@@ -500,3 +500,14 @@ switching records remains possible while no save is pending. Selecting a categor
 from the desktop ledger uses an inline menu and saves that correction directly,
 without opening the panel. Income/expense icons precede compact amounts below the
 481px ledger threshold. Category triggers highlight on hover and while open.
+
+### Compact management tables
+
+Active-token management uses the shared `Table` with one row per token: name and safe short code,
+permissions, creation, last use, expiration, and action. Use `density="compact"` on `TableHead`
+and `TableCell` for 14px text, 8px horizontal padding, and 12px body-cell vertical padding.
+Show dates as `dd-mm-yyyy` without times; retain the full UTC instant in each `time` element’s
+`dateTime` attribute. Use “Nunca” for tokens that have never been used and wrap names readably.
+On narrow screens, scroll
+the table within its container; keep the page width stable. One-token deactivation confirmation
+occupies a full-width row beneath that token. Default table density remains unchanged.

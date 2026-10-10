@@ -73,7 +73,7 @@ const showIssuedPATForRevocation = (page: Page): Promise<void> =>
       );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Agente de casa" })).toBeVisible()
+        expect(page.getByText("Agente de casa", { exact: true })).toBeVisible()
       );
       expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
         bearer
@@ -109,8 +109,11 @@ test("reviews, issues, discloses once, and revokes a manually created PAT", ({ p
         page.getByLabel("Nombre", { exact: true }).fill("Agente de casa")
       );
       yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "30 días" }).click());
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Revisar token" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Duración del token" }).click()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("menuitemradio", { name: "30 días" }).click());
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Crear token" }).click());
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible()
       );
@@ -166,9 +169,7 @@ test("reviews a PATPairing before approval without receiving its private bearer"
           }),
         });
       });
-      yield* Effect.tryPromise(() => page.goto("/settings/pats"));
-      yield* Effect.tryPromise(() => page.getByLabel("Código", { exact: true }).fill("bcdf-ghjk"));
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Continuar" }).click());
+      yield* Effect.tryPromise(() => page.goto("/connect/cli?cliCode=BCDF-GHJK"));
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Agente de casa").first()).toBeVisible()
       );

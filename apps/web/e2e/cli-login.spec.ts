@@ -250,7 +250,7 @@ const cliJourney = Effect.fn(function* ({
     "7",
   ]);
   const approval = yield* firstOutput(child);
-  yield* wait(page.goto("/settings/pats"));
+  yield* wait(page.goto("/connect/cli"));
   yield* wait(page.getByLabel("Código", { exact: true }).fill(approval.publicCode));
   yield* wait(page.getByRole("button", { name: "Continuar" }).click());
   yield* wait(expect(page.getByText("CLI de prueba").first()).toBeVisible());

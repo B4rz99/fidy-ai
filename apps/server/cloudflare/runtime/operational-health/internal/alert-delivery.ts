@@ -1,4 +1,4 @@
-import { type Cause, Effect, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import { OperationalAlert, type OperationalAlertDelivery } from "../contract";
 
 const Claimed = Schema.Struct({
@@ -75,7 +75,7 @@ export const deliverFiring = ({
         input.send(
           alert,
           `fidy-operational-${alert.kind}-${alert.owner}-${attempt.started}-${attempt.attempts}`,
-          { signal: input.signal, phase: "firing" }
+          { signal: input.signal, phase: "firing", release: Option.none() }
         )
       );
       yield* Effect.tryPromise(() =>
@@ -145,7 +145,7 @@ export const deliverResolution = ({
         input.send(
           alert,
           `fidy-operational-resolved-${alert.kind}-${alert.owner}-${claim.started}-${claim.attempts}`,
-          { signal: input.signal, phase: "resolved" }
+          { signal: input.signal, phase: "resolved", release: Option.none() }
         )
       );
       yield* Effect.tryPromise(() =>

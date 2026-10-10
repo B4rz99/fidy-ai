@@ -203,3 +203,13 @@ confirmation shows a public association identifier and directs the caller to com
 review and reply to that exact message. New Users save recovery before Browser Login redemption;
 existing Users proceed directly through the same redemption. Initial linking never exposes new recovery.
 The built static browser checks cover both paths against real public/Core/D1 with external-edge fixtures.
+
+### CLI connection approval
+
+`/connect/cli` owns focused PATPairing review, separate from ordinary PAT management. Its optional
+`cliCode` is decoded with the server's public-code schema. A mounted runtime atom inspects the
+request; navigation never approves it. The view displays the terminal code, unverified recipient
+metadata, scopes and fixed lifetime before an explicit approval click. Only the CLI claims the
+bearer. Browser pairing and provider login preserve this allowlisted destination/code; no arbitrary
+return URL, private verifier or bearer is placed in navigation state. Without a code, the page offers
+the manual fallback for another device. Authentication registry replacement owns pending work.

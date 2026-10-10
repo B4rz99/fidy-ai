@@ -4,7 +4,7 @@ import { coordinatorProbeName } from "../runtime/operational-health/contract";
 import assert from "node:assert/strict";
 import { Clock, Effect, Exit, Option } from "effect";
 import { afterAll, expect, it, vi } from "vitest";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./contract";
 import { runCoreMaintenance } from "./runtime";
 
@@ -353,4 +353,96 @@ it.each([
       ]);
     })
   )
+);
+
+const outageStorage = isolatedTestStorage();
+afterAll(() => outageStorage.dispose());
+it("scheduled maintenance delivers and deduplicates an operator email during a total D1 outage", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+      const failingDb: D1Database = {
+        prepare: unavailable,
+        batch: unavailable,
+        exec: unavailable,
+        withSession: unavailable,
+        dump: unavailable,
+      };
+      const bodies: string[] = [];
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) =>
+        new Request(request, init).text().then((body) => {
+          bodies.push(body);
+          return new Response('{"id":"accepted-id"}', {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        })
+      );
+      try {
+        const input = environment(failingDb, {
+          ASYNC_HEALTH_ENABLED: Option.some("enabled"),
+          STATEMENT_STAGING_BUCKET: Option.some(bucket),
+          OPERATOR_ALERT_EMAIL: Option.some("operator@example.com"),
+          RESEND_API_KEY: Option.some("test-key"),
+        });
+        yield* Effect.exit(runCoreMaintenance(input));
+        yield* Effect.exit(runCoreMaintenance(input));
+        expect(bodies).toHaveLength(1);
+        expect(bodies[0]).toContain("inspection_unavailable");
+        expect(bodies[0]).toContain("d1");
+        expect(bodies[0]).not.toContain("private platform diagnostic");
+        expect(bodies[0]).not.toContain("test-key");
+      } finally {
+        fetch.mockRestore();
+      }
+    })
+  ));
+
+it(
+  "a held D1 outage cannot block independent email behind telemetry",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+        const held = Promise.withResolvers<never>();
+        const statement: D1PreparedStatement = {
+          bind: () => statement,
+          first: () => held.promise,
+          all: () => held.promise,
+          run: () => held.promise,
+          raw: () => held.promise,
+        };
+        const db: D1Database = {
+          prepare: () => statement,
+          batch: () => held.promise,
+          exec: () => held.promise,
+          withSession: unavailable,
+          dump: () => held.promise,
+        };
+        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+          Promise.resolve(
+            new Response('{"id":"accepted-id"}', {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            })
+          )
+        );
+        try {
+          const input = environment(db, {
+            ASYNC_HEALTH_ENABLED: Option.some("enabled"),
+            STATEMENT_STAGING_BUCKET: Option.some(bucket),
+            OPERATOR_ALERT_EMAIL: Option.some("operator@example.com"),
+            RESEND_API_KEY: Option.some("test-key"),
+          });
+          yield* Effect.tryPromise(() =>
+            Effect.runPromiseExit(runCoreMaintenance(input), { signal: AbortSignal.timeout(4_000) })
+          );
+          expect(fetch).toHaveBeenCalledOnce();
+        } finally {
+          held.reject(new Error("released held D1 request"));
+          fetch.mockRestore();
+        }
+      })
+    ),
+  10_000
 );

@@ -8,7 +8,7 @@ import { type BrowserAuthentication, useSession } from "@/session/session-contex
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
-import { PATActivityFeature } from "./activity-feature";
+import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
   type ActivePATManagementState,
@@ -16,19 +16,12 @@ import {
   type RevokeActivePATCommand,
   type RevokeAllActivePATsCommand,
 } from "./management-view";
-import {
-  type ApprovePATPairingCommand,
-  type InspectPATPairingCommand,
-  PATPairingView,
-} from "./pairing-view";
 
 const activePATReactivityKey = ["pats", "active"] as const;
 
 type PATManagementContentProps = Readonly<{
   activePATState: ActivePATManagementState;
-  approve: (command: ApprovePATPairingCommand) => void;
   authentication: BrowserAuthentication;
-  inspect: (command: InspectPATPairingCommand) => void;
   issue: (command: IssueManualPATCommand) => void;
   revoke: (command: RevokeActivePATCommand) => void;
   revokeAll: (command: RevokeAllActivePATsCommand) => void;
@@ -36,25 +29,44 @@ type PATManagementContentProps = Readonly<{
 
 const PATManagementContent = ({
   activePATState,
-  approve,
   authentication,
-  inspect,
   issue,
   revoke,
   revokeAll,
 }: PATManagementContentProps): JSX.Element => (
   <SensitiveClipboardBoundary
-    className={Option.some("flex flex-col gap-8")}
+    className={Option.some("min-w-0")}
     key={authentication}
     lifetime={sensitiveClipboardLifetime}
   >
     {(clipboard) => (
-      <>
-        <ActivePATManagementView state={activePATState} revokeAll={revokeAll} revokeOne={revoke} />
-        <PATActivityFeature />
-        <PATPairingView approve={approve} inspect={inspect} />
-        <ManualPATView clipboard={clipboard} issue={issue} />
-      </>
+      <main className="min-w-0 xl:grid xl:min-h-svh xl:grid-rows-[auto_1fr]">
+        <WorkspaceHeader
+          title="Tokens de acceso"
+          context={
+            <p className="mt-1 text-sm text-muted-foreground">
+              Administra el acceso de tus agentes a Fidy.
+            </p>
+          }
+        >
+          {null}
+        </WorkspaceHeader>
+        <WorkspaceColumns
+          panel={
+            <aside className="min-w-0 border-t bg-card p-5 xl:border-t-0 xl:border-l">
+              <ManualPATView clipboard={clipboard} issue={issue} />
+            </aside>
+          }
+        >
+          <div className="flex min-w-0 flex-col gap-8">
+            <ActivePATManagementView
+              state={activePATState}
+              revokeAll={revokeAll}
+              revokeOne={revoke}
+            />
+          </div>
+        </WorkspaceColumns>
+      </main>
     )}
   </SensitiveClipboardBoundary>
 );
@@ -108,38 +120,8 @@ const makeIssueCommand = (
     { concurrent: false }
   );
 
-const makeInspectPairingCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<InspectPATPairingCommand, void, never> =>
-  apiClient.runtime.fn<InspectPATPairingCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        const response = yield* client.pats.inspectPATPairing({
-          payload: { publicCode: command.publicCode },
-        });
-        yield* Effect.sync(() => command.onInspected(response.data));
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
-    { concurrent: false }
-  );
-
-const makeApprovePairingCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<ApprovePATPairingCommand, void, never> =>
-  apiClient.runtime.fn<ApprovePATPairingCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        yield* client.pats.approvePATPairing({
-          payload: { pairingId: command.pairingId },
-        });
-        yield* Effect.sync(command.onApproved);
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
-    { concurrent: false }
-  );
-
 /**
- * Coordinates authenticated PAT management: direct-client pairing approval and manual issuance.
+ * Coordinates authenticated PAT management and manual issuance.
  * The pairing path never receives a bearer; manual bearers remain confined to the mounted view,
  * with explicit non-fatal clipboard access and bounded clearing.
  */
@@ -179,22 +161,18 @@ export const PATManagementFeature = (): JSX.Element => {
     makeRevokeAllActivePATsCommand(router.options.context.apiClient)
   );
   const [issueAtom] = useState(() => makeIssueCommand(router.options.context.apiClient));
-  const [inspectAtom] = useState(() => makeInspectPairingCommand(router.options.context.apiClient));
-  const [approveAtom] = useState(() => makeApprovePairingCommand(router.options.context.apiClient));
   const revoke = useAtomSet(revokeAtom);
   const revokeAll = useAtomSet(revokeAllAtom);
   const issue = useAtomSet(issueAtom);
-  const inspect = useAtomSet(inspectAtom);
-  const approve = useAtomSet(approveAtom);
   return (
     <PATManagementContent
       activePATState={activePATState}
-      approve={approve}
       authentication={authentication}
-      inspect={inspect}
       issue={issue}
       revoke={revoke}
       revokeAll={revokeAll}
     />
   );
 };
+
+export { CLIConnectionFeature } from "./cli-feature";

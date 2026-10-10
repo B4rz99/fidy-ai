@@ -249,7 +249,7 @@ test("reviews a real PATPairing and presents its under-scoped Core refusal witho
   Effect.runPromise(
     Effect.gen(function* () {
       const { pairingId, publicCode, privateDeviceCode } = yield* startPatPairing(page, request);
-      yield* fromPlaywright(page.goto("/settings/pats"));
+      yield* fromPlaywright(page.goto("/connect/cli"));
       yield* fromPlaywright(
         page
           .getByLabel("Código", {
@@ -888,14 +888,15 @@ const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRe
   yield* fromPlaywright(
     page
       .getByRole("button", {
-        name: "30 días",
+        name: "Duración del token",
       })
       .click()
   );
+  yield* fromPlaywright(page.getByRole("menuitemradio", { name: "30 días" }).click());
   yield* fromPlaywright(
     page
       .getByRole("button", {
-        name: "Revisar token",
+        name: "Crear token",
       })
       .click()
   );
@@ -939,20 +940,12 @@ const revokeReadOnlyPat = Effect.fnUntraced(function* (
   );
   yield* fromPlaywright(expect(page.getByText(bearer)).toHaveCount(0));
   yield* fromPlaywright(page.reload());
-  yield* fromPlaywright(
-    expect(
-      page.getByRole("heading", {
-        name: "Agente de casa",
-      })
-    ).toBeVisible()
-  );
+  yield* fromPlaywright(expect(page.getByText("Agente de casa", { exact: true })).toBeVisible());
   yield* fromPlaywright(
     page
-      .locator('[data-slot="card"]')
+      .getByRole("row")
       .filter({
-        has: page.getByRole("heading", {
-          name: "Agente de casa",
-        }),
+        has: page.getByText("Agente de casa", { exact: true }),
       })
       .getByRole("button", {
         name: "Desactivar",

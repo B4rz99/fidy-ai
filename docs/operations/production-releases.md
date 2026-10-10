@@ -48,6 +48,30 @@ integrations and deployment triggers for those systems; they are not recovery pa
 release Git revision, and the canonical contract digest. The response is `no-store`. It does not
 expose binding names, environment values, internal routes, exception text, or Secrets.
 
+## Retention migration prerequisite (#1136)
+
+The `0074_hosted_retention.sql` triggers add D1 writes. Earlier Core code incorrectly counts these
+trigger writes as lifecycle changes. Land and deploy the separate code-only `RETURNING` compatibility
+fix before merging the retention migration. The migration draft remains blocked until that release
+is actually serving traffic; a merged prerequisite or a green build is insufficient.
+
+`retentionCompatibilityRevision` pins the reviewed prerequisite commit. If it is squash-merged,
+replace the pin with the reviewed landed commit and rerun the gates before merging this migration.
+Immediately before Alchemy applies resources, `verify-retention-migration` requires the exact captured
+Core deployment to remain the sole 100% version, resolves its source revision from that immutable
+version's `RELEASE_GIT_SHA` binding, verifies the captured rollback target is that same revision,
+and checks both stable and candidate Git ancestry against the pin. It reads traffic again after the
+proof. Missing identities, missing Git history, multiple traffic-serving versions, and concurrent
+changes fail closed before D1 apply. Production release and guarded rollback share the existing
+non-cancelling deployment concurrency group.
+
+Guarded rollback independently enforces the same immutable-version ancestry floor, including for an
+older receipt that still matches traffic after migration but before candidate promotion. Existing
+migration/resource compatibility and exact deployment-ID guards still apply. Historical versions
+outside the captured rollback receipt are not supported rollback targets. Manual provider rollbacks
+or rerunning obsolete deployment tooling bypass these proofs and are unsafe after this migration;
+use the current protected-trunk workflow only. Do not remove the floor to recover traffic.
+
 ## Release sequence
 
 The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from ordinary MVP code deployments. The Free plan's indefinite WhatsApp retention is disclosed for the current MVP and must not be reported as a finite retention setting. Before broad real-user WhatsApp launch, run the check and complete the provider review; do not mistake a successful code deployment for launch approval. The workflow allows one active release and does not cancel an active deployment.

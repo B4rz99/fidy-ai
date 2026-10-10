@@ -207,12 +207,14 @@ export type ParsedStatement = Readonly<{
 
 const bytesPerKibibyte = 1024;
 const maximumExpandedMebibytes = 25;
+const maximumReferencedTextMebibytes = 8;
 
 /** Compressed-input and expanded-content ceilings enforced before native finalization. */
 export const statementParserLimits = {
   maximumDecodedBytes: maximumStatementBytes,
   maximumExpandedBytes: maximumExpandedMebibytes * bytesPerKibibyte * bytesPerKibibyte,
   maximumRows: 20_000,
+  maximumReferencedTextBytes: maximumReferencedTextMebibytes * bytesPerKibibyte * bytesPerKibibyte,
 } as const;
 
 /** Closed review outcomes; none contains hostile email or parser text. */

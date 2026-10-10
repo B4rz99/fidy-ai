@@ -57,16 +57,49 @@ const showStatus = Effect.fn(function* (dependencies: CommandDependencies) {
   });
 });
 
+const ignoreBrowser = (_url: string): Effect.Effect<void> => Effect.void;
+const runLogin = Effect.fn(function* (
+  args: ReadonlyArray<string>,
+  dependencies: CommandDependencies,
+  openApproval: (url: string) => Effect.Effect<void>
+) {
+  const noBrowser = args.includes("--no-browser");
+  if (args.filter((argument) => argument === "--no-browser").length > 1) {
+    return yield* new CliFailure({ reason: "InvalidInput" });
+  }
+  const request = yield* loginInput(
+    args.filter((argument) => argument !== "--no-browser"),
+    dependencies
+  );
+  const grant = yield* login(
+    request,
+    (event) =>
+      dependencies
+        .emit(event)
+        .pipe(
+          Effect.andThen(
+            event._tag === "ApprovalRequired" && !noBrowser
+              ? openApproval(event.approvalUrl)
+              : Effect.void
+          )
+        ),
+    dependencies
+  );
+  return yield* dependencies.emit({ _tag: "LoggedIn", grant });
+});
+
 /** Spanish presentation over local access and the one deep pairing operation; no domain commands. */
-export const runCommand = Effect.fn(function* (input: unknown, dependencies: CommandDependencies) {
+export const runCommand = Effect.fn(function* (
+  input: unknown,
+  dependencies: CommandDependencies,
+  openApproval: (url: string) => Effect.Effect<void> = ignoreBrowser
+) {
   const args = yield* Schema.decodeUnknownEffect(Arguments)(input).pipe(
     Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
   );
   switch (args[0]) {
     case "login": {
-      const request = yield* loginInput(args, dependencies);
-      const grant = yield* login(request, dependencies.emit, dependencies);
-      return yield* dependencies.emit({ _tag: "LoggedIn", grant });
+      return yield* runLogin(args, dependencies, openApproval);
     }
     case "status": {
       if (args.length !== 1) return yield* new CliFailure({ reason: "InvalidInput" });

@@ -10,7 +10,7 @@ import {
 import type { OnboardingConsentBasis } from "../../src/shell/consent/contract";
 import type { TranscriptTurnId } from "../../src/core/agent/contract";
 import { readAdmittedBasis } from "./internal/admitted-consent";
-import { AgentUnavailable, type HostedCommitFence } from "./contract";
+import { AgentUnavailable, type HostedCommitFence, hostedTranscriptRetentionMs } from "./contract";
 import type { UserId } from "../../src/core/identity/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import {
@@ -58,6 +58,33 @@ export const hostedChannelTurnObservation = (): string => channelTurnObservation
 /** Compose this User's lifecycle as channel_turns inside the caller's existing atomic statement; preparation grants no Turn authority. */
 export const prepareHostedChannelTurn: typeof prepareChannelTurn = (input) =>
   prepareChannelTurn(input);
+
+/**
+ * Prepare channel cleanup with channel_retention_turns(id, user_id): at most 100 due Turn
+ * identities for the supplied User, including evidence retained after Transcript compaction.
+ * now is the cleanup decision instant in UTC epoch milliseconds. statement.sql must be one
+ * cleanup statement without its own WITH clause, consuming this relation and correlating channel
+ * evidence by both id and user_id;
+ * statement.params supplies only that statement's placeholders, in order. The caller executes the
+ * prepared statement in its cleanup batch. Preparation grants no send authority.
+ */
+export const prepareHostedChannelRetention = ({
+  db,
+  userId,
+  now,
+  statement,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  now: number;
+  statement: OwnedStatement;
+}>): D1PreparedStatement =>
+  db
+    .prepare(`WITH channel_retention_turns AS (
+    SELECT turn_id AS id,user_id FROM hosted_turn_retention
+    WHERE user_id=? AND terminal_at_ms < ? ORDER BY terminal_at_ms,turn_id LIMIT 100
+  ) ${statement.sql}`)
+    .bind(userId, now - hostedTranscriptRetentionMs, ...statement.params);
 
 /**
  * Bind one canonical mutation commit to the exact pending Turn and tool call of its stable User.

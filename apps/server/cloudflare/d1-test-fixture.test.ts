@@ -6,6 +6,7 @@ import {
   installTestSchemaWithPrefix,
   isolatedTestDatabases,
   isolatedTestStorage,
+  observeRetentionCost,
 } from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
@@ -275,5 +276,96 @@ it.live("rolls back the entire fixture schema when a later migration fails", () 
         )
       ).toMatchObject({ results: [] });
     }
+  })
+);
+
+it.live(
+  "counts native first reads while preserving row, column, null and missing-column results",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* wait(() => databases.acquire());
+      yield* wait(() =>
+        db.batch([
+          db.prepare("CREATE TABLE retention_probe (id INTEGER PRIMARY KEY, value TEXT)"),
+          db.prepare("INSERT INTO retention_probe VALUES (1, 'retained'), (2, NULL)"),
+        ])
+      );
+      const sql = "SELECT id, value FROM retention_probe WHERE id = ?";
+      for (const input of [
+        { id: 1, column: undefined, expected: { id: 1, value: "retained" } },
+        { id: 1, column: "value", expected: "retained" },
+        { id: 2, column: "value", expected: null },
+        { id: 3, column: undefined, expected: null },
+        { id: 3, column: "value", expected: null },
+      ]) {
+        const native = yield* wait(() => db.prepare(sql).bind(input.id).all());
+        const observed = observeRetentionCost(db);
+        const query = observed.database.prepare(sql).bind(input.id);
+        expect(
+          yield* wait(() =>
+            input.column === undefined ? query.first() : query.first(input.column)
+          )
+        ).toEqual(input.expected);
+        const expected = {
+          rowsRead: native.meta.rows_read,
+          rowsWritten: native.meta.rows_written,
+        };
+        expect(observed.cost()).toEqual(expected);
+        expect(observed.discovery()).toBe(0);
+        if (input.id === 1) expect(observed.cost().rowsRead).toBeGreaterThan(0);
+        const plans = yield* wait(() => observed.plans());
+        expect(plans).toEqual(["SEARCH retention_probe USING INTEGER PRIMARY KEY (rowid=?)"]);
+        expect(observed.cost()).toEqual(expected);
+      }
+      const native = yield* wait(() => db.prepare(sql).bind(1).all());
+      const observed = observeRetentionCost(db);
+      for (const database of [db, observed.database]) {
+        yield* wait(() =>
+          expect(database.prepare(sql).bind(1).first("missing")).rejects.toThrow(
+            "D1_COLUMN_NOTFOUND: Column not found (missing)"
+          )
+        );
+      }
+      expect(observed.cost()).toEqual({
+        rowsRead: native.meta.rows_read,
+        rowsWritten: native.meta.rows_written,
+      });
+    })
+);
+
+it.live("counts native execution once and excludes batch and plan reads from discovery", () =>
+  Effect.gen(function* () {
+    const db = yield* wait(() => databases.acquire());
+    yield* wait(() => db.prepare("CREATE TABLE retention_probe (id INTEGER PRIMARY KEY)").run());
+    const observed = observeRetentionCost(db);
+    const written = yield* wait(() =>
+      observed.database.prepare("INSERT INTO retention_probe VALUES (?)").bind(1).run()
+    );
+    const discovered = yield* wait(() =>
+      observed.database.prepare("SELECT id FROM retention_probe").all()
+    );
+    expect(discovered.results).toEqual([{ id: 1 }]);
+    const batch = yield* wait(() =>
+      observed.database.batch([
+        observed.database.prepare("INSERT INTO retention_probe VALUES (?)").bind(2),
+        observed.database.prepare("SELECT id FROM retention_probe ORDER BY id"),
+      ])
+    );
+    expect(batch.map((result) => result.results)).toEqual([[], [{ id: 1 }, { id: 2 }]]);
+    const results = [written, discovered, ...batch];
+    const expected = {
+      rowsRead: results.reduce((total, result) => total + result.meta.rows_read, 0),
+      rowsWritten: results.reduce((total, result) => total + result.meta.rows_written, 0),
+    };
+    expect(expected.rowsWritten).toBe(2);
+    expect(discovered.meta.rows_read).toBeGreaterThan(0);
+    expect(observed.discovery()).toBe(discovered.meta.rows_read);
+    expect(observed.cost()).toEqual(expected);
+    expect(yield* wait(() => observed.plans())).toEqual([
+      "SCAN retention_probe",
+      "SCAN retention_probe",
+    ]);
+    expect(observed.cost()).toEqual(expected);
+    expect(observed.discovery()).toBe(discovered.meta.rows_read);
   })
 );

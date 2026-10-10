@@ -13,6 +13,7 @@ import {
 } from "../../quotas/operations";
 import { newId } from "../../secret-material/operations";
 import type { MediaAdmissionInput } from "../contract";
+import { mediaEvidenceLifetimeMs } from "./media-retention-policy";
 
 const HTTP_ACCEPTED = 202;
 const HTTP_BAD_REQUEST = 400;
@@ -20,7 +21,6 @@ const HTTP_FORBIDDEN = 403;
 const HTTP_CONFLICT = 409;
 const HTTP_LIMITED = 429;
 const HTTP_UNAVAILABLE = 503;
-const mediaEvidenceLifetimeMs = 2592000000;
 const hexadecimalRadix = 16;
 class MediaUnavailable extends Data.TaggedError("MediaUnavailable")<{ cause: unknown }> {}
 const noStore = { "cache-control": "no-store" };

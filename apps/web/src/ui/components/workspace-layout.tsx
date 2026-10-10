@@ -11,9 +11,11 @@ export const WorkspaceHeader = ({
       <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
       {context}
     </div>
-    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-      {children}
-    </div>
+    {children !== null && (
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+        {children}
+      </div>
+    )}
   </header>
 );
 

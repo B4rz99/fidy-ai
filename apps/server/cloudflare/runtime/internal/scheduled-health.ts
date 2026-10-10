@@ -38,6 +38,10 @@ const deliverOperationalSignals = (
         const apiKey = environment.RESEND_API_KEY.value;
         return runOperationalAlerts({
           db: environment.DB,
+          outage: Option.map(environment.STATEMENT_STAGING_BUCKET, (bucket) => ({
+            bucket,
+            release: environment.RELEASE_GIT_SHA,
+          })),
           now,
           alerts: decideOperationalAlerts(signals),
           signal,
@@ -47,7 +51,7 @@ const deliverOperationalSignals = (
               idempotencyKey,
               to,
               apiKey,
-              release: environment.RELEASE_GIT_SHA,
+              release: Option.getOrElse(delivery.release, () => environment.RELEASE_GIT_SHA),
               signal: delivery.signal,
               phase: delivery.phase,
             }),
@@ -146,6 +150,24 @@ const operationalWorkflows = (
   }),
 });
 
+const d1Unavailable = (signals: ReadonlyArray<AlertSignal>): boolean =>
+  signals.some((signal) => signal.operation === "d1" && signal.state === "unavailable");
+const retainOperationalSignals = (
+  environment: PlatformMaintenanceInput,
+  signals: ReadonlyArray<AlertSignal>
+): Effect.Effect<void> =>
+  d1Unavailable(signals)
+    ? Effect.void
+    : Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
+        Effect.tryPromise({
+          try: () => recordOperationalHealth({ db: environment.DB, signals, observedAtMs }),
+          catch: () => undefined,
+        }).pipe(
+          Effect.timeout("2 seconds"),
+          Effect.orElseSucceed(() => undefined)
+        )
+      );
+
 const reportOperationalSignals = (
   environment: PlatformMaintenanceInput,
   signals: ReadonlyArray<AlertSignal>
@@ -155,14 +177,7 @@ const reportOperationalSignals = (
     (signal) => (signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal)),
     { discard: true }
   ).pipe(
-    Effect.andThen(
-      Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
-        Effect.tryPromise({
-          try: () => recordOperationalHealth({ db: environment.DB, signals, observedAtMs }),
-          catch: () => undefined,
-        })
-      ).pipe(Effect.orElseSucceed(() => undefined))
-    ),
+    Effect.andThen(retainOperationalSignals(environment, signals)),
     Effect.andThen(deliverOperationalSignals(environment, signals))
   );
 
@@ -189,12 +204,12 @@ const observeAdditionalSignals = (
     )
   );
 
-/** Inspect bounded operational evidence and deliver idempotent metadata-only alerts when enabled. */
-export const inspectScheduledHealth = (
-  environment: PlatformMaintenanceInput
-): Effect.Effect<void, void> =>
-  !Option.contains(environment.ASYNC_HEALTH_ENABLED, "enabled")
-    ? Effect.void
+const scheduledSignals = (
+  environment: PlatformMaintenanceInput,
+  capabilities: ReadonlyArray<CapabilityProbe>
+): Effect.Effect<ReadonlyArray<AlertSignal>, void> =>
+  d1Unavailable(capabilities)
+    ? Effect.succeed(capabilities)
     : observeOperationalHealth({
         DB: environment.DB,
         proactivity: {
@@ -205,22 +220,27 @@ export const inspectScheduledHealth = (
         workQueues: operationalWorkQueues(environment),
         workflows: operationalWorkflows(environment),
       }).pipe(
-        Effect.flatMap((signals) => observeAdditionalSignals(environment, signals)),
         Effect.flatMap((signals) =>
-          inspectOperationalCapabilities({
-            d1: environment.DB,
-            coordinator: environment.USER_TRANSACTION_COORDINATOR,
-            requiredBindings: requiredBindings(environment),
-            providerConfigured: providerConfigured(environment),
-          }).pipe(
-            Effect.map(
-              (
-                capabilities
-              ): ReadonlyArray<
-                OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe
-              > => [...signals, ...capabilities]
-            )
+          observeAdditionalSignals(environment, signals).pipe(
+            Effect.timeout("2 seconds"),
+            Effect.orElseSucceed(() => signals)
           )
         ),
+        Effect.map((signals): ReadonlyArray<AlertSignal> => [...signals, ...capabilities])
+      );
+
+/** Probe independent capabilities before D1-backed inspection; outages still reach durable operator delivery. */
+export const inspectScheduledHealth = (
+  environment: PlatformMaintenanceInput
+): Effect.Effect<void, void> =>
+  !Option.contains(environment.ASYNC_HEALTH_ENABLED, "enabled")
+    ? Effect.void
+    : inspectOperationalCapabilities({
+        d1: environment.DB,
+        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+        requiredBindings: requiredBindings(environment),
+        providerConfigured: providerConfigured(environment),
+      }).pipe(
+        Effect.flatMap((capabilities) => scheduledSignals(environment, capabilities)),
         Effect.flatMap((signals) => reportOperationalSignals(environment, signals))
       );

@@ -61,46 +61,56 @@ const checksForPath = (path: string): ReadonlyArray<ConditionalJob> => {
   return ownedPaths.find(({ prefix }) => path.startsWith(prefix))?.jobs ?? conditionalJobs;
 };
 
-/** Selects expensive PR checks; unrecognized paths run everything rather than silently losing coverage. */
-export const selectChecks = (paths: ReadonlyArray<string>): CheckPlan => {
+/** Full releases select every check; PRs narrow by path without losing coverage for unknown owners. */
+export const selectChecks = (selection: ReadonlyArray<string> | "all"): CheckPlan => {
+  const all = selection === "all";
   const selected: Record<ConditionalJob, boolean> = {
-    builds: false,
-    unit: false,
-    "cloudflare-adapters": false,
-    "cloudflare-infra": false,
-    browser: false,
-    "security-sast": false,
-    "security-sca": false,
+    builds: all,
+    unit: all,
+    "cloudflare-adapters": all,
+    "cloudflare-infra": all,
+    browser: all,
+    "security-sast": all,
+    "security-sca": all,
   };
-  for (const path of paths) {
+  for (const path of selection === "all" ? [] : selection) {
     for (const job of checksForPath(path)) selected[job] = true;
   }
   return selected;
 };
 
 if (import.meta.main) {
-  const base = Bun.env.PR_BASE_SHA;
-  const head = Bun.env.PR_HEAD_SHA;
+  const args = Bun.argv.slice(2);
+  const all = args.length === 1 && args[0] === "--all";
+  if (args.length > 0 && !all) throw new Error("Only --all is accepted");
   const output = Bun.env.GITHUB_OUTPUT;
-  if (base === undefined || head === undefined || output === undefined) {
-    throw new Error("PR_BASE_SHA, PR_HEAD_SHA, and GITHUB_OUTPUT are required");
+  if (output === undefined || output.length === 0) throw new Error("GITHUB_OUTPUT is required");
+  let paths: ReadonlyArray<string> = [];
+  if (!all) {
+    const base = Bun.env.PR_BASE_SHA;
+    const head = Bun.env.PR_HEAD_SHA;
+    if (
+      base === undefined ||
+      head === undefined ||
+      !/^[0-9a-f]{40}$/u.test(base) ||
+      !/^[0-9a-f]{40}$/u.test(head)
+    ) {
+      throw new Error("PR_BASE_SHA and PR_HEAD_SHA are required");
+    }
+    // Both sides of a rename must be considered, including moves out of a code tree.
+    // Full Git history avoids the changed-file API's pagination and file-count limits.
+    const diff = Bun.spawnSync([
+      "git",
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "-z",
+      `${base}...${head}`,
+    ]);
+    if (diff.exitCode !== 0) throw new Error("Cannot determine the PR diff");
+    paths = new TextDecoder().decode(diff.stdout).split("\0").filter(Boolean);
   }
-  if (!/^[0-9a-f]{40}$/u.test(base) || !/^[0-9a-f]{40}$/u.test(head) || output.length === 0) {
-    throw new Error("PR_BASE_SHA, PR_HEAD_SHA, and GITHUB_OUTPUT are required");
-  }
-  // Both sides of a rename must be considered, including moves out of a code tree.
-  // Full Git history avoids the changed-file API's pagination and file-count limits.
-  const diff = Bun.spawnSync([
-    "git",
-    "diff",
-    "--name-only",
-    "--no-renames",
-    "-z",
-    `${base}...${head}`,
-  ]);
-  if (diff.exitCode !== 0) throw new Error("Cannot determine the PR diff");
-  const paths = new TextDecoder().decode(diff.stdout).split("\0").filter(Boolean);
-  const plan = selectChecks(paths);
+  const plan = selectChecks(all ? "all" : paths);
   const lines = Object.entries(plan).map(([job, selected]) => `${job}=${selected}`);
   const file = Bun.file(output);
   await Bun.write(output, `${(await file.exists()) ? await file.text() : ""}${lines.join("\n")}\n`);

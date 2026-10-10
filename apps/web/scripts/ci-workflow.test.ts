@@ -5,6 +5,12 @@ const checksWorkflow = await Bun.file(`${repositoryRoot}/.github/workflows/ci.ym
 const bunInstallAction = await Bun.file(
   `${repositoryRoot}/.github/actions/bun-install/action.yml`
 ).text();
+const candidateWorkflow = await Bun.file(
+  `${repositoryRoot}/.github/workflows/cli-release-build.yml`
+).text();
+const publisherWorkflow = await Bun.file(
+  `${repositoryRoot}/.github/workflows/cli-release-publish.yml`
+).text();
 
 describe("pull-request checks workflow policy", () => {
   it("builds the application without uploading or deploying a PR preview artifact", () => {
@@ -66,7 +72,29 @@ describe("pull-request checks workflow policy", () => {
     expect(requiredJob).toContain("${REQUIRED_CHECK_SCRIPT:?Required-check script unavailable}");
     expect(requiredJob).toContain('bash -c "$REQUIRED_CHECK_SCRIPT"');
     expect(checksWorkflow).toContain("fetch-depth: 0");
-    expect(checksWorkflow).toContain("run: bun scripts/ci-changes.ts");
+    expect(checksWorkflow).toContain("bun scripts/ci-changes.ts");
+  });
+
+  it("reuses every existing check for a pinned release while retaining PR diff selection", () => {
+    expect(checksWorkflow).toContain("workflow_call:");
+    expect(checksWorkflow).toContain("checks_passed: ${{ steps.gate.outputs.checks_passed }}");
+    expect(checksWorkflow).toContain('[[ "$GITHUB_REF" == refs/heads/trunk');
+    expect(checksWorkflow).toContain('"$(git rev-parse HEAD)" == "$EXPECTED_SHA"');
+    expect(checksWorkflow).toContain('if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then');
+    expect(checksWorkflow).toContain("bun scripts/ci-changes.ts --all");
+    expect(checksWorkflow).toContain("|| 'HEAD^' }}");
+    const baseFetch = checksWorkflow.slice(
+      checksWorkflow.indexOf("- name: Fetch base branch tip"),
+      checksWorkflow.indexOf("# Oxlint's RuleTester")
+    );
+    // Fetching trunk at depth one during a release would hide the HEAD^ migration base.
+    expect(baseFetch).toContain("if: ${{ github.event_name == 'pull_request' }}");
+    const requiredJob = checksWorkflow.slice(checksWorkflow.indexOf("\n  required-checks:\n"));
+    expect(requiredJob.indexOf("echo 'checks_passed=true'")).toBeGreaterThan(
+      requiredJob.indexOf('bash -c "$REQUIRED_CHECK_SCRIPT"')
+    );
+    expect(checksWorkflow).not.toContain("secrets: inherit");
+    expect(checksWorkflow).not.toContain("contents: write");
   });
 
   it("runs native conformance from a same-run bundle without installing platform workspace dependencies", () => {
@@ -92,6 +120,38 @@ describe("pull-request checks workflow policy", () => {
     expect(nativeJob).not.toContain("repository:");
     expect(requiredJob).toContain("- cli-native-package");
     expect(checksWorkflow).toContain("cli-native-package: ${{ steps.plan.outputs.unit }}");
+  });
+
+  it("keeps PR native fixtures ephemeral and requires reviewed evidence before candidate upload", () => {
+    expect(candidateWorkflow).not.toContain("contents: write");
+    expect(candidateWorkflow).toContain('"$GITHUB_EVENT_NAME" == workflow_dispatch');
+    expect(candidateWorkflow).toContain('"$GITHUB_REPOSITORY" == B4rz99/fidy-ai');
+    expect(candidateWorkflow).toContain('"$(git rev-parse HEAD)" == "$EXPECTED_SHA"');
+    expect(candidateWorkflow).toContain(
+      "distributable: ${{ steps.materials.outputs.distributable }}"
+    );
+    expect(candidateWorkflow).not.toContain("inputs.version ||");
+    const smoke = candidateWorkflow.slice(
+      candidateWorkflow.indexOf("- name: Test native executable"),
+      candidateWorkflow.indexOf("- name: Test publisher")
+    );
+    expect(smoke).toContain("if: ${{ needs.source.outputs.distributable != 'true' }}");
+    expect(smoke).toContain("python3 scripts/cli-release/test-native.py");
+    const upload = candidateWorkflow.slice(
+      candidateWorkflow.indexOf("- name: Preserve candidate archives"),
+      candidateWorkflow.indexOf("\n  candidate-gate:")
+    );
+    expect(upload).toContain("if: ${{ needs.source.outputs.distributable == 'true' }}");
+    expect(upload).toContain("dist/cli-release/*.zip");
+    expect(upload).not.toContain("RUNNER_TEMP");
+    const gate = candidateWorkflow.slice(candidateWorkflow.indexOf("\n  candidate-gate:"));
+    expect(gate).toContain('[[ "$SOURCE_RESULT" == success && "$PACKAGES_RESULT" == success ]]');
+    expect(gate).toContain('if [[ "$DISTRIBUTABLE" == true ]]; then');
+    expect(publisherWorkflow).toContain("needs.candidates.outputs.candidates_passed == 'true'");
+    expect(publisherWorkflow).toContain("needs.checks.outputs.checks_passed == 'true'");
+    expect(publisherWorkflow).toContain("merge-multiple: false");
+    expect(publisherWorkflow).not.toContain("secrets: inherit");
+    expect(publisherWorkflow.match(/contents: write/gu)).toHaveLength(1);
   });
 
   it("runs mutation testing weekly on Sundays without blocking pull requests", () => {

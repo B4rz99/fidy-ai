@@ -258,7 +258,9 @@ server-adapter-to-CLI evidence, not a live ingress/provider or Production test.
 
 `command/installation.ts` publishes only version and basic help before credential-store startup;
 canonical operation discovery still uses the saved grant. `scripts/cli-release/build.sh` compiles
-natively with the same pinned Bun bytes and packages a single executable. The read-only release
+natively with the same pinned Bun bytes and packages one executable plus both reviewed notice files.
+Packaging fails before compilation when the source-bound redistribution evidence is incomplete.
+The read-only release
 candidate workflow validates Linux x64, macOS arm64 and Windows x64; it never publishes a release.
 See [installation and release gates](../../docs/guides/cli-installation.md). Runtime revision guards,
 credential storage and server authorization are unchanged. Public installer URLs must not be

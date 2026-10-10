@@ -23,6 +23,26 @@ const allJobs = [
 ];
 
 describe("PR check selection", () => {
+  it("selects every release check without relying on a PR diff", () => {
+    const temporary = Bun.spawnSync(["mktemp", "-d"]);
+    expect(temporary.exitCode).toBe(0);
+    const cwd = new TextDecoder().decode(temporary.stdout).trim();
+    fixtures.push(cwd);
+    const output = `${cwd}/outputs`;
+    const result = Bun.spawnSync(["bun", `${root}/scripts/ci-changes.ts`, "--all"], {
+      cwd,
+      env: { ...Bun.env, PR_BASE_SHA: "not-a-pr", PR_HEAD_SHA: "not-a-pr", GITHUB_OUTPUT: output },
+    });
+    expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
+    return Bun.file(output)
+      .text()
+      .then((content) =>
+        expect(content).toBe(
+          "builds=true\nunit=true\ncloudflare-adapters=true\ncloudflare-infra=true\nbrowser=true\nsecurity-sast=true\nsecurity-sca=true\n"
+        )
+      );
+  });
+
   it("leaves prose and agent guidance to the workspace and secret gates", () => {
     expect(
       selectedJobs([

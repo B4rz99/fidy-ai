@@ -1,5 +1,16 @@
 name: CLI release candidates
 on:
+  workflow_call:
+    inputs:
+      expected_sha:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+    outputs:
+      candidates_passed:
+        value: ${{ jobs.candidate-gate.outputs.candidates_passed }}
   pull_request:
     branches: [trunk]
     paths:
@@ -13,7 +24,33 @@ concurrency:
   group: cli-release-candidates-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  source:
+    name: Select native smoke or reviewed distribution
+    runs-on: ubuntu-latest
+    outputs:
+      distributable: ${{ steps.materials.outputs.distributable }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Verify exact source for a reusable release invocation
+        if: ${{ inputs.expected_sha != '' }}
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REPOSITORY" == B4rz99/fidy-ai ]]
+          [[ "$GITHUB_REF" == refs/heads/trunk && "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" && "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]
+      - name: Validate preserved notice and source evidence before packaging
+        if: ${{ inputs.expected_sha != '' }}
+        id: materials
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python3 scripts/cli-release/publish.py materials --version "$RELEASE_VERSION" --destination "$RUNNER_TEMP/cli-notices"
+          echo 'distributable=true' >> "$GITHUB_OUTPUT"
   packages:
+    needs: source
     name: Package (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -29,9 +66,13 @@ jobs:
         with:
           save-cache: "false"
       - name: Build native standalone release candidate
+        if: ${{ needs.source.outputs.distributable == 'true' }}
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: bash scripts/cli-release/build.sh
       - name: Verify repeat-build archive identity
+        if: ${{ needs.source.outputs.distributable == 'true' }}
         shell: bash
         run: |
           bash scripts/cli-release/build.sh dist/cli-repeat
@@ -39,13 +80,24 @@ jobs:
             cmp "$archive" "dist/cli-repeat/$(basename "$archive")"
           done
       - name: Test POSIX installer failure safety
-        if: runner.os != 'Windows'
-        run: python3 scripts/cli-release/test-install.py
+        if: ${{ needs.source.outputs.distributable == 'true' && runner.os != 'Windows' }}
+        run: python3 scripts/cli-release/test-install.py dist/cli-release
+      - name: Test Homebrew formula preparation
+        shell: bash
+        run: python3 scripts/cli-release/test-homebrew.py
       - name: Test Windows installer and corruption safety
-        if: runner.os == 'Windows'
+        if: ${{ needs.source.outputs.distributable == 'true' && runner.os == 'Windows' }}
         shell: pwsh
         run: ./scripts/cli-release/test-install.ps1
+      - name: Test native executable and installers with ephemeral synthetic notices
+        if: ${{ needs.source.outputs.distributable != 'true' }}
+        shell: bash
+        run: python3 scripts/cli-release/test-native.py
+      - name: Test publisher without network or release permissions
+        shell: bash
+        run: python3 scripts/cli-release/publish-test.py
       - name: Preserve candidate archives and checksums
+        if: ${{ needs.source.outputs.distributable == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cli-candidate-${{ runner.os }}-${{ runner.arch }}
@@ -56,3 +108,21 @@ jobs:
             dist/cli-release/install.ps1
           if-no-files-found: error
           retention-days: 14
+  candidate-gate:
+    name: Require every native candidate
+    needs: [source, packages]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    outputs:
+      candidates_passed: ${{ steps.gate.outputs.candidates_passed }}
+    steps:
+      - id: gate
+        env:
+          SOURCE_RESULT: ${{ needs.source.result }}
+          PACKAGES_RESULT: ${{ needs.packages.result }}
+          DISTRIBUTABLE: ${{ needs.source.outputs.distributable }}
+        run: |
+          [[ "$SOURCE_RESULT" == success && "$PACKAGES_RESULT" == success ]]
+          if [[ "$DISTRIBUTABLE" == true ]]; then
+            echo 'candidates_passed=true' >> "$GITHUB_OUTPUT"
+          fi

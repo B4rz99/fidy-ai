@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { Inflate } from "fflate";
+import { admitXlsxArchive } from "./xlsx-admission";
 import { type Options, parse } from "csv-parse/sync";
 import type { CellObject, Range, WorkBook, WorkSheet } from "xlsx";
 import * as XLSX from "xlsx/xlsx.mjs";
@@ -13,31 +13,13 @@ import {
 
 const bytesPerKibibyte = 1024;
 const maximumCsvRecordKibibytes = 256;
-const maximumExpandedBytes = statementParserLimits.maximumExpandedBytes;
-const inflateInputChunkBytes = bytesPerKibibyte;
-
-const maximumZipEntries = 1_000;
 const maximumRows = statementParserLimits.maximumRows;
 const maximumColumns = 200;
 const maximumCells = 250_000;
+const maximumXlsxCells = statementParserLimits.maximumXlsxCells;
 const maximumCsvRecordBytes = maximumCsvRecordKibibytes * bytesPerKibibyte;
 const maximumSheets = 20;
 const mappingSampleSize = 5;
-const zipCentralDirectoryHeaderLength = 46;
-const zipCentralDirectorySignature = 0x02014b50;
-const zipStoredMethod = 0;
-const zipDeflatedMethod = 8;
-const zipCompressionMethodOffset = 10;
-const zipCompressedSizeOffset = 20;
-const zipExpandedSizeOffset = 24;
-const zipNameLengthOffset = 28;
-const zipExtraLengthOffset = 30;
-const zipCommentLengthOffset = 32;
-const zipLocalHeaderOffset = 42;
-const zipLocalHeaderLength = 30;
-const zipLocalNameLengthOffset = 26;
-const zipLocalExtraLengthOffset = 28;
-const zipHeaderRemainder = 45;
 const isoDateLength = 10;
 const carriageReturnCodePoint = 13;
 const lineFeedCodePoint = 10;
@@ -152,88 +134,6 @@ export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
   };
 };
 
-const boundedZipInflate = (compressed: Uint8Array, remaining: number): number => {
-  let expanded = 0;
-  // Workerd cannot bundle node:zlib. Small input chunks bound transient inflater output
-  // before the callback can enforce the aggregate expanded-byte ceiling.
-  const inflater = new Inflate((chunk) => {
-    expanded += chunk.length;
-    if (expanded > remaining) throw new StatementParseFailed({ safeReason: "resource-limit" });
-  });
-  for (let start = 0; start < compressed.length; start += inflateInputChunkBytes) {
-    const end = Math.min(start + inflateInputChunkBytes, compressed.length);
-    inflater.push(compressed.subarray(start, end), end === compressed.length);
-  }
-  if (compressed.length === 0) inflater.push(compressed, true);
-  return expanded;
-};
-
-const boundedStoredZipSize = (compressed: Uint8Array, remaining: number): number => {
-  if (compressed.length > remaining) {
-    throw new StatementParseFailed({ safeReason: "resource-limit" });
-  }
-  return compressed.length;
-};
-
-const expandedZipEntrySize = (input: {
-  readonly bytes: Uint8Array;
-  readonly view: DataView;
-  readonly offset: number;
-  readonly remaining: number;
-}): number => {
-  const { bytes, offset, remaining, view } = input;
-  const compressionMethod = view.getUint16(offset + zipCompressionMethodOffset, true);
-  const compressedSize = view.getUint32(offset + zipCompressedSizeOffset, true);
-  const declaredExpandedSize = view.getUint32(offset + zipExpandedSizeOffset, true);
-  const localOffset = view.getUint32(offset + zipLocalHeaderOffset, true);
-  if (localOffset + zipLocalHeaderLength > bytes.length) {
-    throw new StatementParseFailed({ safeReason: "malformed-file" });
-  }
-  const localNameLength = view.getUint16(localOffset + zipLocalNameLengthOffset, true);
-  const localExtraLength = view.getUint16(localOffset + zipLocalExtraLengthOffset, true);
-  const dataOffset = localOffset + zipLocalHeaderLength + localNameLength + localExtraLength;
-  const compressed = bytes.subarray(dataOffset, dataOffset + compressedSize);
-  if (compressed.length !== compressedSize) {
-    throw new StatementParseFailed({ safeReason: "malformed-file" });
-  }
-  let actualExpandedSize: number;
-  if (compressionMethod === zipStoredMethod) {
-    actualExpandedSize = boundedStoredZipSize(compressed, remaining);
-  } else if (compressionMethod === zipDeflatedMethod) {
-    actualExpandedSize = boundedZipInflate(compressed, remaining);
-  } else throw new StatementParseFailed({ safeReason: "malformed-file" });
-  if (actualExpandedSize !== declaredExpandedSize) {
-    throw new StatementParseFailed({ safeReason: "malformed-file" });
-  }
-  return actualExpandedSize;
-};
-
-const assertZipExpansion = (bytes: Uint8Array): void => {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let expandedBytes = 0;
-  let entries = 0;
-  for (let offset = 0; offset + zipCentralDirectoryHeaderLength <= bytes.length; offset += 1) {
-    if (view.getUint32(offset, true) !== zipCentralDirectorySignature) continue;
-    entries += 1;
-    expandedBytes += expandedZipEntrySize({
-      bytes,
-      view,
-      offset,
-      remaining: maximumExpandedBytes - expandedBytes,
-    });
-    const nameLength = view.getUint16(offset + zipNameLengthOffset, true);
-    const extraLength = view.getUint16(offset + zipExtraLengthOffset, true);
-    const commentLength = view.getUint16(offset + zipCommentLengthOffset, true);
-    offset += zipHeaderRemainder + nameLength + extraLength + commentLength;
-    if (entries > maximumZipEntries || expandedBytes > maximumExpandedBytes) {
-      throw new StatementParseFailed({ safeReason: "resource-limit" });
-    }
-  }
-  if (entries === 0) {
-    throw new StatementParseFailed({ safeReason: "malformed-file" });
-  }
-};
-
 const cellText = (cell: Option.Option<CellObject>): string =>
   Option.match(cell, {
     onNone: () => "",
@@ -304,7 +204,7 @@ const assertSheetLimits = (range: Range): number => {
   const columnCount = range.e.c - range.s.c + 1;
   const rowCount = range.e.r - range.s.r;
   const exceedsDimensions = columnCount > maximumColumns || rowCount > maximumRows;
-  if (exceedsDimensions || columnCount * (rowCount + 1) > maximumCells) {
+  if (exceedsDimensions || columnCount * (rowCount + 1) > maximumXlsxCells) {
     throw new StatementParseFailed({ safeReason: "resource-limit" });
   }
   return columnCount;
@@ -356,55 +256,8 @@ const sheetHeaders = (selected: SelectedSheet, columnCount: number): ReadonlyArr
 const sameHeaders = (left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean =>
   left.length === right.length && left.every((header, index) => header === right[index]);
 
-const referencedCellBytes = (cell: CellObject, sizes: Map<string, number>): number => {
-  let bytes = 0;
-  for (const text of [
-    cell.v === undefined ? "" : String(cell.v),
-    cell.f ?? "",
-    String(cell.z ?? ""),
-  ]) {
-    let size = sizes.get(text);
-    if (size === undefined) {
-      size = new TextEncoder().encode(text).byteLength;
-      sizes.set(text, size);
-    }
-    bytes += size;
-  }
-  return bytes;
-};
-const referencedSheetBytes = (sheet: WorkSheet, sizes: Map<string, number>): number => {
-  let bytes = 0;
-  const cells: Readonly<Record<string, CellObject>> = sheet;
-  for (const [address, cell] of Object.entries(cells)) {
-    if (!address.startsWith("!")) {
-      bytes += referencedCellBytes(cell, sizes);
-      if (bytes > statementParserLimits.maximumReferencedTextBytes) {
-        throw new StatementParseFailed({ safeReason: "resource-limit" });
-      }
-    }
-  }
-  return bytes;
-};
-const admitWorkbookText = (workbook: WorkBook): void => {
-  const sizes = new Map<string, number>();
-  let referencedBytes = 0;
-  let totalCells = 0;
-  for (const selected of selectedSheets(workbook)) {
-    totalCells +=
-      assertSheetLimits(selected.originalRange) *
-      (selected.originalRange.e.r - selected.originalRange.s.r + 1);
-    referencedBytes += referencedSheetBytes(selected.sheet, sizes);
-    if (
-      totalCells > maximumCells ||
-      referencedBytes > statementParserLimits.maximumReferencedTextBytes
-    ) {
-      throw new StatementParseFailed({ safeReason: "resource-limit" });
-    }
-  }
-};
-
 export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
-  assertZipExpansion(bytes);
+  const admitted = admitXlsxArchive(bytes);
   const options = {
     type: "array",
     raw: true,
@@ -416,10 +269,7 @@ export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
     cellHTML: false,
     sheetRows: maximumRows + 2,
   } as const;
-  // Shared-string references are cheap until formatting/evidence repeats their text.
-  // Admit that multiplier before the normal evidence-producing read.
-  admitWorkbookText(XLSX.read(bytes, { ...options, cellText: false }));
-  const workbook = XLSX.read(bytes, options);
+  const workbook = XLSX.read(admitted, options);
   const sheets = selectedSheets(workbook);
   let totalCells = 0;
   let expectedHeaders = Option.none<ReadonlyArray<string>>();
@@ -427,7 +277,9 @@ export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
   for (const selected of sheets) {
     const columnCount = assertSheetLimits(selected.range);
     totalCells += columnCount * (selected.originalRange.e.r - selected.originalRange.s.r + 1);
-    if (totalCells > maximumCells) throw new StatementParseFailed({ safeReason: "resource-limit" });
+    if (totalCells > maximumXlsxCells) {
+      throw new StatementParseFailed({ safeReason: "resource-limit" });
+    }
     const headers = sheetHeaders(selected, columnCount);
     if (headers.every((header) => header.length === 0)) {
       throw new StatementParseFailed({ safeReason: "malformed-file" });

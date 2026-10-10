@@ -221,6 +221,10 @@
             }
           },
           {
+            "include": ["./scripts/document-parsing/xlsx-work.ts"],
+            "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
+          },
+          {
             "include": ["./infra/cloudflare/resource-retirement.test.ts"],
             "options": {
               "diagnosticSeverity": { "strictEffectProvide": "off" }

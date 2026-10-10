@@ -44,6 +44,7 @@ npm-debug.log*
 # Agent / local tooling
 .alchemy/
 .document-parsing-proof/
+.xlsx-work-proof/
 .wrangler/
 .claude/worktrees/
 .claude/settings.local.json

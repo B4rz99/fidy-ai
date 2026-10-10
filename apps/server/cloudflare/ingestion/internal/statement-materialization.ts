@@ -17,7 +17,8 @@ const fragmentCharacters = fragmentKibicharacters * bytesPerKibibyte;
 const maximumParts = 1024;
 const maximumHeaderBytes = maximumMaterializedHeaderBytes;
 const writeBatchSize = 8;
-const representationRevision = "statement-material-v1";
+// A reusable generation must have passed the current XLSX work admission policy.
+const representationRevision = "statement-material-v2";
 const highSurrogateStart = 0xd800;
 const highSurrogateEnd = 0xdbff;
 const headersCodec = Schema.fromJsonString(Schema.NonEmptyArray(Schema.String));

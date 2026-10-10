@@ -1,6 +1,6 @@
-import { BigDecimal, DateTime, Option } from "effect";
+import { BigDecimal, DateTime, Equal, Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 import {
   type TransactionPresentationCategory,
   type TransactionPresentationRecord,
@@ -49,7 +49,7 @@ describe("current-month Transaction presentation", () => {
       },
     });
 
-    expect(formatted).toBe("USD 9.007.199.254.740.993,12");
+    expect(formatted).toBe("$ 9.007.199.254.740.993,12");
     expect(
       formatMoney({
         locale: "es-CO",
@@ -58,7 +58,7 @@ describe("current-month Transaction presentation", () => {
           currency: "COP",
         },
       })
-    ).toBe("COP 25.000,00");
+    ).toBe("$ 25.000,00");
   });
 
   it("joins Category labels and presents Counterparty, expense or income, Money, and local date", () => {
@@ -81,14 +81,16 @@ describe("current-month Transaction presentation", () => {
       ],
     });
 
-    expect(rows).toEqual([
+    expect(rows).toMatchObject([
       {
         id: "24000000-0000-4000-8000-000000000002",
         categoryLabel: "Restaurantes",
         counterpartyLabel: "El Corral",
         direction: "outflow",
         transactionTypeLabel: "Gasto",
-        moneyText: "COP 25.000,00",
+        moneyText: "$ 25.000,00",
+        money: { currency: "COP" },
+        dateLabel: "20 de julio de 2026",
         occurredOnText: "20-07-2026",
       },
       {
@@ -97,9 +99,23 @@ describe("current-month Transaction presentation", () => {
         counterpartyLabel: "Contraparte no identificada",
         direction: "inflow",
         transactionTypeLabel: "Ingreso",
-        moneyText: "USD 19,90",
+        moneyText: "$ 19,90",
+        money: { currency: "USD" },
+        dateLabel: "20 de julio de 2026",
         occurredOnText: "20-07-2026",
       },
     ]);
+    expect(
+      Equal.equals(
+        Option.getOrThrow(Option.fromNullishOr(rows[0])).money.amount,
+        BigDecimal.fromStringUnsafe("25000")
+      )
+    ).toBe(true);
+    expect(
+      Equal.equals(
+        Option.getOrThrow(Option.fromNullishOr(rows[1])).money.amount,
+        BigDecimal.fromStringUnsafe("19.9")
+      )
+    ).toBe(true);
   });
 });

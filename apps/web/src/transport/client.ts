@@ -44,6 +44,9 @@ export {
   OAuthReviewChoice,
 } from "@fidy/server/client";
 export {
+  AtomicBatchCallId,
+  AtomicBatchRejected,
+  maximumAtomicBatchCalls,
   BackupRecoveryCode,
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,

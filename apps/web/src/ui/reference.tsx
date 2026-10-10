@@ -12,8 +12,8 @@ import { Label } from "@/ui/components/label";
 import { Skeleton } from "@/ui/components/skeleton";
 import { Spinner } from "@/ui/components/spinner";
 import { cn } from "./class-names";
-import { formatCurrencyAmount } from "./money";
 import { type DarkPalette, darkPalettes } from "./dark-palettes";
+import { WorkspaceReference } from "./workspace-reference";
 import "./reference.css";
 
 const themes = ["light", "dark", "system"] as const;
@@ -264,9 +264,7 @@ const TransactionReference = (): JSX.Element => (
           <p className="text-sm text-muted-foreground">Restaurantes · 9 de octubre de 2026</p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <p className="font-semibold tabular-nums">
-            − {formatCurrencyAmount({ amount: "28000", currency: "COP", locale: "es-CO" })}
-          </p>
+          <p className="font-semibold tabular-nums">− COP 28.000,00</p>
           <Badge variant="outline">Gasto</Badge>
         </div>
       </div>
@@ -325,6 +323,7 @@ export const UIReference = (): JSX.Element => {
           <ActionReference />
           <FieldReference />
         </div>
+        <WorkspaceReference />
         <FeedbackReference />
         <div className="grid gap-6 lg:grid-cols-2">
           <TransactionReference />

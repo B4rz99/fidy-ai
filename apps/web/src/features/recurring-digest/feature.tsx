@@ -6,7 +6,7 @@ import { Option, Schema } from "effect";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 
 /** Authenticated complete historical facts, preserving every item and exact Currency without active-charge inference. */
 export const RecurringDigestFeature = (): JSX.Element => {

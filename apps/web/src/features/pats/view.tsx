@@ -1,3 +1,4 @@
+import { browserCrypto } from "@/browser/crypto";
 import {
   type IssuedPAT,
   type ManualPATGrantInput,
@@ -14,7 +15,7 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { Crypto, DateTime, Duration, Effect, PlatformError, Redacted } from "effect";
+import { DateTime, Duration, Effect, Redacted } from "effect";
 import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import {
   type Dispatch,
@@ -74,24 +75,6 @@ export type ManualPATCreationState =
       requestId: ManualPATRequestIdType;
     }>
   | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
-
-const browserCrypto = Crypto.make({
-  randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        globalThis.crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((digest) => new Uint8Array(digest)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "BrowserCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
 
 const makeManualPATRequestId = (): ManualPATRequestIdType =>
   ManualPATRequestId.make(Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)));

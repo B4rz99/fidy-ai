@@ -23,6 +23,7 @@ type Conversation = Readonly<{ turn: Turn; history: ReadonlyArray<Entry> }>;
 type SetConversation = Dispatch<SetStateAction<Conversation>>;
 const visibleHistoryLimit = 40;
 const initialConversation: Conversation = { turn: { tag: "idle" }, history: [] };
+const noDeliveredTurn = Option.none<string>();
 
 const status: Readonly<Record<Turn["tag"], string>> = {
   idle: "",
@@ -149,7 +150,7 @@ export const useHostedConversation = ({
   const propose = useAtomSet(commands.propose);
   const progress = useAtomSet(commands.progress);
   const acknowledge = useAtomSet(commands.receipt);
-  const deliveredTurn = useRef(Option.none<string>());
+  const deliveredTurn = useRef(noDeliveredTurn);
   const { turn } = conversation;
   const deliver = (proposal: Proposal): void => {
     setTurn(setConversation, { tag: "confirming", value: proposal });

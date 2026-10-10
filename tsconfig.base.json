@@ -221,7 +221,6 @@
             }
           },
           {
-            // Standalone characterization entrypoint owns its filesystem layer.
             "include": ["./scripts/document-parsing/xlsx-work.ts"],
             "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
           },

@@ -142,6 +142,8 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "strictEffectProvide:./scripts/mcp/production-checks.ts",
           "strictEffectProvide:./scripts/mcp/production-cleanup.test.ts",
           "strictEffectProvide:./scripts/mcp/production-native.test.ts",
+          // Standalone characterization entrypoint owns its filesystem layer.
+          "strictEffectProvide:./scripts/document-parsing/xlsx-work.ts",
         ].toSorted()
       );
     }));

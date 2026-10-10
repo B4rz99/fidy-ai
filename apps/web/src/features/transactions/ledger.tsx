@@ -43,6 +43,7 @@ const columns: Array<ColumnDef<TransactionListRow>> = [
   { accessorKey: "moneyText", header: "Monto", enableSorting: false },
 ];
 type LedgerProps = Readonly<{
+  partial: boolean;
   rows: ReadonlyArray<TransactionListRow>;
   selected: Option.Option<string>;
   onSelect: (id: string) => void;
@@ -373,6 +374,20 @@ const LedgerBody = ({
     ))}
   </TableBody>
 );
+const EmptyLedger = ({ partial }: Readonly<{ partial: boolean }>): JSX.Element => (
+  <div className="p-8">
+    <h2 className="font-medium">
+      {partial
+        ? "No hay coincidencias entre las transacciones cargadas"
+        : "No hay transacciones para mostrar"}
+    </h2>
+    <p className="mt-2 text-sm text-muted-foreground">
+      {partial
+        ? "Carga más transacciones para buscar en el resto del periodo."
+        : "Prueba otros filtros o registra una transacción."}
+    </p>
+  </div>
+);
 /** A date-grouped ledger; sorting preserves dates as the primary grouping key. */
 export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element => {
   const [visibility, setVisibility] = useState({});
@@ -409,12 +424,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
         selecting={props.selection.active}
       />
       {rows.length === 0 ? (
-        <div className="p-8">
-          <h2 className="font-medium">No hay transacciones para mostrar</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Prueba otros filtros o registra una transacción.
-          </p>
-        </div>
+        <EmptyLedger partial={props.partial} />
       ) : (
         <Table aria-label="Tabla de transacciones">
           <LedgerHeader table={table} />

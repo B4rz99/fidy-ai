@@ -318,6 +318,9 @@ export default Alchemy.Stack(
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
         }),
+        CORE_MAINTENANCE: Cloudflare.DurableObject("CoreMaintenanceCoordinator", {
+          className: "CoreMaintenanceCoordinator",
+        }),
         HOSTED_AI_MODEL: yield* hostedAiModel,
         KAPSO_API_KEY: kapsoBindings.apiKey,
         KAPSO_WEBHOOK_SECRET: kapsoBindings.webhookSecret,

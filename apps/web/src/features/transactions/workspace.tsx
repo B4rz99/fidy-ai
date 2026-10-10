@@ -18,6 +18,7 @@ import { TransactionLedger } from "./ledger";
 import { ManualTransactionCapture } from "./manual-capture";
 import { WorkspacePanel as ResponsiveWorkspacePanel } from "@/ui/components/workspace-panel";
 import type { TransactionPanel } from "./panel-state";
+import type { HistoryState } from "./history";
 import {
   type Category,
   type CurrentUser,
@@ -35,6 +36,9 @@ type WorkspaceProps = Readonly<{
   queryNotice: ReactNode;
   onRefresh: () => void;
   editable: boolean;
+  continuation: HistoryState["continuation"];
+  onMore: () => void;
+  onRetryMore: () => void;
 }>;
 type WorkspaceFilters = Readonly<{
   search: string;
@@ -310,16 +314,32 @@ const WorkspacePanel = (props: PanelProps): JSX.Element => {
   if (props.panel._tag === "Detail") return <DetailPanel {...props} panel={props.panel} />;
   return props.renderPanel(
     <TransactionSummary
+      partial={props.continuation !== "complete"}
       transactions={props.transactions}
       locale={props.currentUser.locale}
       timeZone={props.currentUser.timeZone}
     />
   );
 };
+const FilterButton = ({
+  disabled,
+  onClick,
+}: Readonly<{ disabled: boolean; onClick: () => void }>): JSX.Element => (
+  <Button variant="outline" disabled={disabled} onClick={onClick}>
+    <HugeiconsIcon
+      icon={FilterHorizontalIcon}
+      strokeWidth={1.5}
+      data-icon="inline-start"
+      aria-hidden="true"
+    />
+    Filtros
+  </Button>
+);
 const WorkspaceHeader = ({
   period,
   disabled,
   onCapture,
+  onRefresh,
   onTool,
   search,
   onSearch,
@@ -338,6 +358,7 @@ const WorkspaceHeader = ({
   period: WorkspaceProps["period"];
   disabled: boolean;
   onCapture: () => void;
+  onRefresh: () => void;
 }>): JSX.Element => (
   <PageHeader
     title="Transacciones"
@@ -361,14 +382,9 @@ const WorkspaceHeader = ({
       disabled={disabled}
       onChange={onDate}
     />
-    <Button variant="outline" disabled={disabled} onClick={() => onTool("category")}>
-      <HugeiconsIcon
-        icon={FilterHorizontalIcon}
-        strokeWidth={1.5}
-        data-icon="inline-start"
-        aria-hidden="true"
-      />
-      Filtros
+    <FilterButton disabled={disabled} onClick={() => onTool("category")} />
+    <Button variant="ghost" disabled={disabled} onClick={onRefresh}>
+      Actualizar transacciones
     </Button>
     <Button disabled={disabled} onClick={onCapture}>
       + Registrar
@@ -480,6 +496,7 @@ const WorkspaceContent = ({
       }
     >
       <TransactionLedger
+        partial={props.continuation !== "complete"}
         toolbar={
           <WorkspaceToolbar
             tool={tool}
@@ -502,12 +519,52 @@ const WorkspaceContent = ({
     </WorkspaceColumns>
   );
 };
+const ContinuationNotice = (props: WorkspaceProps): JSX.Element =>
+  props.continuation === "complete" ? (
+    <></>
+  ) : (
+    <output className="px-4 py-2 text-sm text-muted-foreground">
+      {props.transactions.length} transacciones cargadas. Filtros y resumen aplican a las
+      transacciones cargadas.
+    </output>
+  );
+const continuationLabels = {
+  complete: "",
+  loading: "Cargando más transacciones…",
+  failure: "Reintentar carga de más transacciones",
+  available: "Cargar más transacciones",
+};
+const ContinuationControl = (
+  props: WorkspaceProps & Readonly<{ editing: boolean }>
+): JSX.Element => {
+  if (props.continuation === "complete") return <></>;
+  return (
+    <div className="flex flex-col items-start gap-2 px-4 py-4">
+      {props.continuation === "failure" ? (
+        <p role="alert">
+          No pudimos cargar más transacciones. Conservamos las transacciones cargadas.
+        </p>
+      ) : null}
+      <Button
+        variant="outline"
+        disabled={props.continuation === "loading" || props.editing || !props.editable}
+        onClick={props.continuation === "failure" ? props.onRetryMore : props.onMore}
+      >
+        {continuationLabels[props.continuation]}
+      </Button>
+    </div>
+  );
+};
 /** Owns filters and panel interaction; canonical records remain in the authentication-lifetime registry. */
 export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [searching, onSearchOpen] = useState(false);
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
-  const [filters, onFilters] = useState<WorkspaceFilters>(emptyFilters);
+  const [filters, setFilters] = useState<WorkspaceFilters>(emptyFilters);
+  const onFilters = (next: WorkspaceFilters): void => {
+    setFilters(next);
+    if (panel._tag === "Bulk") onPanel({ _tag: "Summary" });
+  };
   const visible = props.transactions.filter((transaction) =>
     matchesFilters(transaction, filters, props.currentUser.timeZone)
   );
@@ -534,8 +591,10 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
           period={props.period}
           disabled={editing || !props.editable}
           onCapture={() => onPanel({ _tag: "Capture", status: "idle" })}
+          onRefresh={props.onRefresh}
         />
         {props.queryNotice}
+        <ContinuationNotice {...props} />
         <WorkspaceContent
           tool={tool}
           props={props}
@@ -546,6 +605,7 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
           visible={visible}
           rows={rows}
         />
+        <ContinuationControl {...props} editing={editing} />
       </main>
     </>
   );

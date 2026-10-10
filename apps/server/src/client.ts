@@ -164,3 +164,5 @@ export type { AuthenticationProvider } from "~/shell/web-authentication/contract
 export { ProviderHandoffSearch } from "~/shell/web-authentication/contract";
 
 export { Currency, currencyMetadata } from "~/core/_shared/money";
+
+export { TransactionQueryValues } from "~/core/transactions/contract";

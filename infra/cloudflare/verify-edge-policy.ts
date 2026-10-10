@@ -25,7 +25,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #1139's type-only Proactivity health binding declarations in the hashed runtime contract.
 // #1139 adds no change to the merged public marketing policy, topology, routing, or security settings.
 // #1168 reuses the existing private namespace for maintenance, restoring the original reviewed topology.
-const expectedEdgePolicyDigest = "9fcdfa1f546c38d82a683950d5935dffadd3c12dc617d3ad471b6fd072046859";
+// Includes #1182's public installer GET/HEAD routes and bounded public CLI version metadata.
+const expectedEdgePolicyDigest = "a58359cf66ef6c7cefce1a2003186c4d8949151bf169fb3b42b3f56e708a3caf";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

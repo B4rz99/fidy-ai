@@ -277,7 +277,22 @@ Its Production release failed before promotion: Alchemy rejects new Durable Obje
 with zero-traffic candidates. The follow-up selects the maintenance runtime at a reserved object key
 in the existing namespace, preserving ordinary User coordination and the existing promotion gates.
 Native Core/local D1 checks pass for expired/live retention, malformed requests, separate User probes
-and User alarm delegation; the deployed executor remains unverified until a successful release.
+and User alarm delegation. PR #1176 passed all CI checks and both reviews, then deployed as
+`56564cf4bcb0568160410d9b899518cb7118219f` (Production run `38081989407`). API/web metadata
+agree. The zero-traffic upload, exact-pair smoke, promotion, normal-traffic probes and drift gate passed.
+Two fresh identity-free Microsoft attempts established the live retention proof: one pending attempt
+was aged past the one-day cutoff and removed within 15 seconds; the other remained and its status
+returned 200. No User or WebSession deadline was altered. Closed scheduled and maintenance telemetry
+both report success on that exact revision. The existing authenticated browser survived reload.
 
-Still pending: live forwarded WhatsApp handoff refusal (the prior accepted exchange has expired),
-actual WebSession idle/hard-expiry enforcement, and deployed maintenance-executor verification.
+Live Sandbox rerun: Kapso delivered the authenticated Reiniciar webhook to Fidy with HTTP 202,
+but the outbound reply was refused with HTTP 403 (sandbox BSUID recipients unsupported). The
+configured sandbox business endpoint matches; this already-associated caller enters hosted chat
+before pre-User onboarding, and that sender explicitly uses BSUID delivery. This is a hosted-channel
+sandbox gap, not evidence that provider onboarding failed. No new Consent or association was recorded.
+
+Still pending: live forwarded WhatsApp handoff refusal needs an eligible unassociated test caller
+and fresh Consent; actual WebSession idle/hard-expiry enforcement remains locally clock-tested,
+not exercised against real Production deadlines. Microsoft manual denial/popup close remains deferred,
+and work/school needs an eligible account. The earlier intermittent Microsoft refusal cause remains
+unconfirmed; subsequent successful sign-in is evidence of that journey, not a proven root-cause fix.

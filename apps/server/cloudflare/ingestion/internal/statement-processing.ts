@@ -28,6 +28,7 @@ import { StatementProcessingUnavailable } from "../contract";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
 import { statementChunkSize } from "./statement-processing-limits";
+import { statementReviewAdmission } from "./statement-review-budget";
 
 const submissionRow = Schema.Struct({
   staging_id: StatementStagingId,
@@ -52,6 +53,7 @@ class StatementProcessingDependencyFailed extends Data.TaggedError(
 )<{
   readonly cause: unknown;
 }> {}
+class StatementReviewBudgetExceeded extends Data.TaggedError("StatementReviewBudgetExceeded") {}
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, StatementProcessingDependencyFailed> =>
   Effect.tryPromise({
     try: run,
@@ -304,7 +306,9 @@ const commitOutcome = ({
     ])
   ).pipe(Effect.asVoid);
 
-const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingDependencyFailed> =>
+const rowOutcome = (
+  work: RowWork
+): Effect.Effect<void, StatementProcessingDependencyFailed | StatementReviewBudgetExceeded> =>
   Effect.gen(function* () {
     const { db, userId, submissionId, row, result } = work;
     const existing = yield* attempt(() =>
@@ -324,6 +328,12 @@ const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingDepen
     }
     const id = newId();
     const current = yield* Clock.currentTimeMillis;
+    if (
+      result.outcome === "needs-review" &&
+      !reviewAdmission(work, work.context, current)(result)
+    ) {
+      return yield* new StatementReviewBudgetExceeded();
+    }
     const activeArgs = [submissionId, userId, current];
     const statements =
       result.outcome === "accepted"
@@ -356,6 +366,24 @@ type ProcessInput = Readonly<{
   submissionId: string;
 }>;
 type Progress = typeof countRow.Type;
+
+const reviewAdmission = (
+  input: Pick<ProcessInput, "userId" | "submissionId">,
+  context: SubmissionRow,
+  current: number
+): ReturnType<typeof statementReviewAdmission> =>
+  statementReviewAdmission({
+    userId: input.userId,
+    submissionId: input.submissionId,
+    serviceMarket: context.service_market,
+    locale: context.locale,
+    timeZone: context.time_zone,
+    sourceFormat: context.source_format,
+    parserRevision: context.parser_revision,
+    extractorRevision,
+    expiresAt: context.retention_expires_at_ms,
+    createdAt: current,
+  });
 
 const readParsed = (
   input: ProcessInput,
@@ -487,7 +515,10 @@ const finalizeChunk = ({
   parsed: ParsedStatement;
   rows: ReadonlyArray<ParsedStatementRow>;
   progress: Progress;
-}>): Effect.Effect<void, StatementProcessingDependencyFailed | Schema.SchemaError> =>
+}>): Effect.Effect<
+  void,
+  StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
+> =>
   Effect.gen(function* () {
     const chunk = rows.slice(progress.total, progress.total + statementChunkSize);
     const mapping = mechanicalMappingFor(parsed.headers);
@@ -591,7 +622,7 @@ const advanceSubmission = (
   parsed: ParsedStatement
 ): Effect.Effect<
   "continue" | "completed",
-  StatementProcessingDependencyFailed | Schema.SchemaError
+  StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeEffect(Schema.toType(Schema.Array(ParsedStatementRow)))(
@@ -647,4 +678,14 @@ export const processStatementSubmission = (
     return Option.isSome(parsed)
       ? yield* advanceSubmission(input, context.value, parsed.value)
       : "completed";
-  }).pipe(Effect.mapError(() => new StatementProcessingUnavailable()));
+  }).pipe(
+    Effect.catchTag("StatementReviewBudgetExceeded", () =>
+      markFailed({
+        db: input.DB,
+        userId: input.userId,
+        submissionId: input.submissionId,
+        reason: "resource-limit",
+      }).pipe(Effect.as("completed" as const))
+    ),
+    Effect.mapError(() => new StatementProcessingUnavailable())
+  );

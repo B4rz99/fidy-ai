@@ -203,3 +203,23 @@ it("binds the comparison code to the new review after cancelling a preselected r
     expect.objectContaining({ pairingId: replacement.pairingId })
   );
 });
+
+it("offers sign-in for a valid public code after inspection fails without approving", () => {
+  const approve = vi.fn();
+  render(
+    <PATPairingView
+      initialReview={Option.none()}
+      publicCode={Option.none()}
+      approve={approve}
+      inspect={(command) => command.onFailed()}
+    />
+  );
+  fireEvent.change(screen.getByLabelText("Código"), { target: { value: "bcdf-ghjk" } });
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  expect(
+    screen.getByRole("button", { name: "Iniciar sesión para revisar la solicitud" })
+  ).toHaveAttribute("href", "/auth/pair?cliCode=BCDF-GHJK");
+  expect(approve).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Ingresar otro código" }));
+  expect(screen.getByLabelText("Código")).toHaveValue("");
+});

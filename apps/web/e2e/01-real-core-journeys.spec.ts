@@ -888,10 +888,11 @@ const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRe
   yield* fromPlaywright(
     page
       .getByRole("button", {
-        name: "30 días",
+        name: "90 días",
       })
       .click()
   );
+  yield* fromPlaywright(page.getByRole("menuitemradio", { name: "30 días" }).click());
   yield* fromPlaywright(
     page
       .getByRole("button", {

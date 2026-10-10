@@ -26,10 +26,11 @@ const ProviderChoice = ({
   const search = new URLSearchParams();
   if (Option.isSome(handoffReference)) search.set("handoff", handoffReference.value);
   if (Option.isSome(cliCode)) search.set("cliCode", cliCode.value);
+  const query = search.toString();
   return (
     <a
       className="text-center underline"
-      href={`${provider === "google" ? "/auth/microsoft" : "/auth/google"}?${search.toString()}`}
+      href={`${provider === "google" ? "/auth/microsoft" : "/auth/google"}${query.length > 0 ? `?${query}` : ""}`}
     >
       {provider === "google" ? "Microsoft" : "Google"}
     </a>

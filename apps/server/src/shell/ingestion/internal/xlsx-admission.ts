@@ -67,6 +67,7 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
 };
 
 const requiredXmlRoots: Readonly<Record<string, string>> = {
+  sheet: "workbook",
   c: "worksheet",
   f: "worksheet",
   si: "sst",
@@ -103,7 +104,7 @@ const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
   if (name === "Relationship") assertRelationship(tag);
 };
 
-type XmlMember = Readonly<{ root: string; text: string }>;
+type XmlMember = Readonly<{ name: string; root: string; text: string }>;
 const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> => {
   const members: Array<XmlMember> = [];
   for (const [name, bytes] of entries) {
@@ -133,7 +134,7 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
         assertXmlRepresentation(tag, root);
       });
     });
-    members.push({ root, text });
+    members.push({ name, root, text });
   }
   if (members.some((member) => member.root === "document-content")) return malformed();
   return members;
@@ -292,10 +293,86 @@ const admitWorksheet = ({ xml, strings, formats, charge }: WorksheetInput): void
   });
 };
 
+const worksheetTarget = (
+  target: string,
+  relationshipName: string,
+  members: ReadonlyArray<XmlMember>
+): string => {
+  const candidates = [
+    "xl/" + target.replace(/[/]?xl\//u, ""),
+    target,
+    relationshipName.replace(/_rels\/[\s\S]*$/u, "") + target,
+  ];
+  for (const candidate of candidates) {
+    const name = candidate.replace(/^\//u, "").toLowerCase();
+    if (
+      members.some((member) => member.name.toLowerCase() === name && member.root === "worksheet")
+    ) {
+      return name;
+    }
+  }
+  return malformed();
+};
+const sheetRelationships = (member: XmlMember): Map<string, string> => {
+  const targets = new Map<string, string>();
+  scan(member.text, (parser) =>
+    parser.on("opentag", (tag) => {
+      if (localName(tag.name) !== "Relationship") return;
+      const allowed = ["Id", "Type", "Target", "TargetMode"];
+      if (
+        Object.keys(tag.attributes).some(
+          (name) => !allowed.includes(name) && !name.startsWith("xmlns")
+        )
+      ) {
+        malformed();
+      }
+      const id = tag.attributes.Id ?? "";
+      if (targets.has(id)) malformed();
+      targets.set(id, tag.attributes.Target ?? "");
+    })
+  );
+  return targets;
+};
+const admitSheetReferences = (members: ReadonlyArray<XmlMember>): void => {
+  const books = members.filter((member) => member.root === "workbook");
+  if (books.length !== 1) return malformed();
+  const book = books[0];
+  if (book === undefined) return malformed();
+  const relationshipName = book.name.replace(/([^/]+)$/u, "_rels/$1.rels");
+  const relationships =
+    members.find((member) => member.name === relationshipName) ??
+    members.find((member) => member.name === "xl/_rels/workbook.xml.rels");
+  if (relationships === undefined) return malformed();
+  const targets = sheetRelationships(relationships);
+  const seen = new Set<string>();
+  let count = 0;
+  scan(book.text, (parser) =>
+    parser.on("opentag", (tag) => {
+      if (localName(tag.name) !== "sheet") return;
+      count += 1;
+      if (count > maximumSheets) limit();
+      const allowed = ["name", "sheetId", "state", "r:id"];
+      if (
+        Object.keys(tag.attributes).some(
+          (name) => !allowed.includes(name) && !name.startsWith("xmlns")
+        )
+      ) {
+        malformed();
+      }
+      const target = targets.get(tag.attributes["r:id"] ?? "");
+      if (target === undefined) return malformed();
+      const resolved = worksheetTarget(target, relationships.name, members);
+      if (seen.has(resolved)) return malformed();
+      seen.add(resolved);
+    })
+  );
+};
+
 /** Admit repeated text and formatting work before workbook construction; never truncates evidence. */
 export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
   const entries = decodeXlsxArchive(bytes);
   const members = xmlMembers(entries);
+  admitSheetReferences(members);
   const worksheets = members.filter((member) => member.root === "worksheet");
   if (worksheets.length === 0) return malformed();
   if (worksheets.length > maximumSheets) limit();

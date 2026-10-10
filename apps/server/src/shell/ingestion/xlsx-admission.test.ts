@@ -231,6 +231,58 @@ it.effect("rejects formula translation triggers hidden inside unrelated attribut
   })
 );
 
+it.effect("rejects repeated worksheet targets and excess workbook sheet references", () =>
+  Effect.gen(function* () {
+    const source = workbook("normal");
+    yield* reject(
+      modify(source, (entries) =>
+        replacePart(entries, "xl/workbook.xml", (xml) =>
+          xml.replace("</sheets>", '<sheet name="Alias" sheetId="2" r:id="rId1"/></sheets>')
+        )
+      ),
+      "malformed-file"
+    );
+    yield* reject(
+      modify(source, (entries) => {
+        replacePart(entries, "xl/workbook.xml", (xml) =>
+          xml.replace("</sheets>", '<sheet name="Alias" sheetId="2" r:id="alias"/></sheets>')
+        );
+        replacePart(entries, "xl/_rels/workbook.xml.rels", (xml) =>
+          xml.replace(
+            "</Relationships>",
+            '<Relationship Id="alias" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/xl/worksheets/sheet1.xml"/></Relationships>'
+          )
+        );
+      }),
+      "malformed-file"
+    );
+    const sheetTags = Array.from(
+      { length: 21 },
+      (_, index) =>
+        `<sheet name="Sheet${index}" sheetId="${index + 1}" r:id="${index === 0 ? "rId1" : `extra${index + 1}`}"/>`
+    ).join("");
+    const relationshipTags = Array.from(
+      { length: 20 },
+      (_, index) =>
+        `<Relationship Id="extra${index + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 2}.xml"/>`
+    ).join("");
+    yield* reject(
+      modify(source, (entries) => {
+        replacePart(entries, "xl/workbook.xml", (xml) =>
+          xml.replace(/<sheets>[\s\S]*?<\/sheets>/u, `<sheets>${sheetTags}</sheets>`)
+        );
+        for (let index = 2; index <= 21; index += 1) {
+          entries[`xl/worksheets/sheet${index}.xml`] =
+            entries["xl/worksheets/sheet1.xml"] ?? new Uint8Array();
+        }
+        replacePart(entries, "xl/_rels/workbook.xml.rels", (xml) =>
+          xml.replace("</Relationships>", relationshipTags + "</Relationships>")
+        );
+      })
+    );
+  })
+);
+
 it.effect("counts actual expanded archive bytes at the boundary before workbook construction", () =>
   Effect.gen(function* () {
     const source = workbook("normal");

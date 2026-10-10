@@ -26,7 +26,7 @@ const canonicalHttpRequests = requireNonEmpty(
 export const TelemetryWorkKindGroup = {
   http: ["http_request"],
   queue: ["queue_publication", "queue_attempt"],
-  provider: ["github", "provider_call"],
+  provider: ["provider_call"],
   model: ["model_call"],
   schedule: ["scheduled_execution"],
   database: ["repository_operation"],

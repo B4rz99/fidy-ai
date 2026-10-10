@@ -18,9 +18,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { makeFidyClient, makeHostedTurnClient, makeWebAuthClient } from "@/transport/client";
 import { TransactionListFeature } from "./feature";
 
-const findDetailAmount = (amount: string): Promise<HTMLElement> =>
-  waitFor(() =>
-    within(screen.getByRole("region", { name: "Detalle de transacción" })).getByText(amount)
+const waitForEditableHistory = (): Promise<void> =>
+  waitFor(() => expect(screen.getByRole("button", { name: "+ Registrar" })).toBeEnabled()).then(
+    () => {}
   );
 const waitForMutation = (updates: () => number): Promise<void> =>
   waitFor(() => expect(updates()).toBe(1));
@@ -119,16 +119,7 @@ const renderJourney = (
       return Effect.succeed(jsonResponse(request, created, createdStatus));
     }
     if (request.url.endsWith("/user")) {
-      return Effect.succeed(
-        jsonResponse(request, {
-          id: "24000000-0000-4000-8000-000000000241",
-          serviceMarket: "CO",
-          locale: "es-CO",
-          timeZone: "America/Bogota",
-          trialPeriod: { startedAt: "2026-10-01T00:00:00Z", endsAt: "2026-10-08T00:00:00Z" },
-          createdAt: "2026-10-01T00:00:00Z",
-        })
-      );
+      return Effect.succeed(jsonResponse(request, storedUser));
     }
     if (request.url.endsWith("/categories")) {
       return Effect.succeed(
@@ -169,7 +160,6 @@ it("corrects the selected transaction and refreshes the same history entry", () 
       fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
       expect(yield* Effect.tryPromise(() => screen.findByText("Cambios guardados"))).toBeVisible();
-      fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
       expect(
         yield* Effect.tryPromise(() =>
           within(screen.getByLabelText("Transacciones del mes")).findByText("$ 30.000,00")
@@ -200,7 +190,6 @@ it("keeps an uncertain correction from being submitted a second time", () =>
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
       expect(requests.updates()).toBe(1);
       fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
-      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
       expect(screen.getByRole("region", { name: "Resumen de transacciones" })).toBeVisible();
     })
   ));
@@ -330,7 +319,10 @@ it("finishes a pending correction after crossing the responsive breakpoint", () 
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("30000");
       expect(screen.getByLabelText("Notas (opcional)")).toBeDisabled();
       yield* Deferred.succeed(complete, undefined);
-      expect(yield* Effect.tryPromise(() => findDetailAmount("$ 30.000,00"))).toBeVisible();
+      yield* Effect.tryPromise(() => screen.findByText("Cambios guardados"));
+      yield* Effect.tryPromise(waitForEditableHistory);
+      fireEvent.click(screen.getByRole("button", { name: "Ver transacción El Corral" }));
+      expect(screen.getByLabelText("Monto ($)")).toHaveValue("30000");
       expect(requests.updates()).toBe(1);
     })
   ));
@@ -404,7 +396,7 @@ const bulkRejection = (
     },
     invalidStatus
   );
-const bulkUser = {
+const storedUser = {
   id: "24000000-0000-4000-8000-000000000241",
   serviceMarket: "CO",
   locale: "es-CO",
@@ -470,7 +462,7 @@ const renderBulkJourney = (
         })
       );
     }
-    if (request.url.endsWith("/user")) return Effect.succeed(jsonResponse(request, bulkUser));
+    if (request.url.endsWith("/user")) return Effect.succeed(jsonResponse(request, storedUser));
     if (request.url.endsWith("/categories")) {
       return Effect.succeed(
         jsonResponse(request, [
@@ -778,3 +770,167 @@ it("trims a changed counterparty and retains the explicitly changed notes", () =
       });
     })
   ));
+
+const historyCursor =
+  "2026-10-09T12:30:00.000Z|2026-10-09T12:30:00.000Z|24000000-0000-4000-8000-000000000002";
+type PaginationFixture = {
+  mode: "ready" | "failure" | "repeat" | "wrong-period" | "missing-args";
+  requests: Array<string>;
+  gate: Effect.Effect<void>;
+};
+const paginationQuery = (request: HttpClientRequest.HttpClientRequest): Record<string, string> =>
+  Object.fromEntries([...new URL(request.url).searchParams, ...request.urlParams]);
+const paginationSuggestion = (
+  request: HttpClientRequest.HttpClientRequest,
+  fixture: PaginationFixture
+): unknown => {
+  const query = paginationQuery(request);
+  return {
+    tool: "transactions.listTransactions",
+    hint: "Continue Transaction history.",
+    ...(fixture.mode === "missing-args"
+      ? {}
+      : {
+          args: {
+            query: {
+              from: fixture.mode === "wrong-period" ? "2026-09-01T05:00:00Z" : query.from,
+              to: query.to,
+              cursor: historyCursor,
+            },
+          },
+        }),
+  };
+};
+const renderPaginationJourney = (fixture: PaginationFixture): void => {
+  const client = HttpClient.make((request) => {
+    if (request.url.endsWith("/user")) {
+      return Effect.succeed(jsonResponse(request, storedUser));
+    }
+    if (request.url.endsWith("/categories")) {
+      return Effect.succeed(jsonResponse(request, [{ id: categoryId, label: "Restaurantes" }]));
+    }
+    const query = paginationQuery(request);
+    fixture.requests.push(query.cursor ?? "first");
+    if (query.cursor === undefined) {
+      return Effect.succeed(
+        wireResponse(request, {
+          data: [storedTransaction],
+          next: [paginationSuggestion(request, fixture)],
+        })
+      );
+    }
+    if (fixture.mode === "failure") {
+      return Effect.fail(
+        new HttpClientError.HttpClientError({
+          reason: new HttpClientError.TransportError({ request }),
+        })
+      );
+    }
+    const last = {
+      ...storedTransaction,
+      id: "24000000-0000-4000-8000-000000000003",
+      counterparty: "La Cocina",
+    };
+    return fixture.gate.pipe(
+      Effect.as(
+        wireResponse(request, {
+          data: [storedTransaction, last],
+          next: fixture.mode === "repeat" ? [paginationSuggestion(request, fixture)] : [],
+        })
+      )
+    );
+  });
+  mountJourney(client);
+};
+const waitForFirstPage = (): Promise<void> =>
+  waitFor(() =>
+    expect(screen.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(1)
+  );
+const firstPaginationRow = (): Promise<HTMLElement> =>
+  screen.findByRole("button", { name: "Ver transacción El Corral" });
+it("retains loaded scope while a continuation waits, appends unique rows and refreshes to page one", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>();
+      const fixture: PaginationFixture = {
+        mode: "ready",
+        requests: [],
+        gate: Deferred.await(gate),
+      };
+      renderPaginationJourney(fixture);
+      yield* Effect.tryPromise(firstPaginationRow);
+      fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+      fireEvent.change(screen.getByLabelText("Buscar transacciones"), {
+        target: { value: "La Cocina" },
+      });
+      expect(
+        screen.getByText("No hay coincidencias entre las transacciones cargadas")
+      ).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+      yield* Effect.tryPromise(() =>
+        screen.findByRole("button", { name: "Cargando más transacciones…" })
+      );
+      expect(screen.getByRole("button", { name: "Cargando más transacciones…" })).toBeDisabled();
+      yield* Deferred.succeed(gate, undefined);
+      yield* Effect.tryPromise(() =>
+        screen.findByRole("button", { name: "Ver transacción La Cocina" })
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+      expect(screen.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(2);
+      expect(
+        screen.queryByRole("button", { name: "Cargar más transacciones" })
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Actualizar transacciones" }));
+      yield* Effect.tryPromise(waitForFirstPage);
+      expect(fixture.requests).toEqual(["first", historyCursor, "first"]);
+    })
+  ));
+it("retains rows after continuation transport failure and retries the same cursor", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture: PaginationFixture = { mode: "failure", requests: [], gate: Effect.void };
+      renderPaginationJourney(fixture);
+      yield* Effect.tryPromise(firstPaginationRow);
+      fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+      const retry = yield* Effect.tryPromise(() =>
+        screen.findByRole("button", { name: "Reintentar carga de más transacciones" })
+      );
+      expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
+      fixture.mode = "ready";
+      fireEvent.click(retry);
+      yield* Effect.tryPromise(() =>
+        screen.findByRole("button", { name: "Ver transacción La Cocina" })
+      );
+      expect(fixture.requests.slice(1).every((cursor) => cursor === historyCursor)).toBe(true);
+    })
+  ));
+it.each(["repeat", "wrong-period", "missing-args"] as const)(
+  "rejects %s continuation without exposing boundary details and permits refresh",
+  (mode) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture: PaginationFixture = { mode, requests: [], gate: Effect.void };
+        renderPaginationJourney(fixture);
+        yield* Effect.tryPromise(firstPaginationRow);
+        if (mode === "repeat") {
+          fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+          yield* Effect.tryPromise(() =>
+            screen.findByRole("button", { name: "Ver transacción La Cocina" })
+          );
+          fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+        }
+        yield* Effect.tryPromise(() =>
+          screen.findByText("No pudimos actualizar las transacciones")
+        );
+        expect(
+          screen.queryByText(/Invalid Transaction|Repeated Transaction/)
+        ).not.toBeInTheDocument();
+        fixture.mode = "ready";
+        fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Cargar más transacciones" })
+        );
+        expect(screen.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(1);
+      })
+    )
+);

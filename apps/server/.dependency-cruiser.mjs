@@ -179,6 +179,8 @@ export default {
           "^src/core/(browser-login|dashboard|email-authentication|ingestion|insights|recovery|subscription|tokens)/contract\\.ts$",
 
           "^src/core/tokens/operations\\.ts$",
+          // Pure Transaction query values own canonical browser continuation decoding.
+          "^src/core/transactions/contract\\.ts$",
           // Pure Shared Kernel currency definitions support exact browser presentation.
           "^src/core/_shared/money\\.ts$",
           "^src/core/_shared/context\\.ts$",

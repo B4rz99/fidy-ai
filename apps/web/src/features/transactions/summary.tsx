@@ -5,6 +5,7 @@ import { formatMoney } from "@/transport/money";
 import { type Transaction, formatOccurrence } from "./presentation";
 
 type SummaryProps = Readonly<{
+  partial: boolean;
   transactions: ReadonlyArray<Transaction>;
   locale: string;
   timeZone: string;
@@ -93,6 +94,11 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
     <section aria-label="Resumen de transacciones" className="flex flex-col gap-5">
       <div>
         <h2 className="text-xl font-semibold">Resumen</h2>
+        {props.partial ? (
+          <p className="text-sm text-muted-foreground">
+            Solo transacciones cargadas que coinciden con los filtros.
+          </p>
+        ) : null}
       </div>
       <dl>
         <SummaryLine label="Total de transacciones" value={String(props.transactions.length)} />

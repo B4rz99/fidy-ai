@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PublicHome } from "@/features/public-site/home";
+import { mountConversation, mountPreview } from "./demo-motion";
+import { mountIndicator, moveIndicator } from "./tab-indicator";
 import { FeatureDetail } from "./feature-detail";
 
 // JSDOM has no layout/WAAPI. These browser-boundary fixtures deliver visible intersections
@@ -214,9 +216,7 @@ it("preserves browser scroll timelines while cleaning up owned animations in Str
   Object.defineProperty(Element.prototype, "getAnimations", {
     configurable: true,
     value(this: Element) {
-      return this.classList.contains("fidy-landing")
-        ? [scrollAnimation, ownedAnimation]
-        : [ownedAnimation];
+      return [scrollAnimation, ownedAnimation];
     },
   });
   const view = render(
@@ -326,4 +326,112 @@ it("uses concise first-use wording and the ChatGPT brand", () => {
   expect(screen.queryByText(/Nunca envíes claves/u)).not.toBeInTheDocument();
   expect(screen.queryByText(/Fidy refleja la información/u)).not.toBeInTheDocument();
   expect(screen.queryByText(/CSV o XLSX/u)).not.toBeInTheDocument();
+});
+
+it("retargets the tab underline after wrapping and releases its resize subscription", () => {
+  let resize = (): void => {};
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resize = callback;
+      }
+      observe(): void {}
+      disconnect = disconnect;
+    }
+  );
+  const view = render(<PublicHome />);
+  const tab = screen.getByRole("tab", { name: "Presupuestos" });
+  Object.defineProperties(tab, {
+    offsetLeft: { configurable: true, value: 180 },
+    offsetTop: { configurable: true, value: 48 },
+    offsetHeight: { configurable: true, value: 48 },
+    offsetWidth: { configurable: true, value: 160 },
+  });
+  fireEvent.click(tab, { detail: 1 });
+  const list = screen.getByRole("tablist");
+  expect(list.querySelector(".feature-indicator")).toHaveStyle({
+    transform: "translate(180px, 93px) scaleX(160)",
+  });
+  expect(list).toHaveAttribute("data-instant", "false");
+  Object.defineProperty(tab, "offsetLeft", { value: 0 });
+  resize();
+  expect(list.querySelector(".feature-indicator")).toHaveStyle({
+    transform: "translate(0px, 93px) scaleX(160)",
+  });
+  expect(list).toHaveAttribute("data-instant", "true");
+  view.unmount();
+  expect(disconnect).toHaveBeenCalled();
+});
+
+it("preserves native FAQ toggling with immediate keyboard and animated pointer intent", () => {
+  mountHome();
+  const summary = screen.getByText("¿Puedo corregir una transacción?");
+  const details = summary.closest("details");
+  fireEvent.click(summary, { detail: 1 });
+  expect(details).toHaveAttribute("open");
+  expect(details).toHaveAttribute("data-instant", "false");
+  fireEvent.click(summary, { detail: 0 });
+  expect(details).not.toHaveAttribute("open");
+  expect(details).toHaveAttribute("data-instant", "true");
+});
+
+it("defers a backgrounded demonstration and settles it when visibility changes", () => {
+  const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+  mountHome();
+  const shell = screen.getByText("Tu asistente · WhatsApp").closest(".demo-shell");
+  if (shell === null) throw new Error("Missing conversation shell");
+  animate.mockClear();
+  intersections.get(shell)?.(true);
+  expect(animate).not.toHaveBeenCalled();
+  hidden.mockReturnValue(false);
+  intersections.get(shell)?.(true);
+  expect(animate).toHaveBeenCalled();
+  cancel.mockClear();
+  hidden.mockReturnValue(true);
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(cancel).toHaveBeenCalled();
+  hidden.mockRestore();
+});
+
+it("plays pointer-selected chat and chart previews while keeping tab explanations available", () => {
+  mountHome();
+  fireEvent.click(screen.getByRole("button", { name: "Consultar" }), { detail: 1 });
+  expect(screen.getByRole("button", { name: "Consultar" })).toHaveAttribute("aria-pressed", "true");
+  for (const name of ["Asistente", "Dashboard", "Presupuestos"]) {
+    animate.mockClear();
+    fireEvent.click(screen.getByRole("tab", { name }), { detail: 1 });
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName(name);
+    expect(animate).toHaveBeenCalled();
+  }
+});
+
+it("keeps feature selection usable without ResizeObserver", () => {
+  vi.stubGlobal("ResizeObserver", undefined);
+  mountHome();
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Transacciones" }), { key: "ArrowRight" });
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Presupuestos");
+  expect(screen.getByRole("tab", { name: "Presupuestos" })).toHaveFocus();
+});
+
+it("leaves absent demonstration artwork alone and returns safe cleanup", () => {
+  const placeholder = document.createElement("div");
+  animate.mockClear();
+  cancel.mockClear();
+  const releaseConversation = mountConversation(placeholder);
+  const releasePreview = mountPreview(placeholder);
+  releaseConversation();
+  releasePreview();
+  expect(animate).not.toHaveBeenCalled();
+  expect(cancel).not.toHaveBeenCalled();
+});
+
+it("tolerates a detached tab and a tablist whose active content has been removed", () => {
+  const detached = document.createElement("button");
+  const emptyList = document.createElement("div");
+  expect(() => moveIndicator({ tab: detached, instant: true })).not.toThrow();
+  const release = mountIndicator(emptyList);
+  expect(emptyList.children).toHaveLength(0);
+  release();
 });

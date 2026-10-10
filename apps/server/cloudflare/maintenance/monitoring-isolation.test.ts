@@ -385,7 +385,11 @@ it("scheduled maintenance delivers and deduplicates an operator email during a t
           OPERATOR_ALERT_EMAIL: Option.some("operator@example.com"),
           RESEND_API_KEY: Option.some("test-key"),
         });
-        yield* Effect.exit(runCoreMaintenance(input));
+        yield* Effect.forEach(
+          Array.from({ length: 8 }),
+          () => Effect.exit(runCoreMaintenance(input)),
+          { concurrency: 8 }
+        );
         yield* Effect.exit(runCoreMaintenance(input));
         expect(bodies).toHaveLength(1);
         expect(bodies[0]).toContain("inspection_unavailable");

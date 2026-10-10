@@ -243,19 +243,25 @@ export const decideOperationalAlerts = (
     return asyncAlerts(signal);
   });
 
+const isD1Outage = (alert: OperationalAlert): boolean =>
+  alert.kind === "inspection_unavailable" && alert.owner === "d1";
+
+const d1Severity = (alert: Option.Option<OperationalAlert>): OperationalAlert["severity"] =>
+  Option.match(alert, { onNone: () => "warning", onSome: (value) => value.severity });
+
 /** Claims metadata-only email attempts atomically. Failed sends remain unconfirmed. */
 export const runOperationalAlerts = (input: OperationalAlertDelivery): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const unavailable = input.alerts.some(
-        (alert) => alert.kind === "inspection_unavailable" && alert.owner === "d1"
-      );
+      const outageAlert = Option.fromUndefinedOr(input.alerts.find(isD1Outage));
+      const unavailable = Option.isSome(outageAlert);
       if (Option.isSome(input.outage)) {
         const outageWork = deliverD1Outage({
           ...input,
           outageBucket: input.outage.value.bucket,
           release: input.outage.value.release,
-          unavailable,
+          inspection: unavailable ? "unavailable" : input.outage.value.inspection,
+          severity: d1Severity(outageAlert),
         });
         yield* unavailable ? outageWork : outageWork.pipe(Effect.orElseSucceed(() => undefined));
         if (unavailable) return;

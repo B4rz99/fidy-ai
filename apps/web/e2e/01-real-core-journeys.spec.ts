@@ -940,20 +940,12 @@ const revokeReadOnlyPat = Effect.fnUntraced(function* (
   );
   yield* fromPlaywright(expect(page.getByText(bearer)).toHaveCount(0));
   yield* fromPlaywright(page.reload());
-  yield* fromPlaywright(
-    expect(
-      page.getByRole("heading", {
-        name: "Agente de casa",
-      })
-    ).toBeVisible()
-  );
+  yield* fromPlaywright(expect(page.getByText("Agente de casa", { exact: true })).toBeVisible());
   yield* fromPlaywright(
     page
-      .locator('[data-slot="card"]')
+      .getByRole("row")
       .filter({
-        has: page.getByRole("heading", {
-          name: "Agente de casa",
-        }),
+        has: page.getByText("Agente de casa", { exact: true }),
       })
       .getByRole("button", {
         name: "Desactivar",

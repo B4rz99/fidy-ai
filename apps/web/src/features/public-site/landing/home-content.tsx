@@ -1,5 +1,5 @@
 import { AgentBrands } from "./agent-brands";
-import { fidyLogoUrl } from "@/ui/brand";
+import { Footer } from "./footer";
 import { LaunchButton } from "./registration";
 import { Header } from "./navigation";
 import { PhoneDemo } from "./phone-demo";
@@ -11,16 +11,21 @@ export const HomeContent = (): React.JSX.Element => (
   <>
     {" "}
     <Header />
-    <main>
+    <main itemScope itemType="https://schema.org/SoftwareApplication">
+      <meta itemProp="name" content="Fidy" />
+      <meta itemProp="applicationCategory" content="FinanceApplication" />
+      <meta itemProp="operatingSystem" content="Web" />
+      <link itemProp="url" href="https://app.fidyapp.com/" />
       {hero}
       {marketStrip}
+      {firstSteps}
       {waysToUse}
       <FeatureTabs />
       <DashboardStory />
       <Pricing />
       {questions}
       {closing}
-      {footer}
+      <Footer />
     </main>{" "}
   </>
 );
@@ -48,7 +53,9 @@ const hero = (
             {"Así funciona ↓"}
           </a>
         </div>
-        <small className="fine">{"Finanzas personales. Pensadas para ti y tus agentes."}</small>
+        <small className="fine">
+          {"7 días de Fidy Pro sin tarjeta. Tú eliges si te suscribes."}
+        </small>
       </div>
       <div id="demo">
         <PhoneDemo />
@@ -66,6 +73,41 @@ const marketStrip = (
       <span>{"Tus propios agentes"}</span>
     </div>
   </div>
+);
+
+const firstSteps = (
+  <section className="section wrap first-steps" aria-labelledby="primeros-pasos">
+    <div className="section-head">
+      <h2 id="primeros-pasos">Empieza con lo que ya sabes.</h2>
+      <p>No necesitas conectar un banco para empezar a organizar tus finanzas.</p>
+    </div>
+    <div className="steps">
+      <article className="step">
+        <h3>1. Crea tu cuenta.</h3>
+        <p>
+          Tu cuenta incluye una prueba de Fidy Pro de 7 días, sin tarjeta. Crear la cuenta no activa
+          una suscripción de pago.
+        </p>
+      </article>
+      <article className="step">
+        <h3>2. Registra una transacción.</h3>
+        <p>
+          Escribe cuánto fue y en qué consistió, desde la web o por WhatsApp. También puedes
+          adjuntar un Excel por WhatsApp para incorporar transacciones, según tu plan.
+        </p>
+      </article>
+      <article className="step">
+        <h3>3. Decide cómo seguir.</h3>
+        <p>
+          Revisa tus cifras y presupuestos durante la prueba. Para continuar con las funciones Pro,
+          elige y autoriza un plan en la sección de suscripción.
+        </p>
+        <a className="textlink" href="#precios">
+          Ver planes y precios ↓
+        </a>
+      </article>
+    </div>
+  </section>
 );
 
 const waysToUse = (
@@ -105,9 +147,12 @@ const waysToUse = (
         </h3>
         <p>
           {
-            "Conéctalo mediante MCP, CLI o API. Autoriza su acceso para consultar información o ayudarte a organizarla."
+            "Revisa las opciones de MCP, CLI y API, su disponibilidad y los permisos antes de autorizar a tu agente."
           }
         </p>
+        <a className="textlink" href="/funciones/agentes#conectar">
+          Conecta tu agente ↗
+        </a>
       </div>
     </div>
   </section>
@@ -139,15 +184,28 @@ const questions = (
         <summary>{"¿Qué pasa con mis datos?"}</summary>
         <p>
           {
-            "Se usan para prestar el servicio y proteger tu acceso. Puedes consultar su uso, solicitar correcciones y pedir su eliminación cuando corresponda."
+            "Usamos los datos que compartes para organizar tus finanzas, responder tus solicitudes y proteger tu acceso. Cloudflare procesa el servicio y el asistente; Kapso y Meta intervienen al usar WhatsApp. Estos proveedores pueden tratar datos fuera de Colombia."
           }
+        </p>
+        <p>
+          Puedes consultar, corregir o solicitar la eliminación de tus datos y revocar tu
+          autorización. Algunas obligaciones legales y de seguridad pueden exigir conservar
+          información específica. Consulta los plazos, proveedores y derechos en la{" "}
+          <a className="textlink" href="/politica">
+            política de privacidad
+          </a>{" "}
+          o escribe a{" "}
+          <a className="textlink" href="mailto:obarboza@fidyapp.com">
+            obarboza@fidyapp.com
+          </a>
+          .
         </p>
       </details>
       <details>
         <summary>{"¿Necesito tener mi propio agente?"}</summary>
         <p>
           {
-            "No. Puedes conversar con Fidy en WhatsApp y usar la web app. Si ya usas un agente compatible con MCP, la CLI o la API, puedes configurarlo y autorizarlo para trabajar con tu información."
+            "No. Puedes conversar con Fidy en WhatsApp y usar la web app. Si quieres usar tu propio agente, consulta la guía de conexión y la disponibilidad de cada opción antes de configurarlo."
           }
         </p>
       </details>
@@ -171,13 +229,17 @@ const questions = (
         <summary>{"¿Cuánto cuesta?"}</summary>
         <p>
           {
-            "Fidy Pro cuesta $28.900 COP al mes. También puedes elegir $9.900 COP por semana o $289.900 COP al año."
+            "Crear tu cuenta incluye una prueba de Fidy Pro de 7 días sin tarjeta. Después, Fidy Pro cuesta $28.900 COP al mes. También puedes elegir $9.900 COP por semana o $289.900 COP al año."
           }
         </p>
       </details>
       <details>
         <summary>{"¿Cómo empiezo?"}</summary>
-        <p>{"Crea tu cuenta para organizar tus finanzas y conectar tus agentes."}</p>
+        <p>
+          {
+            "Revisa la autorización de tratamiento de datos, crea tu cuenta y registra tu primera transacción. La prueba comienza al crear tu cuenta; no necesitas conectar un banco ni registrar una tarjeta."
+          }
+        </p>
         <div className="actions">
           <LaunchButton dark={false} arrow />
         </div>
@@ -195,15 +257,4 @@ const closing = (
     <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
     <LaunchButton dark arrow />
   </section>
-);
-
-const footer = (
-  <footer className="footer">
-    <div className="wrap">
-      <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={fidyLogoUrl} alt="fidy" />
-      </a>
-      <span>{"Finanzas personales para ti y tus agentes."}</span>
-    </div>
-  </footer>
 );

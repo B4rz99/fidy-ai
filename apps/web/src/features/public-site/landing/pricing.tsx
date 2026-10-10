@@ -22,7 +22,11 @@ export const Pricing = (): React.JSX.Element => {
               {"Más claridad."} <br />
               {"A tu ritmo."}
             </h2>
-            <p>{"Todo Fidy Pro. Paga por semana, mes o año."}</p>
+            <p>
+              {
+                "Prueba Fidy Pro 7 días sin tarjeta. Después, elige un plan semanal, mensual o anual."
+              }
+            </p>
             <ul>
               <li>{"Conversa con tu asistente de finanzas."}</li>
               <li>{"Organiza y consulta tus transacciones."}</li>

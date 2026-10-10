@@ -27,7 +27,7 @@ it("requires the initiating browser proof and current explicit Consent before Mi
           policy: Schema.Struct({ publicUrl: Schema.String }),
         })
       )(yield* Effect.tryPromise(() => disclosure.json()));
-      expect(current.revision).toBe("web-provider-2026-10-09-short");
+      expect(current.revision).toBe("web-provider-2026-10-09-browser-agents");
       expect(current.text).toBe(
         "Fidy usa tus datos para proteger tu cuenta y organizar tus finanzas."
       );
@@ -687,13 +687,51 @@ it.each(["https://attacker.example", undefined])(
           const refused = yield* Effect.tryPromise(() =>
             send(
               `/web/providers/microsoft/${path}`,
-              { ...pairing, intent: "signup", consentRevision: "web-provider-2026-10-09-short" },
+              {
+                ...pairing,
+                intent: "signup",
+                consentRevision: "web-provider-2026-10-09-browser-agents",
+              },
               headers
             )
           );
           expect(refused.status).toBe(403);
           expect(refused.headers.get("set-cookie")).toBeNull();
         }
+        expect(exchange).not.toHaveBeenCalled();
+        for (const table of [
+          "provider_authentication_attempts",
+          "users",
+          "provider_credentials",
+          "onboarding_consent_records",
+          "trial_periods",
+          "completed_provider_authentications",
+        ]) {
+          expect(yield* countRows(db, table)).toBe(0);
+        }
+        const redeem = yield* Effect.tryPromise(() => send("/web/pairings/redeem", pairing));
+        expect(redeem.status).toBe(202);
+        expect(redeem.headers.get("set-cookie")).toBeNull();
+      })
+    )
+);
+
+it.each(["google", "microsoft"])(
+  "refuses the previous policy decision before %s signup creates any authority",
+  (provider) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, send, pairing } = yield* Effect.tryPromise(setup);
+        const exchange = vi.spyOn(globalThis, "fetch");
+        const refused = yield* Effect.tryPromise(() =>
+          send(`/web/providers/${provider}/start`, {
+            ...pairing,
+            intent: "signup",
+            consentRevision: "web-provider-2026-10-09-short",
+          })
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.headers.get("set-cookie")).toBeNull();
         expect(exchange).not.toHaveBeenCalled();
         for (const table of [
           "provider_authentication_attempts",

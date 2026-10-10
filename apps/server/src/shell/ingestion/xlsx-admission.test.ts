@@ -7,8 +7,15 @@ import { statementParserLimits } from "./contract";
 import { parseStatementFile } from "./operations";
 
 const writeWorkbook = (book: WorkBook): Uint8Array => {
-  const fresh: WorkBook & { SSF: Record<number, string> } = { ...book, SSF: { 0: "General" } };
-  const buffer: unknown = XLSX.write(fresh, { type: "array", compression: true, bookSST: true });
+  const fresh: WorkBook & { SSF: Record<number, string> } = {
+    ...book,
+    SSF: { 0: "General" },
+  };
+  const buffer: unknown = XLSX.write(fresh, {
+    type: "array",
+    compression: true,
+    bookSST: true,
+  });
   if (!(buffer instanceof ArrayBuffer)) throw new Error("Expected workbook bytes");
   return new Uint8Array(buffer);
 };
@@ -93,6 +100,97 @@ it.effect("rejects ambiguous shared-string indexing and namespace attributes", (
       modify(source, (entries) =>
         replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
           xml.replace('t="s"', 'xmlns:bad="urn:bad" bad:t="s"')
+        )
+      ),
+      "malformed-file"
+    );
+  })
+);
+
+it.effect("refuses foreign attribute aliases for shared values, styles and formulas", () =>
+  Effect.gen(function* () {
+    const source = workbook("x".repeat(140000));
+    for (const attribute of ["T", "t_extra"]) {
+      yield* reject(
+        modify(source, (entries) =>
+          replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+            xml.replace(/t="s"/gu, `${attribute}="s"`)
+          )
+        ),
+        "malformed-file"
+      );
+    }
+    for (const attribute of ["S", "s_extra"]) {
+      yield* reject(
+        modify(source, (entries) =>
+          replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+            xml.replace('<c r="A2"', `<c ${attribute}="0" r="A2"`)
+          )
+        ),
+        "malformed-file"
+      );
+    }
+    for (const attribute of ["T", "t_extra"]) {
+      yield* reject(
+        modify(source, (entries) =>
+          replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+            xml.replace("<v>1</v>", `<f ${attribute}="shared" si="0">A1</f><v>1</v>`)
+          )
+        ),
+        "malformed-file"
+      );
+    }
+    for (const attribute of ["NumFmtId", "numFmtId_extra", "FormatCode", "formatCode_extra"]) {
+      yield* reject(
+        modify(source, (entries) =>
+          replacePart(entries, "xl/styles.xml", (xml) =>
+            xml.replace(
+              "</styleSheet>",
+              `<numFmts><numFmt ${attribute}="164"/></numFmts></styleSheet>`
+            )
+          )
+        ),
+        "malformed-file"
+      );
+    }
+  })
+);
+
+it.effect("rejects binary workbook parts despite unrelated admitted XML", () =>
+  Effect.gen(function* () {
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      book,
+      XLSX.utils.aoa_to_sheet([["h"], ...Array.from({ length: 10 }, () => ["x".repeat(32700)])]),
+      "Statement"
+    );
+    const buffer: unknown = XLSX.write(book, {
+      type: "array",
+      bookType: "xlsb",
+      compression: true,
+      bookSST: true,
+    });
+    if (!(buffer instanceof ArrayBuffer)) throw new Error("Expected workbook bytes");
+    yield* reject(
+      modify(new Uint8Array(buffer), (entries) => {
+        entries["decoy.xml"] = strToU8("<worksheet/>");
+      })
+    );
+    // An XML-labelled binary part must not select the suffix-based binary parser either.
+    yield* reject(
+      modify(workbook("normal"), (entries) =>
+        replacePart(entries, "[Content_Types].xml", (xml) =>
+          xml.replace(
+            'PartName="/xl/worksheets/sheet1.xml"',
+            'PartName="/xl/worksheets/sheet1.bin"'
+          )
+        )
+      )
+    );
+    yield* reject(
+      modify(workbook("normal"), (entries) =>
+        replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+          xml.replace(/worksheet/gu, "decoy")
         )
       ),
       "malformed-file"

@@ -45,21 +45,75 @@ const assertNumericText = (text: string): void => {
   if (decoded.replace(/\D/gu, "").length > maximumNumericDigits) limit();
 };
 const assertAttributes = (tag: SaxesTagPlain): void => {
+  const canonical = [
+    "t",
+    "s",
+    "numFmtId",
+    "formatCode",
+    "si",
+    "ContentType",
+    "PartName",
+    "Target",
+    "Type",
+  ];
   for (const name of Object.keys(tag.attributes)) {
-    if (
-      name.includes(":") &&
-      !name.startsWith("xmlns:") &&
-      ["t", "s", "numFmtId", "formatCode", "si"].includes(localName(name))
-    ) {
-      malformed();
-    }
+    if (name.startsWith("xmlns:")) continue;
+    // SheetJS lowercases attribute aliases and strips underscore suffixes. Refuse
+    // spellings that would make its cost-bearing attributes differ from this scan.
+    const alias = localName(name).split("_")[0]?.toLowerCase();
+    const expected = canonical.find((attribute) => attribute.toLowerCase() === alias);
+    if (expected !== undefined && name !== expected) malformed();
   }
+};
+
+const requiredXmlRoots: Readonly<Record<string, string>> = {
+  c: "worksheet",
+  f: "worksheet",
+  si: "sst",
+  sstItem: "sst",
+  xf: "styleSheet",
+  numFmt: "styleSheet",
+};
+const assertContentType = (tag: SaxesTagPlain): void => {
+  const contentType = tag.attributes.ContentType ?? "";
+  const binaryFinancialType =
+    /^application\/vnd\.ms-excel\.(?:sheet\.binary\.macroEnabled\.main|worksheet|chartsheet|macrosheet|dialogsheet|sharedStrings|styles|comments|sheetMetadata|calcChain)$/u;
+  if (binaryFinancialType.test(contentType)) limit();
+  if ((tag.attributes.PartName ?? "").endsWith(".bin") && contentType.endsWith("+xml")) {
+    limit();
+  }
+};
+const assertRelationship = (tag: SaxesTagPlain): void => {
+  if (
+    (tag.attributes.Target ?? "").endsWith(".bin") &&
+    /\/(?:worksheet|chartsheet|dialogsheet|macrosheet|officeDocument|styles|sharedStrings)$/u.test(
+      tag.attributes.Type ?? ""
+    )
+  ) {
+    limit();
+  }
+};
+const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
+  const name = localName(tag.name);
+  const requiredRoot = requiredXmlRoots[name];
+  if (requiredRoot !== undefined && root !== requiredRoot) malformed();
+  // SheetJS selects binary parsers by content type and by a part's .bin suffix.
+  // Inert VBA attachments remain allowed, but no binary financial part is admitted.
+  if (["Override", "Default"].includes(name)) assertContentType(tag);
+  if (name === "Relationship") assertRelationship(tag);
 };
 
 type XmlMember = Readonly<{ root: string; text: string }>;
 const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> => {
   const members: Array<XmlMember> = [];
   for (const [name, bytes] of entries) {
+    if (
+      ["xl/workbook.bin", "META-INF/manifest.xml", "objectdata.xml", "Index/Document.iwa"].includes(
+        name
+      )
+    ) {
+      limit();
+    }
     // OOXML parts can have nonstandard names. Inspect all XML-looking members too.
     if (
       !name.endsWith(".xml") &&
@@ -76,6 +130,7 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
       parser.on("opentag", (tag) => {
         assertAttributes(tag);
         if (root === "") root = localName(tag.name);
+        assertXmlRepresentation(tag, root);
       });
     });
     members.push({ root, text });

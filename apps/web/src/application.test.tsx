@@ -778,8 +778,11 @@ const progressTestClient = (progress: {
       return Effect.succeed(responseJson(request, { status: "completed" }, acknowledgedStatus));
     }
     if (path.endsWith("/progress")) progress.polls += 1;
+    if (path.endsWith("/progress") && progress.polls === 2) {
+      return Effect.succeed(responseJson(request, { status: "unauthenticated" }, rejectedStatus));
+    }
     const body =
-      path.endsWith("/progress") && progress.polls > 1
+      path.endsWith("/progress") && progress.polls > 2
         ? {
             text: "Respuesta recuperada",
             turnId: "10000000-0000-4000-8000-000000000097",
@@ -797,7 +800,7 @@ const waitForProgressPoll = (progress: { polls: number }): Promise<void> =>
 describe("hosted Agent progress", () => {
   afterEach(resetApplicationTest);
 
-  it("polls a processing Turn and automatically delivers its visible reply", () =>
+  it("recovers a processing Turn after a failed status lookup and delivers its visible reply", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const progress: { paths: Array<string>; polls: number } = { paths: [], polls: 0 };
@@ -816,6 +819,12 @@ describe("hosted Agent progress", () => {
         );
         yield* fromPromise(waitForProgressPoll(progress));
         fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
+        expect(
+          yield* fromPromise(screen.findByText(/No se pudo recuperar el turno/u))
+        ).toBeVisible();
+        expect(screen.getByLabelText("Mensaje")).toBeDisabled();
+        expect(screen.getByText("Consulta")).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
         expect(yield* fromPromise(screen.findByText("Respuesta recuperada"))).toBeVisible();
         const assertComposerEnabled = (): void => {
           expect(screen.getByLabelText("Mensaje")).toBeEnabled();
@@ -825,6 +834,7 @@ describe("hosted Agent progress", () => {
           "/web/hosted-turns",
           "/web/hosted-turns/progress",
           "/web/hosted-turns/progress",
+          "/web/hosted-turns/progress",
           "/web/hosted-turns/delivery",
         ]);
         expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
@@ -832,47 +842,68 @@ describe("hosted Agent progress", () => {
     ));
 });
 
+const receiptRetryClient = (receipts: Array<unknown>): HttpClient.HttpClient =>
+  makeHttpClient((request) => {
+    if (!request.url.endsWith("/delivery")) {
+      return Effect.succeed(
+        responseJson(
+          request,
+          {
+            text: "Respuesta sin confirmar",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "a".repeat(hostedReceiptLength),
+          },
+          proposedStatus
+        )
+      );
+    }
+    if (request.body._tag !== "Uint8Array") throw new Error("Expected receipt JSON body");
+    const receipt: unknown = JSON.parse(new TextDecoder().decode(request.body.body));
+    receipts.push(receipt);
+    return Effect.succeed(
+      responseJson(
+        request,
+        receipts.length === 1 ? { status: "unauthenticated" } : { status: "completed" },
+        receipts.length === 1 ? rejectedStatus : acknowledgedStatus
+      )
+    );
+  });
+
+const receiptRetryTest = Effect.fnUntraced(function* () {
+  const receipts: Array<unknown> = [];
+  const channel = makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, receiptRetryClient(receipts)),
+  });
+  yield* channel.pipe(renderHostedRoute, fromPromise);
+  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+    target: { value: "Hola" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  expect(yield* fromPromise(screen.findByText(/No pudimos guardar la respuesta/u))).toBeVisible();
+  expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reintentar conexión" })).toBeEnabled();
+  // Reopening a retained reply must not turn visibility into an automatic receipt retry.
+  fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+  fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
+  expect(yield* fromPromise(screen.findByText("Respuesta sin confirmar"))).toBeVisible();
+  expect(receipts).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Reintentar conexión" }));
+  yield* fromPromise(waitFor(() => expect(screen.getByLabelText("Mensaje")).toBeEnabled()));
+  expect(receipts).toEqual([
+    { turnId: "10000000-0000-4000-8000-000000000097", receipt: "a".repeat(hostedReceiptLength) },
+    { turnId: "10000000-0000-4000-8000-000000000097", receipt: "a".repeat(hostedReceiptLength) },
+  ]);
+  expect(screen.getByText("Respuesta sin confirmar")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Reintentar conexión" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+});
+
 describe("rejected hosted Agent receipt", () => {
   afterEach(resetApplicationTest);
-
-  it("does not label a rejected receipt Completed", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const rejectReceipt = (
-          request: HttpClientRequest.HttpClientRequest
-        ): Effect.Effect<HttpClientResponse.HttpClientResponse> =>
-          Effect.succeed(
-            responseJson(
-              request,
-              request.url.endsWith("/delivery")
-                ? { status: "unauthenticated" }
-                : {
-                    text: "Respuesta sin confirmar",
-                    turnId: "10000000-0000-4000-8000-000000000097",
-                    receipt: "a".repeat(hostedReceiptLength),
-                  },
-              request.url.endsWith("/delivery") ? rejectedStatus : proposedStatus
-            )
-          );
-        const httpClient = makeHttpClient(rejectReceipt);
-        const channel = makeHostedTurnClient({
-          apiOrigin: "https://api.test.fidyapp.com",
-          httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
-        });
-        const route = renderHostedRoute(channel);
-        yield* fromPromise(route);
-        fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
-          target: { value: "Hola" },
-        });
-        fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
-        expect(
-          yield* fromPromise(screen.findByText(/No pudimos guardar la respuesta/u))
-        ).toBeVisible();
-        expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
-        expect(screen.getByRole("button", { name: "Reintentar conexión" })).toBeEnabled();
-      })
-    ));
+  it("blocks submission until an explicit retry delivers the exact retained receipt", () =>
+    Effect.runPromise(receiptRetryTest()));
 });
 
 const dashboardUninitializedStatus = 404;

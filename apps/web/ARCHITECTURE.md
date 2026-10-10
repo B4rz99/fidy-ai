@@ -33,7 +33,10 @@ or onboarding, remain separate features.
 
 Presentation shapes derive from the canonical server declaration, the dedicated server-declared
 hosted Turn browser API, or web-owned view state. The authenticated layout composes a persistent floating Agent chat;
-there is no standalone Agent route or sidebar link. The feature's mounted state keeps a draft and
+there is no standalone Agent route or sidebar link. A mounted conversation module owns Turn
+transitions, exact receipt retention, delivery deduplication, submission gating and bounded visible
+history. Presentation receives a receipt-free display projection and actions; draft text, popup state
+and the browser visibility adapter remain with presentation. The feature's mounted state keeps a draft and
 bounded visible conversation through popup dismissal and route navigation, and expires with the
 signed-in layout. AI Elements conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed

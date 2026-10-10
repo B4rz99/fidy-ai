@@ -1,10 +1,24 @@
 import {
   type StagedStatementBytes,
+  StatementContentDigest,
   type StatementStagingFailureReason,
   StatementStagingId,
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
-import { Data, Effect, Exit, Fiber, Option, Predicate, Result } from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { NodeFileSystem } from "@effect/platform-node";
+import {
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Fiber,
+  type FileSystem,
+  Option,
+  Predicate,
+  Result,
+  type Scope,
+} from "effect";
 import { readCanonicalSubmission } from "./internal/statement-ingestion";
 import { prepareHeldStatementReviewDecision, prepareHeldStatementSubmission } from "./operations";
 import type { StatementDecisionWork } from "./contract";
@@ -12,6 +26,7 @@ import assert from "node:assert/strict";
 import { Hex } from "effect/encoding";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { delayedUpload, persistentStagingStorage } from "./statement-upload-race.test-fixture";
 import {
   StatementStaging,
   StatementStagingFailed,
@@ -80,10 +95,10 @@ type Runtime = Readonly<{
 let nowEpochMs = (): number => startedAtEpochMs;
 const currentNowEpochMs = (): number => nowEpochMs();
 
-const makeRuntime = (): Promise<Runtime> =>
+const makeRuntime = (acquire = storage.acquire): Promise<Runtime> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db: database, bucket } = yield* fromTestPromise(() => storage.acquire());
+      const { db: database, bucket } = yield* fromTestPromise(acquire);
       yield* fromTestPromise(() =>
         installTestSchema({
           db: database,
@@ -328,7 +343,197 @@ const digestHex = (bytes: Uint8Array): Promise<string> =>
     .digest("SHA-256", Uint8Array.from(bytes))
     .then((value) => Hex.encode(new Uint8Array(value)));
 
+const verifyDelayedUpload = (
+  outcome: "interrupted" | "ambiguous-rejection"
+): Effect.Effect<void, never, FileSystem.FileSystem | Scope.Scope> =>
+  Effect.gen(function* () {
+    const persistent = yield* persistentStagingStorage;
+    const runtime = yield* fromTestPromise(() => makeRuntime(persistent.acquire));
+    const delayed = delayedUpload({
+      bucket: runtime.bucket,
+      outcome: outcome === "interrupted" ? "success" : "ambiguous-rejection",
+    });
+    const staging = StatementStaging.make({
+      database: runtime.database,
+      bucket: delayed.bucket,
+      nowEpochMs: currentNowEpochMs,
+    });
+    const fiber = yield* Effect.forkChild(
+      Effect.result(
+        staging.stageStatementBytes({ request: request(statementBytes), userId: userA })
+      )
+    );
+    yield* Effect.gen(function* () {
+      yield* Effect.raceFirst(
+        fromTestPromise(() => delayed.entered),
+        Fiber.join(fiber).pipe(
+          Effect.flatMap(() => Effect.die(new Error("Upload ended before the injected gate")))
+        )
+      );
+      const row = required(yield* fromTestPromise(() => onlyStagingRow(runtime.database)));
+      const reference: StagedStatementBytes = {
+        stagingId: StatementStagingId.make(row.id),
+        byteLength: row.byte_length,
+        sha256: StatementContentDigest.make(row.sha256),
+        sourceFormat: "csv",
+        expiresAt: DateTime.makeUnsafe(startedAtEpochMs + statementStagingLifetime),
+      };
+      const work = publicationWork(runtime, reference);
+      const publication = (userId: string): ReturnType<typeof prepareHeldStatementSubmission> =>
+        prepareHeldStatementSubmission({ ...work, userId, current: currentNowEpochMs() });
+      expect(yield* publication(userA)).toMatchObject({ _tag: "Refused" });
+      expect(yield* publication(userB)).toMatchObject({ _tag: "Refused" });
+      expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).toBeNull();
+      if (outcome === "interrupted") {
+        expect(row.status).toBe("pending");
+        yield* Fiber.interrupt(fiber);
+        nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime - 1;
+        expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
+          objectsDeleted: 0,
+          rowsDeleted: 0,
+        });
+        nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
+        const blocked = StatementStaging.make({
+          database: runtime.database,
+          bucket: failingBucket(runtime.bucket),
+          nowEpochMs: currentNowEpochMs,
+        });
+        expect(Result.isFailure(yield* Effect.result(blocked.sweepExpiredStatementStaging))).toBe(
+          true
+        );
+        expect(
+          required(yield* fromTestPromise(() => stagingRow(runtime.database, row.id))).status
+        ).toBe("deleting");
+        expect(yield* publication(userA)).toMatchObject({ _tag: "Refused" });
+        expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
+          objectsDeleted: 1,
+          rowsDeleted: 1,
+        });
+      } else {
+        // Capture the owner before rejecting acknowledgement, then let ordinary failure cleanup settle.
+        delayed.rejectAcknowledgement();
+        const result = yield* Fiber.join(fiber);
+        assert.deepStrictEqual(
+          result,
+          Result.fail(new StatementStagingUnavailable({ reason: "authority_unavailable" }))
+        );
+      }
+      expect(
+        Option.isNone(yield* fromTestPromise(() => stagingRow(runtime.database, row.id)))
+      ).toBe(true);
+      expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).toBeNull();
+      delayed.release();
+      yield* fromTestPromise(() => delayed.settled);
+      expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).not.toBeNull();
+      expect(
+        Option.isNone(yield* fromTestPromise(() => stagingRow(runtime.database, row.id)))
+      ).toBe(true);
+      const bindings = yield* fromTestPromise(persistent.restart);
+      const restarted: Runtime = {
+        database: bindings.db,
+        bucket: bindings.bucket,
+        staging: StatementStaging.make({
+          database: bindings.db,
+          bucket: bindings.bucket,
+          nowEpochMs: currentNowEpochMs,
+        }),
+      };
+      expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).not.toBeNull();
+      expect(
+        Option.isNone(yield* fromTestPromise(() => stagingRow(restarted.database, row.id)))
+      ).toBe(true);
+      expect(reasonOf(yield* fromTestPromise(() => read(restarted, userA, row.id)))).toBe(
+        "not-found"
+      );
+      expect(reasonOf(yield* fromTestPromise(() => read(restarted, userB, row.id)))).toBe(
+        "not-found"
+      );
+      const stale = { ...publicationWork(restarted, reference), current: currentNowEpochMs() };
+      const inaccessible = {
+        _tag: "Refused",
+        refusal: {
+          code: "validation_failed",
+          message: "The staged statement material is unavailable; upload the file again.",
+        },
+      };
+      expect(yield* prepareHeldStatementSubmission(stale)).toMatchObject(inaccessible);
+      expect(yield* prepareHeldStatementSubmission({ ...stale, userId: userB })).toMatchObject(
+        inaccessible
+      );
+      expect(yield* fromTestPromise(() => count(restarted.database, "statement_submissions"))).toBe(
+        0
+      );
+      expect(
+        yield* fromTestPromise(() => count(restarted.database, "statement_submission_audit"))
+      ).toBe(0);
+      expect(requireValue(yield* fromTestPromise(() => sweep(restarted)))).toEqual({
+        objectsDeleted: 0,
+        rowsDeleted: 0,
+      });
+      // This assertion records the failed cleanup invariant; the issue requests an investigation.
+      expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).not.toBeNull();
+    }).pipe(
+      Effect.ensuring(
+        Effect.gen(function* () {
+          delayed.rejectAcknowledgement();
+          delayed.release();
+          yield* Fiber.interrupt(fiber);
+          yield* fromTestPromise(() => delayed.settled);
+        })
+      )
+    );
+  });
+
+const verifyLiveDelayedSuccess = Effect.gen(function* () {
+  const runtime = yield* fromTestPromise(() => makeRuntime());
+  const delayed = delayedUpload({ bucket: runtime.bucket, outcome: "success" });
+  const staging = StatementStaging.make({
+    database: runtime.database,
+    bucket: delayed.bucket,
+    nowEpochMs: currentNowEpochMs,
+  });
+  const fiber = yield* Effect.forkChild(
+    Effect.result(staging.stageStatementBytes({ request: request(statementBytes), userId: userA }))
+  );
+  yield* Effect.gen(function* () {
+    yield* Effect.raceFirst(
+      fromTestPromise(() => delayed.entered),
+      Fiber.join(fiber).pipe(
+        Effect.flatMap(() => Effect.die(new Error("Upload ended before the injected gate")))
+      )
+    );
+    const row = required(yield* fromTestPromise(() => onlyStagingRow(runtime.database)));
+    nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
+    expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
+      objectsDeleted: 1,
+      rowsDeleted: 1,
+    });
+    delayed.release();
+    yield* fromTestPromise(() => delayed.settled);
+    assert.deepStrictEqual(
+      yield* Fiber.join(fiber),
+      Result.fail(new StatementStagingUnavailable({ reason: "authority_unavailable" }))
+    );
+    expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).toBeNull();
+    expect(Option.isNone(yield* fromTestPromise(() => stagingRow(runtime.database, row.id)))).toBe(
+      true
+    );
+    expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(0);
+  }).pipe(
+    Effect.ensuring(
+      Effect.gen(function* () {
+        delayed.release();
+        yield* Fiber.interrupt(fiber);
+        yield* fromTestPromise(() => delayed.settled);
+      })
+    )
+  );
+});
+
 describe("Cloudflare statement byte staging", () => {
+  it("reclaims a synthetic delayed success after expiry when the original caller can still settle", () =>
+    Effect.runPromise(Effect.scoped(verifyLiveDelayedSuccess)));
+
   it("keeps corrupt present staging metadata unavailable rather than blaming the caller", () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -794,6 +999,14 @@ describe("Cloudflare statement byte staging", () => {
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))).toBe(
           "retention-expired"
         );
+        const work = {
+          ...publicationWork(runtime, staged),
+          current: currentNowEpochMs(),
+        };
+        expect(yield* prepareHeldStatementSubmission(work)).toMatchObject({ _tag: "Refused" });
+        expect(yield* prepareHeldStatementSubmission({ ...work, userId: userB })).toMatchObject({
+          _tag: "Refused",
+        });
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
@@ -809,6 +1022,48 @@ describe("Cloudflare statement byte staging", () => {
           objectsDeleted: 1,
           rowsDeleted: 1,
         });
+      })
+    ));
+
+  it("keeps published material under its submission owner after the original staging deadline", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(makeRuntime);
+        const staged = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+        );
+        const submissionId = yield* completedSubmission(runtime, staged.stagingId);
+        yield* fromTestPromise(() =>
+          runtime.database
+            .prepare(
+              "UPDATE statement_staging_objects SET status = 'published', published_submission_id = ? WHERE id = ?"
+            )
+            .bind(submissionId, staged.stagingId)
+            .run()
+        );
+        nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
+        expect(
+          yield* fromTestPromise(() =>
+            runtime.database
+              .prepare("SELECT expires_at_ms FROM statement_staging_objects WHERE id = ?")
+              .bind(staged.stagingId)
+              .first<number>("expires_at_ms")
+          )
+        ).toBe(startedAtEpochMs + statementStagingLifetime);
+        expect(requireValue(yield* fromTestPromise(() => sweep(runtime)))).toEqual({
+          objectsDeleted: 0,
+          rowsDeleted: 0,
+        });
+        expect(
+          requireValue(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))
+        ).toEqual(statementBytes);
+        expect(reasonOf(yield* fromTestPromise(() => read(runtime, userB, staged.stagingId)))).toBe(
+          "not-found"
+        );
+        expect(
+          required(yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId)))
+            .status
+        ).toBe("published");
       })
     ));
 
@@ -883,4 +1138,13 @@ describe("Cloudflare statement byte staging", () => {
         ).toBe(0);
       })
     ));
+});
+
+effectIt.layer(NodeFileSystem.layer)((it) => {
+  for (const outcome of ["interrupted", "ambiguous-rejection"] as const) {
+    it.effect(
+      `reproduces ownerless retained bytes after a synthetic ${outcome} write lands after cleanup and restart`,
+      () => verifyDelayedUpload(outcome)
+    );
+  }
 });

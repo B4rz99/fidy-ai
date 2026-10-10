@@ -11,6 +11,9 @@ const maximumFormatId = 392;
 const maximumNumericDigits = 128;
 const numericFormattingAllowance = 64;
 const xmlChunkCharacters = 1024;
+const maximumMetadataRecords = 32;
+const maximumMetadataCharges = 4096;
+const maximumMetadataWorkBytes = 524_288;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -83,6 +86,8 @@ const requiredXmlRoots: Readonly<Record<string, string>> = {
   sstItem: "sst",
   xf: "styleSheet",
   numFmt: "styleSheet",
+  metadataType: "metadata",
+  futureMetadata: "metadata",
 };
 const assertContentType = (tag: SaxesTagPlain): void => {
   const contentType = tag.attributes.ContentType ?? "";
@@ -455,6 +460,39 @@ const admitSheetReferences = (members: ReadonlyArray<XmlMember>): void => {
   );
 };
 
+const admitSheetMetadata = (members: ReadonlyArray<XmlMember>): void => {
+  let nodes = 0;
+  let workBytes = 0;
+  const charge = (cost: number): void => {
+    nodes += 1;
+    workBytes += cost;
+    if (nodes > maximumMetadataCharges || workBytes > maximumMetadataWorkBytes) limit();
+  };
+  for (const member of members.filter((candidate) => candidate.root === "metadata")) {
+    const types: Array<number> = [];
+    const future: Array<number> = [];
+    scan(member.text, (parser) => {
+      parser.on("opentag", (tag) => {
+        const bytes = Object.entries(tag.attributes).reduce(
+          (total, [name, value]) => total + size(name) + size(value),
+          numericFormattingAllowance
+        );
+        charge(bytes);
+        if (localName(tag.name) === "metadataType") types.push(bytes);
+        if (localName(tag.name) === "futureMetadata") future.push(bytes);
+        if (types.length > maximumMetadataRecords || future.length > maximumMetadataRecords) {
+          limit();
+        }
+      });
+      parser.on("text", (text) => charge(size(text)));
+    });
+    // SheetJS compares every future-metadata name against every metadata type.
+    for (const futureBytes of future) {
+      for (const typeBytes of types) charge(futureBytes + typeBytes);
+    }
+  }
+};
+
 /** Admit repeated text and formatting work before workbook construction; never truncates evidence. */
 export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
   const entries = decodeXlsxArchive(bytes);
@@ -485,6 +523,7 @@ export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
       limit();
     }
   };
+  admitSheetMetadata(members);
   for (const worksheet of worksheets) {
     admitWorksheet({ xml: worksheet.text, strings, formats, charge });
   }

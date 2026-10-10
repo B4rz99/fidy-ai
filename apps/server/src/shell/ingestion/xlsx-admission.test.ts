@@ -111,6 +111,30 @@ it.effect("refuses repeated same-cell comments before workbook construction", ()
   })
 );
 
+it.effect("bounds optional sheet-metadata matching before workbook construction", () =>
+  Effect.gen(function* () {
+    for (const count of [32, 33, 1000]) {
+      const source = modify(workbook("normal"), (entries) => {
+        const types = '<metadataType name="unused"/>'.repeat(count);
+        const future = '<futureMetadata name="unused"/>'.repeat(count);
+        entries["xl/metadata.xml"] = strToU8(
+          `<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><metadataTypes>${types}</metadataTypes>${future}</metadata>`
+        );
+        replacePart(entries, "[Content_Types].xml", (xml) =>
+          xml.replace(
+            "</Types>",
+            '<Override PartName="/xl/metadata.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml"/></Types>'
+          )
+        );
+      });
+      if (count === 32) {
+        const parsed = yield* parseStatementFile(source);
+        expect(parsed.rows[0]?.fields[0]).toBe("normal");
+      } else yield* reject(source);
+    }
+  })
+);
+
 it.effect("admits the exact repeated-text work boundary and rejects its next byte", () =>
   Effect.gen(function* () {
     // Header h costs two bytes; shared index 1 costs one byte in addition to the value.

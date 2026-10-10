@@ -28,7 +28,7 @@ const ready = {
     analytics: "disabled",
   },
   deletionTestEvidence: "restricted/deletion-test",
-  policyRevision: "policy-2026-09-28-cloudflare-providers",
+  policyRevision: "policy-2026-10-09-browser-agents",
   onboardingRevision: "onboarding-2026-10-08-providers",
 };
 

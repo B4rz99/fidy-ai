@@ -20,8 +20,8 @@ export const currentDisclosureFacts: typeof DisclosureSnapshot.Encoded = {
   text: CURRENT_DISCLOSURE_TEXT,
   policy: {
     publicUrl: "https://app.fidyapp.com/politica",
-    revision: "policy-2026-09-28-cloudflare-providers",
-    contentSha256: "f69bc2d36e7b318287277e4d5a6e185b65e7de253ee722a18faf417664e4c1c6",
+    revision: "policy-2026-10-09-browser-agents",
+    contentSha256: "31930717d057070eff00a1ff27af5cb26dbafadaddb7bc1d0aa33db93c9385da",
   },
   purposes: [
     "Crear, autenticar, administrar y proteger la cuenta",

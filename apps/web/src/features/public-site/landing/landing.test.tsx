@@ -206,3 +206,81 @@ it("restores a saved theme and tolerates unavailable browser storage", () => {
   fireEvent.click(screen.getByRole("button", { name: "Activar tema oscuro" }));
   expect(screen.getByRole("button", { name: "Activar tema claro" })).toBeInTheDocument();
 });
+
+it("explains the trial and exposes privacy, support and agent setup without changing signup", () => {
+  render(<PublicHome />);
+  expect(
+    screen.getByText("7 días de Fidy Pro sin tarjeta. Tú eliges si te suscribes.")
+  ).toBeVisible();
+  const footer = screen.getByRole("navigation", { name: "Información y ayuda" });
+  expect(within(footer).getByRole("link", { name: "Política de privacidad" })).toHaveAttribute(
+    "href",
+    "/politica"
+  );
+  expect(within(footer).getByRole("link", { name: "Cookies y almacenamiento" })).toHaveAttribute(
+    "href",
+    "/cookies"
+  );
+  expect(within(footer).getByRole("link", { name: "Contacto y soporte" })).toHaveAttribute(
+    "href",
+    "mailto:obarboza@fidyapp.com"
+  );
+  expect(within(footer).getByRole("link", { name: "Conecta tu agente" })).toHaveAttribute(
+    "href",
+    "/funciones/agentes#conectar"
+  );
+  for (const link of screen.getAllByRole("link", { name: /Crear mi cuenta/u })) {
+    expect(link).toHaveAttribute("href", "/auth/google");
+  }
+});
+
+it("offers least-privilege setup and keeps each revocation destination explicit", () => {
+  render(<FeatureDetail index={5} />);
+  const guide = screen.getByRole("region", { name: "Conecta con contexto." });
+  expect(within(guide).getByText(/codex mcp login fidy --scopes read/u)).toBeVisible();
+  expect(within(guide).queryByText(/todavía en preparación/u)).not.toBeInTheDocument();
+  expect(within(guide).getByRole("link", { name: "Agentes conectados" })).toHaveAttribute(
+    "href",
+    "/settings/agents"
+  );
+  expect(
+    within(guide).getByText(/No hay un paquete público de instalación documentado/u)
+  ).toBeInTheDocument();
+});
+
+it("updates canonical and share metadata without retaining the previous public page description", () => {
+  const home = render(<PublicHome />);
+  expect(document.head.querySelectorAll('meta[name="description"]')).toHaveLength(1);
+  expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://app.fidyapp.com/"
+  );
+  home.unmount();
+  render(<FeatureDetail index={5} />);
+  expect(document.head.querySelectorAll('meta[name="description"]')).toHaveLength(1);
+  expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://app.fidyapp.com/funciones/agentes"
+  );
+  expect(document.head.querySelector('meta[property="og:url"]')).toHaveAttribute(
+    "content",
+    "https://app.fidyapp.com/funciones/agentes"
+  );
+});
+
+it("keeps legal review status separate from an active service agreement", () => {
+  render(<PublicHome />);
+  expect(screen.getByRole("link", { name: "Términos de servicio (borrador)" })).toHaveAttribute(
+    "href",
+    "/terminos"
+  );
+});
+
+it("uses concise first-use wording and the ChatGPT brand", () => {
+  render(<PublicHome />);
+  expect(screen.getByRole("heading", { name: "Conéctalo a ChatGPT o Claude" })).toBeVisible();
+  expect(screen.getByText(/adjuntar un Excel por WhatsApp/u)).toBeVisible();
+  expect(screen.queryByText(/Nunca envíes claves/u)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Fidy refleja la información/u)).not.toBeInTheDocument();
+  expect(screen.queryByText(/CSV o XLSX/u)).not.toBeInTheDocument();
+});

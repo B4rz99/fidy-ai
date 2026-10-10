@@ -2769,3 +2769,91 @@ html:has(.fidy-landing) {
     transform: translateY(-12px);
   }
 }
+
+/* Keep the primary action with its explanation on compact desktop viewports. */
+@media (min-width: 701px) {
+  .fidy-landing .hero {
+    padding-block: 40px 56px;
+  }
+  .fidy-landing.variant-a .hero-copy h1 {
+    font-size: clamp(48px, 4.8vw, 72px);
+  }
+  .fidy-landing .hero-copy p {
+    margin-top: 22px;
+  }
+}
+.fidy-landing .first-steps .step .textlink {
+  display: inline-block;
+  margin-top: 18px;
+}
+.fidy-landing .footer-brand p {
+  color: inherit;
+  margin-top: 16px;
+  font-size: 14px;
+}
+.fidy-landing .footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px 28px;
+  max-width: 550px;
+}
+.fidy-landing .footer-links a {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  padding-block: 10px;
+}
+.fidy-landing .connection-notice {
+  padding: 24px;
+  border: 1px solid light-dark(#c2a083, var(--night-muted));
+  border-radius: 16px;
+  margin-bottom: 28px;
+  background: light-dark(#fae3d9, var(--night-deep));
+}
+.fidy-landing .connection-notice p {
+  margin-top: 10px;
+}
+.fidy-landing .connection-guide details {
+  border-bottom: 1px solid light-dark(#d6cfc8, #565656);
+  padding: 24px 0;
+}
+.fidy-landing .connection-guide summary {
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 600;
+}
+.fidy-landing .connection-guide details p,
+.fidy-landing .connection-guide details h3 {
+  margin-top: 20px;
+}
+.fidy-landing .connection-guide details h3 {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+.fidy-landing .connection-guide code {
+  overflow-wrap: anywhere;
+  font-size: 0.9em;
+}
+.fidy-landing .connection-guide pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 20px;
+  border-radius: 12px;
+  background: light-dark(#eee9e3, var(--night-deep));
+  margin-block: 16px;
+  line-height: 1.6;
+}
+.fidy-landing .connection-permissions {
+  margin-top: 40px;
+}
+@media (max-width: 700px) {
+  .fidy-landing .footer-links {
+    justify-content: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .fidy-landing .connection-guide pre {
+    padding: 14px;
+    font-size: 13px;
+  }
+}

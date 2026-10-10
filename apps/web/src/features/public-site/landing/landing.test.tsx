@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PublicHome } from "@/features/public-site/home";
+import { mountConversation, mountPreview } from "./demo-motion";
+import { mountIndicator, moveIndicator } from "./tab-indicator";
 import { FeatureDetail } from "./feature-detail";
 
 // JSDOM has no layout/WAAPI. These browser-boundary fixtures deliver visible intersections
@@ -9,7 +11,9 @@ import { FeatureDetail } from "./feature-detail";
 const preference = Object.assign(new EventTarget(), { matches: false });
 const cancel = vi.fn();
 const animate = vi.fn(() => ({ cancel }));
+const intersections = new Map<Element, (visible: boolean) => void>();
 beforeEach(() => {
+  intersections.clear();
   localStorage.clear();
   preference.matches = false;
   vi.stubGlobal("matchMedia", () => preference);
@@ -17,17 +21,24 @@ beforeEach(() => {
     "IntersectionObserver",
     class {
       callback: (
-        entries: ReadonlyArray<Pick<IntersectionObserverEntry, "target" | "isIntersecting">>
+        entries: ReadonlyArray<
+          Pick<IntersectionObserverEntry, "target" | "isIntersecting" | "intersectionRatio">
+        >
       ) => void;
       constructor(
         callback: (
-          entries: ReadonlyArray<Pick<IntersectionObserverEntry, "target" | "isIntersecting">>
+          entries: ReadonlyArray<
+            Pick<IntersectionObserverEntry, "target" | "isIntersecting" | "intersectionRatio">
+          >
         ) => void
       ) {
         this.callback = callback;
       }
       observe(target: Element): void {
-        this.callback([{ target, isIntersecting: true }]);
+        intersections.set(target, (isIntersecting) =>
+          this.callback([{ target, isIntersecting, intersectionRatio: isIntersecting ? 1 : 0 }])
+        );
+        this.callback([{ target, isIntersecting: true, intersectionRatio: 1 }]);
       }
       unobserve(): void {}
       disconnect(): void {}
@@ -111,13 +122,47 @@ it("supports keyboard feature selection and links each preview to its detailed v
   preference.dispatchEvent(new Event("change"));
 });
 
+it("keeps keyboard-selected conversations and feature previews immediate", () => {
+  mountHome();
+  animate.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "Consultar" }), { detail: 0 });
+  fireEvent.click(screen.getByRole("button", { name: "Repetir animación de la conversación" }), {
+    detail: 0,
+  });
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Transacciones" }), { key: "ArrowRight" });
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Presupuestos");
+  expect(screen.getByText("De lo que has registrado en octubre:")).toBeVisible();
+  expect(animate).not.toHaveBeenCalled();
+});
+
+it("settles a departing conversation without replaying it when it returns", () => {
+  mountHome();
+  const shell = screen.getByText("Tu asistente · WhatsApp").closest(".demo-shell");
+  expect(shell).not.toBeNull();
+  if (shell === null) throw new Error("Missing conversation shell");
+  cancel.mockClear();
+  intersections.get(shell)?.(false);
+  expect(cancel).toHaveBeenCalled();
+  animate.mockClear();
+  intersections.get(shell)?.(true);
+  expect(animate).not.toHaveBeenCalled();
+  expect(screen.getByText("Tu asistente · WhatsApp")).toBeVisible();
+});
+
 it("updates launch prices and links to first-party Google signup", () => {
   mountHome();
   expect(screen.getByText("$28.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Anual" }));
-  expect(screen.getByText("$289.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
+  expect(
+    screen.getByText("$289.900", { selector: "[data-price-amount]" }).closest(".price-frame")
+  ).toHaveAttribute("aria-hidden", "false");
+  expect(
+    screen.getByText("$28.900", { selector: "[data-price-amount]" }).closest(".price-frame")
+  ).toHaveAttribute("aria-hidden", "true");
   fireEvent.click(screen.getByRole("button", { name: "Semanal" }));
-  expect(screen.getByText("$9.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
+  expect(
+    screen.getByText("$9.900", { selector: "[data-price-amount]" }).closest(".price-frame")
+  ).toHaveAttribute("aria-hidden", "false");
   expect(
     within(screen.getByRole("banner")).getByRole("link", { name: "Crear mi cuenta" })
   ).toHaveAttribute("href", "/auth/google");
@@ -126,12 +171,12 @@ it("updates launch prices and links to first-party Google signup", () => {
 it("registers and resets only the illustrative dashboard transaction", () => {
   mountHome();
   fireEvent.click(screen.getByRole("button", { name: "Registrar ejemplo" }));
-  expect(screen.getByText("$1.084.000")).toBeInTheDocument();
+  expect(screen.getByText("$1.084.000")).toHaveAttribute("aria-hidden", "false");
   expect(screen.getByRole("status")).toHaveTextContent(
     "Una transacción de $28.000 registrada en Restaurantes."
   );
   fireEvent.click(screen.getByRole("button", { name: /Reiniciar ejemplo/ }), { detail: 1 });
-  expect(screen.getByText("$1.056.000")).toBeInTheDocument();
+  expect(screen.getByText("$1.056.000")).toHaveAttribute("aria-hidden", "false");
 });
 
 it("corrects the same illustrative transaction in its detail view and resets it", () => {
@@ -171,9 +216,7 @@ it("preserves browser scroll timelines while cleaning up owned animations in Str
   Object.defineProperty(Element.prototype, "getAnimations", {
     configurable: true,
     value(this: Element) {
-      return this.classList.contains("fidy-landing")
-        ? [scrollAnimation, ownedAnimation]
-        : [ownedAnimation];
+      return [scrollAnimation, ownedAnimation];
     },
   });
   const view = render(
@@ -283,4 +326,112 @@ it("uses concise first-use wording and the ChatGPT brand", () => {
   expect(screen.queryByText(/Nunca envíes claves/u)).not.toBeInTheDocument();
   expect(screen.queryByText(/Fidy refleja la información/u)).not.toBeInTheDocument();
   expect(screen.queryByText(/CSV o XLSX/u)).not.toBeInTheDocument();
+});
+
+it("retargets the tab underline after wrapping and releases its resize subscription", () => {
+  let resize = (): void => {};
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resize = callback;
+      }
+      observe(): void {}
+      disconnect = disconnect;
+    }
+  );
+  const view = render(<PublicHome />);
+  const tab = screen.getByRole("tab", { name: "Presupuestos" });
+  Object.defineProperties(tab, {
+    offsetLeft: { configurable: true, value: 180 },
+    offsetTop: { configurable: true, value: 48 },
+    offsetHeight: { configurable: true, value: 48 },
+    offsetWidth: { configurable: true, value: 160 },
+  });
+  fireEvent.click(tab, { detail: 1 });
+  const list = screen.getByRole("tablist");
+  expect(list.querySelector(".feature-indicator")).toHaveStyle({
+    transform: "translate(180px, 93px) scaleX(160)",
+  });
+  expect(list).toHaveAttribute("data-instant", "false");
+  Object.defineProperty(tab, "offsetLeft", { value: 0 });
+  resize();
+  expect(list.querySelector(".feature-indicator")).toHaveStyle({
+    transform: "translate(0px, 93px) scaleX(160)",
+  });
+  expect(list).toHaveAttribute("data-instant", "true");
+  view.unmount();
+  expect(disconnect).toHaveBeenCalled();
+});
+
+it("preserves native FAQ toggling with immediate keyboard and animated pointer intent", () => {
+  mountHome();
+  const summary = screen.getByText("¿Puedo corregir una transacción?");
+  const details = summary.closest("details");
+  fireEvent.click(summary, { detail: 1 });
+  expect(details).toHaveAttribute("open");
+  expect(details).toHaveAttribute("data-instant", "false");
+  fireEvent.click(summary, { detail: 0 });
+  expect(details).not.toHaveAttribute("open");
+  expect(details).toHaveAttribute("data-instant", "true");
+});
+
+it("defers a backgrounded demonstration and settles it when visibility changes", () => {
+  const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+  mountHome();
+  const shell = screen.getByText("Tu asistente · WhatsApp").closest(".demo-shell");
+  if (shell === null) throw new Error("Missing conversation shell");
+  animate.mockClear();
+  intersections.get(shell)?.(true);
+  expect(animate).not.toHaveBeenCalled();
+  hidden.mockReturnValue(false);
+  intersections.get(shell)?.(true);
+  expect(animate).toHaveBeenCalled();
+  cancel.mockClear();
+  hidden.mockReturnValue(true);
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(cancel).toHaveBeenCalled();
+  hidden.mockRestore();
+});
+
+it("plays pointer-selected chat and chart previews while keeping tab explanations available", () => {
+  mountHome();
+  fireEvent.click(screen.getByRole("button", { name: "Consultar" }), { detail: 1 });
+  expect(screen.getByRole("button", { name: "Consultar" })).toHaveAttribute("aria-pressed", "true");
+  for (const name of ["Asistente", "Dashboard", "Presupuestos"]) {
+    animate.mockClear();
+    fireEvent.click(screen.getByRole("tab", { name }), { detail: 1 });
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName(name);
+    expect(animate).toHaveBeenCalled();
+  }
+});
+
+it("keeps feature selection usable without ResizeObserver", () => {
+  vi.stubGlobal("ResizeObserver", undefined);
+  mountHome();
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Transacciones" }), { key: "ArrowRight" });
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Presupuestos");
+  expect(screen.getByRole("tab", { name: "Presupuestos" })).toHaveFocus();
+});
+
+it("leaves absent demonstration artwork alone and returns safe cleanup", () => {
+  const placeholder = document.createElement("div");
+  animate.mockClear();
+  cancel.mockClear();
+  const releaseConversation = mountConversation(placeholder);
+  const releasePreview = mountPreview(placeholder);
+  releaseConversation();
+  releasePreview();
+  expect(animate).not.toHaveBeenCalled();
+  expect(cancel).not.toHaveBeenCalled();
+});
+
+it("tolerates a detached tab and a tablist whose active content has been removed", () => {
+  const detached = document.createElement("button");
+  const emptyList = document.createElement("div");
+  expect(() => moveIndicator({ tab: detached, instant: true })).not.toThrow();
+  const release = mountIndicator(emptyList);
+  expect(emptyList.children).toHaveLength(0);
+  release();
 });

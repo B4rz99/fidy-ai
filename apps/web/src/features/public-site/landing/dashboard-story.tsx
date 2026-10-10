@@ -94,14 +94,24 @@ const StoryMetrics = ({ recorded }: { recorded: boolean }): React.JSX.Element =>
   <div className="metrics">
     <div className="metric">
       <small>{"Gastos registrados · COP"}</small>
-      <strong data-story-total="">{recorded ? "$1.084.000" : "$1.056.000"}</strong>
+      <strong data-story-total="">
+        <StoryValue recorded={recorded} before="$1.056.000" after="$1.084.000" />
+      </strong>
       <small>{"Basado en tus transacciones"}</small>
     </div>
     {"\n          "}
     <div className="metric">
       <small>{"Restaurantes · COP"}</small>
-      <strong data-story-category="">{recorded ? "$384.000" : "$356.000"}</strong>
-      <em data-story-remaining="">{recorded ? "$216.000 disponibles" : "$244.000 disponibles"}</em>
+      <strong data-story-category="">
+        <StoryValue recorded={recorded} before="$356.000" after="$384.000" />
+      </strong>
+      <em data-story-remaining="">
+        <StoryValue
+          recorded={recorded}
+          before="$244.000 disponibles"
+          after="$216.000 disponibles"
+        />
+      </em>
       <div className="budget-bar">
         <i className="story-progress"></i>
       </div>
@@ -148,7 +158,11 @@ const StoryResult = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
         <div className="story-dashboard-heading">
           <strong>{"Tu mes, en perspectiva."}</strong>
           <span className="story-badge">
-            {recorded ? "Ejemplo registrado ✓" : "Antes del mensaje"}
+            <StoryValue
+              recorded={recorded}
+              before="Antes del mensaje"
+              after="Ejemplo registrado ✓"
+            />
           </span>
         </div>
         {"\n          "}
@@ -168,4 +182,23 @@ const StoryResult = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
       </div>
     </div>
   </div>
+);
+
+const StoryValue = ({
+  recorded,
+  before,
+  after,
+}: {
+  recorded: boolean;
+  before: string;
+  after: string;
+}): React.JSX.Element => (
+  <span className="story-value">
+    <span aria-hidden={recorded} data-visible={!recorded}>
+      {before}
+    </span>
+    <span aria-hidden={!recorded} data-visible={recorded}>
+      {after}
+    </span>
+  </span>
 );

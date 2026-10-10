@@ -1,15 +1,21 @@
 import { useState } from "react";
 import { features } from "./feature-content";
-import { enter } from "./motion";
+import { mountIndicator, moveIndicator } from "./tab-indicator";
+import { mountPreview } from "./demo-motion";
 
 /** Offers pointer and roving-keyboard previews with separate detailed feature pages. */
 export const FeatureTabs = (): React.JSX.Element => {
   const [selected, setSelected] = useState(0);
-  const [animate, setAnimate] = useState(false);
+  const [animate, setAnimate] = useState(true);
   return (
     <section className="section wrap product-features" id="funciones">
       {heading}
-      <div className="feature-tabs" role="tablist" aria-label="Funciones de Fidy">
+      <div
+        ref={mountIndicator}
+        className="feature-tabs"
+        role="tablist"
+        aria-label="Funciones de Fidy"
+      >
         {features.map((feature, index) => (
           <button
             key={feature.slug}
@@ -19,6 +25,7 @@ export const FeatureTabs = (): React.JSX.Element => {
             aria-selected={selected === index}
             tabIndex={selected === index ? 0 : -1}
             onClick={(event) => {
+              moveIndicator({ tab: event.currentTarget, instant: event.detail === 0 });
               setAnimate(event.detail !== 0);
               setSelected(index);
             }}
@@ -28,14 +35,19 @@ export const FeatureTabs = (): React.JSX.Element => {
               event.preventDefault();
               setAnimate(false);
               setSelected(next);
-              event.currentTarget.parentElement
-                ?.querySelector<HTMLButtonElement>(`#feature-tab-${next}`)
-                ?.focus();
+              const target = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+                `#feature-tab-${next}`
+              );
+              if (target != null) {
+                moveIndicator({ tab: target, instant: true });
+                target.focus();
+              }
             }}
           >
             {feature.label}
           </button>
         ))}
+        <span className="feature-indicator" aria-hidden="true" />
       </div>
       <div
         id="feature-panel"
@@ -44,7 +56,7 @@ export const FeatureTabs = (): React.JSX.Element => {
         aria-labelledby={`feature-tab-${selected}`}
         tabIndex={0}
         key={selected}
-        ref={animate ? mountPanel : undefined}
+        ref={animate ? mountPreview : undefined}
       >
         {features[selected]?.content}
       </div>
@@ -52,7 +64,6 @@ export const FeatureTabs = (): React.JSX.Element => {
   );
 };
 
-const panelDuration = 220;
 const nextFeature = (key: string, index: number): number => {
   if (key === "ArrowRight") return (index + 1) % features.length;
   if (key === "ArrowLeft") return (index + features.length - 1) % features.length;
@@ -69,9 +80,3 @@ const heading = (
     <p>Dale contexto a cada gasto, sigue tu presupuesto y encuentra lo que merece tu atención.</p>
   </div>
 );
-
-const mountPanel = (node: HTMLDivElement): (() => void) => {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
-  const animation = enter({ element: node, duration: panelDuration, delay: 0, distance: "6px" });
-  return () => animation.cancel();
-};

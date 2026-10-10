@@ -1,7 +1,5 @@
 const entranceDuration = 500;
 const reducedDuration = 160;
-const bubbleDuration = 280;
-const bubbleStagger = 550;
 const heroStagger = 60;
 const cardStagger = 50;
 const cardDuration = 300;
@@ -42,19 +40,6 @@ export const enter = ({
   );
 };
 
-/** Restarts only this illustrative chat, cancelling any interrupted sequence. */
-export const playConversation = (root: Element): void => {
-  root.querySelectorAll(".bubble").forEach((bubble, index) => {
-    bubble.getAnimations().forEach((animation) => animation.cancel());
-    enter({
-      element: bubble,
-      duration: bubbleDuration,
-      delay: index * bubbleStagger,
-      distance: "8%",
-    });
-  });
-};
-
 /** Gives the decorative coin one flip without changing its layout or resting angle. */
 const flipCoin = (root: Element): void => {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -91,7 +76,6 @@ const revealSection = (target: Element): void => {
     distance: isDemo ? "3%" : "4%",
   });
   if (isDemo) {
-    playConversation(target);
     flipCoin(target);
   }
 };

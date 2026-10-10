@@ -12,6 +12,7 @@ const prices = [
 ] as const;
 export const Pricing = (): React.JSX.Element => {
   const [price, setPrice] = useState<(typeof prices)[number]>(prices[1]);
+  const [instant, setInstant] = useState(false);
   return (
     <>
       {" "}
@@ -34,26 +35,23 @@ export const Pricing = (): React.JSX.Element => {
               <li>{"Consulta tus cifras en la web app."}</li>
             </ul>
           </div>
-          <div className="price-card">
+          <div className="price-card" data-instant={instant}>
             <h3>{"Fidy Pro"}</h3>
             <fieldset className="price-options" aria-label="Periodicidad de cobro">
               {prices.map((option) => (
                 <button
                   key={option.period}
                   aria-pressed={option.period === price.period}
-                  onClick={() => setPrice(option)}
+                  onClick={(event) => {
+                    setInstant(event.detail === 0);
+                    setPrice(option);
+                  }}
                 >
                   {option.label}
                 </button>
               ))}
             </fieldset>
-            <div className="price-value" aria-live="polite">
-              <strong data-price-amount="">{price.amount}</strong>
-              <span>
-                {" COP / "}
-                <span data-price-period="">{price.period}</span>
-              </span>
-            </div>
+            <PriceValue price={price} />
             <LaunchButton dark={false} arrow />
             <p className="price-terms">
               {
@@ -66,3 +64,22 @@ export const Pricing = (): React.JSX.Element => {
     </>
   );
 };
+
+const PriceValue = ({ price }: { price: (typeof prices)[number] }): React.JSX.Element => (
+  <div className="price-value" aria-live="polite">
+    {prices.map((option) => (
+      <div
+        className="price-frame"
+        key={option.period}
+        data-visible={option.period === price.period}
+        aria-hidden={option.period !== price.period}
+      >
+        <strong data-price-amount="">{option.amount}</strong>
+        <span>
+          {" COP / "}
+          <span data-price-period="">{option.period}</span>
+        </span>
+      </div>
+    ))}
+  </div>
+);

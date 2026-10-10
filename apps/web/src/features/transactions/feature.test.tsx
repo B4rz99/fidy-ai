@@ -4,6 +4,7 @@ import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TransactionListFeature, TransactionListView } from "./feature";
 import { ManualTransactionCapture } from "./manual-capture";
+import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { makeFidyClient } from "@/transport/client";
 
 const queryKey = (atom: unknown): string => {
@@ -19,14 +20,38 @@ const queryMocks = vi.hoisted(() => ({
   values: new Map<string, unknown>(),
 }));
 
+const mockHistoryQuery = (): ReturnType<typeof presentCanonicalQuery> => {
+  const result = queryMocks.values.get("listTransactions");
+  if (!AsyncResult.isAsyncResult(result)) throw new Error("Expected a query result");
+  return presentCanonicalQuery(result);
+};
+vi.mock("./history", () => ({
+  transactionHistory: (): Readonly<{ state: string; action: string }> => ({
+    state: "transactionHistory",
+    action: "historyAction",
+  }),
+}));
 vi.mock("@effect/atom-react", () => ({
-  useAtomSet: (): typeof queryMocks.dispatch => queryMocks.dispatch,
+  useAtomSet: (atom: unknown): ((command: unknown) => void) =>
+    atom === "historyAction"
+      ? (command: unknown) => {
+          if (command === "reset") queryMocks.refresh("listTransactions");
+        }
+      : queryMocks.dispatch,
   useAtomRefresh:
     (atom: unknown): (() => void) =>
     () => {
       queryMocks.refresh(queryKey(atom));
     },
-  useAtomValue: (atom: unknown): unknown => queryMocks.values.get(queryKey(atom)),
+  useAtomValue: (atom: unknown): unknown =>
+    atom === "transactionHistory"
+      ? {
+          query: mockHistoryQuery(),
+          generation: 0,
+          continuation: "complete",
+          retryPage: Option.none(),
+        }
+      : queryMocks.values.get(queryKey(atom)),
 }));
 
 vi.mock("@tanstack/react-router", () => ({

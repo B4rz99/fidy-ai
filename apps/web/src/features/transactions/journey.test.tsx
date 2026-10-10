@@ -18,10 +18,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { makeFidyClient, makeHostedTurnClient, makeWebAuthClient } from "@/transport/client";
 import { TransactionListFeature } from "./feature";
 
-const findDetailAmount = (amount: string): Promise<HTMLElement> =>
-  waitFor(() =>
-    within(screen.getByRole("region", { name: "Detalle de transacción" })).getByText(amount)
-  );
+const waitForEditableHistory = (): Promise<void> =>
+  waitFor(() => expect(screen.getByRole("button", { name: "+ Registrar" })).toBeEnabled());
 const waitForMutation = (updates: () => number): Promise<void> =>
   waitFor(() => expect(updates()).toBe(1));
 const createdStatus = 201;
@@ -169,7 +167,6 @@ it("corrects the selected transaction and refreshes the same history entry", () 
       fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
       expect(yield* Effect.tryPromise(() => screen.findByText("Cambios guardados"))).toBeVisible();
-      fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
       expect(
         yield* Effect.tryPromise(() =>
           within(screen.getByLabelText("Transacciones del mes")).findByText("$ 30.000,00")
@@ -200,7 +197,6 @@ it("keeps an uncertain correction from being submitted a second time", () =>
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
       expect(requests.updates()).toBe(1);
       fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
-      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
       expect(screen.getByRole("region", { name: "Resumen de transacciones" })).toBeVisible();
     })
   ));
@@ -330,7 +326,10 @@ it("finishes a pending correction after crossing the responsive breakpoint", () 
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("30000");
       expect(screen.getByLabelText("Notas (opcional)")).toBeDisabled();
       yield* Deferred.succeed(complete, undefined);
-      expect(yield* Effect.tryPromise(() => findDetailAmount("$ 30.000,00"))).toBeVisible();
+      yield* Effect.tryPromise(() => screen.findByText("Cambios guardados"));
+      yield* Effect.tryPromise(waitForEditableHistory);
+      fireEvent.click(screen.getByRole("button", { name: "Ver transacción El Corral" }));
+      expect(screen.getByLabelText("Monto ($)")).toHaveValue("30000");
       expect(requests.updates()).toBe(1);
     })
   ));

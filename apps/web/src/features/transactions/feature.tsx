@@ -1,4 +1,4 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Effect, Option } from "effect";
 import { useState } from "react";
@@ -7,6 +7,7 @@ import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { TransactionWorkspace } from "./workspace";
+import { type HistoryState, transactionHistory } from "./history";
 import {
   type Category,
   type CurrentUser,
@@ -148,6 +149,9 @@ type TransactionQueries = Readonly<{
   period: ReturnType<typeof deriveCurrentMonthPeriod>;
   retry: () => void;
   transactionState: CanonicalQueryState<Readonly<{ data: ReadonlyArray<Transaction> }>, unknown>;
+  history: HistoryState;
+  onMore: () => void;
+  onRetryMore: () => void;
 }>;
 
 const useTransactionQueries = (currentUser: CurrentUser): TransactionQueries => {
@@ -166,15 +170,31 @@ const useTransactionQueries = (currentUser: CurrentUser): TransactionQueries => 
       query: { from: period.from, to: period.to },
     })
   );
+  const [historyResource] = useState(() =>
+    transactionHistory({
+      apiClient: router.options.context.apiClient,
+      firstPage: transactions,
+      period: { from: period.from, to: period.to },
+    })
+  );
   const categoryState = useAtomValue(categories).pipe(presentCanonicalQuery);
-  const transactionState = useAtomValue(transactions).pipe(presentCanonicalQuery);
+  const history = useAtomValue(historyResource.state);
+  const transactionState = history.query;
+  const dispatch = useAtomSet(historyResource.action);
   const refreshCategories = useAtomRefresh(categories);
-  const refreshTransactions = useAtomRefresh(transactions);
   const retry = (): void => {
     refreshCategories();
-    refreshTransactions();
+    dispatch("reset");
   };
-  return { categoryState, period, retry, transactionState };
+  return {
+    categoryState,
+    period,
+    retry,
+    transactionState,
+    history,
+    onMore: () => dispatch("more"),
+    onRetryMore: () => dispatch("retry"),
+  };
 };
 
 const readyQueryActivity = (
@@ -195,7 +215,8 @@ const TransactionResources = ({
   profileCurrent,
 }: Readonly<{ currentUser: CurrentUser; profileCurrent: boolean }>): JSX.Element => {
   const router = useRouter();
-  const { categoryState, period, retry, transactionState } = useTransactionQueries(currentUser);
+  const { categoryState, period, retry, transactionState, history, onMore, onRetryMore } =
+    useTransactionQueries(currentUser);
   if (categoryState._tag === "Failure") {
     return (
       <FailedTransactionQuery
@@ -225,6 +246,10 @@ const TransactionResources = ({
 
   return (
     <TransactionWorkspace
+      key={history.generation}
+      continuation={history.continuation}
+      onMore={onMore}
+      onRetryMore={onRetryMore}
       editable={
         profileCurrent &&
         readyQueryActivity(categoryState, transactionState, retry)._tag === "Current"
@@ -290,6 +315,7 @@ const CurrentUserQuery = (): JSX.Element => {
             />
           ) : null}
           <TransactionResources
+            key={state.value.data.timeZone}
             currentUser={state.value.data}
             profileCurrent={profileCurrent(state)}
           />

@@ -125,14 +125,21 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
     }
     const text = decoder.decode(bytes);
     let root = "";
+    let textLeaf = false;
     scan(text, (parser) => {
       parser.on("cdata", malformed);
       parser.on("comment", malformed);
       parser.on("processinginstruction", malformed);
       parser.on("opentag", (tag) => {
+        // SheetJS retains raw inner XML in text leaves; SAX text alone would undercharge it.
+        if (textLeaf) malformed();
+        textLeaf = ["t", "v", "f"].includes(localName(tag.name));
         assertAttributes(tag);
         if (root === "") root = localName(tag.name);
         assertXmlRepresentation(tag, root);
+      });
+      parser.on("closetag", (tag) => {
+        if (["t", "v", "f"].includes(localName(tag.name))) textLeaf = false;
       });
     });
     members.push({ name, root, text });

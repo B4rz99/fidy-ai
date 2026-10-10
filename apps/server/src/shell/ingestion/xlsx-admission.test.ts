@@ -232,6 +232,32 @@ it.effect("rejects custom format IDs that SheetJS remaps into uncharged styles",
   )
 );
 
+it.effect("rejects nested markup inside shared, inline and scalar text leaves", () =>
+  Effect.gen(function* () {
+    yield* reject(
+      modify(workbook("normal"), (entries) =>
+        replacePart(entries, "xl/sharedStrings.xml", (xml) =>
+          xml.replace("<t>normal</t>", `<t><foo attr="${"x".repeat(16_384)}"/></t>`)
+        )
+      ),
+      "malformed-file"
+    );
+    for (const leaf of ["t", "v", "f"]) {
+      yield* reject(
+        modify(workbook("normal"), (entries) =>
+          replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+            xml.replace(
+              '<c r="A2" t="s"><v>1</v></c>',
+              `<c r="A2" t="inlineStr"><is><${leaf}><foo attr="padding"/></${leaf}></is></c>`
+            )
+          )
+        ),
+        "malformed-file"
+      );
+    }
+  })
+);
+
 it.effect("rejects formula translation triggers hidden inside unrelated attributes", () =>
   Effect.gen(function* () {
     for (const type of ["shared", "array"]) {

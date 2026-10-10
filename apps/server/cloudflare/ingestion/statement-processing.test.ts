@@ -2819,12 +2819,7 @@ effectIt.effect(
   () =>
     Effect.gen(function* () {
       const source = yield* fromTestPromise(() =>
-        Bun.file(
-          new URL(
-            "../../src/shell/ingestion/internal/fixtures/shared-string-total-limit.xlsx",
-            import.meta.url
-          )
-        ).bytes()
+        Bun.file(new URL("./fixtures/shared-string-total-limit.xlsx", import.meta.url)).bytes()
       );
       const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
       yield* fromTestPromise(() =>

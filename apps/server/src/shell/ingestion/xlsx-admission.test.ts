@@ -258,6 +258,37 @@ it.effect("rejects nested markup inside shared, inline and scalar text leaves", 
   })
 );
 
+it.effect("rejects text-prefix elements whose foreign string parsing retains raw markup", () =>
+  Effect.gen(function* () {
+    const rich = yield* parseStatementFile(
+      modify(workbook("normal"), (entries) =>
+        replacePart(entries, "xl/sharedStrings.xml", (xml) =>
+          xml.replace("<t>normal</t>", "<r><t>normal</t></r>")
+        )
+      )
+    );
+    expect(rich.rows[0]?.fields[0]).toBe("normal");
+    const markup = `<table><foo attr="${"x".repeat(16_384)}"/></table><t>x</t>`;
+    yield* reject(
+      modify(workbook("normal"), (entries) =>
+        replacePart(entries, "xl/sharedStrings.xml", (xml) => xml.replace("<t>normal</t>", markup))
+      ),
+      "malformed-file"
+    );
+    yield* reject(
+      modify(workbook("normal"), (entries) =>
+        replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+          xml.replace(
+            '<c r="A2" t="s"><v>1</v></c>',
+            `<c r="A2" t="inlineStr"><is>${markup}</is></c>`
+          )
+        )
+      ),
+      "malformed-file"
+    );
+  })
+);
+
 it.effect("rejects formula translation triggers hidden inside unrelated attributes", () =>
   Effect.gen(function* () {
     for (const type of ["shared", "array"]) {

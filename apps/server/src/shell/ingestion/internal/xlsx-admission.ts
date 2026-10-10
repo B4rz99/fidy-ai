@@ -105,6 +105,11 @@ const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
   if (name === "Relationship") assertRelationship(tag);
 };
 
+const assertStringChild = (name: string, parent: string): void => {
+  if (!["si", "sstItem", "is"].includes(parent)) return;
+  if (!["t", "r", "rPh", "phoneticPr"].includes(name)) malformed();
+};
+
 type XmlMember = Readonly<{ name: string; root: string; text: string }>;
 const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> => {
   const members: Array<XmlMember> = [];
@@ -126,6 +131,7 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
     const text = decoder.decode(bytes);
     let root = "";
     let textLeaf = false;
+    const ancestors: Array<string> = [];
     scan(text, (parser) => {
       parser.on("cdata", malformed);
       parser.on("comment", malformed);
@@ -133,12 +139,16 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
       parser.on("opentag", (tag) => {
         // SheetJS retains raw inner XML in text leaves; SAX text alone would undercharge it.
         if (textLeaf) malformed();
-        textLeaf = ["t", "v", "f"].includes(localName(tag.name));
+        const name = localName(tag.name);
+        assertStringChild(name, ancestors.at(-1) ?? "");
+        ancestors.push(name);
+        textLeaf = ["t", "v", "f"].includes(name);
         assertAttributes(tag);
         if (root === "") root = localName(tag.name);
         assertXmlRepresentation(tag, root);
       });
       parser.on("closetag", (tag) => {
+        ancestors.pop();
         if (["t", "v", "f"].includes(localName(tag.name))) textLeaf = false;
       });
     });

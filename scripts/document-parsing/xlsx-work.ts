@@ -21,7 +21,7 @@ const escapedRepetitions = 1024;
 const outsideNumericDigits = 129;
 const root = new URL("../..", import.meta.url).pathname;
 const directory = `${root}/.xlsx-work-proof`;
-const fixtureRoot = `${root}/apps/server/src/shell/ingestion/internal/fixtures`;
+const fixtureRoot = `${root}/scripts/document-parsing/fixtures/xlsx-work`;
 const workResult = Schema.Struct({
   outcome: Schema.Literal("parsed"),
   rowCount: Schema.Int,

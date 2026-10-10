@@ -4,7 +4,7 @@ import { type Deployment, type ReleaseSnapshot } from "./release-controller";
 
 // Land and deploy the code-only prerequisite before the retention migration. If it is squash
 // merged, replace this with that reviewed immutable commit; never use trunk or an environment flag.
-export const retentionCompatibilityRevision = "84ff69c0d9b8007547bcaea48172cff622e6f548";
+export const retentionCompatibilityRevision = "cf11ac4c396634f555386bd49ea772548f17e5cb";
 
 const RevisionBinding = Schema.Struct({
   type: Schema.Literal("plain_text"),

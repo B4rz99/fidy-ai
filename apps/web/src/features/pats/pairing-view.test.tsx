@@ -25,7 +25,14 @@ afterEach(cleanup);
 
 it("submits a normalized public code and renders the immutable review", () => {
   const inspect = vi.fn((command: InspectPATPairingCommand) => command.onInspected(review));
-  render(<PATPairingView approve={vi.fn()} inspect={inspect} />);
+  render(
+    <PATPairingView
+      initialReview={Option.none()}
+      publicCode={Option.none()}
+      approve={vi.fn()}
+      inspect={inspect}
+    />
+  );
   expect(screen.getByRole("heading", { name: "Autorizar acceso con código" })).toBeVisible();
   expect(screen.getByText("Ingresa el código que aparece donde quieres usar Fidy.")).toBeVisible();
   fireEvent.change(screen.getByLabelText("Código"), {
@@ -53,7 +60,12 @@ it("reviews and approves a client-selected seven-day pairing starting at approva
   };
   const approve = vi.fn((command: ApprovePATPairingCommand) => command.onApproved());
   render(
-    <PATPairingView approve={approve} inspect={(command) => command.onInspected(sevenDays)} />
+    <PATPairingView
+      initialReview={Option.none()}
+      publicCode={Option.none()}
+      approve={approve}
+      inspect={(command) => command.onInspected(sevenDays)}
+    />
   );
   fireEvent.change(screen.getByLabelText("Código"), { target: { value: "BCDF-GHJK" } });
   fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
@@ -68,7 +80,14 @@ it("reviews and approves a client-selected seven-day pairing starting at approva
 
 it("approves only the inspected identity and fixed lifetime, then shows no credential", () => {
   const approve = vi.fn((command: ApprovePATPairingCommand) => command.onApproved());
-  render(<PATPairingView approve={approve} inspect={(command) => command.onInspected(review)} />);
+  render(
+    <PATPairingView
+      initialReview={Option.none()}
+      publicCode={Option.none()}
+      approve={approve}
+      inspect={(command) => command.onInspected(review)}
+    />
+  );
   fireEvent.change(screen.getByLabelText("Código"), {
     target: { value: "BCDF-GHJK" },
   });
@@ -77,7 +96,7 @@ it("approves only the inspected identity and fixed lifetime, then shows no crede
 
   expect(approve).toHaveBeenCalledWith(expect.objectContaining({ pairingId: review.pairingId }));
   expect(screen.getByText("Acceso autorizado")).toBeVisible();
-  expect(screen.getByText(/vuelve al lugar donde obtuviste el código/iu)).toBeVisible();
+  expect(screen.getByText(/volver a la terminal/iu)).toBeVisible();
   expect(
     screen.getByText(/este navegador no recibe ni muestra la clave de acceso/iu)
   ).toBeVisible();
@@ -89,6 +108,8 @@ it("disables duplicate approval and presents every failure generically", () => {
   let approval = Option.none<ApprovePATPairingCommand>();
   const { rerender } = render(
     <PATPairingView
+      initialReview={Option.none()}
+      publicCode={Option.none()}
       approve={(command) => {
         approval = Option.some(command);
       }}
@@ -108,5 +129,49 @@ it("disables duplicate approval and presents every failure generically", () => {
   fireEvent.click(screen.getByRole("button", { name: "Ingresar otro código" }));
   expect(screen.getByLabelText("Código")).toHaveValue("");
 
-  rerender(<PATPairingView approve={vi.fn()} inspect={(command) => command.onFailed()} />);
+  rerender(
+    <PATPairingView
+      initialReview={Option.none()}
+      publicCode={Option.none()}
+      approve={vi.fn()}
+      inspect={(command) => command.onFailed()}
+    />
+  );
+});
+
+it("preselects the public request without approving it and requires a deliberate confirmation", () => {
+  const approve = vi.fn((command: ApprovePATPairingCommand) => command.onApproved());
+  const inspect = vi.fn();
+  render(
+    <PATPairingView
+      initialReview={Option.some(review)}
+      publicCode={Option.some("BCDF-GHJK")}
+      approve={approve}
+      inspect={inspect}
+    />
+  );
+  expect(screen.getByText("BCDF-GHJK")).toBeVisible();
+  expect(screen.getByText(/no verifica su identidad/u)).toBeVisible();
+  expect(approve).not.toHaveBeenCalled();
+  expect(inspect).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Autorizar acceso" }));
+  expect(approve).toHaveBeenCalledTimes(1);
+  expect(approve).toHaveBeenCalledWith(expect.objectContaining({ pairingId: review.pairingId }));
+});
+
+it("does not place an invalid or secret-like pasted code in a sign-in URL", () => {
+  const approve = vi.fn();
+  render(
+    <PATPairingView
+      initialReview={Option.none()}
+      publicCode={Option.none()}
+      approve={approve}
+      inspect={(command) => command.onFailed()}
+    />
+  );
+  fireEvent.change(screen.getByLabelText("Código"), { target: { value: "private-secret" } });
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  expect(screen.getByText("No encontramos ese código")).toBeVisible();
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  expect(approve).not.toHaveBeenCalled();
 });

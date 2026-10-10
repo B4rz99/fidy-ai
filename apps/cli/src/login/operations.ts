@@ -1,7 +1,7 @@
 import { patPairingLifetime } from "@fidy/server/client";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { CliFailure, type SavedGrant, apiOrigin, managementUrl } from "../credential/contract";
-import { type LoginDependencies, LoginRequest, type PublicProgress } from "./contract";
+import { type LoginDependencies, LoginRequest, type PublicProgress, approvalUrl } from "./contract";
 
 const requestDeadlineMilliseconds = 15_000;
 const maximumLoginMilliseconds =
@@ -22,7 +22,7 @@ export const login = Effect.fn(
     const existing = yield* dependencies.store.load;
     if (Option.isSome(existing)) return yield* new CliFailure({ reason: "AlreadyLoggedIn" });
     const pairing = yield* dependencies.pairing.start(request);
-    yield* progress({ _tag: "ApprovalRequired", publicCode: pairing.publicCode, managementUrl });
+    yield* progress(approvalProgress(pairing.publicCode));
     let delaySeconds: number = pairing.pollingIntervalSeconds;
     let remaining = pairing.expiresAt.epochMilliseconds - (yield* DateTime.now).epochMilliseconds;
     while (remaining > 0) {
@@ -72,3 +72,10 @@ export const login = Effect.fn(
     orElse: () => Effect.fail(new CliFailure({ reason: "ClaimAmbiguous" })),
   })
 );
+
+const approvalProgress = (publicCode: Parameters<typeof approvalUrl>[0]): PublicProgress => ({
+  _tag: "ApprovalRequired",
+  publicCode,
+  managementUrl,
+  approvalUrl: approvalUrl(publicCode),
+});

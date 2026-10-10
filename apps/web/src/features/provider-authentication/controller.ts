@@ -1,6 +1,7 @@
+import { PATPairingPublicCode } from "@/transport/client";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Cause, type Context, Effect, Option, Redacted } from "effect";
+import { Cause, type Context, Effect, Option, Redacted, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
@@ -290,7 +291,7 @@ export const useProviderAuthentication = ({
       handoffReference,
       authenticated: () => {
         session.completeLogin();
-        window.location.assign("/app/transactions");
+        window.location.assign(destinationAfterProviderLogin(router.state.location.search.cliCode));
       },
     })
   );
@@ -336,3 +337,9 @@ export const closeProviderReturn = (node: Parameters<RefCallback<HTMLElement>>[0
   if (node === null) return;
   window.close();
 };
+
+const destinationAfterProviderLogin = (input: unknown): string =>
+  Option.match(Schema.decodeUnknownOption(PATPairingPublicCode)(input), {
+    onNone: () => "/app/transactions",
+    onSome: (code) => `/connect/cli?cliCode=${encodeURIComponent(code)}`,
+  });

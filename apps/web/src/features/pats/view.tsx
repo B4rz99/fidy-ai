@@ -15,7 +15,7 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { DateTime, Duration, Effect, Redacted } from "effect";
+import { DateTime, Duration, Effect, Option, Redacted } from "effect";
 import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import {
   type Dispatch,
@@ -29,10 +29,10 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { Checkbox } from "@/ui/components/checkbox";
+import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/components/toggle-group";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 
 type PATScopeValue = PATScope;
 type ReviewedManualPATGrant = ManualPATGrantInput & Readonly<{ reviewExpiresAt: DateTime.Utc }>;
@@ -98,9 +98,16 @@ const patExpirationFormatter = new Intl.DateTimeFormat("es-CO", {
   timeZone: "America/Bogota",
 });
 
+const scopeDescriptions = {
+  read: "Consultar tus datos financieros.",
+  write: "Crear y modificar tus datos financieros.",
+  dashboard: "Consultar y modificar tu tablero financiero.",
+} as const;
+
 const scopeOptions = (["read", "write", "dashboard"] as const).map((scope) => ({
   scope: PATScope.make(scope),
   ...patScopeCopy[scope],
+  description: scopeDescriptions[scope],
 }));
 
 const toggleScope = (
@@ -119,21 +126,20 @@ const LifetimeSelector = ({
 }>): JSX.Element => (
   <fieldset className="flex flex-col gap-3">
     <legend className="font-medium">Duración</legend>
-    <ToggleGroup
-      aria-label="Duración del token"
-      className="flex-wrap"
-      onValueChange={(values) => {
-        const selected = lifetimeOptions.find((option) => option.value === values[0]);
+    <ChoiceDropdown
+      id="pat-lifetime"
+      label="Duración del token"
+      width="full"
+      disabled={false}
+      leading={null}
+      triggerLabel={Option.none()}
+      options={lifetimeOptions}
+      value={String(state.lifetimeDays)}
+      onChange={(value) => {
+        const selected = lifetimeOptions.find((option) => option.value === value);
         if (selected !== undefined) update({ ...state, lifetimeDays: selected.lifetimeDays });
       }}
-      value={[String(state.lifetimeDays)]}
-    >
-      {lifetimeOptions.map((option) => (
-        <ToggleGroupItem key={option.value} value={option.value}>
-          {option.label}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
+    />
   </fieldset>
 );
 
@@ -146,11 +152,11 @@ const ScopeSelector = ({
 }>): JSX.Element => {
   const selectedScopes = new Set(state.scopes);
   return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="font-medium">Alcances</legend>
+    <fieldset className="flex flex-col">
+      <legend className="mb-2 font-medium">Permisos</legend>
       {scopeOptions.map((option) => (
         <label
-          className="flex cursor-pointer items-start gap-3 rounded-lg border p-4"
+          className="flex cursor-pointer items-start gap-3 border-b py-3 transition-colors hover:bg-muted/50 has-[[data-checked]]:bg-muted/50"
           htmlFor={`pat-scope-${option.scope}`}
           key={option.scope}
         >
@@ -193,29 +199,27 @@ const GrantEditor = ({
   };
 
   return (
-    <Card>
-      <CardContent>
-        <form className="flex flex-col gap-6" onSubmit={submit}>
-          <div className="flex flex-col gap-2">
-            <label className="font-medium" htmlFor="pat-recipient">
-              Nombre
-            </label>
-            <Input
-              id="pat-recipient"
-              onChange={(event) => update({ ...state, recipientLabel: event.target.value })}
-              placeholder="Ej. Automatización casa"
-              value={state.recipientLabel}
-            />
-            <p className="text-sm text-muted-foreground">Un nombre visible de 1 a 80 caracteres.</p>
-          </div>
-          <ScopeSelector state={state} update={update} />
-          <LifetimeSelector state={state} update={update} />
-          <Button disabled={!valid} type="submit">
-            Revisar token
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <form className="flex flex-col gap-6" onSubmit={submit}>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pat-recipient">Nombre</Label>
+        <Input
+          id="pat-recipient"
+          onChange={(event) => update({ ...state, recipientLabel: event.target.value })}
+          aria-describedby="pat-recipient-hint"
+          autoComplete="off"
+          placeholder="Ej. Mi agente personal"
+          value={state.recipientLabel}
+        />
+        <p id="pat-recipient-hint" className="text-sm text-muted-foreground">
+          Un nombre visible de 1 a 80 caracteres.
+        </p>
+      </div>
+      <ScopeSelector state={state} update={update} />
+      <LifetimeSelector state={state} update={update} />
+      <Button disabled={!valid} type="submit">
+        Crear token
+      </Button>
+    </form>
   );
 };
 
@@ -230,17 +234,13 @@ const GrantReview = ({
   confirm: () => void;
   edit: () => void;
 }>): JSX.Element => (
-  <Card>
-    <CardHeader>
-      <CardTitle>
-        <h2>Revisa el acceso</h2>
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="flex flex-col gap-5">
+  <section className="flex min-w-0 flex-col gap-5" aria-label="Revisión del token">
+    <h3 className="text-lg font-semibold">Revisa el acceso</h3>
+    <div className="flex min-w-0 flex-col gap-5">
       <dl className="grid gap-2 sm:grid-cols-[10rem_1fr]">
         <dt className="text-muted-foreground">Nombre</dt>
         <dd className="font-medium">{grant.recipientLabel}</dd>
-        <dt className="text-muted-foreground">Alcances</dt>
+        <dt className="text-muted-foreground">Permisos</dt>
         <dd className="flex flex-wrap gap-2">
           {grant.scopes.map((scope) => (
             <Badge key={scope} variant="secondary">
@@ -268,8 +268,8 @@ const GrantReview = ({
           {issuing ? "Creando token…" : "Confirmar y crear token"}
         </Button>
       </div>
-    </CardContent>
-  </Card>
+    </div>
+  </section>
 );
 
 const IssuedGrant = ({
@@ -283,25 +283,30 @@ const IssuedGrant = ({
 }>): JSX.Element => {
   const [copied, setCopied] = useState(false);
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-5">
-        <code className="break-all rounded-lg border bg-muted p-4 text-sm">
-          {Redacted.value(issued.bearer)}
-        </code>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button
-            aria-live="polite"
-            onClick={() => copyToClipboard(issued.bearer, () => setCopied(true))}
-            type="button"
-          >
-            {copied ? "Copiado" : "Copiar token"}
-          </Button>
-          <Button onClick={reset} type="button" variant="outline">
-            Crear otro token
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex min-w-0 flex-col gap-5">
+      <Alert>
+        <AlertTitle>Token creado</AlertTitle>
+        <AlertDescription>
+          Guárdalo ahora en tu agente. Al salir de esta vista no podrás volver a consultar el token
+          completo.
+        </AlertDescription>
+      </Alert>
+      <code className="break-all rounded-lg border bg-muted p-4 text-sm">
+        {Redacted.value(issued.bearer)}
+      </code>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button
+          aria-live="polite"
+          onClick={() => copyToClipboard(issued.bearer, () => setCopied(true))}
+          type="button"
+        >
+          {copied ? "Copiado" : "Copiar token"}
+        </Button>
+        <Button onClick={reset} type="button" variant="outline">
+          Crear otro token
+        </Button>
+      </div>
+    </div>
   );
 };
 
@@ -474,20 +479,21 @@ export const ManualPATView = ({
     [clipboard, state]
   );
   return (
-    <main
+    <section
+      id="create-pat"
       ref={lifecycleRef}
-      className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8"
+      className="flex min-w-0 flex-col gap-6"
+      aria-labelledby="create-pat-title"
     >
-      <header className="flex flex-col gap-2">
-        <Badge className="w-fit" variant="secondary">
-          Seguridad
-        </Badge>
-        <h1 className="font-heading text-3xl font-semibold tracking-tight">Tokens de acceso</h1>
-        <p className="text-muted-foreground">
-          Crea un token con el acceso mínimo que necesita su destinatario.
+      <header className="flex flex-col gap-1">
+        <h2 id="create-pat-title" className="text-xl font-semibold tracking-tight">
+          Crear token
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Dale un nombre y elige solo los permisos que necesita tu agente.
         </p>
       </header>
       <CreationContent clipboard={clipboard} issue={issue} setState={setState} state={state} />
-    </main>
+    </section>
   );
 };

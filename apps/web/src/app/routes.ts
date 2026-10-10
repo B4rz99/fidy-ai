@@ -4,6 +4,7 @@ import {
   ConnectionAttemptReference,
   OAuthConnectionListQuery,
   OAuthRequestId,
+  PATPairingPublicCode,
   ProviderHandoffSearch,
 } from "@/transport/client";
 import { ConnectionContinuationFeature } from "@/features/connections/feature";
@@ -25,7 +26,7 @@ import {
 } from "@/features/provider-authentication/feature";
 import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
-import { PATManagementFeature } from "@/features/pats/feature";
+import { CLIConnectionFeature, PATManagementFeature } from "@/features/pats/feature";
 import { BackupRecoveryFeature } from "@/features/recovery/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
 import { SubscriptionOffersFeature } from "@/features/subscription/feature";
@@ -98,6 +99,13 @@ const patManagementRoute = createRoute({
   path: "/settings/pats",
   component: PATManagementFeature,
 });
+const cliConnectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/connect/cli",
+  validateSearch: (search) =>
+    Schema.decodeSync(Schema.Struct({ cliCode: Schema.optionalKey(PATPairingPublicCode) }))(search),
+  component: CLIConnectionFeature,
+});
 const oauthManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/agents",
@@ -126,6 +134,7 @@ const browserLoginPairingRoute = createRoute({
   validateSearch: (search) =>
     Schema.decodeSync(
       Schema.Struct({
+        cliCode: Schema.optionalKey(PATPairingPublicCode),
         oauthRequest: Schema.optionalKey(OAuthRequestId),
         connectionAttempt: Schema.optionalKey(ConnectionAttemptReference),
       })
@@ -159,7 +168,13 @@ const MicrosoftAuthentication = (): JSX.Element =>
 const googleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/google",
-  validateSearch: (search) => Schema.decodeSync(ProviderHandoffSearch)(search),
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        ...ProviderHandoffSearch.fields,
+        cliCode: Schema.optionalKey(PATPairingPublicCode),
+      })
+    )(search),
   component: GoogleAuthentication,
 });
 const googleReturnRoute = createRoute({
@@ -170,7 +185,13 @@ const googleReturnRoute = createRoute({
 const microsoftRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/microsoft",
-  validateSearch: (search) => Schema.decodeSync(ProviderHandoffSearch)(search),
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        ...ProviderHandoffSearch.fields,
+        cliCode: Schema.optionalKey(PATPairingPublicCode),
+      })
+    )(search),
   component: MicrosoftAuthentication,
 });
 const microsoftReturnRoute = createRoute({
@@ -181,6 +202,7 @@ const microsoftReturnRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
+  cliConnectionRoute,
   googleRoute,
   googleReturnRoute,
   microsoftRoute,

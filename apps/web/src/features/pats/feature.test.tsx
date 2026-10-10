@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DateTime, Option, Redacted } from "effect";
+import { DateTime, Effect, Option, Redacted } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   type ActivePATMetadata,
@@ -62,7 +62,7 @@ const prepareGrantReview = (): void => {
   });
   fireEvent.click(screen.getByRole("checkbox", { name: /Lectura/iu }));
   fireEvent.click(screen.getByRole("checkbox", { name: /Tablero/iu }));
-  fireEvent.click(screen.getByRole("button", { name: "Revisar token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear token" }));
 };
 
 const issueReviewedPAT = (): void => {
@@ -79,7 +79,7 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
   const clipboard = makeSensitiveClipboardSpy();
   render(<ManualPATView key="signed-in" clipboard={clipboard} issue={issue} />);
 
-  expect(screen.getByRole("button", { name: "90 días" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Duración del token" })).toHaveTextContent("90 días");
   prepareGrantReview();
 
   expect(screen.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
@@ -145,40 +145,48 @@ it("hides an issued bearer and clears the clipboard when its disclosure unmounts
   vi.useRealTimers();
 });
 
-it("offers every fixed lifetime preset and preserves a changed selection through editing", () => {
-  render(<ManualPATView clipboard={makeSensitiveClipboardSpy()} issue={vi.fn()} />);
+it("offers every fixed lifetime preset and preserves a changed selection through editing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      render(<ManualPATView clipboard={makeSensitiveClipboardSpy()} issue={vi.fn()} />);
 
-  for (const days of patLifetimeDayOptions) {
-    expect(screen.getByRole("button", { name: `${days} días` })).toBeVisible();
-  }
-  fireEvent.click(screen.getByRole("button", { name: "30 días" }));
-  prepareGrantReview();
-  expect(screen.getByText("30 días", { selector: "dd" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Editar" }));
-  expect(screen.getByRole("button", { name: "30 días" })).toHaveAttribute("aria-pressed", "true");
-});
+      fireEvent.click(screen.getByRole("button", { name: "Duración del token" }));
+      const queries = patLifetimeDayOptions.map((days) =>
+        screen.findByRole("menuitemradio", { name: `${days} días` })
+      );
+      const presets = yield* Effect.tryPromise(() => Promise.all(queries));
+      for (const preset of presets) expect(preset).toBeVisible();
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "30 días" }));
+      prepareGrantReview();
+      expect(screen.getByText("30 días", { selector: "dd" })).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+      expect(screen.getByRole("button", { name: "Duración del token" })).toHaveTextContent(
+        "30 días"
+      );
+    })
+  ));
 
 it("edits a reviewed grant and preserves one request identity across a failed retry", () => {
   const issue = vi.fn<(command: IssueManualPATCommand) => void>();
   render(<ManualPATView clipboard={makeSensitiveClipboardSpy()} issue={issue} />);
 
-  expect(screen.getByRole("button", { name: "Revisar token" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Crear token" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Nombre"), {
     target: { value: "x".repeat(recipientLabelLimit + 1) },
   });
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  expect(screen.getByRole("button", { name: "Revisar token" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Crear token" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Robot" } });
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  expect(screen.getByRole("button", { name: "Revisar token" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Crear token" })).toBeDisabled();
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  fireEvent.click(screen.getByRole("button", { name: "Revisar token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear token" }));
   fireEvent.click(screen.getByRole("button", { name: "Editar" }));
   expect(screen.getByLabelText("Nombre")).toHaveValue("Robot");
 
-  fireEvent.click(screen.getByRole("button", { name: "Revisar token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear token" }));
   fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
   expect(screen.getByRole("button", { name: "Creando token…" })).toBeDisabled();
   const firstRequest = issue.mock.calls[0]?.[0];

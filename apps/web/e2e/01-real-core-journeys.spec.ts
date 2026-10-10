@@ -249,7 +249,7 @@ test("reviews a real PATPairing and presents its under-scoped Core refusal witho
   Effect.runPromise(
     Effect.gen(function* () {
       const { pairingId, publicCode, privateDeviceCode } = yield* startPatPairing(page, request);
-      yield* fromPlaywright(page.goto("/settings/pats"));
+      yield* fromPlaywright(page.goto("/connect/cli"));
       yield* fromPlaywright(
         page
           .getByLabel("Código", {
@@ -895,7 +895,7 @@ const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRe
   yield* fromPlaywright(
     page
       .getByRole("button", {
-        name: "Revisar token",
+        name: "Crear token",
       })
       .click()
   );

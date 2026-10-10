@@ -11,6 +11,7 @@ import {
   type EmailAddress,
   type EmailVerificationCode,
   OAuthRequestId,
+  PATPairingPublicCode,
   type WebAuthClient,
 } from "@/transport/client";
 
@@ -372,6 +373,7 @@ export type BrowserLoginPairing = Readonly<{
 }>;
 
 type LoginDestination =
+  | Readonly<{ to: "/connect/cli"; search: { cliCode: PATPairingPublicCode } }>
   | Readonly<{ to: "/oauth/review/$requestId"; params: { requestId: typeof OAuthRequestId.Type } }>
   | Readonly<{
       to: "/connections/continue";
@@ -381,12 +383,14 @@ type LoginDestination =
 const destinationAfterLogin = (search: unknown): LoginDestination => {
   const requested = Schema.decodeUnknownOption(
     Schema.Struct({
+      cliCode: Schema.OptionFromOptionalKey(PATPairingPublicCode),
       oauthRequest: Schema.OptionFromOptionalKey(OAuthRequestId),
       connectionAttempt: Schema.OptionFromOptionalKey(ConnectionAttemptReference),
     })
   )(search);
   if (Option.isNone(requested)) return { to: "/app/transactions" };
-  const { oauthRequest, connectionAttempt } = requested.value;
+  const { oauthRequest, connectionAttempt, cliCode } = requested.value;
+  if (Option.isSome(cliCode)) return { to: "/connect/cli", search: { cliCode: cliCode.value } };
   if (Option.isSome(oauthRequest)) {
     return { to: "/oauth/review/$requestId", params: { requestId: oauthRequest.value } };
   }

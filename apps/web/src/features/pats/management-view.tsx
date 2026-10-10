@@ -9,7 +9,16 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/ui/components/table";
+import { formatPATDate } from "./presentation";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 
 /** Terminal callbacks for revoking one PAT selected by its safe short id. */
@@ -45,47 +54,32 @@ export type ActivePATManagementState =
 
 type Selection = TokenShortId | "all";
 
-const instantFormatter = new Intl.DateTimeFormat("es-CO", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-});
-
-const formatInstant = (instant: DateTime.Utc): string =>
-  `${instantFormatter.format(DateTime.toDate(instant))} UTC`;
-
 const PATMetadata = ({ pat }: Readonly<{ pat: ActivePATMetadata }>): JSX.Element => (
-  <dl className="grid gap-2 sm:grid-cols-[9rem_1fr]">
-    <dt className="text-muted-foreground">Código</dt>
-    <dd>
-      <code>{pat.shortId}</code>
-    </dd>
-    <dt className="text-muted-foreground">Permisos</dt>
-    <dd className="flex flex-wrap gap-2">
-      {pat.scopes.map((scope) => (
-        <Badge key={scope} variant="secondary">
-          {patScopeCopy[scope].label}
-        </Badge>
-      ))}
-    </dd>
-    <dt className="text-muted-foreground">Creado el</dt>
-    <dd>
-      <time dateTime={DateTime.formatIso(pat.createdAt)}>{formatInstant(pat.createdAt)}</time>
-    </dd>
-    <dt className="text-muted-foreground">Usado por última vez</dt>
-    <dd>
+  <>
+    <TableCell density="compact">
+      <div className="flex flex-wrap gap-1">
+        {pat.scopes.map((scope) => (
+          <Badge key={scope} variant="secondary">
+            {patScopeCopy[scope].label}
+          </Badge>
+        ))}
+      </div>
+    </TableCell>
+    <TableCell density="compact" className="tabular-nums">
+      <time dateTime={DateTime.formatIso(pat.createdAt)}>{formatPATDate(pat.createdAt)}</time>
+    </TableCell>
+    <TableCell density="compact" className="tabular-nums">
       {Option.match(pat.lastUsedAt, {
-        onNone: () => "Nunca se ha usado",
+        onNone: () => "Nunca",
         onSome: (lastUsedAt) => (
-          <time dateTime={DateTime.formatIso(lastUsedAt)}>{formatInstant(lastUsedAt)}</time>
+          <time dateTime={DateTime.formatIso(lastUsedAt)}>{formatPATDate(lastUsedAt)}</time>
         ),
       })}
-    </dd>
-    <dt className="text-muted-foreground">Vence el</dt>
-    <dd>
-      <time dateTime={DateTime.formatIso(pat.expiresAt)}>{formatInstant(pat.expiresAt)}</time>
-    </dd>
-  </dl>
+    </TableCell>
+    <TableCell density="compact" className="tabular-nums">
+      <time dateTime={DateTime.formatIso(pat.expiresAt)}>{formatPATDate(pat.expiresAt)}</time>
+    </TableCell>
+  </>
 );
 
 type RevocationActionProps = Readonly<{
@@ -159,18 +153,28 @@ const OneRevocationControl = (
   />
 );
 
-const PATCard = (props: Readonly<Parameters<typeof OneRevocationControl>[0]>): JSX.Element => (
-  <Card>
-    <CardHeader>
-      <CardTitle>
-        <h3>{props.pat.recipientLabel}</h3>
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="flex flex-col gap-4">
+const PATRow = (props: Readonly<Parameters<typeof OneRevocationControl>[0]>): JSX.Element => (
+  <>
+    <TableRow>
+      <TableHead scope="row" density="compact" className="whitespace-normal">
+        <span className="block break-words font-semibold">{props.pat.recipientLabel}</span>
+        <code className="mt-1 block text-xs font-normal text-muted-foreground">
+          {props.pat.shortId}
+        </code>
+      </TableHead>
       <PATMetadata pat={props.pat} />
-      <OneRevocationControl {...props} />
-    </CardContent>
-  </Card>
+      <TableCell density="compact" className="text-right">
+        {!props.selected ? <OneRevocationControl {...props} /> : null}
+      </TableCell>
+    </TableRow>
+    {props.selected ? (
+      <TableRow>
+        <TableCell colSpan={6} density="compact">
+          <OneRevocationControl {...props} />
+        </TableCell>
+      </TableRow>
+    ) : null}
+  </>
 );
 
 const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
@@ -185,7 +189,7 @@ const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
     confirmLabel="Sí, desactivar todos"
     revokingLabel="Desactivando todos…"
     triggerLabel="Desactivar todos los tokens"
-    triggerVariant="destructive"
+    triggerVariant="outline"
   />
 );
 
@@ -252,6 +256,28 @@ const useRevocationController = (input: {
   };
 };
 
+const PATTableHeader = (): JSX.Element => (
+  <>
+    <colgroup>
+      <col />
+      <col />
+      <col />
+      <col />
+      <col />
+      <col className="w-32" />
+    </colgroup>
+    <TableHeader>
+      <TableRow>
+        {["Nombre", "Permisos", "Creado el", "Último uso", "Vence el", "Acciones"].map((label) => (
+          <TableHead key={label} scope="col" density="compact">
+            {label}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
+  </>
+);
+
 const ReadyPATs = ({
   pats,
   controller,
@@ -264,22 +290,32 @@ const ReadyPATs = ({
   return (
     <>
       {pats.length === 0 ? (
-        <p className="rounded-lg border p-4 text-muted-foreground">No tienes tokens activos.</p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>No tienes tokens activos.</EmptyTitle>
+            <EmptyDescription>
+              Crea un token o autoriza a tu agente con su código para darle acceso a Fidy.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <div className="grid gap-4">
-          {pats.map((pat) => (
-            <PATCard
-              cancel={controller.cancel}
-              disabled={revoking}
-              key={pat.shortId}
-              pat={pat}
-              revoke={() => controller.revokeOne(pat.shortId)}
-              revoking={revoking && selected === pat.shortId}
-              select={() => controller.select(pat.shortId)}
-              selected={selected === pat.shortId}
-            />
-          ))}
-        </div>
+        <Table aria-labelledby="active-pats-title" className="min-w-[42rem] table-fixed">
+          <PATTableHeader />
+          <TableBody>
+            {pats.map((pat) => (
+              <PATRow
+                cancel={controller.cancel}
+                disabled={revoking}
+                key={pat.shortId}
+                pat={pat}
+                revoke={() => controller.revokeOne(pat.shortId)}
+                revoking={revoking && selected === pat.shortId}
+                select={() => controller.select(pat.shortId)}
+                selected={selected === pat.shortId}
+              />
+            ))}
+          </TableBody>
+        </Table>
       )}
       <AllRevocationControl
         cancel={controller.cancel}
@@ -307,11 +343,6 @@ const PATQueryContent = ({
   if (state._tag === "Ready") {
     return (
       <>
-        {state.refreshing ? (
-          <p aria-live="polite" className="text-sm text-muted-foreground">
-            Actualizando tokens activos…
-          </p>
-        ) : null}
         {state.refreshFailed ? (
           <CanonicalQueryRetry
             description="Mostramos los últimos tokens disponibles."
@@ -357,10 +388,6 @@ export const ActivePATManagementView = ({
         <h2 className="text-xl font-semibold" id="active-pats-title">
           Tokens activos
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Aquí puedes ver y desactivar los tokens que has creado. Por seguridad, el código completo
-          solo se muestra una vez.
-        </p>
       </div>
       {controller.state._tag !== "Revoking" &&
         Option.match(controller.state.notice, {

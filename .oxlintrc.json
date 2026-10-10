@@ -184,6 +184,7 @@
     {
       "files": [
         "apps/web/src/ui/components/sheet.tsx",
+        "apps/web/src/ui/components/table.tsx",
         "apps/web/src/features/transactions/workspace.tsx",
         "apps/web/src/features/transactions/ledger.tsx"
       ],

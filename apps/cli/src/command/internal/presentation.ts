@@ -2,7 +2,8 @@ import type { CliFailure } from "../../credential/contract";
 import type { PublicOutput } from "../contract";
 
 export const messages: Readonly<Record<PublicOutput["_tag"], string>> = {
-  ApprovalRequired: "Aprueba este código en https://fidyapp.com/settings/pats.",
+  ApprovalRequired:
+    "Abre el enlace de aprobación y confirma que el código coincide con el de esta terminal. Si no se abre el navegador, usa el enlace mostrado.",
   PollingDelayed:
     "El servidor pide esperar más antes de comprobar la aprobación; los permisos no cambian.",
   LoggedIn: "Acceso guardado en el almacén nativo.",
@@ -17,7 +18,7 @@ export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   UnsupportedRuntime:
     "Este CLI requiere el Bun verificado 13a98b0db. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
   InvalidInput:
-    "Uso: fidy login [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout | commands | GRUPO OPERACIÓN [--input ARCHIVO|- | --CAMPO VALOR ...] [--json]. No mezcles fuentes, repitas flags ni uses nombres desconocidos. Usa GRUPO OPERACIÓN --help para consultar nombres, requisitos, opciones y entrada estructurada. Texto libre o sensible: archivo/stdin, no historial del shell.",
+    "Uso: fidy login [--no-browser] [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout | commands | GRUPO OPERACIÓN [--input ARCHIVO|- | --CAMPO VALOR ...] [--json]. No mezcles fuentes, repitas flags ni uses nombres desconocidos. Usa GRUPO OPERACIÓN --help para consultar nombres, requisitos, opciones y entrada estructurada. Texto libre o sensible: archivo/stdin, no historial del shell.",
   StorageUnavailable:
     "No se puede usar el almacén nativo. Desbloquea Keychain (macOS), inicia Secret Service/GNOME Keyring/KWallet (Linux) o habilita Credential Manager (Windows). No hay alternativa en texto plano. Si persiste, revisa permisos locales y elimina un login.lock abandonado solo cuando no haya otra instancia activa.",
   StorageInconsistent:

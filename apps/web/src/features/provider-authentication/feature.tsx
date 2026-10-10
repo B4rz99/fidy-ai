@@ -1,5 +1,5 @@
-import { Option } from "effect";
-import type { AuthenticationProvider } from "@/transport/client";
+import { Option, Schema } from "effect";
+import { type AuthenticationProvider, PATPairingPublicCode } from "@/transport/client";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
@@ -18,14 +18,23 @@ const ProviderChoice = ({
 }: Readonly<{
   provider: AuthenticationProvider;
   handoffReference: Option.Option<string>;
-}>): JSX.Element => (
-  <a
-    className="text-center underline"
-    href={`${provider === "google" ? "/auth/microsoft" : "/auth/google"}${Option.match(handoffReference, { onNone: () => "", onSome: (reference) => `?handoff=${encodeURIComponent(reference)}` })}`}
-  >
-    {provider === "google" ? "Microsoft" : "Google"}
-  </a>
-);
+}>): JSX.Element => {
+  const router = useRouter();
+  const cliCode = Schema.decodeUnknownOption(PATPairingPublicCode)(
+    router.state.location.search.cliCode
+  );
+  const search = new URLSearchParams();
+  if (Option.isSome(handoffReference)) search.set("handoff", handoffReference.value);
+  if (Option.isSome(cliCode)) search.set("cliCode", cliCode.value);
+  return (
+    <a
+      className="text-center underline"
+      href={`${provider === "google" ? "/auth/microsoft" : "/auth/google"}?${search.toString()}`}
+    >
+      {provider === "google" ? "Microsoft" : "Google"}
+    </a>
+  );
+};
 const ConsentNotice = ({
   accepted,
   setAccepted,

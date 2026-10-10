@@ -1366,32 +1366,38 @@ effectIt.effect(
     })
 );
 
-effectIt.effect("refuses an incompatible derived representation before the next capture", () =>
-  Effect.gen(function* () {
-    const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
-    const reads = observeStatementReads(bucket);
-    const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
-    expect(yield* processStatementSubmission(input)).toBe("continue");
-    yield* fromTestPromise(() =>
-      db.prepare("DROP TRIGGER statement_materialization_identity").run()
-    );
-    yield* fromTestPromise(() =>
-      db.prepare("UPDATE statement_materializations SET representation_revision='unknown'").run()
-    );
-    expect(yield* processStatementSubmission(input)).toBe("completed");
-    expect(
+effectIt.effect(
+  "refuses a generation from before XLSX work admission without undoing partial captures",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+      const reads = observeStatementReads(bucket);
+      const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      yield* fromTestPromise(() =>
+        db.prepare("DROP TRIGGER statement_materialization_identity").run()
+      );
       yield* fromTestPromise(() =>
         db
-          .prepare(`SELECT status,failure_reason,
+          .prepare(
+            "UPDATE statement_materializations SET representation_revision='statement-material-v1'"
+          )
+          .run()
+      );
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT status,failure_reason,
       (SELECT count(*) FROM transactions) AS captures,
       (SELECT count(*) FROM statement_materialization_parts) AS parts
       FROM statement_submissions WHERE id=?`)
-          .bind(submissionId)
-          .first()
-      )
-    ).toEqual({ status: "failed", failure_reason: "malformed-file", captures: 32, parts: 0 });
-    expect(reads.observed.gets).toBe(1);
-  })
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ status: "failed", failure_reason: "malformed-file", captures: 32, parts: 0 });
+      expect(reads.observed.gets).toBe(1);
+    })
 );
 
 effectIt.effect(
@@ -2807,4 +2813,76 @@ it.each([false, true])(
         }
       })
     )
+);
+effectIt.effect(
+  "settles aggregate XLSX rejection, releases Free reservation and replays without rereading",
+  () =>
+    Effect.gen(function* () {
+      const source = yield* fromTestPromise(() =>
+        Bun.file(
+          new URL(
+            "../../src/shell/ingestion/internal/fixtures/shared-string-total-limit.xlsx",
+            import.meta.url
+          )
+        ).bytes()
+      );
+      const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
+      yield* fromTestPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0036_statement_whatsapp_documents.sql", import.meta.url),
+        })
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      const monitored = observeStatementReads(bucket);
+      const input = {
+        DB: db,
+        STATEMENT_STAGING_BUCKET: monitored.bucket,
+        userId: userA,
+        submissionId,
+      };
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT s.status,s.failure_reason,s.input_rows,
+      (SELECT count(*) FROM transactions) AS captures,
+      (SELECT count(*) FROM source_attestations) AS attestations,
+      (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
+      (SELECT count(*) FROM statement_needs_review) AS reviews,
+      (SELECT count(*) FROM statement_materializations) AS manifests,
+      (SELECT count(*) FROM statement_materialization_parts) AS parts,
+      (SELECT count(*) FROM statement_ingestion_outbox) AS outbox,
+      (SELECT status FROM statement_staging_objects WHERE id=?) AS staging,
+      (SELECT submission_id FROM statement_backfill_entitlements WHERE user_id=?) AS reserved,
+      (SELECT consumed_at_ms FROM statement_backfill_entitlements WHERE user_id=?) AS consumed
+      FROM statement_submissions s WHERE id=?`)
+            .bind(stagingId, userA, userA, submissionId)
+            .first()
+        )
+      ).toEqual({
+        status: "failed",
+        failure_reason: "resource-limit",
+        input_rows: null,
+        captures: 0,
+        attestations: 0,
+        outcomes: 0,
+        reviews: 0,
+        manifests: 0,
+        parts: 0,
+        outbox: 0,
+        staging: "deleting",
+        reserved: null,
+        consumed: null,
+      });
+      expect(monitored.observed).toEqual({ heads: 1, gets: 1, bytes: source.byteLength });
+    })
 );

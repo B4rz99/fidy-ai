@@ -206,14 +206,15 @@ export type ParsedStatement = Readonly<{
 }>;
 
 const bytesPerKibibyte = 1024;
-const maximumExpandedMebibytes = 25;
+const maximumExpandedMebibytes = 12;
 const maximumReferencedTextMebibytes = 8;
 
-/** Compressed-input and expanded-content ceilings enforced before native finalization. */
+/** Document admission ceilings; referenced bytes are a work charge, not an allocation estimate. */
 export const statementParserLimits = {
   maximumDecodedBytes: maximumStatementBytes,
   maximumExpandedBytes: maximumExpandedMebibytes * bytesPerKibibyte * bytesPerKibibyte,
   maximumRows: 20_000,
+  maximumXlsxCells: 100_000,
   maximumReferencedTextBytes: maximumReferencedTextMebibytes * bytesPerKibibyte * bytesPerKibibyte,
 } as const;
 

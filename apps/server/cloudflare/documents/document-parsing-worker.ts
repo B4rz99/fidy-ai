@@ -1,3 +1,4 @@
+import { measureStatementWork } from "./statement-work-proof";
 import {
   type StatementParseFailed,
   statementParserLimits,
@@ -30,7 +31,10 @@ const parseRequest = Effect.fn(function* (request: Request) {
     statementParserLimits.maximumDecodedBytes
   );
   const parsed = yield* parseStatementFile(bytes);
+  const work =
+    new URL(request.url).pathname === "/statement-work" ? yield* measureStatementWork(parsed) : {};
   return Response.json({
+    ...work,
     elapsedMilliseconds: performance.now() - startedAt,
     format: parsed.sourceFormat,
     outcome: "parsed",
@@ -40,7 +44,7 @@ const parseRequest = Effect.fn(function* (request: Request) {
 
 const fetch = (request: Request): Promise<Response> => {
   const url = new URL(request.url);
-  if (request.method !== "POST" || url.pathname !== "/statement") {
+  if (request.method !== "POST" || !["/statement", "/statement-work"].includes(url.pathname)) {
     return Promise.resolve(failureResponse("not-found"));
   }
 
@@ -50,7 +54,8 @@ const fetch = (request: Request): Promise<Response> => {
         if (failure instanceof BoundedBodyReadFailed) {
           return failureResponse(failure.reason);
         }
-        const reason = failure.safeReason;
+        const reason =
+          failure._tag === "StatementParseFailed" ? failure.safeReason : "malformed-file";
         return failureResponse(reason);
       },
       onSuccess: (response) => response,
@@ -61,7 +66,8 @@ const fetch = (request: Request): Promise<Response> => {
 
 /**
  * Accepts `POST /statement` with at most the parser's compressed-input ceiling. It returns only
- * source format, row count, elapsed handler time, and a closed rejection reason. Body-stream
+ * source format, row count, elapsed handler time, and a closed rejection reason. `/statement-work`
+ * additionally measures serialized evidence and the real interpreter, returning only counts. Body-stream
  * cancellation interrupts collection; parsing is bounded synchronous work. No binding or outbound
  * capability is available to the entrypoint.
  */

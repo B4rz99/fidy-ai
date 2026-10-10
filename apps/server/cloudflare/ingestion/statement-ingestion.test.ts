@@ -57,7 +57,7 @@ import {
 import { publishOwnedStatement, stageOwnedStatement } from "./statement-publication.test-fixture";
 import { makeAudit } from "../../src/shell/audit/runtime";
 import { newId } from "../secret-material/operations";
-import coreWorker from "../core-worker";
+import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import publicWorker from "../public-worker";
 

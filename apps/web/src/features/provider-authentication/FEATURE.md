@@ -232,3 +232,45 @@ and [recovery procedure](../../../../../docs/operations/support-recovery.md) con
 Recovery decision timing: held-body Worker/D1 regressions previously approved after operator assertion
 or pairing expiry. The follow-up rechecks verified assertion time and uses the post-read decision
 instant for pairing/proof guards. Both exact-expiry regressions pass; PR #1118 deployed successfully.
+
+## Production recheck — 2026-10-10
+
+Web metadata and API health agree on `6ecbe8efbd33f0fc462f629823bddc641bad2e74`.
+Microsoft personal returning login completes `/complete` and pairing redemption with HTTP 200,
+opens Transactions, and survives reload. Recovery settings do not redisplay a backup code.
+Earlier attempts showed generic refusal; their cause is unresolved, so the successful retry does
+not establish that the intermittent failure is fixed.
+
+Unattended checks pass for both providers: stale Consent revision, wrong browser proof and
+unverified completion are refused; callbacks redirect to clean first-party return URLs. A bound
+synthetic `access_denied` callback rejects the attempt and prevents completion. This is server
+callback evidence, not a manual Microsoft denial or popup-close UI check. Untrusted pairing
+origin is refused; a legitimate unapproved pairing remains pending.
+
+Read-only Production D1 checks confirm the latest Microsoft attempt completed, a ten-minute
+fresh-session interval and ninety-day hard deadline. The idle deadline was renewed by use.
+No provider attempt is overdue for its one-day protocol retention cutoff; this snapshot does not
+prove a deletion or runtime session-expiry enforcement. Queries wrote zero rows.
+
+Microsoft manual denial and popup closure are deferred at the User's request because the provider
+automatically signs in; work/school remains unavailable without an eligible account. No recovery
+credential was rotated in this rerun.
+
+Further unattended checks: an identity-free pending Microsoft attempt was aged past expiry and
+refused by deployed status/completion (400). A separate identity-free browser pairing was aged
+past its ten-minute deadline; redemption returned no-store 400 without issuing a session. These
+clock fixtures changed only their own pending protocol records, never an account or session.
+
+Scheduled retention failed during the initial Production check: the disposable provider attempt remained beyond
+the one-day cutoff. Actual Core readback confirms the one-minute cron. Workers analytics show
+repeated invocations ending in `exceededResources` at 10,000 microseconds CPU; the latest
+completed schedule logs predate the fixture. Expiry refusal works independently of cleanup,
+but those failures do not invalidate expiry refusal.
+
+A pre-fix deployment recheck on `d1d39ecf058477f792f227c5caf068d2f3673d41` finds no overdue
+identity-free pending Microsoft attempts, and recent Core scheduled logs report success.
+The initial disposable attempt was removed before the maintenance executor fix deployed;
+the reason for recovery is unconfirmed. This establishes deletion on that revision, not the new executor.
+
+Still pending: live forwarded WhatsApp handoff refusal (the prior accepted exchange has expired),
+actual WebSession idle/hard-expiry enforcement, and deployed maintenance-executor verification.

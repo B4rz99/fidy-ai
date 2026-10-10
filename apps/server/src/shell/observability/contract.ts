@@ -74,6 +74,7 @@ export const TelemetryRegistry = {
     "worker.core.fetch",
     "worker.core.queue",
     "worker.core.scheduled",
+    "worker.core.maintenance",
     "workflow.browserPairingEmail",
     "workflow.emailReplacement",
     "workflow.billingCollection",

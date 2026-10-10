@@ -4,7 +4,7 @@ import { recordAuthorizedCall, recordOwnerCall } from "../../../src/shell/audit/
 import { makeAudit, makeAuditRetention } from "../../../src/shell/audit/runtime";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { installTestSchema, isolatedTestDatabases } from "../../d1-test-fixture";
-import coreWorker from "../../core-worker";
+import { fixtureWorker as coreWorker } from "../../core-worker.test-fixture";
 import { approvedWorkersAiModel } from "../../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();

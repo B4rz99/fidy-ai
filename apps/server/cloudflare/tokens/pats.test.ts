@@ -30,7 +30,7 @@ import {
 import { SqlClient } from "effect/sql";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
-import coreWorker from "../core-worker";
+import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { sweepExpiredPATPairings } from "./runtime";

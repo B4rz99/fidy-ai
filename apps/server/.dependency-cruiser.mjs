@@ -97,6 +97,8 @@ export default {
         pathNot: [
           "\\.test\\.ts$",
           "^cloudflare/oauth-agents/oauth-ingress\\.test-fixture\\.ts$",
+          // Native scheduler journeys compose the real Core root with private test bindings.
+          "^cloudflare/core-worker\\.test-fixture\\.ts$",
           // Both provider journeys compose the real Public/Core Worker boundary.
           "^cloudflare/provider-authentication/journey\\.test-fixture\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",

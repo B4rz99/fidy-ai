@@ -24,7 +24,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Public marketing GET/HEAD only: skip BIC/UA signatures; preserve managed WAF, DDoS and private-route controls.
 // Includes #1139's type-only Proactivity health binding declarations in the hashed runtime contract.
 // #1139 adds no change to the merged public marketing policy, topology, routing, or security settings.
-const expectedEdgePolicyDigest = "9fcdfa1f546c38d82a683950d5935dffadd3c12dc617d3ad471b6fd072046859";
+// Includes #1168's private SQLite maintenance executor; public routes and owner authority are unchanged.
+const expectedEdgePolicyDigest = "ada94c5c77a793d55d5488344de06e511445c710bcd960e138fdc81ef8143ada";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

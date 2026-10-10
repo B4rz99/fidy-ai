@@ -30,6 +30,10 @@ closed; neither a declaration nor a binding proves an executable path. See
   no D1 binding.
 - `cloudflare/core-worker.ts` composes private HTTP, Queue, and Maintenance runtimes and publishes
   the deployed Durable Object and Workflow identities.
+- Core's one-minute cron delegates to a private SQLite `CoreMaintenanceCoordinator`. It coalesces
+  overlapping ticks and runs the existing owner schedule within the Durable Object CPU budget;
+  no maintenance work falls back to the cron Worker. Its fixed non-User key coordinates execution,
+  confers no authorization, and retains no domain state or credential.
 - The existing per-User Durable Object owns serialization and alarms. It constructs Agent and
   inference services where needed; merely declaring an AI binding on Core does not construct them.
 - The private Email Worker composes only its narrow Ingestion and Maintenance capabilities.

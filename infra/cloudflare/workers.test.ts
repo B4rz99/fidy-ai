@@ -4,7 +4,10 @@ import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemet
 import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
 import { describe, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
-import coreWorker, { makeCoreWorker } from "../../apps/server/cloudflare/core-worker";
+import {
+  fixtureWorker as coreWorker,
+  makeFixtureWorker as makeCoreWorker,
+} from "../../apps/server/cloudflare/core-worker.test-fixture";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import {

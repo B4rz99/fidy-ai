@@ -1,6 +1,6 @@
 import type { ProviderEnvironment } from "./provider-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
-import type { CoreMaintenanceInput } from "./maintenance/contract";
+import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./maintenance/contract";
 import { runCoreMaintenance } from "./maintenance/runtime";
 import { makeCoreHttp } from "./core-http/runtime";
 import { makeCoreQueue } from "./queue/runtime";
@@ -55,6 +55,9 @@ type CoreEnvironment = ProviderEnvironment &
   } & Partial<
     Readonly<{
       RECOVERY_ISOLATION: string;
+      CORE_MAINTENANCE: Readonly<{
+        getByName: (name: string) => Pick<Fetcher, "fetch">;
+      }>;
       BILLING_SUPPORT_AUDIENCE: string;
       BILLING_REFUND_WORKFLOW: Workflow;
       WOMPI_DAVIPLATA_ACTIVATED: string;
@@ -186,12 +189,75 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
   CF_VERSION_METADATA: Option.fromUndefinedOr(environment.CF_VERSION_METADATA),
 });
 
+/** Private, non-User executor; the object key coordinates ticks and grants no domain authority. */
+export class CoreMaintenanceCoordinator {
+  private active: Option.Option<Promise<void>> = Option.none();
+  private readonly state: Readonly<{ id: Pick<DurableObjectId, "name"> }>;
+  private readonly environment: CoreEnvironment;
+
+  constructor(
+    state: Readonly<{ id: Pick<DurableObjectId, "name"> }>,
+    environment: CoreEnvironment
+  ) {
+    this.state = state;
+    this.environment = environment;
+  }
+
+  fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (
+      request.method !== "POST" ||
+      this.state.id.name !== "core-maintenance-v1" ||
+      url.origin !== "https://maintenance.invalid" ||
+      url.pathname !== "/tick" ||
+      url.search !== "" ||
+      request.body !== null
+    ) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+
+    // Overlapping deliveries share one tick instead of queueing unbounded maintenance work.
+    const work = Option.getOrElse(this.active, () => {
+      const started = runCoreMaintenance(maintenanceInput(this.environment))
+        .pipe(
+          observeWorkerExecution({
+            environment: this.environment,
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "worker.core.maintenance",
+          }),
+          Effect.runPromise
+        )
+        .finally(() => {
+          this.active = Option.none();
+        });
+      this.active = Option.some(started);
+      return started;
+    });
+    return work.then(
+      () => new Response(null, { status: 204 }),
+      () => new Response(null, { status: 503 })
+    );
+  }
+}
+
 /** Compose private HTTP, Queue and schedule entrypoints without acquiring owner implementation. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: makeCoreHttp(telemetry),
   queue: makeCoreQueue(telemetry),
   scheduled: (_controller, environment) =>
-    runCoreMaintenance(maintenanceInput(environment)).pipe(
+    Effect.gen(function* () {
+      const executor = environment.CORE_MAINTENANCE;
+      if (executor === undefined) return yield* new ScheduledWorkFailed();
+      const response = yield* Effect.tryPromise({
+        try: (signal) =>
+          executor
+            .getByName("core-maintenance-v1")
+            .fetch(new Request("https://maintenance.invalid/tick", { method: "POST", signal })),
+        catch: () => new ScheduledWorkFailed(),
+      });
+      const succeededStatus = 204;
+      if (response.status !== succeededStatus) return yield* new ScheduledWorkFailed();
+    }).pipe(
       (work) =>
         observeWorkerExecution(work, {
           environment,

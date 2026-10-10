@@ -1,0 +1,37 @@
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_b75995d26622a8::t_b07e814c26bc02 33-35
+apps/server/src/shell/hosted-inference/contract.ts
+  s_b75995d26622a8::t_18de605c84d8ed 345-347
+apps/server/src/shell/hosted-inference/internal/conformance.ts
+  s_b75995d26622a8::t_0d731eb0ace550 2-6,75-77,102-104,127-218
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_b75995d26622a8::t_d93c03b9806a44 23-26,29-30,32-56,63,70-73,125-128,146-158
+apps/server/src/shell/hosted-inference/internal/workers-ai.ts
+  s_b75995d26622a8::t_23a95d56ad8208 1,120-126,131,515
+apps/server/src/shell/hosted-inference/operations.ts
+  s_10fe5273e79fbe::t_4aa7daf8ec8f03 12,17-18,57-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3eaaa8e162fc6bb71661d4723b62e59a0dbfbbf",
+  "prompts": {},
+  "sessions": {
+    "s_10fe5273e79fbe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a127e6-2de5-7951-9eb2-85f36c3f3d0e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

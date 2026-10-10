@@ -11,6 +11,7 @@ apps/web/test-results/
 apps/server/test-results/
 apps/web/playwright-report/
 apps/server/cloudflare/browser-acceptance-core-bundle.mjs
+apps/server/cloudflare/.browser-acceptance-core-*/
 
 # TypeScript
 *.tsbuildinfo

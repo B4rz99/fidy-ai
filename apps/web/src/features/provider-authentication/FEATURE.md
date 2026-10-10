@@ -272,5 +272,12 @@ identity-free pending Microsoft attempts, and recent Core scheduled logs report 
 The initial disposable attempt was removed before the maintenance executor fix deployed;
 the reason for recovery is unconfirmed. This establishes deletion on that revision, not the new executor.
 
+PR #1174 passed all CI checks and merged as `e7dfe795454852256cfde627422863fb92fe2fa6`.
+Its Production release failed before promotion: Alchemy rejects new Durable Object class migrations
+with zero-traffic candidates. The follow-up selects the maintenance runtime at a reserved object key
+in the existing namespace, preserving ordinary User coordination and the existing promotion gates.
+Native Core/local D1 checks pass for expired/live retention, malformed requests, separate User probes
+and User alarm delegation; the deployed executor remains unverified until a successful release.
+
 Still pending: live forwarded WhatsApp handoff refusal (the prior accepted exchange has expired),
 actual WebSession idle/hard-expiry enforcement, and deployed maintenance-executor verification.

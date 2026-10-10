@@ -30,6 +30,7 @@ const ProviderRefusal = Schema.Struct({
     "CloudflareParseError",
     "UnownedResource",
     "MissingProviderError",
+    "WorkerVersionConfigError",
   ]),
   code: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999999 }))),
 });

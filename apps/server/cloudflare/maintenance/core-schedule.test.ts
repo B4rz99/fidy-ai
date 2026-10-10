@@ -1,6 +1,6 @@
 import { Clock, Data, Effect } from "effect";
 import { afterAll, expect, it } from "vitest";
-import coreWorker from "../core-worker";
+import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 
 class TestRuntimeFailed extends Data.TaggedError("TestRuntimeFailed") {}
@@ -31,7 +31,26 @@ const environment = (DB: D1Database): Parameters<typeof coreWorker.scheduled>[1]
   WOMPI_INTEGRITY_SECRET: "",
 });
 
-it("refuses a missing maintenance executor without falling back to cleanup on the cron Worker", () =>
+it("keeps maintenance alarms inert while preserving the User alarm's real D1 recovery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* awaitPromise(() => databases.acquire());
+      const storage = { setAlarm: (): Promise<void> => Promise.resolve() };
+      const maintenance = new UserTransactionCoordinator(
+        { id: { name: "core-maintenance-v1" }, storage },
+        environment(db)
+      );
+      yield* awaitPromise(() => maintenance.alarm());
+      const user = new UserTransactionCoordinator(
+        { id: { name: "10000000-0000-4000-8000-000000000003" }, storage },
+        environment(db)
+      );
+      // An uninitialized real D1 cannot perform User recovery; maintenance must never enter it.
+      yield* awaitPromise(() => expect(user.alarm()).rejects.toThrow());
+    })
+  ));
+
+it("refuses an unavailable maintenance executor without falling back to cleanup on the cron Worker", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* awaitPromise(() => databases.acquire());
@@ -141,13 +160,13 @@ it(
                     "index.mjs": {
                       type: "esm",
                       contents:
-                        'export { scheduledFixture as default, CoreMaintenanceCoordinator } from "./core.mjs";',
+                        'export { scheduledFixture as default, UserTransactionCoordinator } from "./core.mjs";',
                     },
                     "core.mjs": { type: "esm", contents: compiled.stdout.toString() },
                   },
                 },
                 exports: {
-                  CoreMaintenanceCoordinator: { type: "durable-object", storage: "sqlite" },
+                  UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" },
                 },
                 env: {
                   ...Object.fromEntries(
@@ -157,10 +176,10 @@ it(
                     ])
                   ),
                   DB: { type: "d1", id: "core-maintenance-test" },
-                  CORE_MAINTENANCE: {
+                  USER_TRANSACTION_COORDINATOR: {
                     type: "durable-object",
                     worker: "core-maintenance-test",
-                    exportName: "CoreMaintenanceCoordinator",
+                    exportName: "UserTransactionCoordinator",
                   },
                 },
               },
@@ -218,7 +237,7 @@ it(
             )).results
           ).toEqual([{ id: "test-attempt-2" }]);
           const binding = yield* awaitPromise(() =>
-            runtime.getDurableObjectNamespace("CORE_MAINTENANCE")
+            runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR")
           );
           const refused = yield* awaitPromise(() =>
             binding.getByName("core-maintenance-v1").fetch("https://maintenance.invalid/tick", {
@@ -231,7 +250,7 @@ it(
           const refusals = yield* awaitPromise(() =>
             Promise.all([
               binding
-                .getByName("unapproved-executor")
+                .getByName("10000000-0000-4000-8000-000000000003")
                 .fetch("https://maintenance.invalid/tick", { method: "POST" }),
               binding
                 .getByName("core-maintenance-v1")
@@ -242,6 +261,12 @@ it(
             ])
           );
           expect(refusals.map((item) => item.status)).toEqual([404, 404, 404]);
+          const probe = yield* awaitPromise(() =>
+            binding
+              .getByName("operational-health-probe")
+              .fetch("https://coordinator.invalid/operational/probe")
+          );
+          expect(probe.status).toBe(204);
           const repeated = yield* awaitPromise(() =>
             Promise.all([
               runtime.dispatchFetch("https://fixture.invalid/schedule", { method: "POST" }),

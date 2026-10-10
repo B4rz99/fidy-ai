@@ -1,13 +1,7 @@
 import { useState } from "react";
 import { PhoneContent } from "./phone-content";
 import { conversations } from "./conversations";
-import { playConversation } from "./motion";
-
-const animateChat = (node: HTMLDivElement) => {
-  playConversation(node);
-  return (): void =>
-    node.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
-};
+import { mountConversation, playConversation } from "./demo-motion";
 
 /** Changes synthetic conversations without changing the phone's dimensions. */
 export const PhoneDemo = (): React.JSX.Element => {
@@ -15,7 +9,7 @@ export const PhoneDemo = (): React.JSX.Element => {
   return (
     <PhoneContent
       conversation={
-        <div key={scenario} className="conversation-frame" ref={animateChat}>
+        <div key={scenario} className="conversation-frame" ref={mountConversation}>
           {conversations[scenario]}
         </div>
       }
@@ -26,11 +20,12 @@ export const PhoneDemo = (): React.JSX.Element => {
               key={label}
               aria-pressed={scenario === index}
               onClick={(event) => {
-                setScenario(index);
-                if (scenario === index) {
-                  const shell = event.currentTarget.closest(".demo-shell");
-                  if (shell !== null) playConversation(shell);
+                const shell = event.currentTarget.closest<HTMLElement>(".demo-shell");
+                if (shell !== null) {
+                  shell.dataset.motion = event.detail === 0 ? "instant" : "pointer";
+                  if (scenario === index) playConversation(shell, event.detail === 0);
                 }
+                setScenario(index);
               }}
             >
               {label}
@@ -39,10 +34,8 @@ export const PhoneDemo = (): React.JSX.Element => {
           <button
             aria-label="Repetir animación de la conversación"
             onClick={(event) => {
-              if (event.detail !== 0) {
-                const shell = event.currentTarget.closest(".demo-shell");
-                if (shell !== null) playConversation(shell);
-              }
+              const shell = event.currentTarget.closest<HTMLElement>(".demo-shell");
+              if (shell !== null) playConversation(shell, event.detail === 0);
             }}
           >
             ↻ Repetir

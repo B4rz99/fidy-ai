@@ -9,7 +9,9 @@ import { FeatureDetail } from "./feature-detail";
 const preference = Object.assign(new EventTarget(), { matches: false });
 const cancel = vi.fn();
 const animate = vi.fn(() => ({ cancel }));
+const intersections = new Map<Element, (visible: boolean) => void>();
 beforeEach(() => {
+  intersections.clear();
   localStorage.clear();
   preference.matches = false;
   vi.stubGlobal("matchMedia", () => preference);
@@ -17,17 +19,24 @@ beforeEach(() => {
     "IntersectionObserver",
     class {
       callback: (
-        entries: ReadonlyArray<Pick<IntersectionObserverEntry, "target" | "isIntersecting">>
+        entries: ReadonlyArray<
+          Pick<IntersectionObserverEntry, "target" | "isIntersecting" | "intersectionRatio">
+        >
       ) => void;
       constructor(
         callback: (
-          entries: ReadonlyArray<Pick<IntersectionObserverEntry, "target" | "isIntersecting">>
+          entries: ReadonlyArray<
+            Pick<IntersectionObserverEntry, "target" | "isIntersecting" | "intersectionRatio">
+          >
         ) => void
       ) {
         this.callback = callback;
       }
       observe(target: Element): void {
-        this.callback([{ target, isIntersecting: true }]);
+        intersections.set(target, (isIntersecting) =>
+          this.callback([{ target, isIntersecting, intersectionRatio: isIntersecting ? 1 : 0 }])
+        );
+        this.callback([{ target, isIntersecting: true, intersectionRatio: 1 }]);
       }
       unobserve(): void {}
       disconnect(): void {}
@@ -111,13 +120,47 @@ it("supports keyboard feature selection and links each preview to its detailed v
   preference.dispatchEvent(new Event("change"));
 });
 
+it("keeps keyboard-selected conversations and feature previews immediate", () => {
+  mountHome();
+  animate.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "Consultar" }), { detail: 0 });
+  fireEvent.click(screen.getByRole("button", { name: "Repetir animación de la conversación" }), {
+    detail: 0,
+  });
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Transacciones" }), { key: "ArrowRight" });
+  expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Presupuestos");
+  expect(screen.getByText("De lo que has registrado en octubre:")).toBeVisible();
+  expect(animate).not.toHaveBeenCalled();
+});
+
+it("settles a departing conversation without replaying it when it returns", () => {
+  mountHome();
+  const shell = screen.getByText("Tu asistente · WhatsApp").closest(".demo-shell");
+  expect(shell).not.toBeNull();
+  if (shell === null) throw new Error("Missing conversation shell");
+  cancel.mockClear();
+  intersections.get(shell)?.(false);
+  expect(cancel).toHaveBeenCalled();
+  animate.mockClear();
+  intersections.get(shell)?.(true);
+  expect(animate).not.toHaveBeenCalled();
+  expect(screen.getByText("Tu asistente · WhatsApp")).toBeVisible();
+});
+
 it("updates launch prices and links to first-party Google signup", () => {
   mountHome();
   expect(screen.getByText("$28.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Anual" }));
-  expect(screen.getByText("$289.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
+  expect(
+    screen.getByText("$289.900", { selector: "[data-price-amount]" }).closest(".price-frame")
+  ).toHaveAttribute("aria-hidden", "false");
+  expect(
+    screen.getByText("$28.900", { selector: "[data-price-amount]" }).closest(".price-frame")
+  ).toHaveAttribute("aria-hidden", "true");
   fireEvent.click(screen.getByRole("button", { name: "Semanal" }));
-  expect(screen.getByText("$9.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
+  expect(
+    screen.getByText("$9.900", { selector: "[data-price-amount]" }).closest(".price-frame")
+  ).toHaveAttribute("aria-hidden", "false");
   expect(
     within(screen.getByRole("banner")).getByRole("link", { name: "Crear mi cuenta" })
   ).toHaveAttribute("href", "/auth/google");
@@ -126,12 +169,12 @@ it("updates launch prices and links to first-party Google signup", () => {
 it("registers and resets only the illustrative dashboard transaction", () => {
   mountHome();
   fireEvent.click(screen.getByRole("button", { name: "Registrar ejemplo" }));
-  expect(screen.getByText("$1.084.000")).toBeInTheDocument();
+  expect(screen.getByText("$1.084.000")).toHaveAttribute("aria-hidden", "false");
   expect(screen.getByRole("status")).toHaveTextContent(
     "Una transacción de $28.000 registrada en Restaurantes."
   );
   fireEvent.click(screen.getByRole("button", { name: /Reiniciar ejemplo/ }), { detail: 1 });
-  expect(screen.getByText("$1.056.000")).toBeInTheDocument();
+  expect(screen.getByText("$1.056.000")).toHaveAttribute("aria-hidden", "false");
 });
 
 it("corrects the same illustrative transaction in its detail view and resets it", () => {

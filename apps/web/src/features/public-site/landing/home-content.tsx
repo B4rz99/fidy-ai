@@ -5,6 +5,7 @@ import { Header } from "./navigation";
 import { PhoneDemo } from "./phone-demo";
 import { FeatureTabs } from "./feature-tabs";
 import { DashboardStory } from "./dashboard-story";
+import { ChannelStory } from "./channel-story";
 import { Pricing } from "./pricing";
 
 export const HomeContent = (): React.JSX.Element => (
@@ -123,6 +124,7 @@ const waysToUse = (
         }
       </p>
     </div>
+    <ChannelStory />
     <div className="agent-system">
       <div className="agent-entry">
         <h3>{"Conversa con Fidy."}</h3>
@@ -158,6 +160,11 @@ const waysToUse = (
   </section>
 );
 
+const prepareDisclosure: React.MouseEventHandler<HTMLElement> = (event) => {
+  const disclosure = event.currentTarget.closest("details");
+  if (disclosure !== null) disclosure.dataset.instant = String(event.detail === 0);
+};
+
 const questions = (
   <section className="section wrap faq" id="preguntas">
     <div>
@@ -165,7 +172,7 @@ const questions = (
     </div>
     <div>
       <details>
-        <summary>{"¿Qué información tengo que compartir?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Qué información tengo que compartir?"}</summary>
         <p>
           {
             "Para registrar una transacción, cuéntale a Fidy cuánto fue y en qué consistió. Por ejemplo: “Pagué $28.000 de almuerzo en Crepes”. Las respuestas se basan en lo que hayas registrado; no representan por sí solas todas tus finanzas."
@@ -173,7 +180,7 @@ const questions = (
         </p>
       </details>
       <details>
-        <summary>{"¿Puedo corregir una transacción?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Puedo corregir una transacción?"}</summary>
         <p>
           {
             "Sí. Puedes corregir los datos de una transacción si algo quedó mal registrado, como el monto o la categoría. La corrección actualiza esa transacción."
@@ -181,7 +188,7 @@ const questions = (
         </p>
       </details>
       <details>
-        <summary>{"¿Qué pasa con mis datos?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Qué pasa con mis datos?"}</summary>
         <p>
           {
             "Usamos los datos que compartes para organizar tus finanzas, responder tus solicitudes y proteger tu acceso. Cloudflare procesa el servicio y el asistente; Kapso y Meta intervienen al usar WhatsApp. Estos proveedores pueden tratar datos fuera de Colombia."
@@ -202,7 +209,7 @@ const questions = (
         </p>
       </details>
       <details>
-        <summary>{"¿Necesito tener mi propio agente?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Necesito tener mi propio agente?"}</summary>
         <p>
           {
             "No. Puedes conversar con Fidy en WhatsApp y usar la web app. Si quieres usar tu propio agente, consulta la guía de conexión y la disponibilidad de cada opción antes de configurarlo."
@@ -210,7 +217,7 @@ const questions = (
         </p>
       </details>
       <details>
-        <summary>{"¿Qué puede hacer mi agente?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Qué puede hacer mi agente?"}</summary>
         <p>
           {
             "Depende de los permisos que le des: consultar transacciones y hallazgos, registrar o corregir transacciones y trabajar con tu dashboard. El acceso tiene vencimiento y puedes revocarlo desde Fidy."
@@ -218,7 +225,7 @@ const questions = (
         </p>
       </details>
       <details>
-        <summary>{"¿Qué son los hallazgos?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Qué son los hallazgos?"}</summary>
         <p>
           {
             "Son señales basadas en tus transacciones, como resúmenes semanales, avisos de presupuesto o patrones de cobros recurrentes. Tus agentes también pueden consultarlos. No representan información que aún no hayas incorporado a Fidy."
@@ -226,7 +233,7 @@ const questions = (
         </p>
       </details>
       <details>
-        <summary>{"¿Cuánto cuesta?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Cuánto cuesta?"}</summary>
         <p>
           {
             "Crear tu cuenta incluye una prueba de Fidy Pro de 7 días sin tarjeta. Después, Fidy Pro cuesta $28.900 COP al mes. También puedes elegir $9.900 COP por semana o $289.900 COP al año."
@@ -234,7 +241,7 @@ const questions = (
         </p>
       </details>
       <details>
-        <summary>{"¿Cómo empiezo?"}</summary>
+        <summary onClick={prepareDisclosure}>{"¿Cómo empiezo?"}</summary>
         <p>
           {
             "Revisa la autorización de tratamiento de datos, crea tu cuenta y registra tu primera transacción. La prueba comienza al crear tu cuenta; no necesitas conectar un banco ni registrar una tarjeta."

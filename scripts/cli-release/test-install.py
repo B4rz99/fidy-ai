@@ -33,7 +33,8 @@ class InstallerTests(unittest.TestCase):
         self.command('curl', '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\n case "$1" in https://*) source="${1##*/}";; -o) shift; destination="$1";; esac\n shift\ndone\nif [ -n "$destination" ]; then cp "$FIXTURE_RELEASE/$source" "$destination"; else cat "$FIXTURE_RELEASE/$source"; fi\n')
         self.env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ['PATH'],
                         FIXTURE_RELEASE=str(self.release), FIDY_INSTALL_DIR=str(self.destination),
-                        HOME=str(self.home), SHELL='/bin/zsh')
+                        HOME=str(self.home), SHELL='/bin/zsh',
+                        ZDOTDIR=str(self.home), XDG_CONFIG_HOME=str(self.home / '.config'))
 
     def command(self, name, content):
         path = self.bin / name

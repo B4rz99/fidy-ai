@@ -29,7 +29,9 @@ type Input = OperationalAlertDelivery &
   }>;
 type StoredClaim = Readonly<{ claim: Claim; etag: string }>;
 const codec = Schema.fromJsonString(Claim);
-const foreign = <A>(run: () => Promise<A>): Effect.Effect<A, OperatorClaimUnavailable> =>
+const foreign = <A>(
+  run: (signal: AbortSignal) => Promise<A>
+): Effect.Effect<A, OperatorClaimUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new OperatorClaimUnavailable() }).pipe(
     Effect.timeout("3 seconds"),
     Effect.mapError(() => new OperatorClaimUnavailable())
@@ -115,11 +117,11 @@ const sendClaim = (
 ): Effect.Effect<void, OperatorClaimUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     input.signal.throwIfAborted();
-    yield* foreign(() =>
+    yield* foreign((signal) =>
       input.send(
         { kind: "inspection_unavailable", owner: "d1", severity: "critical" },
         `fidy-d1-outage-${claim.phase}-${claim.started}`,
-        { signal: input.signal, phase: claim.phase, release: Option.some(claim.release) }
+        { signal, phase: claim.phase, release: Option.some(claim.release) }
       )
     );
     yield* persistClaim(

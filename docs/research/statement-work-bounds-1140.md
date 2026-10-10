@@ -233,4 +233,7 @@ Conditional writes deduplicate concurrent checks; a stable identity and original
 ambiguous email delivery and restarts. Firing repeats have a 30-minute floor, retries wait five
 minutes and attempts are capped at six per generation. Recovery sends once. Storage/provider waits
 are bounded, and failed R2 claims cannot suppress ordinary alerts when D1 remains healthy.
-Scheduled health also isolates failed D1 metrics reads so the independent route is reachable.
+Scheduled health probes D1 first and skips D1 telemetry entirely when the probe is unavailable.
+Other metrics and telemetry waits are bounded to two seconds. Provider timeout forwards the
+Effect-owned AbortSignal to the HTTP send; its retained claim still preserves retry identity.
+Held-promise regressions cover both D1 telemetry blockage and provider-request abortion.

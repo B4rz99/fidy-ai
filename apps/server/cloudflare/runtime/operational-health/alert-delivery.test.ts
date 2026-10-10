@@ -567,3 +567,34 @@ it.effect("a stalled independent store cannot block ordinary alert delivery", ()
     }
   })
 );
+
+it.effect("outage timeout aborts the provider request and preserves its retry identity", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+    const keys: string[] = [];
+    let aborted = false;
+    const input = outageInput(db, bucket, {
+      now: 1_000_000,
+      send: (_alert, key, delivery): Promise<void> => {
+        keys.push(key);
+        if (keys.length > 1) return Promise.resolve();
+        const held = Promise.withResolvers<void>();
+        delivery.signal.addEventListener(
+          "abort",
+          () => {
+            aborted = true;
+            held.reject(new Error("request aborted"));
+          },
+          { once: true }
+        );
+        return held.promise;
+      },
+    });
+    yield* rejects(deliverAlerts(input));
+    expect(aborted).toBe(true);
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 1_300_000 }));
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+  })
+);

@@ -150,6 +150,24 @@ const operationalWorkflows = (
   }),
 });
 
+const d1Unavailable = (signals: ReadonlyArray<AlertSignal>): boolean =>
+  signals.some((signal) => signal.operation === "d1" && signal.state === "unavailable");
+const retainOperationalSignals = (
+  environment: PlatformMaintenanceInput,
+  signals: ReadonlyArray<AlertSignal>
+): Effect.Effect<void> =>
+  d1Unavailable(signals)
+    ? Effect.void
+    : Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
+        Effect.tryPromise({
+          try: () => recordOperationalHealth({ db: environment.DB, signals, observedAtMs }),
+          catch: () => undefined,
+        }).pipe(
+          Effect.timeout("2 seconds"),
+          Effect.orElseSucceed(() => undefined)
+        )
+      );
+
 const reportOperationalSignals = (
   environment: PlatformMaintenanceInput,
   signals: ReadonlyArray<AlertSignal>
@@ -159,14 +177,7 @@ const reportOperationalSignals = (
     (signal) => (signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal)),
     { discard: true }
   ).pipe(
-    Effect.andThen(
-      Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
-        Effect.tryPromise({
-          try: () => recordOperationalHealth({ db: environment.DB, signals, observedAtMs }),
-          catch: () => undefined,
-        })
-      ).pipe(Effect.orElseSucceed(() => undefined))
-    ),
+    Effect.andThen(retainOperationalSignals(environment, signals)),
     Effect.andThen(deliverOperationalSignals(environment, signals))
   );
 
@@ -197,7 +208,7 @@ const scheduledSignals = (
   environment: PlatformMaintenanceInput,
   capabilities: ReadonlyArray<CapabilityProbe>
 ): Effect.Effect<ReadonlyArray<AlertSignal>, void> =>
-  capabilities.some((probe) => probe.operation === "d1" && probe.state === "unavailable")
+  d1Unavailable(capabilities)
     ? Effect.succeed(capabilities)
     : observeOperationalHealth({
         DB: environment.DB,
@@ -210,7 +221,10 @@ const scheduledSignals = (
         workflows: operationalWorkflows(environment),
       }).pipe(
         Effect.flatMap((signals) =>
-          observeAdditionalSignals(environment, signals).pipe(Effect.orElseSucceed(() => signals))
+          observeAdditionalSignals(environment, signals).pipe(
+            Effect.timeout("2 seconds"),
+            Effect.orElseSucceed(() => signals)
+          )
         ),
         Effect.map((signals): ReadonlyArray<AlertSignal> => [...signals, ...capabilities])
       );

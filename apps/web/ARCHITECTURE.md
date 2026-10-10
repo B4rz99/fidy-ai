@@ -23,6 +23,10 @@ deadline. This proves non-admission; commercial exhaustion, uncertain mutations,
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
+Provider Authentication is the first embedded Foldkit feature: its Model, update, view, commands,
+and subscriptions own that feature's presentation and work. A React callback ref mounts and disposes
+the program inside the existing route and passes the generated authentication client's policy layer.
+The rest of the application retains the React/Atom ownership above.
 
 ## 2. Behavioral ownership
 
@@ -103,6 +107,15 @@ Cancellation, timeout
 and uncertain completion discard private proof and explain fresh sign-in; no mutation auto-retry or
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work
 remains gated. Personal and work/school Microsoft accounts are accepted; initial WhatsApp linking is installed under #1091.
+
+The Foldkit Model and messages contain only public presentation state. Private pairing proof and
+the one-time recovery code remain in the mounted controller, outside model serialization and command
+results. Recovery text enters only its scoped DOM element and is erased on acknowledgement or disposal.
+Developer tools are disabled for this program. A native capture listener reserves the popup during
+the click gesture; the subsequent command performs the protocol. Phase keys give popup and recovery
+Mounts distinct element lifetimes. Disposal clears private state immediately and interrupts the embedded
+runtime; generation checks also reject late responses. Session completion still uses the application
+session boundary before navigating to the allowlisted destination.
 
 The optional channel/mailbox Browser Login begins at `/auth/pair`. The browser retains the private verifier while WhatsApp
 approval, independently established mailbox authentication, or support recovery receives only its

@@ -1,5 +1,5 @@
 import { BigDecimal, Option } from "effect";
-import { formatMoney as formatTransactionMoney } from "@/ui/money";
+import { formatMoney as formatTransactionMoney } from "@/transport/money";
 import { describe, expect, it } from "vitest";
 import {
   exactChartAmount,
@@ -21,7 +21,7 @@ const money = (
 describe("Dashboard exact Money presentation", () => {
   it("formats authoritative decimal text above Number.MAX_SAFE_INTEGER", () => {
     expect(formatMoney({ money: money("9007199254740993.12"), locale: "es-CO" })).toBe(
-      "USD 9.007.199.254.740.993,12"
+      "$ 9.007.199.254.740.993,12"
     );
   });
 
@@ -41,7 +41,7 @@ describe("Dashboard exact Money presentation", () => {
   it("rounds decimal text at Currency display precision, carrying into an enormous integer", () => {
     expect(
       formatCurrencyAmount({ amount: "9007199254740993.125", currency: "USD", locale: "es-CO" })
-    ).toBe("USD 9.007.199.254.740.993,13");
+    ).toBe("$ 9.007.199.254.740.993,13");
     const amount = "1" + "0".repeat(400);
     expect(
       formatCurrencyAmount({ amount: amount + ".995", currency: "USD", locale: "es-CO" }).replace(

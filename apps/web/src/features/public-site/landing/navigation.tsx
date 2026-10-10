@@ -1,5 +1,5 @@
 import type { KeyboardEvent, MouseEvent } from "react";
-import { logoUrl } from "./assets";
+import { fidyLogoUrl } from "@/ui/brand";
 import { LaunchButton } from "./registration";
 import { ThemeToggle } from "./theme";
 
@@ -31,7 +31,7 @@ const instantOnEscape = (event: KeyboardEvent<HTMLElement>): void => {
 export const Header = (): React.JSX.Element => (
   <header className="wrap nav main-nav">
     <a className="logo" href="/" aria-label="Fidy, inicio">
-      <img src={logoUrl} alt="fidy" />
+      <img src={fidyLogoUrl} alt="fidy" />
     </a>
     <nav className="navlinks" aria-label="Principal">
       {links.map(([id, label]) => (

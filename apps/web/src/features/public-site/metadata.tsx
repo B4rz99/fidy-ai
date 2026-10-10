@@ -1,4 +1,4 @@
-import { logoUrl } from "@/features/public-site/landing/assets";
+import { fidyLogoUrl } from "@/ui/brand";
 
 const origin = "https://app.fidyapp.com";
 
@@ -22,11 +22,11 @@ export const PublicMetadata = ({
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={`${origin}${path}`} />
-    <meta property="og:image" content={new URL(logoUrl, origin).href} />
+    <meta property="og:image" content={new URL(fidyLogoUrl, origin).href} />
     <meta property="og:image:alt" content="Fidy" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={new URL(logoUrl, origin).href} />
+    <meta name="twitter:image" content={new URL(fidyLogoUrl, origin).href} />
   </>
 );

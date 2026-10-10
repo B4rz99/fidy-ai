@@ -339,7 +339,7 @@ const headingTexts = (headings: ReadonlyArray<HTMLElement>): ReadonlyArray<strin
 
 const exactMoneyElements = (): ReadonlyArray<HTMLElement> =>
   screen.getAllByText(
-    (_text, element) => element?.textContent.includes("USD 9.007.199.254.740.993,12") ?? false
+    (_text, element) => element?.textContent.includes("$ 9.007.199.254.740.993,12") ?? false
   );
 
 const renderDashboardView = (data: DashboardView): Effect.Effect<void, Cause.UnknownError> => {

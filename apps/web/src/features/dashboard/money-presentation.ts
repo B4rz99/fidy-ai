@@ -1,7 +1,7 @@
 import { BigDecimal, Option, Schema } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
 
-export { formatCurrencyAmount, formatMoney } from "@/ui/money";
+export { formatCurrencyAmount, formatMoney } from "@/transport/money";
 
 type DashboardView = CanonicalSuccess<"dashboard.getDashboardView">["data"];
 type DashboardWidget = Extract<DashboardView["layout"], { readonly kind: "leaf" }>["widget"];

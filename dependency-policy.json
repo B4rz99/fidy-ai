@@ -19,12 +19,6 @@
   ],
   "deferredUpdates": [
     {
-      "name": "@tanstack/react-router",
-      "manifest": "apps/web/package.json",
-      "reason": "The eligible 1.170.41 patch cannot be installed with the pinned Bun without workspace re-resolution, which rejects existing Effect 4.0.0 packages under the unchanged seven-day minimumReleaseAge. Reproduced with bun update @tanstack/react-router@1.170.41 --exact on 2026-10-07; the installer exits before changing the manifest or lockfile. Retain 1.170.40 until the existing workspace resolutions are eligible, then use the normal installer and rerun web builds and browser tests. Do not add install-age exclusions.",
-      "until": "2026-10-10T00:00:00Z"
-    },
-    {
       "name": "@hugeicons/core-free-icons",
       "manifest": "apps/web/package.json",
       "reason": "4.3.4 publishes dist/esm/index.js exports for Grid2x2 and Grid3x2 icons with lowercase x, but its Linux tarball contains only uppercase X filenames. Vite production builds and browser acceptance fail on case-sensitive runners. Keep 4.3.3 until the publisher fixes the export paths; verify the package tarball and Linux build before updating.",
@@ -51,46 +45,16 @@
     {
       "name": "@effect/tsgo",
       "manifest": "package.json",
-      "reason": "0.47.0 introduces 1,148 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits nonzero although no type errors occur. Its patch CLI also requires an otherwise unused --force flag. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
-      "until": "2026-10-10T00:00:00Z"
-    },
-    {
-      "name": "wrangler",
-      "manifest": "apps/server/package.json",
-      "reason": "Updating Wrangler to 4.145.0 with the pinned Bun forces workspace re-resolution and refuses the existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) resolutions under the unchanged seven-day minimumReleaseAge. Both bun install and targeted bun update reproduce the failure. Retain the frozen lockfile and Wrangler 4.144.0 until these resolutions become eligible, then upgrade all three Wrangler pins with the normal installer and rerun workspace, Cloudflare infrastructure, adapter, build and browser checks. Do not add install-age exclusions.",
-      "until": "2026-10-10T00:00:00Z"
-    },
-    {
-      "name": "wrangler",
-      "manifest": "apps/web/package.json",
-      "reason": "Updating Wrangler to 4.145.0 with the pinned Bun forces workspace re-resolution and refuses the existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) resolutions under the unchanged seven-day minimumReleaseAge. Both bun install and targeted bun update reproduce the failure. Retain the frozen lockfile and Wrangler 4.144.0 until these resolutions become eligible, then upgrade all three Wrangler pins with the normal installer and rerun workspace, Cloudflare infrastructure, adapter, build and browser checks. Do not add install-age exclusions.",
-      "until": "2026-10-10T00:00:00Z"
-    },
-    {
-      "name": "wrangler",
-      "manifest": "infra/cloudflare/package.json",
-      "reason": "Updating Wrangler to 4.145.0 with the pinned Bun forces workspace re-resolution and refuses the existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) resolutions under the unchanged seven-day minimumReleaseAge. Both bun install and targeted bun update reproduce the failure. Retain the frozen lockfile and Wrangler 4.144.0 until these resolutions become eligible, then upgrade all three Wrangler pins with the normal installer and rerun workspace, Cloudflare infrastructure, adapter, build and browser checks. Do not add install-age exclusions.",
-      "until": "2026-10-10T00:00:00Z"
-    },
-    {
-      "name": "rolldown",
-      "manifest": "apps/server/package.json",
-      "reason": "Rolldown 1.2.12 became eligible while validating #236. The pinned Bun re-resolves the workspace on a dependency update and rejects existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) under the unchanged seven-day minimumReleaseAge, reproduced by normal and targeted updates. Retain the frozen lockfile and Rolldown 1.2.11 until those resolutions are eligible, then use the normal installer and rerun server bundling and Cloudflare adapter tests. Do not add install-age exclusions.",
-      "until": "2026-10-10T00:00:00Z"
-    },
-    {
-      "name": "@cloudflare/workers-types",
-      "manifest": "infra/cloudflare/package.json",
-      "reason": "The eligible 5.20261001.1 update cannot be installed for the infrastructure workspace with the pinned Bun: bun update @cloudflare/workers-types@5.20261001.1 --exact re-resolves Alchemy 2.0.0-beta.80 and rejects it under the unchanged seven-day minimumReleaseAge. Reproduced on 2026-10-08. The server pin is updated successfully; retain the infrastructure pin and frozen lockfile until Alchemy is eligible, then use the normal installer and rerun infrastructure tests and typecheck. Do not add install-age exclusions.",
-      "until": "2026-10-10T00:00:00Z"
+      "reason": "0.48.0 still introduces 1,378 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-10 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
+      "until": "2026-10-17T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": [
     {
       "cve": "CVE-2026-93687",
       "path": "bun.lock",
-      "reason": "Temporarily retain the required shadcn 4.21.0 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; no patched npm release exists as of 2026-10-03. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
-      "until": "2026-10-10T00:00:00Z"
+      "reason": "Temporarily retain the required shadcn 4.21.0 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; the GitHub advisory still lists no patched version as rechecked on 2026-10-10 UTC. The User explicitly approved renewal of this existing development-CLI exception through 2026-10-17 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
+      "until": "2026-10-17T00:00:00Z"
     }
   ]
 }

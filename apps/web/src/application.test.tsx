@@ -1,9 +1,9 @@
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
-import { Data, Deferred, Effect, Layer, Option } from "effect";
+import { Data, DateTime, Deferred, Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
 import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
@@ -117,6 +117,7 @@ const resetApplicationTest = (): void => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 };
 
 type StubResponse = Readonly<{ status: number; body: unknown }>;
@@ -327,6 +328,15 @@ const transactionCaptureInstant = (request: HttpClientRequest.HttpClientRequest)
 
 const httpCreated = 201;
 const httpUnavailable = 503;
+const stubTransactionScreen = (): void => {
+  vi.stubGlobal("matchMedia", () => ({
+    matches: true,
+    addEventListener: (): void => undefined,
+    removeEventListener: (): void => undefined,
+  }));
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(DateTime.makeUnsafe("2025-01-12T14:00:00Z").epochMilliseconds);
+};
 const transactionCaptureClient = (
   requests: Array<string>,
   capturedInstants: Array<string>
@@ -392,6 +402,7 @@ const requestCount = (requests: ReadonlyArray<string>, target: string): number =
   requests.filter((request) => request === target).length;
 
 describe("signed-in web application routes", () => {
+  beforeEach(stubTransactionScreen);
   afterEach(resetApplicationTest);
 
   it("owns Transactions at /app/transactions and safely presents malformed canonical data", () =>
@@ -414,19 +425,17 @@ describe("signed-in web application routes", () => {
           renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants))
         );
         expect(
-          yield* fromPromise(screen.findByText("Aún no hay transacciones este mes"))
+          yield* fromPromise(screen.findByText("No hay transacciones para mostrar"))
         ).toBeVisible();
-        fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "25000" } });
-        fireEvent.change(screen.getByLabelText("Fecha del movimiento"), {
-          target: { value: "2025-01-10" },
-        });
+        fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
+        fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "25000" } });
+        fireEvent.click(screen.getByRole("button", { name: "Fecha del movimiento" }));
+        fireEvent.click(screen.getByRole("button", { name: "viernes, 10 de enero de 2025" }));
         fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
-        expect(
-          yield* fromPromise(screen.findByLabelText("Transacción recién registrada"))
-        ).toHaveTextContent("El Corral");
-        expect(screen.getByLabelText("Transacción recién registrada")).toHaveTextContent(
-          "10-01-2025"
+        expect(yield* fromPromise(screen.findByText("El Corral · 10-01-2025"))).toHaveTextContent(
+          "El Corral"
         );
+        expect(screen.getByText("El Corral · 10-01-2025")).toHaveTextContent("10-01-2025");
         const assertRefetched = (): void => {
           expect(requestCount(requests, "GET /transactions")).toBe(2);
         };
@@ -438,6 +447,7 @@ describe("signed-in web application routes", () => {
 });
 
 describe("signed-in web application routes — invalid Money", () => {
+  beforeEach(stubTransactionScreen);
   afterEach(resetApplicationTest);
 
   it("refuses malformed Money before sending a canonical create request", () =>
@@ -449,9 +459,10 @@ describe("signed-in web application routes — invalid Money", () => {
           renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants))
         );
         expect(
-          yield* fromPromise(screen.findByText("Aún no hay transacciones este mes"))
+          yield* fromPromise(screen.findByText("No hay transacciones para mostrar"))
         ).toBeVisible();
-        fireEvent.change(screen.getByLabelText("Monto en COP"), {
+        fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
+        fireEvent.change(screen.getByLabelText("Monto ($)"), {
           target: { value: "not-a-number" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));

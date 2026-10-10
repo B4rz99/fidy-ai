@@ -1,7 +1,7 @@
 import { Footer } from "./footer";
 import { AgentConnectionGuide } from "./agent-connection-guide";
 import { ThemeToggle } from "./theme";
-import { logoUrl } from "./assets";
+import { fidyLogoUrl } from "@/ui/brand";
 import { LaunchButton } from "./registration";
 import { CorrectionDemo } from "./correction-demo";
 
@@ -9,7 +9,7 @@ export const detailViews = [
   <>
     <header className="wrap nav">
       <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={logoUrl} alt="fidy" />
+        <img src={fidyLogoUrl} alt="fidy" />
       </a>
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
@@ -117,7 +117,7 @@ export const detailViews = [
   <>
     <header className="wrap nav">
       <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={logoUrl} alt="fidy" />
+        <img src={fidyLogoUrl} alt="fidy" />
       </a>
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
@@ -283,7 +283,7 @@ export const detailViews = [
   <>
     <header className="wrap nav">
       <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={logoUrl} alt="fidy" />
+        <img src={fidyLogoUrl} alt="fidy" />
       </a>
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
@@ -415,7 +415,7 @@ export const detailViews = [
   <>
     <header className="wrap nav">
       <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={logoUrl} alt="fidy" />
+        <img src={fidyLogoUrl} alt="fidy" />
       </a>
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
@@ -588,7 +588,7 @@ export const detailViews = [
   <>
     <header className="wrap nav">
       <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={logoUrl} alt="fidy" />
+        <img src={fidyLogoUrl} alt="fidy" />
       </a>
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
@@ -733,7 +733,7 @@ export const detailViews = [
   <>
     <header className="wrap nav">
       <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={logoUrl} alt="fidy" />
+        <img src={fidyLogoUrl} alt="fidy" />
       </a>
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}

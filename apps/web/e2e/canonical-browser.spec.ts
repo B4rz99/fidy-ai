@@ -43,7 +43,7 @@ test("loads empty Transactions through canonical queries on the separate API ori
         })
       );
       yield* wait(page.goto("/app/transactions"));
-      yield* wait(expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible());
+      yield* wait(expect(page.getByText("No hay transacciones para mostrar")).toBeVisible());
       expect(requests).toHaveLength(3);
       expect(requests.every((url) => url.startsWith(apiOrigin))).toBe(true);
     })
@@ -144,7 +144,7 @@ test("revoked session hides Transactions without showing an internal response bo
       yield* wait(
         expect(page.getByText("Tu sesión venció. Inicia sesión de nuevo.")).toBeVisible()
       );
-      yield* wait(expect(page.getByText("Aún no hay transacciones este mes")).toHaveCount(0));
+      yield* wait(expect(page.getByText("No hay transacciones para mostrar")).toHaveCount(0));
       expect(yield* wait(page.locator("body").textContent())).not.toContain(secret);
     })
   ));

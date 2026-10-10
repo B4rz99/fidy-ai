@@ -1,4 +1,4 @@
-import { logoUrl } from "./assets";
+import { fidyLogoUrl } from "@/ui/brand";
 
 /** Keeps privacy, support and agent setup discoverable across marketing pages. */
 export const Footer = (): React.JSX.Element => (
@@ -6,7 +6,7 @@ export const Footer = (): React.JSX.Element => (
     <div className="wrap">
       <div className="footer-brand">
         <a className="logo" href="/" aria-label="Fidy, inicio">
-          <img src={logoUrl} alt="fidy" />
+          <img src={fidyLogoUrl} alt="fidy" />
         </a>
         <p>Finanzas personales para ti y tus agentes.</p>
       </div>

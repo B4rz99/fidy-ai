@@ -1,12 +1,22 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Cancel01Icon,
+  CreditCardIcon,
+  Home01Icon,
+  Menu01Icon,
+  Settings01Icon,
+  SparklesIcon,
+} from "@hugeicons/core-free-icons";
 import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
-import type { JSX } from "react";
+import type { JSX, MouseEvent } from "react";
 import { useSession } from "@/session/session-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
+import { FidyWordmark } from "@/ui/components/wordmark";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 
 /** Explains the authentication-lifetime transition without exposing or retaining credentials. */
@@ -19,52 +29,105 @@ export const AuthenticationExpired = (): JSX.Element => (
   </main>
 );
 
+const navigationLinks = [
+  { to: "/app/dashboard", label: "Tablero", icon: Home01Icon },
+  { to: "/app/transactions", label: "Transacciones", icon: CreditCardIcon },
+  { to: "/app/agent", label: "Agente", icon: SparklesIcon },
+] as const;
+const settingsLinks = [
+  { to: "/settings/email", label: "Correo" },
+  { to: "/settings/pats", label: "Tokens personales (PAT)" },
+  { to: "/settings/agents", label: "Agentes conectados" },
+  { to: "/settings/recovery", label: "Recuperación" },
+] as const;
+const dismissCompactNavigation = (event: MouseEvent<HTMLAnchorElement>): void => {
+  event.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
+};
 const SignedInNavigation = ({
   onLogout,
   loggingOut,
-}: {
-  readonly onLogout: () => void;
-  readonly loggingOut: boolean;
-}): JSX.Element => (
-  <nav
-    aria-label="Aplicación"
-    className="flex flex-1 flex-wrap items-center gap-1 px-3 pb-3 md:flex-col md:items-stretch"
-  >
-    <Button className="justify-start" render={<Link to="/app/dashboard" />} variant="ghost">
-      Tablero
-    </Button>
-    <Button className="justify-start" render={<Link to="/app/agent" />} variant="ghost">
-      Agente
-    </Button>
-    <Button className="justify-start" render={<Link to="/app/transactions" />} variant="ghost">
-      Transacciones
-    </Button>
-    <Button className="justify-start" render={<Link to="/settings/email" />} variant="ghost">
-      Correo
-    </Button>
-    <Button className="justify-start" render={<Link to="/settings/pats" />} variant="ghost">
-      Tokens personales (PAT)
-    </Button>
-    <Button
-      className="justify-start"
-      render={<Link to="/settings/agents" search={{}} />}
-      variant="ghost"
-    >
-      Agentes conectados
-    </Button>
-    <Button className="justify-start" render={<Link to="/settings/recovery" />} variant="ghost">
-      Recuperación
-    </Button>
+}: Readonly<{
+  onLogout: () => void;
+  loggingOut: boolean;
+}>): JSX.Element => (
+  <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
+    {navigationLinks.map((link) => (
+      <Link
+        key={link.to}
+        to={link.to}
+        search={{}}
+        onClick={dismissCompactNavigation}
+        className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
+        activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
+      >
+        <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+        {link.label}
+      </Link>
+    ))}
+    <details className="shrink-0">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted">
+        <HugeiconsIcon icon={Settings01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+        Ajustes
+      </summary>
+      <div className="flex flex-col gap-1 py-2 pl-4">
+        {settingsLinks.map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            search={{}}
+            onClick={dismissCompactNavigation}
+            className="rounded-md px-4 py-2 text-sm hover:bg-muted"
+            activeProps={{ className: "bg-secondary text-secondary-foreground" }}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
+    </details>
     <Button
       className="justify-start md:mt-auto"
       disabled={loggingOut}
       onClick={onLogout}
       type="button"
-      variant="outline"
+      variant="ghost"
     >
       {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
     </Button>
   </nav>
+);
+
+const CompactNavigation = ({
+  loggingOut,
+  onLogout,
+}: Readonly<{ loggingOut: boolean; onLogout: () => void }>): JSX.Element => (
+  <>
+    <div className="px-5 md:hidden">
+      <Button
+        variant="outline"
+        size="icon"
+        popoverTarget="signed-in-navigation"
+        aria-label="Menú de navegación"
+      >
+        <HugeiconsIcon
+          className="signed-in-menu-bars"
+          icon={Menu01Icon}
+          size={24}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <HugeiconsIcon
+          className="signed-in-menu-close"
+          icon={Cancel01Icon}
+          size={24}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      </Button>
+    </div>
+    <div id="signed-in-navigation" className="signed-in-compact-navigation" popover="auto">
+      <SignedInNavigation loggingOut={loggingOut} onLogout={onLogout} />
+    </div>
+  </>
 );
 
 const SignedInShell = (): JSX.Element => {
@@ -91,12 +154,18 @@ const SignedInShell = (): JSX.Element => {
   };
 
   return (
-    <div className="min-h-svh bg-muted/30 md:flex">
-      <aside className="flex border-b bg-background md:sticky md:top-0 md:h-svh md:w-56 md:flex-none md:flex-col md:border-r md:border-b-0">
-        <Link className="px-5 py-5 font-heading text-xl font-semibold" to="/app/dashboard">
-          Fidy
+    <div className="signed-in-theme min-h-svh bg-background md:flex">
+      <aside className="signed-in-sidebar flex items-center justify-between border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:items-stretch md:border-r md:border-b-0">
+        <Link className="flex shrink-0 flex-col items-start gap-2 px-6 py-4" to="/app/dashboard">
+          <FidyWordmark />
+          <span className="hidden text-xs text-muted-foreground md:block">
+            Tu dinero, más claro
+          </span>
         </Link>
-        <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />
+        <div className="hidden min-h-0 flex-1 md:flex">
+          <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />
+        </div>
+        <CompactNavigation loggingOut={status.waiting} onLogout={onLogout} />
         {failed ? (
           <Alert className="m-3" variant="destructive" role="alert">
             <AlertTitle>No pudimos confirmar el cierre de sesión</AlertTitle>

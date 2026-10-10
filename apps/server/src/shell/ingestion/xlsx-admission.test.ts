@@ -289,6 +289,26 @@ it.effect("rejects text-prefix elements whose foreign string parsing retains raw
   })
 );
 
+const withColumns = (markup: string): Uint8Array =>
+  modify(workbook("normal"), (entries) =>
+    replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+      xml.replace("<sheetData>", `<cols>${markup}</cols><sheetData>`)
+    )
+  );
+
+it.effect("bounds column-style range expansion and repeated metadata before construction", () =>
+  Effect.gen(function* () {
+    expect(
+      (yield* parseStatementFile(withColumns('<col min="1" max="200" width="10"/>'))).rows
+    ).toHaveLength(1);
+    yield* reject(withColumns('<col min="1" max="201" width="10"/>'));
+    yield* reject(withColumns('<col min="1" max="1000000000" width="10"/>'));
+    yield* reject(withColumns('<col min="1" MAX="1000000000" width="10"/>'), "malformed-file");
+    yield* reject(withColumns('<col min="1" max="200" width="10"/>'.repeat(501)));
+    yield* reject(withColumns(`<col min="1" max="200" width="10" extra="${"x".repeat(50_000)}"/>`));
+  })
+);
+
 it.effect("rejects formula translation triggers hidden inside unrelated attributes", () =>
   Effect.gen(function* () {
     for (const type of ["shared", "array"]) {

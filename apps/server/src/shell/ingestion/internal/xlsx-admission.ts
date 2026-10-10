@@ -5,6 +5,7 @@ import { decodeXlsxArchive, encodeXlsxArchive } from "./xlsx-archive";
 
 const maximumCells = statementParserLimits.maximumXlsxCells;
 const maximumSheets = 20;
+const maximumColumns = 200;
 const maximumFormatBytes = 256;
 const maximumFormatId = 392;
 const maximumNumericDigits = 128;
@@ -56,6 +57,8 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
     "PartName",
     "Target",
     "Type",
+    "min",
+    "max",
   ];
   for (const name of Object.keys(tag.attributes)) {
     if (name.startsWith("xmlns:")) continue;
@@ -69,6 +72,7 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
 
 const requiredXmlRoots: Readonly<Record<string, string>> = {
   sheet: "workbook",
+  col: "worksheet",
   c: "worksheet",
   f: "worksheet",
   si: "sst",
@@ -265,10 +269,23 @@ type WorksheetInput = Readonly<{
   formats: ReadonlyArray<number>;
   charge: (cost: number) => void;
 }>;
+const admitColumns = (tag: SaxesTagPlain, charge: (cost: number) => void): void => {
+  const first = indexFor(tag.attributes.min ?? "");
+  const last = indexFor(tag.attributes.max ?? "");
+  if (first === 0 || first > last) malformed();
+  if (last > maximumColumns) limit();
+  const bytes = Object.entries(tag.attributes).reduce(
+    (total, [name, value]) => total + size(name) + size(value),
+    numericFormattingAllowance
+  );
+  for (let column = first; column <= last; column += 1) charge(bytes);
+};
+
 const admitWorksheet = ({ xml, strings, formats, charge }: WorksheetInput): void => {
   let cell = Option.none<CellCost>();
   const open = (tag: SaxesTagPlain): void => {
     const name = localName(tag.name);
+    if (name === "col") admitColumns(tag, charge);
     if (name === "c") {
       if (Option.isSome(cell)) return malformed();
       const style = indexFor(tag.attributes.s ?? "0");

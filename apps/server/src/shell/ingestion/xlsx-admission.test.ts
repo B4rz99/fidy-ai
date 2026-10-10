@@ -309,6 +309,27 @@ it.effect("bounds column-style range expansion and repeated metadata before cons
   })
 );
 
+const withHyperlinks = (markup: string): Uint8Array =>
+  modify(workbook("normal"), (entries) =>
+    replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+      xml.replace("</worksheet>", `<hyperlinks>${markup}</hyperlinks></worksheet>`)
+    )
+  );
+it.effect("bounds hyperlink destinations before foreign cell construction", () =>
+  Effect.gen(function* () {
+    expect(
+      (yield* parseStatementFile(withHyperlinks('<hyperlink ref="A2:A2" location="local"/>'))).rows
+    ).toHaveLength(1);
+    yield* reject(withHyperlinks('<hyperlink ref="A1:XFD1048576" location="local"/>'));
+    yield* reject(withHyperlinks('<hyperlink ref="A1:GR20001" location="local"/>'));
+    yield* reject(
+      withHyperlinks('<hyperlink REF="A1:XFD1048576" location="local"/>'),
+      "malformed-file"
+    );
+    yield* reject(withHyperlinks('<hyperlink ref="A1:GR500" location="local"/>'.repeat(2)));
+  })
+);
+
 it.effect("rejects formula translation triggers hidden inside unrelated attributes", () =>
   Effect.gen(function* () {
     for (const type of ["shared", "array"]) {

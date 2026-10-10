@@ -59,6 +59,7 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
     "Type",
     "min",
     "max",
+    "ref",
   ];
   for (const name of Object.keys(tag.attributes)) {
     if (name.startsWith("xmlns:")) continue;
@@ -72,6 +73,7 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
 
 const requiredXmlRoots: Readonly<Record<string, string>> = {
   sheet: "workbook",
+  hyperlink: "worksheet",
   col: "worksheet",
   c: "worksheet",
   f: "worksheet",
@@ -269,23 +271,65 @@ type WorksheetInput = Readonly<{
   formats: ReadonlyArray<number>;
   charge: (cost: number) => void;
 }>;
+const metadataBytes = (tag: SaxesTagPlain): number =>
+  Object.entries(tag.attributes).reduce(
+    (total, [name, value]) => total + size(name) + size(value),
+    numericFormattingAllowance
+  );
+const maximumWorksheetRow = statementParserLimits.maximumRows + 1;
+const lettersPerAlphabet = 26;
+const firstColumnCode = "A".charCodeAt(0) - 1;
+type WorksheetCoordinate = Readonly<{ column: number; row: number }>;
+const hyperlinkCoordinate = (source: string): WorksheetCoordinate => {
+  const match = /^\$?([A-Z]{1,3})\$?([1-9]\d{0,9})$/u.exec(source);
+  const letters = match?.[1];
+  const digits = match?.[2];
+  if (letters === undefined || digits === undefined) return malformed();
+  const column = Array.from(letters).reduce(
+    (total, letter) => total * lettersPerAlphabet + letter.charCodeAt(0) - firstColumnCode,
+    0
+  );
+  const row = Number(digits);
+  if (column > maximumColumns || row > maximumWorksheetRow) limit();
+  return { column, row };
+};
+const hyperlinkEndpoints = (
+  source: string
+): Readonly<{ first: WorksheetCoordinate; last: WorksheetCoordinate }> => {
+  const parts = source.split(":");
+  if (parts.length > 2) return malformed();
+  const start = parts[0] ?? "";
+  return { first: hyperlinkCoordinate(start), last: hyperlinkCoordinate(parts[1] ?? start) };
+};
+const admitHyperlink = (tag: SaxesTagPlain, charge: (cost: number) => void): void => {
+  const { first, last } = hyperlinkEndpoints(tag.attributes.ref ?? "");
+  if (last.column < first.column || last.row < first.row) malformed();
+  const destinations = (last.column - first.column + 1) * (last.row - first.row + 1);
+  if (destinations > maximumCells) limit();
+  const bytes = metadataBytes(tag);
+  for (let destination = 0; destination < destinations; destination += 1) charge(bytes);
+};
+
 const admitColumns = (tag: SaxesTagPlain, charge: (cost: number) => void): void => {
   const first = indexFor(tag.attributes.min ?? "");
   const last = indexFor(tag.attributes.max ?? "");
   if (first === 0 || first > last) malformed();
   if (last > maximumColumns) limit();
-  const bytes = Object.entries(tag.attributes).reduce(
-    (total, [name, value]) => total + size(name) + size(value),
-    numericFormattingAllowance
-  );
+  const bytes = metadataBytes(tag);
   for (let column = first; column <= last; column += 1) charge(bytes);
+};
+
+const admitWorksheetMetadata = (tag: SaxesTagPlain, charge: (cost: number) => void): void => {
+  const name = localName(tag.name);
+  if (name === "col") admitColumns(tag, charge);
+  if (name === "hyperlink") admitHyperlink(tag, charge);
 };
 
 const admitWorksheet = ({ xml, strings, formats, charge }: WorksheetInput): void => {
   let cell = Option.none<CellCost>();
   const open = (tag: SaxesTagPlain): void => {
     const name = localName(tag.name);
-    if (name === "col") admitColumns(tag, charge);
+    admitWorksheetMetadata(tag, charge);
     if (name === "c") {
       if (Option.isSome(cell)) return malformed();
       const style = indexFor(tag.attributes.s ?? "0");

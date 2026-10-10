@@ -37,10 +37,11 @@ there is no standalone Agent route or sidebar link. The feature's mounted state 
 bounded visible conversation through popup dismissal and route navigation, and expires with the
 signed-in layout. AI Elements conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed
-as model-provided HTML. A proposed reply is visible before the User explicitly confirms receipt;
-until the receipt succeeds the UI never labels the Turn Completed. Replies received while the popup
-is closed cannot acknowledge themselves. Failed receipt confirmation retains the exact proposal
-for retry, and unresolved execution or delivery blocks another submission. The reply and one-use
+as model-provided HTML. After a proposed reply renders in the open popup in a visible document,
+the browser automatically acknowledges its delivery once. The ordinary conversation shows no
+receipt button or completion footer. Replies received while the popup is closed or the document
+is hidden remain unacknowledged until visible. Failed delivery acknowledgement retains the exact
+proposal for a connection retry, and unresolved execution or delivery blocks another submission. The reply and one-use
 receipt stay in mounted component state, not browser storage or a URL. This
 channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
 redirect-rejecting, bounded browser HTTP policy as the derived clients. The

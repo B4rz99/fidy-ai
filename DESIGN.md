@@ -524,6 +524,8 @@ AI Elements `Conversation` and `Message` live in `ui/components/ai-elements`, ad
 aliases, Hugeicons and branded controls. Conversation scrolling stays immediate, honors a reader's
 position, and offers a labeled jump-to-latest control. User entries use peach bubbles; assistant text
 stays plain and readable. Enter sends, Shift+Enter inserts a line, and composing IME text cannot send.
-The feature owns the draft, bounded session-only history, pending status and explicit delivery receipt;
-closing the panel preserves those values and never acknowledges a hidden reply. The UI advertises
+The feature owns the draft, bounded session-only history and pending status. Delivery acknowledgement
+happens automatically after a reply renders in the open, visible panel; ordinary replies have no
+confirmation button or success footer. A failed acknowledgement offers a connection retry for the
+same reply. Closing the panel preserves its state and never acknowledges a hidden reply. The UI advertises
 only text capabilities supported by the existing Agent endpoint.

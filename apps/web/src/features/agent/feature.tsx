@@ -3,7 +3,7 @@ import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Dispatch, JSX, SetStateAction, SubmitEvent } from "react";
 import {
   Conversation,
@@ -21,6 +21,8 @@ import type {
   HostedTurnProposal,
   HostedTurnReceipt,
 } from "@/transport/client";
+
+import { VisibleReply } from "./visible-reply";
 
 type Proposal = typeof HostedTurnProposal.Type;
 type Processing = typeof HostedTurnProcessing.Type;
@@ -86,13 +88,13 @@ const status: Readonly<Record<TurnState["tag"], string>> = {
   idle: "",
   waiting: "Esperando respuesta…",
   error: "No se pudo completar el turno. Inténtalo de nuevo.",
-  proposal: "Respuesta visible. Confirma que la recibiste para completar el turno.",
+  proposal: "",
   processing: "El turno sigue en curso. Consulta el estado antes de volver a intentarlo.",
   uncertain:
     "No se pudo recuperar el turno. Una operación podría haberse ejecutado: consulta tus datos antes de reintentar.",
-  confirming: "Confirmando entrega…",
-  completed: "Respuesta entregada.",
-  unconfirmed: "La entrega no se pudo confirmar. La respuesta no se guardó como completada.",
+  confirming: "",
+  completed: "",
+  unconfirmed: "No pudimos guardar la respuesta. Reintenta la conexión para continuar.",
 };
 
 const replyText = (turn: TurnState): Option.Option<string> => {
@@ -102,10 +104,14 @@ const replyText = (turn: TurnState): Option.Option<string> => {
 
 const AgentReply = ({
   turn,
+  open,
+  onVisible,
   onConfirm,
   onProgress,
 }: Readonly<{
   turn: TurnState;
+  open: boolean;
+  onVisible: (proposal: Proposal) => void;
   onConfirm: (proposal: Proposal) => void;
   onProgress: (pending: Processing) => void;
 }>): JSX.Element => {
@@ -113,21 +119,30 @@ const AgentReply = ({
   return (
     <>
       {Option.isSome(reply) && (
-        <Message from="assistant" aria-label="Respuesta del agente">
-          <MessageContent>{reply.value}</MessageContent>
-        </Message>
+        <VisibleReply
+          active={open && turn.tag === "proposal"}
+          onVisible={() => {
+            if (turn.tag === "proposal") onVisible(turn.value);
+          }}
+        >
+          <Message from="assistant" aria-label="Respuesta del agente">
+            <MessageContent>{reply.value}</MessageContent>
+          </Message>
+        </VisibleReply>
       )}
-      <p aria-live="polite" className="text-xs text-muted-foreground">
-        {status[turn.tag]}
-      </p>
+      {status[turn.tag] !== "" ? (
+        <p aria-live="polite" className="text-xs text-muted-foreground">
+          {status[turn.tag]}
+        </p>
+      ) : null}
       {(turn.tag === "processing" || turn.tag === "uncertain") && (
         <Button onClick={() => onProgress(turn.value)} type="button">
           Consultar estado
         </Button>
       )}
-      {(turn.tag === "proposal" || turn.tag === "unconfirmed") && (
+      {turn.tag === "unconfirmed" && (
         <Button onClick={() => onConfirm(turn.value)} type="button">
-          Confirmar recepción
+          Reintentar conexión
         </Button>
       )}
     </>
@@ -214,6 +229,7 @@ type ChatViewProps = Readonly<{
   text: string;
   onTextChange: (text: string) => void;
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
+  onVisible: (proposal: Proposal) => void;
   onConfirm: (proposal: Proposal) => void;
   onProgress: (pending: Processing) => void;
 }>;
@@ -229,7 +245,13 @@ const ChatView = (props: ChatViewProps): JSX.Element => (
             <MessageContent>{entry.text}</MessageContent>
           </Message>
         ))}
-        <AgentReply onConfirm={props.onConfirm} onProgress={props.onProgress} turn={props.turn} />
+        <AgentReply
+          open={props.open}
+          onVisible={props.onVisible}
+          onConfirm={props.onConfirm}
+          onProgress={props.onProgress}
+          turn={props.turn}
+        />
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
@@ -241,6 +263,8 @@ const ChatView = (props: ChatViewProps): JSX.Element => (
     />
   </ChatWindow>
 );
+
+const initialDeliveredTurn = Option.none<string>();
 
 /** Chat state outlives popup dismissal and navigation, but never the authenticated layout. */
 export const HostedAgentFeature = (): JSX.Element => {
@@ -255,6 +279,14 @@ export const HostedAgentFeature = (): JSX.Element => {
   const [history, setHistory] = useState<ReadonlyArray<Entry>>([]);
   const [text, setText] = useState("");
   const [turn, setTurn] = useState<TurnState>({ tag: "idle" });
+  const deliveredTurn = useRef(initialDeliveredTurn);
+  const onVisible = (value: Proposal): void => {
+    if (Option.isSome(deliveredTurn.current) && deliveredTurn.current.value === value.turnId) {
+      return;
+    }
+    deliveredTurn.current = Option.some(value.turnId);
+    receiptHandler(acknowledge, setTurn)(value);
+  };
   const onSubmit = (event: SubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
     submitMessage({ text, turn, propose, setTurn, setText, setHistory });
@@ -268,6 +300,7 @@ export const HostedAgentFeature = (): JSX.Element => {
       text={text}
       onTextChange={setText}
       onSubmit={onSubmit}
+      onVisible={onVisible}
       onProgress={progressHandler(progress, setTurn)}
       onConfirm={receiptHandler(acknowledge, setTurn)}
     />

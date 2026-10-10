@@ -146,6 +146,11 @@
   },
   "overrides": [
     {
+      // Reply delivery depends on committed DOM and native document visibility, not a User command.
+      "files": ["apps/web/src/features/agent/visible-reply.tsx"],
+      "rules": { "effect-guards/no-react-use-effect": "off" }
+    },
+    {
       "files": ["apps/web/src/**/*.{ts,tsx}"],
       "rules": {
         "shadcn/no-raw-colors": "error",

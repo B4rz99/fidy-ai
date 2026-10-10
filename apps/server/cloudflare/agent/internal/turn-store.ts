@@ -255,12 +255,12 @@ export const recoverHostedTurn = ({
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
       SELECT ?, user_id, hosted_session_id, id, 'interrupted', ? FROM hosted_turns
       WHERE id = ? AND user_id = ? AND status = 'pending'
-        ${whatsAppInterruptionGuard()}`)
+        ${whatsAppInterruptionGuard()} RETURNING id`)
           .bind(marker, timestamp, turn.id, userId),
         db
           .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
       WHERE id = ? AND user_id = ? AND status = 'pending'
-        ${whatsAppInterruptionGuard()}`)
+        ${whatsAppInterruptionGuard()} RETURNING id`)
           .bind(timestamp, turn.id, userId),
         db
           .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
@@ -274,7 +274,7 @@ export const recoverHostedTurn = ({
         ...statementSessionActivity({ db, userId, turnId: turn.id, current: now }),
       ])
     );
-    return results[1]?.meta.changes === 1 && results[2]?.meta.changes === 1;
+    return results[1]?.meta.changes === 1 && results[2]?.results.length === 1;
   });
 
 const admissionState = (snapshot: HostedTurnSnapshot): HostedAdmissionState => ({
@@ -649,12 +649,14 @@ export const commitHostedCompaction = ({
         db
           .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
       AND sequence <= ? AND EXISTS (SELECT 1 FROM hosted_compacted_conversations
-        WHERE user_id = ? AND hosted_session_id = ? AND nonce = ? AND revision = ?)`)
+        WHERE user_id = ? AND hosted_session_id = ? AND nonce = ? AND revision = ?)
+      RETURNING sequence`)
           .bind(userId, sessionId, throughSequence, userId, sessionId, nonce, nextRevision),
       ])
     ).pipe(
       Effect.map(
-        (results) => results[0]?.meta.changes === 1 && results[1]?.meta.changes === selected.length
+        (results) =>
+          results[0]?.meta.changes === 1 && results[1]?.results.length === selected.length
       ),
       Effect.uninterruptible
     );
@@ -1249,11 +1251,11 @@ const hostedFinishStatements = ({
       .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason)
       SELECT ?, user_id, hosted_session_id, id, ?, ?, ?, ? FROM hosted_turns
-      WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql}`)
+      WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql} RETURNING id`)
       .bind(entryId, kind, time, text, reason, turnId, userId, ...guard.bindings),
     db
       .prepare(`UPDATE hosted_turns SET status = ?, terminal_at_ms = ?, failure_reason = ?
-      WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql}`)
+      WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql} RETURNING id`)
       .bind(status, time, reason, turnId, userId, ...guard.bindings),
     db
       .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?
@@ -1293,5 +1295,5 @@ export const finishHostedTurn = (
 ): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const results = yield* Effect.tryPromise(() => input.db.batch(hostedFinishStatements(input)));
-    return results[0]?.meta.changes === 1 && results[1]?.meta.changes === 1;
+    return results[0]?.meta.changes === 1 && results[1]?.results.length === 1;
   });

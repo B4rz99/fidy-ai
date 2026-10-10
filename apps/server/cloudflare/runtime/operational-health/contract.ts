@@ -20,6 +20,7 @@ export const WorkKind = Schema.Literals([
   "billing",
   "statement",
   "forwardedEmail",
+  "proactivity",
 ]);
 export type WorkKind = typeof WorkKind.Type;
 export const QueueKind = Schema.Literals([
@@ -29,6 +30,7 @@ export const QueueKind = Schema.Literals([
   "statementQueue",
   "forwardedEmailQueue",
   "whatsappQueue",
+  "proactivityQueue",
 ]);
 export type QueueKind = typeof QueueKind.Type;
 /** Closed operational evidence. No identity, provider detail, proof, or financial value is exported. */
@@ -86,6 +88,7 @@ type WorkflowStatusBinding = Readonly<{
 /** Private bindings used only for bounded metadata inspection, never replay or provider calls. */
 export type OperationalHealthEnvironment = Readonly<{
   DB: D1Database;
+  proactivity: Readonly<{ weeklyEnabled: boolean; proactivityEnabled: boolean }>;
   workflows: Partial<Record<Exclude<WorkKind, "forwardedEmail">, WorkflowStatusBinding>>;
   deadLetters: Option.Option<Pick<Queue, "metrics">>;
   workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
@@ -100,6 +103,7 @@ const anyOwner = Schema.Literals([
   "billing",
   "statement",
   "forwardedEmail",
+  "proactivity",
   "whatsapp",
   "deadLetters",
   "retention",
@@ -109,6 +113,7 @@ const anyOwner = Schema.Literals([
   "statementQueue",
   "forwardedEmailQueue",
   "whatsappQueue",
+  "proactivityQueue",
   "workerExceptions",
   "resourceLimits",
   "callbackRejections",
@@ -127,6 +132,7 @@ const workOwner = Schema.Literals([
   "billing",
   "statement",
   "forwardedEmail",
+  "proactivity",
 ]);
 const emailProofOwner = Schema.Literals(["browserPairing", "emailReplacement"]);
 const workflowOwner = Schema.Literals([
@@ -135,6 +141,7 @@ const workflowOwner = Schema.Literals([
   "billing",
   "statement",
   "workflowFailures",
+  "proactivity",
 ]);
 const queueOwner = Schema.Literals([
   "browserPairingQueue",
@@ -143,6 +150,7 @@ const queueOwner = Schema.Literals([
   "statementQueue",
   "forwardedEmailQueue",
   "whatsappQueue",
+  "proactivityQueue",
 ]);
 export const OperationalAlert = Schema.Union([
   Schema.Struct({

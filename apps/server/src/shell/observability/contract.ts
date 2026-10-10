@@ -78,6 +78,7 @@ export const TelemetryRegistry = {
     "workflow.emailReplacement",
     "workflow.billingCollection",
     "workflow.billingRefund",
+    "workflow.proactivityDelivery",
     "workflow.statementExtraction",
     "workflow.operationalCanary",
     "workflow.releaseSmoke",

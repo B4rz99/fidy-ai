@@ -1,3 +1,4 @@
+import { proactivityObservationLimit } from "../../../insights/contract";
 import { Effect, Exit, Option, Schema } from "effect";
 import { type EmailWorkOperation } from "../../../email-authentication/contract";
 import {
@@ -8,6 +9,7 @@ import {
   prepareIngestionPendingWorkObservation,
   prepareIngestionRetentionObservation,
 } from "../../../ingestion/operations";
+import { observeProactivityWork } from "../../../insights/operations";
 import { prepareBillingWorkObservation } from "../../../subscription/operations";
 
 import {
@@ -196,7 +198,11 @@ const inspectPendingWorkflow = ({
     return { failed, unavailable };
   });
 
-const pendingWorkStatement = (db: D1Database, operation: WorkKind): D1PreparedStatement => {
+const pendingWorkStatement = (
+  environment: OperationalHealthEnvironment,
+  operation: Exclude<WorkKind, "proactivity">
+): D1PreparedStatement => {
+  const db = environment.DB;
   if (operation === "billing") return prepareBillingWorkObservation({ db, limit: sampleLimit });
   if (isEmailWork(operation)) {
     return prepareEmailPendingWorkObservation({ db, operation, limit: sampleLimit });
@@ -215,9 +221,18 @@ export const inspectPending = ({
 }>): Effect.Effect<OperationalSignal> =>
   Effect.gen(function* () {
     const fetched = yield* Effect.exit(
-      Effect.tryPromise(() => pendingWorkStatement(environment.DB, operation).all()).pipe(
-        Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Pending))(rows.results))
-      )
+      operation === "proactivity"
+        ? observeProactivityWork({ db: environment.DB, ...environment.proactivity }).pipe(
+            Effect.mapError(() => undefined)
+          )
+        : Effect.tryPromise(() => pendingWorkStatement(environment, operation).all()).pipe(
+            Effect.flatMap((rows) =>
+              Schema.decodeUnknownEffect(
+                Schema.Array(Pending).check(Schema.isMaxLength(sampleLimit))
+              )(rows.results)
+            ),
+            Effect.mapError(() => undefined)
+          )
     );
     if (Exit.isFailure(fetched)) return unavailableSignal(operation);
     const rejected = yield* Effect.exit(rejectedEmailWork(environment, operation, current));
@@ -234,7 +249,8 @@ export const inspectPending = ({
       sampledRejectedEmailWork: rejected.value,
       rejectionSampleLimited: rejected.value === sampleLimit,
       sampledPending: rows.length,
-      sampleLimited: rows.length === sampleLimit,
+      sampleLimited:
+        rows.length === (operation === "proactivity" ? proactivityObservationLimit : sampleLimit),
       oldestPendingAgeMilliseconds,
       expiredUndelivered,
       failedWorkflows: workflowStates.failed,

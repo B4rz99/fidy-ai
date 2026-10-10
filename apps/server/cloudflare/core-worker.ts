@@ -102,13 +102,14 @@ type CoreWorker = Readonly<{
   queue: (batch: MessageBatch<unknown>, environment: CoreEnvironment) => Promise<void>;
 }>;
 
-const weeklyMaintenanceInput = (
+const proactivityMaintenanceInput = (
   environment: CoreEnvironment
 ): Pick<
   CoreMaintenanceInput,
   | "WEEKLY_DELIVERY_QUEUE"
   | "WEEKLY_DELIVERY_WORKFLOW"
   | "WEEKLY_SUMMARY_ENABLED"
+  | "PROACTIVITY_ENABLED"
   | "WEEKLY_SUMMARY_TEMPLATE_JSON"
   | "WEEKLY_QUESTION_TEMPLATE_JSON"
   | "PROACTIVITY_ASK_AFTER"
@@ -123,6 +124,7 @@ const weeklyMaintenanceInput = (
   ...(environment.WEEKLY_SUMMARY_ENABLED === undefined
     ? {}
     : { WEEKLY_SUMMARY_ENABLED: environment.WEEKLY_SUMMARY_ENABLED }),
+  PROACTIVITY_ENABLED: environment.PROACTIVITY_ENABLED,
   ...(environment.WEEKLY_SUMMARY_TEMPLATE_JSON === undefined
     ? {}
     : { WEEKLY_SUMMARY_TEMPLATE_JSON: environment.WEEKLY_SUMMARY_TEMPLATE_JSON }),
@@ -140,7 +142,7 @@ const weeklyMaintenanceInput = (
 /** Normalize only the bindings needed by the published scheduled composition. */
 const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput => ({
   DB: environment.DB,
-  ...weeklyMaintenanceInput(environment),
+  ...proactivityMaintenanceInput(environment),
   USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
   AI: environment.AI,
   RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,

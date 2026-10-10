@@ -48,7 +48,19 @@ forwarded-email receipts without a terminal outcome, not global totals. `sampleL
 means more work may exist. Ages, sampled counts, status counts, Queue counts, and Queue bytes are the
 only exported values. User ids, work ids, mailboxes, financial content, and Workflow errors/outputs
 never enter these signals. Each owner inspection has a three-second budget; at most two run together.
-Queue metrics have a separate two-second budget. Failure of one measurement preserves the others.
+Queue metrics have a separate two-second budget. Canary publication stops waiting after two seconds
+without retrying the uncertain offer, so a stalled monitoring Queue cannot hold later Maintenance
+activities. Queue acceptance, including a late result after timeout, is never execution proof.
+Failure of one measurement preserves the others.
+
+The shared Proactivity delivery Queue reports `proactivityQueue` when weekly summaries or category
+proactivity are enabled. `proactivity` samples at most eight oldest unfinished identities across only
+the enabled categories (weekly summaries/questions and category messages). Index-backed per-source
+limits keep terminal history out of this read. Its Workflow identities are inspected without exposing
+User IDs, recipient data, report content, or platform error messages. Missing bindings and failed
+measurements remain unavailable. Neither observation nor migration 0076 enables a feature or sends
+product messages. `workflow.proactivityDelivery` records one safe Work outcome, and terminal failures
+join the existing bounded `workflow_failure` buckets without replacing their original rejection.
 The dead-letter Queue's count and byte figures are platform backlog measurements, not D1 samples.
 
 `component=scheduled-work`, `outcome=failed` identifies an activity failure. The scheduler still tries
@@ -132,11 +144,30 @@ been verified on the Production account. Record the approved USD budget and Work
 the operator's private release checklist, not in alert dimensions or logs. [Budget alert
 instructions](https://developers.cloudflare.com/billing/manage/budget-alerts/).
 
+## D1-independent outage alerting remains open (#1139)
+
+Worker-backed operator email still requires D1 to atomically claim and deduplicate each notification.
+A D1 outage can therefore prevent the very `inspection_unavailable/d1` email it causes. The independent
+GitHub deployment-failure email covers release failures; it is not a runtime D1 outage monitor.
+The canary and Proactivity fixes do not close this gap.
+
+A candidate separate design is a dedicated private operational Durable Object with finite alert
+coordinates, a durable cooldown/attempt ledger, bounded retry/retention, and the existing bounded
+Resend transport. Claims must precede sends and preserve provider ambiguity/idempotency across
+concurrent ticks and Worker restarts, without reading or writing D1. It must emit only closed metadata,
+use the existing approved operator destination and credential boundary, and not gain User authority.
+Process-local counters and provider idempotency alone cannot enforce that durable admission budget.
+
+Adding that persistent owner, binding/migration and outage/recovery lifecycle requires a separate
+architecture decision and review. No such resource, credential, or production setting is installed
+by #1139's monitoring-isolation patch. An independently scheduled monitor would additionally be
+needed to detect a Core cron outage; a Core-triggered Durable Object alone cannot prove cron liveness.
+
 ## Telemetry ownership (#716)
 
 Each boundary records a closed Work outcome, not a propagated cross-application trace. Public HTTP
 and Core HTTP observe their own request handling; Core Queue reception observes handoff only, while
-each of the five Workflows observes execution independently. Cron and Email Worker reception/sweep
+each installed Workflow observes execution independently, including Proactivity delivery. Cron and Email Worker reception/sweep
 observe their respective invocation. The User coordinator observes its serialized request and alarm;
 its soft HTTP deadline does not turn an unfinished owner into completed Work. D1 and R2 activity is
 covered by the surrounding owning Worker, Workflow, or coordinator Work, rather than exporting SQL,

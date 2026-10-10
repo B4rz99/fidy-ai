@@ -32,7 +32,7 @@ export const makePlatformMaintenance = (input: PlatformMaintenanceInput): Platfo
     return Option.isNone(queue)
       ? Effect.fail(new PlatformMaintenanceUnavailable())
       : Effect.tryPromise({
-          try: () => sendCanary({ queue: queue.value, now: nowEpochMs }),
+          try: (signal) => sendCanary({ queue: queue.value, now: nowEpochMs, signal }),
           catch: () => new PlatformMaintenanceUnavailable(),
         });
   },

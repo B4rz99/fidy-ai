@@ -1,4 +1,5 @@
 import { Data, type Effect, type Option } from "effect";
+import type { ProactivityEnvironment } from "../insights/contract";
 import type { WorkersAiEnvironment } from "../ai/contract";
 
 /** Platform-owned scheduled work exposes completion only, never diagnostic or provider details. */
@@ -48,7 +49,14 @@ export type PlatformMaintenanceInput = Readonly<{
   SMOKE_QUEUE_NAME: Option.Option<string>;
   SMOKE_PROOF: Option.Option<string>;
   CF_VERSION_METADATA: Option.Option<Readonly<{ id: string }>>;
-}>;
+}> &
+  Pick<ProactivityEnvironment, "WEEKLY_SUMMARY_ENABLED" | "PROACTIVITY_ENABLED"> &
+  Partial<
+    Readonly<{
+      WEEKLY_DELIVERY_QUEUE: Pick<Queue, "metrics">;
+      WEEKLY_DELIVERY_WORKFLOW: Workflow;
+    }>
+  >;
 
 /** Fixed-policy platform maintenance; actions are independent. Decision instants are Unix epoch milliseconds. */
 export type PlatformMaintenance = Readonly<{

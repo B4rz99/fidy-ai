@@ -3855,6 +3855,7 @@ it(
         );
         const signals = yield* observeOperationalHealth({
           DB: runtime.db,
+          proactivity: { weeklyEnabled: false, proactivityEnabled: false },
           workflows: {
             statement: {
               get: () =>
@@ -3894,6 +3895,7 @@ it(
         ).not.toContain(staged.staged.stagingId);
         const unavailableSignals = yield* observeOperationalHealth({
           DB: runtime.db,
+          proactivity: { weeklyEnabled: false, proactivityEnabled: false },
           workflows: { statement: { get: () => Promise.reject(new Error(secretSentinel)) } },
           deadLetters: Option.some({ metrics: () => Promise.reject(new Error(secretSentinel)) }),
           workQueues: {},

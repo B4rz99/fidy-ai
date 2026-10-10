@@ -150,6 +150,43 @@ export const ProactivityDeliveryWork = Schema.Union([
   CategoryDeliveryWork,
 ]);
 export type ProactivityDeliveryWork = typeof ProactivityDeliveryWork.Type;
+
+/** Insights owns the deterministic Workflow locator; it is a status hint, never delivery authority. */
+export const ProactivityWorkflowId = Schema.TemplateLiteral([
+  "weekly-",
+  UserId,
+  "-",
+  Schema.Union([
+    WeeklySummaryWork.fields.kind,
+    WeeklyQuestionWork.fields.kind,
+    CategoryDeliveryWork.fields.kind,
+  ]),
+  "-",
+  WeeklyQuestionWork.fields.id,
+]);
+/** The private operational projection exposes only a validated locator and bounded timing metadata. */
+export const ProactivityWorkObservation = Schema.Struct({
+  id: ProactivityWorkflowId,
+  /**
+   * UTC epoch milliseconds when summary/category delivery work was materialized, or a weekly
+   * question was requested or triggered by summary delivery; not Queue offer or Workflow start time.
+   */
+  created: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  /**
+   * UTC epoch milliseconds when the delivery window expires: the frozen report's expiry for
+   * summary/category work, or 24 hours after created for weekly questions. None means expiry is
+   * unknown to this observation, never unlimited delivery eligibility; current delivery kinds
+   * supply a deadline.
+   */
+  deadline: Schema.OptionFromNullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
+/** Maximum oldest pending locators exposed by one operational observation. */
+export const proactivityObservationLimit = 8;
+export const ProactivityWorkObservations = Schema.Array(ProactivityWorkObservation).check(
+  Schema.isMaxLength(proactivityObservationLimit)
+);
+export type ProactivityWorkObservations = typeof ProactivityWorkObservations.Type;
+
 export const ProactivityActivity = Schema.Union([
   ProactivityDeliveryWork,
   Schema.Struct({

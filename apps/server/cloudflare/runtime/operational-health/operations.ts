@@ -154,15 +154,20 @@ export const readCanaryHealth = ({
 export const sendCanary = ({
   queue,
   now,
+  signal,
 }: Readonly<{
   queue: Pick<Queue, "send">;
   now: number;
+  signal: AbortSignal;
 }>): Promise<void> => {
   const sentAtMs = Math.floor(now / periodMs) * periodMs;
   return Effect.runPromise(
     Effect.tryPromise(() => queue.send({ version: 1, sentAtMs } satisfies CanaryPayload)).pipe(
+      // Queue.send has no cancellation API. Stop waiting without retrying an ambiguous offer.
+      Effect.timeout("2 seconds"),
       Effect.asVoid
-    )
+    ),
+    { signal }
   );
 };
 
@@ -177,7 +182,12 @@ export const observeOperationalHealth = (
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const signals = yield* Effect.forEach(
-      WorkKind.literals,
+      WorkKind.literals.filter(
+        (kind) =>
+          kind !== "proactivity" ||
+          environment.proactivity.weeklyEnabled === true ||
+          environment.proactivity.proactivityEnabled === true
+      ),
       (operation) =>
         inspectPending({ environment, operation, current }).pipe(
           Effect.timeout("3 seconds"),
@@ -194,7 +204,12 @@ export const observeOperationalHealth = (
       queue: environment.deadLetters,
     });
     const workQueues = yield* Effect.forEach(
-      QueueKind.literals,
+      QueueKind.literals.filter(
+        (kind) =>
+          kind !== "proactivityQueue" ||
+          environment.proactivity.weeklyEnabled === true ||
+          environment.proactivity.proactivityEnabled === true
+      ),
       (operation) =>
         inspectQueue({
           operation,

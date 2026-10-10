@@ -6901,3 +6901,48 @@ it("uses the owner's Clock throughout hosted preflight, inference and delivery s
       ).toEqual({ started_at_ms: admittedAt });
     })
   ));
+
+it("admits a web-provider onboarding grant through the native Agent service and returns a delivery proposal", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const attemptId = "a".repeat(43);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE onboarding_consent_records SET id = ? WHERE user_id = ?")
+          .bind(attemptId, users[0])
+          .run()
+      );
+      const model = vi.fn(() => Promise.resolve(reply("Conexión verificada")));
+      const service = makeAgentService({
+        environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const response = yield* Effect.tryPromise(() => accepted.response);
+      yield* Effect.tryPromise(() => accepted.settled);
+      expect(response.status).toBe(202);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+        text: "Conexión verificada",
+      });
+      expect(model).toHaveBeenCalledOnce();
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "pending", kind: "user", text: "Hola" },
+      ]);
+    })
+  ));

@@ -32,9 +32,16 @@ and lifecycle. Publicly accessible flows with independent product behavior, such
 or onboarding, remain separate features.
 
 Presentation shapes derive from the canonical server declaration, the dedicated server-declared
-hosted Turn browser API, or web-owned view state. `/app/agent` renders a proposed reply before the
-User explicitly confirms receipt; until the receipt succeeds it never labels the Turn Completed.
-The reply and one-use receipt stay in mounted component state, not browser storage or a URL. This
+hosted Turn browser API, or web-owned view state. The authenticated layout composes a persistent floating Agent chat;
+there is no standalone Agent route or sidebar link. The feature's mounted state keeps a draft and
+bounded visible conversation through popup dismissal and route navigation, and expires with the
+signed-in layout. AI Elements conversation/message presentation uses Fidy primitives and the existing
+Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed
+as model-provided HTML. A proposed reply is visible before the User explicitly confirms receipt;
+until the receipt succeeds the UI never labels the Turn Completed. Replies received while the popup
+is closed cannot acknowledge themselves. Failed receipt confirmation retains the exact proposal
+for retry, and unresolved execution or delivery blocks another submission. The reply and one-use
+receipt stay in mounted component state, not browser storage or a URL. This
 channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
 redirect-rejecting, bounded browser HTTP policy as the derived clients. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow

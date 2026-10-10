@@ -95,14 +95,17 @@ const renderRoute = (
     })
   );
 
-const renderHostedRoute = (hostedTurnClient: HostedTurnClient): Promise<void> =>
+const renderHostedRoute = (
+  hostedTurnClient: HostedTurnClient,
+  webAuthClient: WebAuthClient = makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" })
+): Promise<ReturnType<typeof createWebRouter>> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const router = createWebRouter({
         apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
-        webAuthClient: makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+        webAuthClient,
         hostedTurnClient,
-        history: Option.some(createMemoryHistory({ initialEntries: ["/app/agent"] })),
+        history: Option.some(createMemoryHistory({ initialEntries: ["/settings/email"] })),
       });
       render(
         <SessionRegistryProvider>
@@ -110,6 +113,10 @@ const renderHostedRoute = (hostedTurnClient: HostedTurnClient): Promise<void> =>
         </SessionRegistryProvider>
       );
       yield* fromPromise(router.load());
+      fireEvent.click(
+        yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
+      );
+      return router;
     })
   );
 
@@ -727,6 +734,12 @@ describe("hosted Agent reply delivery", () => {
         fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
         expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
         expect(paths).toEqual(["/web/hosted-turns"]);
+        fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+        expect(screen.queryByText("Respuesta exacta")).not.toBeInTheDocument();
+        expect(paths).toEqual(["/web/hosted-turns"]);
+        fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
+        expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
+        expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
         expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Confirmar recepción" }));
         expect(yield* fromPromise(screen.findByText("Respuesta entregada."))).toBeVisible();
@@ -833,6 +846,8 @@ describe("rejected hosted Agent receipt", () => {
           yield* fromPromise(screen.findByText(/La entrega no se pudo confirmar/u))
         ).toBeVisible();
         expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Confirmar recepción" })).toBeEnabled();
       })
     ));
 });
@@ -966,4 +981,137 @@ describe("signed-in web application data routes", () => {
         ).toBeVisible();
       })
     ));
+});
+
+type ClosedReplyFixture = {
+  paths: Array<string>;
+  deferred: ReturnType<typeof Promise.withResolvers<HttpClientResponse.HttpClientResponse>>;
+  request: Option.Option<HttpClientRequest.HttpClientRequest>;
+};
+const closedReplyClient = (fixture: ClosedReplyFixture): HostedTurnClient =>
+  makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(
+      HttpClient.HttpClient,
+      makeHttpClient((request) => {
+        fixture.paths.push(new URL(request.url).pathname);
+        fixture.request = Option.some(request);
+        return fromPromise(fixture.deferred.promise).pipe(Effect.orDie);
+      })
+    ),
+  });
+
+const draftLifetimeTest = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = {
+        paths: [],
+        deferred: Promise.withResolvers<HttpClientResponse.HttpClientResponse>(),
+        request: Option.none<HttpClientRequest.HttpClientRequest>(),
+      };
+      yield* closedReplyClient(fixture).pipe(renderHostedRoute, fromPromise);
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+        target: { value: "Mi borrador" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+      fireEvent.click(screen.getByRole("link", { name: "Transacciones" }));
+      fireEvent.click(
+        yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
+      );
+      expect(yield* fromPromise(screen.findByLabelText("Mensaje"))).toHaveValue("Mi borrador");
+      expect(fixture.paths).toEqual([]);
+      expect(screen.queryByRole("link", { name: /^Agente$/ })).not.toBeInTheDocument();
+    })
+  );
+
+const closedReplyTest = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = {
+        paths: [],
+        deferred: Promise.withResolvers<HttpClientResponse.HttpClientResponse>(),
+        request: Option.none<HttpClientRequest.HttpClientRequest>(),
+      };
+      yield* closedReplyClient(fixture).pipe(renderHostedRoute, fromPromise);
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+        target: { value: "Hola" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+      yield* fromPromise(waitFor(() => expect(fixture.paths).toEqual(["/web/hosted-turns"])));
+      fixture.deferred.resolve(
+        responseJson(
+          Option.getOrThrow(fixture.request),
+          {
+            text: "Respuesta en segundo plano",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "a".repeat(hostedReceiptLength),
+          },
+          proposedStatus
+        )
+      );
+      yield* fromPromise(fixture.deferred.promise);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
+      expect(yield* fromPromise(screen.findByText("Respuesta en segundo plano"))).toBeVisible();
+      expect(screen.getByRole("button", { name: "Confirmar recepción" })).toBeEnabled();
+      expect(fixture.paths).toEqual(["/web/hosted-turns"]);
+    })
+  );
+
+const signedOutChatTest = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture: ClosedReplyFixture = {
+        paths: [],
+        deferred: Promise.withResolvers<HttpClientResponse.HttpClientResponse>(),
+        request: Option.none<HttpClientRequest.HttpClientRequest>(),
+      };
+      const clients = recoveryClients();
+      const router = yield* fromPromise(
+        renderHostedRoute(closedReplyClient(fixture), clients.webAuthClient)
+      );
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+        target: { value: "Mensaje privado anterior" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+      yield* fromPromise(waitFor(() => expect(fixture.paths).toHaveLength(1)));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+      expect(
+        yield* fromPromise(screen.findByRole("heading", { name: "Inicia sesión en Fidy" }))
+      ).toBeVisible();
+      expect(clients.requests).toContain("/web/session/logout");
+      yield* fromPromise(act(() => router.navigate({ to: "/settings/email" })));
+      fireEvent.click(
+        yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
+      );
+      fixture.deferred.resolve(
+        responseJson(
+          Option.getOrThrow(fixture.request),
+          {
+            text: "Respuesta privada anterior",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "a".repeat(hostedReceiptLength),
+          },
+          proposedStatus
+        )
+      );
+      yield* fromPromise(act(() => fixture.deferred.promise.then(() => undefined)));
+      expect(screen.getByLabelText("Mensaje")).toHaveValue("");
+      expect(screen.queryByText("Mensaje privado anterior")).not.toBeInTheDocument();
+      expect(screen.queryByText("Respuesta privada anterior")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+      expect(fixture.paths).toEqual(["/web/hosted-turns"]);
+    })
+  );
+
+describe("floating Agent chat lifetime", () => {
+  afterEach(resetApplicationTest);
+  it("keeps the draft across dismissal and navigation without sending it", draftLifetimeTest);
+  it("does not acknowledge a response received while the chat is closed", closedReplyTest);
+  it(
+    "discards prior history and late responses after logout replaces authentication",
+    signedOutChatTest
+  );
 });

@@ -277,9 +277,21 @@ export type PATRevocationDisclosure<Origin extends PATRevocationOrigin = PATRevo
       }>;
     }[Origin];
 
+/** Existing onboarding evidence uses the WhatsApp exchange UUID or the web provider attempt's
+ * 256-bit base64url reference. Neither format grants authority without the same-User stored grant. */
+export const WebOnboardingConsentGrantId = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)
+).pipe(Schema.brand("WebOnboardingConsentGrantId"));
+/** Retained native onboarding identity, validated before resolving the exact same-User legal grant. */
+export const OnboardingConsentGrantId = Schema.Union([
+  ConsentRecordId,
+  WebOnboardingConsentGrantId,
+]);
+export type OnboardingConsentGrantId = typeof OnboardingConsentGrantId.Type;
+
 /** Exact immutable onboarding grant and legal revisions authorizing a protected decision. */
 export const OnboardingConsentBasis = Schema.Struct({
-  grantId: ConsentRecordId,
+  grantId: OnboardingConsentGrantId,
   disclosureRevision: DisclosureRevision,
   disclosureSha256: Sha256Digest,
   policyRevision: PolicyRevision,

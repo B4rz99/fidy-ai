@@ -16,6 +16,8 @@ import { Effect, Option } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
 
+import { UserTransactionCoordinator as UserCoordinatorRuntime } from "./transactions/runtime";
+
 export {
   BrowserPairingEmailWorkflowV1,
   EmailReplacementWorkflowV1,
@@ -27,7 +29,6 @@ export {
   runBillingCollectionWorkflow,
 } from "./subscription/runtime";
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
-export { UserTransactionCoordinator } from "./transactions/runtime";
 export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
@@ -55,9 +56,6 @@ type CoreEnvironment = ProviderEnvironment &
   } & Partial<
     Readonly<{
       RECOVERY_ISOLATION: string;
-      CORE_MAINTENANCE: Readonly<{
-        getByName: (name: string) => Pick<Fetcher, "fetch">;
-      }>;
       BILLING_SUPPORT_AUDIENCE: string;
       BILLING_REFUND_WORKFLOW: Workflow;
       WOMPI_DAVIPLATA_ACTIVATED: string;
@@ -190,7 +188,7 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
 });
 
 /** Private, non-User executor; the object key coordinates ticks and grants no domain authority. */
-export class CoreMaintenanceCoordinator {
+class CoreMaintenanceCoordinator {
   private active: Option.Option<Promise<void>> = Option.none();
   private readonly state: Readonly<{ id: Pick<DurableObjectId, "name"> }>;
   private readonly environment: CoreEnvironment;
@@ -240,14 +238,44 @@ export class CoreMaintenanceCoordinator {
   }
 }
 
+/** Preserve the deployed native class identity; reserved maintenance never constructs User work. */
+export class UserTransactionCoordinator {
+  private readonly delegate: CoreMaintenanceCoordinator | UserCoordinatorRuntime;
+
+  constructor(
+    state: ConstructorParameters<typeof UserCoordinatorRuntime>[0],
+    environment: CoreEnvironment
+  ) {
+    this.delegate =
+      state.id.name === "core-maintenance-v1"
+        ? new CoreMaintenanceCoordinator(state, environment)
+        : new UserCoordinatorRuntime(state, environment);
+  }
+
+  fetch(request: Request): Promise<Response> {
+    if (
+      this.delegate instanceof UserCoordinatorRuntime &&
+      new URL(request.url).origin === "https://maintenance.invalid"
+    ) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    return this.delegate.fetch(request);
+  }
+
+  alarm(): Promise<void> {
+    return this.delegate instanceof UserCoordinatorRuntime
+      ? this.delegate.alarm()
+      : Promise.resolve();
+  }
+}
+
 /** Compose private HTTP, Queue and schedule entrypoints without acquiring owner implementation. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: makeCoreHttp(telemetry),
   queue: makeCoreQueue(telemetry),
   scheduled: (_controller, environment) =>
     Effect.gen(function* () {
-      const executor = environment.CORE_MAINTENANCE;
-      if (executor === undefined) return yield* new ScheduledWorkFailed();
+      const executor = environment.USER_TRANSACTION_COORDINATOR;
       const response = yield* Effect.tryPromise({
         try: (signal) =>
           executor

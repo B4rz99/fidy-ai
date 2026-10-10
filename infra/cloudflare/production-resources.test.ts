@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import { resourceFailureMessage } from "./production-resources";
 
 describe("resource release refusal diagnostics", () => {
+  it("identifies a rejected Worker version configuration without publishing its provider message", () => {
+    expect(
+      resourceFailureMessage(
+        Cause.fail({
+          _tag: "WorkerVersionConfigError",
+          message: "private Worker binding configuration",
+        })
+      )
+    ).toBe("Alchemy resource operation failed (WorkerVersionConfigError); inspect release state.");
+  });
   it("retains provider refusal codes without foreign messages or bodies", () => {
     const cause = Cause.fail({
       _tag: "Forbidden",

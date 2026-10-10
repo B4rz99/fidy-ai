@@ -423,11 +423,7 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
   if (existing !== undefined) return existing;
   const coordinator = new UserTransactionCoordinator(
     { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
-    {
-      DB: browserDatabase,
-      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-      HOSTED_AI_MODEL: approvedWorkersAiModel,
-    }
+    coreEnvironment
   );
   const fetcher = {
     fetch: (command: RequestInfo | URL): Promise<Response> =>
@@ -438,6 +434,34 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
 };
 const admissionKeyLength = 32;
 const digestHexLength = 64;
+const coreEnvironment: Parameters<typeof core.fetch>[1] = {
+  DB: browserDatabase,
+  AI: { run: () => Promise.reject(new Error("unused")) },
+  CONTRACT_DIGEST: "a".repeat(digestHexLength),
+  RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  BROWSER_ORIGIN: browserOrigin,
+  MICROSOFT_CLIENT_ID: "acceptance-microsoft",
+  MICROSOFT_CLIENT_SECRET: "synthetic-microsoft-secret",
+  MICROSOFT_REDIRECT_URI: "https://127.0.0.1:4174/providers/microsoft/callback",
+  GOOGLE_CLIENT_ID: "acceptance-google",
+  GOOGLE_CLIENT_SECRET: "synthetic-google-secret",
+  GOOGLE_REDIRECT_URI: "https://127.0.0.1:4174/providers/google/callback",
+  WOMPI_ENVIRONMENT: "sandbox",
+  WOMPI_PUBLIC_KEY: providerPublicKey,
+  WOMPI_PRIVATE_KEY: providerPrivateKey,
+  WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+  ...syntheticDaviplataBindings,
+  USER_TRANSACTION_COORDINATOR: {
+    getByName: coordinatorFor,
+  },
+  KAPSO_API_KEY: "acceptance-kapso-key",
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
+  KAPSO_WEBHOOK_SECRET: "acceptance-kapso-secret",
+  CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
+  CLOUDFLARE_ACCESS_AUDIENCE: accessAudience,
+  WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
+};
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: publicPort,
@@ -456,35 +480,7 @@ const server = Bun.serve({
         LOCAL_CANONICAL_READ_BEARER: "",
         PAT_ADMISSION_KEY: "a".repeat(admissionKeyLength),
         CORE: {
-          fetch: (forwarded) =>
-            core.fetch(new Request(forwarded), {
-              DB: browserDatabase,
-              AI: { run: () => Promise.reject(new Error("unused")) },
-              CONTRACT_DIGEST: "a".repeat(digestHexLength),
-              RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-              HOSTED_AI_MODEL: approvedWorkersAiModel,
-              BROWSER_ORIGIN: browserOrigin,
-              MICROSOFT_CLIENT_ID: "acceptance-microsoft",
-              MICROSOFT_CLIENT_SECRET: "synthetic-microsoft-secret",
-              MICROSOFT_REDIRECT_URI: "https://127.0.0.1:4174/providers/microsoft/callback",
-              GOOGLE_CLIENT_ID: "acceptance-google",
-              GOOGLE_CLIENT_SECRET: "synthetic-google-secret",
-              GOOGLE_REDIRECT_URI: "https://127.0.0.1:4174/providers/google/callback",
-              WOMPI_ENVIRONMENT: "sandbox",
-              WOMPI_PUBLIC_KEY: providerPublicKey,
-              WOMPI_PRIVATE_KEY: providerPrivateKey,
-              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-              ...syntheticDaviplataBindings,
-              USER_TRANSACTION_COORDINATOR: {
-                getByName: coordinatorFor,
-              },
-              KAPSO_API_KEY: "acceptance-kapso-key",
-              WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-              KAPSO_WEBHOOK_SECRET: "acceptance-kapso-secret",
-              CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
-              CLOUDFLARE_ACCESS_AUDIENCE: accessAudience,
-              WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-            }),
+          fetch: (forwarded) => core.fetch(new Request(forwarded), coreEnvironment),
         },
       })
       .then(bridgeBrowserOrigin);

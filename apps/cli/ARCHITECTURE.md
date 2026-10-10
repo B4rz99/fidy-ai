@@ -253,3 +253,13 @@ its synthetic credential and replaced transport invoke the same generated client
 stderr/stdout presentation as production. It proves Free success, exhausted and declared-failure
 metadata, shared-PAT replay standing, Trial uncapped standing and security refusal. This is local
 server-adapter-to-CLI evidence, not a live ingress/provider or Production test.
+
+## Standalone release candidates
+
+`command/installation.ts` publishes only version and basic help before credential-store startup;
+canonical operation discovery still uses the saved grant. `scripts/cli-release/build.sh` compiles
+natively with the same pinned Bun bytes and packages a single executable. The read-only release
+candidate workflow validates Linux x64, macOS arm64 and Windows x64; it never publishes a release.
+See [installation and release gates](../../docs/guides/cli-installation.md). Runtime revision guards,
+credential storage and server authorization are unchanged. Public installer URLs must not be
+advertised until an approved release is actually available anonymously.

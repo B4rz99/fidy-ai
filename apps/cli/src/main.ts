@@ -2,6 +2,7 @@
 import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit, Layer, Option, Path, Schema, Terminal } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
+import { installationOutput } from "./command/installation";
 import { formatFailure, formatOutput, runCommand } from "./command/operations";
 import { CliFailure } from "./credential/contract";
 import { makeCredentialStore, supportedBunRevision } from "./credential/runtime";
@@ -32,7 +33,7 @@ const runOperator = Effect.fn(function* () {
   });
   if (yield* runSupportRecovery(args, operator)) process.exitCode = 1;
 });
-const program = Effect.gen(function* () {
+const authenticatedProgram = Effect.gen(function* () {
   yield* validateFlags();
   if (commandArgs[0] === "support-recovery") {
     return yield* runOperator();
@@ -92,6 +93,14 @@ const program = Effect.gen(function* () {
       ),
   });
 }).pipe(Effect.scoped);
+const program = Effect.gen(function* () {
+  const installation = installationOutput(args);
+  if (Option.isSome(installation)) {
+    process.stdout.write(installation.value);
+  } else {
+    yield* authenticatedProgram;
+  }
+});
 const interruptedExitCode = 130;
 
 if (import.meta.main) {

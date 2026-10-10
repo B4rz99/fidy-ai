@@ -1,0 +1,58 @@
+name: CLI release candidates
+on:
+  pull_request:
+    branches: [trunk]
+    paths:
+      - "apps/cli/**"
+      - "scripts/cli-release/**"
+      - ".github/workflows/cli-release-build.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cli-release-candidates-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  packages:
+    name: Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/bun-install
+        with:
+          save-cache: "false"
+      - name: Build native standalone release candidate
+        shell: bash
+        run: bash scripts/cli-release/build.sh
+      - name: Verify repeat-build archive identity
+        shell: bash
+        run: |
+          bash scripts/cli-release/build.sh dist/cli-repeat
+          for archive in dist/cli-release/*.zip; do
+            cmp "$archive" "dist/cli-repeat/$(basename "$archive")"
+          done
+      - name: Test POSIX installer failure safety
+        if: runner.os != 'Windows'
+        run: python3 scripts/cli-release/test-install.py
+      - name: Test Windows installer and corruption safety
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/cli-release/test-install.ps1
+      - name: Preserve candidate archives and checksums
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-candidate-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/cli-release/*.zip
+            dist/cli-release/*.sha256
+            dist/cli-release/install.sh
+            dist/cli-release/install.ps1
+          if-no-files-found: error
+          retention-days: 14

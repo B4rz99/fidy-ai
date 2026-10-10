@@ -288,6 +288,7 @@ export const statementClarificationTestMigrations = [
   "0034_statement_clarification_audit",
   "0035_statement_hosted_origin",
   "0036_statement_whatsapp_documents",
+  "0077_statement_materialization",
 ] as const;
 /** Canonical Audit's full shared-budget dependencies for owner integration harnesses. */
 export const statementAuditTestMigrations = [

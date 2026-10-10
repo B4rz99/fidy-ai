@@ -356,9 +356,56 @@ const sheetHeaders = (selected: SelectedSheet, columnCount: number): ReadonlyArr
 const sameHeaders = (left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean =>
   left.length === right.length && left.every((header, index) => header === right[index]);
 
+const referencedCellBytes = (cell: CellObject, sizes: Map<string, number>): number => {
+  let bytes = 0;
+  for (const text of [
+    cell.v === undefined ? "" : String(cell.v),
+    cell.f ?? "",
+    String(cell.z ?? ""),
+  ]) {
+    let size = sizes.get(text);
+    if (size === undefined) {
+      size = new TextEncoder().encode(text).byteLength;
+      sizes.set(text, size);
+    }
+    bytes += size;
+  }
+  return bytes;
+};
+const referencedSheetBytes = (sheet: WorkSheet, sizes: Map<string, number>): number => {
+  let bytes = 0;
+  const cells: Readonly<Record<string, CellObject>> = sheet;
+  for (const [address, cell] of Object.entries(cells)) {
+    if (!address.startsWith("!")) {
+      bytes += referencedCellBytes(cell, sizes);
+      if (bytes > statementParserLimits.maximumReferencedTextBytes) {
+        throw new StatementParseFailed({ safeReason: "resource-limit" });
+      }
+    }
+  }
+  return bytes;
+};
+const admitWorkbookText = (workbook: WorkBook): void => {
+  const sizes = new Map<string, number>();
+  let referencedBytes = 0;
+  let totalCells = 0;
+  for (const selected of selectedSheets(workbook)) {
+    totalCells +=
+      assertSheetLimits(selected.originalRange) *
+      (selected.originalRange.e.r - selected.originalRange.s.r + 1);
+    referencedBytes += referencedSheetBytes(selected.sheet, sizes);
+    if (
+      totalCells > maximumCells ||
+      referencedBytes > statementParserLimits.maximumReferencedTextBytes
+    ) {
+      throw new StatementParseFailed({ safeReason: "resource-limit" });
+    }
+  }
+};
+
 export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
   assertZipExpansion(bytes);
-  const workbook = XLSX.read(bytes, {
+  const options = {
     type: "array",
     raw: true,
     cellFormula: true,
@@ -366,8 +413,13 @@ export const parseXlsx = (bytes: Uint8Array): ParsedStatementMaterial => {
     cellText: true,
     cellDates: true,
     cellStyles: true,
+    cellHTML: false,
     sheetRows: maximumRows + 2,
-  });
+  } as const;
+  // Shared-string references are cheap until formatting/evidence repeats their text.
+  // Admit that multiplier before the normal evidence-producing read.
+  admitWorkbookText(XLSX.read(bytes, { ...options, cellText: false }));
+  const workbook = XLSX.read(bytes, options);
   const sheets = selectedSheets(workbook);
   let totalCells = 0;
   let expectedHeaders = Option.none<ReadonlyArray<string>>();

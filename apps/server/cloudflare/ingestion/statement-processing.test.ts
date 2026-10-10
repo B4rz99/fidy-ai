@@ -53,12 +53,14 @@ const migrations = [
   "0032_statement_capture_entitlement",
   "0033_statement_clarification",
   "0035_statement_hosted_origin",
+  "0077_statement_materialization",
 ];
 const storage = isolatedTestStorage();
 
 const setup = (
   content: string | Uint8Array,
-  sourceFormat: "csv" | "xlsx" = "csv"
+  sourceFormat: "csv" | "xlsx" = "csv",
+  schemaMigrations: ReadonlyArray<string> = migrations
 ): Promise<{ db: D1Database; bucket: R2Bucket }> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -66,7 +68,9 @@ const setup = (
       yield* fromTestPromise(() =>
         installTestSchema({
           db,
-          sources: migrations.map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+          sources: schemaMigrations.map(
+            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+          ),
         })
       );
       const current = currentMillis();
@@ -637,7 +641,7 @@ effectIt.effect(
           if (key === "batch") {
             return (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
               batches++;
-              if (batches === 2) {
+              if (batches === 3) {
                 throw new Error("simulated interruption before second row commit");
               }
               return target.batch(...args);
@@ -1043,6 +1047,16 @@ effectIt.effect(
       );
       expect(state).toMatchObject({ status: "failed", input_rows: 32, needs_review_rows: 32 });
       expect(entitlement?.consumed_at_ms).toBeNull();
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM statement_materializations").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM statement_materialization_parts").first()
+        )
+      ).toEqual({ count: 0 });
     })
 );
 
@@ -1176,10 +1190,8 @@ const boundedStatementCsv = (): string =>
   Array.from({ length: 97 }, (_, index) => `2026-08-01,-${index + 1},COP,Cafe`).join("\n") +
   "\n";
 
-// These source-IO assertions characterize the current cost. The durable staging work
-// will replace the four-read expectation with one original read and bounded chunk reads.
 effectIt.effect(
-  "measures four complete source reads while finalizing 97 rows exactly once",
+  "reads the original once while finalizing 97 rows exactly once across restarts",
   () =>
     Effect.gen(function* () {
       const csv = boundedStatementCsv();
@@ -1198,9 +1210,9 @@ effectIt.effect(
       }
       expect(yield* processStatementSubmission(input)).toBe("completed");
       expect(monitored.observed).toEqual({
-        heads: 4,
-        gets: 4,
-        bytes: new TextEncoder().encode(csv).byteLength * 4,
+        heads: 1,
+        gets: 1,
+        bytes: new TextEncoder().encode(csv).byteLength,
       });
       const counts = yield* fromTestPromise(() =>
         db
@@ -1217,7 +1229,7 @@ effectIt.effect(
 );
 
 effectIt.effect(
-  "measures retry source IO across pre-commit failure and a lost commit response",
+  "recovers partial materialization once and publishes a lost write response without duplicate captures",
   () =>
     Effect.gen(function* () {
       const csv = boundedStatementCsv();
@@ -1260,15 +1272,15 @@ effectIt.effect(
         yield* fromTestPromise(() =>
           db.prepare("SELECT count(*) AS count FROM transactions").first()
         )
-      ).toEqual({ count: 1 });
-      for (const expected of ["continue", "continue", "completed"]) {
+      ).toEqual({ count: 0 });
+      for (const expected of ["continue", "continue", "continue", "completed"]) {
         expect(yield* processStatementSubmission(input)).toBe(expected);
       }
       expect(yield* processStatementSubmission(input)).toBe("completed");
       expect(monitored.observed).toEqual({
-        heads: 5,
-        gets: 5,
-        bytes: new TextEncoder().encode(csv).byteLength * 5,
+        heads: 2,
+        gets: 2,
+        bytes: new TextEncoder().encode(csv).byteLength * 2,
       });
       const counts = yield* fromTestPromise(() =>
         db
@@ -1373,7 +1385,7 @@ effectIt.effect(
             .first()
         )
       ).toEqual({ count: 0 });
-      expect(monitored.observed).toEqual({ heads: 2, gets: 2, bytes: 2 * source.byteLength });
+      expect(monitored.observed).toEqual({ heads: 1, gets: 1, bytes: source.byteLength });
     })
 );
 
@@ -1580,43 +1592,45 @@ effectIt.effect("fails an already-processing oversized review row without undoin
           .first()
       )
     ).toEqual({ submission_id: submissionId, consumed: 1 });
-    expect(monitored.observed).toEqual({ heads: 2, gets: 2, bytes: 2 * source.byteLength });
+    expect(monitored.observed).toEqual({ heads: 1, gets: 1, bytes: source.byteLength });
   })
 );
 
-effectIt.effect("captures one activity from a thousand repeated large accepted values", () =>
-  Effect.gen(function* () {
-    const source = yield* fromTestPromise(() =>
-      Bun.file(
-        new URL(
-          "../../src/shell/ingestion/internal/fixtures/shared-string-repeated-accepted.xlsx",
-          import.meta.url
-        )
-      ).bytes()
-    );
-    const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
-    const monitored = observeStatementReads(bucket);
-    expect(
-      yield* processStatementSubmission({
-        DB: db,
-        STATEMENT_STAGING_BUCKET: monitored.bucket,
-        userId: userA,
-        submissionId,
-      })
-    ).toBe("continue");
-    expect(
-      yield* fromTestPromise(() =>
-        db
-          .prepare(`SELECT
+effectIt.effect(
+  "rejects derived material above its aggregate budget before capturing any rows",
+  () =>
+    Effect.gen(function* () {
+      const source = yield* fromTestPromise(() =>
+        Bun.file(
+          new URL(
+            "../../src/shell/ingestion/internal/fixtures/shared-string-repeated-accepted.xlsx",
+            import.meta.url
+          )
+        ).bytes()
+      );
+      const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
+      const monitored = observeStatementReads(bucket);
+      expect(
+        yield* processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: monitored.bucket,
+          userId: userA,
+          submissionId,
+        })
+      ).toBe("completed");
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT
       (SELECT count(*) FROM transactions WHERE counterparty='Cafe') AS transactions,
       (SELECT count(*) FROM source_attestations) AS attestations,
       (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
       (SELECT count(*) FROM statement_needs_review) AS reviews`)
-          .first()
-      )
-    ).toEqual({ transactions: 32, attestations: 32, outcomes: 32, reviews: 0 });
-    expect(monitored.observed).toEqual({ heads: 1, gets: 1, bytes: source.byteLength });
-  })
+            .first()
+        )
+      ).toEqual({ transactions: 0, attestations: 0, outcomes: 0, reviews: 0 });
+      expect(monitored.observed).toEqual({ heads: 1, gets: 1, bytes: source.byteLength });
+    })
 );
 
 effectIt.effect("releases an unspent reservation when the first review row exceeds storage", () =>
@@ -1683,4 +1697,223 @@ effectIt.effect("releases an unspent reservation when the first review row excee
     ).toEqual({ submission_id: null, consumed_at_ms: null });
     expect(monitored.observed).toEqual({ heads: 1, gets: 1, bytes: source.byteLength });
   })
+);
+
+effectIt.effect(
+  "refuses corrupted derived evidence without rereading source or duplicating earlier captures",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+      const monitored = observeStatementReads(bucket);
+      const input = {
+        DB: db,
+        STATEMENT_STAGING_BUCKET: monitored.bucket,
+        userId: userA,
+        submissionId,
+      };
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      yield* fromTestPromise(() =>
+        db.prepare("DROP TRIGGER statement_materialization_part_immutable").run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "UPDATE statement_materialization_parts SET body='[]' WHERE submission_id=? AND chunk_index=1"
+          )
+          .bind(submissionId)
+          .run()
+      );
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM transactions").first()
+        )
+      ).toEqual({ count: 32 });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT status,failure_reason FROM statement_submissions WHERE id=?")
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ status: "failed", failure_reason: "malformed-file" });
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM statement_materialization_parts").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(monitored.observed.gets).toBe(1);
+    })
+);
+effectIt.effect(
+  "refuses a substituted source digest after publication without consuming another chunk",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+      const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE statement_staging_objects SET sha256=? WHERE id=?")
+          .bind("0".repeat(64), stagingId)
+          .run()
+      );
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM transactions").first()
+        )
+      ).toEqual({ count: 32 });
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM statement_materializations").first()
+        )
+      ).toEqual({ count: 0 });
+    })
+);
+effectIt.effect("a foreign User cannot read or finalize a published materialization", () =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+    const monitored = observeStatementReads(bucket);
+    const input = {
+      DB: db,
+      STATEMENT_STAGING_BUCKET: monitored.bucket,
+      userId: userA,
+      submissionId,
+    };
+    expect(yield* processStatementSubmission(input)).toBe("continue");
+    expect(yield* processStatementSubmission({ ...input, userId: userB })).toBe("completed");
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT processed_rows,status FROM statement_submissions WHERE id=?")
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({ processed_rows: 32, status: "processing" });
+    expect(
+      yield* fromTestPromise(() =>
+        db.prepare("SELECT count(*) AS count FROM transactions WHERE user_id=?").bind(userB).first()
+      )
+    ).toEqual({ count: 0 });
+    expect(monitored.observed.gets).toBe(1);
+  })
+);
+
+effectIt.effect(
+  "migration preserves existing row receipts and atomically rejects a skipped cursor",
+  () =>
+    Effect.gen(function* () {
+      const { db } = yield* fromTestPromise(() =>
+        setup(
+          "Header\nvalue",
+          "csv",
+          migrations.filter((name) => name !== "0077_statement_materialization")
+        )
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,1,'needs-review'),(?,?,2,'needs-review')"
+          )
+          .bind(userA, submissionId, userA, submissionId)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0077_statement_materialization.sql", import.meta.url),
+        })
+      );
+      const progress = (): ReturnType<D1PreparedStatement["first"]> =>
+        db
+          .prepare(
+            "SELECT processed_rows,processed_accepted_rows,processed_review_rows FROM statement_submissions WHERE id=?"
+          )
+          .bind(submissionId)
+          .first();
+      expect(yield* fromTestPromise(progress)).toEqual({
+        processed_rows: 2,
+        processed_accepted_rows: 0,
+        processed_review_rows: 2,
+      });
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,3,'needs-review')"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      const skipped = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,5,'needs-review')"
+            )
+            .bind(userA, submissionId)
+            .run()
+        )
+      );
+      expect(Exit.isFailure(skipped)).toBe(true);
+      expect(yield* fromTestPromise(progress)).toEqual({
+        processed_rows: 3,
+        processed_accepted_rows: 0,
+        processed_review_rows: 3,
+      });
+    })
+);
+
+effectIt.effect(
+  "materializes the 20,000-row ceiling within one bounded D1 activity and reuses it",
+  () =>
+    Effect.gen(function* () {
+      const csv =
+        "fecha,valor,moneda,contraparte\n" +
+        Array.from(
+          { length: statementParserLimits.maximumRows },
+          () => "2026-08-01,-1,COP,Cafe"
+        ).join("\n") +
+        "\n";
+      const { db, bucket } = yield* fromTestPromise(() => setup(csv));
+      const reads = observeStatementReads(bucket);
+      let statements = 0;
+      const measured = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "prepare") {
+            return (sql: string): D1PreparedStatement => {
+              statements += 1;
+              return target.prepare(sql);
+            };
+          }
+          const method: unknown = Reflect.get(target, property, target);
+          return typeof method === "function" ? method.bind(target) : method;
+        },
+      });
+      const input = {
+        DB: measured,
+        STATEMENT_STAGING_BUCKET: reads.bucket,
+        userId: userA,
+        submissionId,
+      };
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(statements).toBeLessThan(1000);
+      const initialStatements = statements;
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(statements - initialStatements).toBeLessThan(200);
+      expect(reads.observed).toEqual({
+        heads: 1,
+        gets: 1,
+        bytes: new TextEncoder().encode(csv).byteLength,
+      });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT processed_rows FROM statement_submissions WHERE id=?")
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ processed_rows: 64 });
+    }),
+  30_000
 );

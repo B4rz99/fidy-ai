@@ -51,22 +51,12 @@ it.effect("characterizes shared-string row evidence above the D1 string limit", 
   })
 );
 
-it.effect("characterizes repeated shared-string material above the ZIP expansion budget", () =>
+it.effect("rejects aggregate shared-string amplification before retaining parsed rows", () =>
   Effect.gen(function* () {
     const source = yield* bytes("shared-string-total-limit");
-    const parsed = yield* parseStatementFile(source);
     expect(source.byteLength).toBeLessThan(8_000);
-    expect(parsed.rows).toHaveLength(40);
-    // Count referenced text only. Do not serialize the entire amplified document in this probe.
-    let textBytes = 0;
-    for (const row of parsed.rows) {
-      if (row.evidence.sourceFormat !== "xlsx") return yield* Effect.die("Expected XLSX evidence");
-      for (const field of row.fields) textBytes += field.length;
-      for (const cell of row.evidence.cells) {
-        textBytes += cell.value.length;
-        textBytes += Option.getOrElse(cell.formattedText, () => "").length;
-      }
-    }
-    expect(textBytes).toBe(31_457_280);
+    const result = yield* Effect.result(parseStatementFile(source));
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") expect(result.failure.safeReason).toBe("resource-limit");
   })
 );

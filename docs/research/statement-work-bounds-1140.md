@@ -205,3 +205,32 @@ revision and retention deadline, durable cleanup ownership before R2 writes, ver
 bounded chunk reads and atomic progress counters. Test crashes at every write/publication/commit/
 deletion boundary. Retain existing cap, abandonment and privacy semantics. This larger work remains
 open under #1130/#1140 and is not implemented by the review-record fix.
+
+## Follow-up implementation of the remaining gaps
+
+The follow-up replaces the deferred reusable-parsing design above with private D1 fragments.
+This makes derived publication, owner checks, progress receipts and terminal cleanup transactional
+within one store; it avoids a second R2 write/deletion protocol. The original upload stays in R2.
+Normal processing reads and hashes that upload once. A partial interrupted materialization permits
+one rebuild; a complete generation with a lost publication response is reused directly. Each later
+activity loads at most 32 derived rows. Receipt counters replace repeated prefix COUNT queries.
+
+The retained rows have a 16 MiB encoded JSON budget, measured before encoding, with at most 1,024
+fragments of at most 512 KiB UTF-8 each. Headers have a separate 512 KiB budget. The manifest pins
+User, source digest, parser revision, format and original expiry. Fragment hashes, order and row
+numbers are verified before use. Terminal failure/completion and expiry cascade-delete the cache,
+while preserving already committed Transactions and entitlement accounting.
+
+XLSX now performs a value-only preflight before formatted parsing. The complete workbook's
+referenced value, formula and number-format text is capped at 8 MiB. Existing date, display,
+number-format and 1904-date provenance remains unchanged. The 7,594-byte shared-string fixture
+that previously represented 31,457,280 referenced field/value/display bytes now fails closed before
+formatted parsing. These are logical-data bounds; they do not claim measured peak isolate heap
+or production CPU limits. Large previously accepted representations may now fail resource-limit.
+
+D1 outage alerts use one bounded metadata claim in the existing private R2 staging bucket.
+Conditional writes deduplicate concurrent checks; a stable identity and original release survive
+ambiguous email delivery and restarts. Firing repeats have a 30-minute floor, retries wait five
+minutes and attempts are capped at six per generation. Recovery sends once. Storage/provider waits
+are bounded, and failed R2 claims cannot suppress ordinary alerts when D1 remains healthy.
+Scheduled health also isolates failed D1 metrics reads so the independent route is reachable.

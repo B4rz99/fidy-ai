@@ -65,3 +65,33 @@ it.live("rejects empty-field amplification in workerd and continues serving vali
     });
   })
 );
+
+it.live(
+  "rejects shared-string amplification in workerd and still accepts bounded XLSX evidence",
+  () =>
+    Effect.gen(function* () {
+      const module = yield* Effect.tryPromise(buildParser);
+      const runtime = yield* Effect.acquireRelease(
+        Effect.sync(() => parserRuntime(module)),
+        (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
+      );
+      for (const [fixture, status] of [
+        ["shared-string-total-limit", 413],
+        ["shared-string-small", 200],
+        ["shared-string-row-limit", 200],
+      ] as const) {
+        const source = yield* Effect.tryPromise(() =>
+          Bun.file(
+            new URL(`../../src/shell/ingestion/internal/fixtures/${fixture}.xlsx`, import.meta.url)
+          ).bytes()
+        );
+        const response = yield* Effect.tryPromise(() =>
+          runtime.dispatchFetch("https://parser.internal/statement", {
+            method: "POST",
+            body: source,
+          })
+        );
+        expect(response.status).toBe(status);
+      }
+    })
+);

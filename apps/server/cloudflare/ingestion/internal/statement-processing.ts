@@ -27,6 +27,7 @@ import { prepareStatementCapture } from "../../transactions/operations";
 import { StatementProcessingUnavailable } from "../contract";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
+import { materializeStatement, readMaterializedChunk } from "./statement-materialization";
 import { statementChunkSize } from "./statement-processing-limits";
 import { statementReviewAdmission } from "./statement-review-budget";
 
@@ -355,8 +356,8 @@ const rowOutcome = (
  * serialize all processing and retention work for this User; an opaque submission id is never
  * authority. D1 atomically commits each row with its evidence, so retry resumes from the unique
  * (submission, record) outcome. Each call commits at most 32 rows, returning `continue` for
- * another named Workflow activity or `completed` for terminal state. Every reread stays below
- * the parser's 5 MiB input ceiling and the Workflow's admitted row/step ceiling. Infrastructure
+ * another named Workflow activity or `completed` for terminal state. Complete derived material
+ * is published once and reused within its original retention purpose. Infrastructure
  * failures reject for durable redelivery; unsafe material becomes terminal or visible review.
  */
 type ProcessInput = Readonly<{
@@ -478,10 +479,8 @@ const readProgress = (
 ): Effect.Effect<Progress, StatementProcessingDependencyFailed | Schema.SchemaError> =>
   Effect.gen(function* () {
     const raw = yield* attempt(() =>
-      input.DB.prepare(`SELECT count(*) AS total,
-    coalesce(sum(outcome = 'accepted'), 0) AS accepted,
-    coalesce(sum(outcome = 'needs-review'), 0) AS review
-    FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?`)
+      input.DB.prepare(`SELECT processed_rows AS total, processed_accepted_rows AS accepted,
+    processed_review_rows AS review FROM statement_submissions WHERE id = ? AND user_id = ?`)
         .bind(input.submissionId, input.userId)
         .first()
     );
@@ -508,19 +507,17 @@ const finalizeChunk = ({
   context,
   parsed,
   rows,
-  progress,
 }: Readonly<{
   input: ProcessInput;
   context: SubmissionRow;
   parsed: ParsedStatement;
   rows: ReadonlyArray<ParsedStatementRow>;
-  progress: Progress;
 }>): Effect.Effect<
   void,
   StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const chunk = rows.slice(progress.total, progress.total + statementChunkSize);
+    const chunk = rows.slice(0, statementChunkSize);
     const mapping = mechanicalMappingFor(parsed.headers);
     const interpreted = Option.isSome(mapping)
       ? yield* interpretStatementRows(
@@ -619,7 +616,7 @@ const completeSubmission = (
 const advanceSubmission = (
   input: ProcessInput,
   context: SubmissionRow,
-  parsed: ParsedStatement
+  parsed: ParsedStatement & Readonly<{ totalRows: number }>
 ): Effect.Effect<
   "continue" | "completed",
   StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
@@ -636,22 +633,25 @@ const advanceSubmission = (
         .run()
     );
     const progress = yield* readProgress(input);
-    if (progress.total > rows.length || progress.accepted + progress.review !== progress.total) {
+    if (
+      progress.total > parsed.totalRows ||
+      progress.accepted + progress.review !== progress.total
+    ) {
       return yield* new StatementProcessingDependencyFailed({
         cause: new Error("Statement accounting unavailable"),
       });
     }
-    if (progress.total < rows.length) {
-      yield* finalizeChunk({ input, context, parsed, rows, progress });
+    if (progress.total < parsed.totalRows) {
+      yield* finalizeChunk({ input, context, parsed, rows });
     }
     const counts = yield* readProgress(input);
-    if (counts.total < rows.length) return "continue";
-    if (counts.total !== rows.length || counts.accepted + counts.review !== rows.length) {
+    if (counts.total < parsed.totalRows) return "continue";
+    if (counts.total !== parsed.totalRows || counts.accepted + counts.review !== parsed.totalRows) {
       return yield* new StatementProcessingDependencyFailed({
         cause: new Error("Statement accounting unavailable"),
       });
     }
-    yield* completeSubmission(input, rows.length, counts);
+    yield* completeSubmission(input, parsed.totalRows, counts);
     return "completed";
   });
 
@@ -674,18 +674,43 @@ export const processStatementSubmission = (
       });
       return "completed";
     }
-    const parsed = yield* readParsed(input, context.value);
-    return Option.isSome(parsed)
-      ? yield* advanceSubmission(input, context.value, parsed.value)
+    const identity = {
+      DB: input.DB,
+      userId: input.userId,
+      submissionId: input.submissionId,
+      sourceHash: context.value.sha256,
+      parserRevision: context.value.parser_revision,
+      sourceFormat: context.value.source_format,
+      expiresAtMs: context.value.retention_expires_at_ms,
+    };
+    const progress = yield* readProgress(input);
+    let chunk = yield* readMaterializedChunk({ ...identity, offset: progress.total });
+    if (Option.isNone(chunk)) {
+      const parsed = yield* readParsed(input, context.value);
+      if (Option.isNone(parsed)) return "completed";
+      yield* materializeStatement({ ...identity, parsed: parsed.value });
+      chunk = yield* readMaterializedChunk({ ...identity, offset: progress.total });
+    }
+    return Option.isSome(chunk)
+      ? yield* advanceSubmission(input, context.value, chunk.value)
       : "completed";
   }).pipe(
-    Effect.catchTag("StatementReviewBudgetExceeded", () =>
-      markFailed({
-        db: input.DB,
-        userId: input.userId,
-        submissionId: input.submissionId,
-        reason: "resource-limit",
-      }).pipe(Effect.as("completed" as const))
-    ),
+    Effect.catchTags({
+      StatementMaterializationUnavailable: () => Effect.fail(new StatementProcessingUnavailable()),
+      StatementMaterializationFailed: (error) =>
+        markFailed({
+          db: input.DB,
+          userId: input.userId,
+          submissionId: input.submissionId,
+          reason: error.reason,
+        }).pipe(Effect.as("completed" as const)),
+      StatementReviewBudgetExceeded: () =>
+        markFailed({
+          db: input.DB,
+          userId: input.userId,
+          submissionId: input.submissionId,
+          reason: "resource-limit",
+        }).pipe(Effect.as("completed" as const)),
+    }),
     Effect.mapError(() => new StatementProcessingUnavailable())
   );

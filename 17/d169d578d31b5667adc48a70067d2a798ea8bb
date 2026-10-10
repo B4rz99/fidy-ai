@@ -1,0 +1,21 @@
+scripts/cli-release/install.ps1
+  s_10fe5273e79fbe::t_882bc5dea328fd 38
+scripts/cli-release/test-install.ps1
+  s_10fe5273e79fbe::t_882bc5dea328fd 55-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17d169d578d31b5667adc48a70067d2a798ea8bb",
+  "prompts": {},
+  "sessions": {
+    "s_10fe5273e79fbe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a127e6-2de5-7951-9eb2-85f36c3f3d0e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

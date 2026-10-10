@@ -1,0 +1,25 @@
+scripts/cli-release/release.py
+  s_10fe5273e79fbe::t_4376b23445119d 55-57
+scripts/cli-release/test-release.py
+  s_10fe5273e79fbe::t_6347ea8d2ee673 103-121
+docs/guides/cli-installation.md
+  s_10fe5273e79fbe::t_3433aa26334022 46-47,49-50
+apps/cli/ARCHITECTURE.md
+  s_10fe5273e79fbe::t_3433aa26334022 271-272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6e83276e28d5a7d4aeb211395264ee5d93de6fd",
+  "prompts": {},
+  "sessions": {
+    "s_10fe5273e79fbe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a127e6-2de5-7951-9eb2-85f36c3f3d0e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

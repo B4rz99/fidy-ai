@@ -13,10 +13,10 @@ function Invoke-WebRequest {
   param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
   Copy-Item (Join-Path $FixtureRelease ([IO.Path]::GetFileName($Uri))) $OutFile
 }
-$ExtractionCount = 0
+$Extraction = @{ Count = 0 }
 function Expand-Archive {
   param([string]$Path, [string]$DestinationPath)
-  $script:ExtractionCount += 1
+  $Extraction.Count += 1
   Microsoft.PowerShell.Archive\Expand-Archive -Path $Path -DestinationPath $DestinationPath
 }
 function Write-HostileArchive {
@@ -48,7 +48,7 @@ try {
   & "$PSScriptRoot/install.ps1" -Version '0.1.0'
   $Installed = Join-Path $env:LOCALAPPDATA 'Programs\Fidy\fidy.exe'
   if ((& $Installed --version) -ne 'fidy 0.1.0') { throw 'Installed executable failed.' }
-  if ($ExtractionCount -ne 1) { throw 'Positive installer did not exercise actual extraction.' }
+  if ($Extraction.Count -ne 1) { throw 'Positive installer did not exercise actual extraction.' }
   $PreviousHash = (Get-FileHash $Installed).Hash
   Set-Content (Join-Path $FixtureRelease 'fidy-windows-x64.zip') 'corrupt download'
   $Rejected = $false
@@ -68,14 +68,14 @@ try {
   foreach ($Case in $Cases) {
     Write-HostileArchive -Entries $Case.Names
     $BeforeFiles = @(Get-ChildItem -Recurse -File $FixtureRoot | ForEach-Object FullName | Sort-Object)
-    $BeforeExtraction = $ExtractionCount
+    $BeforeExtraction = $Extraction.Count
     $Failure = ''
     try { & "$PSScriptRoot/install.ps1" -Version '0.1.0' } catch { $Failure = $_.Exception.Message }
     if ($Failure -ne 'Unexpected archive contents.') {
       throw "Hostile archive did not reach and fail the entry-name gate: $Failure"
     }
     # No extraction means the fresh temporary directory cannot contain an executable to launch.
-    if ($ExtractionCount -ne $BeforeExtraction) { throw 'Hostile archive reached extraction.' }
+    if ($Extraction.Count -ne $BeforeExtraction) { throw 'Hostile archive reached extraction.' }
     if ((Get-FileHash $Installed).Hash -ne $PreviousHash) { throw 'Hostile update changed installation.' }
     if ($env:Path -ne $InstalledPath -or
         [Environment]::GetEnvironmentVariable('Path', 'User') -ne $InstalledUserPath) {

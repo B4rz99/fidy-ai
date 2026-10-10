@@ -20,6 +20,7 @@ export const effectiveTransactionRelation = (userId: string): EffectiveTransacti
       WHERE user_id = ? AND state = 'linked'),
     linked_member AS (SELECT decision.first_transaction_id, decision.second_transaction_id,
       retained.id FROM linked_decision decision JOIN transactions retained
+        INDEXED BY sqlite_autoindex_transactions_2
         ON retained.user_id = decision.user_id
         AND retained.id IN (decision.first_transaction_id, decision.second_transaction_id)),
     effective_transaction AS (SELECT * FROM dashboard_effective_source WHERE user_id = ?)`,

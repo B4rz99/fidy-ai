@@ -159,6 +159,7 @@ const migrationNames = [
   "0018_forwarded_email_processing",
   "0019_canonical_child_guards",
   "0020_dashboard_projection",
+  "0075_transaction_query_costs",
   ...hostedTurnTestMigrations,
   "0027_recurring",
   "0028_recurring_audit_budget",

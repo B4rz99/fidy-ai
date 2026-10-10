@@ -84,6 +84,7 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
           "0018_batch_envelope_audit",
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
+          "0075_transaction_query_costs",
           "0009_email_replacement",
           "0018_dashboard",
           "0018_insight_events",

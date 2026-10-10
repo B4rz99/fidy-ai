@@ -55,6 +55,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
           "0018_dashboard",
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
+          "0075_transaction_query_costs",
           "0027_recurring",
         ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
       })

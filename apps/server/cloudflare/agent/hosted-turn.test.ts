@@ -241,6 +241,7 @@ const migrationNames = [
   "0019_canonical_child_guards",
   "0020_restore_audit_budgets",
   "0020_dashboard_projection",
+  "0075_transaction_query_costs",
   ...hostedTurnTestMigrations,
   "0035_billing_corrections",
   "0052_weekly_card_renewal",

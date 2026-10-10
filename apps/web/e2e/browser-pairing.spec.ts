@@ -204,7 +204,9 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
       expect(api.redeemCount).toBe(1);
       yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
-      yield* wait(expect(page.getByRole("heading", { name: "Transacciones" })).toBeVisible());
+      yield* wait(
+        expect(page.getByRole("heading", { name: "Transacciones", exact: true })).toBeVisible()
+      );
       expect(api.redeemCount).toBe(2);
       expect(api.maximumActiveRedeems).toBe(1);
       const [firstPollAt = 0, secondPollAt = 0] = api.redeemTimes;
@@ -220,7 +222,7 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
         ])
       );
       yield* wait(page.reload());
-      yield* wait(expect(page.getByText("America/Bogota", { exact: true })).toBeVisible());
+      yield* wait(expect(page.getByText(/America\/Bogota/u)).toBeVisible());
       expect(api.startCount).toBe(1);
       expect(yield* wait(context.cookies())).toEqual(
         expect.arrayContaining([expect.objectContaining({ name: "__Host-fidy_session" })])
@@ -422,12 +424,11 @@ const finishRealPairing = ({
 }): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(page.getByLabel("Monto en COP").fill("12500"));
+      yield* wait(page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+      yield* wait(page.getByLabel("Monto ($)").fill("12500"));
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("La Cocina"));
       yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
-      yield* wait(
-        expect(page.getByLabel("Transacción recién registrada")).toContainText("La Cocina")
-      );
+      yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("La Cocina"));
       yield* wait(editAndCheckDashboard(page));
       yield* wait(page.goto("/upgrade"));
       yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
@@ -466,7 +467,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       expect(approval.status()).toBe(noContentStatus);
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       yield* wait(
-        expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible()
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
       );
       const session = Array.findFirst(
         yield* wait(context.cookies()),
@@ -529,14 +530,13 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
         data: { id: "24000000-0000-4000-8000-000000000311" },
       });
       yield* wait(
-        expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible()
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
       );
-      yield* wait(page.getByLabel("Monto en COP").fill("12345"));
+      yield* wait(page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+      yield* wait(page.getByLabel("Monto ($)").fill("12345"));
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy"));
       yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
-      yield* wait(
-        expect(page.getByLabel("Transacción recién registrada")).toContainText("Recuperación Fidy")
-      );
+      yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("Recuperación Fidy"));
       yield* wait(page.reload());
       yield* wait(expect(page.getByText("Recuperación Fidy").first()).toBeVisible());
       expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");

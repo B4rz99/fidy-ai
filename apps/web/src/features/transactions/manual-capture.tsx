@@ -1,12 +1,16 @@
+import type { CaptureStatus } from "./panel-state";
 import { useAtomSet } from "@effect/atom-react";
-import { BigDecimal, DateTime, Effect, Option, Predicate } from "effect";
+import { BigDecimal, Cause, DateTime, Effect, Option, Predicate } from "effect";
 import type * as Atom from "effect/reactivity/Atom";
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
 import { Button } from "@/ui/components/button";
 import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
-import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import { CalendarField } from "@/ui/components/calendar-field";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
+import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
+import { isCanonicalInput } from "@/transport/canonical-input";
 
 type CapturedTransaction = CanonicalSuccess<"transactions.createTransaction">["data"];
 
@@ -24,30 +28,35 @@ type CaptureCommand = Readonly<{
 const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, void, never> =>
   apiClient.runtime.fn<CaptureCommand>()(
     (command) => {
-      const amount = BigDecimal.fromString(command.amount);
+      const amount = BigDecimal.fromString(command.amount.trim().replace(",", "."));
       const zoned = DateTime.makeZoned(`${command.occurredOn}T00:00:00.000Z`, {
         timeZone: command.timeZone,
         adjustForTimeZone: true,
       });
       if (
         Option.isNone(amount) ||
+        !BigDecimal.isPositive(amount.value) ||
         Option.isNone(zoned) ||
         DateTime.formatIsoDate(zoned.value) !== command.occurredOn
       ) {
         return Effect.sync(command.onFailed);
       }
+      const input: CanonicalInput<"transactions.createTransaction"> = {
+        payload: {
+          money: { amount: amount.value, currency: "COP" },
+          direction: command.direction,
+          counterparty: Option.fromNullishOr(command.counterparty.trim() || undefined),
+          notes: Option.none(),
+          categoryId: Option.none(),
+          occurredAt: DateTime.toUtc(zoned.value),
+        },
+      };
+      if (!isCanonicalInput("transactions.createTransaction", input)) {
+        return Effect.sync(command.onFailed);
+      }
       return Effect.gen(function* () {
         const client = yield* apiClient;
-        const created = yield* client.transactions.createTransaction({
-          payload: {
-            money: { amount: amount.value, currency: "COP" },
-            direction: command.direction,
-            counterparty: Option.fromNullishOr(command.counterparty.trim() || undefined),
-            notes: Option.none(),
-            categoryId: Option.none(),
-            occurredAt: DateTime.toUtc(zoned.value),
-          },
-        });
+        const created = yield* client.transactions.createTransaction(input);
         yield* Effect.sync(() => command.onSaved(created.data));
       }).pipe(
         Effect.catch((failure) =>
@@ -58,6 +67,9 @@ const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, v
               ? command.onFailed
               : command.onUncertain
           )
+        ),
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(command.onUncertain)
         )
       );
     },
@@ -68,6 +80,7 @@ type CaptureInputsProps = Readonly<{
   amount: string;
   counterparty: string;
   occurredOn: string;
+  timeZone: string;
   onAmount: (value: string) => void;
   onCounterparty: (value: string) => void;
   onOccurredOn: (value: string) => void;
@@ -76,13 +89,14 @@ const CaptureInputs = ({
   amount,
   counterparty,
   occurredOn,
+  timeZone,
   onAmount,
   onCounterparty,
   onOccurredOn,
 }: CaptureInputsProps): JSX.Element => (
   <>
     <div className="flex flex-col gap-2">
-      <Label htmlFor="transaction-amount">Monto en COP</Label>
+      <Label htmlFor="transaction-amount">Monto ($)</Label>
       <Input
         id="transaction-amount"
         required
@@ -93,12 +107,15 @@ const CaptureInputs = ({
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="transaction-date">Fecha del movimiento</Label>
-      <Input
+      <CalendarField
         id="transaction-date"
+        label="Fecha del movimiento"
         required
-        type="date"
+        timeZone={timeZone}
+        disabled={false}
+        appearance="field"
         value={occurredOn}
-        onChange={(event) => onOccurredOn(event.target.value)}
+        onChange={onOccurredOn}
       />
     </div>
     <div className="flex flex-col gap-2">
@@ -121,15 +138,20 @@ const CaptureDirection = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <Label htmlFor="transaction-direction">Dirección</Label>
-    <select
+    <ChoiceDropdown
+      triggerLabel={Option.none()}
       id="transaction-direction"
-      className="border-input bg-background h-9 rounded-md border px-3"
+      label="Dirección"
+      width="full"
+      leading={null}
+      disabled={false}
       value={value}
-      onChange={(event) => onChange(event.target.value === "inflow" ? "inflow" : "outflow")}
-    >
-      <option value="outflow">Salida</option>
-      <option value="inflow">Entrada</option>
-    </select>
+      options={[
+        { value: "outflow", label: "Gasto" },
+        { value: "inflow", label: "Ingreso" },
+      ]}
+      onChange={(next) => onChange(next === "inflow" ? "inflow" : "outflow")}
+    />
   </div>
 );
 
@@ -138,13 +160,12 @@ const currentLocalDay = (timeZone: string): string =>
     DateTime.setZone(Effect.runSync(DateTime.now), DateTime.zoneMakeNamedUnsafe(timeZone))
   );
 
-type CaptureStatus = "idle" | "saving" | "saved" | "failed" | "uncertain";
 const CaptureFeedback = ({
   status,
   onCheckHistory,
 }: Readonly<{ status: CaptureStatus; onCheckHistory: () => void }>): JSX.Element => (
   <>
-    {status === "saved" ? <output>Transacción guardada. Actualizando el historial…</output> : null}
+    {status === "saved" ? <output>Transacción guardada.</output> : null}
     {status === "uncertain" ? (
       <div>
         <p role="alert">
@@ -163,24 +184,30 @@ const CaptureFeedback = ({
 );
 
 /** Captures one browser-initiated Transaction through the generated canonical client. */
-export const ManualTransactionCapture = ({
-  apiClient,
-  onCreated,
-  timeZone,
-  onCheckHistory,
-}: Readonly<{
+type CaptureProps = Readonly<{
+  renderForm: (form: JSX.Element) => JSX.Element;
   apiClient: FidyClient;
   onCreated: (transaction: CapturedTransaction) => void;
   timeZone: string;
   onCheckHistory: () => void;
-}>): JSX.Element => {
+  status: CaptureStatus;
+  onStatus: (status: CaptureStatus) => void;
+}>;
+export const ManualTransactionCapture = ({
+  apiClient,
+  renderForm,
+  onCreated,
+  timeZone,
+  onCheckHistory,
+  status,
+  onStatus: setStatus,
+}: CaptureProps): JSX.Element => {
   const [capture] = useState(() => makeCapture(apiClient));
   const submit = useAtomSet(capture);
   const [amount, setAmount] = useState("");
   const [counterparty, setCounterparty] = useState("");
   const [occurredOn, setOccurredOn] = useState(() => currentLocalDay(timeZone));
   const [direction, setDirection] = useState<"inflow" | "outflow">("outflow");
-  const [status, setStatus] = useState<CaptureStatus>("idle");
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     if (status === "saving" || status === "uncertain") return;
@@ -201,13 +228,18 @@ export const ManualTransactionCapture = ({
       onUncertain: () => setStatus("uncertain"),
     });
   };
-  return (
-    <form onSubmit={onSubmit} aria-label="Registrar transacción" className="rounded-lg border p-4">
-      <div className="flex flex-col gap-4">
+  return renderForm(
+    <form onSubmit={onSubmit} aria-label="Registrar transacción" className="flex flex-col gap-5">
+      <fieldset
+        disabled={status === "saving" || status === "uncertain"}
+        className="flex min-w-0 flex-col gap-4"
+      >
+        <legend className="sr-only">Datos de la transacción</legend>
         <CaptureInputs
           amount={amount}
           counterparty={counterparty}
           occurredOn={occurredOn}
+          timeZone={timeZone}
           onAmount={setAmount}
           onCounterparty={setCounterparty}
           onOccurredOn={setOccurredOn}
@@ -216,8 +248,8 @@ export const ManualTransactionCapture = ({
         <Button type="submit" disabled={status === "saving" || status === "uncertain"}>
           {status === "saving" ? "Guardando…" : "Registrar transacción"}
         </Button>
-        <CaptureFeedback status={status} onCheckHistory={onCheckHistory} />
-      </div>
+      </fieldset>
+      <CaptureFeedback status={status} onCheckHistory={onCheckHistory} />
     </form>
   );
 };

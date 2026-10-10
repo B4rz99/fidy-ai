@@ -200,3 +200,203 @@
     @apply text-foreground underline underline-offset-4;
   }
 }
+
+/* Application geometry shares Fidy's global brand and light/Grafito tokens. */
+.signed-in-theme {
+  line-height: 1.5;
+}
+/* Columns depend on the ledger width, including when the detail rail is open. */
+.transaction-ledger {
+  container: ledger / inline-size;
+}
+@container ledger (width >= 600px) {
+  .transaction-ledger .transaction-category-inline,
+  .transaction-ledger .transaction-identity-icon {
+    display: none;
+  }
+}
+.transaction-ledger [data-slot="table-cell"] {
+  padding: 3px 12px;
+  font-size: 16px;
+}
+.transaction-ledger [data-slot="table"] {
+  display: block;
+}
+.transaction-ledger [data-slot="table-body"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+.transaction-ledger [data-slot="table-row"] {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.transaction-ledger [data-slot="table-cell"] {
+  min-width: 0;
+}
+.transaction-ledger [data-date-group="true"] [data-slot="table-cell"] {
+  grid-column: 1 / -1;
+}
+@container ledger (width >= 481px) {
+  .transaction-ledger[data-type-visible="true"] [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
+  }
+}
+@container ledger (width >= 600px) {
+  .transaction-ledger[data-category-visible="true"] [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
+  }
+  .transaction-ledger[data-category-visible="true"][data-type-visible="true"]
+    [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content max-content;
+  }
+}
+@container ledger (width < 400px) {
+  .transaction-ledger [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .transaction-ledger [data-slot="table-cell"] {
+    padding-inline: 4px;
+  }
+  .transaction-ledger [data-slot="table-cell"]:last-child {
+    padding-bottom: 10px;
+  }
+}
+.transaction-ledger [data-slot="table-row"][data-state="selected"] {
+  background: var(--accent);
+}
+.transaction-ledger
+  [data-slot="table-row"][data-state="selected"]
+  [data-slot="table-cell"]:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.transaction-ledger
+  [data-slot="table-row"][data-state="selected"]
+  [data-slot="table-cell"]:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+[data-date-group="true"] [data-slot="table-cell"] {
+  padding: 10px 0 0;
+}
+[data-date-group="true"]:hover {
+  background: transparent;
+}
+.transaction-ledger [data-slot="table-row"]:has(+ [data-date-group="true"]) {
+  border-bottom: 0;
+}
+
+.category-visual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground);
+}
+.category-bubble {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.category-bubble-large {
+  width: 68px;
+  height: 68px;
+}
+.direction-bubble {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+.category-bubble {
+  color: var(--on-pastel);
+  background: var(--chart-3);
+}
+.category-bubble[data-tone="sage"],
+.direction-bubble[data-tone="income"] {
+  color: var(--on-pastel);
+  background: var(--chart-1);
+}
+.direction-bubble[data-tone="expense"] {
+  color: var(--on-pastel);
+  background: var(--chart-3);
+}
+.category-bubble[data-tone="sky"] {
+  background: var(--chart-2);
+}
+.category-bubble[data-tone="lavender"] {
+  background: var(--chart-4);
+}
+.category-bubble[data-tone="butter"] {
+  background: var(--chart-5);
+}
+.category-bubble[data-tone="rose"] {
+  background: var(--chart-6);
+}
+.signed-in-theme .transaction-ledger[data-category-visible="false"] td:nth-child(2),
+.signed-in-theme .transaction-ledger[data-category-visible="false"] .transaction-category-inline,
+.signed-in-theme .transaction-ledger[data-type-visible="false"] td:nth-child(3) {
+  display: none;
+}
+.workspace-page-header h1 {
+  font-size: 24px;
+}
+.signed-in-theme [aria-label="Resumen de transacciones"] dt,
+.signed-in-theme [aria-label="Resumen de transacciones"] dd {
+  font-size: 16px;
+}
+
+.signed-in-theme .transaction-ledger button:disabled {
+  opacity: 1;
+}
+.signed-in-theme .transaction-dropdown-visual .category-bubble {
+  width: 28px;
+  height: 28px;
+}
+.signed-in-theme [data-sonner-toaster] {
+  font-family: inherit;
+  --border-radius: var(--radius-lg);
+  --normal-bg: var(--popover);
+  --normal-border: var(--border);
+  --normal-text: var(--popover-foreground);
+  --success-bg: var(--success);
+  --success-border: var(--on-pastel);
+  --success-text: var(--on-pastel);
+  --info-bg: var(--information);
+  --info-border: var(--on-pastel);
+  --info-text: var(--on-pastel);
+  --warning-bg: var(--warning);
+  --warning-border: var(--on-pastel);
+  --warning-text: var(--on-pastel);
+  --error-bg: var(--destructive);
+  --error-border: var(--on-pastel);
+  --error-text: var(--on-pastel);
+}
+
+/* Same native floating menu composition as the public landing, with shared theme tokens. */
+.signed-in-compact-navigation {
+  inset: 84px 20px auto auto;
+  width: min(260px, calc(100vw - 40px));
+  max-height: calc(100dvh - 108px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 12px 32px #00000024;
+}
+.signed-in-compact-navigation nav {
+  padding: 0;
+}
+.signed-in-menu-close,
+.signed-in-sidebar:has(.signed-in-compact-navigation:popover-open) .signed-in-menu-bars {
+  display: none;
+}
+.signed-in-sidebar:has(.signed-in-compact-navigation:popover-open) .signed-in-menu-close {
+  display: block;
+}
+@media (min-width: 768px) {
+  .signed-in-compact-navigation:popover-open {
+    display: none;
+  }
+}

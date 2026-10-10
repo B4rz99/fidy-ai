@@ -61,7 +61,9 @@ test("presents a Category by stable identity with a current-month Transaction", 
       });
       yield* Effect.tryPromise(() => page.goto("/app/transactions"));
       yield* Effect.tryPromise(() => expect(page.getByText("La Cocina").first()).toBeVisible());
-      yield* Effect.tryPromise(() => expect(page.getByText("Restaurantes").first()).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Restaurantes").filter({ visible: true }).first()).toBeVisible()
+      );
       expect(requestedPeriod).toBe(true);
     })
   ));
@@ -77,7 +79,7 @@ test("shows loading until a bounded Transactions query completes", ({ page }) =>
         expect(page.getByRole("region", { name: "Cargando transacciones" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
+        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
       );
     })
   ));
@@ -133,19 +135,22 @@ test("captures a Transaction by canonical mutation and displays the confirmed re
       });
       yield* Effect.tryPromise(() => page.goto("/app/transactions"));
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
+        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
       );
-      yield* Effect.tryPromise(() => page.getByLabel("Monto en COP").fill("12500"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "+ Registrar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => page.getByLabel("Monto ($)").fill("12500"));
       yield* Effect.tryPromise(() => page.getByLabel("Contraparte (opcional)").fill("La Cocina"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Registrar transacción" }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Transacción guardada. Actualizando el historial…")).toBeVisible()
+        expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Transacción recién registrada")).toContainText("La Cocina")
+        expect(page.locator("[data-sonner-toast]")).toContainText("La Cocina")
       );
       expect(captured).toMatchObject({
         money: { amount: "12500", currency: "COP" },

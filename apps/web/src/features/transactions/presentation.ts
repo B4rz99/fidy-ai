@@ -1,6 +1,6 @@
 import type { CanonicalSuccess } from "@/transport/client";
 import { DateTime, Option } from "effect";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 
 /** Canonical values remain derived from FidyApi rather than redeclared by the browser. */
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
@@ -34,15 +34,18 @@ export const deriveCurrentMonthPeriod = ({
 /** Presentation-only projection consumed by both desktop and mobile Transaction views. */
 export type TransactionListRow = Readonly<{
   id: string;
+  categoryId: string;
   categoryLabel: string;
   counterpartyLabel: string;
   direction: Transaction["direction"];
   transactionTypeLabel: "Gasto" | "Ingreso";
   moneyText: string;
+  money: Transaction["money"];
+  dateLabel: string;
   occurredOnText: string;
 }>;
 
-const formatOccurrence = ({
+export const formatOccurrence = ({
   locale,
   occurredAt,
   timeZone,
@@ -94,12 +97,21 @@ export const presentTransactionRows = ({
   transactions: ReadonlyArray<TransactionPresentationRecord>;
 }>): ReadonlyArray<TransactionListRow> => {
   const categoryLabels = new Map(categories.map(({ id, label }) => [id, label]));
+  const dateFormatter = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone,
+  });
   return transactions.map((transaction) => ({
     id: transaction.id,
+    categoryId: transaction.categoryId,
     categoryLabel: categoryLabels.get(transaction.categoryId) ?? "Categoría no disponible",
     counterpartyLabel: Option.getOrElse(transaction.counterparty, () => counterpartyFallback),
     direction: transaction.direction,
     transactionTypeLabel: transaction.direction === "inflow" ? "Ingreso" : "Gasto",
+    money: transaction.money,
+    dateLabel: dateFormatter.format(transaction.occurredAt.epochMilliseconds),
     moneyText: formatMoney({ locale, money: transaction.money }),
     occurredOnText: formatOccurrence({ locale, occurredAt: transaction.occurredAt, timeZone }),
   }));

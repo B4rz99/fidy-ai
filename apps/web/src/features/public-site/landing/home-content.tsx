@@ -1,5 +1,5 @@
 import { AgentBrands } from "./agent-brands";
-import { logoUrl } from "./assets";
+import { fidyLogoUrl } from "@/ui/brand";
 import { LaunchButton } from "./registration";
 import { Header } from "./navigation";
 import { PhoneDemo } from "./phone-demo";
@@ -201,7 +201,7 @@ const footer = (
   <footer className="footer">
     <div className="wrap">
       <a className="logo" href="/" aria-label="Fidy, inicio">
-        <img src={logoUrl} alt="fidy" />
+        <img src={fidyLogoUrl} alt="fidy" />
       </a>
       <span>{"Finanzas personales para ti y tus agentes."}</span>
     </div>

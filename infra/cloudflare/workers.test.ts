@@ -711,7 +711,8 @@ it.live("routes the private canary Queue to a real Workflow handoff, not to appl
           return Promise.resolve(canaryInstance);
         },
         get: () => Promise.resolve(canaryInstance),
-        createBatch: () => Promise.resolve([]),
+        createBatch: (): Promise<never> =>
+          Promise.reject(new Error("Canary handoff must create one Workflow")),
         deleteBatch: () => Promise.resolve({ deleted: [], errors: [] }),
       };
       const now = yield* Clock.currentTimeMillis;

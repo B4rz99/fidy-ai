@@ -500,7 +500,7 @@ it.each(["pending", "failed", "succeeded"] as const)(
     );
     expect(screen.getByText("Tu acceso: Pro")).toBeVisible();
     expect(screen.getByText(/Último período pagado.*15 de septiembre de 2026/)).toBeVisible();
-    expect(screen.getByText(/Precio cobrado: COP 9.900,00/)).toBeVisible();
+    expect(screen.getByText(/Precio cobrado: \$\s9.900,00/)).toBeVisible();
     const label = { pending: "pendiente", failed: "fallido", succeeded: "aprobado" }[status];
     expect(screen.getByText(`Último intento de cobro: ${label}.`)).toBeVisible();
   }
@@ -571,7 +571,7 @@ it("preserves Subscription offers through refresh and failure and retries the qu
       state={{ _tag: "RefreshFailure", offers, onRetry, waiting: false }}
     />
   );
-  expect(screen.getByText("COP 28.900,00/mes")).toBeVisible();
+  expect(screen.getByText("$ 28.900,00/mes")).toBeVisible();
   expect(screen.getByText("Mostramos las últimas ofertas disponibles.")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
   expect(onRetry).toHaveBeenCalledOnce();
@@ -654,9 +654,9 @@ it("shows shared renewal terms once without ambiguous payment-method pills", () 
   render(<SubscriptionOffersView gateway={Option.none()} state={{ _tag: "Ready", offers }} />);
 
   expect(screen.getByRole("heading", { name: "Mejora tu suscripción" })).toBeVisible();
-  expect(screen.getByText("COP 9.900,00/semana")).toBeVisible();
-  expect(screen.getByText("COP 28.900,00/mes")).toBeVisible();
-  expect(screen.getByText("COP 289.900,00/año")).toBeVisible();
+  expect(screen.getByText("$ 9.900,00/semana")).toBeVisible();
+  expect(screen.getByText("$ 28.900,00/mes")).toBeVisible();
+  expect(screen.getByText("$ 289.900,00/año")).toBeVisible();
   expect(screen.queryByText(/Elige la frecuencia que prefieras/iu)).not.toBeInTheDocument();
   const terms = within(screen.getByRole("region", { name: "Condiciones de suscripción" }));
   expect(terms.getByText(/se renueva automáticamente/iu)).toBeVisible();

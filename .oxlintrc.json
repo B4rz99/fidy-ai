@@ -9,7 +9,7 @@
   "settings": {
     "shadcn": {
       "ui": "@/ui/components",
-      "note": "See DESIGN.md for Fidy's brand foundations and application defaults."
+      "note": "See DESIGN.md: Application components and patterns. Reuse the shared UI components and their named variants; transaction behavior stays in its feature."
     }
   },
   "ignorePatterns": [
@@ -156,6 +156,11 @@
             "allow": ["layout"],
             "contracts": [
               {
+                "pattern": "^(Button|Input|DropdownMenuTrigger|Calendar)$",
+                "allow": ["layout"],
+                "message": "Use the component's named variant or size. Keep Fidy colors, radii, focus, and control density in src/ui/components; use a parent for surrounding spacing. See DESIGN.md."
+              },
+              {
                 "pattern": "^Card$|(Content|Header|Footer|Group|Panel)$",
                 "allow": ["layout", "spacing"]
               },
@@ -164,11 +169,31 @@
                 "allow": ["layout", "typography"]
               },
               { "pattern": "^Empty$", "allow": ["layout", "border"] },
-              { "pattern": "^AlertDescription$", "allow": ["layout", "spacing"] }
+              { "pattern": "^AlertDescription$", "allow": ["layout", "spacing"] },
+              {
+                "pattern": "^(ChoiceDropdown|InlineChoiceDropdown|ChoiceMenuOptions|CalendarField|HeaderSearch|IconIndicator|DirectionIndicator|WorkspaceHeader|WorkspaceColumns|WorkspacePanel|RecordToolbar)$",
+                "allow": ["layout"],
+                "message": "Reuse the approved Fidy pattern. Change its shared component only for an approved design decision; do not override colors, typography, shape, or control spacing in a view. See DESIGN.md: Application components and patterns."
+              }
             ]
           }
         ]
       }
+    },
+    // These libraries expose extensionless package exports that resolve to .mjs.
+    {
+      "files": [
+        "apps/web/src/ui/components/sheet.tsx",
+        "apps/web/src/features/transactions/workspace.tsx",
+        "apps/web/src/features/transactions/ledger.tsx"
+      ],
+      "rules": { "import/extensions": "off" }
+    },
+    // Table V8 uses interior mutability. This app does not enable React Compiler;
+    // the ledger reads its row model each render and never memoizes the table object.
+    {
+      "files": ["apps/web/src/features/transactions/ledger.tsx"],
+      "rules": { "react/incompatible-library": "off" }
     },
     {
       "files": ["apps/web/src/ui/components/**"],
@@ -251,7 +276,7 @@
       "files": [
         "scripts/mcp/production-browser.ts",
         "apps/web/src/ui/class-names.ts",
-        "apps/web/src/ui/components/{alert,badge,button,checkbox,empty,input,progress,toggle-group}.tsx",
+        "apps/web/src/ui/components/{alert,badge,button,calendar,checkbox,dropdown-menu,empty,input,popover,progress,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
         "apps/web/{playwright,vite,vitest}.config.ts",
         "apps/web/src/testing/setup.ts"

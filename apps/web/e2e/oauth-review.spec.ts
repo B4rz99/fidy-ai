@@ -98,7 +98,7 @@ const assertReview = (page: Page): Effect.Effect<void, TestFailure> =>
     yield* Effect.tryPromise(() =>
       expect(page.getByText("<img src=x onerror=alert(1)>")).toBeVisible()
     );
-    yield* Effect.tryPromise(() => expect(page.locator("img")).toHaveCount(0));
+    yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));
     yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
     yield* Effect.tryPromise(() =>
       expect(page.getByRole("button", { name: "90 días" })).toHaveAttribute("aria-pressed", "true")
@@ -337,7 +337,7 @@ const inspectManagementPage = (
     yield* Effect.tryPromise(() =>
       expect(page.getByText("<img src=x onerror=alert(1)>")).toBeVisible()
     );
-    yield* Effect.tryPromise(() => expect(page.locator("img")).toHaveCount(0));
+    yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));
     yield* Effect.tryPromise(() =>
       expect(page.getByText("categories.listCategories", { exact: true })).toBeVisible()
     );

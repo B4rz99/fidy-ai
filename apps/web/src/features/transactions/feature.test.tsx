@@ -1,58 +1,56 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { RegistryContext } from "@effect/atom-react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  render as testingRender,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { BigDecimal, Cause, DateTime, Effect, Option, Predicate } from "effect";
-import { AsyncResult } from "effect/reactivity";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TransactionListFeature, TransactionListView } from "./feature";
 import { ManualTransactionCapture } from "./manual-capture";
-import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { makeFidyClient } from "@/transport/client";
 
-const queryKey = (atom: unknown): string => {
-  if (!Predicate.isString(atom)) throw new Error("Expected a query key");
-  return atom;
+const queryMocks = vi.hoisted(() => {
+  const commandAtom: { current: unknown } = { current: undefined };
+  return {
+    query: vi.fn(),
+    refresh: vi.fn(),
+    dispatch: vi.fn(),
+    commandAtom,
+    values: new Map<string, unknown>(),
+  };
+});
+let registry = AtomRegistry.make({
+  scheduleTask: (task): (() => void) => {
+    task();
+    return () => {};
+  },
+});
+const queries = new Map<string, Atom.Atom<unknown>>();
+const render = (ui: Parameters<typeof testingRender>[0]): ReturnType<typeof testingRender> =>
+  testingRender(ui, {
+    wrapper: ({ children }) => (
+      <RegistryContext.Provider value={registry}>{children}</RegistryContext.Provider>
+    ),
+  });
+const setQueryResult = (operation: string, value: unknown): void => {
+  queryMocks.values.set(operation, value);
+  const atom = queries.get(operation);
+  if (atom !== undefined) act(() => registry.refresh(atom));
 };
-
-const queryMocks = vi.hoisted(() => ({
-  query: vi.fn((_group: string, operation: string) => operation),
-  refresh: vi.fn(),
-  dispatch: vi.fn(),
-  commandAtom: { name: "capture-transaction" },
-  values: new Map<string, unknown>(),
-}));
-
-const mockHistoryQuery = (): ReturnType<typeof presentCanonicalQuery> => {
-  const result = queryMocks.values.get("listTransactions");
-  if (!AsyncResult.isAsyncResult(result)) throw new Error("Expected a query result");
-  return presentCanonicalQuery(result);
+const queryResult = (operation: string): AsyncResult.AsyncResult<unknown, unknown> => {
+  const result = queryMocks.values.get(operation) ?? AsyncResult.initial();
+  if (!AsyncResult.isAsyncResult(result)) throw new Error("Expected a canonical query result");
+  return AsyncResult.map(result, (value) => {
+    if (!Predicate.isObject(value)) throw new Error("Expected a canonical response");
+    return { ...value, next: [] };
+  });
 };
-vi.mock("./history", () => ({
-  transactionHistory: (): Readonly<{ state: string; action: string }> => ({
-    state: "transactionHistory",
-    action: "historyAction",
-  }),
-}));
-vi.mock("@effect/atom-react", () => ({
-  useAtomSet: (atom: unknown): ((command: unknown) => void) =>
-    atom === "historyAction"
-      ? (command: unknown) => {
-          if (command === "reset") queryMocks.refresh("listTransactions");
-        }
-      : queryMocks.dispatch,
-  useAtomRefresh:
-    (atom: unknown): (() => void) =>
-    () => {
-      queryMocks.refresh(queryKey(atom));
-    },
-  useAtomValue: (atom: unknown): unknown =>
-    atom === "transactionHistory"
-      ? {
-          query: mockHistoryQuery(),
-          generation: 0,
-          continuation: "complete",
-          retryPage: Option.none(),
-        }
-      : queryMocks.values.get(queryKey(atom)),
-}));
 
 vi.mock("@tanstack/react-router", () => ({
   useRouter: (): Readonly<Record<"options", unknown>> => ({
@@ -60,7 +58,7 @@ vi.mock("@tanstack/react-router", () => ({
       context: {
         apiClient: {
           query: queryMocks.query,
-          runtime: { fn: () => () => () => queryMocks.commandAtom },
+          runtime: { fn: () => () => queryMocks.commandAtom.current },
         },
       },
     },
@@ -81,12 +79,12 @@ const transaction = {
   occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
 };
 const seedResources = (): void => {
-  queryMocks.values.set(
+  setQueryResult(
     "getCurrentUser",
     AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
   );
-  queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
-  queryMocks.values.set("listTransactions", AsyncResult.success({ data: [transaction] }));
+  setQueryResult("listCategories", AsyncResult.success({ data: [category] }));
+  setQueryResult("listTransactions", AsyncResult.success({ data: [transaction] }));
 };
 
 beforeEach(() => {
@@ -95,13 +93,32 @@ beforeEach(() => {
     addEventListener: (): void => undefined,
     removeEventListener: (): void => undefined,
   }));
-  queryMocks.query.mockClear();
+  registry = AtomRegistry.make({
+    scheduleTask: (task): (() => void) => {
+      task();
+      return () => {};
+    },
+  });
+  queries.clear();
+  queryMocks.query.mockReset();
+  queryMocks.query.mockImplementation((_group: string, operation: string) => {
+    const atom = Atom.make(() => {
+      queryMocks.refresh(operation);
+      return queryResult(operation);
+    });
+    queries.set(operation, atom);
+    return atom;
+  });
+  queryMocks.commandAtom.current = Atom.fnSync<unknown>()((command): void => {
+    queryMocks.dispatch(command);
+  });
   queryMocks.refresh.mockClear();
   queryMocks.dispatch.mockReset();
   queryMocks.values.clear();
 });
 afterEach(() => {
   cleanup();
+  registry.dispose();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -156,7 +173,7 @@ describe("current-month Transaction list presentation", () => {
 describe("current-month Transaction list states", () => {
   it("preserves inflow rows without a refresh notice while refreshing", () => {
     seedResources();
-    queryMocks.values.set(
+    setQueryResult(
       "listTransactions",
       AsyncResult.success({ data: [{ ...transaction, direction: "inflow" }] }, { waiting: true })
     );
@@ -168,7 +185,7 @@ describe("current-month Transaction list states", () => {
   });
   it("renders the current ledger empty state with its applied zone", () => {
     seedResources();
-    queryMocks.values.set("listTransactions", AsyncResult.success({ data: [] }));
+    setQueryResult("listTransactions", AsyncResult.success({ data: [] }));
     render(<TransactionListFeature />);
     expect(screen.getByText("No hay transacciones para mostrar")).toBeVisible();
     expect(screen.getByText(/America\/Bogota/)).toBeVisible();
@@ -196,42 +213,42 @@ describe("current-month Transaction list states", () => {
 
 describe("current-month Transaction resources", () => {
   it("distinguishes the idle User query from its initial load", () => {
-    queryMocks.values.set("getCurrentUser", AsyncResult.initial());
+    setQueryResult("getCurrentUser", AsyncResult.initial());
     const { rerender } = render(<TransactionListFeature />);
     expect(screen.getByText("La consulta aún no se ha iniciado.")).toBeVisible();
     expect(queryMocks.query).toHaveBeenCalledOnce();
 
-    queryMocks.values.set("getCurrentUser", AsyncResult.initial(true));
+    setQueryResult("getCurrentUser", AsyncResult.initial(true));
     rerender(<TransactionListFeature />);
     expect(screen.getByLabelText("Cargando transacciones")).toBeVisible();
   });
 
   it("renders canonical failures from the User or current-month resources", () => {
-    queryMocks.values.set(
+    setQueryResult(
       "getCurrentUser",
       AsyncResult.failure(Cause.fail(new Error("canonical failure")))
     );
     const { rerender } = render(<TransactionListFeature />);
     expect(screen.getByText("No pudimos cargar tus transacciones")).toBeVisible();
 
-    queryMocks.values.set("getCurrentUser", AsyncResult.failure(Cause.die("decoder defect")));
+    setQueryResult("getCurrentUser", AsyncResult.failure(Cause.die("decoder defect")));
     rerender(<TransactionListFeature />);
     expect(screen.getByText("No pudimos comunicarnos con Fidy")).toBeVisible();
 
-    queryMocks.values.set(
+    setQueryResult(
       "getCurrentUser",
       AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
     );
-    queryMocks.values.set(
+    setQueryResult(
       "listCategories",
       AsyncResult.failure(Cause.fail(new Error("canonical failure")))
     );
-    queryMocks.values.set("listTransactions", AsyncResult.initial());
+    setQueryResult("listTransactions", AsyncResult.initial());
     rerender(<TransactionListFeature />);
     expect(screen.getByText("No pudimos cargar tus transacciones")).toBeVisible();
 
-    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
-    queryMocks.values.set(
+    setQueryResult("listCategories", AsyncResult.success({ data: [category] }));
+    setQueryResult(
       "listTransactions",
       AsyncResult.failure(Cause.fail(new Error("canonical failure")))
     );
@@ -245,15 +262,15 @@ describe("current-month Transaction refreshes", () => {
     const userSuccess = AsyncResult.success({
       data: { locale: "es-CO", timeZone: "America/Bogota" },
     });
-    queryMocks.values.set(
+    setQueryResult(
       "getCurrentUser",
       AsyncResult.failure(Cause.fail(new Error("User refresh failed")), {
         previousSuccess: Option.some(userSuccess),
         waiting: true,
       })
     );
-    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
-    queryMocks.values.set("listTransactions", AsyncResult.success({ data: [transaction] }));
+    setQueryResult("listCategories", AsyncResult.success({ data: [category] }));
+    setQueryResult("listTransactions", AsyncResult.success({ data: [transaction] }));
 
     const { rerender } = render(<TransactionListFeature />);
 
@@ -262,7 +279,7 @@ describe("current-month Transaction refreshes", () => {
     expect(screen.getByText("No pudimos actualizar tu perfil")).toBeVisible();
     expect(screen.getByRole("button", { name: "Reintentando…" })).toBeDisabled();
 
-    queryMocks.values.set(
+    setQueryResult(
       "getCurrentUser",
       AsyncResult.failure(Cause.fail(new Error("User refresh failed")), {
         previousSuccess: Option.some(userSuccess),
@@ -274,18 +291,18 @@ describe("current-month Transaction refreshes", () => {
   });
 
   it("keeps previous rows through refresh failure and retries the owning queries", () => {
-    queryMocks.values.set(
+    setQueryResult(
       "getCurrentUser",
       AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
     );
     const categoriesSuccess = AsyncResult.success({ data: [category] });
-    queryMocks.values.set(
+    setQueryResult(
       "listCategories",
       AsyncResult.failure(Cause.fail(new Error("declared refresh failure")), {
         previousSuccess: Option.some(categoriesSuccess),
       })
     );
-    queryMocks.values.set("listTransactions", AsyncResult.success({ data: [transaction] }));
+    setQueryResult("listTransactions", AsyncResult.success({ data: [transaction] }));
 
     render(<TransactionListFeature />);
 
@@ -299,29 +316,29 @@ describe("current-month Transaction refreshes", () => {
 
 describe("current-month Transaction resource successes", () => {
   it("renders loading, empty, and ready resource results", () => {
-    queryMocks.values.set(
+    setQueryResult(
       "getCurrentUser",
       AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
     );
-    queryMocks.values.set("listCategories", AsyncResult.initial());
-    queryMocks.values.set("listTransactions", AsyncResult.initial());
+    setQueryResult("listCategories", AsyncResult.initial());
+    setQueryResult("listTransactions", AsyncResult.initial());
     const { rerender } = render(<TransactionListFeature />);
     expect(screen.getByText("La consulta aún no se ha iniciado.")).toBeVisible();
 
-    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
+    setQueryResult("listCategories", AsyncResult.success({ data: [category] }));
     rerender(<TransactionListFeature />);
     expect(screen.getByText("La consulta aún no se ha iniciado.")).toBeVisible();
 
-    queryMocks.values.set("listTransactions", AsyncResult.initial(true));
+    setQueryResult("listTransactions", AsyncResult.initial(true));
     rerender(<TransactionListFeature />);
     expect(screen.getByLabelText("Cargando transacciones")).toBeVisible();
 
-    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
-    queryMocks.values.set("listTransactions", AsyncResult.success({ data: [] }));
+    setQueryResult("listCategories", AsyncResult.success({ data: [category] }));
+    setQueryResult("listTransactions", AsyncResult.success({ data: [] }));
     rerender(<TransactionListFeature />);
     expect(screen.getByText("No hay transacciones para mostrar")).toBeVisible();
 
-    queryMocks.values.set(
+    setQueryResult(
       "listTransactions",
       AsyncResult.success({
         data: [
@@ -341,12 +358,12 @@ describe("current-month Transaction resource successes", () => {
 
 describe("transaction workspace", () => {
   it("replaces the summary with details and restores it when the transaction closes", () => {
-    queryMocks.values.set(
+    setQueryResult(
       "getCurrentUser",
       AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
     );
-    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
-    queryMocks.values.set(
+    setQueryResult("listCategories", AsyncResult.success({ data: [category] }));
+    setQueryResult(
       "listTransactions",
       AsyncResult.success({ data: [{ ...transaction, revision: 0, notes: Option.none() }] })
     );
@@ -361,12 +378,12 @@ describe("transaction workspace", () => {
 });
 
 it("summarizes the visible records without combining different currencies", () => {
-  queryMocks.values.set(
+  setQueryResult(
     "getCurrentUser",
     AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
   );
-  queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
-  queryMocks.values.set(
+  setQueryResult("listCategories", AsyncResult.success({ data: [category] }));
+  setQueryResult(
     "listTransactions",
     AsyncResult.success({
       data: [
@@ -477,8 +494,8 @@ it("lets readers clear filters even after their input is hidden", () => {
 it("combines filters, keeps the summary in sync and sorts the visible rows", () => {
   seedResources();
   const market = { id: "market", label: "Mercado" };
-  queryMocks.values.set("listCategories", AsyncResult.success({ data: [category, market] }));
-  queryMocks.values.set(
+  setQueryResult("listCategories", AsyncResult.success({ data: [category, market] }));
+  setQueryResult(
     "listTransactions",
     AsyncResult.success({
       data: [
@@ -530,7 +547,7 @@ it("combines filters, keeps the summary in sync and sorts the visible rows", () 
 it("caps multiple selection and releases capacity when a row is deselected", () => {
   seedResources();
   const limit = 12;
-  queryMocks.values.set(
+  setQueryResult(
     "listTransactions",
     AsyncResult.success({
       data: Array.from({ length: limit + 1 }, (_, index) => ({
@@ -575,8 +592,8 @@ it("preserves the available category labels and safely presents an unavailable c
     id: `24000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixLength, "0")}`,
     label,
   }));
-  queryMocks.values.set("listCategories", AsyncResult.success({ data: categories }));
-  queryMocks.values.set(
+  setQueryResult("listCategories", AsyncResult.success({ data: categories }));
+  setQueryResult(
     "listTransactions",
     AsyncResult.success({
       data: [
@@ -608,7 +625,7 @@ it("preserves the available category labels and safely presents an unavailable c
 
 it("keeps transaction history readable when no categories are available", () => {
   seedResources();
-  queryMocks.values.set("listCategories", AsyncResult.success({ data: [] }));
+  setQueryResult("listCategories", AsyncResult.success({ data: [] }));
   render(<TransactionListFeature />);
   expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
   expect(screen.getAllByText("Categoría no disponible").length).toBeGreaterThan(0);

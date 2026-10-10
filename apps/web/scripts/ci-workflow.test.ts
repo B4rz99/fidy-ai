@@ -166,6 +166,28 @@ describe("pull-request checks workflow policy", () => {
       });
   });
 
+  it("assembles source read-only and requires the same-run packet before publication", () => {
+    const sourceJob = publisherWorkflow.slice(
+      publisherWorkflow.indexOf("\n  source:\n"),
+      publisherWorkflow.indexOf("\n  publish:\n")
+    );
+    const publishJob = publisherWorkflow.slice(publisherWorkflow.indexOf("\n  publish:\n"));
+    expect(sourceJob).toContain("contents: read");
+    expect(sourceJob).not.toContain("contents: write");
+    expect(sourceJob).not.toContain("GH_TOKEN");
+    expect(sourceJob).toContain("needs: [preflight, checks]");
+    expect(sourceJob).toContain("assemble-source.py");
+    expect(sourceJob).toContain(
+      'cmp "$RUNNER_TEMP/cli-source/fidy-cli-v$RELEASE_VERSION-source.tar.gz"'
+    );
+    expect(sourceJob).toContain("name: cli-source");
+    expect(publishJob).toContain("needs.source.outputs.source_passed == 'true'");
+    expect(publishJob).toContain('--source-artifact "$RUNNER_TEMP/cli-source"');
+    expect(publishJob).not.toContain("assemble-source.py");
+    expect(candidateWorkflow).toContain("test-prepare-runtime.py");
+    expect(candidateWorkflow).toContain("test-assemble-source.py");
+  });
+
   it("pins every external Action to a complete commit SHA", () => {
     const externalActions = Array.from(
       checksWorkflow.matchAll(/^\s+(?:- )?uses: ([^./][^@\s]+)@([^\s#]+)/gmu)

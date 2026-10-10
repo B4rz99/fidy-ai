@@ -1,10 +1,11 @@
 # CLI distribution evidence gate
 
-The checked-in `publish-readiness.json` is deliberately **blocked**. It does not
-establish a first-party license, a complete bundled-runtime/dependency inventory,
-complete notices, satisfied source obligations, signing, or public availability.
-No real legal materials are supplied by this change. Do not substitute the
-synthetic test fixtures for reviewed distribution evidence.
+The checked-in `publish-readiness.json` records independently reviewed source-bound
+materials. It does not establish signing or public availability, and it is not a
+legal-compliance guarantee. The runtime/application inventory, full notices,
+scoped CLI permission and accompanying source route were reviewed together.
+Source or material changes invalidate that binding. Synthetic test fixtures
+cannot substitute for the reviewed distribution evidence.
 
 `publish.py` uses Python's standard library and the checked-out Git repository.
 The privileged job does not install dependencies, run a build, or execute a
@@ -20,9 +21,9 @@ candidate binary or installer. Its public commands are:
   clean exact source, a first-attempt trunk dispatch, public repository visibility,
   current trunk, and no visible existing version release/tag. Read-only tokens
   may not see drafts; the publisher repeats the check with its write-scoped token.
-- `validate --version 0.1.0 --expected-sha SHA --artifacts PATH`: validate the
-  same source/context and all eight assets without network or candidate execution.
-- `publish --version 0.1.0 --expected-sha SHA --artifacts PATH`: repeat validation
+- `validate --version 0.1.0 --expected-sha SHA --artifacts PATH --source-artifact SOURCE_PATH`: validate the
+  same source/context and all ten assets without network or candidate execution.
+- `publish --version 0.1.0 --expected-sha SHA --artifacts PATH --source-artifact SOURCE_PATH`: repeat validation
   and remote preflight, recheck trunk, create one draft, upload each asset once,
   verify the complete draft, recheck trunk and publish. Finally verify the tag
   target and exact anonymous download bytes, including installers. Every mutation
@@ -48,11 +49,11 @@ material. All eight top-level fields in the committed JSON must remain present:
 - `review_reference`: a specific `https://github.com/B4rz99/fidy-ai/pull/NUMBER`
   or `/issues/NUMBER` review, optionally anchored to a comment
 - `attestations`: every named distribution/inventory/notices/source assertion
-  in the blocked template must be true following that review
-- `materials`: the four named entries in the template, each an object containing
+  in the manifest must be true following that review
+- `materials`: the five named entries in the template, each an object containing
   a repository-relative tracked `path` and exact lowercase `sha256`
 
-The four files must be distinct, nonempty regular tracked files. Material hashes,
+The five files must be distinct, nonempty regular tracked files. Material hashes,
 source identity, all component decisions and packaged notice bytes are checked;
 bare affirmative attestations are insufficient. The inventory and source-decision
 files have the structured contracts below. The two notice files are actual,
@@ -99,17 +100,32 @@ exactly one decision for every inventory component. Each decision has exactly:
 - `requirement`: `none` or `source_required`
 - `status`: respectively `not_required` or `fulfilled`
 - `basis`: a substantive reviewed explanation of the decision
-- `evidence`: an array of preserved source-distribution records, each containing
-  the actual public HTTPS `url` and exact lowercase `sha256` of the source bytes
+- `evidence`: an empty array for `none`/`not_required`; for a required source
+  obligation, one or more reviewed same-release source-asset records as below
 
-A `source_required` decision requires at least one evidence record. Unknown,
-unresolved, missing or duplicate decisions fail closed. The reviewer must verify
-that referenced source is the corresponding version, is actually preserved and
-available to recipients, and satisfies applicable source/offer obligations. URLs
-and hashes record that reviewed evidence; the publisher does not independently
-interpret license obligations or treat a link alone as proof. If obligations need
-additional release assets or a different distribution layout, change and review
-that contract before approving; do not force them into the eight-asset gate.
+Every required-source evidence record has exactly:
+
+- `source_asset`: `fidy-cli-v0.1.0-source.tar.gz`
+- `source_spec_sha256`: the exact SHA-256 commitment to the generated canonical source specification
+- `path_prefixes`: one to 100 unique canonical, nonempty directory prefixes,
+  each ending in `/`, at most 256 UTF-8 bytes, and matching at least one actual
+  file in that trusted specification
+
+Unknown, unresolved, missing or duplicate decisions fail closed. Required source
+cannot be established by an external URL/digest assertion. The prefix decisions
+must be reviewed as complete coverage of the component's obligations, including
+necessary modifications, interfaces and compilation/install data. Before publication, the validator
+checks that every claimed prefix identifies reviewed content; it does not infer
+legal completeness from a prefix match.
+
+This binds readiness to the selected source bytes independently of the eventual
+merge commit. Do not store the final source archive's SHA-256 in tracked evidence:
+`SOURCE-RELEASE.json` contains that future source commit, so doing so would create
+a circular commit/archive binding. The publisher validates every source member
+against the trusted spec, checks the generated exact-commit metadata and archive
+sidecar, then verifies anonymous delivery of the complete same-release archive.
+If obligations need additional assets or a different layout, review that contract
+before approving rather than replacing these checks with a boolean or URL claim.
 
 ## Same-run artifact contract
 
@@ -133,3 +149,85 @@ See GitHub's [reusable workflow contract](https://docs.github.com/en/actions/how
 [asset API](https://docs.github.com/en/rest/releases/assets). Existing tags override
 `target_commitish`; failed uploads can leave starter assets. Those behaviors are
 why this workflow refuses existing versions and never retries mutations.
+
+## Reviewed source archive
+
+Readiness's fifth material, `source_plan`, is a compact tracked recipe with its
+own exact SHA-256. It pins the eight upstream repository revisions, reviewed
+source selections and symlink omissions, application input paths, local recipe
+files and application payload digest. Its `manifest_sha256` is the reviewed
+commitment to the generated full specification. The recipe and its commitment
+are not members of that specification, avoiding a self-reference.
+
+The two large per-file indexes are generated in the read-only source job rather
+than checked into Git. The generated `source-spec.json` has `schema_version: 1`,
+`cli_version: "0.1.0"`, the full `bun_revision`, and sorted `files`. Each file
+record has `path`, `mode` (420 or 493), `bytes` (including trusted empty files),
+lowercase `sha256`, and `origin`. Generation must reproduce the reviewed
+commitment exactly; a changed input or selection requires a reviewed update.
+
+The only origin shapes are:
+
+- Git: `kind: "git"`, `repository: "owner/repo"`, exact 40-character `revision`,
+  original `path`, and `git_blob_sha1`
+- Checkout: `kind: "checkout"`, original tracked `path`, and `git_blob_sha1`
+- Application payload: exactly `kind: "generated"`, `generator: "bun-build"`,
+  and `label: "application-payload"`
+- Recipient index: exactly `kind: "generated"`, `generator: "source-index"`,
+  and `label: "recipient-index"`
+
+The dedicated read-only source job acquires only reviewed immutable official Git
+objects, verifies every selected byte and origin, and builds the application
+payload with the pinned runtime/frozen workspace. It compares its input closure
+with the reviewed source selection. Two assemblies reuse a bounded cache but
+revalidate every input and must produce identical archive and sidecar bytes.
+Neither ordinary PR smoke fixtures nor prior run artifacts enter this path.
+The assembler is separate from the privileged publisher.
+
+The archive adds exactly one dynamic member, `SOURCE-RELEASE.json`, whose bytes
+are computed from the trusted version, runtime revision and exact dispatched
+source SHA. Its fields are `schema_version`, `cli_version`, `bun_revision` and
+`source_commit`, serialized with sorted keys, two-space indentation and a final
+newline. The spec cannot supply or override this member. A static source index
+may describe all other source inputs but must not embed its own digest or this
+dynamic member's digest.
+
+The publisher first hashes the downloaded specification and compares it with
+the commitment in the trusted checked-out recipe, before parsing its contents.
+Only then does it compare every raw USTAR header and source-member digest,
+including Git blob SHA-1 identities, and check the required source prefixes.
+An artifact's self-declared inventory cannot authorize its contents. The publisher
+never fetches source, extracts files or executes source/archive bytes.
+
+Exact format and limits:
+
+- One gzip member with bytes `1f8b08000000000002ff` as its header: no optional
+  name/comment fields, mtime zero, maximum-compression XFL and OS 255
+- Sorted canonical UTF-8 relative USTAR regular-file entries; reviewed mode 0644
+  or 0755; uid/gid/mtime zero; empty owner/group names and link target
+- No directory/link/device/sparse/PAX/GNU records, traversal, duplicate or
+  case-fold/file-prefix collisions, reserved recipient filenames or aliases
+- Zero-filled entry padding; exactly two final zero 512-byte blocks; no extra
+  tar padding, trailing bytes or concatenated gzip members
+- At most 8 MiB of specification JSON, 128 MiB compressed archive bytes,
+  16 MiB per file, 512 MiB for the entire decompressed tar stream, and 20,000
+  total regular entries including dynamic release metadata
+
+The separate `cli-source` Actions artifact contains exactly
+`fidy-cli-v0.1.0-source.tar.gz`, `fidy-cli-v0.1.0-source.tar.gz.sha256`, and
+`source-spec.json`. The generated specification is internal validation evidence,
+not an extra public release asset. The publisher takes its directory through `--source-artifact`; the existing
+native artifact root still contains exactly three native directories. All ten
+validated assets must upload successfully before publication, and all ten exact
+byte sequences must be anonymously available before success is reported.
+Missing source or failed source download is a failed release, even when a public
+release may already exist. The native ZIPs still contain exactly three entries,
+and installers neither fetch nor execute the source packet.
+
+`publish-source.py` exposes `spec_decode(data, version, bun_revision)`,
+`source_metadata(version, bun_revision, source_commit)`,
+`canonical_header(record)`, and `validate_artifact(directory, raw_spec,
+cli_version=..., bun_revision=..., source_commit=...)` for the reviewed assembler
+and publisher. These functions do not grant readiness or interpret source/license
+completeness; the reviewed inventory, notices, source/grant/recipe content,
+first-party authority and full source binding remain required.

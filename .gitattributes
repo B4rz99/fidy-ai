@@ -3,3 +3,5 @@
 *.png binary
 *.xlsm binary
 *.xlsx binary
+# Preserve upstream notice byte ranges, including original mixed line endings.
+/scripts/cli-release/source-materials/BUN-LICENSE.txt -text

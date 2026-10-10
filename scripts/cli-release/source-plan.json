@@ -1,0 +1,274 @@
+{
+  "application_inputs": [
+    "apps/cli/src/canonical/contract.ts",
+    "apps/cli/src/canonical/internal/flags.ts",
+    "apps/cli/src/canonical/operations.ts",
+    "apps/cli/src/canonical/runtime.ts",
+    "apps/cli/src/command/contract.ts",
+    "apps/cli/src/command/installation.ts",
+    "apps/cli/src/command/internal/presentation.ts",
+    "apps/cli/src/command/operations.ts",
+    "apps/cli/src/credential/contract.ts",
+    "apps/cli/src/credential/internal/local-path.ts",
+    "apps/cli/src/credential/runtime.ts",
+    "apps/cli/src/direct-client/runtime.ts",
+    "apps/cli/src/login/browser.ts",
+    "apps/cli/src/login/contract.ts",
+    "apps/cli/src/login/operations.ts",
+    "apps/cli/src/main.ts",
+    "apps/cli/src/support-recovery/contract.ts",
+    "apps/cli/src/support-recovery/internal/access.ts",
+    "apps/cli/src/support-recovery/internal/prompt.ts",
+    "apps/cli/src/support-recovery/operations.ts",
+    "apps/cli/src/support-recovery/runtime.ts",
+    "apps/server/src/client.ts",
+    "apps/server/src/core/_shared/context.ts",
+    "apps/server/src/core/_shared/money.ts",
+    "apps/server/src/core/_shared/time.ts",
+    "apps/server/src/core/access-tier/contract.ts",
+    "apps/server/src/core/agent/contract.ts",
+    "apps/server/src/core/audit/contract.ts",
+    "apps/server/src/core/browser-login/contract.ts",
+    "apps/server/src/core/budgets/contract.ts",
+    "apps/server/src/core/canonical-operations/contract.ts",
+    "apps/server/src/core/categories/contract.ts",
+    "apps/server/src/core/connections/contract.ts",
+    "apps/server/src/core/consent/contract.ts",
+    "apps/server/src/core/dashboard/contract.ts",
+    "apps/server/src/core/email-authentication/contract.ts",
+    "apps/server/src/core/identity/contract.ts",
+    "apps/server/src/core/ingestion/contract.ts",
+    "apps/server/src/core/insights/contract.ts",
+    "apps/server/src/core/interpretation-evidence/contract.ts",
+    "apps/server/src/core/memory/contract.ts",
+    "apps/server/src/core/oauth-agents/contract.ts",
+    "apps/server/src/core/provider-evidence/contract.ts",
+    "apps/server/src/core/quotas/contract.ts",
+    "apps/server/src/core/recovery/contract.ts",
+    "apps/server/src/core/recurring/contract.ts",
+    "apps/server/src/core/source-attestation/contract.ts",
+    "apps/server/src/core/subscription/contract.ts",
+    "apps/server/src/core/tokens/contract.ts",
+    "apps/server/src/core/tokens/operations.ts",
+    "apps/server/src/core/transactions/contract.ts",
+    "apps/server/src/core/web-session/contract.ts",
+    "apps/server/src/shell/agent/contract.ts",
+    "apps/server/src/shell/api.ts",
+    "apps/server/src/shell/authorization/contract.ts",
+    "apps/server/src/shell/authorization/runtime.ts",
+    "apps/server/src/shell/browser-login/contract.ts",
+    "apps/server/src/shell/budgets/contract.ts",
+    "apps/server/src/shell/canonical-catalog/contract.ts",
+    "apps/server/src/shell/canonical-policy/contract.ts",
+    "apps/server/src/shell/canonical-policy/operations.ts",
+    "apps/server/src/shell/categories/contract.ts",
+    "apps/server/src/shell/connections/contract.ts",
+    "apps/server/src/shell/dashboard/contract.ts",
+    "apps/server/src/shell/email-authentication/contract.ts",
+    "apps/server/src/shell/identity/contract.ts",
+    "apps/server/src/shell/ingestion/contract.ts",
+    "apps/server/src/shell/insights/contract.ts",
+    "apps/server/src/shell/memory/contract.ts",
+    "apps/server/src/shell/oauth-agents/contract.ts",
+    "apps/server/src/shell/operations/contract.ts",
+    "apps/server/src/shell/partial-input/contract.ts",
+    "apps/server/src/shell/provider-authentication/contract.ts",
+    "apps/server/src/shell/public-http/contract.ts",
+    "apps/server/src/shell/quotas/contract.ts",
+    "apps/server/src/shell/recovery/contract.ts",
+    "apps/server/src/shell/recurring/contract.ts",
+    "apps/server/src/shell/subscription/contract.ts",
+    "apps/server/src/shell/tokens/contract.ts",
+    "apps/server/src/shell/transactions/contract.ts",
+    "apps/server/src/shell/web-authentication/contract.ts",
+    "apps/server/src/shell/web-session/contract.ts"
+  ],
+  "bun_revision": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+  "cli_version": "0.1.0",
+  "manifest_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+  "materials": [
+    {
+      "checkout": "scripts/cli-release/source-materials/BUN-LICENSE.txt",
+      "path": "BUN-LICENSE.txt"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/COMPONENTS.json",
+      "path": "COMPONENTS.json"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/FIDY-CLI-PERMISSION.txt",
+      "path": "FIDY-CLI-PERMISSION.txt"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/GPL-2.0.txt",
+      "path": "GPL-2.0.txt"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/GPL-3.0.txt",
+      "path": "GPL-3.0.txt"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/LGPL-3.0.txt",
+      "path": "LGPL-3.0.txt"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/REBUILD.txt",
+      "path": "REBUILD.txt"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/THIRD-PARTY-NOTICES.txt",
+      "path": "THIRD-PARTY-NOTICES.txt"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/apple-dnsinfo-modifications.diff",
+      "path": "apple-cares/modifications.diff"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/prepare-runtime.py",
+      "path": "prepare-runtime.py"
+    },
+    {
+      "checkout": "scripts/cli-release/source-materials/tinycc-tcc.h",
+      "path": "recipe/tinycc-tcc.h"
+    }
+  ],
+  "payload": {
+    "bytes": 829399,
+    "sha256": "152684b9f64e0d6e86ba0d5523d9053aae51bfd68af8b888341c94568f5c2e08"
+  },
+  "schema_version": 1,
+  "sources": [
+    {
+      "aliases": {
+        "dnsinfo.h": "dnsinfo/dnsinfo.h"
+      },
+      "destination": "apple-cares/apple-configd-453.19",
+      "omitted_symlinks": [],
+      "prefixes": ["APPLE_LICENSE"],
+      "repository": "apple-oss-distributions/configd",
+      "revision": "5ab18e75fd838206cf76cab596a41a3050404867"
+    },
+    {
+      "aliases": {},
+      "destination": "apple-cares",
+      "omitted_symlinks": [],
+      "prefixes": ["src/lib/thirdparty/apple/README.md", "src/lib/thirdparty/apple/dnsinfo.h"],
+      "repository": "c-ares/c-ares",
+      "revision": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab"
+    },
+    {
+      "aliases": {},
+      "destination": "bun",
+      "omitted_symlinks": ["src/AGENTS.md", "src/cli", "src/js/AGENTS.md"],
+      "prefixes": [
+        ".cargo",
+        "Cargo.lock",
+        "Cargo.toml",
+        "LICENSE.md",
+        "bun.lock",
+        "bunfig.toml",
+        "entitlements.debug.plist",
+        "entitlements.plist",
+        "package.json",
+        "packages/bun-debug-adapter-protocol",
+        "packages/bun-error",
+        "packages/bun-inspector-protocol",
+        "packages/bun-native-bundler-plugin-api",
+        "packages/bun-types",
+        "packages/bun-usockets",
+        "packages/bun-uws",
+        "patches",
+        "rust-toolchain.toml",
+        "scripts",
+        "src",
+        "tsconfig.base.json",
+        "tsconfig.json"
+      ],
+      "repository": "oven-sh/bun",
+      "revision": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc"
+    },
+    {
+      "aliases": {
+        "macros/LICENSE": "LICENSE"
+      },
+      "destination": "mpl/cssparser",
+      "omitted_symlinks": [],
+      "prefixes": [
+        "Cargo.toml",
+        "LICENSE",
+        "README.md",
+        "macros/Cargo.toml",
+        "macros/lib.rs",
+        "src/color.rs",
+        "src/cow_rc_str.rs",
+        "src/from_bytes.rs",
+        "src/lib.rs",
+        "src/macros.rs",
+        "src/nth.rs",
+        "src/parser.rs",
+        "src/rules_and_declarations.rs",
+        "src/serializer.rs",
+        "src/size_of_tests.rs",
+        "src/tests.rs",
+        "src/tokenizer.rs",
+        "src/unicode_range.rs"
+      ],
+      "repository": "servo/rust-cssparser",
+      "revision": "9339ddd71443463dfb85d1185ad50cd98b34bc8f"
+    },
+    {
+      "aliases": {},
+      "destination": "mpl/dtoa-short",
+      "omitted_symlinks": [],
+      "prefixes": ["Cargo.toml", "LICENSE", "README.md", "src"],
+      "repository": "upsuper/dtoa-short",
+      "revision": "2d905cdb8b2e08163dc0d015f529877fe657b4ef"
+    },
+    {
+      "aliases": {},
+      "destination": "mpl/selectors",
+      "omitted_symlinks": [],
+      "prefixes": ["Cargo.toml", "selectors"],
+      "repository": "servo/stylo",
+      "revision": "f319793c6989dba83994fbd10d560b21ad4a0c85"
+    },
+    {
+      "aliases": {},
+      "destination": "tinycc",
+      "omitted_symlinks": [],
+      "prefixes": [],
+      "repository": "oven-sh/tinycc",
+      "revision": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171"
+    },
+    {
+      "aliases": {},
+      "destination": "webkit",
+      "omitted_symlinks": [
+        "Tools/Scripts/libraries/reporelaypy/reporelaypy/static/css/webkit.css",
+        "Tools/Scripts/webkitpy/benchmark_runner/data/plans/jetstream2.plan",
+        "Tools/Scripts/webkitpy/benchmark_runner/data/plans/motionmark.plan",
+        "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer.plan",
+        "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer2.plan",
+        "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer3.plan",
+        "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer4.plan"
+      ],
+      "prefixes": [
+        "CMakeLists.txt",
+        "CMakePresets.json",
+        "Makefile",
+        "Makefile.shared",
+        "Source/CMakeLists.txt",
+        "Source/JavaScriptCore",
+        "Source/WTF",
+        "Source/bmalloc",
+        "Source/cmake",
+        "Tools/Scripts",
+        "build-icu.ps1",
+        "icu",
+        "scripts"
+      ],
+      "repository": "oven-sh/WebKit",
+      "revision": "5718a6ec579b98362ea7276a426deedcc6281ef5"
+    }
+  ]
+}

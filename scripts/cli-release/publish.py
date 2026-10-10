@@ -6,6 +6,8 @@ unverified material. Downloaded executables and installers are never executed.
 All network I/O crosses the request argument to main, enabling offline seam tests.
 """
 import argparse
+import bisect
+import importlib.util
 import hashlib
 import io
 import os
@@ -19,6 +21,15 @@ import subprocess
 import json
 from pathlib import Path
 import sys
+
+
+# Load only the validator beside this trusted checked-out script, never from an artifact.
+SOURCE_MODULE = importlib.util.spec_from_file_location("fidy_publish_source", Path(__file__).with_name("publish-source.py"))
+source_validator = importlib.util.module_from_spec(SOURCE_MODULE)
+SOURCE_MODULE.loader.exec_module(source_validator)
+PLAN_MODULE = importlib.util.spec_from_file_location("fidy_source_plan", Path(__file__).with_name("source-plan.py"))
+source_plan = importlib.util.module_from_spec(PLAN_MODULE)
+PLAN_MODULE.loader.exec_module(source_plan)
 
 
 class ReleaseError(Exception):
@@ -54,7 +65,7 @@ ATTESTATIONS = {
     "first_party_distribution_authorized", "bundled_inventory_complete",
     "required_notices_complete", "source_obligations_satisfied",
 }
-MATERIALS = {"inventory", "source_obligations", "BUN-LICENSE.txt", "THIRD-PARTY-NOTICES.txt"}
+MATERIALS = {"inventory", "source_obligations", "BUN-LICENSE.txt", "THIRD-PARTY-NOTICES.txt", "source_plan"}
 
 
 def require(condition, message):
@@ -93,7 +104,7 @@ def readiness(root, version):
             "Reviewed source tree does not match this checkout.")
     materials = manifest["materials"]
     require(type(materials) is dict and set(materials) == MATERIALS,
-            "Readiness needs all four reviewed evidence materials.")
+            "Readiness needs all five reviewed evidence materials.")
     tracked = set(git(root, "ls-files", "-z").decode().split("\0"))
     content = {}
     for name, entry in materials.items():
@@ -110,7 +121,7 @@ def readiness(root, version):
         require(entry["sha256"] == hashlib.sha256(data).hexdigest(), "Reviewed material digest mismatch.")
         content[name] = data
     require(len({item["path"] for item in materials.values()}) == len(MATERIALS),
-            "Inventory, source evidence and notices must be separate reviewed files.")
+            "Inventory, source evidence, source plan and notices must be separate reviewed files.")
     review_evidence(content, version)
     for name in ("BUN-LICENSE.txt", "THIRD-PARTY-NOTICES.txt"):
         require(bool(content[name].decode('utf-8').strip()), "Reviewed notice text must not be blank.")
@@ -119,7 +130,13 @@ def readiness(root, version):
     return content
 
 
-def review_evidence(content, version):
+def review_evidence(content, version, raw_spec=None):
+    plan = source_plan.decode(content["source_plan"], version, RUNTIME_REVISION)
+    source_paths = None
+    if raw_spec is not None:
+        spec = source_validator.spec_decode(raw_spec, version, RUNTIME_REVISION)
+        source_paths = [entry["path"] for entry in spec["files"]]
+    spec_digest = plan["manifest_sha256"]
     inventory = json.loads(content["inventory"])
     require(type(inventory) is dict and inventory.get("schema_version") == 1
             and inventory.get("status") == "reviewed_complete" and inventory.get("version") == version
@@ -159,14 +176,27 @@ def review_evidence(content, version):
                 "An unresolved source obligation blocks publication.")
         evidence = entry["evidence"]
         require(type(evidence) is list and len(evidence) <= 100
-                and (entry["requirement"] == "none" or len(evidence) > 0),
-                "Required source needs preserved distribution evidence.")
+                and ((entry["requirement"] == "none" and not evidence)
+                     or (entry["requirement"] == "source_required" and bool(evidence))),
+                "Required source needs same-release distribution evidence; no-source decisions need an empty list.")
         for item in evidence:
-            require(type(item) is dict and set(item) == {"url", "sha256"}
-                    and type(item["url"]) is str and item["url"].startswith("https://")
-                    and len(item["url"]) <= 8192 and type(item["sha256"]) is str
-                    and re.fullmatch(r"[a-f0-9]{64}", item["sha256"]),
-                    "Source distribution evidence needs its reviewed HTTPS URL and exact SHA-256.")
+            require(type(item) is dict and set(item) == {"source_asset", "source_spec_sha256", "path_prefixes"}
+                    and item["source_asset"] == f"fidy-cli-v{version}-source.tar.gz",
+                    "Source evidence must identify the versioned same-release source asset.")
+            require(item["source_spec_sha256"] == spec_digest,
+                    "Source evidence must bind the exact reviewed source specification.")
+            prefixes = item["path_prefixes"]
+            require(type(prefixes) is list and 0 < len(prefixes) <= 100
+                    and all(type(prefix) is str and 1 < len(prefix.encode("utf-8")) <= 256
+                            and prefix.endswith("/") for prefix in prefixes)
+                    and len(set(prefixes)) == len(prefixes),
+                    "Source evidence needs unique bounded canonical directory prefixes ending in '/'.")
+            for prefix in prefixes:
+                source_validator.canonical_path(prefix[:-1])
+                if source_paths is not None:
+                    position = bisect.bisect_left(source_paths, prefix)
+                    require(position < len(source_paths) and source_paths[position].startswith(prefix),
+                            "Source evidence prefix matches no reviewed source file.")
         resolved.add(entry["id"])
 
 
@@ -407,7 +437,10 @@ def remote_release(args, environ, assets, request, output):
             "generate_release_notes": False, "make_latest": "false",
             "body": (f"Fidy CLI {args.version}, source {args.expected_sha}.\n\n"
                      "Native Linux x64, macOS ARM64 and Windows x64 archives, checksums and versioned installers. "
-                     "Notices are included. Checksums detect corruption; they are not code signatures. "
+                     f"Notices are included. Corresponding source and recipient rebuild instructions: "
+                     f"[fidy-cli-v{args.version}-source.tar.gz](https://github.com/{REPOSITORY}/releases/download/{tag}/fidy-cli-v{args.version}-source.tar.gz). "
+                     "The accompanying .sha256 file checks these source bytes. "
+                     "Checksums detect corruption; they are not code signatures. "
                      "Respect operating-system security warnings. No automatic updater is installed."),
         }, expected=201)
         release_id = release_state(release, True)
@@ -449,6 +482,7 @@ def main(argv=None, *, source_root=None, environ=None, output=None, request=None
     parser.add_argument("--version", default="0.1.0")
     parser.add_argument("--expected-sha")
     parser.add_argument("--artifacts", type=Path)
+    parser.add_argument("--source-artifact", type=Path)
     parser.add_argument("--destination", type=Path)
     args = parser.parse_args(argv)
     root = (source_root or Path(__file__).resolve().parents[2]).resolve()
@@ -467,14 +501,26 @@ def main(argv=None, *, source_root=None, environ=None, output=None, request=None
             return 0
         context(root, args, os.environ if environ is None else environ)
         if args.command in ("validate", "publish"):
+            require(args.source_artifact is not None, "The same-run source artifact is required.")
+            plan = source_plan.decode(materials["source_plan"], args.version, RUNTIME_REVISION)
+            raw_spec = regular_bytes(args.source_artifact / "source-spec.json", source_validator.MAX_SPEC)
+            # The downloaded spec cannot authorize itself. Verify the checked-in
+            # review commitment before decoding any of its paths or source origins.
+            require(hashlib.sha256(raw_spec).hexdigest() == plan["manifest_sha256"],
+                    "Generated source specification differs from the reviewed manifest commitment.")
+            review_evidence(materials, args.version, raw_spec)
             assets = validate_candidates(root, args.artifacts, materials)
+            assets.update(source_validator.validate_artifact(
+                args.source_artifact, raw_spec, cli_version=args.version,
+                bun_revision=RUNTIME_REVISION, source_commit=args.expected_sha))
+            require(len(assets) == 10, "The complete release must contain exactly ten validated assets.")
             print(f"Validated {len(assets)} release assets without executing candidate contents.", file=output)
         if args.command in ("preflight", "publish"):
             remote_release(args, os.environ if environ is None else environ,
                            assets if args.command == "publish" else None, request or http_request, output)
         return 0
-    except (ReleaseError, OSError, ValueError, TypeError, KeyError, zipfile.BadZipFile) as error:
-        print(str(error) if isinstance(error, ReleaseError) else "Release material could not be read or decoded.", file=output)
+    except (ReleaseError, source_validator.SourceError, source_plan.contract.SourceError, OSError, ValueError, TypeError, KeyError, zipfile.BadZipFile) as error:
+        print(str(error) if isinstance(error, (ReleaseError, source_validator.SourceError, source_plan.contract.SourceError)) else "Release material could not be read or decoded.", file=output)
         return 1
 
 

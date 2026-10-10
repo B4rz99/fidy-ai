@@ -17,9 +17,11 @@ version="${version_output#fidy }"
 python3 scripts/cli-release/publish.py materials --version "$version" --destination "$output/$target"
 mkdir -p "$output/$target"
 bun build apps/cli/src/main.ts --compile --minify --metafile="$output/$target/build-metafile.json" --outfile "$output/$target/$executable"
+python3 scripts/cli-release/verify-bundle.py "$output/$target/build-metafile.json"
 [[ "$("$output/$target/$executable" --version)" == "$version_output" ]] || { echo 'Compiled version differs from the CLI.' >&2; exit 1; }
 printf '%s\n' "$version_output"
 "$output/$target/$executable" --help
+"$output/$target/$executable" --license
 cp scripts/cli-release/install.sh scripts/cli-release/install.ps1 "$output/"
 python3 - "$output" "$target" "$executable" <<'PY'
 from pathlib import Path

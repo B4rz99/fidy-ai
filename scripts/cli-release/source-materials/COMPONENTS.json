@@ -1,0 +1,83 @@
+{
+  "cli_version": "0.1.0",
+  "git_components": [
+    ["apple-oss-distributions/configd", "5ab18e75fd838206cf76cab596a41a3050404867"],
+    ["c-ares/c-ares", "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab"],
+    ["oven-sh/WebKit", "5718a6ec579b98362ea7276a426deedcc6281ef5"],
+    ["oven-sh/bun", "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc"],
+    ["oven-sh/tinycc", "05f0fafaa3be31e31d7b4b5c17dc60f62c991171"],
+    ["servo/rust-cssparser", "9339ddd71443463dfb85d1185ad50cd98b34bc8f"],
+    ["servo/stylo", "f319793c6989dba83994fbd10d560b21ad4a0c85"],
+    ["upsuper/dtoa-short", "2d905cdb8b2e08163dc0d015f529877fe657b4ef"]
+  ],
+  "omitted_symlink_entries": [
+    {
+      "component": "bun",
+      "git_blob_sha1": "681311eb9cf453d0faddf3aacaec7357e97ba8e9",
+      "path": "src/AGENTS.md",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "bun",
+      "git_blob_sha1": "50f69a82d3607201a7a59f6959ffe92a60a50133",
+      "path": "src/cli",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "bun",
+      "git_blob_sha1": "681311eb9cf453d0faddf3aacaec7357e97ba8e9",
+      "path": "src/js/AGENTS.md",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "webkit",
+      "git_blob_sha1": "2c606a72e2f778cab1c66497694ca3f3f85ae71b",
+      "path": "Tools/Scripts/libraries/reporelaypy/reporelaypy/static/css/webkit.css",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "webkit",
+      "git_blob_sha1": "4196fe0fbb6c58c5df595b6866e8072225af4a5f",
+      "path": "Tools/Scripts/webkitpy/benchmark_runner/data/plans/jetstream2.plan",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "webkit",
+      "git_blob_sha1": "170448438458971da7eda0c579614cf3303433d7",
+      "path": "Tools/Scripts/webkitpy/benchmark_runner/data/plans/motionmark.plan",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "webkit",
+      "git_blob_sha1": "73c607ac698075af50228cd639eaff9ddba7ac7e",
+      "path": "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer.plan",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "webkit",
+      "git_blob_sha1": "73c607ac698075af50228cd639eaff9ddba7ac7e",
+      "path": "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer2.plan",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "webkit",
+      "git_blob_sha1": "58f4829c76447d8523b328f254172b6762045147",
+      "path": "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer3.plan",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    },
+    {
+      "component": "webkit",
+      "git_blob_sha1": "0a8f48e4d0fc20e58acfe63c5302076f2fe1a872",
+      "path": "Tools/Scripts/webkitpy/benchmark_runner/data/plans/speedometer4.plan",
+      "reason": "Unneeded compatibility/agent-document or optional benchmark/UI symlink; not followed."
+    }
+  ],
+  "recipe_changes": [
+    "Bun local WebKit: ENABLE_TOOLS=OFF, USE_SYSTEM_UNIFDEF=ON; respect existing PowerShell policy.",
+    "WebKit optional API tests disabled; no core-library source changed by preparation.",
+    "TinyCC supplied Bun tcc.h patch result copied into recipient-only working tree."
+  ],
+  "schema_version": 1,
+  "scope": "Selected Bun/WebKit runtime sources and build interfaces, full TinyCC export, covered MPL source, Apple/c-ares modification and application source. Not an assertion every source file is linked, an offline SDK image, or a legal opinion.",
+  "source_route": "Same-release source and recipe asset accompanying the binary downloads; LGPL library/work source route and MPL covered-source access."
+}

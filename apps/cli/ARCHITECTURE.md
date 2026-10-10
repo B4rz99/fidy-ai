@@ -3,7 +3,9 @@
 `@fidy/cli` is a Bun-only User-facing presentation application, not a domain or authorization
 implementation. Its surface is `login`, `status`, local `logout`, and server-derived canonical
 queries, mutations and ordered atomic batches, in Spanish. It owns one saved login, with no
-profiles, pasted PATs, passwords or headless credential provisioning. Friendly scalar flags derive
+profiles, pasted PATs, passwords or headless credential provisioning.
+Offline `--help`, `--version` and `--license` are handled before credential access or requests.
+The license notice points to the exact versioned accompanying source/recipe asset without fetching it. Friendly scalar flags derive
 from the canonical encoded input schema; structured file/stdin input remains the complete contract.
 
 `support-recovery` is a separate private operator command, outside canonical discovery and saved PAT

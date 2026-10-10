@@ -1,0 +1,135 @@
+Fidy CLI 0.1.0: source and recipient rebuild instructions
+
+Scope
+-----
+This packet accompanies the standalone CLI. FIDY-CLI-PERMISSION.txt gives the
+owner-authorized permission for personal modification, rebuilding/relinking and
+debugging of the CLI and necessary supplied Fidy source. Third-party files keep
+their own licenses. This does not grant hosted-service access or rights in user
+data, trademarks or unrelated Fidy code.
+
+The ordinary installer does not run this recipe or need developer tools.
+This recipe is for recipients who choose to modify their own copy. It produces
+a modified local build, not an official Fidy release or a byte-identical Bun.
+
+What is supplied
+----------------
+- application/fidy-app.js: unminified, self-contained application relink input.
+  Its original Fidy TypeScript inputs and package attribution are supplied too.
+- bun/: selected source, interfaces, data, dependency recipes, lockfiles and
+  build scripts from Bun 13a98b0dbd136bcc5c98a8adfb53c909aa3183cc.
+- webkit/: JavaScriptCore, WTF, bmalloc and their source/build support from
+  5718a6ec579b98362ea7276a426deedcc6281ef5, including the fork's modifications.
+- tinycc/: complete source at 05f0fafaa3be31e31d7b4b5c17dc60f62c991171.
+  bun/patches/tinycc/tcc.h.patch and recipe/tinycc-tcc.h retain Bun's patch and
+  its verified result. The build generates its own config.h/tccdefs_.h inputs.
+- mpl/: covered cssparser, dtoa-short and selectors source and their licenses.
+- apple-cares/: the c-ares dnsinfo.h modification, original source and terms.
+- SOURCE-FILES.json and SOURCE-RELEASE.json: byte inventory and release binding.
+
+The source selection excludes unrelated browser engines, layout tests and
+benchmark resources. Source-only files are not a claim that every one appears
+in the executable. Dependency recipes and lockfiles identify other public
+build dependencies; this packet is not an offline compiler/SDK installation.
+
+1. Inspect and verify
+---------------------
+Use Python 3.10 or later. Check the source archive's SHA-256 against the sibling
+release checksum before extraction. Extract into a new directory. Then run:
+
+  python3 prepare-runtime.py
+
+This verifies every listed file, rejects links and unexpected files, and does
+not download or execute any upstream source. A same-server checksum detects
+corruption but is not independent proof against compromise of that server.
+
+2. Prepare a separate working copy
+---------------------------------
+Choose a new absolute directory outside this extracted packet:
+
+  python3 prepare-runtime.py --output /absolute/path/to/fidy-runtime-work
+
+On Windows, use a new absolute Windows path and your installed Python command.
+The command refuses an existing output. It copies source, retains executable
+script modes where supported, and makes only these documented preparations:
+
+- Bun's local WebKit build disables optional Tools and uses system unifdef.
+- WebKit's optional API test targets are disabled. Core libraries are unchanged.
+- The Windows ICU command respects the current PowerShell execution policy.
+- TinyCC tcc.h receives the supplied Bun patch before the local dependency build.
+
+The original packet is unchanged. RECIPIENT-MODIFICATIONS.txt records these
+changes. If a later copy failure leaves an incomplete new directory, inspect it
+and choose a fresh output for another attempt; the script does not overwrite it.
+Make your intended library/Bun source modifications in this working copy.
+
+3. Build the modified runtime on its native platform
+---------------------------------------------------
+Use the pinned source's normal developer prerequisites and platform tools:
+bootstrap Bun, Git, LLVM 23.1.x, Rust nightly-2026-09-15, CMake, Ninja, Python,
+Perl, Ruby, pkg-config and unifdef; x64 builds also use NASM. macOS requires
+Xcode developer tools and ICU headers; Linux uses system ICU development files.
+Windows requires Visual Studio 2022 C++ tools and its SDK plus native LLVM,
+Python and unifdef. Obtain tools from their official vendors or normal package
+manager and review their terms. Do not bypass an OS, browser or execution-policy
+warning. A missing or policy-blocked tool is a prerequisite to resolve normally.
+
+The authoritative dependency versions, flags and tools are in
+bun/scripts/build/deps/, bun/scripts/build/ci-images/spec.ts,
+bun/rust-toolchain.toml and the supplied lockfiles. The upstream build can
+download those pinned public dependencies and perform normal package installs.
+Run only after reviewing it. No credentials or hosted-service login are needed.
+Do not set CI/Buildkite flags: those are the distributor's upstream automation,
+not this recipient recipe. Do not use Windows cross-compilation for local
+WebKit; the upstream build explicitly requires a native Windows host there.
+
+From the prepared bun directory on macOS or Linux:
+
+  export BUN_WEBKIT_PATH="/absolute/path/to/fidy-runtime-work/webkit"
+  bun scripts/build.ts --profile=release-local --build-dir=build/recipient-local --local-deps=tinycc=/absolute/path/to/fidy-runtime-work/tinycc
+
+On native Windows PowerShell, from the prepared bun directory:
+
+  $env:BUN_WEBKIT_PATH = 'C:\absolute\path\to\fidy-runtime-work\webkit'
+  bun scripts/build.ts --profile=release-local --build-dir=build/recipient-local '--local-deps=tinycc=C:\absolute\path\to\fidy-runtime-work\tinycc'
+
+Use your actual absolute paths. With spaces, quote the entire --local-deps
+argument. No runtime revision is forged: an exported tree can report unknown
+rather than claim an unmodified official Git build. The original runtime policy
+continues to restrict the official CLI to the reviewed revision.
+
+4. Recompile the application with your runtime
+---------------------------------------------
+Inspect/edit application/fidy-app.js for permitted personal modifications.
+The supplied payload has no external application imports. It retains the official
+runtime guard. In your personal copy only, locate its single declaration
+
+  var supportedBunRevision = "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc";
+
+and replace that string with the exact revision printed by your modified runtime:
+
+  /absolute/path/to/modified/bun -e 'console.log(Bun.revision)'
+
+This is an explicit personal application modification, not an official supported
+runtime, a forged runtime identity, or a change to the distributor's pinned
+build. Review your modified runtime before granting it access to credentials.
+Without this personal change, a runtime with a different revision is rejected,
+including for offline commands. Keep the original packet unchanged and edit a
+separate copy of application/fidy-app.js. Then choose a new output path:
+
+  /absolute/path/to/modified/bun build application/fidy-app.js --compile --minify --outfile /absolute/new/path/to/fidy
+
+Use bun.exe and fidy.exe on Windows. This explicit recipient command may replace
+an existing output if you choose one, so use a new path. Verify public offline
+behavior with the new executable's --version and --help. It should say
+"fidy 0.1.0" unless you intentionally changed the application version.
+
+Verification boundary
+---------------------
+The application relink recipe was exercised with the retained Linux compiler.
+Source bytes, recipient preparation and archive reproducibility were checked.
+The full modified Bun/WebKit build was not performed. This is a practical source
+delivery recipe, not a guarantee of every recipient's toolchain or legal advice.
+The first-party permission does not change server authorization, OS credential
+storage safeguards, the official distributor's exact runtime policy, or rights
+under the third-party licenses.

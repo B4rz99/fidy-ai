@@ -1,5 +1,6 @@
 """Compile and install an ephemeral native test fixture; never create release artifacts."""
 import hashlib
+import os
 import platform
 from pathlib import Path
 import stat
@@ -40,6 +41,21 @@ def main():
         if output(str(binary), '--version') != expected:
             raise RuntimeError('Compiled version differs from the CLI.')
         run(str(binary), '--help')
+        license_environment = {**os.environ, 'HOME': '', 'USERPROFILE': '', 'DBUS_SESSION_BUS_ADDRESS': ''}
+        notice = subprocess.run([str(binary), '--license'], cwd=ROOT, env=license_environment,
+                                text=True, capture_output=True, timeout=10, check=True)
+        if ('Apple Public Source License 2.0' not in notice.stdout or notice.stderr or
+                'cli-v0.1.0/fidy-cli-v0.1.0-source.tar.gz' not in notice.stdout):
+            raise RuntimeError('Compiled source-access notice is missing or inconsistent.')
+        # An empty credential home is rejected before native storage can open.
+        # Also make any application fetch fail; Bun.secrets itself is immutable.
+        preload = root / 'forbid-network.js'
+        preload.write_text("globalThis.fetch = () => { throw new Error('Network forbidden in notice test'); };\n")
+        isolated = subprocess.run(['bun', '--preload', str(preload), 'apps/cli/src/main.ts', '--license'],
+                                  cwd=ROOT, env=license_environment, text=True, capture_output=True,
+                                  timeout=10, check=True)
+        if isolated.stdout != notice.stdout or isolated.stderr:
+            raise RuntimeError('Offline source notice differs from the compiled command.')
         archive = root / f'fidy-{target}.zip'
         with zipfile.ZipFile(archive, 'w') as bundle:
             for name in (executable, 'BUN-LICENSE.txt', 'THIRD-PARTY-NOTICES.txt'):

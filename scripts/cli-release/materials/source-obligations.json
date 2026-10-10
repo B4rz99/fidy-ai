@@ -1,0 +1,1644 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "inventory_sha256": "09c7ad621603a065555ae4732ee1ec7ba581de0fefced55ebfacfc8b1a91217d",
+  "components": [
+    {
+      "id": "Application: @effect/platform-bun",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Application: @effect/platform-node-shared",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Application: Node-derived Path in Effect",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Application: effect",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Bun clap parser source",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Bun embedded JavaScript copied-source notices",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Bun runtime and copied in-tree sources",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "The preserved JavaScriptCore COPYING.LIB (LGPL-2.0) sections 4 and 6(a)/(c), and relevant per-file LGPL notices, support the selected accompanying-source/relink route. The same-version source asset binds the pinned library/interface/build sources, Bun work-using-library source, application relink payload/original inputs and recipient REBUILD.txt/prepare-runtime.py. The approved CLI permission permits personal modification/relinking and reverse engineering to debug those changes. No blanket GPL license is imposed on the independent application. Bun also includes copied WebCore LGPL-covered source; those exact source notices and source files are retained under bun/src/jsc/bindings/webcore/. The canonical MIT supplement is only text, not a new component or invented copyright.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["bun/", "webkit/", "tinycc/", "application/", "recipe/"]
+        }
+      ]
+    },
+    {
+      "id": "Copied libuv POSIX headers",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Electron rcedit / rescle",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Fidy CLI",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "The approved FIDY-CLI-PERMISSION.txt is reproduced verbatim. For the work using the included LGPL libraries, the selected LGPL-2.0 section 6(a)/(c) and LGPL-2.1 section 6(a)/(d) route supplies application original inputs and unminified relink payload, Bun/library sources and recipient rebuild instructions. This narrow grant does not license hosted services or unrelated Fidy code.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["application/", "bun/", "webkit/", "tinycc/", "recipe/"]
+        }
+      ]
+    },
+    {
+      "id": "GCC static runtime (libstdc++, libgcc, libatomic)",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "GCC Runtime Library Exception 3.1, section 1, permits conveying eligible Target Code combinations with Independent Modules under the independent modules' terms. The exception is file-scoped to runtime material bearing its notice and conditional on an Eligible Compilation Process, as defined in section 0. This candidate covers the ordinary linked runtime/header combination identified by the retained build recipe and preserves GPL-3.0, COPYING.RUNTIME and the source-specific exception notice; it does not claim that every GCC file or separately modified runtime source is exempt. No separate corresponding-source duty for these combined Target Code portions is asserted under that exception route.",
+      "evidence": []
+    },
+    {
+      "id": "ICU",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "JSC Binja ARM64 disassembler",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "JSC Temporal ports: temporal_rs and ICU4X",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "JSC Zydis / Zycore",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "LLVM libc++abi cxa_thread_atexit fallback",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Mozilla NSS certificate data in Bun",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "MPL-2.0 sections 3.1, 3.2(a) and 3.4 require covered source form, recipient information on obtaining it and preservation of notices. The identified same-version source-asset prefix supplies the covered source and retained notice; BUN-LICENSE.txt points recipients to that asset. This is file-scoped and does not impose MPL on the whole executable.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["bun/packages/bun-usockets/"]
+        }
+      ]
+    },
+    {
+      "id": "Native codec: brotli",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native codec: highway",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native codec: libdeflate",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native codec: libjpeg-turbo",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native codec: libspng",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native codec: libwebp",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native codec: zlib",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native codec: zstd",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The exact Zstandard source offers BSD-3-Clause OR GPL-2.0 alternatives. This candidate decision uses the independently available BSD redistribution grant in zstd/LICENSE, with additional MIT libdivsufsort notices retained. That permissive route requires notices rather than corresponding source; preserving the GPL alternative text does not elect it for the executable.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: boringssl",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: cares",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "Most selected c-ares source uses MIT/BSD/ISC-style grants. The macOS-only modified Apple configd-453.19 dnsinfo.h retains APSL-2.0: sections 2.2(b)/(c) and 2.3 address modification identification, source availability and object-form notices. The same-version source asset supplies the exact original/modified headers, c-ares README and comparison diff with APPLE_LICENSE; the candidate source-access notice points to it. The inherited c-ares changes are not represented as Fidy-authored modifications. Section 2.2(c) requires applicable modification source availability while externally deployed or twelve months after initial deployment, whichever is longer; release retention must preserve that access. This is not a blanket license on other c-ares or Fidy code.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["apple-cares/"]
+        }
+      ]
+    },
+    {
+      "id": "Native network: hdrhistogram",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: libarchive",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: libuv",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: lshpack",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: lsqpack",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: lsquic",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: mimalloc",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Native network: picohttpparser",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The exact picohttpparser.c/.h notice permits the MIT or Perl-license alternative. This candidate uses the reproduced full MIT permission/copyright/disclaimer route; MIT does not require source delivery for the executable. No unverified standalone Perl license is substituted.",
+      "evidence": []
+    },
+    {
+      "id": "Node.js compatibility headers",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Node.js copied builtins",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: Rust portable SIMD@574ff7d98bd6d037e5236a8453029173b32631fd",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: Rust stdarch@574ff7d98bd6d037e5236a8453029173b32631fd",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: alloc@0.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: allocator-api2@0.2.21",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: arrayref@0.3.9",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: arrayvec@0.7.6",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: base64@0.22.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: bcrypt@0.19.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: bitflags@2.11.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: blake2@0.10.6",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: blake2b_simd@1.0.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: block-buffer@0.10.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: blowfish@0.9.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: bstr@1.12.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: bytemuck@1.25.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: byteorder@1.5.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: cfg-if@1.0.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: cipher@0.4.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: compiler_builtins@0.1.160",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The preserved compiler-builtins and libm LICENSE.txt files grant MIT/Apache-2.0 permissions with the LLVM exception for the specified portions. These notices and exact exception text are reproduced. Their permissive/exception terms do not require supplying source solely for the compiled runtime portions; no source obligation is inferred from the compiler's name.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: const_format@0.2.36",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: constant_time_eq@0.4.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: core@0.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: cpufeatures@0.2.17",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: crossbeam-utils@0.8.21",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: crypto-common@0.1.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: cssparser@0.36.0",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "MPL-2.0 sections 3.1, 3.2(a) and 3.4 require covered source form, recipient information on obtaining it and preservation of notices. The identified same-version source-asset prefix supplies the covered source and retained notice; BUN-LICENSE.txt points recipients to that asset. This is file-scoped and does not impose MPL on the whole executable.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["mpl/cssparser/"]
+        }
+      ]
+    },
+    {
+      "id": "Rust: derive_more@2.1.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: digest@0.10.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: dtoa-short@0.3.5",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "MPL-2.0 sections 3.1, 3.2(a) and 3.4 require covered source form, recipient information on obtaining it and preservation of notices. The identified same-version source-asset prefix supplies the covered source and retained notice; BUN-LICENSE.txt points recipients to that asset. This is file-scoped and does not impose MPL on the whole executable.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["mpl/dtoa-short/"]
+        }
+      ]
+    },
+    {
+      "id": "Rust: dtoa@1.0.11",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: encoding_rs@0.8.35",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: enum-map@2.7.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: enumset@1.1.10",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: equivalent@1.0.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: foldhash@0.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: generic-array@0.14.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: getrandom@0.4.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: hashbrown@0.15.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: hashbrown@0.16.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: hashbrown@0.17.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: inout@0.1.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: itoa@1.0.18",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: keccak@0.1.6",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: konst@0.2.20",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: konst_macro_rules@0.2.19",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: libc@0.2.186",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: libc@0.2.189",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: linux-raw-sys@0.4.15",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: log@0.4.29",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: lol_html@2.7.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: memchr@2.8.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: mime@0.3.17",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: new_debug_unreachable@1.0.6",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: panic_abort@0.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: phf@0.13.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: phf_shared@0.13.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: precomputed-hash@0.1.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: rust-argon2@3.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: rustc-demangle@0.1.28",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: rustc-hash@2.1.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: rustc-std-workspace-alloc@1.99.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: rustc-std-workspace-core@1.99.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: rustix@0.38.44",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: scopeguard@1.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: selectors@0.33.0",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "MPL-2.0 sections 3.1, 3.2(a) and 3.4 require covered source form, recipient information on obtaining it and preservation of notices. The identified same-version source-asset prefix supplies the covered source and retained notice; BUN-LICENSE.txt points recipients to that asset. This is file-scoped and does not impose MPL on the whole executable.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["mpl/selectors/"]
+        }
+      ]
+    },
+    {
+      "id": "Rust: servo_arc@0.4.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: sha3@0.10.9",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: siphasher@1.0.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: smallvec@1.15.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: stable_deref_trait@1.2.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: std@0.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: std_detect@0.1.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: strum@0.26.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: subtle@2.6.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: thiserror@2.0.18",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: typenum@1.20.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: unwind@0.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: windows-link@0.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "Rust: zeroize@1.8.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "SIMDe",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "SQLite",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "TinyCC",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "TinyCC COPYING (LGPL-2.1) sections 4 and 6(a)/(d) supports the accompanying source/relink route: full pinned TinyCC source, Bun patch/build driver and the work-using-library/application material accompany the same-version asset. Header dwarf.h retains its own LGPL-3.0-or-later OR GPL-2.0-or-later alternatives and full supplemental texts; its identified material is DWARF enum/constants, not an election of LGPL-3.0 for the whole TinyCC runtime or Fidy executable. LGPL-3.0 section 3 specifically distinguishes numerical parameters, data-structure layouts and accessors/small macros from broader header material. The original header source is supplied unchanged.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": ["tinycc/", "bun/", "application/", "recipe/"]
+        }
+      ]
+    },
+    {
+      "id": "WebKit JavaScriptCore",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "The preserved JavaScriptCore COPYING.LIB (LGPL-2.0) sections 4 and 6(a)/(c), and relevant per-file LGPL notices, support the selected accompanying-source/relink route. The same-version source asset binds the pinned library/interface/build sources, Bun work-using-library source, application relink payload/original inputs and recipient REBUILD.txt/prepare-runtime.py. The approved CLI permission permits personal modification/relinking and reverse engineering to debug those changes. No blanket GPL license is imposed on the independent application.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": [
+            "webkit/Source/JavaScriptCore/",
+            "webkit/Source/WTF/",
+            "webkit/Source/bmalloc/",
+            "webkit/Source/cmake/",
+            "webkit/Tools/",
+            "bun/",
+            "application/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "WebKit WTF support library",
+      "requirement": "source_required",
+      "status": "fulfilled",
+      "basis": "The preserved JavaScriptCore COPYING.LIB (LGPL-2.0) sections 4 and 6(a)/(c), and relevant per-file LGPL notices, support the selected accompanying-source/relink route. The same-version source asset binds the pinned library/interface/build sources, Bun work-using-library source, application relink payload/original inputs and recipient REBUILD.txt/prepare-runtime.py. The approved CLI permission permits personal modification/relinking and reverse engineering to debug those changes. No blanket GPL license is imposed on the independent application.",
+      "evidence": [
+        {
+          "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+          "source_spec_sha256": "adb1a63bafd914fbb37fb6723b909680561492db853131ec66d66ec21f2ff4ba",
+          "path_prefixes": [
+            "webkit/Source/JavaScriptCore/",
+            "webkit/Source/WTF/",
+            "webkit/Source/bmalloc/",
+            "webkit/Source/cmake/",
+            "webkit/Tools/",
+            "bun/",
+            "application/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "WebKit bmalloc / libpas",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "WebKit bundled ICU source notices",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "abort-controller@3.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "acorn-walk@8.3.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "acorn@8.16.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "asn1.js@4.10.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "assert@2.1.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "available-typed-arrays@1.0.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "base64-js@1.5.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "base64-js@1.5.1 (vendored ESM adaptation)",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "bn.js@4.12.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "bn.js@5.2.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "brorand@1.1.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "browserify-aes@1.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "browserify-cipher@1.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "browserify-rsa@4.1.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "browserify-sign@4.2.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "browserify-zlib@0.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "buffer (vendored ESM adaptation)",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "buffer@5.0.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "builtin-status-codes@3.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "call-bind-apply-helpers@1.0.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "call-bind@1.0.8",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "call-bound@1.0.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "create-ecdh@4.0.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "create-hash@1.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "create-hmac@1.1.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "crypto-browserify@3.12.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "define-data-property@1.1.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "define-properties@1.2.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "diffie-hellman@5.0.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "domain-browser@4.23.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "Artistic License 2.0 section 8 permits embedding the Standard or Modified Package in a larger standalone application without restriction when the result does not expose a direct interface to the Package. This candidate covers Fidy CLI application commands, which do not expose the domain-browser package API; the full Artistic-2.0 text and package copyright are retained. The notice index also preserves the exact standard-version registry source URL. This is the scoped embedding provision, not a general assertion that every Artistic-licensed distribution is source-free.",
+      "evidence": []
+    },
+    {
+      "id": "double-conversion (WTF dtoa)",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "dragonbox",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "dunder-proto@1.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "elliptic@6.6.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "error-stack-parser@2.1.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "es-define-property@1.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "es-errors@1.3.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "es-object-atoms@1.1.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "event-target-shim@5.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "evp_bytestokey@1.0.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "fast_float",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "for-each@0.3.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "function-bind@1.1.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "generator-function@2.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "get-intrinsic@1.3.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "get-proto@1.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "gopd@1.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "has-property-descriptors@1.0.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "has-symbols@1.1.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "has-tostringtag@1.0.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "hash-base@3.0.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "hash.js@1.1.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "hasown@2.0.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "hmac-drbg@1.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "https-browserify@1.0.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "ieee754 (vendored ESM adaptation)",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "ieee754@1.2.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "inherits@2.0.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "is-arguments@1.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "is-callable@1.2.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "is-generator-function@1.1.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "is-nan@1.3.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "is-regex@1.2.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "is-typed-array@1.1.15",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "isarray@2.0.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "llhttp",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "math-intrinsics@1.1.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "md5.js@1.3.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "minimalistic-assert@1.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "minimalistic-crypto-utils@1.0.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "object-is@1.1.6",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "object-keys@1.1.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "object.assign@4.1.7",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "pako@1.0.11",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "parse-asn1@5.1.9",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "pbkdf2@3.1.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "possible-typed-array-names@1.1.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "preact@10.27.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "process@0.11.10",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "public-encrypt@4.0.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "punycode@2.3.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "querystring-es3@1.0.0-0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "randombytes@2.1.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "randomfill@1.0.4",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "react-refresh@0.17.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "readable-stream@3.6.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "readable-stream@4.7.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "safe-buffer@5.2.1",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "safe-regex-test@1.1.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "set-function-length@1.2.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "simdutf",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "stream-http@3.2.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "string_decoder@1.3.0",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "to-buffer@1.2.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "typed-array-buffer@1.0.3",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "uSockets / uWebSockets",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "util-deprecate@1.0.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "util@0.12.5",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "which-typed-array@1.1.19",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    },
+    {
+      "id": "xtend@4.0.2",
+      "requirement": "none",
+      "status": "not_required",
+      "basis": "The cited original notice grants source and binary redistribution under the stated permissive terms. Its copyright, grant, disclaimer and any additional patent/attribution conditions are retained in the referenced notice blocks. Those terms do not require providing this component's source merely because this executable is distributed; any separately distributed source retains its original notices.",
+      "evidence": []
+    }
+  ]
+}

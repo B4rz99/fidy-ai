@@ -30,7 +30,7 @@ const pushedCommits = pushLines.flatMap((line) => {
 
   const args =
     remoteSha !== undefined && remoteSha !== ZERO_SHA
-      ? ["rev-list", `${remoteSha}..${localSha}`]
+      ? ["rev-list", `${remoteSha}..${localSha}`, "--not", "--remotes"]
       : ["rev-list", localSha, "--not", "--remotes"];
 
   return text(["git", ...args])

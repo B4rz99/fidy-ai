@@ -69,15 +69,66 @@ jobs:
       expected_sha: ${{ inputs.expected_sha }}
       version: ${{ inputs.version }}
 
+  source:
+    name: Assemble the reviewed source packet
+    needs: [preflight, checks]
+    if: ${{ needs.checks.outputs.checks_passed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      source_passed: ${{ steps.identity.outputs.source_passed }}
+    steps:
+      - name: Check out exact trusted source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install the pinned runtime and frozen workspace
+        uses: ./.github/actions/bun-install
+        with:
+          save-cache: "false"
+      - name: Assemble twice from reviewed inputs and verify archive identity
+        id: identity
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RELEASE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 scripts/cli-release/assemble-source.py \
+            --version "$RELEASE_VERSION" --expected-sha "$EXPECTED_SHA" \
+            --destination "$RUNNER_TEMP/cli-source" --cache "$RUNNER_TEMP/cli-source-inputs"
+          python3 scripts/cli-release/assemble-source.py \
+            --version "$RELEASE_VERSION" --expected-sha "$EXPECTED_SHA" \
+            --destination "$RUNNER_TEMP/cli-source-repeat" --cache "$RUNNER_TEMP/cli-source-inputs"
+          cmp "$RUNNER_TEMP/cli-source/source-spec.json" "$RUNNER_TEMP/cli-source-repeat/source-spec.json"
+          cmp "$RUNNER_TEMP/cli-source/fidy-cli-v$RELEASE_VERSION-source.tar.gz" \
+            "$RUNNER_TEMP/cli-source-repeat/fidy-cli-v$RELEASE_VERSION-source.tar.gz"
+          cmp "$RUNNER_TEMP/cli-source/fidy-cli-v$RELEASE_VERSION-source.tar.gz.sha256" \
+            "$RUNNER_TEMP/cli-source-repeat/fidy-cli-v$RELEASE_VERSION-source.tar.gz.sha256"
+          echo 'source_passed=true' >> "$GITHUB_OUTPUT"
+      - name: Preserve the same-run source archive and validation manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-source
+          path: |
+            ${{ runner.temp }}/cli-source/source-spec.json
+            ${{ runner.temp }}/cli-source/fidy-cli-v${{ inputs.version }}-source.tar.gz
+            ${{ runner.temp }}/cli-source/fidy-cli-v${{ inputs.version }}-source.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
     name: Validate and publish once
-    needs: [preflight, checks, candidates]
+    needs: [preflight, checks, candidates, source]
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.repository == 'B4rz99/fidy-ai' &&
       github.ref == 'refs/heads/trunk' &&
       needs.checks.outputs.checks_passed == 'true' &&
-      needs.candidates.outputs.candidates_passed == 'true'
+      needs.candidates.outputs.candidates_passed == 'true' &&
+      needs.source.outputs.source_passed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -96,6 +147,11 @@ jobs:
           pattern: cli-candidate-*
           path: ${{ runner.temp }}/cli-candidates
           merge-multiple: false
+      - name: Download only this run's reviewed source packet
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cli-source
+          path: ${{ runner.temp }}/cli-source
       - name: Validate, create draft, upload once, publish and verify anonymous bytes
         id: publication
         env:
@@ -107,6 +163,7 @@ jobs:
           python3 scripts/cli-release/publish.py publish
           --version "$RELEASE_VERSION" --expected-sha "$EXPECTED_SHA"
           --artifacts "$RUNNER_TEMP/cli-candidates"
+          --source-artifact "$RUNNER_TEMP/cli-source"
       - name: Warn about uncertain partial publication
         if: ${{ failure() && steps.publication.outcome == 'failure' }}
         run: |

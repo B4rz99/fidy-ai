@@ -1,0 +1,71 @@
+--- Apple configd-453.19 dnsinfo/dnsinfo.h
++++ c-ares c7a3138d src/lib/thirdparty/apple/dnsinfo.h
+@@ -2,14 +2,14 @@
+  * Copyright (c) 2004-2006, 2008, 2009, 2011 Apple Inc. All rights reserved.
+  *
+  * @APPLE_LICENSE_HEADER_START@
+- * 
++ *
+  * This file contains Original Code and/or Modifications of Original Code
+  * as defined in and that are subject to the Apple Public Source License
+  * Version 2.0 (the 'License'). You may not use this file except in
+  * compliance with the License. Please obtain a copy of the License at
+  * http://www.opensource.apple.com/apsl/ and read it before using this
+  * file.
+- * 
++ *
+  * The Original Code and all software distributed under the License are
+  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+@@ -17,7 +17,7 @@
+  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+  * Please see the License for the specific language governing rights and
+  * limitations under the License.
+- * 
++ *
+  * @APPLE_LICENSE_HEADER_END@
+  */
+ 
+@@ -34,6 +34,7 @@
+ #include <sys/types.h>
+ #include <sys/socket.h>
+ #include <netinet/in.h>
++#include <AvailabilityMacros.h>
+ 
+ #define	DNSINFO_VERSION		20111104
+ 
+@@ -72,8 +73,12 @@
+ 	DNS_VAR(uint32_t,		search_order);	/* search_order */
+ 	DNS_VAR(uint32_t,		if_index);
+ 	DNS_VAR(uint32_t,		flags);
++#if MAC_OS_X_VERSION_MIN_REQUIRED < 1080 /* MacOS 10.8 */
++	DNS_VAR(uint32_t,		reserved[6]);
++#else
+ 	DNS_VAR(uint32_t,		reach_flags);	/* SCNetworkReachabilityFlags */
+ 	DNS_VAR(uint32_t,		reserved[5]);
++#endif
+ } dns_resolver_t;
+ #pragma pack()
+ 
+@@ -98,17 +103,19 @@
+  * DNS configuration access APIs
+  */
+ const char *
+-dns_configuration_notify_key    ()				__OSX_AVAILABLE_STARTING(__MAC_10_4,__IPHONE_2_0);
++dns_configuration_notify_key    (void)				__OSX_AVAILABLE_STARTING(__MAC_10_4,__IPHONE_2_0);
+ 
+ dns_config_t *
+-dns_configuration_copy		()				__OSX_AVAILABLE_STARTING(__MAC_10_4,__IPHONE_2_0);
++dns_configuration_copy		(void)				__OSX_AVAILABLE_STARTING(__MAC_10_4,__IPHONE_2_0);
+ 
+ void
+ dns_configuration_free		(dns_config_t	*config)	__OSX_AVAILABLE_STARTING(__MAC_10_4,__IPHONE_2_0);
+ 
++#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1080
+ void
+ _dns_configuration_ack		(dns_config_t	*config,
+ 				 const char	*bundle_id)	__OSX_AVAILABLE_STARTING(__MAC_10_8, __IPHONE_6_0);
++#endif
+ 
+ __END_DECLS
+ 

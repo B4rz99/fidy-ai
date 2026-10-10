@@ -3,6 +3,8 @@
 import importlib.util
 import io
 import hashlib
+import gzip
+import tarfile
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -46,10 +48,44 @@ class Fixture:
                   "components": [{"id": component["id"], "requirement": "none", "status": "not_required",
                                   "basis": "Synthetic test review, not actual license evidence.", "evidence": []}
                                  for component in inventory["components"]]}
+        self.source_files = {"EMPTY": b"", "README.txt": b"Synthetic source fixture.\n",
+                             "BUN-LICENSE.txt": b"Synthetic Bun license fixture.\n",
+                             "THIRD-PARTY-NOTICES.txt": b"Synthetic dependency notices fixture.\n",
+                             "FIDY-CLI-MODIFICATION-PERMISSION.txt": b"Synthetic grant fixture, not a real permission.\n",
+                             "rebuild.sh": b"#!/bin/sh\necho synthetic-only\n",
+                             "runtime/source.c": b"/* Synthetic runtime source fixture. */\n"}
+        self.source_spec = {"schema_version": 1, "cli_version": "0.1.0",
+                            "bun_revision": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+                            "files": [{"path": name, "mode": 493 if name.endswith(".sh") else 420,
+                                       "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                                       "origin": {"kind": "checkout", "path": "source-fixture/" + name,
+                                                  "git_blob_sha1": hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()}}
+                                      for name, data in sorted(self.source_files.items())]}
+        source["components"][1].update(requirement="source_required", status="fulfilled", evidence=[{
+            "source_asset": "fidy-cli-v0.1.0-source.tar.gz",
+            "source_spec_sha256": hashlib.sha256(json.dumps(self.source_spec).encode()).hexdigest(),
+            "path_prefixes": ["runtime/"],
+        }])
+        for name, data in self.source_files.items():
+            path = root / "source-fixture" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        self.source_plan = {
+            "schema_version": 1, "cli_version": "0.1.0",
+            "bun_revision": self.source_spec["bun_revision"],
+            "manifest_sha256": hashlib.sha256(json.dumps(self.source_spec).encode()).hexdigest(),
+            "application_inputs": ["apps/cli/src/main.ts"],
+            "materials": [{"path": "README.txt", "checkout": "source-fixture/README.txt"}],
+            "payload": {"bytes": 1, "sha256": hashlib.sha256(b"x").hexdigest()},
+            "sources": [{"repository": "vendor/runtime", "revision": "a" * 40,
+                         "destination": "runtime", "prefixes": ["src"],
+                         "aliases": {}, "omitted_symlinks": []}],
+        }
         self.materials = {}
         for name, content in {
             "inventory": inventory_bytes,
             "source_obligations": json.dumps(source).encode(),
+            "source_plan": json.dumps(self.source_plan).encode(),
             "BUN-LICENSE.txt": b"Synthetic Bun license fixture.\n",
             "THIRD-PARTY-NOTICES.txt": b"Synthetic dependency notices fixture.\n",
         }.items():
@@ -88,8 +124,19 @@ class Fixture:
                     "GITHUB_REPOSITORY": "B4rz99/fidy-ai", "GITHUB_RUN_ID": "12345",
                     "GITHUB_RUN_ATTEMPT": "1", "GH_TOKEN": "synthetic-test-token"}
         self.make_archives()
+        self.make_source_archive()
 
-    def rebind_review(self):
+    def rebind_review(self, rebind_source=False):
+        if rebind_source:
+            path = self.root / self.materials["source_obligations"]["path"]
+            source = json.loads(path.read_bytes())
+            digest = hashlib.sha256((self.source_artifact / "source-spec.json").read_bytes()).hexdigest()
+            self.source_plan["manifest_sha256"] = digest
+            (self.root / self.materials["source_plan"]["path"]).write_text(json.dumps(self.source_plan))
+            for entry in source["components"]:
+                for evidence in entry["evidence"]:
+                    evidence["source_spec_sha256"] = digest
+            path.write_text(json.dumps(source))
         for item in self.materials.values():
             item["sha256"] = hashlib.sha256((self.root / item["path"]).read_bytes()).hexdigest()
         self.write_manifest()
@@ -136,13 +183,41 @@ class Fixture:
             for name in ("install.sh", "install.ps1"):
                 (directory / name).write_bytes((self.root / "scripts/cli-release" / name).read_bytes())
 
+    def make_source_archive(self, files=None):
+        # Keep native artifacts isolated from the separately downloaded source.
+        self.source_artifact = self.root / "candidates-source"
+        self.source_artifact.mkdir(exist_ok=True)
+        (self.source_artifact / "source-spec.json").write_text(json.dumps(self.source_spec))
+        ignored = self.root / ".git/info/exclude"
+        ignored.write_text("candidates-source/\n")
+        data = dict(self.source_files if files is None else files)
+        data["SOURCE-RELEASE.json"] = (json.dumps({"schema_version": 1, "cli_version": "0.1.0",
+            "bun_revision": self.source_spec["bun_revision"], "source_commit": self.sha}, sort_keys=True, indent=2) + "\n").encode()
+        tar = bytearray()
+        for name, content in sorted(data.items()):
+            entry = tarfile.TarInfo(name)
+            entry.mode = 0o755 if name.endswith(".sh") else 0o644
+            entry.size = len(content)
+            tar.extend(entry.tobuf(format=tarfile.USTAR_FORMAT))
+            tar.extend(content)
+            tar.extend(bytes((-len(content)) % 512))
+        tar.extend(bytes(1024))
+        self.source_tar = bytes(tar)
+        self.write_source_tar(self.source_tar)
+
+    def write_source_tar(self, raw):
+        archive = self.source_artifact / "fidy-cli-v0.1.0-source.tar.gz"
+        with archive.open("wb") as stream, gzip.GzipFile(filename="", mode="wb", fileobj=stream, mtime=0, compresslevel=9) as compressed:
+            compressed.write(raw)
+        self.checksum(archive)
+
     def checksum(self, archive):
         archive.with_name(archive.name + ".sha256").write_bytes((hashlib.sha256(archive.read_bytes()).hexdigest() + "  " + archive.name + "\n").encode('ascii'))
 
     def run(self, command="validate", request=None, version="0.1.0"):
         output = io.StringIO()
         code = publisher.main([command, "--version", version, "--expected-sha", self.sha,
-                               "--artifacts", str(self.artifacts)], source_root=self.root,
+                               "--artifacts", str(self.artifacts), "--source-artifact", str(self.source_artifact)], source_root=self.root,
                               environ=self.env, output=output, request=request)
         return code, output.getvalue()
 
@@ -170,7 +245,7 @@ class GitHubFixture:
             self.assert_anonymous(headers)
             name = path.rsplit("/", 1)[1]
             data = self.assets[name]
-            if self.failure == "anonymous-corruption":
+            if self.failure == "anonymous-corruption" or (self.failure == "anonymous-source" and name.endswith("source.tar.gz")):
                 data += b"changed"
             return 200, {}, data
         if path.endswith("/git/ref/heads/trunk"):
@@ -309,9 +384,9 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(code, 0, output)
             self.assertIn("Published and anonymously verified", output)
             mutations = [(method, url) for method, url, _, _ in github.calls if method != "GET"]
-            self.assertEqual(len(mutations), 10)
-            self.assertEqual(len(set(mutations)), 10)
-            self.assertEqual(len(github.assets), 8)
+            self.assertEqual(len(mutations), 12)
+            self.assertEqual(len(set(mutations)), 12)
+            self.assertEqual(len(github.assets), 10)
             self.assertFalse(github.draft)
             create = json.loads(next(body for method, url, _, body in github.calls if method == "POST" and url.endswith("/releases")))
             self.assertTrue(create["draft"])
@@ -328,8 +403,8 @@ class PublisherTests(unittest.TestCase):
                 self.assertFalse(any(method != "GET" for method, _, _, _ in github.calls))
 
     def test_ambiguous_mutation_or_failed_final_verification_never_retries_or_claims_no_release(self):
-        for failure, mutation_count in (("lost-create", 1), ("lost-upload", 2), ("lost-publish", 10),
-                                        ("moved-before-publish", 9), ("anonymous-corruption", 10), ("bad-final-tag", 10)):
+        for failure, mutation_count in (("lost-create", 1), ("lost-upload", 2), ("lost-publish", 12),
+                                        ("moved-before-publish", 11), ("anonymous-corruption", 12), ("bad-final-tag", 12)):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 fixture = Fixture(Path(temporary))
                 github = GitHubFixture(fixture, failure)
@@ -345,7 +420,7 @@ class PublisherTests(unittest.TestCase):
             fixture = Fixture(Path(temporary))
             code, output = fixture.run()
             self.assertEqual(code, 0, output)
-            self.assertIn("Validated 8 release assets", output)
+            self.assertIn("Validated 10 release assets", output)
 
     def test_changed_candidate_notice_or_installer_fails_without_network(self):
         for changed in ("BUN-LICENSE.txt", "THIRD-PARTY-NOTICES.txt", "extra-entry", "installer",
@@ -389,6 +464,237 @@ class PublisherTests(unittest.TestCase):
                 self.assertEqual(calls, [])
                 if changed.endswith('.txt'):
                     self.assertIn('Packaged notices differ from reviewed materials.', output)
+
+    def test_source_corruption_is_rejected_before_any_github_request(self):
+        for change, expected in (
+                ("member-bytes", "Source member bytes"),
+                ("notice-bytes", "Source member bytes"),
+                ("missing-grant", "Source tar header"),
+                ("metadata-sha", "Source member bytes"),
+                ("missing-member", "Source tar header"),
+                ("extra-member", "Source tar must end"),
+                ("duplicate-member", "Source tar header"),
+                ("symlink", "Source tar header"),
+                ("hardlink", "Source tar header"),
+                ("device", "Source tar header"),
+                ("pax", "Source tar header"),
+                ("traversal", "Source tar header"),
+                ("wrong-mode", "Source tar header"),
+                ("padding", "Source tar member padding"),
+                ("extra-zero-record", "Source tar has trailing"),
+                ("concatenated-gzip", "Source gzip contains trailing"),
+                ("gzip-trailing", "Source gzip contains trailing"),
+                ("gzip-mtime", "Source gzip header"),
+                ("gzip-trailer", "Source gzip trailer"),
+                ("checksum", "Source archive checksum"),
+                ("compressed-limit", "Source artifact must be a nonempty bounded regular file")):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                raw = bytearray(fixture.source_tar)
+                with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as packet:
+                    members = {item.name: item for item in packet.getmembers()}
+                member = members["README.txt"]
+                archive = fixture.source_artifact / "fidy-cli-v0.1.0-source.tar.gz"
+                if change == "notice-bytes":
+                    member = members["THIRD-PARTY-NOTICES.txt"]
+                    raw[member.offset_data] ^= 1
+                elif change == "missing-grant":
+                    member = members["FIDY-CLI-MODIFICATION-PERMISSION.txt"]
+                    del raw[member.offset:member.offset_data + ((member.size + 511) // 512) * 512]
+                elif change in ("member-bytes", "metadata-sha"):
+                    if change == "metadata-sha":
+                        member = members["SOURCE-RELEASE.json"]
+                        body = json.loads(raw[member.offset_data:member.offset_data + member.size])
+                        body["source_commit"] = "b" * 40
+                        data = (json.dumps(body, sort_keys=True, indent=2) + "\n").encode()
+                        raw[member.offset_data:member.offset_data + member.size] = data
+                    else:
+                        raw[member.offset_data] ^= 1
+                elif change == "missing-member":
+                    del raw[member.offset:member.offset_data + ((member.size + 511) // 512) * 512]
+                elif change in ("extra-member", "duplicate-member"):
+                    repeated = raw[member.offset:member.offset_data + ((member.size + 511) // 512) * 512]
+                    if change == "extra-member":
+                        raw[-1024:-1024] = repeated
+                    else:
+                        raw[member.offset:member.offset] = repeated
+                elif change in ("symlink", "hardlink", "device", "pax", "traversal", "wrong-mode"):
+                    if change == "traversal":
+                        member.name = "../README.txt"
+                    elif change == "wrong-mode":
+                        member.mode = 0o777
+                    else:
+                        member.type = {"symlink": tarfile.SYMTYPE, "hardlink": tarfile.LNKTYPE,
+                                       "device": tarfile.CHRTYPE, "pax": tarfile.XHDTYPE}[change]
+                        member.linkname = "README.txt" if change in ("symlink", "hardlink") else ""
+                    raw[member.offset:member.offset + 512] = member.tobuf(format=tarfile.USTAR_FORMAT)
+                elif change == "padding":
+                    raw[member.offset_data + member.size] = 1
+                elif change == "extra-zero-record":
+                    raw.extend(bytes(512))
+                fixture.write_source_tar(raw)
+                if change == "compressed-limit":
+                    with archive.open("wb") as stream:
+                        stream.truncate(128 * 1024 * 1024 + 1)
+                elif change == "checksum":
+                    archive.write_bytes(archive.read_bytes() + b"corrupted")
+                elif change.startswith("gzip-") or change == "concatenated-gzip":
+                    compressed = bytearray(archive.read_bytes())
+                    if change == "gzip-mtime":
+                        compressed[4] = 1
+                    elif change == "gzip-trailer":
+                        compressed[-8] ^= 1
+                    elif change == "gzip-trailing":
+                        compressed.extend(b"trailing")
+                    else:
+                        compressed.extend(compressed)
+                    archive.write_bytes(compressed)
+                    fixture.checksum(archive)
+                calls = []
+                code, output = fixture.run("publish", request=lambda *args: calls.append(args))
+                self.assertEqual(code, 1, output)
+                self.assertIn(expected, output)
+                self.assertEqual(calls, [])
+
+    def test_invalid_source_plan_is_rejected_before_artifact_or_network_access(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            path = fixture.root / fixture.materials["source_plan"]["path"]
+            plan = json.loads(path.read_bytes())
+            plan["application_inputs"] = ["../outside.ts"]
+            path.write_text(json.dumps(plan))
+            fixture.rebind_review()
+            calls = []
+            code, output = fixture.run("publish", request=lambda *args: calls.append(args))
+            self.assertEqual(code, 1, output)
+            self.assertIn("traversing", output)
+            self.assertEqual(calls, [])
+
+    def test_generated_manifest_must_match_reviewed_commitment_before_parsing_or_network(self):
+        for changed in (b"not JSON", b'{"files": []}'):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                (fixture.source_artifact / "source-spec.json").write_bytes(changed)
+                calls = []
+                code, output = fixture.run("publish", request=lambda *args: calls.append(args))
+                self.assertEqual(code, 1, output)
+                self.assertIn("reviewed manifest commitment", output)
+                self.assertEqual(calls, [])
+
+    def test_source_specification_rejects_untrusted_layout_or_identity_before_network(self):
+        for change, expected in (
+                ("version", "exact CLI"), ("runtime", "exact CLI"),
+                ("member-limit", "Source file mode, size"), ("total-limit", "total uncompressed"),
+                ("entry-limit", "entry count"), ("metadata-entry", "cannot supply release metadata"),
+                ("case-collision", "case-fold"), ("prefix-collision", "file/directory collision"),
+                ("traversal", "traversing"), ("symlink-mode", "Source file mode"),
+                ("moving-origin", "Immutable Git source origin")):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                spec = fixture.source_spec
+                if change == "version":
+                    spec["cli_version"] = "0.2.0"
+                elif change == "runtime":
+                    spec["bun_revision"] = "b" * 40
+                elif change == "member-limit":
+                    spec["files"][0]["bytes"] = 16 * 1024 * 1024 + 1
+                elif change in ("total-limit", "entry-limit"):
+                    count = 32 if change == "total-limit" else 20000
+                    spec["files"] = [dict(spec["files"][0], path=f"files/{index:05d}",
+                                          bytes=16 * 1024 * 1024 if count == 32 else 0)
+                                     for index in range(count)]
+                elif change == "metadata-entry":
+                    spec["files"][0]["path"] = "SOURCE-RELEASE.json"
+                elif change == "case-collision":
+                    spec["files"].append(dict(spec["files"][0], path="empty"))
+                elif change == "prefix-collision":
+                    spec["files"].append(dict(spec["files"][0], path="EMPTY/child"))
+                elif change == "traversal":
+                    spec["files"][0]["path"] = "../EMPTY"
+                elif change == "symlink-mode":
+                    spec["files"][0]["mode"] = 0o120777
+                else:
+                    spec["files"][0]["origin"] = {"kind": "git", "repository": "oven-sh/bun", "revision": "main",
+                                                   "path": "LICENSE", "git_blob_sha1": "a" * 40}
+                spec["files"].sort(key=lambda entry: entry["path"])
+                path = fixture.source_artifact / "source-spec.json"
+                path.write_text(json.dumps(spec))
+                fixture.rebind_review(rebind_source=True)
+                calls = []
+                code, output = fixture.run("publish", request=lambda *args: calls.append(args))
+                self.assertEqual(code, 1, output)
+                self.assertIn(expected, output)
+                self.assertEqual(calls, [])
+
+    def test_reviewed_git_and_fixed_application_payload_origins_validate_without_fetching(self):
+        for kind in ("git", "generated"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                entry = next(item for item in fixture.source_spec["files"] if item["path"] == "README.txt")
+                if kind == "git":
+                    entry["origin"].update(kind="git", repository="oven-sh/bun", revision=fixture.source_spec["bun_revision"])
+                else:
+                    entry["origin"] = {"kind": "generated", "generator": "bun-build", "label": "application-payload"}
+                path = fixture.source_artifact / "source-spec.json"
+                path.write_text(json.dumps(fixture.source_spec))
+                fixture.rebind_review(rebind_source=True)
+                fixture.make_source_archive()
+                calls = []
+                code, output = fixture.run(request=lambda *args: calls.append(args))
+                self.assertEqual(code, 0, output)
+                self.assertEqual(calls, [])
+
+    def test_required_source_evidence_binds_the_reviewed_same_release_packet_before_network(self):
+        for change, expected in (("digest", "reviewed source specification"),
+                                 ("prefix", "matches no reviewed source file"),
+                                 ("asset", "versioned same-release source asset"),
+                                 ("traversal", "traversing"),
+                                 ("empty-prefix", "canonical directory prefixes"),
+                                 ("external-url", "versioned same-release source asset")):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                path = fixture.root / fixture.materials["source_obligations"]["path"]
+                source = json.loads(path.read_bytes())
+                evidence = source["components"][1]["evidence"][0]
+                if change == "digest":
+                    evidence["source_spec_sha256"] = "a" * 64
+                elif change == "prefix":
+                    evidence["path_prefixes"] = ["not-in-the-source-packet/"]
+                elif change == "asset":
+                    evidence["source_asset"] = "fidy-cli-v0.2.0-source.tar.gz"
+                elif change == "traversal":
+                    evidence["path_prefixes"] = ["../runtime/"]
+                elif change == "empty-prefix":
+                    evidence["path_prefixes"] = [""]
+                else:
+                    source["components"][1]["evidence"] = [{"url": "https://example.invalid/source.tar.gz", "sha256": "a" * 64}]
+                path.write_text(json.dumps(source))
+                fixture.rebind_review()
+                calls = []
+                code, output = fixture.run("publish", request=lambda *args: calls.append(args))
+                self.assertEqual(code, 1, output)
+                self.assertIn(expected, output)
+                self.assertEqual(calls, [])
+
+    def test_missing_source_artifact_never_starts_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            (fixture.source_artifact / "fidy-cli-v0.1.0-source.tar.gz").unlink()
+            calls = []
+            code, output = fixture.run("publish", request=lambda *args: calls.append(args))
+            self.assertEqual(code, 1, output)
+            self.assertIn("exactly the versioned archive", output)
+            self.assertEqual(calls, [])
+
+    def test_failed_anonymous_source_delivery_reports_existing_publication_without_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            github = GitHubFixture(fixture, "anonymous-source")
+            code, output = fixture.run("publish", request=github)
+            self.assertEqual(code, 1, output)
+            self.assertIn("Publication may exist", output)
+            self.assertIn("Anonymous asset bytes differ", output)
+            self.assertEqual(sum(method != "GET" for method, _, _, _ in github.calls), 12)
 
     def test_production_http_adapter_rejects_authenticated_cross_origin_redirects(self):
         # Keep the production opener and NoRedirect handler. Only the TLS socket

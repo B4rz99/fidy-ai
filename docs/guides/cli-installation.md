@@ -1,8 +1,8 @@
 # Installable Fidy CLI
 
 This is the native installation and publication contract. No public CLI release is implied by
-this source change. Public packaging is blocked until reviewed redistribution evidence is
-complete. Only the dedicated final publication job has release-write permission.
+this source change. Public packaging requires the reviewed, source-bound redistribution evidence and
+successful same-source release checks. Only the dedicated final publication job has release-write permission.
 
 ## End-user experience after publication
 
@@ -59,13 +59,18 @@ workspace dependency installation is required. Initial candidates support macOS 
 Windows x64 and glibc Linux x64. The retained x64 runtime requires AVX2. Other OS/CPU combinations fail explicitly rather than selecting
 an untested binary. Linux needs a working Secret Service/GNOME Keyring/KWallet; macOS uses Keychain;
 Windows uses the reviewed local credential persistence. There is no plaintext fallback.
-`--help` and `--version` work without a login, network or credential store.
+`--help`, `--version` and `--license` work without a login, network or credential store.
+`--license` identifies the Apple Public Source License component and the versioned
+source/recipe asset; it never opens a browser or downloads anything. The source asset
+contains the selected runtime/application source, full notices, the approved narrow CLI
+modification grant, and recipient rebuild instructions. It accompanies the binary release
+and is checked against the same reviewed source specification before publication.
 
 ## Release preparation
 
 1. Complete and review the actual bundled-component inventory, full notices and corresponding
    source/relink evidence. Follow the [source-bound evidence contract](../../scripts/cli-release/publish-readiness.md).
-   The checked-in manifest is blocked; setting affirmative flags alone cannot approve a release.
+   The checked-in manifest binds the reviewed materials; affirmative flags alone cannot approve a release.
    Any signing/notarization or additional source-asset requirements need their own reviewed
    implementation before approval. Do not choose a new first-party license implicitly.
 2. Review and merge the preparation, then dispatch `Publish reviewed CLI release` on `trunk`
@@ -77,11 +82,13 @@ Windows uses the reviewed local credential persistence. There is no plaintext fa
    `build.sh` validates material before compilation, checks binary version/help and creates
    deterministic archives. Every target must pass a same-source repeat-build ZIP comparison and
    actual executable installer tests. No cross-target runtime is downloaded.
-4. The final write-scoped job accepts only the same run's three candidate artifacts and rechecks
-   their exact layout, digests, reviewed notices and source installer bytes. It never executes
-   downloaded files. It creates one draft, uploads the eight assets once, verifies them, then
+4. The final write-scoped job accepts only the same run's three candidate artifacts and separate
+   source artifact. It rechecks their exact layout, digests, reviewed notices, source installer bytes
+   and every source archive member. The generated source manifest must first match the reviewed
+   SHA-256 commitment in the compact checked-in recipe. It never executes downloaded files. It creates one draft,
+   uploads ten assets once (three ZIP/checksum pairs, two installers, source archive/checksum), verifies them, then
    publishes `cli-v0.1.0`. Existing tags/releases are refused; assets are never replaced.
-5. The job verifies all eight public downloads anonymously against the exact validated bytes.
+5. The job verifies all ten public downloads anonymously against the exact validated bytes.
    A failed or interrupted write may leave a draft, tag, assets or public release. Inspect GitHub
    before any further action; do not retry or overwrite blindly. A failure after publication is
    not a rollback. See the evidence contract for the recovery boundary.
@@ -105,7 +112,7 @@ revoke the grant in Fidy when appropriate. No automatic update background proces
 ```sh
 bash scripts/install-bun.sh
 bash scripts/install-workspace.sh
-# Safe while redistribution evidence is incomplete: real binary, synthetic notices,
+# Non-distributable PR smoke: real binary, synthetic notices,
 # private temporary fixtures only, no upload or release artifacts.
 python3 scripts/cli-release/test-native.py
 python3 scripts/cli-release/publish-test.py
@@ -130,53 +137,16 @@ downloadable binary-only PR artifacts. Only a source-verified reusable publicati
 can produce and upload distributable candidates, after the materials gate succeeds. The
 separate native credential-store conformance jobs in ordinary repository CI are unchanged.
 
-The bounded inventory remains incomplete. Application bundling identified Effect,
+The reviewed bounded inventory covers 223 components. Application bundling identified Effect,
 `@effect/platform-bun` and `@effect/platform-node-shared` 4.0.0, plus surviving Node/Joyent
 Path adaptation. The runtime inventory is based on Bun commit
 [`13a98b0dbd136bcc5c98a8adfb53c909aa3183cc`](https://github.com/oven-sh/bun/tree/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc),
-including its pinned WebKit/JavaScriptCore and patched TinyCC sources. Bun's root license
-inventory is not a complete notice bundle. Remaining review includes selected native and
-embedded-JavaScript notices, compiler-runtime provenance, selected Rust notices and transitive
-closure, and platform-specific source obligations. Workspace/test dependencies are not presumed
-shipped. These material gaps block publication independently of passing application tests.
+including its pinned WebKit/JavaScriptCore and patched TinyCC sources. Full notices, the selected
+corresponding source, recipient recipe and scoped CLI permission have completed independent
+material review and are bound by the readiness manifest. Workspace/test dependencies are not
+presumed shipped, and this review is not a legal-compliance guarantee.
 
-## Homebrew preparation (not published)
-
-The intended Apple Silicon experience is one command, `brew install B4rz99/tap/fidy`,
-once the owner approves and publishes a public `B4rz99/homebrew-tap` repository and a
-verified CLI release. Neither the tap nor that install command is available merely
-because this preparation exists. Do not advertise it on the landing page or in
-`llms.txt` until anonymous installation has passed.
-
-Prepare the formula only from the final macOS ARM64 archive and its matching checksum:
-
-```sh
-python3 scripts/cli-release/test-homebrew.py
-python3 scripts/cli-release/homebrew.py 0.1.0 dist/cli-release > /tmp/fidy.rb
-```
-
-The generator checks the actual archive digest, exact three-file layout, nonempty
-regular files, ARM64 Mach-O deployment header and numeric version syntax before printing a formula. It does not
-download, execute or publish anything. Its URL is versioned; it never uses `latest`,
-changes the reviewed Bun pin, or infers that an unpublished asset is available.
-The release operator must independently verify the binary version, actual platform,
-minimum supported macOS version, complete notices/source obligations, release
-provenance and anonymous access. No first-party license is inferred or assigned.
-
-After those gates, review the generated file for `Formula/fidy.rb` in the approved
-tap and test installation, `brew test B4rz99/tap/fidy`, upgrade and uninstall on a
-supported Mac. The formula's offline test covers version/help and installed notices,
-not account authorization or Keychain persistence. Homebrew installs the binary into
-its managed prefix and preserves notices silently in its package share directory;
-there is no license acceptance prompt, extra runtime download or shell-profile edit.
-An existing Homebrew installation supplies PATH management. Login remains the user's
-explicit `fidy login` step after installation. Uninstall does not revoke grants or
-clear credentials; log out first and revoke grants separately when appropriate.
-
-The formula requires an Apple Silicon Mac running macOS 13 Ventura or newer, matching
-the retained runtime's deployment header. A different binary deployment target fails
-generation until its formula requirements are reviewed. Windows and Linux retain their
-separate release paths. Do not bypass OS warnings or modify security policy to make
-the package install. Homebrew packaging does not itself establish code signing or
-notarization. See Homebrew's [formula cookbook](https://docs.brew.sh/Formula-Cookbook)
-and [tap guide](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
+Remaining launch checks are fresh exact-source CI and native credential conformance, same-run
+source acquisition and publication, anonymous exact-byte downloads and native installation,
+real pairing/status/logout and credential persistence, and applicable signing/OS-policy checks.
+Landing and public agent-guide install claims follow those verified public results.

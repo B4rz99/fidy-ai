@@ -1,20 +1,36 @@
 {
   "schema_version": 1,
   "version": "0.1.0",
-  "status": "blocked",
+  "status": "approved",
   "runtime_revision": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
-  "source_tree_sha256": null,
-  "review_reference": null,
+  "source_tree_sha256": "0bc5d276e005d581465f603ec881bb542f54782a54ce12f8e0847be0003f4c68",
+  "review_reference": "https://github.com/B4rz99/fidy-ai/pull/1162",
   "attestations": {
-    "first_party_distribution_authorized": false,
-    "bundled_inventory_complete": false,
-    "required_notices_complete": false,
-    "source_obligations_satisfied": false
+    "first_party_distribution_authorized": true,
+    "bundled_inventory_complete": true,
+    "required_notices_complete": true,
+    "source_obligations_satisfied": true
   },
   "materials": {
-    "inventory": null,
-    "source_obligations": null,
-    "BUN-LICENSE.txt": null,
-    "THIRD-PARTY-NOTICES.txt": null
+    "inventory": {
+      "path": "scripts/cli-release/materials/inventory.json",
+      "sha256": "09c7ad621603a065555ae4732ee1ec7ba581de0fefced55ebfacfc8b1a91217d"
+    },
+    "source_obligations": {
+      "path": "scripts/cli-release/materials/source-obligations.json",
+      "sha256": "5d1d59c1973614c840733cceac35c0213a10625f26b9a4c608385be54dc3be5c"
+    },
+    "BUN-LICENSE.txt": {
+      "path": "scripts/cli-release/source-materials/BUN-LICENSE.txt",
+      "sha256": "e0477cddc5b34139cb414752383a84ff84c31d72d7ae02982f8bfcc8f0fd9d24"
+    },
+    "THIRD-PARTY-NOTICES.txt": {
+      "path": "scripts/cli-release/source-materials/THIRD-PARTY-NOTICES.txt",
+      "sha256": "91b94e2153774138b5d46011ccb083c70bfefbf2916c45a2f71a66638e0eebcc"
+    },
+    "source_plan": {
+      "path": "scripts/cli-release/source-plan.json",
+      "sha256": "33392b5c0947a28e927814d83cbe2f20bb03f5e68d1fb6e4a9bda358431200b8"
+    }
   }
 }

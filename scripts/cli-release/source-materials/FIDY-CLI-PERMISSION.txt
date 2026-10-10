@@ -1,0 +1,7 @@
+Fidy CLI 0.1.0: permission for personal modification and relinking
+
+Recipients of Fidy CLI 0.1.0 may copy and modify the Fidy-owned portions of that CLI and the supplied source needed for it for their own use, including rebuilding or relinking with modified versions of its included LGPL libraries. They may reverse engineer the CLI to debug those modifications.
+
+This permission covers the distributed CLI and the supplied materials necessary for those purposes. It does not grant access to the hosted service or other users' data, or grant rights to trademarks or unrelated Fidy code.
+
+Third-party components retain their own licenses. This permission does not limit rights granted by those licenses or applicable law.

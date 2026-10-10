@@ -1,0 +1,2015 @@
+{
+  "schema_version": 1,
+  "status": "reviewed_complete",
+  "version": "0.1.0",
+  "runtime_revision": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+  "components": [
+    {
+      "id": "Application: @effect/platform-bun",
+      "kind": "bundled_dependency",
+      "version": "4.0.0",
+      "license": "MIT",
+      "source": "https://github.com/Effect-TS/effect.git",
+      "notice": "THIRD-PARTY-NOTICES.txt: effect, @effect/platform-bun, @effect/platform-node-shared, all 4.0.0",
+      "status": "reviewed"
+    },
+    {
+      "id": "Application: @effect/platform-node-shared",
+      "kind": "bundled_dependency",
+      "version": "4.0.0",
+      "license": "MIT",
+      "source": "https://github.com/Effect-TS/effect.git",
+      "notice": "THIRD-PARTY-NOTICES.txt: effect, @effect/platform-bun, @effect/platform-node-shared, all 4.0.0",
+      "status": "reviewed"
+    },
+    {
+      "id": "Application: Node-derived Path in Effect",
+      "kind": "bundled_dependency",
+      "version": "Effect 4.0.0 adaptation; Node v26.3.0 notice-retrieval reference, original adaptation revision not asserted",
+      "license": "Node contributors / Joyent MIT",
+      "source": "https://github.com/nodejs/node/blob/v26.3.0/LICENSE",
+      "notice": "THIRD-PARTY-NOTICES.txt: Node-derived Path implementation in Effect",
+      "status": "reviewed"
+    },
+    {
+      "id": "Application: effect",
+      "kind": "bundled_dependency",
+      "version": "4.0.0",
+      "license": "MIT",
+      "source": "https://github.com/Effect-TS/effect.git",
+      "notice": "THIRD-PARTY-NOTICES.txt: effect, @effect/platform-bun, @effect/platform-node-shared, all 4.0.0",
+      "status": "reviewed"
+    },
+    {
+      "id": "Bun clap parser source",
+      "kind": "runtime_dependency",
+      "version": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "Unlicense / public-domain dedication in exact src/clap/LICENSE; no copyright holder invented",
+      "source": "https://github.com/oven-sh/bun/blob/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc/src/clap/LICENSE",
+      "notice": "BUN-LICENSE.txt: Bun clap parser source; notices N0014",
+      "status": "reviewed"
+    },
+    {
+      "id": "Bun embedded JavaScript copied-source notices",
+      "kind": "runtime_dependency",
+      "version": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "Node/Joyent MIT source notices",
+      "source": "https://github.com/nodejs/node/blob/6edaf759b5c878d071d55a533c26d5d1c9a66763/lib/path.js",
+      "notice": "BUN-LICENSE.txt: Bun embedded JavaScript copied-source notices; notices N0026",
+      "status": "reviewed"
+    },
+    {
+      "id": "Bun runtime and copied in-tree sources",
+      "kind": "runtime",
+      "version": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "Bun MIT overview; copied sources retain their BSD/MIT/Apache/LGPL and other explicitly reproduced per-file terms",
+      "source": "https://github.com/oven-sh/bun/tree/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "notice": "BUN-LICENSE.txt: Bun runtime and copied in-tree sources; notices N0002-N0324",
+      "status": "reviewed"
+    },
+    {
+      "id": "Copied libuv POSIX headers",
+      "kind": "runtime_dependency",
+      "version": "1.51.0, provenance commit bb706f5fe71827f667f0bce532e95ce0698a498d",
+      "license": "Joyent/Node-contributors MIT",
+      "source": "https://github.com/oven-sh/bun/blob/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc/src/jsc/bindings/libuv/uv.h",
+      "notice": "BUN-LICENSE.txt: Copied libuv POSIX headers; notices N0065",
+      "status": "reviewed"
+    },
+    {
+      "id": "Electron rcedit / rescle",
+      "kind": "runtime_dependency",
+      "version": "e36b688b42df0e236922019ce14e0ea165dc176d origin, modified Bun snapshot",
+      "license": "GitHub Inc. MIT",
+      "source": "https://github.com/oven-sh/bun/blob/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc/src/jsc/bindings/windows/rescle.cpp",
+      "notice": "BUN-LICENSE.txt: Electron rcedit / rescle; notices N0311-N0312",
+      "status": "reviewed"
+    },
+    {
+      "id": "Fidy CLI",
+      "kind": "first_party",
+      "version": "0.1.0",
+      "license": "Owner-approved Fidy CLI 0.1.0 personal modification, relinking and debugging permission; third-party rights retained",
+      "source": "https://github.com/B4rz99/fidy-ai",
+      "notice": "THIRD-PARTY-NOTICES.txt: FIDY CLI PERMISSION",
+      "status": "reviewed"
+    },
+    {
+      "id": "GCC static runtime (libstdc++, libgcc, libatomic)",
+      "kind": "runtime_dependency",
+      "version": "Ubuntu13.1.0-8ubuntu1~20.04.2;13.1.0",
+      "license": "GPL-3.0 plus GCC Runtime Library Exception3.1",
+      "source": "https://github.com/gcc-mirror/gcc/blob/releases/gcc-13.1.0/COPYING3",
+      "notice": "BUN-LICENSE.txt: GCC static runtime (libstdc++, libgcc, libatomic); notices N0001, N0325-N0326",
+      "status": "reviewed"
+    },
+    {
+      "id": "ICU",
+      "kind": "runtime_dependency",
+      "version": "78.3",
+      "license": "Unicode License V3 plus included third-party notices",
+      "source": "https://github.com/unicode-org/icu/blob/release-78.3/LICENSE",
+      "notice": "BUN-LICENSE.txt: ICU; notices N0327",
+      "status": "reviewed"
+    },
+    {
+      "id": "JSC Binja ARM64 disassembler",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "Apache-2.0; Copyright2020–2026 Vector35 Inc. in exact LICENSE-binja.txt",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/JavaScriptCore/disassembler/ARM64/LICENSE-binja.txt",
+      "notice": "BUN-LICENSE.txt: JSC Binja ARM64 disassembler; notices N1451",
+      "status": "reviewed"
+    },
+    {
+      "id": "JSC Temporal ports: temporal_rs and ICU4X",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "MIT (temporal_rs) and Unicode License V3 (ICU4X)",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/JavaScriptCore/runtime/temporal/core/LICENSE-temporal_rs.txt",
+      "notice": "BUN-LICENSE.txt: JSC Temporal ports: temporal_rs and ICU4X; notices N1880-N1881",
+      "status": "reviewed"
+    },
+    {
+      "id": "JSC Zydis / Zycore",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "MIT",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/JavaScriptCore/disassembler/zydis/LICENSE-zydis.txt",
+      "notice": "BUN-LICENSE.txt: JSC Zydis / Zycore; notices N1452-N1453",
+      "status": "reviewed"
+    },
+    {
+      "id": "LLVM libc++abi cxa_thread_atexit fallback",
+      "kind": "runtime_dependency",
+      "version": "llvmorg-19.1.0 origin",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "source": "https://github.com/llvm/llvm-project/blob/llvmorg-19.1.0/libcxxabi/LICENSE.TXT",
+      "notice": "BUN-LICENSE.txt: LLVM libc++abi cxa_thread_atexit fallback; notices N0328",
+      "status": "reviewed"
+    },
+    {
+      "id": "Mozilla NSS certificate data in Bun",
+      "kind": "runtime_dependency",
+      "version": "13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "MPL-2.0 (certdata.txt source form)",
+      "source": "https://github.com/oven-sh/bun/tree/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "notice": "BUN-LICENSE.txt: Mozilla NSS certificate data in Bun; notices N0329",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: brotli",
+      "kind": "runtime_dependency",
+      "version": "1.2.0",
+      "license": "MIT root license plus per-source Google notices",
+      "source": "https://github.com/google/brotli/tree/028fb5a23661f123017c060daa546b55cf4bde29",
+      "notice": "BUN-LICENSE.txt: Native codec: brotli; notices N0330-N0340",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: highway",
+      "kind": "runtime_dependency",
+      "version": "1.4.0",
+      "license": "Root LICENSE declares Apache-2.0 OR BSD-3-Clause and contains CC0-1.0 exception text; many selected files still explicitly say Apache-2.0.",
+      "source": "https://github.com/google/highway/tree/2607d3b5b0113992fe84d3848859eae13b3b52c1",
+      "notice": "BUN-LICENSE.txt: Native codec: highway; notices N0341-N0358",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: libdeflate",
+      "kind": "runtime_dependency",
+      "version": "1.26",
+      "license": "MIT, with original per-file copyright notices retained",
+      "source": "https://github.com/ebiggers/libdeflate/tree/92e6a0db9fa848d742f9eb286c92afc60f2c3dda",
+      "notice": "BUN-LICENSE.txt: Native codec: libdeflate; notices N0359-N0389",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: libjpeg-turbo",
+      "kind": "runtime_dependency",
+      "version": "3.2.0",
+      "license": "IJG plus Modified BSD for TurboJPEG; selected SIMD code has zlib-style embedded terms.",
+      "source": "https://github.com/libjpeg-turbo/libjpeg-turbo/tree/c85e6b905bf237038faa936dab160ebfc5da0344",
+      "notice": "BUN-LICENSE.txt: Native codec: libjpeg-turbo; notices N0390-N0552",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: libspng",
+      "kind": "runtime_dependency",
+      "version": "0.7.4",
+      "license": "BSD-2-Clause AND libpng-2.0, as the compiled spng.c SPDX header states; root LICENSE alone contains only BSD-2-Clause.",
+      "source": "https://github.com/randy408/libspng/tree/fb768002d4288590083a476af628e51c3f1d47cd",
+      "notice": "BUN-LICENSE.txt: Native codec: libspng; notices N0553-N0559",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: libwebp",
+      "kind": "runtime_dependency",
+      "version": "1.6.0",
+      "license": "BSD-3-Clause plus exact WebM patent grant and AUTHORS",
+      "source": "https://github.com/webmproject/libwebp/tree/b7e29b9d75bd31422b00c2a446d49d7af06c328d",
+      "notice": "BUN-LICENSE.txt: Native codec: libwebp; notices N0560-N0717",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: zlib",
+      "kind": "runtime_dependency",
+      "version": "zlib-ng 2.3.3; compatibility version 1.3.1.zlib-ng",
+      "license": "zlib-style license; original zlib-ng and contributor notices preserved in all selected sources and included headers",
+      "source": "https://github.com/zlib-ng/zlib-ng/tree/12731092979c6d07f42da27da673a9f6c7b13586",
+      "notice": "BUN-LICENSE.txt: Native codec: zlib; notices N0718-N0811",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native codec: zstd",
+      "kind": "runtime_dependency",
+      "version": "1.5.7",
+      "license": "BSD-style OR GPLv2 source choice; additional MIT libdivsufsort-lite terms. Both upstream alternatives preserved without choosing a legal distribution route.",
+      "source": "https://github.com/facebook/zstd/tree/f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "notice": "BUN-LICENSE.txt: Native codec: zstd; notices N0812-N0829",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: boringssl",
+      "kind": "runtime_dependency",
+      "version": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+      "license": "Apache-2.0, including selected Fiat-Crypto notices",
+      "source": "https://github.com/oven-sh/boringssl/blob/41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f/AUTHORS",
+      "notice": "BUN-LICENSE.txt: Native network: boringssl; notices N0830-N0887",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: cares",
+      "kind": "runtime_dependency",
+      "version": "1.34.8",
+      "license": "MIT; BSD-3-Clause and ISC-derived per-file notices; modified Apple dnsinfo.h under APSL-2.0 on macOS",
+      "source": "https://github.com/c-ares/c-ares/blob/c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab/AUTHORS",
+      "notice": "BUN-LICENSE.txt: Native network: cares; notices N0888-N0928",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: hdrhistogram",
+      "kind": "runtime_dependency",
+      "version": "0.11.10",
+      "license": "CC0-1.0/public-domain dedication OR accompanying BSD-2-Clause alternative",
+      "source": "https://github.com/HdrHistogram/HdrHistogram_c/blob/18c7a324383dded1451d15621cd018b0048057d0/COPYING.txt",
+      "notice": "BUN-LICENSE.txt: Native network: hdrhistogram; notices N0929-N0939",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: libarchive",
+      "kind": "runtime_dependency",
+      "version": "3.8.9",
+      "license": "BSD-2-Clause and BSD-3-Clause per-file variants; ISC-style and public-domain portions",
+      "source": "https://github.com/libarchive/libarchive/blob/27cbc7827172698143e440801fc0ba39ccb4f1f5/COPYING",
+      "notice": "BUN-LICENSE.txt: Native network: libarchive; notices N0940-N1015",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: libuv",
+      "kind": "runtime_dependency",
+      "version": "1.51.1-dev (UV_VERSION_IS_RELEASE=0)",
+      "license": "MIT; BSD-2-Clause, ISC and source-specific permission notices (Windows vendor implementation)",
+      "source": "https://github.com/oven-sh/libuv/blob/8023581113b276e7c1aee3f82da57ca0893faab1/LICENSE",
+      "notice": "BUN-LICENSE.txt: Native network: libuv; notices N0065, N1016-N1025, N2313",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: lshpack",
+      "kind": "runtime_dependency",
+      "version": "2.3.5",
+      "license": "MIT; bundled xxHash BSD-2-Clause and Windows FreeBSD queue BSD-3-Clause",
+      "source": "https://github.com/litespeedtech/ls-hpack/blob/cf0f70dd10b352194c97448eb5d00b4aa484f531/LICENSE",
+      "notice": "BUN-LICENSE.txt: Native network: lshpack; notices N1026-N1031",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: lsqpack",
+      "kind": "runtime_dependency",
+      "version": "2.7.0",
+      "license": "MIT; Windows FreeBSD queue BSD-3-Clause",
+      "source": "https://github.com/litespeedtech/ls-qpack/blob/91567706c41c0d97ab8dc576873ecd472d7869fa/LICENSE",
+      "notice": "BUN-LICENSE.txt: Native network: lsqpack; notices N1026, N1030, N1032",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: lsquic",
+      "kind": "runtime_dependency",
+      "version": "4.9.4",
+      "license": "MIT; Chromium/Google BSD-3-Clause, Rapidhash BSD-2-Clause and generated-scanner MIT notices",
+      "source": "https://github.com/litespeedtech/lsquic/blob/f812ceb9529e26717df78c6064a2ff648b949f3e/LICENSE",
+      "notice": "BUN-LICENSE.txt: Native network: lsquic; notices N1026, N1033-N1043",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: mimalloc",
+      "kind": "runtime_dependency",
+      "version": "3.5.3",
+      "license": "MIT",
+      "source": "https://github.com/oven-sh/mimalloc/blob/92ef6587c57b262f6e6abf513f7776a2f8d12aeb/LICENSE",
+      "notice": "BUN-LICENSE.txt: Native network: mimalloc; notices N1044-N1061",
+      "status": "reviewed"
+    },
+    {
+      "id": "Native network: picohttpparser",
+      "kind": "runtime_dependency",
+      "version": "f4d94b48b31e0abae029ebeafcfd9ca0680ede58",
+      "license": "MIT OR Perl-license alternative, as stated in exact source; full MIT grant preserved",
+      "source": "https://github.com/h2o/picohttpparser/blob/f4d94b48b31e0abae029ebeafcfd9ca0680ede58/picohttpparser.c",
+      "notice": "BUN-LICENSE.txt: Native network: picohttpparser; notices N1062",
+      "status": "reviewed"
+    },
+    {
+      "id": "Node.js compatibility headers",
+      "kind": "runtime_dependency",
+      "version": "26.3.0",
+      "license": "Node contributors / Joyent MIT",
+      "source": "https://github.com/nodejs/node/blob/v26.3.0/LICENSE",
+      "notice": "BUN-LICENSE.txt: Node.js compatibility headers; notices N1063",
+      "status": "reviewed"
+    },
+    {
+      "id": "Node.js copied builtins",
+      "kind": "runtime_dependency",
+      "version": "Bun snapshot 13a98b0dbd136bcc5c98a8adfb53c909aa3183cc; Node v26.3.0 primary-notice reference, not every adaptation origin",
+      "license": "MIT: Node contributors, Joyent and Thomas Robinson/Narwhal source notices",
+      "source": "https://github.com/nodejs/node/blob/v26.3.0/LICENSE",
+      "notice": "BUN-LICENSE.txt: Node.js copied builtins; notices N1063-N1064",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: Rust portable SIMD@574ff7d98bd6d037e5236a8453029173b32631fd",
+      "kind": "runtime_dependency",
+      "version": "574ff7d98bd6d037e5236a8453029173b32631fd; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0 (preserved Rust root/component source licenses)",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: Rust portable SIMD@574ff7d98bd6d037e5236a8453029173b32631fd; notices N1065, N1103",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: Rust stdarch@574ff7d98bd6d037e5236a8453029173b32631fd",
+      "kind": "runtime_dependency",
+      "version": "574ff7d98bd6d037e5236a8453029173b32631fd; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0 (preserved Rust root/component source licenses)",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: Rust stdarch@574ff7d98bd6d037e5236a8453029173b32631fd; notices N1066, N1072",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: alloc@0.0.0",
+      "kind": "runtime_dependency",
+      "version": "0.0.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: alloc@0.0.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: allocator-api2@0.2.21",
+      "kind": "runtime_dependency",
+      "version": "0.2.21",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/zakarumych/allocator-api2/blob/63cd7fcc2f8854b5821c7054d026e8a4647acde1/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: allocator-api2@0.2.21; notices N1069-N1070",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: arrayref@0.3.9",
+      "kind": "runtime_dependency",
+      "version": "0.3.9",
+      "license": "BSD-2-Clause",
+      "source": "https://github.com/droundy/arrayref/blob/f8d0299d863922db6c409d08098941e833b70d69/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: arrayref@0.3.9; notices N1071",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: arrayvec@0.7.6",
+      "kind": "runtime_dependency",
+      "version": "0.7.6",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/bluss/arrayvec/blob/0aede877fe0bfb1ba5e3c2024df8c0958d503a83/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: arrayvec@0.7.6; notices N1072-N1073",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: base64@0.22.1",
+      "kind": "runtime_dependency",
+      "version": "0.22.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/marshallpierce/rust-base64/blob/e14400697453bcc85997119b874bc03d9601d0af/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: base64@0.22.1; notices N1072, N1074",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: bcrypt@0.19.0",
+      "kind": "runtime_dependency",
+      "version": "0.19.0",
+      "license": "MIT",
+      "source": "https://github.com/Keats/rust-bcrypt/blob/9222c285cad733610459f5fb5453b92bdd4b31f4/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: bcrypt@0.19.0; notices N1075",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: bitflags@2.11.1",
+      "kind": "runtime_dependency",
+      "version": "2.11.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/bitflags/bitflags/blob/4ed9ffa949970239cd2d87c775e9fdcf9c438fb5/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: bitflags@2.11.1; notices N1072, N1076",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: blake2@0.10.6",
+      "kind": "runtime_dependency",
+      "version": "0.10.6",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/hashes/blob/1f727ce37ff40fa0cce84eb8543a45bdd3ca4a4e/blake2/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: blake2@0.10.6; notices N1077-N1078",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: blake2b_simd@1.0.4",
+      "kind": "runtime_dependency",
+      "version": "1.0.4",
+      "license": "MIT",
+      "source": "https://github.com/oconnor663/blake2_simd/blob/6a94ae2e18985c7c35bada8a4d438bfe9ab0d0c0/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: blake2b_simd@1.0.4; notices N1079",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: block-buffer@0.10.4",
+      "kind": "runtime_dependency",
+      "version": "0.10.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/utils/blob/6d35952d3d3b124bc1049ad6fb406b42b1ce4bfe/block-buffer/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: block-buffer@0.10.4; notices N1077, N1080",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: blowfish@0.9.1",
+      "kind": "runtime_dependency",
+      "version": "0.9.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/block-ciphers/blob/7de364ede310f1ea7080c99ddf1138aeb47f9a69/blowfish/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: blowfish@0.9.1; notices N1077, N1081",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: bstr@1.12.1",
+      "kind": "runtime_dependency",
+      "version": "1.12.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/BurntSushi/bstr/blob/a90f36f0de8c984662c49fb5742027ca24a88cbb/COPYING",
+      "notice": "BUN-LICENSE.txt: Rust: bstr@1.12.1; notices N1072, N1082-N1083",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: bytemuck@1.25.0",
+      "kind": "runtime_dependency",
+      "version": "1.25.0",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "https://github.com/Lokathor/bytemuck/blob/164cedda0eae131bc6cb67902599f4ec253642ca/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: bytemuck@1.25.0; notices N1084-N1086",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: byteorder@1.5.0",
+      "kind": "runtime_dependency",
+      "version": "1.5.0",
+      "license": "Unlicense OR MIT",
+      "source": "https://github.com/BurntSushi/byteorder/blob/ec068eefa042d494475db125c4b034bd8e9e34dd/COPYING",
+      "notice": "BUN-LICENSE.txt: Rust: byteorder@1.5.0; notices N1087-N1088",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: cfg-if@1.0.4",
+      "kind": "runtime_dependency",
+      "version": "1.0.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-lang/cfg-if/blob/3510ca6abea34cbbc702509a4e50ea9709925eda/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: cfg-if@1.0.4; notices N1072, N1089",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: cipher@0.4.4",
+      "kind": "runtime_dependency",
+      "version": "0.4.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/traits/blob/0af93f6076a76757c65cb2ef6f6abd9756440478/cipher/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: cipher@0.4.4; notices N1077, N1090",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: compiler_builtins@0.1.160",
+      "kind": "runtime_dependency",
+      "version": "0.1.160; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT AND Apache-2.0 WITH LLVM-exception AND (MIT OR Apache-2.0)",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: compiler_builtins@0.1.160; notices N1091-N1092",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: const_format@0.2.36",
+      "kind": "runtime_dependency",
+      "version": "0.2.36",
+      "license": "Zlib",
+      "source": "https://github.com/rodrimati1992/const_format_crates/blob/6bcde171f0a9c59d8afc88492db52c7e1d343ebd/const_format/LICENSE-ZLIB.md",
+      "notice": "BUN-LICENSE.txt: Rust: const_format@0.2.36; notices N1093",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: constant_time_eq@0.4.2",
+      "kind": "runtime_dependency",
+      "version": "0.4.2",
+      "license": "CC0-1.0 OR MIT-0 OR Apache-2.0",
+      "source": "https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: constant_time_eq@0.4.2; notices N0938, N1069, N1094",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: core@0.0.0",
+      "kind": "runtime_dependency",
+      "version": "0.0.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: core@0.0.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: cpufeatures@0.2.17",
+      "kind": "runtime_dependency",
+      "version": "0.2.17",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/utils/blob/9d92d5e95ab4c07c5d8bfd024bf2a17e96d20feb/cpufeatures/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: cpufeatures@0.2.17; notices N1077, N1095",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: crossbeam-utils@0.8.21",
+      "kind": "runtime_dependency",
+      "version": "0.8.21",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/crossbeam-rs/crossbeam/blob/ccd83ac4108a2a1b41e9c6e79c87267167d18dfa/crossbeam-utils/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: crossbeam-utils@0.8.21; notices N1072, N1096",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: crypto-common@0.1.7",
+      "kind": "runtime_dependency",
+      "version": "0.1.7",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/traits/blob/66a997ccf5776ce873da5a48e2885a9908e940f6/crypto-common/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: crypto-common@0.1.7; notices N1077, N1097",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: cssparser@0.36.0",
+      "kind": "runtime_dependency",
+      "version": "0.36.0",
+      "license": "MPL-2.0",
+      "source": "https://github.com/servo/rust-cssparser/blob/9339ddd71443463dfb85d1185ad50cd98b34bc8f/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: cssparser@0.36.0; notices N1098",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: derive_more@2.1.1",
+      "kind": "runtime_dependency",
+      "version": "2.1.1",
+      "license": "MIT",
+      "source": "https://github.com/JelteF/derive_more/blob/f7bb41ac054c060caaf5ff3212e74e42794cb4b4/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: derive_more@2.1.1; notices N1099",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: digest@0.10.7",
+      "kind": "runtime_dependency",
+      "version": "0.10.7",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/traits/blob/344389411fd9718a0742435152e933a9e71461ee/digest/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: digest@0.10.7; notices N1077, N1100",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: dtoa-short@0.3.5",
+      "kind": "runtime_dependency",
+      "version": "0.3.5",
+      "license": "MPL-2.0",
+      "source": "https://github.com/upsuper/dtoa-short/blob/2d905cdb8b2e08163dc0d015f529877fe657b4ef/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: dtoa-short@0.3.5; notices N1101",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: dtoa@1.0.11",
+      "kind": "runtime_dependency",
+      "version": "1.0.11",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/dtolnay/dtoa/blob/4c30faa2d91f167d7c343d13ebc9d30730456d56/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: dtoa@1.0.11; notices N1069-N1070",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: encoding_rs@0.8.35",
+      "kind": "runtime_dependency",
+      "version": "0.8.35",
+      "license": "(Apache-2.0 OR MIT) AND BSD-3-Clause",
+      "source": "https://github.com/hsivonen/encoding_rs/blob/2fa58aecf537cc76ff52c0eb3d5e9f8fda466844/COPYRIGHT",
+      "notice": "BUN-LICENSE.txt: Rust: encoding_rs@0.8.35; notices N1102-N1105",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: enum-map@2.7.3",
+      "kind": "runtime_dependency",
+      "version": "2.7.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://docs.rs/crate/enum-map/2.7.3/source/src/lib.rs",
+      "notice": "BUN-LICENSE.txt: Rust: enum-map@2.7.3; notices N1106-N1108",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: enumset@1.1.10",
+      "kind": "runtime_dependency",
+      "version": "1.1.10",
+      "license": "MIT/Apache-2.0",
+      "source": "https://github.com/Lymia/enumset/blob/a808e1de1f744c98cc33967da31513a78665ba2d/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: enumset@1.1.10; notices N1072, N1109",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: equivalent@1.0.2",
+      "kind": "runtime_dependency",
+      "version": "1.0.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/indexmap-rs/equivalent/blob/44cdd44f8b8ebb5f9ae096c7550a5e74ffb7d6ae/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: equivalent@1.0.2; notices N1072, N1110",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: foldhash@0.2.0",
+      "kind": "runtime_dependency",
+      "version": "0.2.0",
+      "license": "Zlib",
+      "source": "https://github.com/orlp/foldhash/blob/8f878c636fda9c9e93384824ea45e06d03f009f5/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: foldhash@0.2.0; notices N1111",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: generic-array@0.14.7",
+      "kind": "runtime_dependency",
+      "version": "0.14.7",
+      "license": "MIT",
+      "source": "https://github.com/fizyk20/generic-array/blob/1397d2bb40c406901b7827161b73b34b056cbe3a/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: generic-array@0.14.7; notices N1112",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: getrandom@0.4.2",
+      "kind": "runtime_dependency",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-random/getrandom/blob/4d826731b20a09e69cca91c66aea57ab3cf00072/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: getrandom@0.4.2; notices N1113-N1114",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: hashbrown@0.15.5",
+      "kind": "runtime_dependency",
+      "version": "0.15.5",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-lang/hashbrown/blob/b751eef8e99ccf3652046ef4a9e1ec47c1bfb78d/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: hashbrown@0.15.5; notices N1072, N1115",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: hashbrown@0.16.1",
+      "kind": "runtime_dependency",
+      "version": "0.16.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-lang/hashbrown/blob/1876e4f02708b93903d55ef598f68e82a826518f/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: hashbrown@0.16.1; notices N1072, N1115",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: hashbrown@0.17.1",
+      "kind": "runtime_dependency",
+      "version": "0.17.1; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: hashbrown@0.17.1; notices N1072, N1115",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: inout@0.1.4",
+      "kind": "runtime_dependency",
+      "version": "0.1.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/utils/blob/784ff3c76c907f80363ada7dc69c1d5831d4789f/inout/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: inout@0.1.4; notices N1077, N1116",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: itoa@1.0.18",
+      "kind": "runtime_dependency",
+      "version": "1.0.18",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/dtolnay/itoa/blob/af77385d0daf4d0e949e81f2588be2e44f69f086/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: itoa@1.0.18; notices N1069-N1070",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: keccak@0.1.6",
+      "kind": "runtime_dependency",
+      "version": "0.1.6",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/sponges/blob/a8936d9662ca92fd177d289580066ceabb937b0c/keccak/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: keccak@0.1.6; notices N1077, N1117",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: konst@0.2.20",
+      "kind": "runtime_dependency",
+      "version": "0.2.20",
+      "license": "Zlib",
+      "source": "https://github.com/rodrimati1992/konst/blob/ad6db2fc0d38b79ef0b34b18b81e4e71c09814f5/konst/LICENSE-ZLIB.md",
+      "notice": "BUN-LICENSE.txt: Rust: konst@0.2.20; notices N1118",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: konst_macro_rules@0.2.19",
+      "kind": "runtime_dependency",
+      "version": "0.2.19",
+      "license": "Zlib",
+      "source": "https://github.com/rodrimati1992/konst/blob/6463c1578d96c8b41f59a93496473be6212f6297/konst_macro_rules/LICENSE-ZLIB.md",
+      "notice": "BUN-LICENSE.txt: Rust: konst_macro_rules@0.2.19; notices N1118",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: libc@0.2.186",
+      "kind": "runtime_dependency",
+      "version": "0.2.186",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-lang/libc/blob/42620ffc4109dc32e02f1cae9e63a3f4311b4b71/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: libc@0.2.186; notices N1069, N1119",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: libc@0.2.189",
+      "kind": "runtime_dependency",
+      "version": "0.2.189; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: libc@0.2.189; notices N1069, N1119",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: linux-raw-sys@0.4.15",
+      "kind": "runtime_dependency",
+      "version": "0.4.15",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "source": "https://github.com/sunfishcode/linux-raw-sys/blob/77e4a4223b14957ad8fa2958ea411cd4b54314e7/COPYRIGHT",
+      "notice": "BUN-LICENSE.txt: Rust: linux-raw-sys@0.4.15; notices N1070, N1072, N1120-N1121",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: log@0.4.29",
+      "kind": "runtime_dependency",
+      "version": "0.4.29",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-lang/log/blob/b1e2df7bce7a1b685aa9bfd1db0a5cac1f0fc27d/LICENSE-MIT",
+      "notice": "BUN-LICENSE.txt: Rust: log@0.4.29; notices N1072, N1076",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: lol_html@2.7.2",
+      "kind": "runtime_dependency",
+      "version": "2.7.2",
+      "license": "BSD-3-Clause",
+      "source": "https://github.com/oven-sh/lol-html/blob/725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: lol_html@2.7.2; notices N1122",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: memchr@2.8.0",
+      "kind": "runtime_dependency",
+      "version": "2.8.0",
+      "license": "Unlicense OR MIT",
+      "source": "https://github.com/BurntSushi/memchr/blob/886ca4ca4820297191c6e9f7b023dc356f31a4d1/COPYING",
+      "notice": "BUN-LICENSE.txt: Rust: memchr@2.8.0; notices N1087-N1088",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: mime@0.3.17",
+      "kind": "runtime_dependency",
+      "version": "0.3.17",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/hyperium/mime/blob/ce5062d216bf757a0ed3fc70f0fe255d1c8d74ae/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: mime@0.3.17; notices N1072, N1123",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: new_debug_unreachable@1.0.6",
+      "kind": "runtime_dependency",
+      "version": "1.0.6",
+      "license": "MIT",
+      "source": "https://github.com/mbrubeck/rust-debug-unreachable/blob/4b3fa6e0b6d728ed2018690e087a440dd29e7d06/LICENSE-MIT",
+      "notice": "BUN-LICENSE.txt: Rust: new_debug_unreachable@1.0.6; notices N1124",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: panic_abort@0.0.0",
+      "kind": "runtime_dependency",
+      "version": "0.0.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: panic_abort@0.0.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: phf@0.13.1",
+      "kind": "runtime_dependency",
+      "version": "0.13.1",
+      "license": "MIT",
+      "source": "https://github.com/rust-phf/rust-phf/blob/1e518a6e94a2444b8df7d89078cfc69859537971/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: phf@0.13.1; notices N1125",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: phf_shared@0.13.1",
+      "kind": "runtime_dependency",
+      "version": "0.13.1",
+      "license": "MIT",
+      "source": "https://github.com/rust-phf/rust-phf/blob/1e518a6e94a2444b8df7d89078cfc69859537971/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: phf_shared@0.13.1; notices N1125",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: precomputed-hash@0.1.1",
+      "kind": "runtime_dependency",
+      "version": "0.1.1",
+      "license": "MIT",
+      "source": "https://github.com/emilio/precomputed-hash/blob/9a798bdacb76c8d03cc95335d138b1b2e7109899/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: precomputed-hash@0.1.1; notices N1126",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: rust-argon2@3.0.0",
+      "kind": "runtime_dependency",
+      "version": "3.0.0",
+      "license": "MIT/Apache-2.0",
+      "source": "https://github.com/sru-systems/rust-argon2/blob/ed81866f163f0c7026aa6fd8388adf37242eb32a/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: rust-argon2@3.0.0; notices N1072, N1127",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: rustc-demangle@0.1.28",
+      "kind": "runtime_dependency",
+      "version": "0.1.28; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT/Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: rustc-demangle@0.1.28; notices N1072, N1089",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: rustc-hash@2.1.2",
+      "kind": "runtime_dependency",
+      "version": "2.1.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/rust-lang/rustc-hash/blob/fdb275c8a0135403067ce1c4be8e97e53c473764/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: rustc-hash@2.1.2; notices N1128-N1129",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: rustc-std-workspace-alloc@1.99.0",
+      "kind": "runtime_dependency",
+      "version": "1.99.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: rustc-std-workspace-alloc@1.99.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: rustc-std-workspace-core@1.99.0",
+      "kind": "runtime_dependency",
+      "version": "1.99.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: rustc-std-workspace-core@1.99.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: rustix@0.38.44",
+      "kind": "runtime_dependency",
+      "version": "0.38.44",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "source": "https://github.com/bytecodealliance/rustix/blob/acf4a284ea893efa93953e1ff2f2f0ab00be1cdc/COPYRIGHT",
+      "notice": "BUN-LICENSE.txt: Rust: rustix@0.38.44; notices N1070, N1072, N1121, N1130",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: scopeguard@1.2.0",
+      "kind": "runtime_dependency",
+      "version": "1.2.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/bluss/scopeguard/blob/bb988222848d39b0b9037b29da3a3a1eb05ebf4b/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: scopeguard@1.2.0; notices N1072, N1131",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: selectors@0.33.0",
+      "kind": "runtime_dependency",
+      "version": "0.33.0",
+      "license": "MPL-2.0",
+      "source": "https://docs.rs/crate/selectors/0.33.0/source/lib.rs",
+      "notice": "BUN-LICENSE.txt: Rust: selectors@0.33.0; notices N1132-N1133",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: servo_arc@0.4.3",
+      "kind": "runtime_dependency",
+      "version": "0.4.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/servo/stylo/blob/f319793c6989dba83994fbd10d560b21ad4a0c85/servo_arc/LICENSE-MIT",
+      "notice": "BUN-LICENSE.txt: Rust: servo_arc@0.4.3; notices N1070, N1072, N1134",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: sha3@0.10.9",
+      "kind": "runtime_dependency",
+      "version": "0.10.9",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/hashes/blob/1637e892b5658941d04a4d895165b66780c7d7ab/sha3/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: sha3@0.10.9; notices N1077, N1135",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: siphasher@1.0.3",
+      "kind": "runtime_dependency",
+      "version": "1.0.3",
+      "license": "MIT/Apache-2.0",
+      "source": "https://github.com/jedisct1/rust-siphash/blob/451f67d73a772cba325728109bbfa247750ed076/COPYING",
+      "notice": "BUN-LICENSE.txt: Rust: siphasher@1.0.3; notices N1106, N1136-N1137",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: smallvec@1.15.1",
+      "kind": "runtime_dependency",
+      "version": "1.15.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/servo/rust-smallvec/blob/d0f47a3ea99296498ee940b5d99f59b403c498a2/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: smallvec@1.15.1; notices N1072, N1138",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: stable_deref_trait@1.2.1",
+      "kind": "runtime_dependency",
+      "version": "1.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/Storyyeller/stable_deref_trait/blob/30002b4228f7cdee309217b6bf6eee099dda0b00/LICENSE-MIT",
+      "notice": "BUN-LICENSE.txt: Rust: stable_deref_trait@1.2.1; notices N1072, N1139",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: std@0.0.0",
+      "kind": "runtime_dependency",
+      "version": "0.0.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: std@0.0.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: std_detect@0.1.5",
+      "kind": "runtime_dependency",
+      "version": "0.1.5; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: std_detect@0.1.5; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: strum@0.26.3",
+      "kind": "runtime_dependency",
+      "version": "0.26.3",
+      "license": "MIT",
+      "source": "https://github.com/Peternator7/strum/blob/a91f64b04b44ef7d87208caa7cbe27766fc83765/strum/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: strum@0.26.3; notices N1140",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: subtle@2.6.1",
+      "kind": "runtime_dependency",
+      "version": "2.6.1",
+      "license": "BSD-3-Clause",
+      "source": "https://github.com/dalek-cryptography/subtle/blob/5457b5448b021d1da101ababbb854e6657233943/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: subtle@2.6.1; notices N1141",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: thiserror@2.0.18",
+      "kind": "runtime_dependency",
+      "version": "2.0.18",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/dtolnay/thiserror/blob/dc0f6a23a3fb6ae34ef117133ec43650450c4b32/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: thiserror@2.0.18; notices N1069-N1070",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: typenum@1.20.0",
+      "kind": "runtime_dependency",
+      "version": "1.20.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/paholg/typenum/blob/c755e2fd5d09e996822938f8fdf3eaccdac9e912/LICENSE",
+      "notice": "BUN-LICENSE.txt: Rust: typenum@1.20.0; notices N1142-N1143",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: unwind@0.0.0",
+      "kind": "runtime_dependency",
+      "version": "0.0.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: unwind@0.0.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: windows-link@0.0.0",
+      "kind": "runtime_dependency",
+      "version": "0.0.0; Rust 574ff7d98bd6d037e5236a8453029173b32631fd",
+      "license": "MIT OR Apache-2.0 (preserved Rust root/component source licenses)",
+      "source": "https://static.rust-lang.org/dist/2026-09-15/rust-src-nightly.tar.xz",
+      "notice": "BUN-LICENSE.txt: Rust: windows-link@0.0.0; notices N1067-N1069",
+      "status": "reviewed"
+    },
+    {
+      "id": "Rust: zeroize@1.8.2",
+      "kind": "runtime_dependency",
+      "version": "1.8.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/utils/blob/c100874101bfd584870de5dde1b13dd92a17bf48/zeroize/LICENSE-APACHE",
+      "notice": "BUN-LICENSE.txt: Rust: zeroize@1.8.2; notices N1103, N1144",
+      "status": "reviewed"
+    },
+    {
+      "id": "SIMDe",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "MIT",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/WTF/LICENSE-simde.txt",
+      "notice": "BUN-LICENSE.txt: SIMDe; notices N1940",
+      "status": "reviewed"
+    },
+    {
+      "id": "SQLite",
+      "kind": "runtime_dependency",
+      "version": "3.53.4; source id2026-07-24 bf7c7f30031888f4e796e429ab3978879485813aaca6f641c7b33e4e09459bcc",
+      "license": "Public-domain disclaimer in exact header",
+      "source": "https://github.com/oven-sh/bun/blob/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc/src/jsc/bindings/sqlite/sqlite3_local.h",
+      "notice": "BUN-LICENSE.txt: SQLite; notices N0076, N0145, N0185",
+      "status": "reviewed"
+    },
+    {
+      "id": "TinyCC",
+      "kind": "runtime_dependency",
+      "version": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+      "license": "COPYING is LGPL-2.1; README/libtcc.c also describe LGPL-2-or-later. RELICENSING does not establish a complete MIT relicensing.",
+      "source": "https://github.com/oven-sh/tinycc/tree/05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+      "notice": "BUN-LICENSE.txt: TinyCC; notices N0326, N1145-N1165",
+      "status": "reviewed"
+    },
+    {
+      "id": "WebKit JavaScriptCore",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "LGPL-2.0-or-later for applicable sources; BSD-2-Clause/BSD-3-Clause and bundled component-specific terms",
+      "source": "https://github.com/oven-sh/WebKit/tree/5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "notice": "BUN-LICENSE.txt: WebKit JavaScriptCore; notices N0035, N0048, N0057-N0059, N0063, N0204-N0205, N0207-N0208, N0210, N0226, N0232, N0234, N0237, N0240, N0249-N0252, N0255, N0258, N0288-N0289, N0291, N0295-N0297, N0299-N0300, N0306, N1166-N1936",
+      "status": "reviewed"
+    },
+    {
+      "id": "WebKit WTF support library",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "LGPL-2.0-or-later for applicable sources; BSD-2-Clause/BSD-3-Clause and bundled component-specific terms",
+      "source": "https://github.com/oven-sh/WebKit/tree/5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "notice": "BUN-LICENSE.txt: WebKit WTF support library; notices N0048, N0058-N0059, N0063, N0204-N0205, N0208, N0210, N0219, N0226, N0232, N0234, N0237, N0240, N0242, N0250-N0251, N0258, N0261, N0272, N0289, N0295-N0296, N0299, N0303, N0306, N1168, N1174, N1176, N1184, N1190-N1191, N1196, N1201, N1204, N1208, N1210-N1212, N1220, N1227-N1228, N1230, N1232, N1246, N1249, N1251, N1254, N1259, N1262-N1263, N1265, N1269, N1271, N1273-N1275, N1279, N1286-N1288, N1300, N1305, N1313, N1316, N1319, N1321, N1327, N1331, N1334-N1335, N1344, N1347, N1351, N1359, N1362, N1370, N1380, N1385, N1399, N1403, N1411, N1414, N1420, N1422-N1423, N1442-N1444, N1447, N1449, N1454, N1464, N1472-N1473, N1479, N1487, N1490, N1498, N1501, N1531, N1537, N1545, N1559, N1562, N1564, N1573, N1585, N1588, N1635, N1638, N1646, N1650-N1651, N1664, N1675, N1706, N1717, N1725, N1765, N1785, N1788, N1823, N1829, N1896, N1906, N1937-N2338",
+      "status": "reviewed"
+    },
+    {
+      "id": "WebKit bmalloc / libpas",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "Apple BSD-2-Clause-style notices and source-specific permissive terms",
+      "source": "https://github.com/oven-sh/WebKit/tree/5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "notice": "BUN-LICENSE.txt: WebKit bmalloc / libpas; notices N0058, N0210, N1168, N1190-N1191, N1217, N1221, N1230, N1261, N1265, N1269, N1279, N1300, N1305, N1316, N1335-N1336, N1354, N1359, N1383, N1417, N1433, N1461, N1481, N1564, N1566, N2076, N2089, N2339-N2391",
+      "status": "reviewed"
+    },
+    {
+      "id": "WebKit bundled ICU source notices",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "Unicode License V3 and accompanying third-party Unicode/ICU notices",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/WTF/icu/LICENSE",
+      "notice": "BUN-LICENSE.txt: WebKit bundled ICU source notices; notices N2392-N2573",
+      "status": "reviewed"
+    },
+    {
+      "id": "abort-controller@3.0.0",
+      "kind": "runtime_dependency",
+      "version": "3.0.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz",
+      "notice": "BUN-LICENSE.txt: abort-controller@3.0.0; notices N2574",
+      "status": "reviewed"
+    },
+    {
+      "id": "acorn-walk@8.3.5",
+      "kind": "runtime_dependency",
+      "version": "8.3.5",
+      "license": "MIT; original source and license copyright-year variants preserved",
+      "source": "https://github.com/nodejs/node/blob/v26.3.0/deps/acorn/acorn-walk/LICENSE",
+      "notice": "BUN-LICENSE.txt: acorn-walk@8.3.5; notices N2575-N2576",
+      "status": "reviewed"
+    },
+    {
+      "id": "acorn@8.16.0",
+      "kind": "runtime_dependency",
+      "version": "8.16.0",
+      "license": "MIT; Acorn AUTHORS attribution retained",
+      "source": "https://github.com/nodejs/node/blob/v26.3.0/deps/acorn/acorn/LICENSE",
+      "notice": "BUN-LICENSE.txt: acorn@8.16.0; notices N2576-N2577",
+      "status": "reviewed"
+    },
+    {
+      "id": "asn1.js@4.10.1",
+      "kind": "runtime_dependency",
+      "version": "4.10.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/asn1.js/-/asn1.js-4.10.1.tgz",
+      "notice": "BUN-LICENSE.txt: asn1.js@4.10.1; notices N2578",
+      "status": "reviewed"
+    },
+    {
+      "id": "assert@2.1.0",
+      "kind": "runtime_dependency",
+      "version": "2.1.0",
+      "license": "MIT including preserved Thomas Robinson/Narwhal-derived source notice",
+      "source": "https://registry.npmjs.org/assert/-/assert-2.1.0.tgz",
+      "notice": "BUN-LICENSE.txt: assert@2.1.0; notices N2579-N2580",
+      "status": "reviewed"
+    },
+    {
+      "id": "available-typed-arrays@1.0.7",
+      "kind": "runtime_dependency",
+      "version": "1.0.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/available-typed-arrays/-/available-typed-arrays-1.0.7.tgz",
+      "notice": "BUN-LICENSE.txt: available-typed-arrays@1.0.7; notices N2581",
+      "status": "reviewed"
+    },
+    {
+      "id": "base64-js@1.5.1",
+      "kind": "runtime_dependency",
+      "version": "1.5.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz",
+      "notice": "BUN-LICENSE.txt: base64-js@1.5.1; notices N2582",
+      "status": "reviewed"
+    },
+    {
+      "id": "base64-js@1.5.1 (vendored ESM adaptation)",
+      "kind": "runtime_dependency",
+      "version": "1.5.1; adaptation in Bun 13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "MIT",
+      "source": "https://github.com/oven-sh/bun/tree/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "notice": "BUN-LICENSE.txt: base64-js@1.5.1 (vendored ESM adaptation); notices N2582",
+      "status": "reviewed"
+    },
+    {
+      "id": "bn.js@4.12.2",
+      "kind": "runtime_dependency",
+      "version": "4.12.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/bn.js/-/bn.js-4.12.2.tgz",
+      "notice": "BUN-LICENSE.txt: bn.js@4.12.2; notices N2583",
+      "status": "reviewed"
+    },
+    {
+      "id": "bn.js@5.2.2",
+      "kind": "runtime_dependency",
+      "version": "5.2.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/bn.js/-/bn.js-5.2.2.tgz",
+      "notice": "BUN-LICENSE.txt: bn.js@5.2.2; notices N2583",
+      "status": "reviewed"
+    },
+    {
+      "id": "brorand@1.1.0",
+      "kind": "runtime_dependency",
+      "version": "1.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/brorand/-/brorand-1.1.0.tgz",
+      "notice": "BUN-LICENSE.txt: brorand@1.1.0; notices N2584",
+      "status": "reviewed"
+    },
+    {
+      "id": "browserify-aes@1.2.0",
+      "kind": "runtime_dependency",
+      "version": "1.2.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/browserify-aes/-/browserify-aes-1.2.0.tgz",
+      "notice": "BUN-LICENSE.txt: browserify-aes@1.2.0; notices N2585",
+      "status": "reviewed"
+    },
+    {
+      "id": "browserify-cipher@1.0.1",
+      "kind": "runtime_dependency",
+      "version": "1.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/browserify-cipher/-/browserify-cipher-1.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: browserify-cipher@1.0.1; notices N2586",
+      "status": "reviewed"
+    },
+    {
+      "id": "browserify-rsa@4.1.1",
+      "kind": "runtime_dependency",
+      "version": "4.1.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/browserify-rsa/-/browserify-rsa-4.1.1.tgz",
+      "notice": "BUN-LICENSE.txt: browserify-rsa@4.1.1; notices N2587",
+      "status": "reviewed"
+    },
+    {
+      "id": "browserify-sign@4.2.5",
+      "kind": "runtime_dependency",
+      "version": "4.2.5",
+      "license": "ISC",
+      "source": "https://registry.npmjs.org/browserify-sign/-/browserify-sign-4.2.5.tgz",
+      "notice": "BUN-LICENSE.txt: browserify-sign@4.2.5; notices N2588",
+      "status": "reviewed"
+    },
+    {
+      "id": "browserify-zlib@0.2.0",
+      "kind": "runtime_dependency",
+      "version": "0.2.0",
+      "license": "MIT and zlib-origin notices reproduced in the package LICENSE",
+      "source": "https://registry.npmjs.org/browserify-zlib/-/browserify-zlib-0.2.0.tgz",
+      "notice": "BUN-LICENSE.txt: browserify-zlib@0.2.0; notices N2589",
+      "status": "reviewed"
+    },
+    {
+      "id": "buffer (vendored ESM adaptation)",
+      "kind": "runtime_dependency",
+      "version": "Bun snapshot 13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "MIT",
+      "source": "https://github.com/oven-sh/bun/tree/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "notice": "BUN-LICENSE.txt: buffer (vendored ESM adaptation); notices N2590, N2592",
+      "status": "reviewed"
+    },
+    {
+      "id": "buffer@5.0.5",
+      "kind": "runtime_dependency",
+      "version": "5.0.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/buffer/-/buffer-5.0.5.tgz",
+      "notice": "BUN-LICENSE.txt: buffer@5.0.5; notices N2591-N2592",
+      "status": "reviewed"
+    },
+    {
+      "id": "builtin-status-codes@3.0.0",
+      "kind": "runtime_dependency",
+      "version": "3.0.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/builtin-status-codes/-/builtin-status-codes-3.0.0.tgz",
+      "notice": "BUN-LICENSE.txt: builtin-status-codes@3.0.0; notices N2593",
+      "status": "reviewed"
+    },
+    {
+      "id": "call-bind-apply-helpers@1.0.2",
+      "kind": "runtime_dependency",
+      "version": "1.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+      "notice": "BUN-LICENSE.txt: call-bind-apply-helpers@1.0.2; notices N2605",
+      "status": "reviewed"
+    },
+    {
+      "id": "call-bind@1.0.8",
+      "kind": "runtime_dependency",
+      "version": "1.0.8",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.8.tgz",
+      "notice": "BUN-LICENSE.txt: call-bind@1.0.8; notices N2594",
+      "status": "reviewed"
+    },
+    {
+      "id": "call-bound@1.0.4",
+      "kind": "runtime_dependency",
+      "version": "1.0.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
+      "notice": "BUN-LICENSE.txt: call-bound@1.0.4; notices N2605",
+      "status": "reviewed"
+    },
+    {
+      "id": "create-ecdh@4.0.4",
+      "kind": "runtime_dependency",
+      "version": "4.0.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/create-ecdh/-/create-ecdh-4.0.4.tgz",
+      "notice": "BUN-LICENSE.txt: create-ecdh@4.0.4; notices N2595",
+      "status": "reviewed"
+    },
+    {
+      "id": "create-hash@1.2.0",
+      "kind": "runtime_dependency",
+      "version": "1.2.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/create-hash/-/create-hash-1.2.0.tgz",
+      "notice": "BUN-LICENSE.txt: create-hash@1.2.0; notices N2596",
+      "status": "reviewed"
+    },
+    {
+      "id": "create-hmac@1.1.7",
+      "kind": "runtime_dependency",
+      "version": "1.1.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/create-hmac/-/create-hmac-1.1.7.tgz",
+      "notice": "BUN-LICENSE.txt: create-hmac@1.1.7; notices N2596",
+      "status": "reviewed"
+    },
+    {
+      "id": "crypto-browserify@3.12.1",
+      "kind": "runtime_dependency",
+      "version": "3.12.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/crypto-browserify/-/crypto-browserify-3.12.1.tgz",
+      "notice": "BUN-LICENSE.txt: crypto-browserify@3.12.1; notices N2597",
+      "status": "reviewed"
+    },
+    {
+      "id": "define-data-property@1.1.4",
+      "kind": "runtime_dependency",
+      "version": "1.1.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz",
+      "notice": "BUN-LICENSE.txt: define-data-property@1.1.4; notices N2598",
+      "status": "reviewed"
+    },
+    {
+      "id": "define-properties@1.2.1",
+      "kind": "runtime_dependency",
+      "version": "1.2.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/define-properties/-/define-properties-1.2.1.tgz",
+      "notice": "BUN-LICENSE.txt: define-properties@1.2.1; notices N2599",
+      "status": "reviewed"
+    },
+    {
+      "id": "diffie-hellman@5.0.3",
+      "kind": "runtime_dependency",
+      "version": "5.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/diffie-hellman/-/diffie-hellman-5.0.3.tgz",
+      "notice": "BUN-LICENSE.txt: diffie-hellman@5.0.3; notices N2600",
+      "status": "reviewed"
+    },
+    {
+      "id": "domain-browser@4.23.0",
+      "kind": "runtime_dependency",
+      "version": "4.23.0",
+      "license": "Artistic-2.0",
+      "source": "https://registry.npmjs.org/domain-browser/-/domain-browser-4.23.0.tgz",
+      "notice": "BUN-LICENSE.txt: domain-browser@4.23.0; notices N2601",
+      "status": "reviewed"
+    },
+    {
+      "id": "double-conversion (WTF dtoa)",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "BSD-3-Clause license text",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/WTF/wtf/dtoa/LICENSE",
+      "notice": "BUN-LICENSE.txt: double-conversion (WTF dtoa); notices N2138",
+      "status": "reviewed"
+    },
+    {
+      "id": "dragonbox",
+      "kind": "runtime_dependency",
+      "version": "5718a6ec579b98362ea7276a426deedcc6281ef5",
+      "license": "Apache-2.0 with LLVM exception / Boost text, plus Apple BSD header",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/WTF/LICENSE-dragonbox.txt",
+      "notice": "BUN-LICENSE.txt: dragonbox; notices N1938, N2134",
+      "status": "reviewed"
+    },
+    {
+      "id": "dunder-proto@1.0.1",
+      "kind": "runtime_dependency",
+      "version": "1.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: dunder-proto@1.0.1; notices N2602",
+      "status": "reviewed"
+    },
+    {
+      "id": "elliptic@6.6.1",
+      "kind": "runtime_dependency",
+      "version": "6.6.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/elliptic/-/elliptic-6.6.1.tgz",
+      "notice": "BUN-LICENSE.txt: elliptic@6.6.1; notices N2603",
+      "status": "reviewed"
+    },
+    {
+      "id": "error-stack-parser@2.1.4",
+      "kind": "runtime_dependency",
+      "version": "2.1.4",
+      "license": "MIT",
+      "source": "https://github.com/stacktracejs/error-stack-parser/blob/9f33c224b5d7b607755eb277f9d51fcdb7287e24/LICENSE",
+      "notice": "BUN-LICENSE.txt: error-stack-parser@2.1.4; notices N2604",
+      "status": "reviewed"
+    },
+    {
+      "id": "es-define-property@1.0.1",
+      "kind": "runtime_dependency",
+      "version": "1.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: es-define-property@1.0.1; notices N2605",
+      "status": "reviewed"
+    },
+    {
+      "id": "es-errors@1.3.0",
+      "kind": "runtime_dependency",
+      "version": "1.3.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+      "notice": "BUN-LICENSE.txt: es-errors@1.3.0; notices N2605",
+      "status": "reviewed"
+    },
+    {
+      "id": "es-object-atoms@1.1.1",
+      "kind": "runtime_dependency",
+      "version": "1.1.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+      "notice": "BUN-LICENSE.txt: es-object-atoms@1.1.1; notices N2605",
+      "status": "reviewed"
+    },
+    {
+      "id": "event-target-shim@5.0.1",
+      "kind": "runtime_dependency",
+      "version": "5.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: event-target-shim@5.0.1; notices N2606",
+      "status": "reviewed"
+    },
+    {
+      "id": "evp_bytestokey@1.0.3",
+      "kind": "runtime_dependency",
+      "version": "1.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/evp_bytestokey/-/evp_bytestokey-1.0.3.tgz",
+      "notice": "BUN-LICENSE.txt: evp_bytestokey@1.0.3; notices N2596",
+      "status": "reviewed"
+    },
+    {
+      "id": "fast_float",
+      "kind": "runtime_dependency",
+      "version": "8.2.10 in WebKit snapshot",
+      "license": "Apache-2.0 OR MIT OR Boost-1.0 header; LICENSE contains Apache text",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/WTF/wtf/fast_float/LICENSE",
+      "notice": "BUN-LICENSE.txt: fast_float; notices N2143-N2144",
+      "status": "reviewed"
+    },
+    {
+      "id": "for-each@0.3.5",
+      "kind": "runtime_dependency",
+      "version": "0.3.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/for-each/-/for-each-0.3.5.tgz",
+      "notice": "BUN-LICENSE.txt: for-each@0.3.5; notices N2607",
+      "status": "reviewed"
+    },
+    {
+      "id": "function-bind@1.1.2",
+      "kind": "runtime_dependency",
+      "version": "1.1.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+      "notice": "BUN-LICENSE.txt: function-bind@1.1.2; notices N2608",
+      "status": "reviewed"
+    },
+    {
+      "id": "generator-function@2.0.1",
+      "kind": "runtime_dependency",
+      "version": "2.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/generator-function/-/generator-function-2.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: generator-function@2.0.1; notices N2609",
+      "status": "reviewed"
+    },
+    {
+      "id": "get-intrinsic@1.3.0",
+      "kind": "runtime_dependency",
+      "version": "1.3.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+      "notice": "BUN-LICENSE.txt: get-intrinsic@1.3.0; notices N2594",
+      "status": "reviewed"
+    },
+    {
+      "id": "get-proto@1.0.1",
+      "kind": "runtime_dependency",
+      "version": "1.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: get-proto@1.0.1; notices N2610",
+      "status": "reviewed"
+    },
+    {
+      "id": "gopd@1.2.0",
+      "kind": "runtime_dependency",
+      "version": "1.2.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+      "notice": "BUN-LICENSE.txt: gopd@1.2.0; notices N2611",
+      "status": "reviewed"
+    },
+    {
+      "id": "has-property-descriptors@1.0.2",
+      "kind": "runtime_dependency",
+      "version": "1.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz",
+      "notice": "BUN-LICENSE.txt: has-property-descriptors@1.0.2; notices N2612",
+      "status": "reviewed"
+    },
+    {
+      "id": "has-symbols@1.1.0",
+      "kind": "runtime_dependency",
+      "version": "1.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+      "notice": "BUN-LICENSE.txt: has-symbols@1.1.0; notices N2613",
+      "status": "reviewed"
+    },
+    {
+      "id": "has-tostringtag@1.0.2",
+      "kind": "runtime_dependency",
+      "version": "1.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+      "notice": "BUN-LICENSE.txt: has-tostringtag@1.0.2; notices N2614",
+      "status": "reviewed"
+    },
+    {
+      "id": "hash-base@3.0.5",
+      "kind": "runtime_dependency",
+      "version": "3.0.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/hash-base/-/hash-base-3.0.5.tgz",
+      "notice": "BUN-LICENSE.txt: hash-base@3.0.5; notices N2615",
+      "status": "reviewed"
+    },
+    {
+      "id": "hash.js@1.1.7",
+      "kind": "runtime_dependency",
+      "version": "1.1.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/hash.js/-/hash.js-1.1.7.tgz",
+      "notice": "BUN-LICENSE.txt: hash.js@1.1.7; notices N2584",
+      "status": "reviewed"
+    },
+    {
+      "id": "hasown@2.0.2",
+      "kind": "runtime_dependency",
+      "version": "2.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz",
+      "notice": "BUN-LICENSE.txt: hasown@2.0.2; notices N2616",
+      "status": "reviewed"
+    },
+    {
+      "id": "hmac-drbg@1.0.1",
+      "kind": "runtime_dependency",
+      "version": "1.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/hmac-drbg/-/hmac-drbg-1.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: hmac-drbg@1.0.1; notices N2617",
+      "status": "reviewed"
+    },
+    {
+      "id": "https-browserify@1.0.0",
+      "kind": "runtime_dependency",
+      "version": "1.0.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/https-browserify/-/https-browserify-1.0.0.tgz",
+      "notice": "BUN-LICENSE.txt: https-browserify@1.0.0; notices N2618",
+      "status": "reviewed"
+    },
+    {
+      "id": "ieee754 (vendored ESM adaptation)",
+      "kind": "runtime_dependency",
+      "version": "Bun snapshot 13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "BSD-3-Clause",
+      "source": "https://github.com/oven-sh/bun/tree/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "notice": "BUN-LICENSE.txt: ieee754 (vendored ESM adaptation); notices N2619",
+      "status": "reviewed"
+    },
+    {
+      "id": "ieee754@1.2.1",
+      "kind": "runtime_dependency",
+      "version": "1.2.1",
+      "license": "BSD-3-Clause",
+      "source": "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz",
+      "notice": "BUN-LICENSE.txt: ieee754@1.2.1; notices N2619",
+      "status": "reviewed"
+    },
+    {
+      "id": "inherits@2.0.4",
+      "kind": "runtime_dependency",
+      "version": "2.0.4",
+      "license": "ISC",
+      "source": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+      "notice": "BUN-LICENSE.txt: inherits@2.0.4; notices N2620",
+      "status": "reviewed"
+    },
+    {
+      "id": "is-arguments@1.2.0",
+      "kind": "runtime_dependency",
+      "version": "1.2.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/is-arguments/-/is-arguments-1.2.0.tgz",
+      "notice": "BUN-LICENSE.txt: is-arguments@1.2.0; notices N2622",
+      "status": "reviewed"
+    },
+    {
+      "id": "is-callable@1.2.7",
+      "kind": "runtime_dependency",
+      "version": "1.2.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/is-callable/-/is-callable-1.2.7.tgz",
+      "notice": "BUN-LICENSE.txt: is-callable@1.2.7; notices N2621",
+      "status": "reviewed"
+    },
+    {
+      "id": "is-generator-function@1.1.2",
+      "kind": "runtime_dependency",
+      "version": "1.1.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/is-generator-function/-/is-generator-function-1.1.2.tgz",
+      "notice": "BUN-LICENSE.txt: is-generator-function@1.1.2; notices N2622",
+      "status": "reviewed"
+    },
+    {
+      "id": "is-nan@1.3.2",
+      "kind": "runtime_dependency",
+      "version": "1.3.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/is-nan/-/is-nan-1.3.2.tgz",
+      "notice": "BUN-LICENSE.txt: is-nan@1.3.2; notices N2622",
+      "status": "reviewed"
+    },
+    {
+      "id": "is-regex@1.2.1",
+      "kind": "runtime_dependency",
+      "version": "1.2.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/is-regex/-/is-regex-1.2.1.tgz",
+      "notice": "BUN-LICENSE.txt: is-regex@1.2.1; notices N2622",
+      "status": "reviewed"
+    },
+    {
+      "id": "is-typed-array@1.1.15",
+      "kind": "runtime_dependency",
+      "version": "1.1.15",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/is-typed-array/-/is-typed-array-1.1.15.tgz",
+      "notice": "BUN-LICENSE.txt: is-typed-array@1.1.15; notices N2621",
+      "status": "reviewed"
+    },
+    {
+      "id": "isarray@2.0.5",
+      "kind": "runtime_dependency",
+      "version": "2.0.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/isarray/-/isarray-2.0.5.tgz",
+      "notice": "BUN-LICENSE.txt: isarray@2.0.5; notices N2623",
+      "status": "reviewed"
+    },
+    {
+      "id": "llhttp",
+      "kind": "runtime_dependency",
+      "version": "9.4.2",
+      "license": "MIT",
+      "source": "https://github.com/nodejs/node/blob/110840f2c74/deps/llhttp/LICENSE-MIT",
+      "notice": "BUN-LICENSE.txt: llhttp; notices N2624",
+      "status": "reviewed"
+    },
+    {
+      "id": "math-intrinsics@1.1.0",
+      "kind": "runtime_dependency",
+      "version": "1.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+      "notice": "BUN-LICENSE.txt: math-intrinsics@1.1.0; notices N2602",
+      "status": "reviewed"
+    },
+    {
+      "id": "md5.js@1.3.5",
+      "kind": "runtime_dependency",
+      "version": "1.3.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/md5.js/-/md5.js-1.3.5.tgz",
+      "notice": "BUN-LICENSE.txt: md5.js@1.3.5; notices N2615",
+      "status": "reviewed"
+    },
+    {
+      "id": "minimalistic-assert@1.0.1",
+      "kind": "runtime_dependency",
+      "version": "1.0.1",
+      "license": "ISC",
+      "source": "https://registry.npmjs.org/minimalistic-assert/-/minimalistic-assert-1.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: minimalistic-assert@1.0.1; notices N2625",
+      "status": "reviewed"
+    },
+    {
+      "id": "minimalistic-crypto-utils@1.0.1",
+      "kind": "runtime_dependency",
+      "version": "1.0.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/minimalistic-crypto-utils/-/minimalistic-crypto-utils-1.0.1.tgz",
+      "notice": "BUN-LICENSE.txt: minimalistic-crypto-utils@1.0.1; notices N2617",
+      "status": "reviewed"
+    },
+    {
+      "id": "object-is@1.1.6",
+      "kind": "runtime_dependency",
+      "version": "1.1.6",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/object-is/-/object-is-1.1.6.tgz",
+      "notice": "BUN-LICENSE.txt: object-is@1.1.6; notices N2622",
+      "status": "reviewed"
+    },
+    {
+      "id": "object-keys@1.1.1",
+      "kind": "runtime_dependency",
+      "version": "1.1.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/object-keys/-/object-keys-1.1.1.tgz",
+      "notice": "BUN-LICENSE.txt: object-keys@1.1.1; notices N2626",
+      "status": "reviewed"
+    },
+    {
+      "id": "object.assign@4.1.7",
+      "kind": "runtime_dependency",
+      "version": "4.1.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/object.assign/-/object.assign-4.1.7.tgz",
+      "notice": "BUN-LICENSE.txt: object.assign@4.1.7; notices N2627",
+      "status": "reviewed"
+    },
+    {
+      "id": "pako@1.0.11",
+      "kind": "runtime_dependency",
+      "version": "1.0.11",
+      "license": "MIT AND Zlib",
+      "source": "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz",
+      "notice": "BUN-LICENSE.txt: pako@1.0.11; notices N2628",
+      "status": "reviewed"
+    },
+    {
+      "id": "parse-asn1@5.1.9",
+      "kind": "runtime_dependency",
+      "version": "5.1.9",
+      "license": "ISC",
+      "source": "https://registry.npmjs.org/parse-asn1/-/parse-asn1-5.1.9.tgz",
+      "notice": "BUN-LICENSE.txt: parse-asn1@5.1.9; notices N2629",
+      "status": "reviewed"
+    },
+    {
+      "id": "pbkdf2@3.1.5",
+      "kind": "runtime_dependency",
+      "version": "3.1.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/pbkdf2/-/pbkdf2-3.1.5.tgz",
+      "notice": "BUN-LICENSE.txt: pbkdf2@3.1.5; notices N2630",
+      "status": "reviewed"
+    },
+    {
+      "id": "possible-typed-array-names@1.1.0",
+      "kind": "runtime_dependency",
+      "version": "1.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/possible-typed-array-names/-/possible-typed-array-names-1.1.0.tgz",
+      "notice": "BUN-LICENSE.txt: possible-typed-array-names@1.1.0; notices N2605",
+      "status": "reviewed"
+    },
+    {
+      "id": "preact@10.27.2",
+      "kind": "runtime_dependency",
+      "version": "10.27.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/preact/-/preact-10.27.2.tgz",
+      "notice": "BUN-LICENSE.txt: preact@10.27.2; notices N2631",
+      "status": "reviewed"
+    },
+    {
+      "id": "process@0.11.10",
+      "kind": "runtime_dependency",
+      "version": "0.11.10",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/process/-/process-0.11.10.tgz",
+      "notice": "BUN-LICENSE.txt: process@0.11.10; notices N2632",
+      "status": "reviewed"
+    },
+    {
+      "id": "public-encrypt@4.0.3",
+      "kind": "runtime_dependency",
+      "version": "4.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/public-encrypt/-/public-encrypt-4.0.3.tgz",
+      "notice": "BUN-LICENSE.txt: public-encrypt@4.0.3; notices N2600",
+      "status": "reviewed"
+    },
+    {
+      "id": "punycode@2.3.1",
+      "kind": "runtime_dependency",
+      "version": "2.3.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+      "notice": "BUN-LICENSE.txt: punycode@2.3.1; notices N2633",
+      "status": "reviewed"
+    },
+    {
+      "id": "querystring-es3@1.0.0-0",
+      "kind": "runtime_dependency",
+      "version": "1.0.0-0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/querystring-es3/-/querystring-es3-1.0.0-0.tgz",
+      "notice": "BUN-LICENSE.txt: querystring-es3@1.0.0-0; notices N2634",
+      "status": "reviewed"
+    },
+    {
+      "id": "randombytes@2.1.0",
+      "kind": "runtime_dependency",
+      "version": "2.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/randombytes/-/randombytes-2.1.0.tgz",
+      "notice": "BUN-LICENSE.txt: randombytes@2.1.0; notices N2635",
+      "status": "reviewed"
+    },
+    {
+      "id": "randomfill@1.0.4",
+      "kind": "runtime_dependency",
+      "version": "1.0.4",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/randomfill/-/randomfill-1.0.4.tgz",
+      "notice": "BUN-LICENSE.txt: randomfill@1.0.4; notices N2635",
+      "status": "reviewed"
+    },
+    {
+      "id": "react-refresh@0.17.0",
+      "kind": "runtime_dependency",
+      "version": "0.17.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.17.0.tgz",
+      "notice": "BUN-LICENSE.txt: react-refresh@0.17.0; notices N2636",
+      "status": "reviewed"
+    },
+    {
+      "id": "readable-stream@3.6.2",
+      "kind": "runtime_dependency",
+      "version": "3.6.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
+      "notice": "BUN-LICENSE.txt: readable-stream@3.6.2; notices N2637",
+      "status": "reviewed"
+    },
+    {
+      "id": "readable-stream@4.7.0",
+      "kind": "runtime_dependency",
+      "version": "4.7.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/readable-stream/-/readable-stream-4.7.0.tgz",
+      "notice": "BUN-LICENSE.txt: readable-stream@4.7.0; notices N2637",
+      "status": "reviewed"
+    },
+    {
+      "id": "safe-buffer@5.2.1",
+      "kind": "runtime_dependency",
+      "version": "5.2.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
+      "notice": "BUN-LICENSE.txt: safe-buffer@5.2.1; notices N2638",
+      "status": "reviewed"
+    },
+    {
+      "id": "safe-regex-test@1.1.0",
+      "kind": "runtime_dependency",
+      "version": "1.1.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/safe-regex-test/-/safe-regex-test-1.1.0.tgz",
+      "notice": "BUN-LICENSE.txt: safe-regex-test@1.1.0; notices N2611",
+      "status": "reviewed"
+    },
+    {
+      "id": "set-function-length@1.2.2",
+      "kind": "runtime_dependency",
+      "version": "1.2.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz",
+      "notice": "BUN-LICENSE.txt: set-function-length@1.2.2; notices N2616",
+      "status": "reviewed"
+    },
+    {
+      "id": "simdutf",
+      "kind": "runtime_dependency",
+      "version": "9.0.0 in WebKit snapshot",
+      "license": "MIT in LICENSE-simdutf.txt",
+      "source": "https://github.com/oven-sh/WebKit/blob/5718a6ec579b98362ea7276a426deedcc6281ef5/Source/WTF/wtf/simdutf/LICENSE-simdutf.txt",
+      "notice": "BUN-LICENSE.txt: simdutf; notices N2006, N2247",
+      "status": "reviewed"
+    },
+    {
+      "id": "stream-http@3.2.0",
+      "kind": "runtime_dependency",
+      "version": "3.2.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/stream-http/-/stream-http-3.2.0.tgz",
+      "notice": "BUN-LICENSE.txt: stream-http@3.2.0; notices N2639",
+      "status": "reviewed"
+    },
+    {
+      "id": "string_decoder@1.3.0",
+      "kind": "runtime_dependency",
+      "version": "1.3.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
+      "notice": "BUN-LICENSE.txt: string_decoder@1.3.0; notices N2640",
+      "status": "reviewed"
+    },
+    {
+      "id": "to-buffer@1.2.2",
+      "kind": "runtime_dependency",
+      "version": "1.2.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/to-buffer/-/to-buffer-1.2.2.tgz",
+      "notice": "BUN-LICENSE.txt: to-buffer@1.2.2; notices N2641",
+      "status": "reviewed"
+    },
+    {
+      "id": "typed-array-buffer@1.0.3",
+      "kind": "runtime_dependency",
+      "version": "1.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/typed-array-buffer/-/typed-array-buffer-1.0.3.tgz",
+      "notice": "BUN-LICENSE.txt: typed-array-buffer@1.0.3; notices N2598",
+      "status": "reviewed"
+    },
+    {
+      "id": "uSockets / uWebSockets",
+      "kind": "runtime_dependency",
+      "version": "Bun snapshot 13a98b0dbd136bcc5c98a8adfb53c909aa3183cc",
+      "license": "Apache-2.0 with source author headers",
+      "source": "https://github.com/oven-sh/bun/blob/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc/packages/bun-usockets/LICENSE",
+      "notice": "BUN-LICENSE.txt: uSockets / uWebSockets; notices N0003, N0007, N0009",
+      "status": "reviewed"
+    },
+    {
+      "id": "util-deprecate@1.0.2",
+      "kind": "runtime_dependency",
+      "version": "1.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
+      "notice": "BUN-LICENSE.txt: util-deprecate@1.0.2; notices N2642-N2643",
+      "status": "reviewed"
+    },
+    {
+      "id": "util@0.12.5",
+      "kind": "runtime_dependency",
+      "version": "0.12.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/util/-/util-0.12.5.tgz",
+      "notice": "BUN-LICENSE.txt: util@0.12.5; notices N2580",
+      "status": "reviewed"
+    },
+    {
+      "id": "which-typed-array@1.1.19",
+      "kind": "runtime_dependency",
+      "version": "1.1.19",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.19.tgz",
+      "notice": "BUN-LICENSE.txt: which-typed-array@1.1.19; notices N2621",
+      "status": "reviewed"
+    },
+    {
+      "id": "xtend@4.0.2",
+      "kind": "runtime_dependency",
+      "version": "4.0.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
+      "notice": "BUN-LICENSE.txt: xtend@4.0.2; notices N2644",
+      "status": "reviewed"
+    }
+  ]
+}

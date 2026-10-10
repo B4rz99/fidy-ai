@@ -11,6 +11,7 @@ import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { Skeleton } from "@/ui/components/skeleton";
 import { Spinner } from "@/ui/components/spinner";
+import { CompactTableReference } from "./compact-table-reference";
 import { cn } from "./class-names";
 import { type DarkPalette, darkPalettes } from "./dark-palettes";
 import { WorkspaceReference } from "./workspace-reference";
@@ -324,6 +325,7 @@ export const UIReference = (): JSX.Element => {
           <FieldReference />
         </div>
         <WorkspaceReference />
+        <CompactTableReference />
         <FeedbackReference />
         <div className="grid gap-6 lg:grid-cols-2">
           <TransactionReference />

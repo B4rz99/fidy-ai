@@ -1,11 +1,12 @@
-import { DateTime } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import { type FormEvent, type JSX, useState } from "react";
 import type { PATPairingId, PATPairingReview } from "@/transport/client";
-import { patScopeCopy } from "@/transport/client";
+import { PATPairingPublicCode, patScopeCopy } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
+import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
 
 export type InspectPATPairingCommand = Readonly<{
@@ -22,9 +23,9 @@ export type ApprovePATPairingCommand = Readonly<{
 type PairingState =
   | Readonly<{ _tag: "Entering"; publicCode: string }>
   | Readonly<{ _tag: "Inspecting"; publicCode: string }>
-  | Readonly<{ _tag: "Reviewing"; review: PATPairingReview }>
-  | Readonly<{ _tag: "Approving"; review: PATPairingReview }>
-  | Readonly<{ _tag: "Invalid" }>
+  | Readonly<{ _tag: "Reviewing"; review: PATPairingReview; publicCode: Option.Option<string> }>
+  | Readonly<{ _tag: "Approving"; review: PATPairingReview; publicCode: Option.Option<string> }>
+  | Readonly<{ _tag: "Invalid"; publicCode: Option.Option<string> }>
   | Readonly<{ _tag: "Approved" }>;
 
 const initialState: PairingState = { _tag: "Entering", publicCode: "" };
@@ -56,13 +57,29 @@ const PairingReviewDetails = ({ review }: Readonly<{ review: PATPairingReview }>
   </dl>
 );
 
-const InvalidPairingCard = ({ reset }: Readonly<{ reset: () => void }>): JSX.Element => (
+const InvalidPairingCard = ({
+  reset,
+  publicCode,
+}: Readonly<{ reset: () => void; publicCode: Option.Option<string> }>): JSX.Element => (
   <Card>
     <CardContent className="flex flex-col gap-4">
       <Alert variant="destructive">
         <AlertTitle>No encontramos ese código</AlertTitle>
         <AlertDescription>El código no es válido o ya no está disponible.</AlertDescription>
       </Alert>
+      {Option.isSome(publicCode) ? (
+        <Button
+          nativeButton={false}
+          render={
+            <a
+              aria-label="Iniciar sesión para revisar la solicitud"
+              href={`/auth/pair?cliCode=${encodeURIComponent(publicCode.value)}`}
+            />
+          }
+        >
+          Iniciar sesión para revisar la solicitud
+        </Button>
+      ) : null}
       <Button onClick={reset} type="button" variant="outline">
         Ingresar otro código
       </Button>
@@ -76,8 +93,8 @@ const ApprovedPairingCard = (): JSX.Element => (
       <Alert>
         <AlertTitle>Acceso autorizado</AlertTitle>
         <AlertDescription>
-          Vuelve al lugar donde obtuviste el código para completar la conexión. Este navegador no
-          recibe ni muestra la clave de acceso.
+          Puedes cerrar esta pestaña y volver a la terminal para completar la conexión. Este
+          navegador no recibe ni muestra la clave de acceso.
         </AlertDescription>
       </Alert>
     </CardContent>
@@ -106,6 +123,16 @@ const PairingReviewCard = ({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
+        {Option.isSome(state.publicCode) ? (
+          <p className="text-sm">
+            Confirma que este código coincide con tu terminal:{" "}
+            <strong className="font-mono">{state.publicCode.value}</strong>.
+          </p>
+        ) : null}
+        <p className="text-sm text-muted-foreground">
+          El nombre lo indica el solicitante; no verifica su identidad. Continúa solo si tú
+          iniciaste esta conexión.
+        </p>
         <PairingReviewDetails review={state.review} />
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button disabled={busy} onClick={reset} type="button" variant="outline">
@@ -130,7 +157,7 @@ const PairingReviewCard = ({
   );
 };
 
-const PairingCodeCard = ({
+const PairingCodeSection = ({
   state,
   inspect,
   update,
@@ -145,19 +172,18 @@ const PairingCodeCard = ({
     if (!busy && state.publicCode.trim().length > 0) inspect(state.publicCode);
   };
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2>Autorizar acceso con código</h2>
-        </CardTitle>
-        <CardDescription>Ingresa el código que aparece donde quieres usar Fidy.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <section className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-xl font-semibold">Autorizar acceso con código</h2>
+
+        <p className="text-sm text-muted-foreground">
+          Ingresa el código que aparece donde quieres usar Fidy.
+        </p>
+      </div>
+      <div>
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <div className="flex flex-col gap-2">
-            <label className="font-medium" htmlFor="pat-pairing-code">
-              Código
-            </label>
+            <Label htmlFor="pat-pairing-code">Código</Label>
             <Input
               autoComplete="off"
               disabled={busy}
@@ -167,12 +193,17 @@ const PairingCodeCard = ({
               value={state.publicCode}
             />
           </div>
-          <Button disabled={busy || state.publicCode.trim().length === 0} type="submit">
+          <Button
+            className="self-start"
+            disabled={busy || state.publicCode.trim().length === 0}
+            type="submit"
+            variant="outline"
+          >
             {busy ? "Buscando…" : "Continuar"}
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 };
 
@@ -180,37 +211,52 @@ const PairingCodeCard = ({
 export const PATPairingView = ({
   inspect,
   approve,
+  initialReview,
+  publicCode,
 }: Readonly<{
+  initialReview: Option.Option<PATPairingReview>;
+  publicCode: Option.Option<string>;
   inspect: (command: InspectPATPairingCommand) => void;
   approve: (command: ApprovePATPairingCommand) => void;
 }>): JSX.Element => {
-  const [state, setState] = useState<PairingState>(initialState);
+  const [state, setState] = useState<PairingState>(() =>
+    Option.isSome(initialReview)
+      ? { _tag: "Reviewing", review: initialReview.value, publicCode }
+      : initialState
+  );
   const reset = (): void => setState(initialState);
-  if (state._tag === "Invalid") return <InvalidPairingCard reset={reset} />;
+  if (state._tag === "Invalid") {
+    return <InvalidPairingCard reset={reset} publicCode={state.publicCode} />;
+  }
   if (state._tag === "Approved") return <ApprovedPairingCard />;
   if (state._tag === "Reviewing" || state._tag === "Approving") {
     return (
       <PairingReviewCard
         approve={(command) => {
-          setState({ _tag: "Approving", review: state.review });
+          setState({ ...state, _tag: "Approving" });
           approve(command);
         }}
         approved={() => setState({ _tag: "Approved" })}
-        failed={() => setState({ _tag: "Invalid" })}
+        failed={() => setState({ _tag: "Invalid", publicCode: Option.none() })}
         reset={reset}
         state={state}
       />
     );
   }
   return (
-    <PairingCodeCard
+    <PairingCodeSection
       inspect={(value) => {
         const publicCode = value.trim().toUpperCase();
         setState({ _tag: "Inspecting", publicCode });
         inspect({
           publicCode,
-          onInspected: (review) => setState({ _tag: "Reviewing", review }),
-          onFailed: () => setState({ _tag: "Invalid" }),
+          onInspected: (review) =>
+            setState({ _tag: "Reviewing", review, publicCode: Option.some(publicCode) }),
+          onFailed: () =>
+            setState({
+              _tag: "Invalid",
+              publicCode: Schema.decodeOption(PATPairingPublicCode)(publicCode),
+            }),
         });
       }}
       state={state}

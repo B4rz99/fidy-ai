@@ -1,3 +1,4 @@
+import { type VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
 import { cn } from "@/ui/class-names";
 
@@ -6,8 +7,8 @@ type TableSectionProps = React.ComponentProps<"thead">;
 type TableBodyProps = React.ComponentProps<"tbody">;
 type TableFooterProps = React.ComponentProps<"tfoot">;
 type TableRowProps = React.ComponentProps<"tr">;
-type TableHeadProps = React.ComponentProps<"th">;
-type TableCellProps = React.ComponentProps<"td">;
+type TableHeadProps = React.ComponentProps<"th"> & VariantProps<typeof tableHeadVariants>;
+type TableCellProps = React.ComponentProps<"td"> & VariantProps<typeof tableCellVariants>;
 type TableCaptionProps = React.ComponentProps<"caption">;
 
 const Table = ({ className, ...props }: TableProps): React.JSX.Element => (
@@ -51,23 +52,27 @@ const TableRow = ({ className, ...props }: TableRowProps): React.JSX.Element => 
   />
 );
 
-const TableHead = ({ className, ...props }: TableHeadProps): React.JSX.Element => (
-  <th
-    data-slot="table-head"
-    className={cn(
-      "h-11 px-4 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
-      className
-    )}
-    {...props}
-  />
+const tableHeadVariants = cva(
+  "h-11 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+  {
+    variants: { density: { default: "px-4", compact: "px-2 text-sm" } },
+    defaultVariants: { density: "default" },
+  }
 );
 
-const TableCell = ({ className, ...props }: TableCellProps): React.JSX.Element => (
-  <td
-    data-slot="table-cell"
-    className={cn("px-4 py-4 text-base align-middle [&:has([role=checkbox])]:pr-0", className)}
-    {...props}
-  />
+const tableCellVariants = cva("align-middle [&:has([role=checkbox])]:pr-0", {
+  variants: {
+    density: { default: "px-4 py-4 text-base", compact: "px-2 py-3 text-sm" },
+  },
+  defaultVariants: { density: "default" },
+});
+
+const TableHead = ({ className, density, ...props }: TableHeadProps): React.JSX.Element => (
+  <th data-slot="table-head" className={cn(tableHeadVariants({ density }), className)} {...props} />
+);
+
+const TableCell = ({ className, density, ...props }: TableCellProps): React.JSX.Element => (
+  <td data-slot="table-cell" className={cn(tableCellVariants({ density }), className)} {...props} />
 );
 
 const TableCaption = ({ className, ...props }: TableCaptionProps): React.JSX.Element => (

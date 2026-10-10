@@ -7,6 +7,11 @@ export const PublicOutput = Schema.Union([
   Schema.TaggedStruct("ApprovalRequired", {
     publicCode: StartedPATPairing.fields.publicCode,
     managementUrl: Schema.Literal(managementUrl),
+    approvalUrl: Schema.String.check(
+      Schema.isPattern(
+        /^https:\/\/fidyapp\.com\/connect\/cli\?cliCode=[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u
+      )
+    ),
   }),
   Schema.TaggedStruct("PollingDelayed", { retryAfterSeconds: Schema.Int }),
   Schema.TaggedStruct("LoggedIn", { grant: SavedGrant }),

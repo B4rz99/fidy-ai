@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+import { ChildProcessSpawner } from "effect/process";
+import { type PublicOutput } from "./command/contract";
+import { openApprovalBrowser } from "./login/browser";
 import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit, Layer, Option, Path, Schema, Terminal } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -19,7 +22,11 @@ const validateFlags = Effect.fn(function* () {
   if (args.filter((argument) => argument === "--json").length > 1) {
     return yield* new CliFailure({ reason: "InvalidInput" });
   }
-  if (json && commandArgs.length === 1 && commandArgs[0] === "login") {
+  if (
+    json &&
+    commandArgs.filter((argument) => argument !== "--no-browser").length === 1 &&
+    commandArgs[0] === "login"
+  ) {
     return yield* new CliFailure({ reason: "InvalidInput" });
   }
 });
@@ -33,17 +40,20 @@ const runOperator = Effect.fn(function* () {
   });
   if (yield* runSupportRecovery(args, operator)) process.exitCode = 1;
 });
-const authenticatedProgram = Effect.gen(function* () {
-  yield* validateFlags();
-  if (commandArgs[0] === "support-recovery") {
-    return yield* runOperator();
-  }
+const localCredentialStore = Effect.gen(function* () {
   const home = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(
     process.platform === "win32" ? Bun.env.USERPROFILE : Bun.env.HOME
   ).pipe(Effect.mapError(() => new CliFailure({ reason: "StorageUnavailable" })));
   const path = yield* Path.Path;
   if (!path.isAbsolute(home)) return yield* new CliFailure({ reason: "StorageUnavailable" });
-  const credential = yield* makeCredentialStore(path.join(home, ".fidy", "cli"));
+  return yield* makeCredentialStore(path.join(home, ".fidy", "cli"));
+});
+const authenticatedProgram = Effect.gen(function* () {
+  yield* validateFlags();
+  if (commandArgs[0] === "support-recovery") {
+    return yield* runOperator();
+  }
+  const credential = yield* localCredentialStore;
   const httpClient = yield* HttpClient.HttpClient;
   if (!["login", "status", "logout"].includes(commandArgs[0] ?? "")) {
     const failed = yield* runOperationCommand(commandArgs, {
@@ -65,34 +75,47 @@ const authenticatedProgram = Effect.gen(function* () {
     return;
   }
   const pairing = yield* makePairingClient(httpClient);
+  const browserSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const terminal = yield* Terminal.Terminal;
-  yield* runCommand(commandArgs, {
-    ...credential,
-    pairing,
-    readLine: (question) =>
-      (json
-        ? Effect.sync(() => {
-            process.stderr.write(question);
-          })
-        : terminal.display(question)
-      ).pipe(
-        Effect.andThen(terminal.readLine),
-        Effect.mapError(
-          (failure) =>
-            new CliFailure({ reason: Terminal.isQuitError(failure) ? "Cancelled" : "InvalidInput" })
-        )
-      ),
-    emit: (output) =>
-      formatOutput(output, json).pipe(
-        Effect.flatMap((text) =>
-          Effect.sync(() => {
-            process.stdout.write(text);
-          })
+  yield* runCommand(
+    commandArgs,
+    {
+      ...credential,
+      pairing,
+      readLine: (question) =>
+        (json
+          ? Effect.sync(() => {
+              process.stderr.write(question);
+            })
+          : terminal.display(question)
+        ).pipe(
+          Effect.andThen(terminal.readLine),
+          Effect.mapError(
+            (failure) =>
+              new CliFailure({
+                reason: Terminal.isQuitError(failure) ? "Cancelled" : "InvalidInput",
+              })
+          )
         ),
-        Effect.orDie
-      ),
-  });
+      emit: emitOutput,
+    },
+    (url) =>
+      json
+        ? Effect.void
+        : openApprovalBrowser(url).pipe(
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, browserSpawner)
+          )
+  );
 }).pipe(Effect.scoped);
+const emitOutput = (output: PublicOutput): Effect.Effect<void> =>
+  formatOutput(output, json).pipe(
+    Effect.flatMap((text) =>
+      Effect.sync(() => {
+        process.stdout.write(text);
+      })
+    ),
+    Effect.orDie
+  );
 const program = Effect.gen(function* () {
   const installation = installationOutput(args);
   if (Option.isSome(installation)) {

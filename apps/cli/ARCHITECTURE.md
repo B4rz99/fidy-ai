@@ -19,6 +19,7 @@ directory first on PATH. `bun run cli login` prompts for the exact recipient, no
 scope set and fixed lifetime. Explicit non-secret arguments are also supported:
 
 ```sh
+# Opens the dedicated browser approval page; add --no-browser for SSH/containers.
 bun run cli login --recipient 'Mi agente' --scopes read --lifetime 7
 bun run cli status --json
 bun run cli logout
@@ -194,8 +195,13 @@ is not necessarily completed asynchronous work. Hosted confirmation metadata nev
 browser or hosted-session authority.
 
 Both fresh and saved access are bound to the fixed production API origin. There is no API-origin
-argument or environment override. The only displayed approval URL is
-`https://fidyapp.com/settings/pats`; proof and PAT never enter URLs, browser state or arguments.
+argument or environment override. Approval uses `https://fidyapp.com/connect/cli?cliCode=PUBLIC-CODE`.
+Only the server-decoded public request identity enters this fixed-origin URL; proof and PAT never
+enter URLs, browser state or arguments. Human login attempts to open the system browser once with
+an argument-vector child (no shell), a five-second deadline and scoped process cleanup. Failure
+leaves the printed link/code usable. `--no-browser` and JSON mode never open a browser. The dedicated
+page inspects the request, retains it through sign-in, displays the terminal code for comparison and
+requires explicit permission/lifetime approval. Ordinary PAT settings contain no pairing form.
 
 The transport refuses redirects, omits ambient cookies, bounds requests and streamed response bytes,
 and owns a 15-second deadline. Login sleeps on advertised cadence, honors `PollingDelayed` without

@@ -291,6 +291,7 @@ export const statementClarificationTestMigrations = [
   "0077_statement_materialization",
   "0078_statement_materialization_binding",
   "0079_statement_progress",
+  "0082_statement_review_capacity",
 ] as const;
 /** Canonical Audit's full shared-budget dependencies for owner integration harnesses. */
 export const statementAuditTestMigrations = [

@@ -1,0 +1,3108 @@
+{
+  "date": "2026-10-10",
+  "baselineRevision": "ae32d98b31b9ab3f7a95cb77df85c1132cd394b9",
+  "candidateMigration": "0081_retire_projection_search.sql",
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "bun": "1.4.3",
+    "miniflare": "5.20260911.1-alpha",
+    "workerd": "1.20261001.1",
+    "vitest": "5.0.3",
+    "playwright": "1.63.0",
+    "vite": "8.3.2"
+  },
+  "boundary": "Synthetic local native fixtures; not production telemetry. Durations are single-run local samples, not percentiles. Retained heap is not peak memory.",
+  "nativeD1": [
+    {
+      "scenario": "projection-write",
+      "length": 32,
+      "capture": {
+        "before": {
+          "reads": 94,
+          "writes": 45,
+          "durationMs": 1
+        },
+        "after": {
+          "reads": 42,
+          "writes": 44,
+          "durationMs": 2
+        }
+      },
+      "correction": {
+        "before": {
+          "reads": 408,
+          "writes": 153,
+          "durationMs": 2
+        },
+        "after": {
+          "reads": 300,
+          "writes": 149,
+          "durationMs": 2
+        }
+      }
+    },
+    {
+      "scenario": "projection-write",
+      "length": 1024,
+      "capture": {
+        "before": {
+          "reads": 1086,
+          "writes": 45,
+          "durationMs": 3
+        },
+        "after": {
+          "reads": 42,
+          "writes": 44,
+          "durationMs": 1
+        }
+      },
+      "correction": {
+        "before": {
+          "reads": 2392,
+          "writes": 153,
+          "durationMs": 7
+        },
+        "after": {
+          "reads": 300,
+          "writes": 149,
+          "durationMs": 1
+        }
+      }
+    },
+    {
+      "scenario": "history-growth",
+      "count": 200,
+      "foreignCount": 200,
+      "linked": false,
+      "rowsReturned": 101,
+      "rowsRead": 102,
+      "nativeDurationMs": 0,
+      "elapsedMs": 4
+    },
+    {
+      "scenario": "projection-write",
+      "length": 4096,
+      "capture": {
+        "before": {
+          "reads": 4158,
+          "writes": 45,
+          "durationMs": 14
+        },
+        "after": {
+          "reads": 42,
+          "writes": 44,
+          "durationMs": 1
+        }
+      },
+      "correction": {
+        "before": {
+          "reads": 8536,
+          "writes": 153,
+          "durationMs": 29
+        },
+        "after": {
+          "reads": 300,
+          "writes": 149,
+          "durationMs": 2
+        }
+      }
+    },
+    {
+      "scenario": "history-growth",
+      "count": 2000,
+      "foreignCount": 2000,
+      "linked": false,
+      "rowsReturned": 101,
+      "rowsRead": 102,
+      "nativeDurationMs": 1,
+      "elapsedMs": 5
+    },
+    {
+      "scenario": "history-growth",
+      "count": 20000,
+      "foreignCount": 20000,
+      "linked": false,
+      "rowsReturned": 101,
+      "rowsRead": 102,
+      "nativeDurationMs": 0,
+      "elapsedMs": 4
+    },
+    {
+      "scenario": "history-growth",
+      "count": 200,
+      "foreignCount": 200,
+      "linked": true,
+      "rowsReturned": 100,
+      "rowsRead": 4302,
+      "nativeDurationMs": 2,
+      "elapsedMs": 4
+    },
+    {
+      "scenario": "history-growth",
+      "count": 2000,
+      "foreignCount": 2000,
+      "linked": true,
+      "rowsReturned": 101,
+      "rowsRead": 43002,
+      "nativeDurationMs": 11,
+      "elapsedMs": 14
+    },
+    {
+      "scenario": "history-growth",
+      "count": 20000,
+      "foreignCount": 20000,
+      "linked": true,
+      "rowsReturned": 101,
+      "rowsRead": 430002,
+      "nativeDurationMs": 116,
+      "elapsedMs": 120
+    }
+  ],
+  "browser": [
+    {
+      "scenario": "provider-start-and-four-status",
+      "attempts": {
+        "POST /web/pairings": 1,
+        "POST /web/providers/google/start": 1,
+        "POST /web/providers/google/status": 4
+      },
+      "requests": {
+        "POST /web/pairings 200": 1,
+        "POST /web/providers/google/start 200": 1,
+        "POST /web/providers/google/status 200": 4
+      },
+      "rowsRead": 14,
+      "rowsWritten": 7
+    },
+    {
+      "scenario": "provider-hidden-three-status",
+      "attempts": {
+        "POST /web/providers/google/status": 3
+      },
+      "requests": {
+        "POST /web/providers/google/status 200": 3
+      },
+      "rowsRead": 6,
+      "rowsWritten": 0
+    },
+    {
+      "scenario": "provider-cancelled-20s",
+      "attempts": {},
+      "requests": {},
+      "rowsRead": 0,
+      "rowsWritten": 0
+    },
+    {
+      "scenario": "ordinary-start-and-two-pending-polls",
+      "attempts": {
+        "POST /web/pairings": 1,
+        "POST /web/pairings/redeem": 2
+      },
+      "requests": {
+        "POST /web/pairings 200": 1,
+        "POST /web/pairings/redeem 202": 2
+      },
+      "rowsRead": 8,
+      "rowsWritten": 5
+    },
+    {
+      "scenario": "ordinary-after-route-unmount",
+      "attempts": {},
+      "requests": {},
+      "rowsRead": 0,
+      "rowsWritten": 0
+    },
+    {
+      "scenario": "three-document-navigation-round-trips",
+      "attempts": {
+        "GET /subscription/offers": 3,
+        "GET /subscription/status": 3,
+        "GET /web/subscription/payment-enrollments/availability": 3,
+        "GET /user": 3,
+        "GET /categories": 3,
+        "GET /transactions": 4
+      },
+      "requests": {
+        "GET /subscription/offers 200": 3,
+        "GET /subscription/status 200": 2,
+        "GET /web/subscription/payment-enrollments/availability 200": 3,
+        "GET /user 200": 3,
+        "GET /categories 200": 3,
+        "GET /transactions 200": 3,
+        "GET /subscription/status 429": 1,
+        "GET /transactions 429": 1
+      },
+      "rowsRead": 466,
+      "rowsWritten": 248
+    },
+    {
+      "scenario": "three-spa-navigation-round-trips",
+      "attempts": {
+        "GET /user": 3,
+        "GET /categories": 5,
+        "GET /transactions": 8
+      },
+      "requests": {
+        "GET /user 200": 3,
+        "GET /categories 429": 2,
+        "GET /transactions 429": 5,
+        "GET /categories 200": 3,
+        "GET /transactions 200": 3
+      },
+      "rowsRead": 490,
+      "rowsWritten": 153
+    },
+    {
+      "scenario": "payment-setup-and-first-poll",
+      "attempts": {
+        "GET /subscription/offers": 2,
+        "GET /subscription/status": 3,
+        "GET /web/subscription/payment-enrollments/availability": 1,
+        "POST /web/subscription/payment-enrollments/prepare": 1,
+        "POST /web/subscription/payment-enrollments/submit": 1,
+        "GET /web/subscription/billing-attempts/:id": 1
+      },
+      "requests": {
+        "GET /subscription/offers 429": 1,
+        "GET /subscription/status 429": 2,
+        "GET /subscription/offers 200": 1,
+        "GET /web/subscription/payment-enrollments/availability 200": 1,
+        "POST /web/subscription/payment-enrollments/prepare 200": 1,
+        "POST /web/subscription/payment-enrollments/submit 200": 1,
+        "GET /subscription/status 200": 1,
+        "GET /web/subscription/billing-attempts/:id 200": 1
+      },
+      "rowsRead": 134,
+      "rowsWritten": 86
+    },
+    {
+      "scenario": "payment-two-pending-polls",
+      "attempts": {
+        "GET /web/subscription/billing-attempts/:id": 2
+      },
+      "requests": {
+        "GET /web/subscription/billing-attempts/:id 200": 2
+      },
+      "rowsRead": 14,
+      "rowsWritten": 0
+    },
+    {
+      "scenario": "payment-hidden-60s",
+      "attempts": {},
+      "requests": {},
+      "rowsRead": 0,
+      "rowsWritten": 0
+    },
+    {
+      "scenario": "payment-resumed-settlement-and-terminal-60s",
+      "attempts": {
+        "GET /web/subscription/billing-attempts/:id": 1
+      },
+      "requests": {
+        "GET /web/subscription/billing-attempts/:id 200": 1
+      },
+      "rowsRead": 8,
+      "rowsWritten": 0
+    },
+    {
+      "scenario": "navigation-before-logout",
+      "attempts": {
+        "GET /user": 1,
+        "GET /categories": 1,
+        "GET /transactions": 1
+      },
+      "requests": {
+        "GET /user 200": 1,
+        "GET /categories 200": 1,
+        "GET /transactions 200": 1
+      },
+      "rowsRead": 184,
+      "rowsWritten": 44
+    },
+    {
+      "scenario": "logout",
+      "attempts": {
+        "POST /web/session/logout": 1
+      },
+      "requests": {
+        "POST /web/session/logout 204": 1
+      },
+      "rowsRead": 1,
+      "rowsWritten": 1
+    },
+    {
+      "scenario": "authentication-replaced-60s",
+      "attempts": {},
+      "requests": {},
+      "rowsRead": 0,
+      "rowsWritten": 0
+    }
+  ],
+  "xlsx": [
+    {
+      "baseline": false,
+      "fixture": "shared-string-small",
+      "zipBytes": 2258,
+      "expandedBytes": 11191,
+      "sampledV8ActiveMilliseconds": 12.11,
+      "retainedHeapBeforeBytes": 9414376,
+      "retainedHeapAfterBytes": 11685388,
+      "outcome": "parsed",
+      "rowCount": 1,
+      "elapsedMilliseconds": 11,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 786432,
+      "serializedEvidenceBytes": 530315,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "fixture": "shared-string-row-limit",
+      "zipBytes": 2278,
+      "expandedBytes": 23479,
+      "sampledV8ActiveMilliseconds": 13.65,
+      "retainedHeapBeforeBytes": 11685388,
+      "retainedHeapAfterBytes": 15398232,
+      "outcome": "parsed",
+      "rowCount": 1,
+      "elapsedMilliseconds": 12,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 3145728,
+      "serializedEvidenceBytes": 2103179,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "fixture": "shared-string-total-limit",
+      "zipBytes": 7594,
+      "expandedBytes": 85307,
+      "sampledV8ActiveMilliseconds": 16.103,
+      "retainedHeapBeforeBytes": 15398232,
+      "retainedHeapAfterBytes": 12134832,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "fixture": "shared-string-accepted",
+      "zipBytes": 3601,
+      "expandedBytes": 1209495,
+      "sampledV8ActiveMilliseconds": 42.721,
+      "retainedHeapBeforeBytes": 12134832,
+      "retainedHeapAfterBytes": 17181336,
+      "outcome": "parsed",
+      "rowCount": 34,
+      "elapsedMilliseconds": 40,
+      "interpretationMilliseconds": 4,
+      "logicalTextBytes": 3602013,
+      "serializedEvidenceBytes": 2417418,
+      "interpretedRows": 34,
+      "acceptedRows": 34,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "fixture": "shared-string-review",
+      "zipBytes": 3605,
+      "expandedBytes": 1209495,
+      "sampledV8ActiveMilliseconds": 35.792,
+      "retainedHeapBeforeBytes": 17181336,
+      "retainedHeapAfterBytes": 22194760,
+      "outcome": "parsed",
+      "rowCount": 34,
+      "elapsedMilliseconds": 34,
+      "interpretationMilliseconds": 2,
+      "logicalTextBytes": 3602013,
+      "serializedEvidenceBytes": 2417418,
+      "interpretedRows": 34,
+      "acceptedRows": 33,
+      "reviewRows": 1
+    },
+    {
+      "baseline": false,
+      "fixture": "shared-string-repeated-accepted",
+      "zipBytes": 19123,
+      "expandedBytes": 271062,
+      "sampledV8ActiveMilliseconds": 14.072,
+      "retainedHeapBeforeBytes": 22194760,
+      "retainedHeapAfterBytes": 20879576,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "fixture": "different-amounts",
+      "zipBytes": 54421,
+      "expandedBytes": 178647,
+      "sampledV8ActiveMilliseconds": 113.102,
+      "retainedHeapBeforeBytes": 20879576,
+      "retainedHeapAfterBytes": 22523368,
+      "outcome": "parsed",
+      "rowCount": 1000,
+      "elapsedMilliseconds": 111,
+      "interpretationMilliseconds": 53,
+      "logicalTextBytes": 12335679,
+      "serializedEvidenceBytes": 8702266,
+      "interpretedRows": 1000,
+      "acceptedRows": 1000,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "fixture": "escaped-formatted",
+      "zipBytes": 15778,
+      "expandedBytes": 44139,
+      "sampledV8ActiveMilliseconds": 27.162,
+      "retainedHeapBeforeBytes": 22523368,
+      "retainedHeapAfterBytes": 25264280,
+      "outcome": "parsed",
+      "rowCount": 128,
+      "elapsedMilliseconds": 25,
+      "interpretationMilliseconds": 10,
+      "logicalTextBytes": 1186236,
+      "serializedEvidenceBytes": 1638806,
+      "interpretedRows": 128,
+      "acceptedRows": 0,
+      "reviewRows": 128
+    },
+    {
+      "baseline": false,
+      "fixture": "formatted-work-outside-envelope",
+      "zipBytes": 33117,
+      "expandedBytes": 103767,
+      "sampledV8ActiveMilliseconds": 9.004,
+      "retainedHeapBeforeBytes": 25264280,
+      "retainedHeapAfterBytes": 22811872,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "fixture": "numeric-outside-envelope",
+      "zipBytes": 5978,
+      "expandedBytes": 15512,
+      "sampledV8ActiveMilliseconds": 3.032,
+      "retainedHeapBeforeBytes": 22811872,
+      "retainedHeapAfterBytes": 23295672,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "fixture": "many-cells",
+      "zipBytes": 1695716,
+      "expandedBytes": 7357998,
+      "sampledV8ActiveMilliseconds": 369.559,
+      "retainedHeapBeforeBytes": 23295672,
+      "retainedHeapAfterBytes": 34469832,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "fixture": "bounded-cells",
+      "zipBytes": 676645,
+      "expandedBytes": 2835958,
+      "sampledV8ActiveMilliseconds": 746.023,
+      "retainedHeapBeforeBytes": 34469832,
+      "retainedHeapAfterBytes": 54409892,
+      "outcome": "parsed",
+      "rowCount": 8000,
+      "elapsedMilliseconds": 743,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 1112148,
+      "serializedEvidenceBytes": 10679080,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "fixture": "two-overlapping-requests",
+      "elapsedMilliseconds": 208.26554099999976,
+      "outcomes": ["parsed", "parsed"],
+      "retainedHeapAfterBytes": 33842300
+    },
+    {
+      "baseline": false,
+      "fixture": "two-overlapping-bounded-cell-requests",
+      "elapsedMilliseconds": 1426.711292,
+      "outcomes": ["parsed", "parsed"],
+      "retainedHeapAfterBytes": 51065612
+    }
+  ],
+  "validation": {
+    "static": "passed",
+    "relatedNative": {
+      "files": 16,
+      "passed": 304,
+      "skipped": 1
+    },
+    "measurementRun": {
+      "files": 2,
+      "passed": 6
+    },
+    "browser": {
+      "passed": 3
+    },
+    "xlsx": "passed"
+  },
+  "extendedRevision": "2284a6e8a3a43bb6a45ea905fe855cd711d5cc87",
+  "candidateChanges": [
+    "0081_retire_projection_search.sql",
+    "effectiveHistoryPage ready projection with atomic canonical fallback",
+    "0082_statement_review_capacity.sql"
+  ],
+  "extendedNativeD1": [
+    {
+      "scenario": "history-growth",
+      "count": 200,
+      "foreignCount": 200,
+      "linked": false,
+      "rowsReturned": 101,
+      "rowsRead": 304,
+      "nativeDurationMs": 1,
+      "elapsedMs": 4
+    },
+    {
+      "scenario": "history-growth",
+      "count": 2000,
+      "foreignCount": 2000,
+      "linked": false,
+      "rowsReturned": 101,
+      "rowsRead": 304,
+      "nativeDurationMs": 2,
+      "elapsedMs": 4
+    },
+    {
+      "scenario": "history-growth",
+      "count": 20000,
+      "foreignCount": 20000,
+      "linked": false,
+      "rowsReturned": 101,
+      "rowsRead": 304,
+      "nativeDurationMs": 1,
+      "elapsedMs": 5
+    },
+    {
+      "scenario": "history-growth",
+      "count": 200,
+      "foreignCount": 200,
+      "linked": true,
+      "rowsReturned": 100,
+      "rowsRead": 302,
+      "nativeDurationMs": 2,
+      "elapsedMs": 4
+    },
+    {
+      "scenario": "history-growth",
+      "count": 2000,
+      "foreignCount": 2000,
+      "linked": true,
+      "rowsReturned": 101,
+      "rowsRead": 304,
+      "nativeDurationMs": 2,
+      "elapsedMs": 3
+    },
+    {
+      "scenario": "history-growth",
+      "count": 20000,
+      "foreignCount": 20000,
+      "linked": true,
+      "rowsReturned": 101,
+      "rowsRead": 304,
+      "nativeDurationMs": 1,
+      "elapsedMs": 6
+    },
+    {
+      "scenario": "projection-write",
+      "length": 32,
+      "capture": {
+        "before": {
+          "reads": 94,
+          "writes": 45,
+          "durationMs": 1
+        },
+        "after": {
+          "reads": 42,
+          "writes": 44,
+          "durationMs": 1
+        }
+      },
+      "correction": {
+        "before": {
+          "reads": 408,
+          "writes": 153,
+          "durationMs": 4
+        },
+        "after": {
+          "reads": 300,
+          "writes": 149,
+          "durationMs": 4
+        }
+      }
+    },
+    {
+      "scenario": "projection-write",
+      "length": 480,
+      "capture": {
+        "before": {
+          "reads": 542,
+          "writes": 45,
+          "durationMs": 3
+        },
+        "after": {
+          "reads": 42,
+          "writes": 44,
+          "durationMs": 2
+        }
+      },
+      "correction": {
+        "before": {
+          "reads": 1304,
+          "writes": 153,
+          "durationMs": 5
+        },
+        "after": {
+          "reads": 300,
+          "writes": 149,
+          "durationMs": 4
+        }
+      }
+    },
+    {
+      "scenario": "projection-write",
+      "length": 1024,
+      "capture": {
+        "before": {
+          "reads": 1086,
+          "writes": 45,
+          "durationMs": 5
+        },
+        "after": {
+          "reads": 42,
+          "writes": 44,
+          "durationMs": 3
+        }
+      },
+      "correction": {
+        "before": {
+          "reads": 2392,
+          "writes": 153,
+          "durationMs": 9
+        },
+        "after": {
+          "reads": 300,
+          "writes": 149,
+          "durationMs": 3
+        }
+      }
+    },
+    {
+      "scenario": "projection-write",
+      "length": 4096,
+      "capture": {
+        "before": {
+          "reads": 4158,
+          "writes": 45,
+          "durationMs": 20
+        },
+        "after": {
+          "reads": 42,
+          "writes": 44,
+          "durationMs": 2
+        }
+      },
+      "correction": {
+        "before": {
+          "reads": 8536,
+          "writes": 153,
+          "durationMs": 94
+        },
+        "after": {
+          "reads": 300,
+          "writes": 149,
+          "durationMs": 5
+        }
+      }
+    },
+    {
+      "scenario": "complete-maintenance",
+      "retainedAdmissions": 0,
+      "tick": 0,
+      "rowsRead": 247,
+      "rowsWritten": 44,
+      "queueOffers": 1,
+      "queueMetricCalls": 7,
+      "workflowCalls": 0,
+      "elapsedMs": 248,
+      "activities": [
+        {
+          "operation": "async.health",
+          "rowsRead": 59,
+          "rowsWritten": 42,
+          "elapsedMs": 78.979375,
+          "successful": true
+        },
+        {
+          "operation": "audit.retention",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 14.10575,
+          "successful": true
+        },
+        {
+          "operation": "operational.events.retention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 3.740459,
+          "successful": true
+        },
+        {
+          "operation": "recovery.retention",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.640292,
+          "successful": true
+        },
+        {
+          "operation": "operational.canary.publish",
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "elapsedMs": 0.267667,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.6025,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.reconcile",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 7.258917,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.536959,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.reconcile",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 7.985167,
+          "successful": true
+        },
+        {
+          "operation": "billing.renewal.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 3.03025,
+          "successful": true
+        },
+        {
+          "operation": "billing.cancellation.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.270417,
+          "successful": true
+        },
+        {
+          "operation": "billing.priceNotice.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.442958,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.reconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.697209,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.468,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.632917,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.reconcile",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 4.140458,
+          "successful": true
+        },
+        {
+          "operation": "consent.sweep",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 6.907584,
+          "successful": true
+        },
+        {
+          "operation": "consent.proactivityOfferRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.268583,
+          "successful": true
+        },
+        {
+          "operation": "consent.disclosureRecovery",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 3.070125,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.747708,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.windowSweep",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.15175,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.sweep",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 6.956041,
+          "successful": true
+        },
+        {
+          "operation": "patPairing.sweep",
+          "rowsRead": 19,
+          "rowsWritten": 2,
+          "elapsedMs": 11.923375,
+          "successful": true
+        },
+        {
+          "operation": "dashboard.projectionRepair",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.716209,
+          "successful": true
+        },
+        {
+          "operation": "recurring.evaluate",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.755416,
+          "successful": true
+        },
+        {
+          "operation": "insights.weekly.dispatch",
+          "rowsRead": 29,
+          "rowsWritten": 0,
+          "elapsedMs": 17.732041,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.submissionRetention",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.988208,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.stagingSweep",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 3.445584,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.mediaRetention",
+          "rowsRead": 7,
+          "rowsWritten": 0,
+          "elapsedMs": 3.980958,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.uploadAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 3.221416,
+          "successful": true
+        },
+        {
+          "operation": "agent.workersAiAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.984708,
+          "successful": true
+        },
+        {
+          "operation": "billing.cardPreparationAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.658334,
+          "successful": true
+        },
+        {
+          "operation": "provider.authenticationRetention",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.869792,
+          "successful": true
+        },
+        {
+          "operation": "release.smoke.expiry",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.06025,
+          "successful": true
+        },
+        {
+          "operation": "canonical.admissionRetention",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 4.965416,
+          "successful": true
+        },
+        {
+          "operation": "oauth.confirmationRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.020917,
+          "successful": true
+        },
+        {
+          "operation": "connections.attemptRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.029416,
+          "successful": true
+        },
+        {
+          "operation": "quota.consumptionRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.0065,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.reviewEvidenceExpiry",
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 4.366583,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementReconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.307125,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementDispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.339708,
+          "successful": true
+        }
+      ]
+    },
+    {
+      "scenario": "complete-maintenance",
+      "retainedAdmissions": 0,
+      "tick": 1,
+      "rowsRead": 289,
+      "rowsWritten": 23,
+      "queueOffers": 1,
+      "queueMetricCalls": 7,
+      "workflowCalls": 0,
+      "elapsedMs": 204,
+      "activities": [
+        {
+          "operation": "async.health",
+          "rowsRead": 101,
+          "rowsWritten": 21,
+          "elapsedMs": 60.815125,
+          "successful": true
+        },
+        {
+          "operation": "audit.retention",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 13.607708,
+          "successful": true
+        },
+        {
+          "operation": "operational.events.retention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.375042,
+          "successful": true
+        },
+        {
+          "operation": "recovery.retention",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 4.629417,
+          "successful": true
+        },
+        {
+          "operation": "operational.canary.publish",
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "elapsedMs": 0.105416,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.015667,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.reconcile",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 6.228209,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.990083,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.reconcile",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.723458,
+          "successful": true
+        },
+        {
+          "operation": "billing.renewal.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.940417,
+          "successful": true
+        },
+        {
+          "operation": "billing.cancellation.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.928792,
+          "successful": true
+        },
+        {
+          "operation": "billing.priceNotice.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.91825,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.reconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.991333,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.9215,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.951042,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.reconcile",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.246459,
+          "successful": true
+        },
+        {
+          "operation": "consent.sweep",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 8.45375,
+          "successful": true
+        },
+        {
+          "operation": "consent.proactivityOfferRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 1.930042,
+          "successful": true
+        },
+        {
+          "operation": "consent.disclosureRecovery",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.050625,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.024958,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.windowSweep",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.842334,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.sweep",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 4.61375,
+          "successful": true
+        },
+        {
+          "operation": "patPairing.sweep",
+          "rowsRead": 19,
+          "rowsWritten": 2,
+          "elapsedMs": 11.049167,
+          "successful": true
+        },
+        {
+          "operation": "dashboard.projectionRepair",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.481,
+          "successful": true
+        },
+        {
+          "operation": "recurring.evaluate",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.969917,
+          "successful": true
+        },
+        {
+          "operation": "insights.weekly.dispatch",
+          "rowsRead": 29,
+          "rowsWritten": 0,
+          "elapsedMs": 15.0345,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.submissionRetention",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.980125,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.stagingSweep",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 1.90925,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.mediaRetention",
+          "rowsRead": 7,
+          "rowsWritten": 0,
+          "elapsedMs": 3.839791,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.uploadAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.696125,
+          "successful": true
+        },
+        {
+          "operation": "agent.workersAiAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.476875,
+          "successful": true
+        },
+        {
+          "operation": "billing.cardPreparationAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.718625,
+          "successful": true
+        },
+        {
+          "operation": "provider.authenticationRetention",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.647,
+          "successful": true
+        },
+        {
+          "operation": "release.smoke.expiry",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.50625,
+          "successful": true
+        },
+        {
+          "operation": "canonical.admissionRetention",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 4.922875,
+          "successful": true
+        },
+        {
+          "operation": "oauth.confirmationRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 4.149042,
+          "successful": true
+        },
+        {
+          "operation": "connections.attemptRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.04725,
+          "successful": true
+        },
+        {
+          "operation": "quota.consumptionRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.865417,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.reviewEvidenceExpiry",
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 3.808083,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementReconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.020583,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementDispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.894042,
+          "successful": true
+        }
+      ]
+    },
+    {
+      "scenario": "complete-maintenance",
+      "retainedAdmissions": 0,
+      "tick": 2,
+      "rowsRead": 289,
+      "rowsWritten": 23,
+      "queueOffers": 1,
+      "queueMetricCalls": 7,
+      "workflowCalls": 0,
+      "elapsedMs": 211,
+      "activities": [
+        {
+          "operation": "async.health",
+          "rowsRead": 101,
+          "rowsWritten": 21,
+          "elapsedMs": 55.444042,
+          "successful": true
+        },
+        {
+          "operation": "audit.retention",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 14.028791,
+          "successful": true
+        },
+        {
+          "operation": "operational.events.retention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.185541,
+          "successful": true
+        },
+        {
+          "operation": "recovery.retention",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.303125,
+          "successful": true
+        },
+        {
+          "operation": "operational.canary.publish",
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "elapsedMs": 0.118375,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.05425,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.reconcile",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 6.077167,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.85925,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.reconcile",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 10.774333,
+          "successful": true
+        },
+        {
+          "operation": "billing.renewal.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.980125,
+          "successful": true
+        },
+        {
+          "operation": "billing.cancellation.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.8165,
+          "successful": true
+        },
+        {
+          "operation": "billing.priceNotice.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 4.670958,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.reconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.077542,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.909833,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.937,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.reconcile",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.199167,
+          "successful": true
+        },
+        {
+          "operation": "consent.sweep",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 5.699459,
+          "successful": true
+        },
+        {
+          "operation": "consent.proactivityOfferRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 1.9945,
+          "successful": true
+        },
+        {
+          "operation": "consent.disclosureRecovery",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.087,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.86725,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.windowSweep",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.888917,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.sweep",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 5.269875,
+          "successful": true
+        },
+        {
+          "operation": "patPairing.sweep",
+          "rowsRead": 19,
+          "rowsWritten": 2,
+          "elapsedMs": 10.4075,
+          "successful": true
+        },
+        {
+          "operation": "dashboard.projectionRepair",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.364375,
+          "successful": true
+        },
+        {
+          "operation": "recurring.evaluate",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.157708,
+          "successful": true
+        },
+        {
+          "operation": "insights.weekly.dispatch",
+          "rowsRead": 29,
+          "rowsWritten": 0,
+          "elapsedMs": 13.032125,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.submissionRetention",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.773666,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.stagingSweep",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.145041,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.mediaRetention",
+          "rowsRead": 7,
+          "rowsWritten": 0,
+          "elapsedMs": 3.697208,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.uploadAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.638416,
+          "successful": true
+        },
+        {
+          "operation": "agent.workersAiAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.871666,
+          "successful": true
+        },
+        {
+          "operation": "billing.cardPreparationAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.594792,
+          "successful": true
+        },
+        {
+          "operation": "provider.authenticationRetention",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.765958,
+          "successful": true
+        },
+        {
+          "operation": "release.smoke.expiry",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 6.322625,
+          "successful": true
+        },
+        {
+          "operation": "canonical.admissionRetention",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 8.442292,
+          "successful": true
+        },
+        {
+          "operation": "oauth.confirmationRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 4.082709,
+          "successful": true
+        },
+        {
+          "operation": "connections.attemptRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.118958,
+          "successful": true
+        },
+        {
+          "operation": "quota.consumptionRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.023833,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.reviewEvidenceExpiry",
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 4.59425,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementReconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.092417,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementDispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.862875,
+          "successful": true
+        }
+      ]
+    },
+    {
+      "scenario": "complete-maintenance",
+      "retainedAdmissions": 2000,
+      "tick": 0,
+      "rowsRead": 247,
+      "rowsWritten": 44,
+      "queueOffers": 1,
+      "queueMetricCalls": 7,
+      "workflowCalls": 0,
+      "elapsedMs": 214,
+      "activities": [
+        {
+          "operation": "async.health",
+          "rowsRead": 59,
+          "rowsWritten": 42,
+          "elapsedMs": 64.2375,
+          "successful": true
+        },
+        {
+          "operation": "audit.retention",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 11.96825,
+          "successful": true
+        },
+        {
+          "operation": "operational.events.retention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.072916,
+          "successful": true
+        },
+        {
+          "operation": "recovery.retention",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.216375,
+          "successful": true
+        },
+        {
+          "operation": "operational.canary.publish",
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "elapsedMs": 0.098625,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.05075,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.reconcile",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 6.785333,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.927333,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.reconcile",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.640291,
+          "successful": true
+        },
+        {
+          "operation": "billing.renewal.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.092083,
+          "successful": true
+        },
+        {
+          "operation": "billing.cancellation.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.951458,
+          "successful": true
+        },
+        {
+          "operation": "billing.priceNotice.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.967708,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.reconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.952792,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.86625,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.926333,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.reconcile",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.446959,
+          "successful": true
+        },
+        {
+          "operation": "consent.sweep",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 5.598667,
+          "successful": true
+        },
+        {
+          "operation": "consent.proactivityOfferRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.012042,
+          "successful": true
+        },
+        {
+          "operation": "consent.disclosureRecovery",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.972208,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.922458,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.windowSweep",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.778542,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.sweep",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 9.010292,
+          "successful": true
+        },
+        {
+          "operation": "patPairing.sweep",
+          "rowsRead": 19,
+          "rowsWritten": 2,
+          "elapsedMs": 17.674375,
+          "successful": true
+        },
+        {
+          "operation": "dashboard.projectionRepair",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.668208,
+          "successful": true
+        },
+        {
+          "operation": "recurring.evaluate",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.025667,
+          "successful": true
+        },
+        {
+          "operation": "insights.weekly.dispatch",
+          "rowsRead": 29,
+          "rowsWritten": 0,
+          "elapsedMs": 13.033166,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.submissionRetention",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.90375,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.stagingSweep",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.052875,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.mediaRetention",
+          "rowsRead": 7,
+          "rowsWritten": 0,
+          "elapsedMs": 3.797167,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.uploadAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.705084,
+          "successful": true
+        },
+        {
+          "operation": "agent.workersAiAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.524917,
+          "successful": true
+        },
+        {
+          "operation": "billing.cardPreparationAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.575917,
+          "successful": true
+        },
+        {
+          "operation": "provider.authenticationRetention",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.587333,
+          "successful": true
+        },
+        {
+          "operation": "release.smoke.expiry",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.702708,
+          "successful": true
+        },
+        {
+          "operation": "canonical.admissionRetention",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 4.478167,
+          "successful": true
+        },
+        {
+          "operation": "oauth.confirmationRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 1.815166,
+          "successful": true
+        },
+        {
+          "operation": "connections.attemptRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.7845,
+          "successful": true
+        },
+        {
+          "operation": "quota.consumptionRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.778459,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.reviewEvidenceExpiry",
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 4.132458,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementReconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.0765,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementDispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 6.319584,
+          "successful": true
+        }
+      ]
+    },
+    {
+      "scenario": "complete-maintenance",
+      "retainedAdmissions": 2000,
+      "tick": 1,
+      "rowsRead": 289,
+      "rowsWritten": 23,
+      "queueOffers": 1,
+      "queueMetricCalls": 7,
+      "workflowCalls": 0,
+      "elapsedMs": 207,
+      "activities": [
+        {
+          "operation": "async.health",
+          "rowsRead": 101,
+          "rowsWritten": 21,
+          "elapsedMs": 55.122084,
+          "successful": true
+        },
+        {
+          "operation": "audit.retention",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 13.226834,
+          "successful": true
+        },
+        {
+          "operation": "operational.events.retention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 7.273833,
+          "successful": true
+        },
+        {
+          "operation": "recovery.retention",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.317167,
+          "successful": true
+        },
+        {
+          "operation": "operational.canary.publish",
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "elapsedMs": 0.113416,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.379542,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.reconcile",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 5.775083,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.190834,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.reconcile",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.432625,
+          "successful": true
+        },
+        {
+          "operation": "billing.renewal.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.366417,
+          "successful": true
+        },
+        {
+          "operation": "billing.cancellation.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.94525,
+          "successful": true
+        },
+        {
+          "operation": "billing.priceNotice.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.105125,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.reconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.00025,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.171916,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.001459,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.reconcile",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.156458,
+          "successful": true
+        },
+        {
+          "operation": "consent.sweep",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 7.564125,
+          "successful": true
+        },
+        {
+          "operation": "consent.proactivityOfferRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 2.040958,
+          "successful": true
+        },
+        {
+          "operation": "consent.disclosureRecovery",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.741917,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.192334,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.windowSweep",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.806084,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.sweep",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 5.890833,
+          "successful": true
+        },
+        {
+          "operation": "patPairing.sweep",
+          "rowsRead": 19,
+          "rowsWritten": 2,
+          "elapsedMs": 10.443375,
+          "successful": true
+        },
+        {
+          "operation": "dashboard.projectionRepair",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.492584,
+          "successful": true
+        },
+        {
+          "operation": "recurring.evaluate",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.952167,
+          "successful": true
+        },
+        {
+          "operation": "insights.weekly.dispatch",
+          "rowsRead": 29,
+          "rowsWritten": 0,
+          "elapsedMs": 18.912584,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.submissionRetention",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.949875,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.stagingSweep",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.04825,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.mediaRetention",
+          "rowsRead": 7,
+          "rowsWritten": 0,
+          "elapsedMs": 4.104292,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.uploadAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.642,
+          "successful": true
+        },
+        {
+          "operation": "agent.workersAiAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.756542,
+          "successful": true
+        },
+        {
+          "operation": "billing.cardPreparationAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.923583,
+          "successful": true
+        },
+        {
+          "operation": "provider.authenticationRetention",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.719709,
+          "successful": true
+        },
+        {
+          "operation": "release.smoke.expiry",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.8725,
+          "successful": true
+        },
+        {
+          "operation": "canonical.admissionRetention",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 4.909834,
+          "successful": true
+        },
+        {
+          "operation": "oauth.confirmationRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 1.950792,
+          "successful": true
+        },
+        {
+          "operation": "connections.attemptRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.845041,
+          "successful": true
+        },
+        {
+          "operation": "quota.consumptionRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.0165,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.reviewEvidenceExpiry",
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 3.916459,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementReconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.789291,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementDispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.240459,
+          "successful": true
+        }
+      ]
+    },
+    {
+      "scenario": "complete-maintenance",
+      "retainedAdmissions": 2000,
+      "tick": 2,
+      "rowsRead": 289,
+      "rowsWritten": 23,
+      "queueOffers": 1,
+      "queueMetricCalls": 7,
+      "workflowCalls": 0,
+      "elapsedMs": 198,
+      "activities": [
+        {
+          "operation": "async.health",
+          "rowsRead": 101,
+          "rowsWritten": 21,
+          "elapsedMs": 60.783084,
+          "successful": true
+        },
+        {
+          "operation": "audit.retention",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 12.741417,
+          "successful": true
+        },
+        {
+          "operation": "operational.events.retention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.01425,
+          "successful": true
+        },
+        {
+          "operation": "recovery.retention",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 4.071042,
+          "successful": true
+        },
+        {
+          "operation": "operational.canary.publish",
+          "rowsRead": 0,
+          "rowsWritten": 0,
+          "elapsedMs": 0.074459,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.903583,
+          "successful": true
+        },
+        {
+          "operation": "browserPairing.email.reconcile",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 5.636708,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.897958,
+          "successful": true
+        },
+        {
+          "operation": "emailReplacement.reconcile",
+          "rowsRead": 5,
+          "rowsWritten": 0,
+          "elapsedMs": 5.394666,
+          "successful": true
+        },
+        {
+          "operation": "billing.renewal.dispatch",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 2.181125,
+          "successful": true
+        },
+        {
+          "operation": "billing.cancellation.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.861708,
+          "successful": true
+        },
+        {
+          "operation": "billing.priceNotice.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 6.664917,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.reconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 2.117542,
+          "successful": true
+        },
+        {
+          "operation": "billing.refund.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.94525,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.904084,
+          "successful": true
+        },
+        {
+          "operation": "billing.collection.reconcile",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 3.459916,
+          "successful": true
+        },
+        {
+          "operation": "consent.sweep",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 5.870709,
+          "successful": true
+        },
+        {
+          "operation": "consent.proactivityOfferRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 3.193333,
+          "successful": true
+        },
+        {
+          "operation": "consent.disclosureRecovery",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.965375,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.dispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.758708,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.whatsapp.windowSweep",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.849667,
+          "successful": true
+        },
+        {
+          "operation": "hostedTurn.sweep",
+          "rowsRead": 11,
+          "rowsWritten": 0,
+          "elapsedMs": 4.63225,
+          "successful": true
+        },
+        {
+          "operation": "patPairing.sweep",
+          "rowsRead": 19,
+          "rowsWritten": 2,
+          "elapsedMs": 9.92175,
+          "successful": true
+        },
+        {
+          "operation": "dashboard.projectionRepair",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.279166,
+          "successful": true
+        },
+        {
+          "operation": "recurring.evaluate",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.862,
+          "successful": true
+        },
+        {
+          "operation": "insights.weekly.dispatch",
+          "rowsRead": 29,
+          "rowsWritten": 0,
+          "elapsedMs": 12.520708,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.submissionRetention",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.830459,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.stagingSweep",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.136209,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.mediaRetention",
+          "rowsRead": 7,
+          "rowsWritten": 0,
+          "elapsedMs": 3.5945,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.uploadAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.577167,
+          "successful": true
+        },
+        {
+          "operation": "agent.workersAiAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.302,
+          "successful": true
+        },
+        {
+          "operation": "billing.cardPreparationAdmissionSweep",
+          "rowsRead": 4,
+          "rowsWritten": 0,
+          "elapsedMs": 2.595292,
+          "successful": true
+        },
+        {
+          "operation": "provider.authenticationRetention",
+          "rowsRead": 6,
+          "rowsWritten": 0,
+          "elapsedMs": 2.508416,
+          "successful": true
+        },
+        {
+          "operation": "release.smoke.expiry",
+          "rowsRead": 1,
+          "rowsWritten": 0,
+          "elapsedMs": 1.799875,
+          "successful": true
+        },
+        {
+          "operation": "canonical.admissionRetention",
+          "rowsRead": 8,
+          "rowsWritten": 0,
+          "elapsedMs": 4.782167,
+          "successful": true
+        },
+        {
+          "operation": "oauth.confirmationRetention",
+          "rowsRead": 3,
+          "rowsWritten": 0,
+          "elapsedMs": 1.907916,
+          "successful": true
+        },
+        {
+          "operation": "connections.attemptRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.7765,
+          "successful": true
+        },
+        {
+          "operation": "quota.consumptionRetention",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.783875,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.reviewEvidenceExpiry",
+          "rowsRead": 10,
+          "rowsWritten": 0,
+          "elapsedMs": 3.945041,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementReconcile",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.8905,
+          "successful": true
+        },
+        {
+          "operation": "ingestion.statementDispatch",
+          "rowsRead": 2,
+          "rowsWritten": 0,
+          "elapsedMs": 1.833166,
+          "successful": true
+        }
+      ]
+    },
+    {
+      "scenario": "email-maintenance",
+      "tick": 0,
+      "rowsRead": 4,
+      "rowsWritten": 0,
+      "elapsedMs": 11
+    },
+    {
+      "scenario": "email-maintenance",
+      "tick": 1,
+      "rowsRead": 4,
+      "rowsWritten": 0,
+      "elapsedMs": 6
+    },
+    {
+      "scenario": "email-maintenance",
+      "tick": 2,
+      "rowsRead": 4,
+      "rowsWritten": 0,
+      "elapsedMs": 5
+    }
+  ],
+  "statementBefore": [
+    {
+      "scenario": "full-statement-processing",
+      "rows": 96,
+      "rowsRead": 15217,
+      "rowsWritten": 793,
+      "accountingReads": 1106,
+      "activities": 3,
+      "elapsedMs": 1688
+    },
+    {
+      "scenario": "full-statement-processing",
+      "rows": 192,
+      "rowsRead": 58057,
+      "rowsWritten": 1570,
+      "accountingReads": 2198,
+      "activities": 6,
+      "elapsedMs": 4616
+    },
+    {
+      "scenario": "full-statement-processing",
+      "rows": 1024,
+      "rowsRead": 1587487,
+      "rowsWritten": 8304,
+      "accountingReads": 11662,
+      "activities": 32,
+      "elapsedMs": 23032
+    }
+  ],
+  "statementAfter": [
+    {
+      "scenario": "full-statement-processing",
+      "rows": 96,
+      "rowsRead": 1918,
+      "rowsWritten": 889,
+      "accountingReads": 1106,
+      "activities": 3,
+      "elapsedMs": 1225
+    },
+    {
+      "scenario": "full-statement-processing",
+      "rows": 192,
+      "rowsRead": 3814,
+      "rowsWritten": 1762,
+      "accountingReads": 2198,
+      "activities": 6,
+      "elapsedMs": 4952
+    },
+    {
+      "scenario": "full-statement-processing",
+      "rows": 1024,
+      "rowsRead": 20252,
+      "rowsWritten": 9328,
+      "accountingReads": 11662,
+      "activities": 32,
+      "elapsedMs": 25451
+    }
+  ],
+  "overloadedConcurrency": [
+    {
+      "scenario": "history-concurrency",
+      "concurrency": 1,
+      "requests": 64,
+      "rowsRead": 19456,
+      "elapsedMs": 1836,
+      "p50Ms": 16,
+      "p95Ms": 100,
+      "maximumMs": 141
+    },
+    {
+      "scenario": "history-concurrency",
+      "concurrency": 8,
+      "requests": 64,
+      "rowsRead": 19456,
+      "elapsedMs": 3234,
+      "p50Ms": 292,
+      "p95Ms": 853,
+      "maximumMs": 875
+    },
+    {
+      "scenario": "history-concurrency",
+      "concurrency": 32,
+      "requests": 64,
+      "rowsRead": 19456,
+      "elapsedMs": 2275,
+      "p50Ms": 985,
+      "p95Ms": 1474,
+      "maximumMs": 1825
+    }
+  ],
+  "extendedBoundary": "Local native D1/R2 counters; synthetic external Queue/Workflow/provider bindings. Overloaded latency samples excluded from production conclusions. Production analytics are now recorded separately in infra-performance-production-2026-10-10.json; these local counters remain synthetic.",
+  "canonicalOperations": [
+    {
+      "id": "browserLogin.approvePairing",
+      "method": "POST",
+      "route": "/browser-login/pairings/approve"
+    },
+    {
+      "id": "identity.getCurrentUser",
+      "method": "GET",
+      "route": "/user"
+    },
+    {
+      "id": "identity.updateUserPreferences",
+      "method": "PATCH",
+      "route": "/user/preferences"
+    },
+    {
+      "id": "categories.listCategories",
+      "method": "GET",
+      "route": "/categories"
+    },
+    {
+      "id": "categories.listKeywordRules",
+      "method": "GET",
+      "route": "/category-keyword-rules"
+    },
+    {
+      "id": "categories.createKeywordRule",
+      "method": "POST",
+      "route": "/category-keyword-rules"
+    },
+    {
+      "id": "categories.updateKeywordRule",
+      "method": "PUT",
+      "route": "/category-keyword-rules/:id"
+    },
+    {
+      "id": "categories.deleteKeywordRule",
+      "method": "DELETE",
+      "route": "/category-keyword-rules/:id"
+    },
+    {
+      "id": "budgets.createBudget",
+      "method": "POST",
+      "route": "/budgets"
+    },
+    {
+      "id": "budgets.listBudgets",
+      "method": "GET",
+      "route": "/budgets"
+    },
+    {
+      "id": "budgets.getBudget",
+      "method": "GET",
+      "route": "/budgets/:id"
+    },
+    {
+      "id": "budgets.updateBudget",
+      "method": "PUT",
+      "route": "/budgets/:id"
+    },
+    {
+      "id": "budgets.deleteBudget",
+      "method": "DELETE",
+      "route": "/budgets/:id"
+    },
+    {
+      "id": "budgets.getBudgetStatus",
+      "method": "GET",
+      "route": "/budget-status"
+    },
+    {
+      "id": "connections.listInstitutions",
+      "method": "GET",
+      "route": "/institutions"
+    },
+    {
+      "id": "connections.connectInstitution",
+      "method": "POST",
+      "route": "/connections"
+    },
+    {
+      "id": "connections.listConnections",
+      "method": "GET",
+      "route": "/connections"
+    },
+    {
+      "id": "connections.getConnection",
+      "method": "GET",
+      "route": "/connections/:id"
+    },
+    {
+      "id": "dashboard.initializeDashboard",
+      "method": "POST",
+      "route": "/dashboard/initialize"
+    },
+    {
+      "id": "dashboard.getDashboard",
+      "method": "GET",
+      "route": "/dashboard"
+    },
+    {
+      "id": "dashboard.getDashboardView",
+      "method": "GET",
+      "route": "/dashboard/view"
+    },
+    {
+      "id": "dashboard.listDashboardCatalog",
+      "method": "GET",
+      "route": "/dashboard/catalog"
+    },
+    {
+      "id": "dashboard.applyDashboardEdit",
+      "method": "POST",
+      "route": "/dashboard/edits"
+    },
+    {
+      "id": "emailAuthentication.requestEmailReplacement",
+      "method": "POST",
+      "route": "/email/replacement"
+    },
+    {
+      "id": "emailAuthentication.completeEmailReplacement",
+      "method": "POST",
+      "route": "/web/email/replacement/verify"
+    },
+    {
+      "id": "transactions.createTransaction",
+      "method": "POST",
+      "route": "/transactions"
+    },
+    {
+      "id": "transactions.listTransactions",
+      "method": "GET",
+      "route": "/transactions"
+    },
+    {
+      "id": "transactions.searchTransactions",
+      "method": "GET",
+      "route": "/transactions/search"
+    },
+    {
+      "id": "transactions.getTransaction",
+      "method": "GET",
+      "route": "/transactions/:id"
+    },
+    {
+      "id": "transactions.linkTransactions",
+      "method": "POST",
+      "route": "/transactions/link"
+    },
+    {
+      "id": "transactions.unlinkTransactions",
+      "method": "POST",
+      "route": "/transactions/unlink"
+    },
+    {
+      "id": "transactions.updateTransaction",
+      "method": "PUT",
+      "route": "/transactions/:id"
+    },
+    {
+      "id": "transactions.deleteTransaction",
+      "method": "DELETE",
+      "route": "/transactions/:id"
+    },
+    {
+      "id": "transactions.listSourceAttestations",
+      "method": "GET",
+      "route": "/transactions/:id/source-attestations"
+    },
+    {
+      "id": "ingestion.enableEmailForwarding",
+      "method": "POST",
+      "route": "/ingestion/email-forwarding"
+    },
+    {
+      "id": "ingestion.getEmailForwarding",
+      "method": "GET",
+      "route": "/ingestion/email-forwarding"
+    },
+    {
+      "id": "ingestion.submitForExtraction",
+      "method": "POST",
+      "route": "/ingestion/statements"
+    },
+    {
+      "id": "ingestion.getStatementSubmission",
+      "method": "GET",
+      "route": "/ingestion/statements/:id"
+    },
+    {
+      "id": "ingestion.listNeedsReviewItems",
+      "method": "GET",
+      "route": "/ingestion/needs-review"
+    },
+    {
+      "id": "ingestion.resolveNeedsReviewItem",
+      "method": "POST",
+      "route": "/ingestion/needs-review/:id/resolve"
+    },
+    {
+      "id": "ingestion.skipNeedsReviewItem",
+      "method": "POST",
+      "route": "/ingestion/needs-review/:id/skip"
+    },
+    {
+      "id": "ingestion.abandonStatementSubmission",
+      "method": "POST",
+      "route": "/ingestion/statements/:id/abandon"
+    },
+    {
+      "id": "insights.getRecurringDigestReport",
+      "method": "GET",
+      "route": "/insights/recurring/:id"
+    },
+    {
+      "id": "insights.getReminderSchedule",
+      "method": "GET",
+      "route": "/insights/reminder"
+    },
+    {
+      "id": "insights.updateReminderSchedule",
+      "method": "POST",
+      "route": "/insights/reminder"
+    },
+    {
+      "id": "insights.listPendingInsights",
+      "method": "GET",
+      "route": "/insights/pending"
+    },
+    {
+      "id": "insights.markInsightDelivered",
+      "method": "POST",
+      "route": "/insights/:id/delivered"
+    },
+    {
+      "id": "insights.markInsightRead",
+      "method": "POST",
+      "route": "/insights/:id/read"
+    },
+    {
+      "id": "insights.dismissInsight",
+      "method": "POST",
+      "route": "/insights/:id/dismissed"
+    },
+    {
+      "id": "recurring.listRecurringSeries",
+      "method": "GET",
+      "route": "/recurring-series"
+    },
+    {
+      "id": "memory.remember",
+      "method": "POST",
+      "route": "/memories"
+    },
+    {
+      "id": "memory.revise",
+      "method": "PUT",
+      "route": "/memories/:id"
+    },
+    {
+      "id": "memory.forget",
+      "method": "DELETE",
+      "route": "/memories/:id"
+    },
+    {
+      "id": "memory.recall",
+      "method": "GET",
+      "route": "/memories"
+    },
+    {
+      "id": "subscription.getUpgradeUrl",
+      "method": "GET",
+      "route": "/subscription/upgrade-url"
+    },
+    {
+      "id": "subscription.listSubscriptionOffers",
+      "method": "GET",
+      "route": "/subscription/offers"
+    },
+    {
+      "id": "subscription.getSubscriptionStatus",
+      "method": "GET",
+      "route": "/subscription/status"
+    },
+    {
+      "id": "subscription.cancelSubscription",
+      "method": "POST",
+      "route": "/subscription/cancellation"
+    },
+    {
+      "id": "quota.getQuota",
+      "method": "GET",
+      "route": "/quota"
+    },
+    {
+      "id": "pats.listPATs",
+      "method": "GET",
+      "route": "/pats"
+    },
+    {
+      "id": "pats.getPATActivity",
+      "method": "GET",
+      "route": "/pats/:shortId/activity"
+    },
+    {
+      "id": "pats.revokePAT",
+      "method": "DELETE",
+      "route": "/pats/:shortId"
+    },
+    {
+      "id": "pats.revokeAllPATs",
+      "method": "DELETE",
+      "route": "/pats"
+    },
+    {
+      "id": "pats.createManualPAT",
+      "method": "POST",
+      "route": "/pats"
+    },
+    {
+      "id": "pats.inspectPATPairing",
+      "method": "POST",
+      "route": "/pats/pairings/inspect"
+    },
+    {
+      "id": "pats.approvePATPairing",
+      "method": "POST",
+      "route": "/pats/pairings/approve"
+    },
+    {
+      "id": "recovery.rotateBackupRecoveryCode",
+      "method": "POST",
+      "route": "/recovery/backup-code/rotate"
+    },
+    {
+      "id": "operations.executeAtomicBatch",
+      "method": "POST",
+      "route": "/operations/atomic-batch"
+    }
+  ],
+  "productionInspection": {
+    "run": "https://github.com/B4rz99/fidy-ai/actions/runs/38092671954",
+    "status": "passed",
+    "scope": "release routing and no topology drift; no performance analytics"
+  },
+  "extendedValidation": {
+    "browser": {
+      "passed": 78,
+      "skipped": 3
+    },
+    "initialBroadNative": {
+      "passed": 1735,
+      "failed": 8,
+      "skipped": 13,
+      "files": 132
+    },
+    "isolatedFailureRerun": {
+      "passed": 72,
+      "skipped": 8
+    },
+    "pristineBaselineSameFiles": {
+      "passed": 72,
+      "skipped": 8
+    },
+    "finalFullNative": {
+      "passed": 1743,
+      "failed": 0,
+      "skipped": 14,
+      "files": 132,
+      "passedFiles": 131,
+      "skippedFiles": 1,
+      "workers": 1,
+      "durationSeconds": 726.96
+    },
+    "static": "Passed: typecheck, type-aware lint, formatting and other static verification groups; final changed-file formatting and git diff --check clean",
+    "secondParallelNative": {
+      "passed": 1737,
+      "failed": 6,
+      "skipped": 14,
+      "files": 132,
+      "failureBoundary": "Miniflare synchronous IPC message-id assertion in PAT tests"
+    },
+    "isolatedPatRerun": {
+      "passed": 52,
+      "failed": 0
+    },
+    "historyMeasurements": {
+      "passed": 7,
+      "failed": 0
+    }
+  },
+  "historyConcurrency": {
+    "boundary": "Native D1 only, 64 finite requests per level; local competing load, not production saturation or an SLO",
+    "measurements": [
+      {
+        "scenario": "history-concurrency",
+        "concurrency": 1,
+        "requests": 64,
+        "rowsRead": 19456,
+        "elapsedMs": 1285,
+        "p50Ms": 10,
+        "p95Ms": 68,
+        "maximumMs": 126
+      },
+      {
+        "scenario": "history-concurrency",
+        "concurrency": 8,
+        "requests": 64,
+        "rowsRead": 19456,
+        "elapsedMs": 935,
+        "p50Ms": 79,
+        "p95Ms": 202,
+        "maximumMs": 207
+      },
+      {
+        "scenario": "history-concurrency",
+        "concurrency": 32,
+        "requests": 64,
+        "rowsRead": 19456,
+        "elapsedMs": 667,
+        "p50Ms": 304,
+        "p95Ms": 363,
+        "maximumMs": 365
+      }
+    ]
+  },
+  "startup": {
+    "boundary": "Standalone pinned Alchemy WorkerBundle with Cloudflare Rolldown/PurePlugin/default minification, external entries, compatibility 2026-09-08/nodejs_compat; Wrangler packages built output without rebundling; no resource bindings; local contended host, not exact deployed artifact or hosted startup time",
+    "measurements": [
+      {
+        "worker": "public",
+        "uploadKiB": 473.52,
+        "gzipKiB": 132.1,
+        "activeStartupMs": 247.5,
+        "includedGcMs": 37.8
+      },
+      {
+        "worker": "core",
+        "uploadKiB": 2750.85,
+        "gzipKiB": 742.1,
+        "activeStartupMs": 488.6,
+        "includedGcMs": 25.4
+      },
+      {
+        "worker": "email",
+        "uploadKiB": 1222.46,
+        "gzipKiB": 331.16,
+        "activeStartupMs": 303.2,
+        "includedGcMs": 24.6
+      }
+    ]
+  },
+  "productionAnalytics": {
+    "access": "Read-only token authenticated successfully",
+    "report": "infra-performance-production-2026-10-10.md",
+    "artifact": "infra-performance-production-2026-10-10.json",
+    "completedWindowUtc": "2026-10-03T00:00:00Z to 2026-10-10T00:00:00Z exclusive",
+    "candidateDeployed": false
+  }
+}

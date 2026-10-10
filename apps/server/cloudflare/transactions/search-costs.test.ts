@@ -45,7 +45,7 @@ const setup = (): Effect.Effect<D1Database> =>
   });
 
 // This owner adapter test arranges retained effective leaves directly to isolate search read cost.
-// All migrated FTS-maintenance triggers run, and no request or projection-repair work is measured.
+// All migrated maintenance triggers run, and no request or projection-repair work is measured.
 const seedLeaves = (
   db: D1Database,
   subject: string,

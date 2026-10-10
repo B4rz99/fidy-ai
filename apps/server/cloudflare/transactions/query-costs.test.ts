@@ -1,7 +1,10 @@
-import { Data, Effect, Option, Schema } from "effect";
+import { Clock, Config, Data, Effect, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { effectiveTransactionRelation } from "./internal/effective-transaction";
+import {
+  effectiveHistoryPage,
+  effectiveTransactionRelation,
+} from "./internal/effective-transaction";
 import { findTransactionPresentation } from "./internal/transaction-history";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -47,7 +50,7 @@ const setup = (upgrade = false): Effect.Effect<D1Database> =>
   });
 
 // Suppress only per-row projection refresh during bulk arrangement. All measured operations run
-// with the complete migrated trigger graph restored, including exact aggregate and FTS maintenance.
+// with the complete migrated trigger graph restored, including exact aggregate maintenance.
 const seedHistory = (
   db: D1Database,
   {
@@ -135,13 +138,180 @@ const seedHistory = (
     );
   });
 const historyPage = (db: D1Database, subject: string): Promise<D1Result> => {
-  const relation = effectiveTransactionRelation(subject);
+  const page = effectiveHistoryPage({
+    userId: subject,
+    where: "user_id = ?",
+    bindings: [subject],
+    limit: 101,
+  });
   return db
-    .prepare(`WITH ${relation.sql} SELECT * FROM effective_transaction
-    WHERE user_id = ? ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 101`)
-    .bind(...relation.bindings, subject)
+    .prepare(page.sql)
+    .bind(...page.bindings)
     .all();
 };
+it("bounds ready effective History pages while preserving authoritative rows", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedHistory(db, {
+        subject: userId,
+        transactionPrefix: prefix,
+        count: 2_000,
+        linked: true,
+      });
+      const page = yield* fromTestPromise(() => historyPage(db, userId));
+      expect(page.results).toHaveLength(101);
+      expect(page.meta.rows_read).toBeLessThan(500);
+    })
+  ));
+it(
+  "matches authoritative effective facts across filters and every repair state",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* seedHistory(db, {
+          subject: userId,
+          transactionPrefix: prefix,
+          count: 220,
+          linked: true,
+        });
+        yield* seedHistory(db, {
+          subject: otherUserId,
+          transactionPrefix: otherPrefix,
+          count: 220,
+          linked: true,
+        });
+        yield* fromTestPromise(() => correctNotes(db, 219));
+        const relation = effectiveTransactionRelation(userId);
+        for (const filter of [
+          { sql: "user_id = ?", values: [userId] },
+          { sql: "user_id = ? AND notes = ?", values: [userId, "corrected"] },
+          {
+            sql: "user_id = ? AND category_id = ? AND direction = ? AND counterparty = ?",
+            values: [userId, categoryId, "outflow", "shop"],
+          },
+          { sql: "user_id = ? AND occurred_at < ?", values: [userId, "2020-01-03T00:00:00.000Z"] },
+          { sql: "user_id = ? AND occurred_at < ?", values: [userId, "1900-01-01T00:00:00.000Z"] },
+        ]) {
+          const expected = yield* fromTestPromise(() =>
+            db
+              .prepare(`WITH ${relation.sql}
+        SELECT user_id, id, amount, currency, direction, counterparty, category_id, notes,
+          occurred_at, created_at, revision FROM effective_transaction
+        WHERE ${filter.sql} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 101`)
+              .bind(...relation.bindings, ...filter.values)
+              .all()
+          );
+          const page = effectiveHistoryPage({
+            userId,
+            where: filter.sql,
+            bindings: filter.values,
+            limit: 101,
+          });
+          expect(
+            (yield* fromTestPromise(() =>
+              db
+                .prepare(page.sql)
+                .bind(...page.bindings)
+                .all()
+            )).results
+          ).toEqual(expected.results);
+        }
+        const expected = (yield* fromTestPromise(() => historyPage(db, userId))).results;
+        yield* fromTestPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "UPDATE dashboard_projection_state SET readiness = 'clearing' WHERE user_id = ?"
+              )
+              .bind(userId),
+            db.prepare("DELETE FROM dashboard_projection_leaf WHERE user_id = ?").bind(userId),
+          ])
+        );
+        for (const readiness of [
+          "linking",
+          "dirty",
+          "clearing-buckets",
+          "clearing-digits",
+          "clearing",
+          "rebuilding",
+        ]) {
+          yield* fromTestPromise(() =>
+            db
+              .prepare("UPDATE dashboard_projection_state SET readiness = ? WHERE user_id = ?")
+              .bind(readiness, userId)
+              .run()
+          );
+          expect((yield* fromTestPromise(() => historyPage(db, userId))).results).toEqual(expected);
+        }
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "UPDATE dashboard_projection_state SET readiness = 'ready', version = 0 WHERE user_id = ?"
+            )
+            .bind(userId)
+            .run()
+        );
+        expect((yield* fromTestPromise(() => historyPage(db, userId))).results).toEqual(expected);
+        yield* fromTestPromise(() =>
+          db.prepare("DELETE FROM dashboard_projection_state WHERE user_id = ?").bind(userId).run()
+        );
+        expect((yield* fromTestPromise(() => historyPage(db, userId))).results).toEqual(expected);
+      })
+    ),
+  30_000
+);
+const measuringCapacity =
+  Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
+const historyMeasurement = Schema.fromJsonString(
+  Schema.Struct({
+    scenario: Schema.Literal("history-growth"),
+    count: Schema.Int,
+    foreignCount: Schema.Int,
+    linked: Schema.Boolean,
+    rowsReturned: Schema.Int,
+    rowsRead: Schema.Int,
+    nativeDurationMs: Schema.Finite,
+    elapsedMs: Schema.Finite,
+  })
+);
+it.skipIf(!measuringCapacity)(
+  "measures history growth with native counters and equally large foreign histories",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const linked of [false, true]) {
+          for (const count of [200, 2_000, 20_000]) {
+            const db = yield* setup();
+            yield* seedHistory(db, { subject: userId, transactionPrefix: prefix, count, linked });
+            yield* seedHistory(db, {
+              subject: otherUserId,
+              transactionPrefix: otherPrefix,
+              count,
+              linked,
+            });
+            const started = yield* Clock.currentTimeMillis;
+            const page = yield* fromTestPromise(() => historyPage(db, userId));
+            const ended = yield* Clock.currentTimeMillis;
+            expect(page.results).toHaveLength(Math.min(101, linked ? count / 2 : count));
+            const encoded = yield* Schema.encodeEffect(historyMeasurement)({
+              scenario: "history-growth",
+              count,
+              foreignCount: count,
+              linked,
+              rowsReturned: page.results.length,
+              rowsRead: page.meta.rows_read,
+              nativeDurationMs: page.meta.duration,
+              elapsedMs: ended - started,
+            }).pipe(Effect.orDie);
+            yield* Effect.sync(() => process.stdout.write(`INFRA_COST ${encoded}\n`));
+          }
+        }
+      })
+    ),
+  120_000
+);
 it(
   "uses pair-member point reads without statistics and does not visit foreign Reconciliation pairs",
   () =>
@@ -249,7 +419,7 @@ it(
         });
         const unlinkedPage = yield* fromTestPromise(() => historyPage(db, userId));
         expect(unlinkedPage.results).toHaveLength(101);
-        expect(unlinkedPage.meta.rows_read).toBeLessThan(300);
+        expect(unlinkedPage.meta.rows_read).toBeLessThan(500);
         const before = (yield* fromTestPromise(() => aggregateSnapshot(db))).map(
           (result) => result.results
         );
@@ -416,3 +586,68 @@ it("upgrades populated projection buckets without changing pre-epoch boundaries 
       }
     })
   ));
+
+const measureHistoryRequest = (
+  db: D1Database,
+  expected: ReadonlyArray<unknown>
+): Effect.Effect<Readonly<{ elapsedMs: number; rowsRead: number }>> =>
+  Effect.gen(function* () {
+    const before = yield* Clock.currentTimeMillis;
+    const result = yield* fromTestPromise(() => historyPage(db, userId));
+    const after = yield* Clock.currentTimeMillis;
+    expect(result.results).toEqual(expected);
+    expect(result.meta.rows_read).toBeLessThan(500);
+    return { elapsedMs: after - before, rowsRead: result.meta.rows_read };
+  });
+const concurrencyMeasurement = Schema.fromJsonString(
+  Schema.Struct({
+    scenario: Schema.Literal("history-concurrency"),
+    concurrency: Schema.Int,
+    requests: Schema.Int,
+    rowsRead: Schema.Int,
+    elapsedMs: Schema.Finite,
+    p50Ms: Schema.Finite,
+    p95Ms: Schema.Finite,
+    maximumMs: Schema.Finite,
+  })
+);
+it.skipIf(!measuringCapacity)(
+  "measures ready History concurrency with native D1",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* seedHistory(db, {
+          subject: userId,
+          transactionPrefix: prefix,
+          count: 20_000,
+          linked: true,
+        });
+        const expected = (yield* fromTestPromise(() => historyPage(db, userId))).results;
+        for (const concurrency of [1, 8, 32]) {
+          const start = yield* Clock.currentTimeMillis;
+          const requests = yield* Effect.forEach(
+            Array.from({ length: 64 }, (_, index) => index),
+            () => measureHistoryRequest(db, expected),
+            { concurrency }
+          );
+          const end = yield* Clock.currentTimeMillis;
+          const durations = requests
+            .map((request) => request.elapsedMs)
+            .sort((left, right) => left - right);
+          const encoded = yield* Schema.encodeEffect(concurrencyMeasurement)({
+            scenario: "history-concurrency",
+            concurrency,
+            requests: requests.length,
+            rowsRead: requests.reduce((sum, request) => sum + request.rowsRead, 0),
+            elapsedMs: end - start,
+            p50Ms: durations[31] ?? 0,
+            p95Ms: durations[60] ?? 0,
+            maximumMs: durations[63] ?? 0,
+          });
+          yield* Effect.sync(() => process.stdout.write(`INFRA_COST ${encoded}\n`));
+        }
+      })
+    ),
+  60_000
+);

@@ -225,10 +225,10 @@ const reviewStatement = (
        issues, status, evidence_expires_at_ms, created_at_ms, service_market, locale,
        time_zone, source_format, parser_revision, extractor_revision)
       SELECT ?, ?, ?, ?, ?,
-        CASE WHEN (SELECT count(*) FROM statement_needs_review WHERE status = 'pending') < ?
+        CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
           AND ? > ? THEN ? ELSE NULL END,
         NULL, ?,
-        CASE WHEN (SELECT count(*) FROM statement_needs_review WHERE status = 'pending') < ?
+        CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
           AND ? > ? THEN 'pending' ELSE 'expired' END,
         ?, ?, ?, ?, ?, ?, ?, ? WHERE ${active}`)
     .bind(

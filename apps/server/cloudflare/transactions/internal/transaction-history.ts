@@ -18,7 +18,7 @@ import {
   TransactionSearchQuery,
 } from "../../../src/core/transactions/contract";
 import { Currency } from "../../../src/core/_shared/money";
-import { effectiveTransactionRelation } from "./effective-transaction";
+import { effectiveHistoryPage, effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "../../tokens/contract";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
@@ -189,17 +189,12 @@ type HistoryRow = Readonly<{
  * effective Transaction, so a linked pair is filtered and paged as the one record it represents.
  */
 const listStatement = ({ db, userId, query, authority }: HistoryRow): D1PreparedStatement => {
-  const relation = effectiveTransactionRelation(userId);
   const conditions = [
     "user_id = ?",
     `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
   ];
 
-  const values: Array<string | number | Uint8Array> = [
-    ...relation.bindings,
-    userId,
-    ...authority.bindings,
-  ];
+  const values: Array<string | number | Uint8Array> = [userId, ...authority.bindings];
 
   const fields = [
     ["occurred_at >=", Option.map(query.from, DateTime.formatIso)],
@@ -226,11 +221,13 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
     conditions.push("(occurred_at, created_at, id) < (?, ?, ?)");
     values.push(occurred, created, recordId);
   }
-  return db
-    .prepare(
-      `WITH ${relation.sql} SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision FROM effective_transaction WHERE ${conditions.join(" AND ")} ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${boundarySize}`
-    )
-    .bind(...values);
+  const page = effectiveHistoryPage({
+    userId,
+    where: conditions.join(" AND "),
+    bindings: values,
+    limit: boundarySize,
+  });
+  return db.prepare(page.sql).bind(...page.bindings);
 };
 
 type PresentationSelection = Readonly<{

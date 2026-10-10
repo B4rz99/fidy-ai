@@ -97,8 +97,11 @@ it.live(
       )
         .sort()
         .map((name) => new URL(`./migrations/${name}`, import.meta.url));
+      const prefixStatements = [
+        "CREATE VIRTUAL TABLE fixture_search USING fts5(search_text, tokenize='trigram')",
+      ];
       const original = yield* wait(() => databases.acquire());
-      yield* wait(() => installTestSchema({ db: original, sources }));
+      yield* wait(() => installTestSchemaWithPrefix({ db: original, sources, prefixStatements }));
       const catalog =
         "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name";
       const expected = yield* wait(() => original.prepare(catalog).all());
@@ -106,13 +109,11 @@ it.live(
         original.batch([
           original.prepare("UPDATE categories SET label = 'changed' WHERE display_order = 0"),
           original.prepare("CREATE TABLE leaked_test_rows (id TEXT)"),
-          original.prepare(
-            "INSERT INTO dashboard_projection_list_search (search_text) VALUES ('snapshot search')"
-          ),
+          original.prepare("INSERT INTO fixture_search (search_text) VALUES ('snapshot search')"),
         ])
       );
       const restored = yield* wait(() => databases.acquire());
-      yield* wait(() => installTestSchema({ db: restored, sources }));
+      yield* wait(() => installTestSchemaWithPrefix({ db: restored, sources, prefixStatements }));
       expect((yield* wait(() => restored.prepare(catalog).all())).results).toEqual(
         expected.results
       );
@@ -122,22 +123,16 @@ it.live(
         )
       ).toBe("Restaurantes");
       expect(
-        (yield* wait(() =>
-          restored.prepare("SELECT * FROM dashboard_projection_list_search").all()
-        )).results
+        (yield* wait(() => restored.prepare("SELECT * FROM fixture_search").all())).results
       ).toEqual([]);
       yield* wait(() =>
-        restored
-          .prepare(
-            "INSERT INTO dashboard_projection_list_search (search_text) VALUES ('native search')"
-          )
-          .run()
+        restored.prepare("INSERT INTO fixture_search (search_text) VALUES ('native search')").run()
       );
       expect(
         yield* wait(() =>
           restored
             .prepare(
-              "SELECT count(*) AS count FROM dashboard_projection_list_search WHERE dashboard_projection_list_search MATCH 'native'"
+              "SELECT count(*) AS count FROM fixture_search WHERE fixture_search MATCH 'native'"
             )
             .first("count")
         )

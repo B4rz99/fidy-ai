@@ -24,6 +24,9 @@ SPEC.loader.exec_module(publisher)
 
 class Fixture:
     def __init__(self, root):
+        # macOS temporary roots can use /var -> /private/var. Give the positive
+        # fixture a canonical destination without weakening the production guard.
+        root = root.resolve()
         self.root = root
         self.artifacts = root / "candidates"
         self.git("init", "-q")

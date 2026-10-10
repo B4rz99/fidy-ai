@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import { Inflate } from "fflate";
-import { parse } from "csv-parse/sync";
+import { type Options, parse } from "csv-parse/sync";
 import type { CellObject, Range, WorkBook, WorkSheet } from "xlsx";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { ParsedStatementRow, XlsxCellEvidence } from "~/core/ingestion/contract";
@@ -52,12 +52,20 @@ const CsvRecord = Schema.Struct({
 type CsvRecord = typeof CsvRecord.Type;
 
 const delimiterFor = (text: string): string => {
-  const lineBreak = text.search(/\r?\n|\r/u);
-  const firstLine = text.slice(0, lineBreak < 0 ? text.length : lineBreak);
-  const candidates = [";", ",", "\t"];
-  return candidates.reduce((best, candidate) =>
-    firstLine.split(candidate).length > firstLine.split(best).length ? candidate : best
-  );
+  const candidates = [
+    { delimiter: ";", count: 0 },
+    { delimiter: ",", count: 0 },
+    { delimiter: "\t", count: 0 },
+  ];
+  // Keep the existing first-physical-line scoring and tie order without allocating fields.
+  for (const character of text) {
+    if (character === "\r" || character === "\n") break;
+    for (const candidate of candidates) {
+      if (character === candidate.delimiter) candidate.count += 1;
+    }
+  }
+  return candidates.reduce((best, candidate) => (candidate.count > best.count ? candidate : best))
+    .delimiter;
 };
 
 const enforceCsvPhysicalLineLimit = (text: string): void => {
@@ -73,30 +81,48 @@ const enforceCsvPhysicalLineLimit = (text: string): void => {
   }
 };
 
+const enforceCsvDimensions = (text: string, options: Options): void => {
+  let cells = 0;
+  parse(text, {
+    ...options,
+    // Field context includes a copy of the entire raw prefix when raw is enabled.
+    // Keep dimension admission raw-free and discard each bounded record immediately.
+    info: false,
+    raw: false,
+    cast: (value, context): string => {
+      cells += 1;
+      if (
+        context.index >= maximumColumns ||
+        context.records > maximumRows ||
+        cells > maximumCells
+      ) {
+        throw new StatementParseFailed({ safeReason: "resource-limit" });
+      }
+      return value;
+    },
+    on_record: (): ReturnType<NonNullable<Options["on_record"]>> => undefined,
+  });
+};
+
 export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   enforceCsvPhysicalLineLimit(text);
+  const options = {
+    bom: true,
+    delimiter: delimiterFor(text),
+    relax_column_count: true,
+    skip_empty_lines: true,
+    max_record_size: maximumCsvRecordBytes,
+  };
+  enforceCsvDimensions(text, options);
+  // Both passes share the parser's grammar. Evidence is decoded only after admission,
+  // without a field callback that would repeatedly copy a long leading field.
   const records: ReadonlyArray<CsvRecord> = Schema.decodeUnknownSync(Schema.Array(CsvRecord))(
-    parse(text, {
-      bom: true,
-      delimiter: delimiterFor(text),
-      info: true,
-      raw: true,
-      relax_column_count: true,
-      skip_empty_lines: true,
-      max_record_size: maximumCsvRecordBytes,
-    })
+    parse(text, { ...options, info: true, raw: true })
   );
   const [header, ...data] = records;
-  if (header === undefined || header.record.length === 0 || header.record.length > maximumColumns) {
+  if (header === undefined || header.record.length === 0) {
     throw new StatementParseFailed({ safeReason: "malformed-file" });
-  }
-  let cells = header.record.length;
-  for (const record of data) {
-    cells += record.record.length;
-    if (record.record.length > maximumColumns || cells > maximumCells) {
-      throw new StatementParseFailed({ safeReason: "resource-limit" });
-    }
   }
   const rows = data.map((record, index): ParsedStatementRow => {
     const terminators = record.raw.match(/\r\n|\n|\r/gu)?.length ?? 0;

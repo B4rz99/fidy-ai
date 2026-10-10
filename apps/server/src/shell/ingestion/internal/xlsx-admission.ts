@@ -6,6 +6,7 @@ import { decodeXlsxArchive, encodeXlsxArchive } from "./xlsx-archive";
 const maximumCells = statementParserLimits.maximumXlsxCells;
 const maximumSheets = 20;
 const maximumFormatBytes = 256;
+const maximumFormatId = 392;
 const maximumNumericDigits = 128;
 const numericFormattingAllowance = 64;
 const xmlChunkCharacters = 1024;
@@ -191,6 +192,8 @@ const retainFormat = (tag: SaxesTagPlain, formats: Map<number, number>): void =>
   const bytes = size(tag.attributes.formatCode ?? "");
   if (bytes > maximumFormatBytes) limit();
   const id = indexFor(tag.attributes.numFmtId ?? "");
+  // SheetJS remaps higher IDs into this range before formatting cells.
+  if (id > maximumFormatId) limit();
   if (formats.has(id)) malformed();
   formats.set(id, bytes);
 };

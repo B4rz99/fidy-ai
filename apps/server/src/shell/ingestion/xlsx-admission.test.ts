@@ -217,6 +217,21 @@ it.effect(
     })
 );
 
+it.effect("rejects custom format IDs that SheetJS remaps into uncharged styles", () =>
+  reject(
+    modify(workbook("normal"), (entries) => {
+      replacePart(entries, "xl/styles.xml", (xml) =>
+        xml
+          .replace(
+            "</styleSheet>",
+            `<numFmts count="1"><numFmt numFmtId="393" formatCode="${"@".repeat(256)}"/></numFmts></styleSheet>`
+          )
+          .replace('numFmtId="0"', 'numFmtId="392"')
+      );
+    })
+  )
+);
+
 it.effect("rejects formula translation triggers hidden inside unrelated attributes", () =>
   Effect.gen(function* () {
     for (const type of ["shared", "array"]) {

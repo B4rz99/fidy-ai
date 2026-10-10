@@ -54,6 +54,7 @@ const migrations = [
   "0033_statement_clarification",
   "0035_statement_hosted_origin",
   "0077_statement_materialization",
+  "0078_statement_materialization_binding",
 ];
 const storage = isolatedTestStorage();
 
@@ -1190,6 +1191,313 @@ const boundedStatementCsv = (): string =>
   Array.from({ length: 97 }, (_, index) => `2026-08-01,-${index + 1},COP,Cafe`).join("\n") +
   "\n";
 
+const observeDerivedReads = (
+  db: D1Database
+): {
+  db: D1Database;
+  observed: {
+    publicationBytes: number;
+    processingBytes: number;
+    processingReads: number;
+    maximumProcessingBytes: number;
+  };
+} => {
+  const observed = {
+    publicationBytes: 0,
+    processingBytes: 0,
+    processingReads: 0,
+    maximumProcessingBytes: 0,
+  };
+  const instrument = (statement: D1PreparedStatement, publication: boolean): D1PreparedStatement =>
+    new Proxy(statement, {
+      get(target, property): unknown {
+        if (property === "bind") {
+          return (...args: Parameters<D1PreparedStatement["bind"]>) =>
+            instrument(target.bind(...args), publication);
+        }
+        if (property === "all") {
+          return (...args: Parameters<D1PreparedStatement["all"]>) =>
+            target.all(...args).then((result) => {
+              const parts = Schema.decodeUnknownSync(
+                Schema.Array(Schema.Struct({ body: Schema.String }))
+              )(result.results);
+              const bytes = parts.reduce(
+                (sum, part) => sum + new TextEncoder().encode(part.body).byteLength,
+                0
+              );
+              if (publication) observed.publicationBytes += bytes;
+              else {
+                observed.processingBytes += bytes;
+                observed.processingReads += 1;
+                observed.maximumProcessingBytes = Math.max(observed.maximumProcessingBytes, bytes);
+              }
+              return result;
+            });
+        }
+        const method: unknown = Reflect.get(target, property, target);
+        return typeof method === "function" ? method.bind(target) : method;
+      },
+    });
+  return {
+    observed,
+    db: new Proxy(db, {
+      get(target, property): unknown {
+        if (property === "prepare") {
+          return (sql: string) =>
+            sql.includes("p.body") && sql.includes("SELECT p.")
+              ? instrument(target.prepare(sql), sql.includes("m.state='building'"))
+              : target.prepare(sql);
+        }
+        const method: unknown = Reflect.get(target, property, target);
+        return typeof method === "function" ? method.bind(target) : method;
+      },
+    }),
+  };
+};
+
+effectIt.effect("User erasure reclaims an interrupted generation through its durable owner", () =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+    const interrupted = new Proxy(db, {
+      get(target, property): unknown {
+        if (property === "batch") {
+          return (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> =>
+            target.batch(...args).then(() => {
+              throw new Error("lost fragment write response");
+            });
+        }
+        const method: unknown = Reflect.get(target, property, target);
+        return typeof method === "function" ? method.bind(target) : method;
+      },
+    });
+    deepStrictEqual(
+      yield* Effect.exit(
+        processStatementSubmission({
+          DB: interrupted,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
+      ),
+      Exit.fail(new StatementProcessingUnavailable())
+    );
+    expect(
+      yield* fromTestPromise(() =>
+        db.prepare("SELECT count(*) AS count FROM statement_materialization_parts").first()
+      )
+    ).toEqual({ count: 4 });
+    yield* fromTestPromise(() =>
+      db.batch([
+        db.prepare("DELETE FROM statement_ingestion_outbox WHERE user_id=?").bind(userA),
+        db.prepare("DELETE FROM statement_submissions WHERE user_id=?").bind(userA),
+        db.prepare("DELETE FROM statement_staging_objects WHERE user_id=?").bind(userA),
+        db.prepare("DELETE FROM users WHERE id=?").bind(userA),
+      ])
+    );
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`SELECT
+      (SELECT count(*) FROM statement_materializations) AS manifests,
+      (SELECT count(*) FROM statement_materialization_parts) AS parts`)
+          .first()
+      )
+    ).toEqual({ manifests: 0, parts: 0 });
+    expect(
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      })
+    ).toBe("completed");
+  })
+);
+
+effectIt.effect(
+  "rebuilds an invalidated development generation without losing partial captures",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+      const reads = observeStatementReads(bucket);
+      const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      yield* fromTestPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL(
+            "../migrations/0078_statement_materialization_binding.sql",
+            import.meta.url
+          ),
+        })
+      );
+      for (const expected of ["continue", "continue", "completed"]) {
+        expect(yield* processStatementSubmission(input)).toBe(expected);
+      }
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT
+      (SELECT count(*) FROM transactions) AS captures,
+      (SELECT count(*) FROM source_attestations WHERE time_zone='America/Bogota') AS attestations,
+      (SELECT count(*) FROM statement_record_outcomes) AS outcomes,
+      (SELECT count(*) FROM statement_materialization_parts) AS parts`)
+            .first()
+        )
+      ).toEqual({ captures: 97, attestations: 97, outcomes: 97, parts: 0 });
+      expect(reads.observed.gets).toBe(2);
+    })
+);
+
+effectIt.effect("refuses an incompatible derived representation before the next capture", () =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+    const reads = observeStatementReads(bucket);
+    const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
+    expect(yield* processStatementSubmission(input)).toBe("continue");
+    yield* fromTestPromise(() =>
+      db.prepare("DROP TRIGGER statement_materialization_identity").run()
+    );
+    yield* fromTestPromise(() =>
+      db.prepare("UPDATE statement_materializations SET representation_revision='unknown'").run()
+    );
+    expect(yield* processStatementSubmission(input)).toBe("completed");
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`SELECT status,failure_reason,
+      (SELECT count(*) FROM transactions) AS captures,
+      (SELECT count(*) FROM statement_materialization_parts) AS parts
+      FROM statement_submissions WHERE id=?`)
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({ status: "failed", failure_reason: "malformed-file", captures: 32, parts: 0 });
+    expect(reads.observed.gets).toBe(1);
+  })
+);
+
+effectIt.effect(
+  "refuses changed interpretation context without reinterpreting partial captures",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+      const reads = observeStatementReads(bucket);
+      const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE statement_submissions SET time_zone='America/New_York' WHERE id=?")
+          .bind(submissionId)
+          .run()
+      );
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT status,failure_reason,
+      (SELECT count(*) FROM source_attestations WHERE time_zone='America/Bogota') AS attestations,
+      (SELECT count(*) FROM transactions) AS captures FROM statement_submissions WHERE id=?`)
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({
+        status: "failed",
+        failure_reason: "malformed-file",
+        attestations: 32,
+        captures: 32,
+      });
+      expect(reads.observed.gets).toBe(1);
+    })
+);
+
+const corruptPublication = (
+  db: D1Database,
+  corruption: "body" | "body-and-checksum"
+): Promise<unknown> =>
+  db
+    .prepare("DROP TRIGGER statement_materialization_part_immutable")
+    .run()
+    .then(() =>
+      db
+        .prepare(
+          "UPDATE statement_materialization_parts SET body=replace(body,'Cafe','Evil') WHERE chunk_index=2"
+        )
+        .run()
+    )
+    .then(() => (corruption === "body-and-checksum" ? replacePartChecksum(db) : undefined));
+const replacePartChecksum = (db: D1Database): Promise<unknown> =>
+  db
+    .prepare("SELECT body FROM statement_materialization_parts WHERE chunk_index=2")
+    .first<string>("body")
+    .then((body) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(body ?? "")))
+    .then((digest) =>
+      db
+        .prepare("UPDATE statement_materialization_parts SET sha256=? WHERE chunk_index=2")
+        .bind(
+          Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+        )
+        .run()
+    );
+
+it.each(["body", "body-and-checksum"] as const)(
+  "refuses %s corruption in a later fragment before publishing an interrupted generation",
+  (corruption) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+        const reads = observeStatementReads(bucket);
+        let interrupt = true;
+        const interrupted = new Proxy(db, {
+          get(target, property): unknown {
+            if (property === "batch") {
+              return (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> =>
+                target.batch(...args).then((result) => {
+                  if (interrupt) {
+                    interrupt = false;
+                    return corruptPublication(target, corruption).then(() => {
+                      throw new Error("lost fragment write response");
+                    });
+                  }
+                  return result;
+                });
+            }
+            const method: unknown = Reflect.get(target, property, target);
+            return typeof method === "function" ? method.bind(target) : method;
+          },
+        });
+        const input = {
+          DB: interrupted,
+          STATEMENT_STAGING_BUCKET: reads.bucket,
+          userId: userA,
+          submissionId,
+        };
+        deepStrictEqual(
+          yield* Effect.exit(processStatementSubmission(input)),
+          Exit.fail(new StatementProcessingUnavailable())
+        );
+        expect(yield* processStatementSubmission({ ...input, DB: db })).toBe("completed");
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare(`SELECT status,failure_reason,
+        (SELECT count(*) FROM transactions) AS captures,
+        (SELECT count(*) FROM statement_materializations) AS materializations
+        FROM statement_submissions WHERE id=?`)
+              .bind(submissionId)
+              .first()
+          )
+        ).toEqual({
+          status: "failed",
+          failure_reason: "malformed-file",
+          captures: 0,
+          materializations: 0,
+        });
+        expect(reads.observed.gets).toBe(1);
+      })
+    )
+);
+
 effectIt.effect(
   "reads the original once while finalizing 97 rows exactly once across restarts",
   () =>
@@ -1197,8 +1505,9 @@ effectIt.effect(
       const csv = boundedStatementCsv();
       const { db, bucket } = yield* fromTestPromise(() => setup(csv));
       const monitored = observeStatementReads(bucket);
+      const derived = observeDerivedReads(db);
       const input = {
-        DB: db,
+        DB: derived.db,
         STATEMENT_STAGING_BUCKET: monitored.bucket,
         userId: userA,
         submissionId,
@@ -1224,6 +1533,12 @@ effectIt.effect(
           .first()
       );
       expect(counts).toEqual({ transactions: 97, attestations: 97, outcomes: 97 });
+      expect(derived.observed.processingReads).toBe(4);
+      expect(derived.observed.processingBytes).toBe(derived.observed.publicationBytes);
+      expect(derived.observed.maximumProcessingBytes).toBeLessThan(
+        derived.observed.processingBytes / 2
+      );
+      expect(derived.observed.processingBytes).toBeGreaterThan(0);
     }),
   30_000
 );
@@ -1808,7 +2123,11 @@ effectIt.effect(
         setup(
           "Header\nvalue",
           "csv",
-          migrations.filter((name) => name !== "0077_statement_materialization")
+          migrations.filter(
+            (name) =>
+              name !== "0077_statement_materialization" &&
+              name !== "0078_statement_materialization_binding"
+          )
         )
       );
       yield* fromTestPromise(() =>

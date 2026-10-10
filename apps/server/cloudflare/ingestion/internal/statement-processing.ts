@@ -659,6 +659,21 @@ const advanceSubmission = (
     return "completed";
   });
 
+const materializationIdentity = (
+  input: ProcessInput,
+  context: SubmissionRow
+): Parameters<typeof reserveStatementSourceParse>[0] => ({
+  DB: input.DB,
+  userId: input.userId,
+  submissionId: input.submissionId,
+  sourceHash: context.sha256,
+  parserRevision: context.parser_revision,
+  sourceFormat: context.source_format,
+  expiresAtMs: context.retention_expires_at_ms,
+  serviceMarket: context.service_market,
+  locale: context.locale,
+  timeZone: context.time_zone,
+});
 export const processStatementSubmission = (
   input: ProcessInput
 ): Effect.Effect<"continue" | "completed", StatementProcessingUnavailable> =>
@@ -678,15 +693,7 @@ export const processStatementSubmission = (
       });
       return "completed";
     }
-    const identity = {
-      DB: input.DB,
-      userId: input.userId,
-      submissionId: input.submissionId,
-      sourceHash: context.value.sha256,
-      parserRevision: context.value.parser_revision,
-      sourceFormat: context.value.source_format,
-      expiresAtMs: context.value.retention_expires_at_ms,
-    };
+    const identity = materializationIdentity(input, context.value);
     const progress = yield* readProgress(input);
     let chunk = yield* findMaterializedChunk({ ...identity, offset: progress.total });
     if (Option.isNone(chunk)) {

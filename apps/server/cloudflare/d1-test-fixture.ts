@@ -362,39 +362,81 @@ const explainRetentionPlans = (
     )
   ).then((plans) => plans.flat());
 
-/** Observe native D1 work without replacing query execution or its transactional behavior. */
+const observeRetentionStatement = ({
+  native,
+  query,
+  bind,
+  queries,
+  record,
+}: Readonly<{
+  native: D1PreparedStatement;
+  query: RetentionQuery;
+  bind: (values: ReadonlyArray<unknown>) => D1PreparedStatement;
+  queries: Array<RetentionQuery>;
+  record: <Row>(result: D1Result<Row>, discovery?: boolean) => D1Result<Row>;
+}>): D1PreparedStatement =>
+  new Proxy(native, {
+    get(target, property): unknown {
+      if (property === "bind") {
+        return (...values: Parameters<D1PreparedStatement["bind"]>) => bind(values);
+      }
+      if (property === "all" || property === "run") {
+        return () => {
+          queries.push(query);
+          return target[property]().then((result) => record(result, property === "all"));
+        };
+      }
+      if (property === "first") {
+        return (column?: string) => {
+          queries.push(query);
+          return target.all().then((result) => {
+            const row = record(result).results[0];
+            if (row === undefined) return null;
+            if (column === undefined) return row;
+            if (row[column] === undefined) {
+              throw Error(`D1_COLUMN_NOTFOUND: Column not found (${column})`, {
+                cause: Error("Column not found"),
+              });
+            }
+            return row[column];
+          });
+        };
+      }
+      const value: unknown = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+
+/** Count native all/first/run/batch work; discovery counts standalone all calls, excluding plans. */
 export const observeRetentionCost = (
   db: D1Database
 ): Readonly<{
   database: D1Database;
   cost: () => Readonly<{ rowsRead: number; rowsWritten: number }>;
+  discovery: () => number;
   plans: () => Promise<ReadonlyArray<string>>;
 }> => {
   let rowsRead = 0;
   let rowsWritten = 0;
+  let discoveryReads = 0;
   const queries: Array<RetentionQuery> = [];
   const nativeStatements = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
   const preparedQueries = new WeakMap<D1PreparedStatement, RetentionQuery>();
-  const record = <Row>(result: D1Result<Row>): D1Result<Row> => {
+  const record = <Row>(result: D1Result<Row>, discovery = false): D1Result<Row> => {
+    if (discovery) discoveryReads += result.meta.rows_read;
     rowsRead += result.meta.rows_read;
     rowsWritten += result.meta.rows_written;
     return result;
   };
   const prepare = (sql: string, params: ReadonlyArray<unknown> = []): D1PreparedStatement => {
     const native = db.prepare(sql).bind(...params);
-    const statement: D1PreparedStatement = {
-      bind: (...values) => prepare(sql, values),
-      first: native.first.bind(native),
-      raw: native.raw.bind(native),
-      all: <Row>() => {
-        queries.push({ sql, params });
-        return native.all<Row>().then(record);
-      },
-      run: <Row>() => {
-        queries.push({ sql, params });
-        return native.run<Row>().then(record);
-      },
-    };
+    const statement = observeRetentionStatement({
+      native,
+      query: { sql, params },
+      bind: (values) => prepare(sql, values),
+      queries,
+      record,
+    });
     nativeStatements.set(statement, native);
     preparedQueries.set(statement, { sql, params });
     return statement;
@@ -417,9 +459,10 @@ export const observeRetentionCost = (
               );
             })
           )
-          .then((results) => results.map(record)),
+          .then((results) => results.map((result) => record(result))),
     },
     cost: () => ({ rowsRead, rowsWritten }),
+    discovery: () => discoveryReads,
     plans: () => explainRetentionPlans(db, queries),
   };
 };

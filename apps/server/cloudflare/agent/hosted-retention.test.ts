@@ -1,6 +1,11 @@
 import { Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  installTestSchema,
+  isolatedTestDatabases,
+  observeRetentionCost,
+} from "../d1-test-fixture";
 import { UserId } from "../../src/core/identity/contract";
 import { makeAgentRetention } from "./runtime";
 import { expireHostedPending, hostedTranscriptRetentionMs } from "./internal/turn-store";
@@ -83,66 +88,6 @@ const seedHistory = (db: D1Database): Promise<void> =>
       );
     })
   );
-const observeRows = (
-  db: D1Database
-): Readonly<{
-  database: D1Database;
-  read: () => number;
-  written: () => number;
-  discovery: () => number;
-}> => {
-  let rowsRead = 0;
-  let rowsWritten = 0;
-  let discoveryReads = 0;
-  const observe = <Row>(result: D1Result<Row>): D1Result<Row> => {
-    rowsRead += result.meta.rows_read;
-    rowsWritten += result.meta.rows_written;
-    return result;
-  };
-  const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
-    new Proxy(statement, {
-      get(target, property): unknown {
-        if (property === "bind") {
-          return (...values: Parameters<D1PreparedStatement["bind"]>) =>
-            wrap(target.bind(...values));
-        }
-        if (property === "all") {
-          return () =>
-            target.all().then((result) => {
-              discoveryReads += result.meta.rows_read;
-              return observe(result);
-            });
-        }
-        if (property === "run") return () => target.run().then(observe);
-        if (property === "first") {
-          return (column?: string) =>
-            target.all().then((result) => {
-              const row = observe(result).results[0];
-              if (row === undefined) return null;
-              return column === undefined ? row : row[column];
-            });
-        }
-        const value: unknown = Reflect.get(target, property);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  return {
-    database: new Proxy(db, {
-      get(target, property): unknown {
-        if (property === "prepare") return (sql: string) => wrap(target.prepare(sql));
-        if (property === "batch") {
-          return <Row>(statements: D1PreparedStatement[]) =>
-            target.batch<Row>(statements).then((results) => results.map(observe));
-        }
-        const value: unknown = Reflect.get(target, property);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    }),
-    read: () => rowsRead,
-    written: () => rowsWritten,
-    discovery: () => discoveryReads,
-  };
-};
 it("keeps repeated idle sweeps independent of permanent terminal history", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -172,20 +117,20 @@ it("keeps repeated idle sweeps independent of permanent terminal history", () =>
         ])
       );
       for (let tick = 0; tick < 2; tick += 1) {
-        const observed = observeRows(db);
+        const observed = observeRetentionCost(db);
         yield* makeAgentRetention({ db: observed.database }).sweep(now);
-        expect(observed.read()).toBeLessThanOrEqual(50);
-        expect(observed.written()).toBe(0);
+        expect(observed.cost().rowsRead).toBeLessThanOrEqual(50);
+        expect(observed.cost().rowsWritten).toBe(0);
       }
-      const observed = observeRows(db);
+      const observed = observeRetentionCost(db);
       const deadline = yield* expireHostedPending({
         db: observed.database,
         userId,
         now,
       });
       expect(deadline).toEqual(Option.some(198 * day + day / 50 + 2 + hostedTranscriptRetentionMs));
-      expect(observed.read()).toBeLessThanOrEqual(50);
-      expect(observed.written()).toBe(0);
+      expect(observed.cost().rowsRead).toBeLessThanOrEqual(50);
+      expect(observed.cost().rowsWritten).toBe(0);
     })
   ));
 it("cleans only the addressed User and retains discovery after a terminal marker is removed", () =>
@@ -216,15 +161,15 @@ it("cleans only the addressed User and retains discovery after a terminal marker
             .run()
         ).rejects.toThrow()
       );
-      const observed = observeRows(db);
+      const observed = observeRetentionCost(db);
       yield* expireHostedPending({
         db: observed.database,
         userId,
         now,
       });
-      expect(observed.read()).toBeLessThanOrEqual(200);
-      expect(observed.written()).toBeGreaterThan(0);
-      expect(observed.written()).toBeLessThanOrEqual(20);
+      expect(observed.cost().rowsRead).toBeLessThanOrEqual(200);
+      expect(observed.cost().rowsWritten).toBeGreaterThan(0);
+      expect(observed.cost().rowsWritten).toBeLessThanOrEqual(20);
       expect(
         (yield* Effect.tryPromise(() =>
           db
@@ -262,12 +207,12 @@ it("cleans only the addressed User and retains discovery after a terminal marker
           db.prepare("SELECT count(*) AS count FROM transcript_entries").first("count")
         )
       ).toBe(100);
-      const idle = observeRows(db);
+      const idle = observeRetentionCost(db);
       yield* makeAgentRetention({
         db: idle.database,
       }).sweep(now);
-      expect(idle.read()).toBeLessThanOrEqual(50);
-      expect(idle.written()).toBe(0);
+      expect(idle.cost().rowsRead).toBeLessThanOrEqual(50);
+      expect(idle.cost().rowsWritten).toBe(0);
     })
   ));
 it("backfills only retained terminal evidence and drops its deadline with the last entry", () =>
@@ -294,26 +239,26 @@ it("backfills only retained terminal evidence and drops its deadline with the la
           .bind(now)
           .run()
       );
-      const observed = observeRows(db);
+      const observed = observeRetentionCost(db);
       yield* Effect.tryPromise(() =>
         observed.database
           .prepare("DELETE FROM transcript_entries WHERE user_id = ?")
           .bind(userId)
           .run()
       );
-      expect(observed.read()).toBeLessThanOrEqual(2_000);
-      expect(observed.written()).toBeLessThanOrEqual(1_000);
+      expect(observed.cost().rowsRead).toBeLessThanOrEqual(2_000);
+      expect(observed.cost().rowsWritten).toBeLessThanOrEqual(1_000);
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) AS count FROM hosted_turn_retention").first("count")
         )
       ).toBe(0);
-      const idle = observeRows(db);
+      const idle = observeRetentionCost(db);
       yield* makeAgentRetention({
         db: idle.database,
       }).sweep(now);
-      expect(idle.read()).toBeLessThanOrEqual(50);
-      expect(idle.written()).toBe(0);
+      expect(idle.cost().rowsRead).toBeLessThanOrEqual(50);
+      expect(idle.cost().rowsWritten).toBe(0);
     })
   ));
 
@@ -347,11 +292,11 @@ it("bounds every due branch before grouping a large retained backlog", () =>
         ])
       );
       for (let tick = 0; tick < 40; tick += 1) {
-        const observed = observeRows(db);
+        const observed = observeRetentionCost(db);
         yield* makeAgentRetention({ db: observed.database }).sweep(now);
         expect(observed.discovery()).toBeLessThanOrEqual(1_000);
-        expect(observed.read()).toBeLessThanOrEqual(15_000);
-        expect(observed.written()).toBeLessThanOrEqual(3_000);
+        expect(observed.cost().rowsRead).toBeLessThanOrEqual(15_000);
+        expect(observed.cost().rowsWritten).toBeLessThanOrEqual(3_000);
         expect(
           yield* Effect.tryPromise(() =>
             db.prepare("SELECT count(*) AS count FROM hosted_confirmations").first("count")
@@ -363,10 +308,10 @@ it("bounds every due branch before grouping a large retained backlog", () =>
           db.prepare("SELECT count(*) AS count FROM transcript_entries").first("count")
         )
       ).toBe(100);
-      const idle = observeRows(db);
+      const idle = observeRetentionCost(db);
       yield* makeAgentRetention({ db: idle.database }).sweep(now);
-      expect(idle.read()).toBeLessThanOrEqual(50);
-      expect(idle.written()).toBe(0);
+      expect(idle.cost().rowsRead).toBeLessThanOrEqual(50);
+      expect(idle.cost().rowsWritten).toBe(0);
     })
   ));
 
@@ -393,10 +338,10 @@ it("keeps compacted mutation receipts discoverable until their own retention bou
           db.prepare("SELECT count(*) AS count FROM hosted_turn_retention").first("count")
         )
       ).toBe(1);
-      const before = observeRows(db);
+      const before = observeRetentionCost(db);
       yield* expireHostedPending({ db: before.database, userId, now });
-      expect(before.read()).toBeLessThanOrEqual(50);
-      expect(before.written()).toBe(0);
+      expect(before.cost().rowsRead).toBeLessThanOrEqual(50);
+      expect(before.cost().rowsWritten).toBe(0);
       yield* expireHostedPending({ db, userId, now: now + hostedTranscriptRetentionMs });
       expect(
         yield* Effect.tryPromise(() =>
@@ -435,10 +380,10 @@ it("drains channel event backlogs without losing their parent deadline or touchi
         ])
       );
       for (let tick = 0; tick < 3; tick += 1) {
-        const observed = observeRows(db);
+        const observed = observeRetentionCost(db);
         yield* expireHostedPending({ db: observed.database, userId, now });
-        expect(observed.read()).toBeLessThanOrEqual(3_000);
-        expect(observed.written()).toBeLessThanOrEqual(1_000);
+        expect(observed.cost().rowsRead).toBeLessThanOrEqual(3_000);
+        expect(observed.cost().rowsWritten).toBeLessThanOrEqual(1_000);
         expect(
           yield* Effect.tryPromise(() =>
             db

@@ -382,6 +382,16 @@ it("expires personal media locators without recharge on exact replay and eventua
       const db = yield* setup;
       expect((yield* acceptWhatsAppMedia({ db, userId, event: event("first") })).status).toBe(202);
       const expired = DateTime.toEpochMillis(current) + 2592000000;
+      yield* sweepMediaSubmissions({ db, now: expired - 1 });
+      expect(
+        yield* io(() =>
+          db
+            .prepare(`SELECT media_id,expires_at_ms,
+            (SELECT count(*) FROM media_submission_outbox) AS pending
+            FROM media_submissions`)
+            .first()
+        )
+      ).toEqual({ media_id: "media-first", expires_at_ms: expired, pending: 1 });
       yield* sweepMediaSubmissions({ db, now: expired });
       expect(
         yield* io(() => db.prepare("SELECT media_id,caption FROM media_submissions").first())

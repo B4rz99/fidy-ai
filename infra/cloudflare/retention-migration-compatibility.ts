@@ -29,7 +29,10 @@ const Version = Schema.Struct({
 });
 
 /** Resolve source from the exact immutable Worker version, never from mutable Worker settings. */
-export const decodeRetentionVersionRevision = (raw: unknown, expectedId: string): string => {
+export const decodeRetentionVersionRevision = ({
+  raw,
+  expectedId,
+}: Readonly<{ raw: unknown; expectedId: string }>): string => {
   const version = Schema.decodeUnknownSync(Version)(raw).result;
   if (version.id !== expectedId) throw Error("Retention Worker version identity changed");
   const bindings = version.resources.bindings;

@@ -404,13 +404,17 @@ const expireInsightClaims = (
   ).pipe(Effect.asVoid);
 };
 
-/** Clear at most 64 sent and 64 never-started expired bodies for one User; retain one-shot correlation evidence. */
+/** Clear expired bodies from at most 64 started sends and 64 never-started sends for one User;
+ * retain one-shot correlation evidence.
+ */
 export const expireInsightChannelEvidence = (
   input: Readonly<{ db: D1Database; userId: UserId; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> =>
   expireInsightClaims({ ...input, userId: Option.some(input.userId) });
 
-/** Bound independent retention by claims rather than Users, including Users with no Hosted Agent Session. */
+/** Clear expired bodies from at most 64 started sends and 64 never-started sends across Users,
+ * including those without a Hosted Agent Session; retain one-shot correlation evidence.
+ */
 export const sweepInsightChannelEvidence = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, InsightDeliveryFailure> =>

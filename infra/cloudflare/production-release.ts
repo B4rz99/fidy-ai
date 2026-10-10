@@ -1301,7 +1301,9 @@ const retentionCompatibilityPort = (
       )
     ).pipe(
       Effect.provideService(HttpClient.HttpClient, client),
-      Effect.flatMap((raw) => Effect.try(() => decodeRetentionVersionRevision(raw, id)))
+      Effect.flatMap((raw) =>
+        Effect.try(() => decodeRetentionVersionRevision({ raw, expectedId: id }))
+      )
     ),
   requireCompatible: (revision) =>
     shell([

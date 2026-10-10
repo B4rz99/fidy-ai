@@ -8,8 +8,9 @@ import { expireHostedPending, hostedTranscriptRetentionMs } from "./turn-store";
 const maximumUsersPerSweep = 100;
 const retentionConcurrency = 4;
 
-/** Independent Core cron fallback for lost DO alarms and expired personal Transcript evidence.
- * Each indexed branch is bounded before User grouping; failed batches retry next minute.
+/** Recover abandoned Turns and erase expired personal evidence for at most 100 Users per call,
+ * with at most four Users in progress. now is UTC epoch milliseconds. Failures propagate;
+ * committed cleanup remains, and unfinished eligible work can be retried on a later call.
  */
 export const sweepHostedTurns = ({
   db,
@@ -19,6 +20,7 @@ export const sweepHostedTurns = ({
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
+    // Bound each indexed source before grouping Users to keep discovery work bounded.
     const due = yield* Effect.tryPromise(() =>
       db
         .prepare(`WITH

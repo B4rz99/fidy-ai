@@ -32,10 +32,15 @@ const version = (bindings: unknown): unknown => ({
 
 it("reads the immutable revision and rejects missing, ambiguous, secret, or mismatched versions", () => {
   const binding = { name: "RELEASE_GIT_SHA", type: "plain_text", text: stableRevision };
-  expect(decodeRetentionVersionRevision(version([binding]), versionId)).toBe(stableRevision);
-  expect(decodeRetentionVersionRevision(version({ RELEASE_GIT_SHA: binding }), versionId)).toBe(
+  expect(decodeRetentionVersionRevision({ raw: version([binding]), expectedId: versionId })).toBe(
     stableRevision
   );
+  expect(
+    decodeRetentionVersionRevision({
+      raw: version({ RELEASE_GIT_SHA: binding }),
+      expectedId: versionId,
+    })
+  ).toBe(stableRevision);
   for (const bindings of [
     [],
     [binding, binding],
@@ -44,10 +49,15 @@ it("reads the immutable revision and rejects missing, ambiguous, secret, or mism
     [{ ...binding, text: "trunk" }],
     [{ ...binding, name: "UNRELATED" }],
   ]) {
-    expect(() => decodeRetentionVersionRevision(version(bindings), versionId)).toThrow();
+    expect(() =>
+      decodeRetentionVersionRevision({ raw: version(bindings), expectedId: versionId })
+    ).toThrow();
   }
   expect(() =>
-    decodeRetentionVersionRevision(version([binding]), "22222222-2222-4222-8222-222222222222")
+    decodeRetentionVersionRevision({
+      raw: version([binding]),
+      expectedId: "22222222-2222-4222-8222-222222222222",
+    })
   ).toThrow();
 });
 

@@ -217,6 +217,20 @@ it.effect(
     })
 );
 
+it.effect("rejects formula translation triggers hidden inside unrelated attributes", () =>
+  Effect.gen(function* () {
+    for (const type of ["shared", "array"]) {
+      yield* reject(
+        modify(workbook("normal"), (entries) =>
+          replacePart(entries, "xl/worksheets/sheet1.xml", (xml) =>
+            xml.replace("<v>1</v>", `<f desc='t="${type}"' ref="A2:A3" si="0">1+1</f><v>1</v>`)
+          )
+        )
+      );
+    }
+  })
+);
+
 it.effect("counts actual expanded archive bytes at the boundary before workbook construction", () =>
   Effect.gen(function* () {
     const source = workbook("normal");

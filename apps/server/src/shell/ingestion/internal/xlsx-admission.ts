@@ -194,7 +194,12 @@ const retainFormat = (tag: SaxesTagPlain, formats: Map<number, number>): void =>
   formats.set(id, bytes);
 };
 const assertFormula = (tag: SaxesTagPlain): void => {
-  if (localName(tag.name) === "f" && ["shared", "array"].includes(tag.attributes.t ?? "")) limit();
+  if (localName(tag.name) !== "f") return;
+  if (["shared", "array"].includes(tag.attributes.t ?? "")) limit();
+  // SheetJS searches the whole raw opening tag, including unrelated attribute values.
+  if (Object.values(tag.attributes).some((value) => /t="(?:shared|array)"/u.test(value))) {
+    limit();
+  }
 };
 
 const formatSizes = (members: ReadonlyArray<XmlMember>): ReadonlyArray<number> => {

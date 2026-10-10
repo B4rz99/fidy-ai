@@ -26,7 +26,7 @@ const canonicalHttpRequests = requireNonEmpty(
 export const TelemetryWorkKindGroup = {
   http: ["http_request"],
   queue: ["queue_publication", "queue_attempt"],
-  provider: ["provider_call"],
+  provider: ["github", "provider_call"],
   model: ["model_call"],
   schedule: ["scheduled_execution"],
   database: ["repository_operation"],
@@ -117,6 +117,7 @@ export const TelemetryRegistry = {
     "disclosure_not_current",
   ],
   provider: [
+    "github",
     "cloudflare-access",
     "google",
     "microsoft",

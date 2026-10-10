@@ -22,12 +22,16 @@ El nombre del cliente no certifica su identidad. Las acciones sensibles
 requieren confirmación nativa compatible. La respuesta del cliente autorizado
 no certifica presencia humana. Cancelar la autorización no concede acceso.
 
-CLI: requiere acceso al repositorio de Fidy y su Bun fijado; no hay un paquete
-público de instalación documentado. Desde el proyecto instalado:
-bun run cli login --recipient 'Mi agente' --scopes read --lifetime 7
-bun run cli status --json
-bun run cli commands --json
-bun run cli transactions listTransactions --help
+CLI (macOS Apple Silicon y Linux x64 con glibc):
+curl -fsSL https://fidyapp.com/install.sh | bash
+Windows x64, PowerShell:
+& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://fidyapp.com/install.ps1).Content))
+Abre una terminal nueva después de instalar y ejecuta:
+fidy login --recipient 'Mi agente' --scopes read --lifetime 7
+fidy status --json
+fidy commands --json
+fidy transactions listTransactions --help
+Repite el instalador para actualizar. No requiere clonar el repositorio ni instalar Bun/Node.
 La CLI guarda su acceso en el almacén de credenciales del sistema.
 
 API: https://api.fidyapp.com

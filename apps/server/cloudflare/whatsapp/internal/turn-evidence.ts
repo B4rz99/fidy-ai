@@ -7,8 +7,7 @@ import {
 import { type Cause, Effect, Option, Schema } from "effect";
 
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { hostedTranscriptRetentionMs } from "../../agent/contract";
-import { prepareHostedChannelTurn } from "../../agent/operations";
+import { prepareHostedChannelRetention, prepareHostedChannelTurn } from "../../agent/operations";
 import { prepareWhatsAppIdentity } from "../../identity/operations";
 import {
   type WhatsAppHostedSubject,
@@ -169,6 +168,10 @@ export const prepareWhatsAppInbound = ({
   }),
 ];
 
+const expiredChannelOutbox = `DELETE FROM hosted_whatsapp_outbox WHERE rowid IN (
+  SELECT o.rowid FROM channel_retention_turns AS t CROSS JOIN hosted_whatsapp_outbox AS o
+  WHERE o.user_id=t.user_id AND o.turn_id=t.id LIMIT 100)`;
+
 /** Expire only terminal channel evidence older than the approved thirty-day retention, for one explicit User. */
 export const expireWhatsAppEvidence = ({
   db,
@@ -178,46 +181,58 @@ export const expireWhatsAppEvidence = ({
   void,
   Cause.UnknownError
 > =>
-  Effect.gen(function* () {
-    const cutoff = now - hostedTranscriptRetentionMs;
-    yield* Effect.tryPromise(() =>
-      prepareHostedChannelTurn({
+  Effect.tryPromise(() =>
+    db.batch([
+      prepareHostedChannelRetention({
         db,
         userId,
+        now,
         statement: {
-          sql: `DELETE FROM hosted_whatsapp_delivery_events WHERE correlation_token IN
-        (SELECT d.correlation_token FROM hosted_whatsapp_delivery AS d
-          JOIN channel_turns AS t ON t.id = d.turn_id AND t.user_id = d.user_id
-          WHERE t.user_id = ? AND t.status <> 'pending' AND t.terminal_at_ms < ?)`,
-          params: [userId, cutoff],
+          sql: `DELETE FROM hosted_whatsapp_delivery_events WHERE rowid IN (
+        SELECT e.rowid FROM channel_retention_turns AS t CROSS JOIN hosted_whatsapp_delivery AS d CROSS JOIN hosted_whatsapp_delivery_events AS e
+        WHERE d.user_id=t.user_id AND d.turn_id=t.id AND e.correlation_token=d.correlation_token
+        LIMIT 200)`,
+          params: [],
         },
-      }).run()
-    );
-    yield* Effect.tryPromise(() =>
-      prepareHostedChannelTurn({
+      }),
+      prepareHostedChannelRetention({
         db,
         userId,
+        now,
         statement: {
-          sql: `DELETE FROM hosted_whatsapp_delivery WHERE user_id = ? AND turn_id IN
-        (SELECT id FROM channel_turns WHERE user_id = ? AND status <> 'pending'
-          AND terminal_at_ms < ?)`,
-          params: [userId, userId, cutoff],
+          sql: `DELETE FROM hosted_whatsapp_delivery WHERE rowid IN (
+        SELECT d.rowid FROM channel_retention_turns AS t CROSS JOIN hosted_whatsapp_delivery AS d
+        WHERE d.user_id=t.user_id AND d.turn_id=t.id AND NOT EXISTS (
+          SELECT 1 FROM hosted_whatsapp_delivery_events AS e WHERE e.correlation_token=d.correlation_token)
+        LIMIT 100)`,
+          params: [],
         },
-      }).run()
-    );
-    yield* Effect.tryPromise(() =>
-      prepareHostedChannelTurn({
+      }),
+      prepareHostedChannelRetention({
         db,
         userId,
+        now,
         statement: {
-          sql: `DELETE FROM hosted_whatsapp_inbound WHERE user_id = ? AND turn_id IN
-        (SELECT id FROM channel_turns WHERE user_id = ? AND status <> 'pending'
-          AND terminal_at_ms < ?)`,
-          params: [userId, userId, cutoff],
+          sql: expiredChannelOutbox,
+          params: [],
         },
-      }).run()
-    );
-  });
+      }),
+      prepareHostedChannelRetention({
+        db,
+        userId,
+        now,
+        statement: {
+          sql: `DELETE FROM hosted_whatsapp_inbound WHERE rowid IN (
+        SELECT i.rowid FROM channel_retention_turns AS t CROSS JOIN hosted_whatsapp_inbound AS i
+        WHERE i.user_id=t.user_id AND i.turn_id=t.id AND NOT EXISTS (
+          SELECT 1 FROM hosted_whatsapp_delivery AS d WHERE d.user_id=i.user_id AND d.turn_id=i.turn_id)
+        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_outbox AS o WHERE o.turn_id=i.turn_id)
+        LIMIT 100)`,
+          params: [],
+        },
+      }),
+    ])
+  ).pipe(Effect.asVoid);
 /** Permit Interrupted only while this same Pending hosted_turns row has no begun channel send. */
 export const whatsAppInterruptionGuard =
   (): string => `AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery AS d

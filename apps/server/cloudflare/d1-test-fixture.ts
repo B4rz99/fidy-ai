@@ -1,5 +1,5 @@
 import { Miniflare } from "miniflare";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 
 const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
 // A binding's bootstrap route follows its identity without retaining the binding or its runtime.
@@ -329,4 +329,97 @@ export const hostedTurnTestMigrations = [
   "0054_recurring_proactivity",
   "0055_recurring_digests",
   "0057_recurring_offer_replacement",
+  "0074_hosted_retention",
 ] as const;
+
+/** Resource regressions use the deployed index choices, triggers and foreign keys together. */
+export const installRetentionTestSchema = (db: D1Database): Promise<void> =>
+  installTestSchema({
+    db,
+    sources: Array.from(
+      new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
+    )
+      .sort()
+      .map((name) => new URL(`./migrations/${name}`, import.meta.url)),
+  });
+
+type RetentionQuery = Readonly<{ sql: string; params: ReadonlyArray<unknown> }>;
+const explainRetentionPlans = (
+  db: D1Database,
+  queries: ReadonlyArray<RetentionQuery>
+): Promise<ReadonlyArray<string>> =>
+  Promise.all(
+    queries.map(({ sql, params }) =>
+      db
+        .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .bind(...params)
+        .all()
+        .then((result) =>
+          Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ detail: Schema.String })))(
+            result.results
+          ).map(({ detail }) => detail)
+        )
+    )
+  ).then((plans) => plans.flat());
+
+/** Observe native D1 work without replacing query execution or its transactional behavior. */
+export const observeRetentionCost = (
+  db: D1Database
+): Readonly<{
+  database: D1Database;
+  cost: () => Readonly<{ rowsRead: number; rowsWritten: number }>;
+  plans: () => Promise<ReadonlyArray<string>>;
+}> => {
+  let rowsRead = 0;
+  let rowsWritten = 0;
+  const queries: Array<RetentionQuery> = [];
+  const nativeStatements = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
+  const preparedQueries = new WeakMap<D1PreparedStatement, RetentionQuery>();
+  const record = <Row>(result: D1Result<Row>): D1Result<Row> => {
+    rowsRead += result.meta.rows_read;
+    rowsWritten += result.meta.rows_written;
+    return result;
+  };
+  const prepare = (sql: string, params: ReadonlyArray<unknown> = []): D1PreparedStatement => {
+    const native = db.prepare(sql).bind(...params);
+    const statement: D1PreparedStatement = {
+      bind: (...values) => prepare(sql, values),
+      first: native.first.bind(native),
+      raw: native.raw.bind(native),
+      all: <Row>() => {
+        queries.push({ sql, params });
+        return native.all<Row>().then(record);
+      },
+      run: <Row>() => {
+        queries.push({ sql, params });
+        return native.run<Row>().then(record);
+      },
+    };
+    nativeStatements.set(statement, native);
+    preparedQueries.set(statement, { sql, params });
+    return statement;
+  };
+  return {
+    database: {
+      prepare,
+      exec: db.exec.bind(db),
+      dump: db.dump.bind(db),
+      withSession: db.withSession.bind(db),
+      batch: <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+        db
+          .batch<Row>(
+            statements.map((statement) => {
+              const query = preparedQueries.get(statement);
+              if (query !== undefined) queries.push(query);
+              return Option.getOrElse(
+                Option.fromUndefinedOr(nativeStatements.get(statement)),
+                () => statement
+              );
+            })
+          )
+          .then((results) => results.map(record)),
+    },
+    cost: () => ({ rowsRead, rowsWritten }),
+    plans: () => explainRetentionPlans(db, queries),
+  };
+};

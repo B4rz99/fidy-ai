@@ -50,6 +50,39 @@ export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
   return `Alchemy resource operation failed${suffix}; inspect release state.`;
 };
 
+const requireResourceCompatibility = Effect.fn(function* (phase: typeof Phase.Type) {
+  if (phase === "retire") {
+    // Recheck after planning, immediately before the first destructive operation.
+    yield* releaseCommand({
+      args: ["bun", "production-release.ts", "verify-retirement"],
+      lifetime: "read-only",
+    }).pipe(
+      Effect.mapError(
+        () =>
+          new ResourceReleaseFailed({
+            message:
+              "Resource retirement refused: verified Worker traffic changed or is unreadable.",
+          })
+      )
+    );
+  }
+  if (phase === "upload") {
+    // Recheck live immutable Worker versions after planning, before any D1 migration can run.
+    yield* releaseCommand({
+      args: ["bun", "production-release.ts", "verify-retention-migration"],
+      lifetime: "read-only",
+    }).pipe(
+      Effect.mapError(
+        () =>
+          new ResourceReleaseFailed({
+            message:
+              "Retention migration blocked: deploy the reviewed trigger-compatible Core first.",
+          })
+      )
+    );
+  }
+});
+
 // Alchemy keeps pending deletions in its state; retirement never reconciles the verified resources.
 const releaseResources = Effect.fn(function* (phase: typeof Phase.Type) {
   const actions = yield* Config.String("GITHUB_ACTIONS").pipe(Config.withDefault(""));
@@ -71,21 +104,7 @@ const releaseResources = Effect.fn(function* (phase: typeof Phase.Type) {
   }).pipe(
     Effect.mapError(() => new ResourceReleaseFailed({ message: "Resource planning failed." }))
   );
-  if (phase === "retire") {
-    // Recheck after planning, immediately before the first destructive operation.
-    yield* releaseCommand({
-      args: ["bun", "production-release.ts", "verify-retirement"],
-      lifetime: "read-only",
-    }).pipe(
-      Effect.mapError(
-        () =>
-          new ResourceReleaseFailed({
-            message:
-              "Resource retirement refused: verified Worker traffic changed or is unreadable.",
-          })
-      )
-    );
-  }
+  yield* requireResourceCompatibility(phase);
   return yield* Apply.apply(snapshot.native, {
     deletions: phase === "upload" ? "defer" : "only",
   }).pipe(

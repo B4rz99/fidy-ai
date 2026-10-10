@@ -355,10 +355,24 @@ export const sweepEvidence = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, WhatsAppUnavailable> =>
   attempt(() =>
-    input.db
-      .prepare(
-        "UPDATE proactivity_whatsapp_claims SET text=NULL,template_json=NULL WHERE rowid IN (SELECT rowid FROM proactivity_whatsapp_claims WHERE (text IS NOT NULL OR template_json IS NOT NULL) AND ((send_started_at_ms IS NOT NULL AND send_started_at_ms+?<=?) OR (state='staged' AND expires_at_ms<=?)) LIMIT 64)"
-      )
-      .bind(retentionMs, input.now, input.now)
-      .run()
+    input.db.batch([
+      input.db
+        .prepare(
+          `UPDATE proactivity_whatsapp_claims SET text=NULL,template_json=NULL WHERE rowid IN (
+             SELECT rowid FROM proactivity_whatsapp_claims
+             WHERE (text IS NOT NULL OR template_json IS NOT NULL) AND send_started_at_ms <= ?
+             ORDER BY send_started_at_ms LIMIT 64
+           ) AND (text IS NOT NULL OR template_json IS NOT NULL)`
+        )
+        .bind(input.now - retentionMs),
+      input.db
+        .prepare(
+          `UPDATE proactivity_whatsapp_claims SET text=NULL,template_json=NULL WHERE rowid IN (
+             SELECT rowid FROM proactivity_whatsapp_claims
+             WHERE (text IS NOT NULL OR template_json IS NOT NULL) AND state='staged' AND expires_at_ms <= ?
+             ORDER BY expires_at_ms LIMIT 64
+           ) AND (text IS NOT NULL OR template_json IS NOT NULL)`
+        )
+        .bind(input.now),
+    ])
   ).pipe(Effect.asVoid);

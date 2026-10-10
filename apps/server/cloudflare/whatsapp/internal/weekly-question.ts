@@ -343,16 +343,32 @@ export const weeklyQuestionDeliveryQuery = (
   params: [input.userId, input.id],
 });
 
+const questionContentLifetimeMs = 2592000000;
+
 export const expireWeeklyQuestions = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, WhatsAppUnavailable> =>
   Effect.tryPromise(() =>
-    input.db
-      .prepare(
-        "UPDATE weekly_governor_questions SET text=NULL,offer_json=NULL WHERE created_at_ms+2592000000 <= ? OR (state='ready' AND expires_at_ms<=?)"
-      )
-      .bind(input.now, input.now)
-      .run()
+    input.db.batch([
+      input.db
+        .prepare(
+          `UPDATE weekly_governor_questions SET text=NULL,offer_json=NULL WHERE rowid IN (
+             SELECT rowid FROM weekly_governor_questions
+             WHERE (text IS NOT NULL OR offer_json IS NOT NULL) AND created_at_ms <= ?
+             ORDER BY created_at_ms,id LIMIT 64
+           ) AND (text IS NOT NULL OR offer_json IS NOT NULL)`
+        )
+        .bind(input.now - questionContentLifetimeMs),
+      input.db
+        .prepare(
+          `UPDATE weekly_governor_questions SET text=NULL,offer_json=NULL WHERE rowid IN (
+             SELECT rowid FROM weekly_governor_questions
+             WHERE (text IS NOT NULL OR offer_json IS NOT NULL) AND state='ready' AND expires_at_ms <= ?
+             ORDER BY expires_at_ms,id LIMIT 64
+           ) AND (text IS NOT NULL OR offer_json IS NOT NULL)`
+        )
+        .bind(input.now),
+    ])
   ).pipe(
     Effect.asVoid,
     Effect.mapError(() => new WhatsAppUnavailable())

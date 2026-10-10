@@ -239,3 +239,73 @@ Scheduled health probes D1 first and skips D1 telemetry entirely when the probe 
 Other metrics and telemetry waits are bounded to two seconds. Provider timeout forwards the
 Effect-owned AbortSignal to the HTTP send; its retained claim still preserves retry identity.
 Held-promise regressions cover both D1 telemetry blockage and provider-request abortion.
+
+## Verified reusable generations (#1154)
+
+The representation is private D1 JSON. An immutable manifest precedes fragment writes and belongs
+to the original submission. It binds the User, submission, original digest, CSV/XLSX format,
+parser revision, captured ServiceMarket/locale/time zone, original retention deadline and
+`statement-material-v1` representation revision. It fixes a SHA-256 digest of the ordered
+`(chunk, part, body digest)` descriptors. Workflow history and Queue payloads keep their existing
+bounded submission identities; financial rows remain in D1.
+
+Publication checks persisted fragment count and UTF-8 bytes, reads every fragment in batches of
+eight, verifies each body digest, and verifies the ordered descriptor digest against the manifest.
+Replacing a body and recomputing its fragment digest still fails closed. Keyset pagination follows
+the `(chunk_index, part_index)` primary key without repeated prefix/OFFSET scans. Lost publication
+responses reuse the verified generation. An incomplete building generation is deleted before a
+same-source rebuild, within the existing three durable parse reservations. Complete corrupt or
+incompatible material fails terminally without rereading the original. Cleanup failures retain the
+owner and consume no additional parse reservation.
+
+Later activities load only their next chunk. SQL checks its UTF-8 byte sum before returning bodies;
+the codec permits at most 32 rows and verifies consecutive original record numbers. Original
+parsing/full-source validation runs once per successful generation. Encoding, persisted publication
+verification and successful chunk decoding add linear passes. Retries decode their requested chunk.
+These are logical work counts, not production CPU or heap measurements.
+
+No new numeric admission limit is introduced. The inherited policy remains 20,000 rows, 32 rows
+per activity, 16 MiB total encoded row JSON, 512 KiB header JSON, 1,024 fragments, 128 Ki UTF-16
+characters/512 KiB UTF-8 per fragment and eight writes/verification reads per batch. Publication
+therefore transfers at most 4 MiB per batch; a processing chunk transfers at most 16 MiB of bodies
+plus bounded headers. The latter is a ceiling, not a measured peak heap claim. Schema, SQL byte
+checks and the split encoder enforce these distinct units. Prior proposed byte budgets were not
+acceptance requirements; this slice retains the implemented policy rather than claiming it proves
+an optimal memory policy.
+
+Native D1/R2 measurement for the synthetic 97-row CSV:
+
+| Work                                     |    Successful processing |
+| ---------------------------------------- | -----------------------: |
+| Original R2 body reads / bytes           |                1 / 2,350 |
+| Parser/full-source validation passes     | 1 (production call path) |
+| Persisted publication verification bytes |                   21,865 |
+| Derived processing reads / total bytes   |               4 / 21,865 |
+| Largest derived processing read          |              7,233 bytes |
+| Captures / SourceAttestations / receipts |             97 / 97 / 97 |
+
+The #1153 pre-materialization characterization needed four original reads, or five with pre/post-
+commit failures. The current retry regression needs two only because the first generation fails
+before fragment commit; the complete second generation survives a lost response and serves all
+captures. At 20,000 rows, successful processing visits the source rows once and reads 625 next
+chunks, instead of 12.5 million source-row visits. The native maximum-row regression bounds
+preparation statements and subsequent activity work. Only the 97-row byte totals above are measured
+here; maximum-row counts are source-derived.
+
+Migration `0078` replaces development-only derived tables to introduce the immutable bindings.
+It invalidates existing caches while preserving original retention, source-parse reservations,
+committed Transactions, SourceAttestations, receipts and entitlements. An active submission may
+need one bounded rebuild; exhausted reservations fail closed. Deploy schema before the new code.
+Native recovery proves 32 earlier captures survive and complete as exactly 97.
+
+Terminal status deletes the manifest and cascades its fragments atomically. Expiry and abandonment
+use existing terminal settlement. Submission deletion during User erasure cascades building and
+ready material. The interrupted-write erasure regression removes actual User-owned parents and
+checks for derived orphans. This adds no public account-erasure operation and changes no original
+R2 deletion protocol. D1 foreign keys and insert guards prevent derived writes after owner deletion;
+the separate delayed original R2-write investigation (#1158) remains outside this write path.
+
+Native regressions additionally cover changed interpretation context, incompatible representations,
+later-fragment corruption before publication (including recomputed hashes), migration recovery,
+partial captures, cross-User refusal and restart/replay behavior. The context and publication
+corruption regressions failed against baseline before their respective guards were added.

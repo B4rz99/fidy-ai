@@ -2,13 +2,22 @@
 
 ## Decision and scope
 
-This change enforces CSV columns, logical records and aggregate cells as fields are emitted,
-before the parser can accumulate a surplus record or Schema can traverse an oversized result.
-The pinned `csv-parse` 7.0.3 implementation calls its documented `cast` callback before
+This change enforces CSV columns, logical records and aggregate cells in a raw-free admission
+pass, before the parser can accumulate a surplus record or Schema can traverse an oversized
+result. The pinned `csv-parse` 7.0.3 implementation calls its documented `cast` callback before
 `record.push(field)`. The callback preserves the original string exactly; it does not perform
-numeric/date conversion. This keeps quoting, escaped quotes, delimiter recognition, blank-line
-handling and physical evidence positions owned by the existing parser rather than duplicating
-its grammar in a preflight lexer.
+numeric/date conversion. `on_record` discards every admitted record, so the first pass retains
+only its current bounded record rather than a second full result.
+
+A second pass collects raw evidence without any field callback. Both passes share the same
+grammar options. Quoting, escaped quotes, delimiter recognition, blank-line handling and
+physical evidence positions remain owned by the existing parser rather than a second lexer.
+
+Independent security review identified a resource multiplier in the initial PR revision:
+`cast` with `raw: true` makes `__infoField` decode the entire raw prefix before every field.
+A long first field followed by empty fields repeatedly decodes the same large prefix. Keeping
+`raw` and `info` disabled throughout admission removes that per-field raw-context decoding;
+raw evidence is collected only per record after its dimensions have been admitted.
 
 Delimiter detection retains the existing first-physical-line counts and semicolon/comma/tab tie
 order with three counters. It no longer creates repeated arrays proportional to the number of
@@ -21,10 +30,12 @@ retention, migration or deployment configuration changes. Existing closed parser
 observability; no new logging of uploaded data is introduced. Existing CRLF evidence positions
 are deliberately preserved, including the upstream parser's line-count/raw-terminator behavior.
 
-## Measurements
+## Initial-revision measurements
 
 Synthetic local measurements compare base `612ed42a4f1f9a5c2851ce1857c74cb46e87a930`
-with this change, using the same pinned Bun executable and public `parseStatementFile` operation.
+with initial revision `084d38241a9cb84128404f2491d6728260fd8421`, using the same pinned
+Bun executable and public `parseStatementFile` operation. These initial numbers are retained
+for review history; corrected two-pass measurements follow below.
 Five sequential samples per case; input creation and explicit GC happen before timing. These are
 local timings, not production p95, production memory peaks or billing measurements.
 
@@ -41,17 +52,57 @@ faster. Incremental process RSS was 161–184 MiB before and 9–10 MiB after in
 RSS is sampled process memory, not a peak-allocation measurement; Bun heap samples are not
 reliable evidence of V8/Workerd usage.
 
-The field callback has a measured valid-input cost: approximately 31 ms at the median for
+The initial raw-enabled field callback had a measured valid-input cost: approximately 31 ms at the median for
 20,000 ordinary rows and 65 ms for the maximum empty-cell fixture. The library constructs
-field context, including raw-record context, for each callback. This is an explicit tradeoff
-for exact parser-owned grammar and early limits. It does not solve repeated parsing below.
+field context, including raw-record context, for each callback. The corrected implementation instead pays for a second raw-free parser pass to preserve exact
+grammar without this field-context multiplier. Neither revision solves repeated workflow
+parsing below.
 
-A separate real Workerd run bundles the actual document Worker and uses its existing inspector
+A separate real Workerd run of the initial revision bundles the actual document Worker and uses its existing inspector
 profiling helper. Comma inputs of 256 KiB, 1 MiB and 5 MiB reject with HTTP 413/resource-limit at
-13.8, 24.4 and 95.9 ms sampled CPU. After those requests, sampled retained isolate heap is
+13.8, 24.4 and 95.9 ms sampled CPU. After those requests, sampled used isolate heap is
 9.1, 11.7 and 17.1 MB respectively. These observations do not establish peak memory or concurrent
 request capacity. Delimiter detection and UTF-8 decoding still scan the bounded source bytes;
 only field/result allocation stops at the limit.
+
+## Corrected two-pass measurements
+
+After the independent review correction, five local Bun samples on the same synthetic inputs
+produced these parser timings. Input construction and explicit GC remain outside timing:
+
+| Input                        | Corrected milliseconds | Corrected median |
+| ---------------------------- | ---------------------- | ---------------- |
+| 256 KiB commas               | 4.3–11.2               | 4.9              |
+| 1 MiB commas                 | 16.1–18.1              | 16.6             |
+| 5 MiB commas                 | 83.5–115.3             | 86.0             |
+| 20,000 valid four-field rows | 75.5–149.3             | 90.7             |
+| 250,000 valid empty cells    | 60.7–70.9              | 67.5             |
+
+The corrected 5 MiB rejection remains about 42 times faster than the measured base median.
+Accepted inputs pay for a second parser pass; these timings do not claim a general accepted-file
+speedup over base. The original repeated-workflow-parsing issue remains deferred.
+
+The review fixture is exactly 5,004,200 bytes: a 200-column empty header followed by 20 rows,
+each with a 250,000-byte ASCII leading field and 199 empty fields. Observing the actual Buffer
+decoder while preserving its returned value gives an identical count in each of five samples:
+
+| Revision                     | Decoded ASCII characters | Median milliseconds | Range milliseconds |
+| ---------------------------- | ------------------------ | ------------------- | ------------------ |
+| Original base                | 15,008,400               | 166.4               | 130.7–190.3        |
+| Initial PR, raw-enabled cast | 1,015,430,500            | 291.4               | 246.4–304.3        |
+| Corrected raw-free admission | 20,008,400               | 251.0               | 249.0–414.0        |
+
+This measures decoding work, not simultaneously resident memory. The corrected count is about
+four times source size, rather than about 203 times. The additional field decoding relative to
+base is the explicit bounded admission pass. The committed regression fails on initial PR head
+`084d38241a9cb84128404f2491d6728260fd8421` and passes after correction, using a six-times-source
+budget without an elapsed-time assertion.
+
+Real Workerd accepts that long-leading-field fixture with 20 rows at 312.7 ms sampled CPU and
+rejects 5 MiB commas at 93.8 ms sampled CPU. `Runtime.getHeapUsage` after the comma request reports
+17.6 MB used heap; after the long-field request it reports 37.2 MB. These are used-heap samples,
+not peak memory or post-GC retained-memory measurements. No production/concurrency memory claim
+is made.
 
 ## Regression evidence
 
@@ -61,6 +112,10 @@ only field/result allocation stops at the limit.
 - Semantic cases cover BOM, LF/CR/CRLF, mixed line endings, raw evidence, multiline fields,
   escaped quotes, more than 200 quoted delimiters, empty fields/lines, ragged records, tie order,
   numeric-looking text and malformed quotes.
+- A public-seam resource regression parses 20 valid records with a 250,000-byte leading field
+  and 199 empty fields each. It observes the actual Buffer decoder without changing its result,
+  checks original fields/evidence, and caps total decoded characters at six times source bytes.
+  This directly catches per-field raw-prefix amplification without a flaky elapsed-time limit.
 - A real bundled Workerd regression rejects all three maximal delimiter-only inputs and then
   successfully parses a quoted multiline statement in the same isolate.
 - Existing CSV/XLSX parser tests and native staging/processing/ingestion tests remain passing.
@@ -76,12 +131,13 @@ bun run --cwd apps/server test:cloudflare \
   cloudflare/documents/document-parsing-worker.test.ts \
   cloudflare/documents/document-parsing-limits.test.ts
 bun run typecheck
+bun run lint
 bun run lint:type-aware
 bun run --cwd apps/server lint:deps
 bun run format:check
 ```
 
-The focused suites have 34 ingestion tests and 102 Cloudflare tests. This is not a claim that
+The corrected focused suites have 35 ingestion tests and 102 Cloudflare tests. This is not a claim that
 all repository verification groups, browser journeys or production deployment gates ran.
 
 ## Repeated parsing: separate design required

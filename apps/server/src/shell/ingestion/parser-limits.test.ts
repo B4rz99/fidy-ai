@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Predicate, Schema } from "effect";
 import { StatementParseFailed } from "./contract";
 import { parseStatementFile } from "./operations";
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+const BufferDecoder = Schema.Struct({ toString: Schema.declare(Predicate.isFunction) });
 const resourceLimit = Exit.fail(new StatementParseFailed({ safeReason: "resource-limit" }));
 const maximumColumns = 200;
 const maximumCells = 250_000;
@@ -102,5 +104,44 @@ it.effect("does not count quoted delimiters or escaped quotes as additional cell
     const punctuation = ",;\t".repeat(maximumColumns + 1);
     const parsed = yield* parseStatementFile(encode(`A,B\n"${punctuation}""quoted""",00123`));
     expect(parsed.rows[0]?.fields).toEqual([`${punctuation}"quoted"`, "00123"]);
+  })
+);
+
+it.effect("bounds decoding work for long leading fields followed by many empty cells", () =>
+  Effect.gen(function* () {
+    const leadingField = "x".repeat(250_000);
+    const rawRecord = `${leadingField}${fullRow}\n`;
+    const bytes = encode(`${fullRow}\n${rawRecord.repeat(20)}`);
+    // Workers' ambient Buffer declaration is untyped; validate only the observed callable seam.
+    const constructor: unknown = Buffer;
+    if (!Predicate.isFunction(constructor)) return yield* Effect.die("Missing Buffer constructor");
+    const prototype: unknown = Reflect.get(constructor, "prototype");
+    if (!Schema.is(BufferDecoder)(prototype)) return yield* Effect.die("Missing Buffer decoder");
+    const decodeBuffer = prototype.toString;
+    let decodedCharacters = 0;
+    // Observe actual decoding work without substituting the parser or its returned values.
+    const observeDecoding = function (this: unknown, ...args: Array<unknown>): string {
+      const result: unknown = Reflect.apply(decodeBuffer, this, args);
+      const decoded = Schema.decodeUnknownSync(Schema.String)(result);
+      decodedCharacters += decoded.length;
+      return decoded;
+    };
+    assert.ok(Reflect.set(prototype, "toString", observeDecoding));
+    const parsed = yield* parseStatementFile(bytes).pipe(
+      Effect.ensuring(Effect.sync(() => Reflect.set(prototype, "toString", decodeBuffer)))
+    );
+    expect(parsed.rows).toHaveLength(20);
+    expect(parsed.rows.every((row) => row.fields.length === maximumColumns)).toBe(true);
+    expect(parsed.rows[0]?.fields).toEqual([
+      leadingField,
+      ...Array.from({ length: 199 }, () => ""),
+    ]);
+    expect(parsed.rows[0]?.evidence).toMatchObject({
+      rawRecord,
+      startLine: 2,
+      endLine: 2,
+    });
+    // Raw-context decoding per field would exceed 1 GB for this approximately 5 MB input.
+    expect(decodedCharacters).toBeLessThan(bytes.length * 6);
   })
 );

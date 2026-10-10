@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import { Inflate } from "fflate";
-import { parse } from "csv-parse/sync";
+import { type Options, parse } from "csv-parse/sync";
 import type { CellObject, Range, WorkBook, WorkSheet } from "xlsx";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { ParsedStatementRow, XlsxCellEvidence } from "~/core/ingestion/contract";
@@ -81,33 +81,44 @@ const enforceCsvPhysicalLineLimit = (text: string): void => {
   }
 };
 
+const enforceCsvDimensions = (text: string, options: Options): void => {
+  let cells = 0;
+  parse(text, {
+    ...options,
+    // Field context includes a copy of the entire raw prefix when raw is enabled.
+    // Keep dimension admission raw-free and discard each bounded record immediately.
+    info: false,
+    raw: false,
+    cast: (value, context): string => {
+      cells += 1;
+      if (
+        context.index >= maximumColumns ||
+        context.records > maximumRows ||
+        cells > maximumCells
+      ) {
+        throw new StatementParseFailed({ safeReason: "resource-limit" });
+      }
+      return value;
+    },
+    on_record: (): ReturnType<NonNullable<Options["on_record"]>> => undefined,
+  });
+};
+
 export const parseCsv = (bytes: Uint8Array): ParsedStatementMaterial => {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   enforceCsvPhysicalLineLimit(text);
-  let cells = 0;
+  const options = {
+    bom: true,
+    delimiter: delimiterFor(text),
+    relax_column_count: true,
+    skip_empty_lines: true,
+    max_record_size: maximumCsvRecordBytes,
+  };
+  enforceCsvDimensions(text, options);
+  // Both passes share the parser's grammar. Evidence is decoded only after admission,
+  // without a field callback that would repeatedly copy a long leading field.
   const records: ReadonlyArray<CsvRecord> = Schema.decodeUnknownSync(Schema.Array(CsvRecord))(
-    parse(text, {
-      bom: true,
-      delimiter: delimiterFor(text),
-      info: true,
-      raw: true,
-      relax_column_count: true,
-      skip_empty_lines: true,
-      max_record_size: maximumCsvRecordBytes,
-      // Csv-parse calls cast before appending each field, including empty fields and headers.
-      // Use its quote/newline grammar; max_record_size alone does not count empty columns.
-      cast: (value, context): string => {
-        cells += 1;
-        if (
-          context.index >= maximumColumns ||
-          context.records > maximumRows ||
-          cells > maximumCells
-        ) {
-          throw new StatementParseFailed({ safeReason: "resource-limit" });
-        }
-        return value;
-      },
-    })
+    parse(text, { ...options, info: true, raw: true })
   );
   const [header, ...data] = records;
   if (header === undefined || header.record.length === 0) {

@@ -208,7 +208,7 @@ it(
     ),
   30_000
 );
-const correctNotes = (db: D1Database, index: number): Promise<D1Result[]> =>
+const correctNotes = (db: D1Database, index: number): Promise<ReadonlyArray<D1Result>> =>
   db.batch([
     db
       .prepare(`INSERT INTO transaction_corrections
@@ -220,7 +220,7 @@ const correctNotes = (db: D1Database, index: number): Promise<D1Result[]> =>
     WHERE user_id = ? AND id = ?`)
       .bind(userId, id(index)),
   ]);
-const aggregateSnapshot = (db: D1Database): Promise<D1Result[]> =>
+const aggregateSnapshot = (db: D1Database): Promise<ReadonlyArray<D1Result>> =>
   db.batch([
     db.prepare(
       "SELECT * FROM dashboard_projection_bucket ORDER BY user_id, size_seconds, bucket, currency, direction, category_id"

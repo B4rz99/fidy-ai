@@ -6308,6 +6308,102 @@ const closedContinuityFixture = Effect.fn(function* (db: D1Database) {
   return { caller, sessionId: selection.id, current };
 });
 
+const installLifecycleAuditTriggers = (db: D1Database): Promise<unknown> =>
+  db.batch([
+    db.prepare("CREATE TABLE lifecycle_audit (operation TEXT NOT NULL) STRICT"),
+    db.prepare(`CREATE TRIGGER audit_terminal AFTER UPDATE ON hosted_turns
+      WHEN OLD.status = 'pending' AND NEW.status <> 'pending'
+      BEGIN INSERT INTO lifecycle_audit VALUES ('terminal'); END`),
+    db.prepare(`CREATE TRIGGER audit_compaction AFTER DELETE ON transcript_entries
+      BEGIN INSERT INTO lifecycle_audit VALUES ('transcript'); END`),
+  ]);
+
+it.each(["finish", "recover"] as const)(
+  "counts the exact %s transition despite native D1 trigger writes",
+  (operation) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        yield* Effect.tryPromise(() => installLifecycleAuditTriggers(db));
+        const caller = yield* Effect.tryPromise(() => subject(0));
+        const current = now();
+        const snapshot = Option.getOrThrow(
+          yield* readHostedSnapshot({ db, subject: caller, now: current })
+        );
+        const userId = UserId.make(users[0]);
+        const selection = selectHostedSession({ snapshot, userId, now: current });
+        const turnId = TranscriptTurnId.make(newId());
+        yield* admitHostedTurn({
+          db,
+          channel: { _tag: "Browser", subject: caller },
+          selection,
+          text: TranscriptText.make("Trigger accounting"),
+          now: current,
+          id: turnId,
+        });
+        const pending = Option.getOrThrow(
+          Option.getOrThrow(yield* readHostedSnapshot({ db, subject: caller, now: current }))
+            .pending
+        );
+        const transition =
+          operation === "finish"
+            ? finishHostedTurn({
+                db,
+                userId,
+                turnId,
+                startedAtMs: current,
+                result: { _tag: "Interrupted" },
+                subject: caller,
+                now: current,
+              })
+            : recoverHostedTurn({ db, userId, turn: pending, now: current });
+        expect(yield* transition).toBe(true);
+        expect(yield* transition).toBe(false);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT operation FROM lifecycle_audit").all()
+          )).results
+        ).toEqual([{ operation: "terminal" }]);
+      })
+    )
+);
+
+it("counts only selected Transcript rows when native D1 compaction triggers write", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => installLifecycleAuditTriggers(db));
+      const fixture = yield* closedContinuityFixture(db);
+      const continuity = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      const compact = commitHostedCompaction({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        continuity,
+        throughSequence: Option.getOrThrow(continuity.terminalThroughSequence),
+        text: "Exact compacted evidence",
+        signal: makeAbortController().signal,
+      });
+      expect(yield* compact).toBe(true);
+      expect(yield* compact).toBe(false);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT operation FROM lifecycle_audit ORDER BY rowid").all()
+        )).results
+      ).toEqual([
+        { operation: "terminal" },
+        { operation: "transcript" },
+        { operation: "transcript" },
+      ]);
+    })
+  ));
+
 const gateCompactionBatch = (
   db: D1Database
 ): Readonly<{ db: D1Database; dispatched: Promise<void>; release: () => void }> => {

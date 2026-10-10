@@ -1,8 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import assert from "node:assert/strict";
+import {
+  makeTestOutboundTransport,
+  testOutboundTransportResponse,
+} from "~/shell/outbound-http/testing";
 import {
   E164PhoneNumber,
   WhatsAppBusinessPortfolioId,
@@ -36,7 +39,7 @@ it.effect.each(["123456789", "987654321"])(
       const sender = makeHostedSender({
         apiKey: Redacted.make("sandbox-test-key"),
         sandboxPhoneNumberId,
-        httpClient: HttpClient.make((request) => {
+        httpClient: makeTestOutboundTransport((request) => {
           if (request.body._tag !== "Uint8Array") return Effect.die("Expected JSON bytes");
           const body = Schema.decodeUnknownSync(
             Schema.Struct({
@@ -51,7 +54,7 @@ it.effect.each(["123456789", "987654321"])(
           );
           expect(body.biz_opaque_callback_data).toBe("22222222-2222-4222-8222-222222222222");
           return Effect.succeed(
-            HttpClientResponse.fromWeb(
+            testOutboundTransportResponse(
               request,
               Response.json({
                 messaging_product: "whatsapp",
@@ -81,7 +84,7 @@ it.effect("fails closed before provider egress when a sandbox caller has no phon
     const sender = makeHostedSender({
       apiKey: Redacted.make("sandbox-test-key"),
       sandboxPhoneNumberId: Option.some("123456789"),
-      httpClient: HttpClient.make(() => {
+      httpClient: makeTestOutboundTransport(() => {
         requests++;
         return Effect.die("Unexpected egress");
       }),
@@ -117,7 +120,7 @@ it.effect("addresses the fixed voice failure reply to the authenticated sandbox 
     const sender = makeVoiceUnavailableSender({
       apiKey: Redacted.make("sandbox-test-key"),
       sandboxPhoneNumberId: Option.some("123456789"),
-      httpClient: HttpClient.make((request) => {
+      httpClient: makeTestOutboundTransport((request) => {
         if (request.body._tag !== "Uint8Array") return Effect.die("Expected JSON bytes");
         const body = Schema.decodeUnknownSync(
           Schema.Struct({ to: Schema.String, text: Schema.Struct({ body: Schema.String }) })
@@ -127,7 +130,7 @@ it.effect("addresses the fixed voice failure reply to the authenticated sandbox 
           "No pude procesar la nota de voz. Envíala de nuevo o escríbeme."
         );
         return Effect.succeed(
-          HttpClientResponse.fromWeb(
+          testOutboundTransportResponse(
             request,
             Response.json({
               messaging_product: "whatsapp",

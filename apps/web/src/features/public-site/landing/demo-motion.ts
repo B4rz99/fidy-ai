@@ -36,7 +36,13 @@ const fill = (element: Element, axis: "X" | "Y", delay: number): void => {
 };
 
 /** Reveals the result only after the chat explains it; keyboard selection settles immediately. */
-export const playConversation = (root: HTMLElement, instant = false): void => {
+export const playConversation = ({
+  root,
+  instant,
+}: {
+  root: HTMLElement;
+  instant: boolean;
+}): void => {
   settle(root);
   if (instant) return;
   const bubbles = root.querySelectorAll(".bubble");
@@ -98,7 +104,7 @@ export const mountConversation = (node: HTMLDivElement): (() => void) => {
   const shell = node.closest<HTMLElement>(".demo-shell");
   if (shell === null) return () => {};
   return mountDemonstration(shell, () =>
-    playConversation(shell, shell.dataset.motion === "instant")
+    playConversation({ root: shell, instant: shell.dataset.motion === "instant" })
   );
 };
 

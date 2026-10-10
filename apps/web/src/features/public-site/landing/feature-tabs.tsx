@@ -25,7 +25,7 @@ export const FeatureTabs = (): React.JSX.Element => {
             aria-selected={selected === index}
             tabIndex={selected === index ? 0 : -1}
             onClick={(event) => {
-              moveIndicator(event.currentTarget, event.detail === 0);
+              moveIndicator({ tab: event.currentTarget, instant: event.detail === 0 });
               setAnimate(event.detail !== 0);
               setSelected(index);
             }}
@@ -39,7 +39,7 @@ export const FeatureTabs = (): React.JSX.Element => {
                 `#feature-tab-${next}`
               );
               if (target != null) {
-                moveIndicator(target, true);
+                moveIndicator({ tab: target, instant: true });
                 target.focus();
               }
             }}

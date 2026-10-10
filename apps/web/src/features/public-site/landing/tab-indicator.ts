@@ -1,5 +1,11 @@
 /** Retargets a single underline; layout coordinates also support wrapped mobile tabs. */
-export const moveIndicator = (tab: HTMLButtonElement, instant: boolean): void => {
+export const moveIndicator = ({
+  tab,
+  instant,
+}: {
+  tab: HTMLButtonElement;
+  instant: boolean;
+}): void => {
   const list = tab.parentElement;
   const indicator = list?.querySelector<HTMLElement>(".feature-indicator");
   if (list === null || indicator == null) return;
@@ -11,7 +17,7 @@ export const moveIndicator = (tab: HTMLButtonElement, instant: boolean): void =>
 export const mountIndicator = (list: HTMLDivElement): (() => void) => {
   const position = (): void => {
     const active = list.querySelector<HTMLButtonElement>('[aria-selected="true"]');
-    if (active !== null) moveIndicator(active, true);
+    if (active !== null) moveIndicator({ tab: active, instant: true });
   };
   position();
   if (typeof ResizeObserver === "undefined") return () => {};

@@ -23,7 +23,9 @@ export const PhoneDemo = (): React.JSX.Element => {
                 const shell = event.currentTarget.closest<HTMLElement>(".demo-shell");
                 if (shell !== null) {
                   shell.dataset.motion = event.detail === 0 ? "instant" : "pointer";
-                  if (scenario === index) playConversation(shell, event.detail === 0);
+                  if (scenario === index) {
+                    playConversation({ root: shell, instant: event.detail === 0 });
+                  }
                 }
                 setScenario(index);
               }}
@@ -35,7 +37,7 @@ export const PhoneDemo = (): React.JSX.Element => {
             aria-label="Repetir animación de la conversación"
             onClick={(event) => {
               const shell = event.currentTarget.closest<HTMLElement>(".demo-shell");
-              if (shell !== null) playConversation(shell, event.detail === 0);
+              if (shell !== null) playConversation({ root: shell, instant: event.detail === 0 });
             }}
           >
             ↻ Repetir

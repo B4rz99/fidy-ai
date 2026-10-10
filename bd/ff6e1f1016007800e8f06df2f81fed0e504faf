@@ -1,0 +1,47 @@
+apps/web/package.json
+  s_b75995d26622a8::t_4de67d9fdff78f 43-44
+apps/web/src/ui/components/ai-elements/conversation.tsx
+  s_b75995d26622a8::t_1bd2197cf84752 1-70
+apps/server/src/core/consent/contract.ts
+  s_b75995d26622a8::t_fe9447d494d2c4 280-291,294
+apps/web/ARCHITECTURE.md
+  s_b75995d26622a8::t_9fbab6020837b2 35-44
+apps/web/src/application.test.tsx
+  s_b75995d26622a8::t_a8b4750e6756a5 108,116-119,737-742,849-850,985-1117
+apps/web/src/ui/components/ai-elements/LICENSE
+  s_b75995d26622a8::t_09687dfe9d2c5f 1-13
+apps/web/src/features/agent/feature.tsx
+  s_b75995d26622a8::t_cb68820b940c12 1,7-15,32,98-102,112,116-118,120-122,128,157,160-161,165-245,254-255,258,260,263-273
+apps/server/cloudflare/consent/operations.test.ts
+  s_b75995d26622a8::t_6ae738d4419708 1-2,13,188-230
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_b75995d26622a8::t_f8974ae40bde97 6904-6948
+apps/web/src/ui/components/chat.tsx
+  s_b75995d26622a8::t_95273698f3227d 1-97
+apps/web/src/features/signed-in/feature.tsx
+  s_b75995d26622a8::t_e2de838c7e2706 14,131-133,180,187-189,191-195
+DESIGN.md
+  s_b75995d26622a8::t_a724d65264a339 514-529
+apps/web/src/ui/components/ai-elements/message.tsx
+  s_b75995d26622a8::t_b66fe4721faa83 1-39
+apps/web/src/app/routes.ts
+  s_b75995d26622a8::t_e9bec47d1c3e5a 63-64,68,211
+bun.lock
+  s_b75995d26622a8::t_26155ef17fdd6e 96,1743-1744
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bdff6e1f1016007800e8f06df2f81fed0e504faf",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

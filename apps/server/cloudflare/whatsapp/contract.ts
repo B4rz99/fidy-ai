@@ -4,6 +4,7 @@ import {
   TranscriptTurnId,
 } from "../../src/core/agent/contract";
 import {
+  E164PhoneNumber,
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
@@ -142,6 +143,8 @@ export const WhatsAppInboundEvidence = Schema.Struct({
   occurredAtMs: Schema.Int,
   receivedAtMs: Schema.Int,
   replyToMessageId: Model.optionalOption(WhatsAppProviderMessageId),
+  /** Provider-observed routing evidence retained only for the configured sandbox endpoint. */
+  sandboxPhone: Model.optionalOption(E164PhoneNumber),
 });
 export type WhatsAppInboundEvidence = typeof WhatsAppInboundEvidence.Type;
 /** Private Core-to-User-coordinator text work. Never a public bearer or a Queue envelope. */
@@ -190,6 +193,7 @@ export type WhatsAppPendingWork = Readonly<{
   portfolioId: WhatsAppBusinessPortfolioId;
   bsuid: WhatsAppBusinessScopedUserId;
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  sandboxPhone: Option.Option<E164PhoneNumber>;
   associationCurrent: boolean;
   replyToMessageId: Option.Option<WhatsAppProviderMessageId>;
   text: TranscriptText;

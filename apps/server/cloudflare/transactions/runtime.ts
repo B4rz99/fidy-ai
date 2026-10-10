@@ -77,6 +77,7 @@ type CoordinatorEnvironment = Readonly<{
       STATEMENT_STAGING_BUCKET: R2Bucket;
       EMAIL_BUCKET: R2Bucket;
       KAPSO_API_KEY: string;
+      WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
       WOMPI_ENVIRONMENT: string;
     }>
   > &

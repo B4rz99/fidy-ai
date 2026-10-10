@@ -56,7 +56,13 @@ export class AgentUnavailable extends Data.TaggedError("AgentUnavailable")<{}> {
 
 /** Platform bindings supplied by the existing User coordinator; none establishes User authority. */
 export type AgentEnvironment = Readonly<{ DB: D1Database }> &
-  Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket; KAPSO_API_KEY: string }>> &
+  Partial<
+    Readonly<{
+      STATEMENT_STAGING_BUCKET: R2Bucket;
+      KAPSO_API_KEY: string;
+      WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
+    }>
+  > &
   WorkersAiEnvironment &
   ProactivityEnvironment;
 /** Construct a hosted workflow for one explicit User; scheduleRecovery sets the coordinator's durable alarm. */

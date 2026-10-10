@@ -127,6 +127,9 @@ const sendVoiceRefusal = (
     const sent = yield* Effect.exit(
       makeVoiceUnavailableSender({
         apiKey: Redacted.make(environment.KAPSO_API_KEY),
+        sandboxPhoneNumberId: Option.fromUndefinedOr(
+          environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID
+        ).pipe(Option.filter((id) => id.length > 0)),
         httpClient,
       })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
     ).pipe(
@@ -247,6 +250,10 @@ const routeHostedInbound = (
         bsuid: input.event.caller.businessScopedUserId,
         messageId: input.event.messageEvidence.providerMessageId,
         businessPhoneNumberId: input.event.businessPhoneNumberId,
+        sandboxPhone:
+          input.event.businessPhoneNumberId === environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID
+            ? input.event.caller.phoneNumber
+            : Option.none(),
         occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
         receivedAtMs: input.receivedAtMs,
         text,

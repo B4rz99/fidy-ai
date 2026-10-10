@@ -3,7 +3,7 @@ import { newId } from "../secret-material/operations";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { disposeJourneys, setup, setupWhatsApp } from "./journey.test-fixture";
+import { disposeJourneys, setup, setupHostedWhatsApp, setupWhatsApp } from "./journey.test-fixture";
 
 afterAll(disposeJourneys);
 afterEach(() => vi.restoreAllMocks());
@@ -1495,3 +1495,56 @@ it("sweeps expired handoff correlation while preserving committed User and legal
       expect(yield* Effect.tryPromise(() => journey.db.prepare(durable).first())).toEqual(before);
     })
   ));
+
+it.each(["123456789012345", "987654321098765"])(
+  "forwards authenticated phone evidence only for the configured sandbox (%s)",
+  (sandboxEndpoint) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const forwarded: Array<unknown> = [];
+        const journey = yield* Effect.tryPromise(() =>
+          setupHostedWhatsApp({
+            sandboxPhoneNumberId: sandboxEndpoint,
+            coordinatorFetch: (request) =>
+              request.json().then((body) => {
+                forwarded.push(body);
+                return new Response(null, { status: 202 });
+              }),
+          })
+        );
+        const userId = newId();
+        const now = yield* Clock.currentTimeMillis;
+        yield* Effect.tryPromise(() =>
+          journey.db.batch([
+            journey.db
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+              )
+              .bind(userId, now),
+            journey.db
+              .prepare(
+                "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,'portfolio','CO.Person1',?)"
+              )
+              .bind(userId, now),
+          ])
+        );
+        expect((yield* sendChat(journey, "Hola", { phone: "573001234567" })).status).toBe(202);
+        expect(forwarded).toHaveLength(1);
+        const proof = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ sandboxPhone: Schema.optionalKey(Schema.String) })
+        )(forwarded[0]);
+        expect(proof.sandboxPhone).toBe(
+          sandboxEndpoint === "123456789012345" ? "+573001234567" : undefined
+        );
+        expect(forwarded[0]).toMatchObject({
+          userId,
+          bsuid: "CO.Person1",
+        });
+        expect(
+          (yield* sendChat(journey, "Hola", { phone: "573009876543", signature: "0".repeat(64) }))
+            .status
+        ).toBe(401);
+        expect(forwarded).toHaveLength(1);
+      })
+    )
+);

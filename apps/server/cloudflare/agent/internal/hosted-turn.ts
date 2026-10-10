@@ -322,6 +322,7 @@ export const resumeWhatsAppTurn = ({
       businessPhoneNumberId: WhatsAppInboundEvidence["businessPhoneNumberId"];
       portfolioId: WhatsAppHostedSubject["portfolioId"];
       replyToMessageId: Option.Option<WhatsAppProviderMessageId>;
+      sandboxPhone: WhatsAppInboundEvidence["sandboxPhone"];
     }>
   ) => WhatsAppHostedDelivery;
   signal: AbortSignal;

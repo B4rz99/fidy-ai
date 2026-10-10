@@ -1,8 +1,13 @@
 import { expect, it } from "@effect/vitest";
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Redacted, Schema } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import assert from "node:assert/strict";
-import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
+import {
+  E164PhoneNumber,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import {
@@ -19,7 +24,132 @@ import {
   type WhatsAppDelivery,
   WhatsAppSendFailed,
 } from "./contract";
-import { makeWhatsAppDelivery } from "./runtime";
+import { makeHostedSender, makeVoiceUnavailableSender, makeWhatsAppDelivery } from "./runtime";
+
+it.effect.each(["123456789", "987654321"])(
+  "routes hosted replies only through the configured sandbox endpoint (%s)",
+  (businessPhoneNumberId) =>
+    Effect.gen(function* () {
+      let addressedByPhone = false;
+      const sandboxPhoneNumberId = Option.some("123456789");
+      const sandboxPhone = Option.some(E164PhoneNumber.make("+573001234567"));
+      const sender = makeHostedSender({
+        apiKey: Redacted.make("sandbox-test-key"),
+        sandboxPhoneNumberId,
+        httpClient: HttpClient.make((request) => {
+          if (request.body._tag !== "Uint8Array") return Effect.die("Expected JSON bytes");
+          const body = Schema.decodeUnknownSync(
+            Schema.Struct({
+              to: Schema.optionalKey(Schema.String),
+              recipient: Schema.optionalKey(Schema.String),
+              biz_opaque_callback_data: Schema.String,
+            })
+          )(JSON.parse(new TextDecoder().decode(request.body.body)));
+          addressedByPhone = body.to === "573001234567";
+          expect(body.recipient).toBe(
+            businessPhoneNumberId === "123456789" ? undefined : "CO.573001234567"
+          );
+          expect(body.biz_opaque_callback_data).toBe("22222222-2222-4222-8222-222222222222");
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                messaging_product: "whatsapp",
+                messages: [{ id: "wamid.sandbox-hosted" }],
+              })
+            )
+          );
+        }),
+      });
+      const result = yield* sender({
+        recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
+        businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make(businessPhoneNumberId),
+        sandboxPhone,
+        text: TranscriptText.make("hola"),
+        correlationToken: HostedDeliveryCorrelationToken.make(
+          "22222222-2222-4222-8222-222222222222"
+        ),
+      });
+      expect(addressedByPhone).toBe(businessPhoneNumberId === "123456789");
+      expect(result.messageEvidence.providerMessageId).toBe("wamid.sandbox-hosted");
+    })
+);
+
+it.effect("fails closed before provider egress when a sandbox caller has no phone evidence", () =>
+  Effect.gen(function* () {
+    let requests = 0;
+    const sender = makeHostedSender({
+      apiKey: Redacted.make("sandbox-test-key"),
+      sandboxPhoneNumberId: Option.some("123456789"),
+      httpClient: HttpClient.make(() => {
+        requests++;
+        return Effect.die("Unexpected egress");
+      }),
+    });
+    const exit = yield* sender({
+      recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
+      businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+      sandboxPhone: Option.none(),
+      text: TranscriptText.make("hola"),
+      correlationToken: HostedDeliveryCorrelationToken.make("22222222-2222-4222-8222-222222222222"),
+    }).pipe(Effect.exit);
+    const unannotatedExit = Exit.isFailure(exit)
+      ? Exit.fail(Option.getOrThrow(Cause.findErrorOption(exit.cause)))
+      : exit;
+    assert.deepStrictEqual(
+      unannotatedExit,
+      Exit.fail(
+        new WhatsAppSendFailed({
+          safeReason: "invalid_recipient",
+          deliveryCertainty: "rejected",
+          automaticRetry: false,
+          responseStatus: Option.none(),
+        })
+      )
+    );
+    expect(requests).toBe(0);
+  })
+);
+
+it.effect("addresses the fixed voice failure reply to the authenticated sandbox phone", () =>
+  Effect.gen(function* () {
+    let addressedByPhone = false;
+    const sender = makeVoiceUnavailableSender({
+      apiKey: Redacted.make("sandbox-test-key"),
+      sandboxPhoneNumberId: Option.some("123456789"),
+      httpClient: HttpClient.make((request) => {
+        if (request.body._tag !== "Uint8Array") return Effect.die("Expected JSON bytes");
+        const body = Schema.decodeUnknownSync(
+          Schema.Struct({ to: Schema.String, text: Schema.Struct({ body: Schema.String }) })
+        )(JSON.parse(new TextDecoder().decode(request.body.body)));
+        addressedByPhone = body.to === "573001234567";
+        expect(body.text.body).toBe(
+          "No pude procesar la nota de voz. Envíala de nuevo o escríbeme."
+        );
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "wamid.voice-refusal" }],
+            })
+          )
+        );
+      }),
+    });
+    yield* sender({
+      caller: {
+        businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
+        phoneNumber: Option.some(E164PhoneNumber.make("+573001234567")),
+        parentBusinessScopedUserId: Option.none(),
+        username: Option.none(),
+        businessPortfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+      },
+      phoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+    });
+    expect(addressedByPhone).toBe(true);
+  })
+);
 
 const sendInput = (
   overrides: Partial<Parameters<WhatsAppDelivery["sendText"]>[0]> = {}

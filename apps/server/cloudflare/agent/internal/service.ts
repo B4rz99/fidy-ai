@@ -89,7 +89,7 @@ const sendWhatsAppAttempt = ({
   correlationToken,
 }: Readonly<{
   sender: ReturnType<typeof makeHostedSender>;
-  admission: Pick<WhatsAppTurnAdmission, "bsuid" | "businessPhoneNumberId">;
+  admission: Pick<WhatsAppTurnAdmission, "bsuid" | "businessPhoneNumberId" | "sandboxPhone">;
   text: TranscriptText;
   correlationToken: HostedDeliveryCorrelationToken;
 }>): Effect.Effect<
@@ -99,6 +99,7 @@ const sendWhatsAppAttempt = ({
   Effect.exit(
     sender({
       recipient: admission.bsuid,
+      sandboxPhone: admission.sandboxPhone,
       businessPhoneNumberId: admission.businessPhoneNumberId,
       text,
       correlationToken,
@@ -143,6 +144,9 @@ const prepareWhatsAppExecution = (
     const sender = makeHostedSender({
       apiKey: Redacted.make(environment.KAPSO_API_KEY),
       httpClient: Context.get(clients, HttpClient.HttpClient),
+      sandboxPhoneNumberId: Option.fromUndefinedOr(
+        environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID
+      ).pipe(Option.filter((id) => id.length > 0)),
     });
     const outbound = makeKapsoOutboundHttp({
       apiKey: Redacted.make(environment.KAPSO_API_KEY),
@@ -185,6 +189,7 @@ const startWhatsAppTurn = ({
       occurredAtMs: proof.occurredAtMs,
       receivedAtMs: proof.receivedAtMs,
       replyToMessageId: proof.replyToMessageId,
+      sandboxPhone: proof.sandboxPhone,
     },
     text: proof.text,
     inference,

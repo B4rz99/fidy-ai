@@ -1,5 +1,5 @@
 import type { SignJWT } from "jose";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import publicWorker from "../public-worker";
 import coreWorker from "../core-worker";
@@ -30,7 +30,11 @@ const requestHeaders = (overrides: Readonly<Record<string, string>>): Headers =>
   return headers;
 };
 const sendThroughWorkers =
-  (db: D1Database, sandboxPhoneNumberId: string = ""): Journey["send"] =>
+  (
+    db: D1Database,
+    sandboxPhoneNumberId: string = "",
+    coordinatorFetch: Option.Option<(request: Request) => Promise<Response>>
+  ): Journey["send"] =>
   (
     path: string,
     body?: unknown,
@@ -63,7 +67,12 @@ const sendThroughWorkers =
               GOOGLE_CLIENT_SECRET: "test-secret",
               GOOGLE_REDIRECT_URI: "https://api.fidyapp.com/providers/google/callback",
               USER_TRANSACTION_COORDINATOR: {
-                getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
+                getByName: () => ({
+                  fetch: Option.getOrElse(
+                    coordinatorFetch,
+                    () => () => Promise.reject(new Error("unused"))
+                  ),
+                }),
               },
               KAPSO_API_KEY: "test-kapso-key",
               KAPSO_WEBHOOK_SECRET: "test-kapso-secret",
@@ -81,7 +90,11 @@ const sendThroughWorkers =
     );
 
 const setupJourney = (
-  options: Readonly<{ whatsapp: boolean; sandboxPhoneNumberId: string }>
+  options: Readonly<{
+    whatsapp: boolean;
+    sandboxPhoneNumberId: string;
+    coordinatorFetch: Option.Option<(request: Request) => Promise<Response>>;
+  }>
 ): Promise<Journey> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -115,7 +128,7 @@ const setupJourney = (
                 ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );
-      const send = sendThroughWorkers(db, options.sandboxPhoneNumberId);
+      const send = sendThroughWorkers(db, options.sandboxPhoneNumberId, options.coordinatorFetch);
       const response = yield* Effect.tryPromise(() => send("/web/pairings", {}));
       const pairing = yield* Schema.decodeUnknownEffect(Pairing)(
         yield* Effect.tryPromise(() => response.json())
@@ -126,9 +139,20 @@ const setupJourney = (
 export const disposeJourneys = (): Promise<void> => databases.dispose();
 
 export const setup = (): Promise<Journey> =>
-  setupJourney({ whatsapp: false, sandboxPhoneNumberId: "" });
+  setupJourney({ whatsapp: false, sandboxPhoneNumberId: "", coordinatorFetch: Option.none() });
 export const setupWhatsApp = (sandboxPhoneNumberId: string = ""): Promise<Journey> =>
-  setupJourney({ whatsapp: true, sandboxPhoneNumberId });
+  setupJourney({ whatsapp: true, sandboxPhoneNumberId, coordinatorFetch: Option.none() });
+export const setupHostedWhatsApp = (
+  options: Readonly<{
+    sandboxPhoneNumberId: string;
+    coordinatorFetch: (request: Request) => Promise<Response>;
+  }>
+): Promise<Journey> =>
+  setupJourney({
+    ...options,
+    whatsapp: true,
+    coordinatorFetch: Option.some(options.coordinatorFetch),
+  });
 
 /** Model a provider issuing its token after the callback's initial clock sample. */
 export const delayedProviderTokenResponse = ({

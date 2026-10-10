@@ -357,6 +357,10 @@ WhatsApp recovery restores that soft response lifecycle only after rechecking th
 Turn, User and current channel association. Its original model deadline is unchanged. A Queue
 batch dispatches at most four User groups concurrently, retaining each User's message order and
 individual acknowledgment/retry decisions; the User coordinator still owns execution settlement.
+For an operator-configured Kapso sandbox endpoint, authenticated caller phone evidence is retained
+with the exact private inbound Turn under its existing bounded retention. Queue envelopes remain
+User/Turn identifiers only. Hosted and fixed voice-refusal replies use this phone only for the
+matching sandbox endpoint; other endpoints use BSUID, and missing sandbox phone evidence fails closed.
 
 An accepted User entry and Pending Turn are retained atomically. A generated reply is a delivery
 proposal, not yet Transcript evidence. Agent commits exact assistant content and Completed status

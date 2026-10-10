@@ -4,6 +4,7 @@ import {
   type TranscriptTurnId,
 } from "../../../src/core/agent/contract";
 import {
+  E164PhoneNumber,
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
@@ -163,6 +164,7 @@ const PendingWork = Schema.Struct({
   business_phone_number_id: WhatsAppBusinessPhoneNumberId,
   association_current: Schema.Literals([0, 1]),
   reply_to_message_id: Schema.OptionFromNullOr(WhatsAppProviderMessageId),
+  sandbox_phone: Schema.OptionFromNullOr(E164PhoneNumber),
   text: TranscriptText,
 });
 /** A continuation reads only its own pending Turn and exact User Transcript, never Queue text. */
@@ -183,7 +185,7 @@ export const readWhatsAppPendingWork = ({
         statement: {
           sql: `SELECT
       t.started_at_ms, t.hosted_session_id, i.portfolio_id, i.bsuid,
-      i.business_phone_number_id,i.reply_to_message_id, t.user_text AS text,
+      i.business_phone_number_id,i.reply_to_message_id,i.sandbox_phone, t.user_text AS text,
       EXISTS (SELECT 1 FROM identity_associations AS w
         WHERE w.userId = t.user_id AND w.businessPortfolioId = i.portfolio_id AND w.businessScopedUserId = i.bsuid)
         AS association_current
@@ -203,6 +205,7 @@ export const readWhatsAppPendingWork = ({
       portfolioId: row.portfolio_id,
       bsuid: row.bsuid,
       businessPhoneNumberId: row.business_phone_number_id,
+      sandboxPhone: row.sandbox_phone,
       associationCurrent: row.association_current === 1,
       replyToMessageId: row.reply_to_message_id,
       text: row.text,

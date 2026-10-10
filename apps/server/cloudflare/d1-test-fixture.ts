@@ -333,6 +333,7 @@ export const hostedTurnTestMigrations = [
   "0055_recurring_digests",
   "0057_recurring_offer_replacement",
   "0074_hosted_retention",
+  "0080_whatsapp_sandbox_routing",
 ] as const;
 
 /** Resource regressions use the deployed index choices, triggers and foreign keys together. */

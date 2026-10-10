@@ -778,8 +778,11 @@ const progressTestClient = (progress: {
       return Effect.succeed(responseJson(request, { status: "completed" }, acknowledgedStatus));
     }
     if (path.endsWith("/progress")) progress.polls += 1;
+    if (path.endsWith("/progress") && progress.polls === 2) {
+      return Effect.succeed(responseJson(request, { status: "unauthenticated" }, rejectedStatus));
+    }
     const body =
-      path.endsWith("/progress") && progress.polls > 1
+      path.endsWith("/progress") && progress.polls > 2
         ? {
             text: "Respuesta recuperada",
             turnId: "10000000-0000-4000-8000-000000000097",
@@ -797,7 +800,7 @@ const waitForProgressPoll = (progress: { polls: number }): Promise<void> =>
 describe("hosted Agent progress", () => {
   afterEach(resetApplicationTest);
 
-  it("polls a processing Turn and automatically delivers its visible reply", () =>
+  it("recovers a processing Turn after a failed status lookup and delivers its visible reply", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const progress: { paths: Array<string>; polls: number } = { paths: [], polls: 0 };
@@ -816,6 +819,12 @@ describe("hosted Agent progress", () => {
         );
         yield* fromPromise(waitForProgressPoll(progress));
         fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
+        expect(
+          yield* fromPromise(screen.findByText(/No se pudo recuperar el turno/u))
+        ).toBeVisible();
+        expect(screen.getByLabelText("Mensaje")).toBeDisabled();
+        expect(screen.getByText("Consulta")).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
         expect(yield* fromPromise(screen.findByText("Respuesta recuperada"))).toBeVisible();
         const assertComposerEnabled = (): void => {
           expect(screen.getByLabelText("Mensaje")).toBeEnabled();
@@ -823,6 +832,7 @@ describe("hosted Agent progress", () => {
         yield* fromPromise(waitFor(assertComposerEnabled));
         expect(progress.paths).toEqual([
           "/web/hosted-turns",
+          "/web/hosted-turns/progress",
           "/web/hosted-turns/progress",
           "/web/hosted-turns/progress",
           "/web/hosted-turns/delivery",

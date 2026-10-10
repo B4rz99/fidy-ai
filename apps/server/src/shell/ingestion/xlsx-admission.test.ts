@@ -63,6 +63,24 @@ it.effect("preserves ordinary core-property date typing", () =>
   })
 );
 
+it.effect("refuses nested archive fallback and case-insensitive alternate format markers", () =>
+  Effect.gen(function* () {
+    const source = workbook("normal");
+    yield* reject(
+      modify(source, (entries) => {
+        delete entries["[Content_Types].xml"];
+        entries["Index.zip"] = workbook("embedded");
+      }),
+      "malformed-file"
+    );
+    yield* reject(
+      modify(source, (entries) => {
+        entries["INDEX/DOCUMENT.IWA"] = new Uint8Array([1]);
+      })
+    );
+  })
+);
+
 it.effect("admits the exact repeated-text work boundary and rejects its next byte", () =>
   Effect.gen(function* () {
     // Header h costs two bytes; shared index 1 costs one byte in addition to the value.

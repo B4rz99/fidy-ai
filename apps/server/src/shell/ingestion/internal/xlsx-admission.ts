@@ -123,8 +123,8 @@ const xmlMembers = (entries: Map<string, Uint8Array>): ReadonlyArray<XmlMember> 
   const members: Array<XmlMember> = [];
   for (const [name, bytes] of entries) {
     if (
-      ["xl/workbook.bin", "META-INF/manifest.xml", "objectdata.xml", "Index/Document.iwa"].includes(
-        name
+      ["xl/workbook.bin", "meta-inf/manifest.xml", "objectdata.xml", "index/document.iwa"].includes(
+        name.toLowerCase()
       )
     ) {
       limit();
@@ -455,6 +455,14 @@ const admitSheetReferences = (members: ReadonlyArray<XmlMember>): void => {
 export const admitXlsxArchive = (bytes: Uint8Array): Uint8Array => {
   const entries = decodeXlsxArchive(bytes);
   const members = xmlMembers(entries);
+  // Without the OOXML content-type part SheetJS can recursively read an uninspected Index.zip.
+  if (
+    !members.some(
+      (member) => member.name.toLowerCase() === "[content_types].xml" && member.root === "Types"
+    )
+  ) {
+    malformed();
+  }
   admitSheetReferences(members);
   const worksheets = members.filter((member) => member.root === "worksheet");
   if (worksheets.length === 0) return malformed();

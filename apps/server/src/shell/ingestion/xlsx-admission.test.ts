@@ -51,6 +51,18 @@ const reject = (source: Uint8Array, reason = "resource-limit"): Effect.Effect<vo
     if (result._tag === "Failure") expect(result.failure.safeReason).toBe(reason);
   });
 
+it.effect("preserves ordinary core-property date typing", () =>
+  Effect.gen(function* () {
+    const source = modify(workbook("normal"), (entries) => {
+      entries["docProps/core.xml"] = strToU8(
+        '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dcterms:created xsi:type="dcterms:W3CDTF">2026-01-01T00:00:00Z</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">2026-01-02T00:00:00Z</dcterms:modified></cp:coreProperties>'
+      );
+    });
+    const parsed = yield* parseStatementFile(source);
+    expect(parsed.rows[0]?.fields[0]).toBe("normal");
+  })
+);
+
 it.effect("admits the exact repeated-text work boundary and rejects its next byte", () =>
   Effect.gen(function* () {
     // Header h costs two bytes; shared index 1 costs one byte in addition to the value.

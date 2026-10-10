@@ -63,6 +63,8 @@ const assertAttributes = (tag: SaxesTagPlain): void => {
   ];
   for (const name of Object.keys(tag.attributes)) {
     if (name.startsWith("xmlns:")) continue;
+    // Core-property date typing is metadata, not a SheetJS relationship Type alias.
+    if (name === "xsi:type" && ["dcterms:created", "dcterms:modified"].includes(tag.name)) continue;
     // SheetJS lowercases attribute aliases and strips underscore suffixes. Refuse
     // spellings that would make its cost-bearing attributes differ from this scan.
     const alias = localName(name).split("_")[0]?.toLowerCase();

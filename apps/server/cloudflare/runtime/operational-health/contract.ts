@@ -202,7 +202,13 @@ export const OperationalAlert = Schema.Union([
 export type OperationalAlert = typeof OperationalAlert.Type;
 
 export type OperationalAlertDelivery = Readonly<{
-  outage: Option.Option<Readonly<{ bucket: R2Bucket; release: string }>>;
+  outage: Option.Option<
+    Readonly<{
+      bucket: R2Bucket;
+      release: string;
+      inspection: "healthy" | "unavailable" | "unknown";
+    }>
+  >;
   db: D1Database;
   now: number;
   alerts: ReadonlyArray<OperationalAlert>;

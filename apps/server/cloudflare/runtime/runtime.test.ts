@@ -1,8 +1,11 @@
 import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
-import { Effect, Exit, Option } from "effect";
-import { afterAll, expect } from "vitest";
-import { isolatedTestStorage } from "../d1-test-fixture";
+import { Clock, Effect, Exit, FileSystem, Option } from "effect";
+import { TestClock } from "effect/testing";
+import { afterAll, expect, vi } from "vitest";
+import { Miniflare } from "miniflare";
+import { NodeFileSystem } from "@effect/platform-node";
+import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { makePlatformMaintenance } from "./runtime";
 
@@ -209,5 +212,169 @@ it.effect(
             .first()
         )
       ).toEqual({ state: "unavailable" });
+    })
+);
+
+it.layer(NodeFileSystem.layer)((it) =>
+  it.effect(
+    "preserves unavailable-D1 email claims across real platform restart and concurrent inspection",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* fs.makeTempDirectory({ prefix: "fidy-1160-" }).pipe(Effect.orDie);
+        const create = (): Miniflare =>
+          new Miniflare({
+            resourcePersistencePath: path,
+            workers: [
+              {
+                config: {
+                  name: "outage-restart",
+                  type: "worker",
+                  compatibilityDate: "2026-09-08",
+                  env: { BUCKET: { type: "r2", name: "outage-restart" } },
+                  manifest: {
+                    mainModule: "index.mjs",
+                    modules: {
+                      "index.mjs": {
+                        type: "esm",
+                        contents: "export default {fetch() {return new Response('ok')}}",
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          });
+        let runtime = create();
+        const unavailableDb: D1Database = {
+          prepare: unavailable,
+          batch: unavailable,
+          exec: unavailable,
+          withSession: unavailable,
+          dump: unavailable,
+        };
+        const requests: Request[] = [];
+        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) => {
+          requests.push(new Request(request, init));
+          return requests.length === 1
+            ? Promise.reject(new Error("lost response after acceptance"))
+            : Promise.resolve(new Response('{"id":"accepted-id"}', { status: 200 }));
+        });
+        const inspect = (bucket: R2Bucket): Effect.Effect<void> =>
+          makePlatformMaintenance(
+            input(unavailableDb, {
+              ASYNC_HEALTH_ENABLED: Option.some("enabled"),
+              STATEMENT_STAGING_BUCKET: Option.some(bucket),
+              OPERATOR_ALERT_EMAIL: Option.some("operator@example.com"),
+              RESEND_API_KEY: Option.some("test-only-key"),
+            })
+          )
+            .inspectHealth()
+            .pipe(Effect.ignore);
+        const clock = yield* Clock.Clock;
+        const at = <A, E>(now: number, work: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+          work.pipe(
+            Effect.provideService(Clock.Clock, {
+              currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+              currentTimeNanos: clock.currentTimeNanos,
+              monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+              monotonicTimeNanos: clock.monotonicTimeNanos,
+              sleep: (duration) => clock.sleep(duration),
+              currentTimeMillisUnsafe: () => now,
+              currentTimeMillis: Effect.succeed(now),
+            })
+          );
+        try {
+          const first = yield* Effect.tryPromise(() => runtime.getBindings<{ BUCKET: R2Bucket }>());
+          yield* at(1_000_000, inspect(first.BUCKET));
+          expect(requests).toHaveLength(1);
+          yield* Effect.tryPromise(() => runtime.dispose());
+          runtime = create();
+          const restarted = yield* Effect.tryPromise(() =>
+            runtime.getBindings<{ BUCKET: R2Bucket }>()
+          );
+          yield* at(1_060_000, inspect(restarted.BUCKET));
+          expect(requests).toHaveLength(1);
+          yield* at(
+            1_300_000,
+            Effect.forEach(Array.from({ length: 8 }), () => inspect(restarted.BUCKET), {
+              concurrency: 8,
+              discard: true,
+            })
+          );
+          expect(requests).toHaveLength(2);
+          expect(requests[1]?.headers.get("idempotency-key")).toBe(
+            requests[0]?.headers.get("idempotency-key")
+          );
+          expect(requests[0]?.headers.get("idempotency-key")).toBeTruthy();
+          expect(requests[1]?.headers.get("authorization")).toBe("Bearer test-only-key");
+          const body = yield* Effect.tryPromise(() => requests[1]?.text() ?? Promise.resolve(""));
+          expect(body).toContain("inspection_unavailable / d1 (warning)");
+          expect(body).toContain("operator@example.com");
+          expect(body).not.toContain("lost response");
+          yield* at(2_800_000, inspect(restarted.BUCKET));
+          expect(requests).toHaveLength(2);
+        } finally {
+          fetch.mockRestore();
+          yield* Effect.tryPromise(() => runtime.dispose());
+          yield* fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie);
+        }
+      })
+  )
+);
+
+it.effect(
+  "resolves the D1 outage only after the operational entrypoint confirms available owner inspection",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      const unavailableDb: D1Database = {
+        prepare: unavailable,
+        batch: unavailable,
+        exec: unavailable,
+        withSession: unavailable,
+        dump: unavailable,
+      };
+      const bodies: string[] = [];
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) =>
+        new Request(request, init).text().then((body) => {
+          bodies.push(body);
+          return new Response('{"id":"accepted-id"}', { status: 200 });
+        })
+      );
+      const inspect = (database: D1Database): Effect.Effect<void> =>
+        makePlatformMaintenance(
+          input(database, {
+            ASYNC_HEALTH_ENABLED: Option.some("enabled"),
+            STATEMENT_STAGING_BUCKET: Option.some(bucket),
+            OPERATOR_ALERT_EMAIL: Option.some("operator@example.com"),
+            RESEND_API_KEY: Option.some("test-only-key"),
+          })
+        )
+          .inspectHealth()
+          .pipe(Effect.andThen(TestClock.adjust("1 millis")), Effect.ignore);
+      try {
+        yield* inspect(unavailableDb);
+        yield* inspect(db);
+        expect(bodies.filter((body) => body.includes(" / d1 "))).toHaveLength(1);
+        const names = Array.from(
+          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
+        ).sort();
+        yield* Effect.tryPromise(() =>
+          installTestSchema({
+            db,
+            sources: names.map((name) => new URL(`../migrations/${name}`, import.meta.url)),
+          })
+        );
+        yield* inspect(db);
+        yield* inspect(db);
+        expect(
+          bodies
+            .filter((body) => body.includes(" / d1 "))
+            .map((body) => body.includes("alert resolved:"))
+        ).toEqual([false, true]);
+      } finally {
+        fetch.mockRestore();
+      }
     })
 );

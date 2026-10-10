@@ -402,7 +402,10 @@ Operational Health observes bounded owner metadata and dead-letter signals separ
 reachability health. Unreadable measurements are unavailable, not zero. D1 outage email claims use
 bounded, conditional writes in the existing private R2 staging bucket,
 so a failed D1 inspection or metrics read cannot disable outage notification. Claim metadata contains
-no User or financial content. Ordinary alerts retain D1 claims. Operational procedures and
+no User or financial content. Conditional observations, acknowledgement and the 23-hour safe
+provider retry identity survive Worker restarts; only healthy D1 inspection starts resolution.
+One bounded resolved tombstone retains the firing cooldown. Ordinary alerts retain D1 claims.
+See [ADR 0035](../../docs/adr/0035-d1-independent-operator-alerts.md). Operational procedures and
 limits belong in the [background-work runbook](../../docs/operations/cloudflare-background-work.md).
 
 Budget crossing snapshots, category-separated Budget/reminder Consent evidence, and guarded reminder

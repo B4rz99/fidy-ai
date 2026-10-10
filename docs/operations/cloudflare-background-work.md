@@ -144,24 +144,45 @@ been verified on the Production account. Record the approved USD budget and Work
 the operator's private release checklist, not in alert dimensions or logs. [Budget alert
 instructions](https://developers.cloudflare.com/billing/manage/budget-alerts/).
 
-## D1-independent outage alerting remains open (#1139)
+## D1-independent outage alerts (#1160)
 
-Worker-backed operator email still requires D1 to atomically claim and deduplicate each notification.
-A D1 outage can therefore prevent the very `inspection_unavailable/d1` email it causes. The independent
-GitHub deployment-failure email covers release failures; it is not a runtime D1 outage monitor.
-The canary and Proactivity fixes do not close this gap.
+Operational Health owns a single metadata-only R2 ledger at `operational/alerts/d1-v1` in the
+existing private statement staging bucket. See [ADR 0035](../adr/0035-d1-independent-operator-alerts.md).
+The Core minute inspection probes D1 before attempting database-backed telemetry. Unavailable D1
+reaches this independent ledger and the existing approved `OPERATOR_ALERT_EMAIL` / `RESEND_API_KEY`
+boundary. Other alert coordinates continue to use `operational_alerts` in D1.
 
-A candidate separate design is a dedicated private operational Durable Object with finite alert
-coordinates, a durable cooldown/attempt ledger, bounded retry/retention, and the existing bounded
-Resend transport. Claims must precede sends and preserve provider ambiguity/idempotency across
-concurrent ticks and Worker restarts, without reading or writing D1. It must emit only closed metadata,
-use the existing approved operator destination and credential boundary, and not gain User authority.
-Process-local counters and provider idempotency alone cannot enforce that durable admission budget.
+R2 ETag conditions admit each attempt before sending. Concurrent ticks and Worker restarts share
+one durable ledger. The D1 inspection alert preserves its warning severity and four-hour repeat;
+critical delivery repeats after 30 minutes. A failed or lost response retries after five minutes,
+at most six times under the same email identity and original release. That identity remains fixed
+for the 23-hour safe provider idempotency window, including after retry exhaustion. After the window,
+another eligible attempt starts a fresh identity. Provider acceptance is not inbox receipt; a duplicate
+operator email remains possible after the provider window or provider ambiguity.
 
-Adding that persistent owner, binding/migration and outage/recovery lifecycle requires a separate
-architecture decision and review. No such resource, credential, or production setting is installed
-by #1139's monitoring-isolation patch. An independently scheduled monitor would additionally be
-needed to detect a Core cron outage; a Core-triggered Durable Object alone cannot prove cron liveness.
+For acknowledgement, use authenticated private R2 access to read this exact object and its ETag.
+Check that `phase` is `firing` and its `started` timestamp identifies the notification you read.
+Conditionally replace that same JSON with only `acknowledged` changed to `true`, using `If-Match`
+with the read ETag. If the condition fails, reread and recheck the notification before retrying;
+do not overwrite a newer claim. This suppresses firing repeats and retries, without declaring
+recovery. Preserve every other field, never delete the object, and do not update D1 to acknowledge
+this R2-owned coordinate. No public administrative endpoint exists.
+
+Only a healthy D1 capability probe with available D1-backed owner inspection starts resolution.
+Missing or failed measurements cannot resolve. A resolution clears acknowledgement and sends once,
+using the same bounded retry policy if its response is lost. The firing cooldown survives resolution
+to bound rapid flapping; older observations cannot regress newer state. Retention overwrites one
+object of at most 1 KiB, including its resolved tombstone; no per-tick history accumulates. Staging
+cleanup operates on its own statement prefix and must not delete the operational ledger.
+
+Verified local tests exercise actual R2 conditional writes, persistent runtime recreation, Core
+maintenance/operational inspection, unavailable D1, concurrent ticks, failed and ambiguous provider
+transport, cooldown, acknowledgement and recovery. These tests do not prove production inbox receipt.
+Delivery requires Core execution and its minute trigger, R2 and Resend to remain available. This
+owner cannot independently establish Core cron liveness or detect a Cloudflare-wide outage. An
+external independently scheduled monitor is required for cron liveness. GitHub deployment-failure
+email observes release failures, not runtime D1 availability. No new credentials, recipient changes,
+or production infrastructure enablement follow from this implementation.
 
 ## Telemetry ownership (#716)
 

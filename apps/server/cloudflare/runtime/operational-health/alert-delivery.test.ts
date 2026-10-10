@@ -1,6 +1,6 @@
 import { Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Option } from "effect";
+import { Cause, Deferred, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, describe, expect, vi } from "vitest";
 import { isolatedTestStorage } from "../../d1-test-fixture";
 import { runOperationalAlerts as deliverAlerts } from "./operations";
@@ -412,10 +412,10 @@ it.effect("delivers one deduplicated D1 outage alert while claim storage is unav
         {
           kind: "inspection_unavailable",
           owner: "d1",
-          severity: "warning",
+          severity: "critical",
         } satisfies OperationalAlert,
       ],
-      outage: Option.some({ bucket, release: "test-release" }),
+      outage: Option.some({ bucket, release: "test-release", inspection: "unavailable" as const }),
       signal: yield* Effect.abortSignal,
       send: (_alert: OperationalAlert, key: string): Promise<void> => {
         sent.push(key);
@@ -440,9 +440,9 @@ const outageInput = (
 ): Parameters<typeof deliverAlerts>[0] => ({
   db,
   ...delivery,
-  outage: Option.some({ bucket, release: "original-release" }),
+  outage: Option.some({ bucket, release: "original-release", inspection: "unavailable" }),
   signal: new AbortController().signal,
-  alerts: [{ kind: "inspection_unavailable", owner: "d1", severity: "warning" }],
+  alerts: [{ kind: "inspection_unavailable", owner: "d1", severity: "critical" }],
 });
 it.effect(
   "retries an ambiguous outage email with the original identity and release after restart",
@@ -467,7 +467,7 @@ it.effect(
         deliverAlerts({
           ...input,
           now: 1_300_000,
-          outage: Option.some({ bucket, release: "new-release" }),
+          outage: Option.some({ bucket, release: "new-release", inspection: "unavailable" }),
         })
       );
       expect(sent).toHaveLength(2);
@@ -489,9 +489,23 @@ it.effect(
         },
       });
       yield* Effect.tryPromise(() => deliverAlerts(input));
-      yield* Effect.tryPromise(() => deliverAlerts({ ...input, alerts: [], now: 1_010_000 }));
+      yield* Effect.tryPromise(() =>
+        deliverAlerts({
+          ...input,
+          outage: Option.some({ bucket, release: "original-release", inspection: "healthy" }),
+          alerts: [],
+          now: 1_010_000,
+        })
+      );
       yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 1_020_000 }));
-      yield* Effect.tryPromise(() => deliverAlerts({ ...input, alerts: [], now: 1_030_000 }));
+      yield* Effect.tryPromise(() =>
+        deliverAlerts({
+          ...input,
+          outage: Option.some({ bucket, release: "original-release", inspection: "healthy" }),
+          alerts: [],
+          now: 1_030_000,
+        })
+      );
       expect(phases).toEqual(["firing", "resolved"]);
       yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 2_800_000 }));
       expect(phases).toEqual(["firing", "resolved", "firing"]);
@@ -596,5 +610,215 @@ it.effect("outage timeout aborts the provider request and preserves its retry id
     yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 1_300_000 }));
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
+  })
+);
+
+it.effect("keeps an ambiguous outage identity beyond the repeat cooldown", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+    const keys: string[] = [];
+    const input = outageInput(db, bucket, {
+      now: 1_000_000,
+      send: (_alert, key): Promise<void> => {
+        keys.push(key);
+        return keys.length === 1
+          ? Promise.reject(new Error("lost provider response"))
+          : Promise.resolve();
+      },
+    });
+    yield* rejects(deliverAlerts(input));
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 2_800_000 }));
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+  })
+);
+
+it.effect("bounds ambiguous attempts until the safe provider window expires", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+    const keys: string[] = [];
+    const input = outageInput(db, bucket, {
+      now: 1_000_000,
+      send: (_alert, key): Promise<void> => {
+        keys.push(key);
+        return Promise.reject(new Error("provider unavailable"));
+      },
+    });
+    for (const now of [1_000_000, 1_300_000, 1_600_000, 1_900_000, 2_200_000, 2_500_000]) {
+      yield* rejects(deliverAlerts({ ...input, now }));
+    }
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 2_800_000 }));
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 83_799_999 }));
+    expect(keys).toHaveLength(6);
+    expect(new Set(keys).size).toBe(1);
+    yield* rejects(deliverAlerts({ ...input, now: 83_800_000 }));
+    expect(keys).toHaveLength(7);
+    expect(keys[6]).not.toBe(keys[0]);
+  })
+);
+
+it.effect("honours warning cooldown and private acknowledgement until confirmed recovery", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+    const phases: string[] = [];
+    const input = {
+      ...outageInput(db, bucket, {
+        now: 1_000_000,
+        send: (alert, _key, delivery): Promise<void> => {
+          phases.push(`${alert.severity}:${delivery.phase}`);
+          return Promise.resolve();
+        },
+      }),
+      alerts: [
+        {
+          kind: "inspection_unavailable",
+          owner: "d1",
+          severity: "warning",
+        } satisfies OperationalAlert,
+      ],
+    };
+    yield* Effect.tryPromise(() => deliverAlerts(input));
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 2_800_000 }));
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 15_400_000 }));
+    expect(phases).toEqual(["warning:firing", "warning:firing"]);
+    const object = yield* Effect.tryPromise(() => bucket.get("operational/alerts/d1-v1"));
+    if (object === null) throw new Error("Missing operator ledger");
+    const ledger = yield* Schema.decodeEffect(
+      Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+    )(yield* Effect.tryPromise(() => object.text()));
+    const body = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+    )({ ...ledger, acknowledged: true });
+    yield* Effect.tryPromise(() =>
+      bucket.put("operational/alerts/d1-v1", body, {
+        onlyIf: { etagMatches: object.etag },
+      })
+    );
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 29_800_000 }));
+    yield* Effect.tryPromise(() =>
+      deliverAlerts({
+        ...input,
+        alerts: [],
+        outage: Option.some({ bucket, release: "recovered", inspection: "unknown" }),
+        now: 29_900_000,
+      })
+    );
+    expect(phases).toHaveLength(2);
+    yield* Effect.tryPromise(() =>
+      deliverAlerts({
+        ...input,
+        alerts: [],
+        outage: Option.some({ bucket, release: "recovered", inspection: "healthy" }),
+        now: 30_000_000,
+      })
+    );
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 29_900_000 }));
+    expect(phases).toEqual(["warning:firing", "warning:firing", "warning:resolved"]);
+    yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 30_100_000 }));
+    expect(phases).toEqual([
+      "warning:firing",
+      "warning:firing",
+      "warning:resolved",
+      "warning:firing",
+    ]);
+  })
+);
+
+it.effect(
+  "preserves a concurrent acknowledgement when a provider response confirms the claim",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+      const context = yield* Effect.context<never>();
+      const input = outageInput(db, bucket, {
+        now: 1_000_000,
+        send: (): Promise<void> =>
+          Effect.runPromiseWith(context)(
+            Effect.gen(function* () {
+              const object = yield* Effect.tryPromise(() => bucket.get("operational/alerts/d1-v1"));
+              if (object === null) throw new Error("Send preceded its claim");
+              const codec = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+              const ledger = yield* Schema.decodeEffect(codec)(
+                yield* Effect.tryPromise(() => object.text())
+              );
+              const body = yield* Schema.encodeEffect(codec)({ ...ledger, acknowledged: true });
+              yield* Effect.tryPromise(() =>
+                bucket.put("operational/alerts/d1-v1", body, {
+                  onlyIf: { etagMatches: object.etag },
+                })
+              );
+            })
+          ),
+      });
+      yield* Effect.tryPromise(() => deliverAlerts(input));
+      const repeat = vi.fn(accepted);
+      yield* Effect.tryPromise(() => deliverAlerts({ ...input, now: 2_800_000, send: repeat }));
+      expect(repeat).not.toHaveBeenCalled();
+      const object = yield* Effect.tryPromise(() => bucket.get("operational/alerts/d1-v1"));
+      if (object === null) throw new Error("Missing acknowledgement");
+      expect(
+        yield* Schema.decodeEffect(
+          Schema.fromJsonString(
+            Schema.Struct({ confirmed: Schema.Boolean, acknowledged: Schema.Boolean })
+          )
+        )(yield* Effect.tryPromise(() => object.text()))
+      ).toEqual({ confirmed: true, acknowledged: true });
+    })
+);
+
+it.effect("retries a lost recovery response without restarting the resolved notification", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+    const keys: string[] = [];
+    const input = outageInput(db, bucket, { now: 1_000_000, send: accepted });
+    yield* Effect.tryPromise(() => deliverAlerts(input));
+    const recovered = {
+      ...input,
+      alerts: [],
+      outage: Option.some({ bucket, release: "recovered", inspection: "healthy" as const }),
+      now: 1_010_000,
+      send: (_alert: OperationalAlert, key: string): Promise<void> => {
+        keys.push(key);
+        return keys.length === 1 ? Promise.reject(new Error("Lost recovery response")) : accepted();
+      },
+    };
+    yield* Effect.tryPromise(() => deliverAlerts(recovered));
+    yield* Effect.tryPromise(() => deliverAlerts({ ...recovered, now: 1_310_000 }));
+    yield* Effect.tryPromise(() => deliverAlerts({ ...recovered, now: 84_000_000 }));
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+  })
+);
+
+it.effect("retains unknown observation ordering against a delayed healthy tick", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    const { bucket } = yield* Effect.tryPromise(() => outageStorage.acquire());
+    const phases: string[] = [];
+    const input = outageInput(db, bucket, {
+      now: 1_000_000,
+      send: (_alert, _key, delivery): Promise<void> => {
+        phases.push(delivery.phase);
+        return accepted();
+      },
+    });
+    yield* Effect.tryPromise(() => deliverAlerts(input));
+    const observation = (now: number, inspection: "healthy" | "unknown"): Promise<void> =>
+      deliverAlerts({
+        ...input,
+        now,
+        alerts: [],
+        outage: Option.some({ bucket, release: "test", inspection }),
+      });
+    yield* Effect.tryPromise(() => observation(1_030_000, "unknown"));
+    yield* Effect.tryPromise(() => observation(1_020_000, "healthy"));
+    expect(phases).toEqual(["firing"]);
+    yield* Effect.tryPromise(() => observation(1_040_000, "healthy"));
+    expect(phases).toEqual(["firing", "resolved"]);
   })
 );

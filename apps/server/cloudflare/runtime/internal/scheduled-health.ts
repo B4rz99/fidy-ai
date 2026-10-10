@@ -1,13 +1,14 @@
 import { EmailAddress } from "../../../src/core/email-authentication/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { PlatformMaintenanceInput } from "../contract";
-import type {
-  AlertSignal,
-  CanaryHealth,
-  CapabilityProbe,
-  EventMetricSignal,
-  OperationalHealthEnvironment,
-  OperationalSignal,
+import {
+  type AlertSignal,
+  type CanaryHealth,
+  type CapabilityProbe,
+  type EventMetricSignal,
+  type OperationalHealthEnvironment,
+  type OperationalSignal,
+  WorkKind,
 } from "../operational-health/contract";
 import {
   decideOperationalAlerts,
@@ -22,44 +23,44 @@ import { sendOperatorEmail } from "../operational-health/runtime";
 
 const deliverOperationalSignals = (
   environment: PlatformMaintenanceInput,
-  signals: ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe>
+  signals: ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe>,
+  now: number
 ): Effect.Effect<void, void> =>
-  Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    Effect.tryPromise({
-      try: (signal) => {
-        const recipient = Option.flatMap(
-          environment.OPERATOR_ALERT_EMAIL,
-          Schema.decodeUnknownOption(EmailAddress)
-        );
-        if (Option.isNone(recipient) || Option.isNone(environment.RESEND_API_KEY)) {
-          throw new Error("Operator email configuration unavailable");
-        }
-        const to = recipient.value;
-        const apiKey = environment.RESEND_API_KEY.value;
-        return runOperationalAlerts({
-          db: environment.DB,
-          outage: Option.map(environment.STATEMENT_STAGING_BUCKET, (bucket) => ({
-            bucket,
-            release: environment.RELEASE_GIT_SHA,
-          })),
-          now,
-          alerts: decideOperationalAlerts(signals),
-          signal,
-          send: (alert, idempotencyKey, delivery) =>
-            sendOperatorEmail({
-              alert,
-              idempotencyKey,
-              to,
-              apiKey,
-              release: Option.getOrElse(delivery.release, () => environment.RELEASE_GIT_SHA),
-              signal: delivery.signal,
-              phase: delivery.phase,
-            }),
-        });
-      },
-      catch: () => undefined,
-    })
-  );
+  Effect.tryPromise({
+    try: (signal) => {
+      const recipient = Option.flatMap(
+        environment.OPERATOR_ALERT_EMAIL,
+        Schema.decodeUnknownOption(EmailAddress)
+      );
+      if (Option.isNone(recipient) || Option.isNone(environment.RESEND_API_KEY)) {
+        throw new Error("Operator email configuration unavailable");
+      }
+      const to = recipient.value;
+      const apiKey = environment.RESEND_API_KEY.value;
+      return runOperationalAlerts({
+        db: environment.DB,
+        outage: Option.map(environment.STATEMENT_STAGING_BUCKET, (bucket) => ({
+          bucket,
+          release: environment.RELEASE_GIT_SHA,
+          inspection: d1Inspection(signals),
+        })),
+        now,
+        alerts: decideOperationalAlerts(signals),
+        signal,
+        send: (alert, idempotencyKey, delivery) =>
+          sendOperatorEmail({
+            alert,
+            idempotencyKey,
+            to,
+            apiKey,
+            release: Option.getOrElse(delivery.release, () => environment.RELEASE_GIT_SHA),
+            signal: delivery.signal,
+            phase: delivery.phase,
+          }),
+      });
+    },
+    catch: () => undefined,
+  });
 
 const operationalWorkQueues = (
   environment: PlatformMaintenanceInput
@@ -152,6 +153,20 @@ const operationalWorkflows = (
 
 const d1Unavailable = (signals: ReadonlyArray<AlertSignal>): boolean =>
   signals.some((signal) => signal.operation === "d1" && signal.state === "unavailable");
+const d1Inspection = (
+  signals: ReadonlyArray<AlertSignal>
+): "healthy" | "unavailable" | "unknown" => {
+  if (d1Unavailable(signals)) return "unavailable";
+  const unknown = signals.some(
+    (signal) =>
+      signal.state === "unavailable" &&
+      (WorkKind.literals.some((owner) => owner === signal.operation) ||
+        signal.operation === "whatsapp" ||
+        signal.operation === "retention" ||
+        signal.operation === "workflowFailures")
+  );
+  return unknown ? "unknown" : "healthy";
+};
 const retainOperationalSignals = (
   environment: PlatformMaintenanceInput,
   signals: ReadonlyArray<AlertSignal>
@@ -170,7 +185,8 @@ const retainOperationalSignals = (
 
 const reportOperationalSignals = (
   environment: PlatformMaintenanceInput,
-  signals: ReadonlyArray<AlertSignal>
+  signals: ReadonlyArray<AlertSignal>,
+  observedAtMs: number
 ): Effect.Effect<void, void> =>
   Effect.forEach(
     signals,
@@ -178,7 +194,7 @@ const reportOperationalSignals = (
     { discard: true }
   ).pipe(
     Effect.andThen(retainOperationalSignals(environment, signals)),
-    Effect.andThen(deliverOperationalSignals(environment, signals))
+    Effect.andThen(deliverOperationalSignals(environment, signals, observedAtMs))
   );
 
 const observeAdditionalSignals = (
@@ -223,7 +239,14 @@ const scheduledSignals = (
         Effect.flatMap((signals) =>
           observeAdditionalSignals(environment, signals).pipe(
             Effect.timeout("2 seconds"),
-            Effect.orElseSucceed(() => signals)
+            Effect.orElseSucceed((): ReadonlyArray<OperationalSignal | EventMetricSignal> => [
+              ...signals,
+              {
+                component: "workflow-execution",
+                operation: "workflowFailures",
+                state: "unavailable",
+              },
+            ])
           )
         ),
         Effect.map((signals): ReadonlyArray<AlertSignal> => [...signals, ...capabilities])
@@ -235,12 +258,14 @@ export const inspectScheduledHealth = (
 ): Effect.Effect<void, void> =>
   !Option.contains(environment.ASYNC_HEALTH_ENABLED, "enabled")
     ? Effect.void
-    : inspectOperationalCapabilities({
-        d1: environment.DB,
-        coordinator: environment.USER_TRANSACTION_COORDINATOR,
-        requiredBindings: requiredBindings(environment),
-        providerConfigured: providerConfigured(environment),
-      }).pipe(
-        Effect.flatMap((capabilities) => scheduledSignals(environment, capabilities)),
-        Effect.flatMap((signals) => reportOperationalSignals(environment, signals))
+    : Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
+        inspectOperationalCapabilities({
+          d1: environment.DB,
+          coordinator: environment.USER_TRANSACTION_COORDINATOR,
+          requiredBindings: requiredBindings(environment),
+          providerConfigured: providerConfigured(environment),
+        }).pipe(
+          Effect.flatMap((capabilities) => scheduledSignals(environment, capabilities)),
+          Effect.flatMap((signals) => reportOperationalSignals(environment, signals, observedAtMs))
+        )
       );

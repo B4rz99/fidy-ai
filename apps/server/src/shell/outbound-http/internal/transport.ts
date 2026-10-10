@@ -29,6 +29,7 @@ type OutboundHttpPolicy = Readonly<{
 }>;
 
 const outboundHttpPolicies: Readonly<Record<OutboundHttpProvider, OutboundHttpPolicy>> = {
+  github: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: ["location"] },
   microsoft: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: [] },
   google: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: [] },
   "cloudflare-access": {

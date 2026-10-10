@@ -1,79 +1,82 @@
-# Installable Fidy CLI
+# Install the Fidy CLI
 
-This is the release-candidate installation contract. No public CLI release is implied by this
-source change. The workflow builds candidates only; it has no release-write permission.
-
-## End-user experience after publication
-
-Download `install.sh` (macOS/Linux) or `install.ps1` (Windows) from the approved, versioned
-`cli-v0.1.0` GitHub release in `B4rz99/fidy-ai`. Review the script, then run:
+On macOS Apple Silicon or glibc Linux x64 desktops:
 
 ```sh
-bash install.sh 0.1.0
-# If the installer reports a missing PATH entry, add the printed directory to PATH.
-fidy --version
-fidy login
-fidy commands
+curl -fsSL https://fidyapp.com/install.sh | bash
 ```
 
-On Windows PowerShell:
+On Windows x64, PowerShell:
 
 ```powershell
-.\install.ps1 -Version 0.1.0
-fidy --version
-fidy login
+& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://fidyapp.com/install.ps1).Content))
 ```
 
-Do not bypass PowerShell execution policy or OS security warnings. Signed/notarized distribution
-must be arranged before a general public launch if required by the target environment.
-The Windows installer adds `%LOCALAPPDATA%\Programs\Fidy` to this session and the user's PATH.
-The POSIX installer uses `~/.local/bin` (override with `FIDY_INSTALL_DIR`) without editing shell files.
-Neither installer needs administrator access or changes authentication/security settings.
+Open a new terminal if prompted, then run `fidy login`. Neither installer requires administrator
+access, a repository clone, Bun or Node. The executable contains the pinned Bun runtime.
+Bash, Zsh and Fish receive idempotent user PATH configuration; Windows updates the user's PATH.
+The POSIX default is `~/.local/bin`; `FIDY_INSTALL_DIR` overrides it. Zsh respects `ZDOTDIR` and
+Fish respects `XDG_CONFIG_HOME`. Windows uses `%LOCALAPPDATA%\Programs\Fidy`.
 
-The executable includes the reviewed Bun runtime: no Bun/Node installation, repository clone or
-workspace dependency installation is required. Initial candidates support macOS Apple Silicon,
-Windows x64 and glibc Linux x64. The retained x64 runtime requires AVX2. Other OS/CPU combinations fail explicitly rather than selecting
-an untested binary. Linux needs a working Secret Service/GNOME Keyring/KWallet; macOS uses Keychain;
-Windows uses the reviewed local credential persistence. There is no plaintext fallback.
-`--help` and `--version` work without a login, network or credential store.
+Rerun the same command to upgrade to the latest validated release. To choose a particular version:
 
-## Release preparation
+```sh
+curl -fsSL https://fidyapp.com/install.sh | bash -s -- 0.1.0
+```
 
-1. Build on each native runner using `scripts/cli-release/build.sh`; no cross-target runtime fetch.
-2. Require the same-source repeat-build archive comparison on every native target and normal repository CI plus the `CLI release candidates` matrix to pass for the exact SHA.
-3. Download all three candidate artifacts. Inspect packaged binary names, version output and
-   checksum files. Exercise real login/status/logout on supported desktop targets before launch.
-4. Inventory the bundled runtime/dependencies and include their required licenses and notices in the
-   approved distribution before publication. Obtain owner approval for publication and any signing/credential setup. Sign/notarize where
-   appropriate, then regenerate checksums for the final archive bytes and retest installation.
-5. Publish a versioned `cli-v0.1.0` release with the three `fidy-OS-ARCH.zip` files, their individual
-   `.sha256` files and both installers. Never replace assets under an existing version tag.
-6. Verify anonymous download access before advertising installation. If this repository is private,
-   use an explicitly approved public distribution repository; these installers cannot read private
-   release assets without credentials and deliberately do not request/store a GitHub token.
-7. Only then replace source-checkout instructions in the public agent guide with the verified URL.
+```powershell
+& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://fidyapp.com/install.ps1).Content)) -Version 0.1.0
+```
 
-The SHA-256 checks reject corruption and unexpected archive contents before installation. They
-are not a signature against a compromised GitHub release owner: the archive and digest share an
-origin. Keep release permissions restricted and use signed distribution for stronger provenance.
-Upgrades use an explicit version and verify before replacing the old executable. Removing the
-binary does not revoke server grants or delete saved credentials; run `fidy logout` first and
-revoke the grant in Fidy when appropriate. No automatic update background process is installed.
+The latest version comes from `https://api.fidyapp.com/cli/latest.txt`. Installers check the numeric
+version, archive SHA-256, single executable entry and executable version before replacing an
+installation. A failed download or integrity check preserves the previous executable and PATH.
+There is no background updater. Checksums share the archive's GitHub origin; they do not protect
+against a compromised release publisher. The current binaries are unsigned; installers do not
+bypass execution policy or OS security controls.
 
-## Build and regression checks
+Linux requires AVX2 and a working Secret Service/GNOME Keyring/KWallet. macOS uses Keychain;
+Windows uses the retained credential persistence. No plaintext fallback is added. `fidy --version`
+and `fidy --help` require neither login nor a credential store. Removing the binary does not revoke
+server grants or remove credentials; use `fidy logout` and revoke the grant in Fidy when appropriate.
+
+## Automated releases
+
+`Publish CLI` runs after `Checks` succeeds for a push to `trunk`. It checks the exact source SHA,
+bundles the CLI to enumerate its resolved inputs and compares their fingerprint with the current
+published release. CLI code, consumed contracts, bundled dependency code/metadata/notices, the
+runtime pin, installers and packaging trigger a release. Unrelated changes allocate no version.
+Versions start at `0.1.0` and advance the patch number automatically.
+
+All three native runners build the assigned version, compare same-source repeat archives and run
+installer checks. Only after these jobs succeed does the publication job obtain release-write
+permission. It uploads all archives, checksums, installers, resolved dependency notices,
+the application bundle for rebuilding with Bun, version manifest and source fingerprint to a draft.
+GitHub release immutability must be enabled (configured for `B4rz99/fidy-ai`). Publishing freezes
+the assets and tag. The workflow anonymously downloads and compares every asset before setting
+that release as GitHub's latest. The API reads the latest release's version asset; upstream failure
+returns 503 and never selects an unvalidated version.
+
+A failure or superseded source revision preserves the prior default. Reserved version tags are
+never reused. Rerunning **all jobs** replans from current releases and allocates a new version if a
+failed attempt reserved the preceding one. No separate maintainer publication approval is required.
+The pull-request `CLI release candidates` workflow validates candidates without publishing.
+
+## Build and focused regression checks
 
 ```sh
 bash scripts/install-bun.sh
+# Put the directory reported by this contributor-only setup on PATH.
 bash scripts/install-workspace.sh
-bash scripts/cli-release/build.sh
+FIDY_CLI_VERSION=0.1.0 bash scripts/cli-release/build.sh
 python3 scripts/cli-release/test-install.py
+python3 scripts/cli-release/test-release.py
 ```
 
-Standalone bundling follows [Bun's executable build documentation](https://bun.sh/docs/bundler/executables).
+Standalone bundling follows [Bun's executable documentation](https://bun.sh/docs/bundler/executables).
 Archive timestamps, executable mode and ZIP metadata are fixed; stored entries avoid host zlib
-variation. Each native CI job rebuilds into a second output directory and compares the complete ZIP
-bytes. This proves repeatability in that runner, not cross-toolchain identity or reproducible signatures.
-The pinned runtime guard remains active in the resulting executable. The workflow validates native
-compilation/help/version on all three target OSes; existing repository native-store conformance
-checks remain required. A passing build is not evidence that code signing or production pairing
-has been completed.
+variation. Repeat builds prove identity in that native runner, not cross-toolchain identity or
+reproducible signatures. Runtime guards and existing native credential-store checks remain active.
+The runtime notice inventory is pinned alongside `scripts/install-bun.sh`; update both when changing
+Bun. [GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
+allow changing the latest marker while preserving published assets and tags.

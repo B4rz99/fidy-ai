@@ -2,10 +2,6 @@ name: CLI release candidates
 on:
   pull_request:
     branches: [trunk]
-    paths:
-      - "apps/cli/**"
-      - "scripts/cli-release/**"
-      - ".github/workflows/cli-release-build.yml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,6 +34,9 @@ jobs:
           for archive in dist/cli-release/*.zip; do
             cmp "$archive" "dist/cli-repeat/$(basename "$archive")"
           done
+      - name: Verify release selection and failure safety
+        if: runner.os != 'Windows'
+        run: python3 scripts/cli-release/test-release.py
       - name: Test POSIX installer failure safety
         if: runner.os != 'Windows'
         run: python3 scripts/cli-release/test-install.py
@@ -54,5 +53,7 @@ jobs:
             dist/cli-release/*.sha256
             dist/cli-release/install.sh
             dist/cli-release/install.ps1
+            dist/cli-release/THIRD-PARTY-NOTICES.txt
+            dist/cli-release/fidy.js
           if-no-files-found: error
           retention-days: 14

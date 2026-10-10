@@ -15,6 +15,13 @@ import {
   SmokeResponse,
   smokePath,
 } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
+import {
+  type RetentionCompatibilityPort,
+  decodeRetentionVersionRevision,
+  requireRetentionMigration,
+  requireRetentionRollback,
+  retentionCompatibilityRevision,
+} from "./retention-migration-compatibility";
 import { releaseCleanup } from "./release-cleanup";
 import { freeTierWorkerObservability } from "./worker-observability";
 import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
@@ -88,6 +95,7 @@ const UpdatingStateEntry = Schema.Struct({
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
 const Commands = Schema.Literals([
   "verify-retirement",
+  "verify-retention-migration",
   "capture",
   "stage",
   "promote",
@@ -1279,6 +1287,50 @@ const versionResources = Effect.fn(function* (
     exports: version.result.resources.script_runtime.exports,
   } satisfies WorkerResources;
 });
+const retentionCompatibilityPort = (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+): RetentionCompatibilityPort => ({
+  current: port.current,
+  revision: (name, id) =>
+    providerJson(
+      HttpClientRequest.get(
+        `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/versions/${encodeURIComponent(id)}`,
+        { headers: { authorization: `Bearer ${env.token}` } }
+      )
+    ).pipe(
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.flatMap((raw) =>
+        Effect.try(() => decodeRetentionVersionRevision({ raw, expectedId: id }))
+      )
+    ),
+  requireCompatible: (revision) =>
+    shell([
+      "git",
+      "-C",
+      "../..",
+      "merge-base",
+      "--is-ancestor",
+      retentionCompatibilityRevision,
+      revision,
+    ]).pipe(Effect.asVoid),
+});
+
+const verifyRetentionMigration = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  if (snapshot.revision !== env.revision) {
+    return yield* Effect.fail(Error("Retention migration snapshot belongs to another release"));
+  }
+  yield* requireRetentionMigration(retentionCompatibilityPort(port, env, client), snapshot);
+});
+
 const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snapshot.Type) {
   // A code-only release is the only automatic rollback case. A missing Git ancestor refuses.
   yield* shell([
@@ -1362,6 +1414,8 @@ const rollback = Effect.fn(function* (
   const { release, promoted } = yield* Schema.decodeUnknownEffect(RollbackReceipt)(
     yield* readFile(`${env.file}.promoted`)
   );
+  // This also rejects pre-migration receipts whose deployment IDs still match after D1 apply.
+  yield* requireRetentionRollback(retentionCompatibilityPort(port, env, client), release.snapshot);
   const compatible = yield* rollbackCompatibility(env, client, release);
   const guarded: RollbackPort = {
     ...port,
@@ -1436,6 +1490,8 @@ if (import.meta.main) {
     const port = releasePort({ env: environment, client });
     if (command === "verify-retirement") {
       yield* verifyRetirement(port, environment);
+    } else if (command === "verify-retention-migration") {
+      yield* verifyRetentionMigration(port, environment, client);
     } else if (command === "isolate") {
       yield* isolate(port, environment, client);
     } else {

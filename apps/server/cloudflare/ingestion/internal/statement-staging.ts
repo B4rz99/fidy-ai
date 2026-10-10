@@ -60,6 +60,7 @@ import {
 const statementStagingObjectPrefix = "staging/statement/v1/";
 const statementStagingObjectEntropyBytes = 32;
 const millisecondsPerHour = 3_600_000;
+const encodeRetentionIds = Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)));
 
 /** Safe response vocabulary and metadata-only audit classification for statement publication. */
 export type StatementPublicationRefusal = Readonly<{
@@ -1565,10 +1566,8 @@ const expireStatementSubmissions = (
       })
     );
     if (rows.length === 0) return { submissionsFailed: 0 };
-    const placeholders = rows.map(() => "?").join(", ");
-    const ids = rows.map(({ id }) => id);
-    const stagingIds = rows.map(({ staging_id: stagingId }) => stagingId);
-    const stagingPlaceholders = stagingIds.map(() => "?").join(", ");
+    const ids = encodeRetentionIds(rows.map(({ id }) => id));
+    const stagingIds = encodeRetentionIds(rows.map(({ staging_id: stagingId }) => stagingId));
     const results = yield* settleBatch(config.database, [
       // The terminal transition commits before any object delete, so no authoritative submission
       // that still lacks a useful outcome can ever point at material a later cleanup run reclaimed.
@@ -1577,16 +1576,16 @@ const expireStatementSubmissions = (
           `UPDATE statement_submissions
            SET status = 'failed', started_at_ms = coalesce(started_at_ms, ?),
                completed_at_ms = ?, failure_reason = 'retention-expired'
-           WHERE id IN (${placeholders}) AND status IN ('queued', 'processing')`
+           WHERE id IN (SELECT value FROM json_each(?)) AND status IN ('queued', 'processing') RETURNING id`
         )
-        .bind(nowEpochMs, nowEpochMs, ...ids),
+        .bind(nowEpochMs, nowEpochMs, ids),
       // A submission that never produced a useful outcome returns the Free backfill to the User.
       config.database
         .prepare(
           `UPDATE statement_backfill_entitlements SET submission_id = NULL
-           WHERE consumed_at_ms IS NULL AND submission_id IN (${placeholders})`
+           WHERE consumed_at_ms IS NULL AND submission_id IN (SELECT value FROM json_each(?))`
         )
-        .bind(...ids),
+        .bind(ids),
       // Published material becomes sweepable exactly once; the sweep deletes the object and keeps
       // the referenced row as durable evidence that the locator's bytes are gone. Clearing the
       // publication pointer is what lets the row leave `published` under the staging state check.
@@ -1594,13 +1593,42 @@ const expireStatementSubmissions = (
         .prepare(
           `UPDATE statement_staging_objects
            SET status = 'deleting', published_submission_id = NULL
-           WHERE id IN (${stagingPlaceholders}) AND status = 'published'
+           WHERE id IN (SELECT value FROM json_each(?)) AND status = 'published'
              AND object_deleted_at_ms IS NULL`
         )
-        .bind(...stagingIds),
+        .bind(stagingIds),
     ]);
-    return { submissionsFailed: results[0]?.meta.changes ?? 0 };
+    return { submissionsFailed: results[0]?.results.length ?? 0 };
   });
+
+const prepareStagingRetention = (database: D1Database, nowEpochMs: number): D1PreparedStatement =>
+  database
+    .prepare(
+      `UPDATE statement_staging_objects SET status = 'deleting'
+           WHERE id IN (
+             SELECT id FROM (
+               SELECT id,expires_at_ms FROM (
+                 SELECT id,expires_at_ms FROM statement_staging_objects
+                 WHERE status = 'deleting' AND object_deleted_at_ms IS NULL
+                 ORDER BY expires_at_ms,id LIMIT ?
+               )
+               UNION ALL
+               SELECT id,expires_at_ms FROM (
+                 SELECT id,expires_at_ms FROM statement_staging_objects
+                 WHERE status IN ('pending','available') AND object_deleted_at_ms IS NULL
+                   AND expires_at_ms <= ?
+                 ORDER BY expires_at_ms,id LIMIT ?
+               )
+             ) ORDER BY expires_at_ms,id LIMIT ?
+           )
+           RETURNING id, object_key`
+    )
+    .bind(
+      maximumStatementStagingSweep,
+      nowEpochMs,
+      maximumStatementStagingSweep,
+      maximumStatementStagingSweep
+    );
 
 const sweepExpiredStatementStaging = (
   config: StatementStagingConfig
@@ -1612,21 +1640,7 @@ const sweepExpiredStatementStaging = (
     // never commit against material whose object delete is pending: D1 serializes this against the
     // publication unit, and `deleting` rows are refused. Objects are deleted next and rows last;
     // an interrupted sweep re-selects its `deleting` rows, so no object is left unreachable.
-    const marked = yield* settleAll(
-      config.database
-        .prepare(
-          `UPDATE statement_staging_objects SET status = 'deleting'
-           WHERE id IN (
-             SELECT id FROM statement_staging_objects
-             WHERE status != 'published' AND object_deleted_at_ms IS NULL
-               AND (status = 'deleting' OR expires_at_ms <= ?)
-             ORDER BY expires_at_ms
-             LIMIT ?
-           )
-           RETURNING id, object_key`
-        )
-        .bind(nowEpochMs, maximumStatementStagingSweep)
-    );
+    const marked = yield* settleAll(prepareStagingRetention(config.database, nowEpochMs));
     const rows = marked.results.flatMap((value) =>
       Option.match(Schema.decodeUnknownOption(ExpiredRow)(value), {
         onNone: () => [],
@@ -1637,28 +1651,27 @@ const sweepExpiredStatementStaging = (
     yield* platformUnavailable(() =>
       config.bucket.delete(rows.map(({ object_key: objectKey }) => objectKey))
     );
-    const placeholders = rows.map(() => "?").join(", ");
-    const ids = rows.map(({ id }) => id);
+    const ids = encodeRetentionIds(rows.map(({ id }) => id));
     const results = yield* settleBatch(config.database, [
       // Rows a submission still references stay as durable cleanup evidence; only the object goes.
       config.database
         .prepare(
           `DELETE FROM statement_staging_objects
-           WHERE id IN (${placeholders}) AND status = 'deleting'
+           WHERE id IN (SELECT value FROM json_each(?)) AND status = 'deleting'
              AND NOT EXISTS (
                SELECT 1 FROM statement_submissions
                WHERE staging_id = statement_staging_objects.id)`
         )
-        .bind(...ids),
+        .bind(ids),
       config.database
         .prepare(
           `UPDATE statement_staging_objects SET object_deleted_at_ms = ?
-           WHERE id IN (${placeholders}) AND status = 'deleting' AND object_deleted_at_ms IS NULL
+           WHERE id IN (SELECT value FROM json_each(?)) AND status = 'deleting' AND object_deleted_at_ms IS NULL
              AND EXISTS (
                SELECT 1 FROM statement_submissions
                WHERE staging_id = statement_staging_objects.id)`
         )
-        .bind(nowEpochMs, ...ids),
+        .bind(nowEpochMs, ids),
     ]);
     return { objectsDeleted: rows.length, rowsDeleted: results[0]?.meta.changes ?? 0 };
   });

@@ -73,6 +73,7 @@ import {
 } from "./hosted-authority";
 
 const maximumRetainedEntries = 200;
+const maximumRetentionRows = 100;
 const maximumCurrentMemories = 100;
 const millisecondsPerDay = 86_400_000;
 const maximumDailyTurns = 50;
@@ -255,7 +256,7 @@ export const recoverHostedTurn = ({
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
       SELECT ?, user_id, hosted_session_id, id, 'interrupted', ? FROM hosted_turns
       WHERE id = ? AND user_id = ? AND status = 'pending'
-        ${whatsAppInterruptionGuard()} RETURNING id`)
+        ${whatsAppInterruptionGuard()}`)
           .bind(marker, timestamp, turn.id, userId),
         db
           .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
@@ -1064,38 +1065,50 @@ const sweepHostedTranscript = (
     const cutoff = now - hostedTranscriptRetentionMs;
     yield* Effect.tryPromise(() =>
       db
-        .prepare("DELETE FROM hosted_confirmations WHERE user_id = ? AND expires_at_ms < ?")
-        .bind(userId, now)
+        .prepare(`DELETE FROM hosted_confirmations WHERE rowid IN
+    (SELECT rowid FROM hosted_confirmations WHERE user_id = ? AND expires_at_ms < ?
+      ORDER BY expires_at_ms LIMIT ?)`)
+        .bind(userId, now, maximumRetentionRows)
         .run()
     );
     yield* Effect.tryPromise(() =>
       db
-        .prepare(`DELETE FROM hosted_mutation_commits WHERE user_id = ? AND turn_id IN
-    (SELECT id FROM hosted_turns WHERE user_id = ? AND status <> 'pending'
-      AND terminal_at_ms < ?)`)
-        .bind(userId, userId, cutoff)
+        .prepare(`DELETE FROM hosted_mutation_commits WHERE rowid IN
+    (SELECT m.rowid FROM
+      (SELECT turn_id, user_id FROM hosted_turn_retention
+        WHERE user_id = ? AND terminal_at_ms < ? ORDER BY terminal_at_ms, turn_id LIMIT ?) AS r
+      CROSS JOIN hosted_mutation_commits AS m
+      WHERE m.user_id = r.user_id AND m.turn_id = r.turn_id LIMIT ?)`)
+        .bind(userId, cutoff, maximumRetentionRows, maximumRetentionRows)
         .run()
     );
     yield* expireWhatsAppEvidence({ db, userId, now });
     yield* Effect.tryPromise(() =>
       db
-        .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND turn_id IN
-    (SELECT id FROM hosted_turns WHERE user_id = ? AND status <> 'pending'
-      AND terminal_at_ms < ?)`)
-        .bind(userId, userId, cutoff)
+        .prepare(`DELETE FROM transcript_entries WHERE sequence IN
+    (SELECT e.sequence FROM
+      (SELECT turn_id, user_id FROM hosted_turn_retention
+        WHERE user_id = ? AND terminal_at_ms < ? ORDER BY terminal_at_ms, turn_id LIMIT ?) AS r
+      CROSS JOIN transcript_entries AS e
+      WHERE e.user_id = r.user_id AND e.turn_id = r.turn_id LIMIT ?)`)
+        .bind(userId, cutoff, maximumRetentionRows, maximumRetainedEntries)
         .run()
     );
     yield* Effect.tryPromise(() =>
       db
         .prepare(`DELETE FROM hosted_compacted_conversations
-    WHERE user_id = ? AND updated_at_ms < ?`)
-        .bind(userId, cutoff)
+    WHERE rowid IN
+      (SELECT rowid FROM hosted_compacted_conversations
+        WHERE user_id = ? AND updated_at_ms < ? ORDER BY updated_at_ms LIMIT ?)`)
+        .bind(userId, cutoff, maximumRetentionRows)
         .run()
     );
     yield* Effect.tryPromise(() =>
       db
-        .prepare(`DELETE FROM hosted_compaction_attempts WHERE user_id = ? AND day_ms < ?`)
-        .bind(userId, cutoff)
+        .prepare(`DELETE FROM hosted_compaction_attempts WHERE rowid IN
+    (SELECT rowid FROM hosted_compaction_attempts WHERE user_id = ? AND day_ms < ?
+      ORDER BY day_ms LIMIT ?)`)
+        .bind(userId, cutoff, maximumRetentionRows)
         .run()
     );
     return yield* readHostedRetentionDeadline(db, userId);
@@ -1110,57 +1123,36 @@ const readHostedRetentionDeadline = (
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
-    const compacted = yield* Effect.tryPromise(() =>
+    const row = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT MIN(updated_at_ms) AS oldest
-    FROM hosted_compacted_conversations WHERE user_id = ?`)
-        .bind(userId)
+        .prepare(`SELECT MIN(due_ms) AS due_ms FROM (
+        SELECT * FROM (SELECT terminal_at_ms + ? AS due_ms FROM hosted_turn_retention
+          WHERE user_id=? ORDER BY terminal_at_ms LIMIT 1)
+        UNION ALL
+        SELECT * FROM (SELECT updated_at_ms + ? AS due_ms FROM hosted_compacted_conversations
+          WHERE user_id=? ORDER BY updated_at_ms LIMIT 1)
+        UNION ALL
+        SELECT * FROM (SELECT expires_at_ms + 1 AS due_ms FROM hosted_confirmations
+          WHERE user_id=? ORDER BY expires_at_ms LIMIT 1)
+        UNION ALL
+        SELECT * FROM (SELECT day_ms + ? AS due_ms FROM hosted_compaction_attempts
+          WHERE user_id=? ORDER BY day_ms LIMIT 1)
+      )`)
+        .bind(
+          hostedTranscriptRetentionMs + 1,
+          userId,
+          hostedTranscriptRetentionMs + 1,
+          userId,
+          userId,
+          hostedTranscriptRetentionMs + 1,
+          userId
+        )
         .first()
     );
-    const compactedAge = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
-    )(compacted);
-    const oldest = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT terminal_at_ms FROM hosted_turns AS t WHERE user_id = ?
-      AND status <> 'pending' AND EXISTS
-      (SELECT 1 FROM transcript_entries AS e WHERE e.turn_id = t.id AND e.user_id = t.user_id)
-      ORDER BY terminal_at_ms LIMIT 1`)
-        .bind(userId)
-        .first()
-    );
-    const oldestEntry =
-      oldest === null
-        ? Option.none()
-        : Option.some(
-            yield* Schema.decodeUnknownEffect(Schema.Struct({ terminal_at_ms: Schema.Int }))(oldest)
-          );
-    const transcriptDue = Option.map(
-      oldestEntry,
-      (entry) => entry.terminal_at_ms + hostedTranscriptRetentionMs + 1
-    );
-    const compactDue = Option.map(
-      Option.fromNullishOr(compactedAge.oldest),
-      (updated) => updated + hostedTranscriptRetentionMs + 1
-    );
-    const confirmation = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT MIN(expires_at_ms) AS oldest
-    FROM hosted_confirmations WHERE user_id = ?`)
-        .bind(userId)
-        .first()
-    );
-    const confirmationAge = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ oldest: Schema.NullOr(Schema.Int) })
-    )(confirmation);
-    const confirmationDue = Option.map(
-      Option.fromNullishOr(confirmationAge.oldest),
-      (at) => at + 1
-    );
-    const due = [transcriptDue, compactDue, confirmationDue]
-      .filter(Option.isSome)
-      .map((candidate) => candidate.value);
-    return due.length === 0 ? Option.none() : Option.some(Math.min(...due));
+    const deadline = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ due_ms: Schema.OptionFromNullOr(Schema.Int) })
+    )(row);
+    return deadline.due_ms;
   });
 
 /** DO alarm sweep: recover abandoned work and delete expired terminal content for this User. */
@@ -1251,7 +1243,7 @@ const hostedFinishStatements = ({
       .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason)
       SELECT ?, user_id, hosted_session_id, id, ?, ?, ?, ? FROM hosted_turns
-      WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql} RETURNING id`)
+      WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql}`)
       .bind(entryId, kind, time, text, reason, turnId, userId, ...guard.bindings),
     db
       .prepare(`UPDATE hosted_turns SET status = ?, terminal_at_ms = ?, failure_reason = ?

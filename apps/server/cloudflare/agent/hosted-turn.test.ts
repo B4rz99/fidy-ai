@@ -6442,9 +6442,7 @@ it("bounds independent User retention at four and expires every selected User", 
           if (property === "prepare") {
             return (sql: string): D1PreparedStatement => {
               const statement = target.prepare(sql);
-              if (
-                sql !== "DELETE FROM hosted_confirmations WHERE user_id = ? AND expires_at_ms < ?"
-              ) {
+              if (!sql.startsWith("DELETE FROM hosted_confirmations")) {
                 return statement;
               }
               return new Proxy(statement, {

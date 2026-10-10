@@ -373,39 +373,52 @@ export const readInsightDeliveryEvidence = (
       text,
     });
   });
-/** Delete only exact channel content at its fixed boundary; retain one-shot correlation tombstones, not a resend path. */
+const expireInsightClaims = (
+  input: Readonly<{ db: D1Database; userId: Option.Option<UserId>; now: number }>
+): Effect.Effect<void, Cause.UnknownError> => {
+  const scope = Option.isSome(input.userId) ? "user_id=? AND " : "";
+  const user = Option.toArray(input.userId);
+  return Effect.tryPromise(() =>
+    input.db.batch([
+      input.db
+        .prepare(
+          `UPDATE insight_whatsapp_claims SET text=NULL,summary_json=NULL
+           WHERE ${scope}rowid IN (
+             SELECT rowid FROM insight_whatsapp_claims
+             WHERE ${scope}(text IS NOT NULL OR summary_json IS NOT NULL) AND send_started_at_ms <= ?
+             ORDER BY send_started_at_ms LIMIT 64
+           ) AND (text IS NOT NULL OR summary_json IS NOT NULL)`
+        )
+        .bind(...user, ...user, input.now - hostedTranscriptRetentionMs),
+      input.db
+        .prepare(
+          `UPDATE insight_whatsapp_claims SET text=NULL,summary_json=NULL
+           WHERE ${scope}rowid IN (
+             SELECT rowid FROM insight_whatsapp_claims
+             WHERE ${scope}(text IS NOT NULL OR summary_json IS NOT NULL) AND state='staged' AND expires_at_ms <= ?
+             ORDER BY expires_at_ms LIMIT 64
+           ) AND (text IS NOT NULL OR summary_json IS NOT NULL)`
+        )
+        .bind(...user, ...user, input.now),
+    ])
+  ).pipe(Effect.asVoid);
+};
+
+/** Clear expired bodies from at most 64 started sends and 64 never-started sends for one User;
+ * retain one-shot correlation evidence.
+ */
 export const expireInsightChannelEvidence = (
   input: Readonly<{ db: D1Database; userId: UserId; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    input.db
-      .prepare(
-        "UPDATE insight_whatsapp_claims SET text=NULL,summary_json=NULL WHERE user_id=? AND ((send_started_at_ms IS NOT NULL AND send_started_at_ms + ? <= ?) OR (state='staged' AND expires_at_ms <= ?))"
-      )
-      .bind(input.userId, hostedTranscriptRetentionMs, input.now, input.now)
-      .run()
-  ).pipe(Effect.asVoid);
+  expireInsightClaims({ ...input, userId: Option.some(input.userId) });
 
-/** Bounded independent retention, including Users with no Hosted Agent Session. */
+/** Clear expired bodies from at most 64 started sends and 64 never-started sends across Users,
+ * including those without a Hosted Agent Session; retain one-shot correlation evidence.
+ */
 export const sweepInsightChannelEvidence = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, InsightDeliveryFailure> =>
-  Effect.gen(function* () {
-    const rows = yield* Effect.tryPromise(() =>
-      input.db
-        .prepare(
-          "SELECT DISTINCT user_id FROM insight_whatsapp_claims WHERE (text IS NOT NULL OR summary_json IS NOT NULL) AND ((send_started_at_ms IS NOT NULL AND send_started_at_ms+2592000000<=?) OR (state='staged' AND expires_at_ms<=?)) LIMIT 64"
-        )
-        .bind(input.now, input.now)
-        .all()
-    );
-    const users = yield* Schema.decodeUnknownEffect(
-      Schema.Array(Schema.Struct({ user_id: UserId }))
-    )(rows.results);
-    for (const user of users) {
-      yield* expireInsightChannelEvidence({ ...input, userId: user.user_id });
-    }
-  });
+  expireInsightClaims({ ...input, userId: Option.none() });
 
 /** Identity-bound attention metadata, independent of model and processing availability; no report content is released. */
 export const weeklySummaryReplyQuery = (proof: WhatsAppTurnAdmission): OwnedStatement => {

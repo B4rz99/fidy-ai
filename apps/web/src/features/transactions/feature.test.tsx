@@ -533,3 +533,60 @@ it("caps multiple selection and releases capacity when a row is deselected", () 
   expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
   expect(screen.queryByRole("checkbox", { name: "Seleccionar Compra 0" })).not.toBeInTheDocument();
 });
+
+it("preserves the available category labels and safely presents an unavailable category", () => {
+  seedResources();
+  const labels = [
+    "Restaurantes",
+    "Mercado",
+    "Entretenimiento",
+    "Transporte",
+    "Vivienda",
+    "Ingresos",
+    "Otros",
+  ];
+  const uuidSuffixLength = 12;
+  const categories = labels.map((label, index) => ({
+    id: `24000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixLength, "0")}`,
+    label,
+  }));
+  queryMocks.values.set("listCategories", AsyncResult.success({ data: categories }));
+  queryMocks.values.set(
+    "listTransactions",
+    AsyncResult.success({
+      data: [
+        ...categories.map((item) => ({
+          ...transaction,
+          id: item.id,
+          categoryId: item.id,
+          counterparty: Option.some(item.label),
+        })),
+        {
+          ...transaction,
+          id: "24000000-0000-4000-8000-000000000099",
+          categoryId: "24000000-0000-4000-8000-000000000098",
+          occurredAt: DateTime.makeUnsafe("2026-10-08T12:30:00Z"),
+          counterparty: Option.none(),
+        },
+      ],
+    })
+  );
+  render(<TransactionListFeature />);
+  for (const label of labels) {
+    expect(screen.getByRole("button", { name: `Ver transacción ${label}` })).toBeVisible();
+  }
+  expect(screen.getAllByText("Categoría no disponible").length).toBeGreaterThan(0);
+  expect(
+    screen.getByRole("button", { name: "Ver transacción Contraparte no identificada" })
+  ).toBeVisible();
+});
+
+it("keeps transaction history readable when no categories are available", () => {
+  seedResources();
+  queryMocks.values.set("listCategories", AsyncResult.success({ data: [] }));
+  render(<TransactionListFeature />);
+  expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
+  expect(screen.getAllByText("Categoría no disponible").length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
+  expect(screen.queryByRole("button", { name: "Categorías" })).not.toBeInTheDocument();
+});

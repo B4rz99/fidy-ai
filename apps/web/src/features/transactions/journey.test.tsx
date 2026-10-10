@@ -22,6 +22,8 @@ const findDetailAmount = (amount: string): Promise<HTMLElement> =>
   waitFor(() =>
     within(screen.getByRole("region", { name: "Detalle de transacción" })).getByText(amount)
   );
+const waitForMutation = (updates: () => number): Promise<void> =>
+  waitFor(() => expect(updates()).toBe(1));
 const createdStatus = 201;
 const invalidStatus = 400;
 const categoryId = "24000000-0000-4000-8000-000000000001";
@@ -211,6 +213,18 @@ it("records a transaction, shows the saved history entry and opens its details",
         screen.findByRole("button", { name: "Ver transacción El Corral" })
       );
       fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Dirección" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Ingreso" }));
+      expect(screen.getByRole("button", { name: "Dirección" })).toHaveTextContent("Ingreso");
+      fireEvent.click(screen.getByRole("button", { name: "Dirección" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Gasto" }));
+      expect(screen.getByRole("button", { name: "Dirección" })).toHaveTextContent("Gasto");
+      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "45000.001" } });
+      fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+      yield* Effect.tryPromise(() => screen.findByRole("alert"));
+      expect(
+        screen.queryByRole("button", { name: "Ver transacción La Cocina" })
+      ).not.toBeInTheDocument();
       fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "45000" } });
       fireEvent.change(screen.getByLabelText("Contraparte (opcional)"), {
         target: { value: "La Cocina" },
@@ -413,9 +427,14 @@ const bulkRecords = [
   },
 ];
 const renderBulkJourney = (
-  result: "saved" | "rejected" | "uncertain" = "saved"
+  result: "saved" | "rejected" | "uncertain" = "saved",
+  mixedCurrencies = false
 ): Readonly<{ bodies: string[] }> => {
-  let records = [...bulkRecords];
+  let records = bulkRecords.map((record) =>
+    mixedCurrencies && record.counterparty === "Éxito"
+      ? { ...record, money: { ...record.money, currency: "USD" } }
+      : record
+  );
   const bodies: string[] = [];
   const client = HttpClient.make((request) => {
     if (request.url.endsWith("/operations/atomic-batch")) {
@@ -594,5 +613,168 @@ it("blocks repeating an uncertain inline category correction", () =>
       fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
       yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
       expect(requests.updates()).toBe(1);
+    })
+  ));
+
+it("sends every explicitly changed bulk fact and keeps the selected local date", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderBulkJourney();
+      yield* selectBulkRecords;
+      fireEvent.click(screen.getByRole("button", { name: "Categoría de la selección" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Mercado" }));
+      fireEvent.click(screen.getByRole("button", { name: "Tipo de la selección" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Ingreso" }));
+      fireEvent.change(screen.getByLabelText("Contraparte"), {
+        target: { value: "  Nueva contraparte  " },
+      });
+      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "125,50" } });
+      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      fireEvent.click(
+        within(screen.getByRole("form", { name: "Editar transacciones seleccionadas" })).getByRole(
+          "button",
+          { name: "Fecha" }
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: "jueves, 8 de octubre de 2026" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sin cambiar fecha" }));
+      fireEvent.click(
+        within(screen.getByRole("form", { name: "Editar transacciones seleccionadas" })).getByRole(
+          "button",
+          { name: "Fecha" }
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: "jueves, 8 de octubre de 2026" }));
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
+      const request = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        Option.getOrThrow(Option.fromNullishOr(requests.bodies[0]))
+      );
+      const changes = {
+        categoryId: "24000000-0000-4000-8000-000000000099",
+        direction: "inflow",
+        counterparty: "Nueva contraparte",
+        notes: "Compra revisada",
+        money: { amount: "125.5", currency: "COP" },
+        occurredAt: "2026-10-08T05:00:00.000Z",
+      };
+      expect(request).toMatchObject({
+        calls: [
+          { input: { payload: { expectedRevision: 0, changes } } },
+          { input: { payload: { expectedRevision: 4, changes } } },
+        ],
+      });
+    })
+  ));
+
+it.each(["-1", "125.123"])("refuses invalid bulk Money %s without issuing a batch", (amount) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderBulkJourney();
+      yield* selectBulkRecords;
+      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: amount } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      expect(screen.getByRole("alert")).toHaveTextContent("Revisa los campos");
+      expect(requests.bodies).toHaveLength(0);
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
+    })
+  )
+);
+
+it("clears optional correction facts and sends the chosen type, category and date", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderJourney();
+      fireEvent.click(
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Ver transacción El Corral" })
+        )
+      );
+      fireEvent.change(screen.getByLabelText("Contraparte"), { target: { value: " " } });
+      fireEvent.change(screen.getByLabelText("Notas (opcional)"), { target: { value: " " } });
+      fireEvent.click(screen.getByRole("button", { name: "Tipo" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Ingreso" }));
+      fireEvent.click(screen.getByRole("button", { name: "Categoría" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Mercado" }));
+      fireEvent.click(
+        within(screen.getByRole("form", { name: "Corregir transacción" })).getByRole("button", {
+          name: "Fecha",
+        })
+      );
+      fireEvent.click(screen.getByRole("button", { name: "jueves, 8 de octubre de 2026" }));
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* Effect.tryPromise(() => waitForMutation(requests.updates));
+      expect(
+        yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests.updateBody())
+      ).toMatchObject({
+        expectedRevision: 0,
+        changes: {
+          counterparty: null,
+          notes: null,
+          direction: "inflow",
+          categoryId: "24000000-0000-4000-8000-000000000099",
+          occurredAt: "2026-10-08T05:00:00.000Z",
+        },
+      });
+    })
+  ));
+
+it("closes an unchanged correction without issuing a mutation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderJourney();
+      fireEvent.click(
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Ver transacción El Corral" })
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
+      expect(requests.updates()).toBe(0);
+    })
+  ));
+
+it("allows shared notes but prevents a shared amount across different currencies", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderBulkJourney("saved", true);
+      yield* selectBulkRecords;
+      expect(screen.getByLabelText("Monto ($)")).toBeDisabled();
+      expect(screen.getByText(/selecciona transacciones con la misma moneda/u)).toBeVisible();
+      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
+      const request = yield* Schema.decodeEffect(bulkRequest)(
+        Option.getOrThrow(Option.fromNullishOr(requests.bodies[0]))
+      );
+      for (const call of request.calls) {
+        expect(call.input.payload.changes).toEqual({ notes: "Compra revisada" });
+      }
+    })
+  ));
+
+it("trims a changed counterparty and retains the explicitly changed notes", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderJourney();
+      fireEvent.click(
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Ver transacción El Corral" })
+        )
+      );
+      fireEvent.change(screen.getByLabelText("Contraparte"), {
+        target: { value: "  Nueva contraparte  " },
+      });
+      fireEvent.change(screen.getByLabelText("Notas (opcional)"), {
+        target: { value: "  Nota revisada  " },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* Effect.tryPromise(() => waitForMutation(requests.updates));
+      expect(
+        yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests.updateBody())
+      ).toMatchObject({
+        changes: { counterparty: "Nueva contraparte", notes: "Nota revisada" },
+      });
     })
   ));

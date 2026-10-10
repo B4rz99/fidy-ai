@@ -1,0 +1,136 @@
+DESIGN.md
+  s_b75995d26622a8::t_9c9b810ef11ed3 503-508,512-513
+  s_b75995d26622a8::t_377aebcb6485c0 509-511
+.oxlintrc.json
+  s_b75995d26622a8::t_7008d6b2b3f75b 187
+apps/web/src/features/pats/management-view.tsx
+  s_b75995d26622a8::t_9c9b810ef11ed3 59,68,71,79,159,166,172
+  s_b75995d26622a8::t_7008d6b2b3f75b 259-280,303
+  s_b75995d26622a8::t_377aebcb6485c0 21,69,73,75,80
+  s_b75995d26622a8::t_41e9a98a18896b 12,293-300
+  s_b75995d26622a8::t_1136c99dd9ec4a 13-20,58,60-67,70,78,81-82,156-158,160-164,167-171,173-177,302,304-318
+  s_6d017cc65783af::t_21d2c66d2b11d2 192
+apps/web/src/features/pats/view.tsx
+  s_b75995d26622a8::t_fc1e6709350deb 488,492
+  s_b75995d26622a8::t_c7ac07207e3314 18,35,101-106,110,129-139,142,202-203,205-207,211-212,216-219,221-222,243,482,485-486,489-491,493,497
+  s_b75995d26622a8::t_41e9a98a18896b 33,213-215,237-239,271-272,286-309,483
+  s_b75995d26622a8::t_d1d14d839822b0 220
+  s_6d017cc65783af::t_aac503939aeded 155-156,159,204,208-210
+apps/cli/src/command/contract.ts
+  s_b75995d26622a8::t_78d1a1c98fd10c 10-14
+apps/web/src/app/routes.ts
+  s_b75995d26622a8::t_91690f0105bf6f 29
+  s_b75995d26622a8::t_db7592bdb44343 171-177,188-194
+  s_b75995d26622a8::t_78d1a1c98fd10c 7,102-108,137,205
+apps/web/e2e/cli-login.spec.ts
+  s_b75995d26622a8::t_db7592bdb44343 253
+apps/cli/src/login/contract.ts
+  s_b75995d26622a8::t_78d1a1c98fd10c 10-14,22
+apps/cli/src/command/operations.ts
+  s_b75995d26622a8::t_78d1a1c98fd10c 68-80,83-88
+  s_b75995d26622a8::t_56d7cc4a603598 63,65,81-82,92-94,96
+  s_6d017cc65783af::t_c6e1dd115bd4bd 60-62,64,66-67,89-90,95,102
+apps/web/src/features/pats/pairing-view.tsx
+  s_b75995d26622a8::t_41e9a98a18896b 9,188,198,200-203
+  s_b75995d26622a8::t_78d1a1c98fd10c 96-97,110,129-130,132-137,181,183,216-217,224,226,243
+  s_b75995d26622a8::t_91690f0105bf6f 73-78,228,230
+  s_b75995d26622a8::t_cdd7354c971de1 28,60-63,70-72,79-82,229,240
+  s_b75995d26622a8::t_56d7cc4a603598 112,128,131,219-220
+  s_b75995d26622a8::t_cf5a237bb7e66a 258
+  s_b75995d26622a8::t_14dae92c68e03b 1,4,255-257,259
+  s_6d017cc65783af::t_d3c71b6d2e46ba 8,162,177-180,182,184-185,199,207-208,225,248
+apps/cli/src/login/operations.ts
+  s_b75995d26622a8::t_78d1a1c98fd10c 4
+  s_6d017cc65783af::t_9d666b7db7bf95 25,75-81
+apps/cli/src/login/browser.ts
+  s_b75995d26622a8::t_56d7cc4a603598 1,3-6,8-22,24
+  s_6d017cc65783af::t_aeea434ecb1ced 2,7,23
+apps/web/src/features/pats/pairing-view.test.tsx
+  s_b75995d26622a8::t_56d7cc4a603598 28-35,63-68,83-90,99,111-112,132-139,150
+  s_b75995d26622a8::t_14dae92c68e03b 145-146,149,151-152,155,161-176
+  s_6d017cc65783af::t_bbf7df452570fc 140-144,147-148,153-154,156-160
+apps/web/src/features/pats/presentation.ts
+  s_b75995d26622a8::t_377aebcb6485c0 10-12
+  s_6d017cc65783af::t_43d6a8777a5b17 1-9
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_b75995d26622a8::t_7fc748fe34e5c7 898
+  s_6d017cc65783af::t_56948951ac7e49 252
+apps/web/src/features/pats/cli-feature.tsx
+  s_b75995d26622a8::t_78d1a1c98fd10c 1-8,10-11,14,16-28,31-44,46-47,49-56,65-69,71-81,86-94,97-99,102-122
+  s_b75995d26622a8::t_820cd2cbf34f61 84
+  s_b75995d26622a8::t_56d7cc4a603598 12-13,48,57-62,70,82-83,100-101
+  s_6d017cc65783af::t_af85c8310a0026 9,30,45,63-64,85,95-96
+apps/cli/src/command/operations.test.ts
+  s_b75995d26622a8::t_cf5a237bb7e66a 128-132
+  s_b75995d26622a8::t_91690f0105bf6f 2-3,149-178
+  s_6d017cc65783af::t_79d47081f6b43f 1,5,93-127,133-148
+apps/cli/src/main.ts
+  s_b75995d26622a8::t_56d7cc4a603598 4,80-98,101,107-108,110-117
+  s_b75995d26622a8::t_14dae92c68e03b 25-29
+  s_b75995d26622a8::t_820cd2cbf34f61 43,49-50,52-56
+  s_6d017cc65783af::t_729c73e9263fc5 2-3,78,100,102-106,118
+apps/web/src/features/provider-authentication/feature.tsx
+  s_b75995d26622a8::t_db7592bdb44343 1,21-37
+  s_b75995d26622a8::t_56d7cc4a603598 2
+apps/web/src/features/pats/feature.tsx
+  s_b75995d26622a8::t_c7ac07207e3314 38,44-50,54-55,57-69
+  s_b75995d26622a8::t_d1d14d839822b0 43
+  s_b75995d26622a8::t_40fbfcd1b70da0 51-53
+  s_b75995d26622a8::t_91690f0105bf6f 177-178
+  s_b75995d26622a8::t_78d1a1c98fd10c 124
+  s_6d017cc65783af::t_c00b3317d9a1e8 11,56
+apps/web/src/ui/components/workspace-layout.tsx
+  s_b75995d26622a8::t_d1d14d839822b0 14-18
+apps/web/src/ui/components/table.tsx
+  s_b75995d26622a8::t_7008d6b2b3f75b 1
+  s_b75995d26622a8::t_9c9b810ef11ed3 10-11,55-60,63-75
+apps/cli/ARCHITECTURE.md
+  s_b75995d26622a8::t_db7592bdb44343 22,198-204
+apps/web/e2e/security-journeys.spec.ts
+  s_b75995d26622a8::t_7fc748fe34e5c7 116
+  s_b75995d26622a8::t_db7592bdb44343 172
+  s_6d017cc65783af::t_3bce9db77f7d62 112-115
+apps/web/src/features/browser-login/pairing-controller.ts
+  s_b75995d26622a8::t_56d7cc4a603598 376
+  s_b75995d26622a8::t_78d1a1c98fd10c 14,386,392-393
+apps/cli/src/command/internal/presentation.ts
+  s_b75995d26622a8::t_78d1a1c98fd10c 5-6,21
+apps/web/src/features/browser-login/feature.tsx
+  s_b75995d26622a8::t_db7592bdb44343 4,268-275,297
+  s_6d017cc65783af::t_7cc14cf2177b71 1
+apps/web/ARCHITECTURE.md
+  s_b75995d26622a8::t_db7592bdb44343 206-215
+apps/web/src/features/pats/feature.test.tsx
+  s_b75995d26622a8::t_7fc748fe34e5c7 65,173,178,183,185,189
+  s_b75995d26622a8::t_41e9a98a18896b 82
+  s_b75995d26622a8::t_820cd2cbf34f61 2,148-153,155-156,158-167
+  s_6d017cc65783af::t_598a95318a95e0 154,157
+apps/web/src/features/provider-authentication/controller.ts
+  s_b75995d26622a8::t_db7592bdb44343 1
+  s_b75995d26622a8::t_820cd2cbf34f61 4
+  s_6d017cc65783af::t_88c89f70ddf019 294,340-345
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f5df8536a9adc78f99793ee51f6b9fde877b288",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

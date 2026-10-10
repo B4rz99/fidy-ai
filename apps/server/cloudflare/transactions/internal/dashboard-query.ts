@@ -95,31 +95,21 @@ const recentCategoryPage = ({ db, userId, categories, limit }: ListInput): D1Pre
     .bind(...bindings, userId, limit);
 };
 
-const indexedSearchText = (text: string): string => {
-  const codePoints = Array.from(text).length;
-  if (codePoints === 1) return `§${text}§`;
-  if (codePoints === 2) return `§${text}`;
-  return text;
-};
-
 const searchPage = ({ db, userId, categories, search, limit }: ListInput): D1PreparedStatement => {
   const categoryPredicate =
     categories.length === 0
       ? ""
       : `AND effective.category_id IN (${categories.map(() => "?").join(",")})`;
   const text = Option.getOrThrow(search).toLocaleLowerCase("es-CO");
-  // FTS5's trigram index narrows candidates; the exact predicate preserves the established
-  // accent-aware substring semantics for returned effective Transactions.
-  const phrase = `"${indexedSearchText(text).replaceAll('"', '""')}"`;
+  // Visit only this User's leaves in result order. Global FTS candidates and repeated rowid
+  // MATCH probes both amplify other Users' notes; rare terms can still visit this User's history.
   return db
     .prepare(`SELECT ${selectedColumns}
-    FROM dashboard_projection_list_search
-    JOIN dashboard_projection_leaf effective
-      ON effective.rowid = dashboard_projection_list_search.rowid
-    WHERE dashboard_projection_list_search MATCH ? AND effective.user_id = ?
+    FROM dashboard_projection_leaf effective INDEXED BY dashboard_projection_leaf_recent
+    WHERE effective.user_id = ?
       ${categoryPredicate} AND instr(lower(${listSearchText}), ?) > 0
     ORDER BY ${recentOrder} LIMIT ?`)
-    .bind(phrase, userId, ...categories, text, limit);
+    .bind(userId, ...categories, text, limit);
 };
 
 const recentPage = ({ db, userId, categories, search, limit }: ListInput): D1PreparedStatement => {

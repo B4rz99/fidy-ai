@@ -100,6 +100,25 @@ elif args[:2]==['release','edit'] and '--latest=true' in args:
             script.write('\n# new packaging behavior\n')
         self.assertTrue(self.plan()['changed'])
 
+    def test_consumed_compiler_configuration_changes_increment_version(self):
+        configuration = self.root / 'tsconfig.base.json'
+        configuration.write_text('{"compilerOptions":{"useDefineForClassFields":false}}')
+        (self.root / 'apps/cli/tsconfig.json').write_text('{"extends":"../../tsconfig.base.json"}')
+        (self.root / 'apps/cli/src/main.ts').write_text('class Example { value = 1; } console.log(new Example());')
+        self.retain(self.plan())
+        configuration.write_text('{"compilerOptions":{"useDefineForClassFields":true}}')
+        next_plan = self.plan()
+        self.assertTrue(next_plan['changed'])
+        self.assertEqual(next_plan['version'], '0.1.1')
+
+    def test_unconsumed_compiler_configuration_does_not_release(self):
+        self.retain(self.plan())
+        (self.root / 'apps/web').mkdir()
+        (self.root / 'apps/web/tsconfig.json').write_text('{"compilerOptions":{"useDefineForClassFields":true}}')
+        next_plan = self.plan()
+        self.assertFalse(next_plan['changed'])
+        self.assertEqual(next_plan['version'], '0.1.0')
+
     def publication(self, corrupt=False, missing=False, superseded=False):
         plan = self.plan()
         directory = self.root / 'assets'

@@ -268,7 +268,8 @@ natively with the pinned Bun bytes and embeds the assigned release version. The 
 publication workflows validate Linux x64, macOS arm64 and Windows x64, including same-source
 repeat builds and installer checks. The publication workflow runs after successful trunk checks.
 Its resolved CLI input fingerprint includes consumed contracts, bundled dependency code and metadata,
-runtime pin and packaging; unrelated edits do not allocate a new version. Publication freezes a
+runtime pin, packaging and emitted bundle bytes; compiler configuration that changes the bundle
+triggers a release, while unrelated edits do not allocate a new version. Publication freezes a
 complete GitHub release before anonymous verification and advancing GitHub's latest marker.
 The web artifact serves canonical installer bytes; the API exposes the bounded anonymous latest
 version manifest. Installers configure user PATH idempotently and upgrades run on demand.

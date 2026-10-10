@@ -43,9 +43,11 @@ server grants or remove credentials; use `fidy logout` and revoke the grant in F
 ## Automated releases
 
 `Publish CLI` runs after `Checks` succeeds for a push to `trunk`. It checks the exact source SHA,
-bundles the CLI to enumerate its resolved inputs and compares their fingerprint with the current
+bundles the CLI to enumerate its resolved inputs and compares their fingerprint, including emitted
+bundle bytes, with the current
 published release. CLI code, consumed contracts, bundled dependency code/metadata/notices, the
-runtime pin, installers and packaging trigger a release. Unrelated changes allocate no version.
+runtime pin, installers, packaging and compiler configuration that changes the bundle trigger a
+release. Unrelated changes allocate no version.
 Versions start at `0.1.0` and advance the patch number automatically.
 
 All three native runners build the assigned version, compare same-source repeat archives and run

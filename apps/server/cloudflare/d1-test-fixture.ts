@@ -290,6 +290,7 @@ export const statementClarificationTestMigrations = [
   "0036_statement_whatsapp_documents",
   "0077_statement_materialization",
   "0078_statement_materialization_binding",
+  "0079_statement_progress",
 ] as const;
 /** Canonical Audit's full shared-budget dependencies for owner integration harnesses. */
 export const statementAuditTestMigrations = [
@@ -375,7 +376,7 @@ const observeRetentionStatement = ({
   query: RetentionQuery;
   bind: (values: ReadonlyArray<unknown>) => D1PreparedStatement;
   queries: Array<RetentionQuery>;
-  record: <Row>(result: D1Result<Row>, discovery?: boolean) => D1Result<Row>;
+  record: <Row>(result: D1Result<Row>, discovery: boolean, query: RetentionQuery) => D1Result<Row>;
 }>): D1PreparedStatement =>
   new Proxy(native, {
     get(target, property): unknown {
@@ -385,14 +386,14 @@ const observeRetentionStatement = ({
       if (property === "all" || property === "run") {
         return () => {
           queries.push(query);
-          return target[property]().then((result) => record(result, property === "all"));
+          return target[property]().then((result) => record(result, property === "all", query));
         };
       }
       if (property === "first") {
         return (column?: string) => {
           queries.push(query);
           return target.all().then((result) => {
-            const row = record(result).results[0];
+            const row = record(result, false, query).results[0];
             if (row === undefined) return null;
             if (column === undefined) return row;
             if (row[column] === undefined) {
@@ -409,6 +410,44 @@ const observeRetentionStatement = ({
     },
   });
 
+const retentionBatch =
+  ({
+    db,
+    queries,
+    nativeStatements,
+    preparedQueries,
+    record,
+  }: Readonly<{
+    db: D1Database;
+    queries: Array<RetentionQuery>;
+    nativeStatements: WeakMap<D1PreparedStatement, D1PreparedStatement>;
+    preparedQueries: WeakMap<D1PreparedStatement, RetentionQuery>;
+    record: <Row>(
+      result: D1Result<Row>,
+      discovery: boolean,
+      query: RetentionQuery
+    ) => D1Result<Row>;
+  }>): D1Database["batch"] =>
+  <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+    db
+      .batch<Row>(
+        statements.map((statement) => {
+          const query = preparedQueries.get(statement);
+          if (query !== undefined) queries.push(query);
+          return Option.getOrElse(
+            Option.fromUndefinedOr(nativeStatements.get(statement)),
+            () => statement
+          );
+        })
+      )
+      .then((results) =>
+        results.map((result, index) => {
+          const statement = Option.getOrThrow(Option.fromUndefinedOr(statements[index]));
+          const query = Option.getOrThrow(Option.fromUndefinedOr(preparedQueries.get(statement)));
+          return record(result, false, query);
+        })
+      );
+
 /** Count native all/first/run/batch work; discovery counts standalone all calls, excluding plans. */
 export const observeRetentionCost = (
   db: D1Database
@@ -416,15 +455,27 @@ export const observeRetentionCost = (
   database: D1Database;
   cost: () => Readonly<{ rowsRead: number; rowsWritten: number }>;
   discovery: () => number;
+  statements: () => ReadonlyArray<Readonly<{ sql: string; rowsRead: number; rowsWritten: number }>>;
   plans: () => Promise<ReadonlyArray<string>>;
 }> => {
   let rowsRead = 0;
   let rowsWritten = 0;
   let discoveryReads = 0;
+  const statementCosts: Array<Readonly<{ sql: string; rowsRead: number; rowsWritten: number }>> =
+    [];
   const queries: Array<RetentionQuery> = [];
   const nativeStatements = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
   const preparedQueries = new WeakMap<D1PreparedStatement, RetentionQuery>();
-  const record = <Row>(result: D1Result<Row>, discovery = false): D1Result<Row> => {
+  const record = <Row>(
+    result: D1Result<Row>,
+    discovery: boolean,
+    query: RetentionQuery
+  ): D1Result<Row> => {
+    statementCosts.push({
+      sql: query.sql,
+      rowsRead: result.meta.rows_read,
+      rowsWritten: result.meta.rows_written,
+    });
     if (discovery) discoveryReads += result.meta.rows_read;
     rowsRead += result.meta.rows_read;
     rowsWritten += result.meta.rows_written;
@@ -449,22 +500,11 @@ export const observeRetentionCost = (
       exec: db.exec.bind(db),
       dump: db.dump.bind(db),
       withSession: db.withSession.bind(db),
-      batch: <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
-        db
-          .batch<Row>(
-            statements.map((statement) => {
-              const query = preparedQueries.get(statement);
-              if (query !== undefined) queries.push(query);
-              return Option.getOrElse(
-                Option.fromUndefinedOr(nativeStatements.get(statement)),
-                () => statement
-              );
-            })
-          )
-          .then((results) => results.map((result) => record(result))),
+      batch: retentionBatch({ db, queries, nativeStatements, preparedQueries, record }),
     },
     cost: () => ({ rowsRead, rowsWritten }),
     discovery: () => discoveryReads,
+    statements: () => statementCosts,
     plans: () => explainRetentionPlans(db, queries),
   };
 };

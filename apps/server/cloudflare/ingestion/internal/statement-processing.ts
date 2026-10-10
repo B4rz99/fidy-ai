@@ -47,7 +47,15 @@ const submissionRow = Schema.Struct({
   status: Schema.Literals(["queued", "processing", "completed", "failed"]),
 });
 type SubmissionRow = typeof submissionRow.Type;
-const countRow = Schema.Struct({ total: Schema.Int, accepted: Schema.Int, review: Schema.Int });
+const progressCount = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: statementParserLimits.maximumRows })
+);
+const countRow = Schema.Struct({
+  total: progressCount,
+  accepted: progressCount,
+  review: progressCount,
+  last_record: progressCount,
+});
 const outcomeRow = Schema.Struct({ outcome: Schema.Literals(["accepted", "needs-review"]) });
 const evidenceCodec = Schema.toCodecJson(StatementRowEvidence);
 const extractorRevision = "statement-mechanical-v1";
@@ -106,34 +114,11 @@ const markFailed = ({
         db
           .prepare(`UPDATE statement_submissions SET status = 'failed',
       started_at_ms = coalesce(started_at_ms, ?), completed_at_ms = ?, failure_reason = ?,
-      input_rows = (SELECT nullif(count(*), 0) FROM statement_record_outcomes
-        WHERE submission_id = ? AND user_id = ?),
-      accepted_rows = CASE WHEN EXISTS (SELECT 1 FROM statement_record_outcomes
-        WHERE submission_id = ? AND user_id = ?) THEN
-        (SELECT count(*) FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?
-          AND outcome = 'accepted') ELSE NULL END,
-      needs_review_rows = CASE WHEN EXISTS (SELECT 1 FROM statement_record_outcomes
-        WHERE submission_id = ? AND user_id = ?) THEN
-        (SELECT count(*) FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?
-          AND outcome = 'needs-review') ELSE NULL END
+      input_rows = nullif(processed_rows, 0),
+      accepted_rows = CASE WHEN processed_rows > 0 THEN processed_accepted_rows ELSE NULL END,
+      needs_review_rows = CASE WHEN processed_rows > 0 THEN processed_review_rows ELSE NULL END
       WHERE id = ? AND user_id = ? AND status IN ('queued', 'processing')`)
-          .bind(
-            current,
-            current,
-            reason,
-            submissionId,
-            userId,
-            submissionId,
-            userId,
-            submissionId,
-            userId,
-            submissionId,
-            userId,
-            submissionId,
-            userId,
-            submissionId,
-            userId
-          ),
+          .bind(current, current, reason, submissionId, userId),
         db
           .prepare(`UPDATE statement_backfill_entitlements
       SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
@@ -484,11 +469,23 @@ const readProgress = (
   Effect.gen(function* () {
     const raw = yield* attempt(() =>
       input.DB.prepare(`SELECT processed_rows AS total, processed_accepted_rows AS accepted,
-    processed_review_rows AS review FROM statement_submissions WHERE id = ? AND user_id = ?`)
+    processed_review_rows AS review,
+    coalesce((SELECT record_number FROM statement_record_outcomes
+      WHERE submission_id = s.id ORDER BY record_number DESC LIMIT 1), 0) AS last_record
+    FROM statement_submissions s WHERE id = ? AND user_id = ?`)
         .bind(input.submissionId, input.userId)
         .first()
     );
-    return yield* Schema.decodeUnknownEffect(countRow)(raw);
+    const progress = yield* Schema.decodeUnknownEffect(countRow)(raw);
+    if (
+      progress.total !== progress.last_record ||
+      progress.accepted + progress.review !== progress.total
+    ) {
+      return yield* new StatementProcessingDependencyFailed({
+        cause: new Error("Statement accounting unavailable"),
+      });
+    }
+    return progress;
   });
 
 const captureCategoryInput = (
@@ -578,17 +575,16 @@ const completeSubmission = (
     SET status = 'completed', completed_at_ms = ?, input_rows = ?,
       accepted_rows = ?, needs_review_rows = ?
     WHERE id = ? AND user_id = ? AND status = 'processing'
-      AND (SELECT count(*) FROM statement_record_outcomes
-        WHERE submission_id = ? AND user_id = ?) = ?`).bind(
+      AND processed_rows = ? AND processed_accepted_rows = ? AND processed_review_rows = ?`).bind(
           current,
           rows,
           counts.accepted,
           counts.review,
           submissionId,
           userId,
-          submissionId,
-          userId,
-          rows
+          rows,
+          counts.accepted,
+          counts.review
         ),
         DB.prepare(`UPDATE statement_backfill_entitlements
       SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END

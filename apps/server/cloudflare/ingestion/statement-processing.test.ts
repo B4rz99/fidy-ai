@@ -7,8 +7,14 @@ import {
 } from "../../src/core/ingestion/contract";
 import { statementReviewAdmission } from "./internal/statement-review-budget";
 import { deepStrictEqual } from "node:assert/strict";
+import { inspect } from "node:util";
 import { StatementProcessingUnavailable } from "./contract";
-import { applyTestMigration, installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  installTestSchema,
+  isolatedTestStorage,
+  observeRetentionCost,
+} from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../runtime/operations";
@@ -55,6 +61,7 @@ const migrations = [
   "0035_statement_hosted_origin",
   "0077_statement_materialization",
   "0078_statement_materialization_binding",
+  "0079_statement_progress",
 ];
 const storage = isolatedTestStorage();
 
@@ -580,6 +587,16 @@ effectIt.effect(
           }>()
       );
       expect(counts).toEqual({ transactions: 0, attestations: 0, outcomes: 0 });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT processed_rows,processed_accepted_rows,processed_review_rows FROM statement_submissions WHERE id=?"
+            )
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ processed_rows: 0, processed_accepted_rows: 0, processed_review_rows: 0 });
     })
 );
 
@@ -2126,7 +2143,8 @@ effectIt.effect(
           migrations.filter(
             (name) =>
               name !== "0077_statement_materialization" &&
-              name !== "0078_statement_materialization_binding"
+              name !== "0078_statement_materialization_binding" &&
+              name !== "0079_statement_progress"
           )
         )
       );
@@ -2399,4 +2417,394 @@ effectIt.effect("caps repeated partial-publication failures before further sourc
       yield* fromTestPromise(() => db.prepare("SELECT count(*) AS count FROM transactions").first())
     ).toEqual({ count: 0 });
   })
+);
+
+const measureWholeProcessing = (
+  rows: number
+): Effect.Effect<Readonly<{ accounting: number; all: number }>, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() => setup("unmapped\n" + "row\n".repeat(rows)));
+    const measured = observeRetentionCost(db);
+    let result: "continue" | "completed" = "continue";
+    while (result === "continue") {
+      result = yield* processStatementSubmission({
+        DB: measured.database,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      });
+    }
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+          )
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({ input_rows: rows, accepted_rows: 0, needs_review_rows: rows });
+    return { accounting: accountingReads(measured), all: measured.cost().rowsRead };
+  });
+
+const measureNextActivity = (
+  prefix: number
+): Effect.Effect<Readonly<{ accounting: number; all: number }>, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() => setup("unmapped\n" + "row\n".repeat(4192)));
+    yield* seedReceipts({
+      db,
+      rows: prefix,
+      from: 0,
+      owner: userA,
+      submission: submissionId,
+    });
+    if (prefix === 4096) {
+      yield* seedUnrelatedReceipts(db);
+    }
+    const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
+    // Source publication is measured separately from equal, warm 32-row activities.
+    expect(yield* processStatementSubmission(input)).toBe("continue");
+    const measured = observeRetentionCost(db);
+    expect(yield* processStatementSubmission({ ...input, DB: measured.database })).toBe("continue");
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT processed_rows,processed_review_rows FROM statement_submissions WHERE id=?"
+          )
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({ processed_rows: prefix + 64, processed_review_rows: prefix + 64 });
+    return { accounting: accountingReads(measured), all: measured.cost().rowsRead };
+  });
+
+const measurePartialFailure = (
+  prefix: number
+): Effect.Effect<number, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() => setup("unmapped\n" + "row\n".repeat(4192)));
+    expect(
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      })
+    ).toBe("continue");
+    yield* seedReceipts({
+      db,
+      rows: prefix,
+      from: 32,
+      owner: userA,
+      submission: submissionId,
+    });
+    const measured = observeRetentionCost(db);
+    yield* failStatementSubmission({
+      DB: measured.database,
+      userId: userA,
+      submissionId,
+      reason: "resource-limit",
+    });
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT status,input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+          )
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({
+      status: "failed",
+      input_rows: prefix,
+      accepted_rows: 0,
+      needs_review_rows: prefix,
+    });
+    return measured.cost().rowsRead;
+  });
+
+effectIt.effect(
+  "settles partial failure with bounded native reads after small and large prefixes",
+  () =>
+    Effect.gen(function* () {
+      const reads = yield* Effect.forEach([32, 4096], measurePartialFailure);
+      yield* Effect.sync(() =>
+        process.stdout.write(
+          inspect({
+            evidence: "Partial failure D1 reads (32 / 4096 receipts):",
+            reads,
+          }) + "\n"
+        )
+      );
+      expect(reads[1]).toBeLessThanOrEqual((reads[0] ?? 0) + 8);
+    })
+);
+
+effectIt.effect("refuses forged progress and preserves captures after a lost row response", () =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() =>
+      setup("fecha,valor,moneda,contraparte\n2026-08-01,-1,COP,Cafe\n2026-08-01,-2,COP,Cafe\n")
+    );
+    let lost = false;
+    const ambiguous = new Proxy(db, {
+      get(target, property): unknown {
+        if (property === "batch") {
+          return (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> =>
+            target.batch(...args).then((result) =>
+              db
+                .prepare("SELECT processed_rows FROM statement_submissions WHERE id=?")
+                .bind(submissionId)
+                .first<{ processed_rows: number }>()
+                .then((progress) => {
+                  if (!lost && progress?.processed_rows === 1) {
+                    lost = true;
+                    throw new Error("lost committed row response");
+                  }
+                  return result;
+                })
+            );
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect(
+      Exit.isFailure(
+        yield* Effect.exit(
+          processStatementSubmission({
+            DB: ambiguous,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId: userA,
+            submissionId,
+          })
+        )
+      )
+    ).toBe(true);
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT processed_rows,processed_accepted_rows,processed_review_rows FROM statement_submissions WHERE id=?"
+          )
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({ processed_rows: 1, processed_accepted_rows: 1, processed_review_rows: 0 });
+    yield* fromTestPromise(() =>
+      expect(
+        db
+          .prepare(
+            "UPDATE statement_submissions SET processed_rows=2,processed_accepted_rows=2 WHERE id=?"
+          )
+          .bind(submissionId)
+          .run()
+      ).rejects.toThrow()
+    );
+    expect(
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      })
+    ).toBe("completed");
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+          )
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({ input_rows: 2, accepted_rows: 2, needs_review_rows: 0 });
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT (SELECT count(*) FROM transactions) AS captures,(SELECT count(*) FROM source_attestations) AS attestations"
+          )
+          .first()
+      )
+    ).toEqual({ captures: 2, attestations: 2 });
+  })
+);
+
+// Batch synthetic fixture receipts independently of the processor's 32-row activity.
+const receiptBatchSize = 96;
+
+const seedReceipts = ({
+  db,
+  rows,
+  from,
+  owner,
+  submission,
+}: Readonly<{
+  db: D1Database;
+  rows: number;
+  from: number;
+  owner: string;
+  submission: string;
+}>): Effect.Effect<void> =>
+  Effect.forEach(
+    Array.from(
+      { length: Math.ceil((rows - from) / receiptBatchSize) },
+      (_, batch) => from + batch * receiptBatchSize
+    ),
+    (offset) =>
+      fromTestPromise(() =>
+        db.batch(
+          Array.from({ length: Math.min(receiptBatchSize, rows - offset) }, (_, index) =>
+            db
+              .prepare(
+                "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,?,'needs-review')"
+              )
+              .bind(owner, submission, offset + index + 1)
+          )
+        )
+      ),
+    { discard: true }
+  );
+
+const seedUnrelatedReceipts = (db: D1Database): Effect.Effect<void> =>
+  Effect.forEach(
+    [userA, userB],
+    (owner) =>
+      Effect.gen(function* () {
+        const extraSubmission =
+          owner === userA
+            ? "10000000-0000-4000-8000-000000000801"
+            : "10000000-0000-4000-8000-000000000802";
+        const extraStaging =
+          owner === userA
+            ? "10000000-0000-4000-8000-000000000803"
+            : "10000000-0000-4000-8000-000000000804";
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`INSERT INTO statement_staging_objects
+    (id,user_id,object_key,byte_length,sha256,source_format,status,created_at_ms,expires_at_ms,published_submission_id)
+    SELECT ?,?,?,byte_length,sha256,source_format,status,created_at_ms,expires_at_ms,?
+    FROM statement_staging_objects WHERE id=?`)
+            .bind(extraStaging, owner, extraStaging, extraSubmission, stagingId)
+            .run()
+        );
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`INSERT INTO statement_submissions
+    (id,user_id,idempotency_key,staging_id,submitted_at_ms,source_format,parser_revision,service_market,locale,time_zone,status,retention_expires_at_ms)
+    SELECT ?,?,?,?,submitted_at_ms,source_format,parser_revision,service_market,locale,time_zone,'queued',retention_expires_at_ms
+    FROM statement_submissions WHERE id=?`)
+            .bind(extraSubmission, owner, extraSubmission, extraStaging, submissionId)
+            .run()
+        );
+        yield* seedReceipts({ db, rows: 2048, from: 0, owner, submission: extraSubmission });
+      }),
+    { discard: true }
+  );
+
+const accountingReads = (measured: ReturnType<typeof observeRetentionCost>): number =>
+  measured
+    .statements()
+    .filter(({ sql }) =>
+      /^\s*(?:SELECT[\s\S]+?FROM|INSERT INTO|UPDATE|DELETE FROM) statement_(?:submissions|record_outcomes|submission_assertion|ingestion_outbox|backfill_entitlements)\b/u.test(
+        sql
+      )
+    )
+    .reduce((sum, statement) => sum + statement.rowsRead, 0);
+
+effectIt.effect(
+  "keeps equal next activities bounded across completed prefixes and unrelated receipts",
+  () =>
+    Effect.gen(function* () {
+      const nextCosts = yield* Effect.forEach([32, 4096], measureNextActivity);
+      yield* Effect.sync(() =>
+        process.stdout.write(
+          "Next activity D1 reads (32 / 4096 receipts plus unrelated receipts): " +
+            inspect(nextCosts) +
+            "\n"
+        )
+      );
+      expect(nextCosts[1]?.accounting).toBeLessThanOrEqual((nextCosts[0]?.accounting ?? 0) + 8);
+      expect(nextCosts[1]?.all).toBeLessThanOrEqual((nextCosts[0]?.all ?? 0) + 8);
+    }),
+  30_000
+);
+
+effectIt.effect(
+  "scales normal outcome accounting linearly while reporting unrelated capture reads",
+  () =>
+    Effect.gen(function* () {
+      const costs = yield* Effect.forEach([96, 192], measureWholeProcessing);
+      yield* Effect.sync(() =>
+        process.stdout.write(
+          inspect({ evidence: "Whole processing D1 reads (96 / 192 rows):", reads: costs }) + "\n"
+        )
+      );
+      expect(costs[1]?.accounting).toBeLessThanOrEqual((costs[0]?.accounting ?? 0) * 2 + 32);
+      expect(costs[1]?.all).toBeGreaterThan(costs[1]?.accounting ?? 0);
+    })
+);
+
+it.each([false, true])(
+  "validates already-processing progress during migration (corrupt=%s)",
+  (corrupt) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, bucket } = yield* fromTestPromise(() =>
+          setup(
+            "unmapped\n" + "row\n".repeat(33),
+            "csv",
+            migrations.filter((name) => name !== "0079_statement_progress")
+          )
+        );
+        const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
+        expect(yield* processStatementSubmission(input)).toBe("continue");
+        if (corrupt) {
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                "UPDATE statement_submissions SET processed_accepted_rows=1,processed_review_rows=31 WHERE id=?"
+              )
+              .bind(submissionId)
+              .run()
+          );
+          yield* fromTestPromise(() =>
+            expect(
+              applyTestMigration({
+                db,
+                source: new URL("../migrations/0079_statement_progress.sql", import.meta.url),
+              })
+            ).rejects.toThrow()
+          );
+          expect(
+            yield* fromTestPromise(() =>
+              db
+                .prepare("SELECT status,input_rows FROM statement_submissions WHERE id=?")
+                .bind(submissionId)
+                .first()
+            )
+          ).toEqual({ status: "processing", input_rows: null });
+        } else {
+          yield* fromTestPromise(() =>
+            applyTestMigration({
+              db,
+              source: new URL("../migrations/0079_statement_progress.sql", import.meta.url),
+            })
+          );
+          expect(yield* processStatementSubmission(input)).toBe("completed");
+          expect(
+            yield* fromTestPromise(() =>
+              db
+                .prepare(
+                  "SELECT input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+                )
+                .bind(submissionId)
+                .first()
+            )
+          ).toEqual({ input_rows: 33, accepted_rows: 0, needs_review_rows: 33 });
+        }
+      })
+    )
 );

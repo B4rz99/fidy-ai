@@ -173,6 +173,7 @@ const migrationNames = [
   "0036_statement_whatsapp_documents",
   "0077_statement_materialization",
   "0078_statement_materialization_binding",
+  "0079_statement_progress",
   "0038_proactivity_consent",
   "0040_reminder_canonical_audit",
   "0032_oauth_review",

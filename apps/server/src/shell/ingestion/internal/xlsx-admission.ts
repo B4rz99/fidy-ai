@@ -91,7 +91,7 @@ const requiredXmlRoots: Readonly<Record<string, string>> = {
 };
 const assertContentType = (tag: SaxesTagPlain): void => {
   const contentType = tag.attributes.ContentType ?? "";
-  if (/\.(?:comments|threadedcomments)\+xml$/iu.test(contentType)) limit();
+  if (/\.(?:comments|threadedcomments|externalLink)\+xml$/iu.test(contentType)) limit();
   const binaryFinancialType =
     /^application\/vnd\.ms-excel\.(?:sheet\.binary\.macroEnabled\.main|worksheet|chartsheet|macrosheet|dialogsheet|sharedStrings|styles|comments|sheetMetadata|calcChain)$/u;
   if (binaryFinancialType.test(contentType)) limit();
@@ -100,7 +100,7 @@ const assertContentType = (tag: SaxesTagPlain): void => {
   }
 };
 const assertRelationship = (tag: SaxesTagPlain): void => {
-  if (/\/(?:comments|threadedComment)$/u.test(tag.attributes.Type ?? "")) limit();
+  if (/\/(?:comments|threadedComment|externalLink)$/u.test(tag.attributes.Type ?? "")) limit();
   if (
     (tag.attributes.Target ?? "").endsWith(".bin") &&
     /\/(?:worksheet|chartsheet|dialogsheet|macrosheet|officeDocument|styles|sharedStrings)$/u.test(
@@ -114,6 +114,7 @@ const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
   const name = localName(tag.name);
   // Comments are outside Statement evidence; foreign per-cell insertion is quadratic.
   if (["comments", "comment", "ThreadedComments", "threadedComment"].includes(name)) limit();
+  if (["externalLink", "externalBook"].includes(name)) limit();
   const requiredRoot = requiredXmlRoots[name];
   if (requiredRoot !== undefined && root !== requiredRoot) malformed();
   // SheetJS selects binary parsers by content type and by a part's .bin suffix.

@@ -111,6 +111,24 @@ it.effect("refuses repeated same-cell comments before workbook construction", ()
   })
 );
 
+it.effect("refuses repeated external-link declarations before workbook construction", () =>
+  reject(
+    modify(workbook("normal"), (entries) => {
+      const override =
+        '<Override PartName="/xl/externalLinks/externalLink1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"/>';
+      replacePart(entries, "[Content_Types].xml", (xml) =>
+        xml.replace("</Types>", `${override.repeat(1000)}</Types>`)
+      );
+      entries["xl/externalLinks/externalLink1.xml"] = strToU8(
+        '<externalLink xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><externalBook/></externalLink>'
+      );
+      entries["xl/externalLinks/_rels/externalLink1.xml.rels"] = strToU8(
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="external" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath" Target="https://example.invalid/workbook.xlsx" TargetMode="External"/></Relationships>'
+      );
+    })
+  )
+);
+
 it.effect("bounds optional sheet-metadata matching before workbook construction", () =>
   Effect.gen(function* () {
     for (const count of [32, 33, 1000]) {

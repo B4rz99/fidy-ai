@@ -888,7 +888,7 @@ const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRe
   yield* fromPlaywright(
     page
       .getByRole("button", {
-        name: "90 días",
+        name: "Duración del token",
       })
       .click()
   );

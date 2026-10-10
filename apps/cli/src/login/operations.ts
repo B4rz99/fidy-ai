@@ -1,7 +1,12 @@
-import { patPairingLifetime } from "@fidy/server/client";
+import { type StartedPATPairing, patPairingLifetime } from "@fidy/server/client";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { CliFailure, type SavedGrant, apiOrigin, managementUrl } from "../credential/contract";
-import { type LoginDependencies, LoginRequest, type PublicProgress, approvalUrl } from "./contract";
+import {
+  type LoginDependencies,
+  LoginRequest,
+  type PublicProgress,
+  approvalPageUrl,
+} from "./contract";
 
 const requestDeadlineMilliseconds = 15_000;
 const maximumLoginMilliseconds =
@@ -73,7 +78,11 @@ export const login = Effect.fn(
   })
 );
 
-const approvalProgress = (publicCode: Parameters<typeof approvalUrl>[0]): PublicProgress => ({
+/** Carries only the public identity to the fixed first-party approval page. */
+const approvalUrl = (publicCode: StartedPATPairing["publicCode"]): string =>
+  `${approvalPageUrl}?cliCode=${encodeURIComponent(publicCode)}`;
+
+const approvalProgress = (publicCode: StartedPATPairing["publicCode"]): PublicProgress => ({
   _tag: "ApprovalRequired",
   publicCode,
   managementUrl,

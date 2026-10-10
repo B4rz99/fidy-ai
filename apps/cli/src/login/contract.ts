@@ -8,9 +8,6 @@ import { Data, type Effect } from "effect";
 import { type CliFailure, type CredentialStore, type managementUrl } from "../credential/contract";
 
 export const approvalPageUrl = "https://fidyapp.com/connect/cli";
-/** Carries only the public request identity to the fixed first-party approval page. */
-export const approvalUrl = (publicCode: StartedPATPairing["publicCode"]): string =>
-  `${approvalPageUrl}?cliCode=${encodeURIComponent(publicCode)}`;
 
 export const LoginRequest = StartPATPairingPayload;
 export type LoginRequest = typeof LoginRequest.Type;

@@ -23,8 +23,8 @@ export type ApprovePATPairingCommand = Readonly<{
 type PairingState =
   | Readonly<{ _tag: "Entering"; publicCode: string }>
   | Readonly<{ _tag: "Inspecting"; publicCode: string }>
-  | Readonly<{ _tag: "Reviewing"; review: PATPairingReview }>
-  | Readonly<{ _tag: "Approving"; review: PATPairingReview }>
+  | Readonly<{ _tag: "Reviewing"; review: PATPairingReview; publicCode: Option.Option<string> }>
+  | Readonly<{ _tag: "Approving"; review: PATPairingReview; publicCode: Option.Option<string> }>
   | Readonly<{ _tag: "Invalid"; publicCode: Option.Option<string> }>
   | Readonly<{ _tag: "Approved" }>;
 
@@ -107,9 +107,7 @@ const PairingReviewCard = ({
   reset,
   failed,
   approved,
-  publicCode,
 }: Readonly<{
-  publicCode: Option.Option<string>;
   state: Extract<PairingState, { _tag: "Reviewing" | "Approving" }>;
   approve: (command: ApprovePATPairingCommand) => void;
   reset: () => void;
@@ -125,10 +123,10 @@ const PairingReviewCard = ({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        {Option.isSome(publicCode) ? (
+        {Option.isSome(state.publicCode) ? (
           <p className="text-sm">
             Confirma que este código coincide con tu terminal:{" "}
-            <strong className="font-mono">{publicCode.value}</strong>.
+            <strong className="font-mono">{state.publicCode.value}</strong>.
           </p>
         ) : null}
         <p className="text-sm text-muted-foreground">
@@ -222,7 +220,9 @@ export const PATPairingView = ({
   approve: (command: ApprovePATPairingCommand) => void;
 }>): JSX.Element => {
   const [state, setState] = useState<PairingState>(() =>
-    Option.isSome(initialReview) ? { _tag: "Reviewing", review: initialReview.value } : initialState
+    Option.isSome(initialReview)
+      ? { _tag: "Reviewing", review: initialReview.value, publicCode }
+      : initialState
   );
   const reset = (): void => setState(initialState);
   if (state._tag === "Invalid") {
@@ -233,14 +233,13 @@ export const PATPairingView = ({
     return (
       <PairingReviewCard
         approve={(command) => {
-          setState({ _tag: "Approving", review: state.review });
+          setState({ ...state, _tag: "Approving" });
           approve(command);
         }}
         approved={() => setState({ _tag: "Approved" })}
         failed={() => setState({ _tag: "Invalid", publicCode: Option.none() })}
         reset={reset}
         state={state}
-        publicCode={publicCode}
       />
     );
   }
@@ -251,7 +250,8 @@ export const PATPairingView = ({
         setState({ _tag: "Inspecting", publicCode });
         inspect({
           publicCode,
-          onInspected: (review) => setState({ _tag: "Reviewing", review }),
+          onInspected: (review) =>
+            setState({ _tag: "Reviewing", review, publicCode: Option.some(publicCode) }),
           onFailed: () =>
             setState({
               _tag: "Invalid",

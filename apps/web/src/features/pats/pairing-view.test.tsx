@@ -175,3 +175,31 @@ it("does not place an invalid or secret-like pasted code in a sign-in URL", () =
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
   expect(approve).not.toHaveBeenCalled();
 });
+
+it("binds the comparison code to the new review after cancelling a preselected request", () => {
+  const replacement: PATPairingReview = {
+    ...review,
+    pairingId: PATPairingId.make("f1d1a000-0000-4000-8000-000000000250"),
+    recipientLabel: PATRecipientLabel.make("Otro cliente"),
+  };
+  const approve = vi.fn();
+  render(
+    <PATPairingView
+      initialReview={Option.some(review)}
+      publicCode={Option.some("BCDF-GHJK")}
+      approve={approve}
+      inspect={(command) => command.onInspected(replacement)}
+    />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  fireEvent.change(screen.getByLabelText("Código"), { target: { value: "LMNP-QRST" } });
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  expect(screen.getByText("LMNP-QRST")).toBeVisible();
+  expect(screen.queryByText("BCDF-GHJK")).not.toBeInTheDocument();
+  expect(screen.getByText("Otro cliente")).toBeVisible();
+  expect(approve).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Autorizar acceso" }));
+  expect(approve).toHaveBeenCalledWith(
+    expect.objectContaining({ pairingId: replacement.pairingId })
+  );
+});

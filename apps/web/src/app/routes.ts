@@ -60,10 +60,12 @@ const DashboardRoute = (): JSX.Element => {
 };
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({});
+const AuthenticatedRoute = (): JSX.Element =>
+  createElement(SignedInFeature, null, createElement(HostedAgentFeature));
 const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "authenticated",
-  component: SignedInFeature,
+  component: AuthenticatedRoute,
 });
 const signedInRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -78,11 +80,6 @@ const dashboardRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/dashboard",
   component: DashboardRoute,
-});
-const agentRoute = createRoute({
-  getParentRoute: () => signedInRoute,
-  path: "/agent",
-  component: HostedAgentFeature,
 });
 const transactionsRoute = createRoute({
   getParentRoute: () => signedInRoute,
@@ -211,7 +208,7 @@ const routeTree = rootRoute.addChildren([
   connectionContinuationRoute,
   subscriptionOffersRoute,
   authenticatedRoute.addChildren([
-    signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, agentRoute, transactionsRoute]),
+    signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, transactionsRoute]),
     patManagementRoute,
     oauthManagementRoute,
     recurringDigestRoute,

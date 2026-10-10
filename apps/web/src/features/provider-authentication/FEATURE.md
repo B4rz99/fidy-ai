@@ -306,11 +306,17 @@ was aged past the one-day cutoff and removed within 15 seconds; the other remain
 returned 200. No User or WebSession deadline was altered. Closed scheduled and maintenance telemetry
 both report success on that exact revision. The existing authenticated browser survived reload.
 
-Live Sandbox rerun: Kapso delivered the authenticated Reiniciar webhook to Fidy with HTTP 202,
-but the outbound reply was refused with HTTP 403 (sandbox BSUID recipients unsupported). The
-configured sandbox business endpoint matches; this already-associated caller enters hosted chat
-before pre-User onboarding, and that sender explicitly uses BSUID delivery. This is a hosted-channel
-sandbox gap, not evidence that provider onboarding failed. No new Consent or association was recorded.
+Live Sandbox rerun initially failed: Kapso delivered the authenticated Reiniciar webhook with HTTP 202,
+but the hosted reply received HTTP 403 because sandbox BSUID recipients are unsupported.
+PR #1181 fixes hosted replies and fixed voice refusals by using the authenticated phone only for
+the configured sandbox business endpoint. Production run `38092876126` deployed revision
+`549070cb78bd463ec74dd1665eaf76944d780191`; API/web metadata agree. All CI checks and both
+Security and Standards reviews passed, alongside 176 focused local tests. Local checks cover endpoint
+isolation, missing-phone refusal before egress, fixed voice refusal, queued recovery and retention.
+Two real WhatsApp questions then received visible replies: Production D1 records both Turns completed
+and delivered. The first Turn's received webhook returned 202, outbound send returned 200, and
+sent/delivered callbacks returned 200. The second question requested explanation only, without recording
+a Transaction. The existing authenticated app survived reload. No new Consent or association was recorded.
 
 Still pending: live forwarded WhatsApp handoff refusal needs an eligible unassociated test caller
 and fresh Consent; actual WebSession idle/hard-expiry enforcement remains locally clock-tested,

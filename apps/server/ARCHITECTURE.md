@@ -253,6 +253,9 @@ Statement extraction materializes bounded, private derived chunks in D1, pinned 
 original digest, parser revision and retention deadline. Complete publication precedes capture;
 atomic row receipts advance progress without rescanning prior outcomes. Terminal or expired
 submissions delete derived material in the same D1 transition. Original bytes remain in R2.
+The private Ingestion source module owns reuse, interrupted-generation recovery, parse reservation,
+source validation and complete publication behind one chunk-acquisition interface. It returns verified
+rows or closed rejection/unavailability failures; processing owns row capture and terminal settlement.
 
 A D1 commit and external submission are also separate effects. Durable outbox intent plus idempotent
 handoff bridges that boundary. Provider uncertainty belongs to the owner's retained lifecycle and

@@ -2,12 +2,9 @@ import type { CaptureCategoryInput } from "../../categories/contract";
 import {
   type ParsedStatement,
   StatementFailureReason,
-  StatementParseFailed,
   StatementStagingId,
-  maximumStatementBytes,
   statementParserLimits,
 } from "../../../src/shell/ingestion/contract";
-import { parseStatementFile } from "../../../src/shell/ingestion/operations";
 
 import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCaptures } from "../../categories/operations";
@@ -25,13 +22,9 @@ import {
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { prepareStatementCapture } from "../../transactions/operations";
 import { StatementProcessingUnavailable } from "../contract";
-import { StatementStaging, newIngestionId } from "./statement-staging";
+import { newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
-import {
-  findMaterializedChunk,
-  materializeStatement,
-  reserveStatementSourceParse,
-} from "./statement-materialization";
+import { acquireStatementChunk } from "./statement-source";
 import { statementChunkSize } from "./statement-processing-limits";
 import { statementReviewAdmission } from "./statement-review-budget";
 
@@ -375,94 +368,6 @@ const reviewAdmission = (
     createdAt: current,
   });
 
-const readParsed = (
-  input: ProcessInput,
-  context: SubmissionRow
-): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingDependencyFailed> =>
-  Effect.gen(function* () {
-    const { DB, STATEMENT_STAGING_BUCKET, userId, submissionId } = input;
-    const clock = yield* Clock.Clock;
-    const staging = StatementStaging.make({
-      database: DB,
-      bucket: STATEMENT_STAGING_BUCKET,
-      nowEpochMs: () => clock.currentTimeMillisUnsafe(),
-    });
-    const bytes = yield* Effect.result(
-      staging.readOwnedStagedBytes({ userId, stagingId: context.staging_id })
-    );
-    if (bytes._tag === "Failure") {
-      if (bytes.failure._tag === "StatementStagingUnavailable") {
-        return yield* new StatementProcessingDependencyFailed({
-          cause: new Error("Statement storage unavailable"),
-        });
-      }
-      yield* markFailed({
-        db: DB,
-        userId,
-        submissionId,
-        reason:
-          bytes.failure.reason === "retention-expired" ? "retention-expired" : "malformed-file",
-      });
-      return Option.none();
-    }
-    if (bytes.success.length > maximumStatementBytes) {
-      yield* markFailed({ db: DB, userId, submissionId, reason: "resource-limit" });
-      return Option.none();
-    }
-    const parsed = yield* Effect.result(parseStatementFile(bytes.success));
-    if (parsed._tag === "Failure") {
-      yield* markFailed({
-        db: DB,
-        userId,
-        submissionId,
-        reason:
-          parsed.failure instanceof StatementParseFailed
-            ? parsed.failure.safeReason
-            : "malformed-file",
-      });
-      return Option.none();
-    }
-    return yield* validateParsed(input, context, parsed.success);
-  });
-
-const validateParsed = (
-  input: ProcessInput,
-  context: SubmissionRow,
-  parsed: ParsedStatement
-): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingDependencyFailed> =>
-  Effect.gen(function* () {
-    if (parsed.sourceFormat !== context.source_format) {
-      yield* markFailed({
-        db: input.DB,
-        userId: input.userId,
-        submissionId: input.submissionId,
-        reason: "malformed-file",
-      });
-      return Option.none();
-    }
-    // A header-only or other zero-row document has no Transaction or review outcome to conserve.
-    // It is not a successfully finalized statement, even if its bytes passed the staging gate.
-    if (parsed.rows.length === 0) {
-      yield* markFailed({
-        db: input.DB,
-        userId: input.userId,
-        submissionId: input.submissionId,
-        reason: "malformed-file",
-      });
-      return Option.none();
-    }
-    if (parsed.rows.length > statementParserLimits.maximumRows) {
-      yield* markFailed({
-        db: input.DB,
-        userId: input.userId,
-        submissionId: input.submissionId,
-        reason: "resource-limit",
-      });
-      return Option.none();
-    }
-    return Option.some(parsed);
-  });
-
 const readProgress = (
   input: ProcessInput
 ): Effect.Effect<Progress, StatementProcessingDependencyFailed | Schema.SchemaError> =>
@@ -655,13 +560,17 @@ const advanceSubmission = (
     return "completed";
   });
 
-const materializationIdentity = (
+const sourceInput = (
   input: ProcessInput,
-  context: SubmissionRow
-): Parameters<typeof reserveStatementSourceParse>[0] => ({
+  context: SubmissionRow,
+  offset: number
+): Parameters<typeof acquireStatementChunk>[0] => ({
   DB: input.DB,
   userId: input.userId,
   submissionId: input.submissionId,
+  STATEMENT_STAGING_BUCKET: input.STATEMENT_STAGING_BUCKET,
+  stagingId: context.staging_id,
+  offset,
   sourceHash: context.sha256,
   parserRevision: context.parser_revision,
   sourceFormat: context.source_format,
@@ -689,23 +598,13 @@ export const processStatementSubmission = (
       });
       return "completed";
     }
-    const identity = materializationIdentity(input, context.value);
     const progress = yield* readProgress(input);
-    let chunk = yield* findMaterializedChunk({ ...identity, offset: progress.total });
-    if (Option.isNone(chunk)) {
-      yield* reserveStatementSourceParse(identity);
-      const parsed = yield* readParsed(input, context.value);
-      if (Option.isNone(parsed)) return "completed";
-      yield* materializeStatement({ ...identity, parsed: parsed.value });
-      chunk = yield* findMaterializedChunk({ ...identity, offset: progress.total });
-    }
-    return Option.isSome(chunk)
-      ? yield* advanceSubmission(input, context.value, chunk.value)
-      : "completed";
+    const chunk = yield* acquireStatementChunk(sourceInput(input, context.value, progress.total));
+    return yield* advanceSubmission(input, context.value, chunk);
   }).pipe(
     Effect.catchTags({
-      StatementMaterializationUnavailable: () => Effect.fail(new StatementProcessingUnavailable()),
-      StatementMaterializationFailed: (error) =>
+      StatementSourceUnavailable: () => Effect.fail(new StatementProcessingUnavailable()),
+      StatementSourceRejected: (error) =>
         markFailed({
           db: input.DB,
           userId: input.userId,

@@ -1,7 +1,15 @@
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { ParsedStatementRow } from "../../../src/core/ingestion/contract";
-import { type ParsedStatement, statementParserLimits } from "../../../src/shell/ingestion/contract";
+import {
+  type ParsedStatement,
+  StatementParseFailed,
+  type StatementStagingId,
+  maximumStatementBytes,
+  statementParserLimits,
+} from "../../../src/shell/ingestion/contract";
+import { parseStatementFile } from "../../../src/shell/ingestion/operations";
+import { StatementStaging } from "./statement-staging";
 import {
   maximumMaterializedHeaderBytes,
   maximumMaterializedStatementBytes,
@@ -82,32 +90,27 @@ type EncodedMaterial = Readonly<{
   partsHash: string;
 }>;
 type PartIdentity = Pick<EncodedPart, "chunk" | "part" | "hash">;
-export class StatementMaterializationFailed extends Data.TaggedError(
-  "StatementMaterializationFailed"
-)<{
-  readonly reason: "resource-limit" | "malformed-file";
+export class StatementSourceRejected extends Data.TaggedError("StatementSourceRejected")<{
+  readonly reason: "resource-limit" | "malformed-file" | "retention-expired" | "unsupported-format";
 }> {}
-export class StatementMaterializationUnavailable extends Data.TaggedError(
-  "StatementMaterializationUnavailable"
-) {}
-type Failure = StatementMaterializationFailed | StatementMaterializationUnavailable;
+export class StatementSourceUnavailable extends Data.TaggedError("StatementSourceUnavailable") {}
+type Failure = StatementSourceRejected | StatementSourceUnavailable;
 type BoundaryFailure = Failure | Schema.SchemaError;
-const failed = (): StatementMaterializationFailed =>
-  new StatementMaterializationFailed({ reason: "malformed-file" });
+const failed = (): StatementSourceRejected =>
+  new StatementSourceRejected({ reason: "malformed-file" });
 const normalize = (error: BoundaryFailure): Failure =>
-  error instanceof StatementMaterializationFailed ||
-  error instanceof StatementMaterializationUnavailable
+  error instanceof StatementSourceRejected || error instanceof StatementSourceUnavailable
     ? error
     : failed();
-const foreign = <A>(run: () => Promise<A>): Effect.Effect<A, StatementMaterializationUnavailable> =>
-  Effect.tryPromise({ try: run, catch: () => new StatementMaterializationUnavailable() });
-const checksum = (text: string): Effect.Effect<string, StatementMaterializationUnavailable> =>
+const foreign = <A>(run: () => Promise<A>): Effect.Effect<A, StatementSourceUnavailable> =>
+  Effect.tryPromise({ try: run, catch: () => new StatementSourceUnavailable() });
+const checksum = (text: string): Effect.Effect<string, StatementSourceUnavailable> =>
   foreign(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).pipe(
     Effect.map((value) => Hex.encode(new Uint8Array(value)))
   );
 const partsChecksum = (
   parts: ReadonlyArray<PartIdentity>
-): Effect.Effect<string, StatementMaterializationUnavailable> =>
+): Effect.Effect<string, StatementSourceUnavailable> =>
   checksum(JSON.stringify(parts.map(({ chunk, part, hash }) => ({ chunk, part, hash }))));
 const findManifest = (
   input: MaterializationIdentity
@@ -293,7 +296,7 @@ const readRows = (
   });
 
 /** Loads at most one owned chunk at the durable cursor. Refuses substituted data and recovers interrupted publication within the durable source-parse budget. */
-export const findMaterializedChunk = (
+const findMaterializedChunk = (
   input: MaterializationIdentity & Readonly<{ offset: number }>
 ): Effect.Effect<Option.Option<MaterializedChunk>, Failure> =>
   Effect.gen(function* () {
@@ -345,16 +348,16 @@ const encodeMaterial = (parsed: ParsedStatement): Effect.Effect<EncodedMaterial,
       const chunk = parsed.rows.slice(offset, offset + statementChunkSize);
       byteLength += materializedStatementBytes(chunk);
       if (byteLength > maximumMaterializedBytes) {
-        return yield* new StatementMaterializationFailed({ reason: "resource-limit" });
+        return yield* new StatementSourceRejected({ reason: "resource-limit" });
       }
       const text = yield* Schema.encodeEffect(rowsCodec)(chunk);
       parts.push(...(yield* splitChunk(text, Math.floor(offset / statementChunkSize))));
     }
     if (parts.length > maximumParts) {
-      return yield* new StatementMaterializationFailed({ reason: "resource-limit" });
+      return yield* new StatementSourceRejected({ reason: "resource-limit" });
     }
     if (materializedHeaderBytes(parsed.headers) > maximumHeaderBytes) {
-      return yield* new StatementMaterializationFailed({ reason: "resource-limit" });
+      return yield* new StatementSourceRejected({ reason: "resource-limit" });
     }
     const headersJson = yield* Schema.encodeEffect(headersCodec)(parsed.headers);
     return { parts, byteLength, headersJson, partsHash: yield* partsChecksum(parts) };
@@ -429,7 +432,7 @@ const writeParts = (
     }
   });
 /** Reserve before expensive source reads. Ambiguous acknowledgements consume a slot, while idempotent cache cleanup remains independently retryable. */
-export const reserveStatementSourceParse = (
+const reserveStatementSourceParse = (
   input: MaterializationIdentity
 ): Effect.Effect<void, Failure> =>
   Effect.gen(function* () {
@@ -453,12 +456,12 @@ export const reserveStatementSourceParse = (
         .all()
     );
     if (reserved.results.length === 0) {
-      return yield* new StatementMaterializationFailed({ reason: "resource-limit" });
+      return yield* new StatementSourceRejected({ reason: "resource-limit" });
     }
   });
 
 /** Retains at most 16 MiB of derived rows for the original source purpose/deadline. Only complete publication may drive captures. Requires the User coordinator. */
-export const materializeStatement = (
+const materializeStatement = (
   input: MaterializationIdentity & Readonly<{ parsed: ParsedStatement }>
 ): Effect.Effect<void, Failure> =>
   Effect.gen(function* () {
@@ -474,3 +477,78 @@ export const materializeStatement = (
       return yield* failed();
     }
   }).pipe(Effect.mapError(normalize));
+
+type SourceInput = MaterializationIdentity &
+  Readonly<{
+    STATEMENT_STAGING_BUCKET: R2Bucket;
+    stagingId: StatementStagingId;
+    offset: number;
+  }>;
+
+const readSource = (input: SourceInput): Effect.Effect<ParsedStatement, Failure> =>
+  Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    const staging = StatementStaging.make({
+      database: input.DB,
+      bucket: input.STATEMENT_STAGING_BUCKET,
+      nowEpochMs: () => clock.currentTimeMillisUnsafe(),
+    });
+    const bytes = yield* staging
+      .readOwnedStagedBytes({
+        userId: input.userId,
+        stagingId: input.stagingId,
+      })
+      .pipe(
+        Effect.mapError((error): Failure =>
+          error._tag === "StatementStagingUnavailable"
+            ? new StatementSourceUnavailable()
+            : new StatementSourceRejected({
+                reason:
+                  error.reason === "retention-expired" ? "retention-expired" : "malformed-file",
+              })
+        )
+      );
+    if (bytes.length > maximumStatementBytes) {
+      return yield* new StatementSourceRejected({ reason: "resource-limit" });
+    }
+    const parsed = yield* parseStatementFile(bytes).pipe(
+      Effect.mapError(
+        (error) =>
+          new StatementSourceRejected({
+            reason: error instanceof StatementParseFailed ? error.safeReason : "malformed-file",
+          })
+      )
+    );
+    // A header-only source cannot produce a conserved Transaction or review outcome.
+    if (parsed.sourceFormat !== input.sourceFormat || parsed.rows.length === 0) {
+      return yield* failed();
+    }
+    if (parsed.rows.length > statementParserLimits.maximumRows) {
+      return yield* new StatementSourceRejected({ reason: "resource-limit" });
+    }
+    return parsed;
+  });
+
+/**
+ * Acquires verified rows at the durable processing offset for an owned, active submission.
+ * The caller holds the User coordinator and supplies the submission's captured source identity
+ * and retention deadline. Reuses or recovers complete derived material before spending a bounded
+ * source parse. Rejection carries only a terminal reason; unavailability permits durable retry.
+ * Neither failure settles the submission or changes its captured Transactions.
+ */
+export const acquireStatementChunk = (
+  input: SourceInput
+): Effect.Effect<MaterializedChunk, Failure> =>
+  Effect.gen(function* () {
+    const chunk = yield* findMaterializedChunk(input);
+    if (Option.isSome(chunk)) return chunk.value;
+    yield* reserveStatementSourceParse(input);
+    const parsed = yield* readSource(input);
+    yield* materializeStatement({ ...input, parsed });
+    // Successful publication must be readable before any row may be captured.
+    return yield* findMaterializedChunk(input).pipe(
+      Effect.flatMap((published) =>
+        Effect.fromOption(published, () => new StatementSourceUnavailable())
+      )
+    );
+  });

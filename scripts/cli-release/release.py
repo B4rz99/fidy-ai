@@ -52,7 +52,9 @@ def fingerprint():
         paths.update(str(path.relative_to(ROOT)) for path in (ROOT / 'scripts/cli-release').iterdir()
                      if path.is_file() and not path.name.startswith('test-'))
         paths.update(str(path.relative_to(ROOT)) for path in (ROOT / '.github/workflows').glob('cli-release*.yml'))
-        digest = hashlib.sha256()
+        # Include emitted bytes so consumed compiler configuration is tracked without
+        # releasing for configuration changes that leave the CLI bundle unchanged.
+        digest = hashlib.sha256(bundle.read_bytes())
         for name in sorted(paths):
             path = ROOT / name
             if not path.is_file():

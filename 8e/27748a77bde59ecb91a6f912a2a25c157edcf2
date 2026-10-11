@@ -1,0 +1,27 @@
+apps/web/e2e/recovery-live-disclosure.spec.ts
+  s_b75995d26622a8::t_2cc514bc03bc51 1-38
+apps/web/e2e/dashboard-live-customization.spec.ts
+  s_b75995d26622a8::t_2cc514bc03bc51 1-69
+apps/web/src/features/dashboard/FEATURE.md
+  s_b75995d26622a8::t_457beebef2bf1b 38-39,44,46,53
+apps/web/src/features/email-replacement/FEATURE.md
+  s_b75995d26622a8::t_69359a525eee50 1-26
+apps/web/src/features/recovery/FEATURE.md
+  s_b75995d26622a8::t_880afa5ce95df5 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e27748a77bde59ecb91a6f912a2a25c157edcf2",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

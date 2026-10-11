@@ -23,13 +23,20 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
     });
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
-const signInWithIdentity = ({ page, request }: SignInFixture, firstCard: boolean): Promise<void> =>
+const signInWithIdentity = (
+  { page, request }: SignInFixture,
+  identity: "primary" | "firstCard" | "dashboard"
+): Promise<void> =>
   page.clock
     .install()
     .then(() => page.goto("/auth/pair"))
     .then(() => page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click())
     .then(() => visiblePairingCode(page))
-    .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&firstCard=${firstCard}`))
+    .then((code) =>
+      request.post(
+        `${operatorOrigin}/approve?code=${code}&firstCard=${identity === "firstCard"}&dashboard=${identity === "dashboard"}`
+      )
+    )
     .then((approval) => {
       expect(approval.status()).toBe(noContentStatus);
       // Advance only the browser's first-poll delay after approval. Core's clock, proof
@@ -94,8 +101,12 @@ export const signInFirstDaviplataThroughCore = (input: SignInFixture): Promise<v
 
 /** Signs in the seeded User with an available PaymentSource through real Core redemption. */
 export const signInThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, false);
+  signInWithIdentity(input, "primary");
 
 /** Signs in a separate User whose first Subscription must tokenize a new card. */
 export const signInFirstCardThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, true);
+  signInWithIdentity(input, "firstCard");
+
+/** Dashboard mutations have their own User so concurrent enrollment cannot reset its document. */
+export const signInDashboardThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, "dashboard");

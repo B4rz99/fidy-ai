@@ -1,4 +1,7 @@
-import { RecurringDigestFeature } from "@/features/recurring-digest/feature";
+import {
+  ProviderAuthenticationFeature,
+  ProviderReturnFeature,
+} from "@/features/provider-authentication/feature";
 import { Option, Schema } from "effect";
 import {
   ConnectionAttemptReference,
@@ -7,30 +10,17 @@ import {
   PATPairingPublicCode,
   ProviderHandoffSearch,
 } from "@/transport/client";
-import { ConnectionContinuationFeature } from "@/features/connections/feature";
-import { OAuthManagementFeature, OAuthReviewFeature } from "@/features/oauth-connections/feature";
 import { type JSX, Suspense, createElement, lazy } from "react";
 import {
   type RouterHistory,
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   redirect,
   useRouter,
 } from "@tanstack/react-router";
-import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
-import { HostedAgentFeature } from "@/features/agent/feature";
-import {
-  ProviderAuthenticationFeature,
-  ProviderReturnFeature,
-} from "@/features/provider-authentication/feature";
-import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
-import { CLIConnectionFeature, PATManagementFeature } from "@/features/pats/feature";
-import { BackupRecoveryFeature } from "@/features/recovery/feature";
-import { SignedInFeature } from "@/features/signed-in/feature";
-import { SubscriptionOffersFeature } from "@/features/subscription/feature";
-import { TransactionListFeature } from "@/features/transactions/feature";
 import type { FidyClient, HostedTurnClient, WebAuthClient } from "@/transport/client";
 
 type WebRouterContext = Readonly<{
@@ -42,6 +32,51 @@ type WebRouterOptions = WebRouterContext &
   Readonly<{
     history: Option.Option<RouterHistory>;
   }>;
+
+const RecurringDigestFeature = lazyRouteComponent(
+  () => import("@/features/recurring-digest/feature"),
+  "RecurringDigestFeature"
+);
+const ConnectionContinuationFeature = lazyRouteComponent(
+  () => import("@/features/connections/feature"),
+  "ConnectionContinuationFeature"
+);
+const OAuthManagementFeature = lazyRouteComponent(
+  () => import("@/features/oauth-connections/feature"),
+  "OAuthManagementFeature"
+);
+const OAuthReviewFeature = lazyRouteComponent(
+  () => import("@/features/oauth-connections/feature"),
+  "OAuthReviewFeature"
+);
+const BrowserLoginPairingFeature = lazyRouteComponent(
+  () => import("@/features/browser-login/feature"),
+  "BrowserLoginPairingFeature"
+);
+const EmailReplacementFeature = lazyRouteComponent(
+  () => import("@/features/email-replacement/feature"),
+  "EmailReplacementFeature"
+);
+const CLIConnectionFeature = lazyRouteComponent(
+  () => import("@/features/pats/feature"),
+  "CLIConnectionFeature"
+);
+const PATManagementFeature = lazyRouteComponent(
+  () => import("@/features/pats/feature"),
+  "PATManagementFeature"
+);
+const BackupRecoveryFeature = lazyRouteComponent(
+  () => import("@/features/recovery/feature"),
+  "BackupRecoveryFeature"
+);
+const SubscriptionOffersFeature = lazyRouteComponent(
+  () => import("@/features/subscription/feature"),
+  "SubscriptionOffersFeature"
+);
+const TransactionListFeature = lazyRouteComponent(
+  () => import("@/features/transactions/feature"),
+  "TransactionListFeature"
+);
 
 const DashboardRouteContent = lazy(() =>
   import("@/features/dashboard/feature").then((module) => ({
@@ -60,8 +95,14 @@ const DashboardRoute = (): JSX.Element => {
 };
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({});
-const AuthenticatedRoute = (): JSX.Element =>
-  createElement(SignedInFeature, null, createElement(HostedAgentFeature));
+const AuthenticatedRoute = lazyRouteComponent(() =>
+  Promise.all([import("@/features/signed-in/feature"), import("@/features/agent/feature")]).then(
+    ([signedIn, agent]) => ({
+      default: (): JSX.Element =>
+        createElement(signedIn.SignedInFeature, null, createElement(agent.HostedAgentFeature)),
+    })
+  )
+);
 const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "authenticated",

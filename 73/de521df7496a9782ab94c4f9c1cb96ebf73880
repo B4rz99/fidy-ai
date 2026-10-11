@@ -1,0 +1,27 @@
+apps/web/src/app/native-access.ts
+  s_b75995d26622a8::t_5e405b60ebca64 2,181
+apps/web/src/app/native-routes.ts
+  s_b75995d26622a8::t_5e405b60ebca64 134-139
+apps/web/src/features/pats/management-foldkit-view.ts
+  s_b75995d26622a8::t_5e405b60ebca64 155-158,204
+apps/web/src/features/pats/management-program.ts
+  s_b75995d26622a8::t_5e405b60ebca64 139
+apps/web/e2e/access-management.spec.ts
+  s_b75995d26622a8::t_5e405b60ebca64 65,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73de521df7496a9782ab94c4f9c1cb96ebf73880",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,6 +1,9 @@
 import { Crypto, Effect, FileSystem, Schema } from "effect";
+import { requestHostedProof } from "./local-workerd-http";
 
 const previewName = "parser-performance";
+const proofRequestTimeout = 5000;
+const hiddenProofStatus = 404;
 const previewOutput = Schema.fromJsonString(
   Schema.Struct({ deployment: Schema.Struct({ urls: Schema.Array(Schema.String) }) })
 );
@@ -51,6 +54,20 @@ export const hostedPreview = Effect.fn(function* (directory: string) {
   const origin = decoded.deployment.urls[0];
   if (origin === undefined || !origin.startsWith("https://")) {
     throw new Error("Isolated parser Preview did not expose an HTTPS deployment URL");
+  }
+  const unauthorized = yield* Effect.tryPromise(() =>
+    requestHostedProof({
+      origin,
+      port: 0,
+      path: "/statement-work",
+      method: "POST",
+      body: "Date,Amount\n2026-01-01,1",
+      headers: {},
+      signal: AbortSignal.timeout(proofRequestTimeout),
+    })
+  );
+  if (unauthorized.status !== hiddenProofStatus) {
+    throw new Error("Isolated parser Preview did not require its access key");
   }
   return { origin, token };
 });

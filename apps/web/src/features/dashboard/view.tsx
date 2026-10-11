@@ -924,7 +924,7 @@ export const DashboardViewComponent = ({
     <main className="flex w-full flex-col gap-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Tablero</h1>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">{view.title}</h1>
           <p className="text-muted-foreground">Lectura actual de tus finanzas.</p>
         </div>
         {Option.isNone(editor) ? null : (

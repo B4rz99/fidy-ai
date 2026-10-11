@@ -463,6 +463,13 @@ describe("read-only Dashboard resources", () => {
 });
 
 describe("read-only Dashboard responsive rendering", () => {
+  effectIt.effect("renders the canonical Dashboard title as its visible heading", () =>
+    Effect.gen(function* () {
+      yield* renderDashboardView(makeView(standardOptions));
+      expect(screen.getByRole("heading", { level: 1, name: "Mi tablero" })).toBeVisible();
+    })
+  );
+
   effectIt.effect(
     "uses one recursive DOM tree with mobile columns, desktop axes, weights, and stable order",
     () =>

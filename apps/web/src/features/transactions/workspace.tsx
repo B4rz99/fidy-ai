@@ -1,6 +1,7 @@
 import { Toaster, toast } from "sonner";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { JSX, ReactNode, RefCallback } from "react";
+import { observeContinuation } from "./scroll-continuation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FilterHorizontalIcon } from "@hugeicons/core-free-icons";
 import { Array, DateTime, Option } from "effect";
@@ -537,8 +538,7 @@ const continuationLabels = {
 const ContinuationControl = (
   props: WorkspaceProps & Readonly<{ editing: boolean }>
 ): JSX.Element => {
-  const requested = useRef<Option.Option<number>>(Option.none());
-  const observe: RefCallback<HTMLDivElement> = (element) => {
+  const attachContinuation: RefCallback<HTMLDivElement> = (element) => {
     if (
       element === null ||
       props.continuation !== "available" ||
@@ -547,28 +547,12 @@ const ContinuationControl = (
     ) {
       return;
     }
-    const count = props.transactions.length;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (
-          !entries.some((entry) => entry.isIntersecting) ||
-          Option.contains(requested.current, count)
-        ) {
-          return;
-        }
-        requested.current = Option.some(count);
-        observer.disconnect();
-        props.onMore();
-      },
-      { rootMargin: "0px 0px 160px 0px" }
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
+    return observeContinuation({ element, onMore: props.onMore });
   };
   if (props.continuation === "complete") return <></>;
   return (
     <div
-      ref={observe}
+      ref={attachContinuation}
       aria-label="Continuación de transacciones"
       aria-live="polite"
       aria-busy={props.continuation === "loading"}

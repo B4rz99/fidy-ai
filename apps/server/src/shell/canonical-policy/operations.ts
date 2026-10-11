@@ -40,6 +40,9 @@ const decideUserOwnedAgentScoped = (
   return decideAgentScope(requirement.scope, caller.capabilities);
 };
 
+const decideWebSession = (caller: OperationAccessCaller): OperationAccessDecision =>
+  caller._tag === "WebSession" ? allowed : denied("caller_ineligible");
+
 const decideFreshWebSession = (caller: OperationAccessCaller): OperationAccessDecision => {
   if (caller._tag !== "WebSession") return denied("caller_ineligible");
   return caller.fresh ? allowed : denied("fresh_web_session_required");
@@ -53,6 +56,13 @@ const decideVerifiedWhatsAppHosted = (caller: OperationAccessCaller): OperationA
   return decideHostedAuthority(caller.authorityRoot);
 };
 
+const decideFreshWebOrVerifiedWhatsApp = (
+  caller: OperationAccessCaller
+): OperationAccessDecision =>
+  caller._tag === "WebSession"
+    ? decideFreshWebSession(caller)
+    : decideVerifiedWhatsAppHosted(caller);
+
 /** Decides execution from the same closed requirement used by every derived surface. */
 export const decideOperationAccess: {
   (caller: OperationAccessCaller): (self: OperationAccess) => OperationAccessDecision;
@@ -63,14 +73,14 @@ export const decideOperationAccess: {
       return decideUserOwnedAgentScoped(requirement, caller);
     case "FreshWebSessionOnly":
       return decideFreshWebSession(caller);
+    case "WebSessionOnly":
+      return decideWebSession(caller);
     case "WebOrHosted":
       return isUserAgent(caller) ? denied("caller_ineligible") : allowed;
     case "VerifiedWhatsAppHostedOnly":
       return decideVerifiedWhatsAppHosted(caller);
     case "FreshWebOrVerifiedWhatsAppHosted":
-      return caller._tag === "WebSession"
-        ? decideFreshWebSession(caller)
-        : decideVerifiedWhatsAppHosted(caller);
+      return decideFreshWebOrVerifiedWhatsApp(caller);
   }
 });
 
@@ -90,5 +100,5 @@ export const completesHostedTurn = (policy: OperationPolicyValue): boolean => {
   if (policy.access._tag === "UserOwnedAgentScoped") {
     return policy.access.scope._tag === "Operation" && policy.access.scope.capability === "write";
   }
-  return policy.access._tag !== "FreshWebSessionOnly";
+  return policy.access._tag !== "FreshWebSessionOnly" && policy.access._tag !== "WebSessionOnly";
 };

@@ -22,7 +22,11 @@ import {
   protectPATRevocationStatement,
 } from "~/shell/consent/operations";
 import { type FreshSessionSubject, type WebSessionAuthority } from "~/shell/web-session/contract";
-import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
+import {
+  freshSessionExists,
+  freshSessionParams,
+  liveSessionConditions,
+} from "~/shell/web-session/operations";
 import {
   type PATAuthority,
   type PATGrantSelection,
@@ -96,23 +100,25 @@ type ApprovalInput = Readonly<{ pairingId: string; current: number; expires: num
 export const approvePairingGrant = ({
   session,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: ApprovalInput }>): OwnedStatement =>
-  protectConsentStatement({
+}: Readonly<{ session: FreshSessionSubject; input: ApprovalInput }>): OwnedStatement => {
+  const live = liveSessionConditions({ session, current: input.current });
+  return protectConsentStatement({
     statement: {
       sql: `UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
-        WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${freshSessionExists}`,
+        WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${live.sql}`,
       params: [
         session.user_id,
         input.current,
         input.expires,
         input.pairingId,
         input.current,
-        ...freshSessionParams({ session, time: input.current }),
+        ...live.params,
       ],
     },
     subject: { _tag: "User", userId: session.user_id },
     requirement: "unrevoked",
   });
+};
 
 /** Consume a single User-bound PATPairing approval under current Consent and issuance limits. */
 export const claimPairingGrant = (

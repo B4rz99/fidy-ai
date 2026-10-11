@@ -124,7 +124,8 @@ const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOpe
       operation.atomicBatchEligible &&
       operation.policy.kind === "mutation" &&
       (isUserOwnedAgentScoped(operation.policy.access) ||
-        operation.policy.access._tag === "FreshWebSessionOnly")
+        operation.policy.access._tag === "FreshWebSessionOnly" ||
+        operation.policy.access._tag === "WebSessionOnly")
   );
 
 /**

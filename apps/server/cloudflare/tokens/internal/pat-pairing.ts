@@ -231,7 +231,7 @@ const admitReview = (
     });
     return result.meta.changes === 1;
   });
-/** Inspect a public code only for a fresh browser User, with bounded guessing. */
+/** Inspect a public code only for an authenticated browser User, with bounded guessing. */
 export const inspectPATPairing = ({
   request,
   db,
@@ -240,7 +240,7 @@ export const inspectPATPairing = ({
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const session = yield* webSession({ request, db, fresh: true });
+    const session = yield* webSession({ request, db, fresh: false });
     if (Option.isNone(session)) return unauthorized();
     const current = yield* Clock.currentTimeMillis;
     if (!(yield* admitReview(db, session.value.id, current))) return rateLimited();
@@ -334,7 +334,7 @@ export const approvePATPairing = ({
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const session = yield* webSession({ request, db, fresh: true });
+    const session = yield* webSession({ request, db, fresh: false });
     if (Option.isNone(session)) return unauthorized();
     const payload = yield* decodeBody({
       request,

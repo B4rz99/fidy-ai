@@ -18873,7 +18873,7 @@
           "pats"
         ],
         "x-fidy-access": {
-          "type": "fresh-web-session-only"
+          "type": "web-session-only"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -19006,7 +19006,7 @@
           "pats"
         ],
         "x-fidy-access": {
-          "type": "fresh-web-session-only"
+          "type": "web-session-only"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",

@@ -91,7 +91,12 @@ const invalidView = (model: PairingModel, html: Builder): Html =>
     [html.Class("flex flex-col gap-4")],
     [
       html.h2([], ["No encontramos ese código"]),
-      html.p([html.Role("alert")], ["El código no es válido o ya no está disponible."]),
+      html.p(
+        [html.Role("alert")],
+        [
+          "La solicitud venció, no está disponible o necesitas iniciar sesión. Ejecuta fidy login para comenzar otra conexión si la solicitud venció.",
+        ]
+      ),
       Option.isSome(model.publicCode)
         ? html.a(
             [

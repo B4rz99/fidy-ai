@@ -20,7 +20,11 @@ const workerReady = (path: string): Promise<void> =>
   );
 
 type Scenario = "readiness-headers" | "post-headers" | "post-body" | "healthy" | "refused";
-const exercise = Effect.fn(function* (scenario: Scenario, check?: string) {
+const exercise = Effect.fn(function* (
+  scenario: Scenario,
+  check?: string,
+  category: string = "InvalidOutput"
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Config.String("PATH");
   const directory = yield* Effect.acquireRelease(
@@ -92,7 +96,7 @@ const exercise = Effect.fn(function* (scenario: Scenario, check?: string) {
                   modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
                   outcome: "non_conforming",
                   check,
-                  category: "InvalidOutput",
+                  category,
                   privateContent: "fixture-private-content",
                 }),
             { status: scenario === "refused" ? 503 : 200 }
@@ -149,9 +153,7 @@ const exercise = Effect.fn(function* (scenario: Scenario, check?: string) {
     expect(diagnostic).toBe("Workers AI conformance request failed.\n");
   }
   if (check !== undefined) {
-    expect(diagnostic).toBe(
-      `Workers AI conformance failed: check=${check} category=InvalidOutput\n`
-    );
+    expect(diagnostic).toBe(`Workers AI conformance failed: check=${check} category=${category}\n`);
     expect(output + diagnostic).not.toContain("fixture-private-content");
   }
   expect(yield* fs.readDirectory(`${directory}/tmp`)).toEqual([]);
@@ -177,6 +179,10 @@ layer(BunServices.layer, { excludeTestServices: true })((it) => {
       exercise("refused", check)
     );
   }
+  it.effect(
+    "reports provider quota without admitting a deployment or exposing private content",
+    () => exercise("refused", "canonical_query", "ProviderQuotaExceeded")
+  );
   it.effect("refuses invalid or raised client deadlines before starting conformance work", () =>
     Effect.gen(function* () {
       for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {

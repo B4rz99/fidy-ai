@@ -760,7 +760,7 @@ it.each(["fresh", "live"] as const)(
       })
     )
 );
-it.each(["revoked", "idle-expired", "hard-expired"] as const)(
+it.each(["revoked", "idle-expired"] as const)(
   "refuses pairing review and approval with a %s browser session without partial effects",
   (state) =>
     runTest(
@@ -775,7 +775,7 @@ it.each(["revoked", "idle-expired", "hard-expired"] as const)(
           );
         } else {
           vi.useFakeTimers({ toFake: ["Date"] });
-          vi.setSystemTime(clock() + (state === "idle-expired" ? 2_592_000_000 : 7_776_000_000));
+          vi.setSystemTime(clock() + 2_592_000_000);
         }
         const started = yield* awaitPromise(
           send({

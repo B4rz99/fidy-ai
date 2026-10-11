@@ -93,6 +93,38 @@ const fromBinding =
           : hostedFailure({ _tag: "ProviderUnavailable" }, true),
     });
 
+it.effect(
+  "distinguishes daily provider quota from temporary capacity without exposing provider text",
+  () =>
+    Effect.gen(function* () {
+      for (const body of [
+        { errors: [{ code: 3036, message: "private provider detail" }] },
+        { errors: [{ code: 4006, message: "private provider detail" }] },
+        { internalCode: 3036, description: "private binding detail" },
+        { errors: [{ code: 3040, message: "private capacity detail" }] },
+      ]) {
+        const binding = captureRun(() => Promise.resolve(response(body, 429)));
+        const inference = yield* makeConfiguredInference(binding.run);
+        const prepared = yield* inference.prepareText({
+          context: initialContext(),
+          availableOperations: [],
+          toolChoice: "none",
+        });
+        const exit = yield* Effect.exit(prepared.execute);
+        assertHostedFailure(
+          exit,
+          hostedFailure(
+            {
+              _tag:
+                body.errors?.[0]?.code === 3040 ? "ProviderUnavailable" : "ProviderQuotaExceeded",
+            },
+            body.errors?.[0]?.code === 3040
+          )
+        );
+      }
+    })
+);
+
 it.effect("fails closed when the configured Workers AI model is absent or unsupported", () =>
   Effect.gen(function* () {
     const run = fromBinding(captureRun(() => Promise.resolve(completed())).run);

@@ -6991,6 +6991,52 @@ it("admits a web-provider onboarding grant through the native Agent service and 
     })
   ));
 
+it("returns safe quota feedback and retains a terminal failure without an assistant reply", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const model = vi.fn(() =>
+        Promise.resolve(
+          Response.json(
+            { errors: [{ code: 4006, message: "private provider quota detail" }] },
+            { status: 429 }
+          )
+        )
+      );
+      const service = makeAgentService({
+        environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const response = yield* Effect.tryPromise(() => accepted.response);
+      yield* Effect.tryPromise(() => accepted.settled);
+      expect(response.status).toBe(429);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+        status: "provider_quota_exceeded",
+      });
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "failed", kind: "user", text: "Hola" },
+        { status: "failed", kind: "failed", text: null },
+      ]);
+      expect(model).toHaveBeenCalledOnce();
+    })
+  ));
+
 it("confirms a hosted Transaction deletion exactly once and retains the hidden original", () =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -340,7 +340,10 @@ const httpCreated = 201;
 const httpUnavailable = 503;
 // TZDate must inherit the native Date before this fixture replaces the global constructor.
 // Lazy routes otherwise import the date subclass under fake timers and corrupt calendar instants.
-beforeAll(() => import("@/ui/components/calendar"));
+// Preload the Dashboard's date-dependent graph under the same native clock as well.
+beforeAll(() =>
+  Promise.all([import("@/ui/components/calendar"), import("@/features/dashboard/feature")])
+);
 
 const stubTransactionScreen = (): void => {
   vi.stubGlobal("matchMedia", () => ({
@@ -769,6 +772,55 @@ describe("hosted Agent reply delivery", () => {
   afterEach(resetApplicationTest);
   it("automatically delivers a rendered reply and permits the next message without confirmation", () =>
     Effect.runPromise(automaticReplyTest()));
+});
+
+const rejectedSubmissionTest = Effect.fnUntraced(function* (
+  failure: Readonly<{ status: number; body: string; copy: string }>
+) {
+  const paths: Array<string> = [];
+  const successful = automaticReplyClient(paths);
+  let rejected = false;
+  const httpClient = makeHttpClient((request) => {
+    if (!rejected) {
+      rejected = true;
+      return Effect.succeed(responseJson(request, { status: failure.body }, failure.status));
+    }
+    return successful.execute(request);
+  });
+  const client = makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+  const route = renderHostedRoute(client);
+  yield* fromPromise(route);
+  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+    target: { value: "Hola" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  yield* fromPromise(screen.findByText(new RegExp(failure.copy, "u")));
+  expect(screen.getByLabelText("Mensaje")).toHaveValue("Hola");
+  expect(screen.queryByText("Hola", { selector: "div" })).not.toBeInTheDocument();
+  expect(paths).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  yield* fromPromise(screen.findByText("Respuesta exacta"));
+  const assertComposerEnabled = (): void => {
+    expect(screen.getByLabelText("Mensaje")).toBeEnabled();
+  };
+  yield* fromPromise(waitFor(assertComposerEnabled));
+  expect(screen.getAllByText("Hola", { selector: "div" })).toHaveLength(1);
+  expect(screen.getAllByText("Respuesta exacta")).toHaveLength(1);
+  expect(screen.getByLabelText("Mensaje")).toHaveValue("");
+  expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]);
+});
+
+describe("failed hosted Agent submission", () => {
+  afterEach(resetApplicationTest);
+  it.each([
+    { status: 503, body: "unavailable", copy: "No se pudo completar el turno." },
+    { status: 429, body: "provider_quota_exceeded", copy: "El agente alcanzó su límite diario." },
+  ])("retains the draft after $body and retries without duplicate messages", (failure) =>
+    Effect.runPromise(rejectedSubmissionTest(failure))
+  );
 });
 
 const progressTestClient = (progress: {

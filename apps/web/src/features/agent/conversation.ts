@@ -4,7 +4,7 @@ import { Effect, Option, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { HostedTurnRequest } from "@/transport/client";
+import { HostedTurnQuotaExceeded, HostedTurnRequest } from "@/transport/client";
 import type {
   HostedTurnClient,
   HostedTurnProcessing,
@@ -14,7 +14,7 @@ import type {
 type Proposal = typeof HostedTurnProposal.Type;
 type Processing = typeof HostedTurnProcessing.Type;
 type Turn =
-  | Readonly<{ tag: "idle" | "waiting" | "error" }>
+  | Readonly<{ tag: "idle" | "waiting" | "error" | "quota" }>
   | Readonly<{ tag: "proposal"; value: Proposal }>
   | Readonly<{ tag: "processing" | "uncertain"; value: Processing }>
   | Readonly<{ tag: "confirming" | "completed" | "unconfirmed"; value: Proposal }>;
@@ -29,6 +29,8 @@ const status: Readonly<Record<Turn["tag"], string>> = {
   idle: "",
   waiting: "Esperando respuesta…",
   error: "No se pudo completar el turno. Inténtalo de nuevo.",
+  quota:
+    "El agente alcanzó su límite diario. Tu borrador sigue aquí. Inténtalo cuando se restablezca el acceso; si pediste cambios, revisa tus datos antes de reenviar.",
   proposal: "",
   processing: "El turno sigue en curso. Consulta el estado antes de volver a intentarlo.",
   uncertain:
@@ -39,7 +41,8 @@ const status: Readonly<Record<Turn["tag"], string>> = {
 };
 const proposedTurn = (value: Proposal | Processing): Turn =>
   "status" in value ? { tag: "processing", value } : { tag: "proposal", value };
-const canSubmit = (turn: Turn): boolean => ["idle", "error", "completed"].includes(turn.tag);
+const canSubmit = (turn: Turn): boolean =>
+  ["idle", "error", "quota", "completed"].includes(turn.tag);
 const setTurn = (setConversation: SetConversation, turn: Turn): void =>
   setConversation((previous) => ({ ...previous, turn }));
 
@@ -49,10 +52,14 @@ type Commands = Readonly<{
   progress: Atom.AtomResultFn<Processing, void, never>;
   receipt: Atom.AtomResultFn<Proposal, void, never>;
 }>;
-const rejectSubmission = (setConversation: SetConversation, entryId: string): Effect.Effect<void> =>
+const rejectSubmission = (
+  setConversation: SetConversation,
+  entryId: string,
+  failure: unknown
+): Effect.Effect<void> =>
   Effect.sync(() =>
     setConversation((previous) => ({
-      turn: { tag: "error" },
+      turn: { tag: Schema.is(HostedTurnQuotaExceeded)(failure) ? "quota" : "error" },
       history: previous.history.filter((entry) => entry.id !== entryId),
     }))
   );
@@ -72,7 +79,7 @@ const conversationCommands = (
           clearDraft();
           setTurn(setConversation, proposedTurn(reply));
         });
-      }).pipe(Effect.catch(() => rejectSubmission(setConversation, entryId))),
+      }).pipe(Effect.catch((failure) => rejectSubmission(setConversation, entryId, failure))),
     { concurrent: false }
   ),
   progress: client.runtime.fn<Processing>()(

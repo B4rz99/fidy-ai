@@ -21,6 +21,7 @@ export {
 export {
   HostedTurnApi,
   HostedTurnRequest,
+  HostedTurnQuotaExceeded,
   HostedTurnReceipt,
   HostedTurnProposal,
   HostedTurnProcessing,

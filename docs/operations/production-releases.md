@@ -79,9 +79,15 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 1. Check out the exact `github.sha` revision and install the locked workspace.
 2. Calculate the canonical contract digest and bind it with `RELEASE_GIT_SHA` for later steps.
 3. Create an ephemeral local Alchemy profile.
-4. Run four parallel preflight lanes in the same runner: focused Worker-boundary tests, live Workers
-   AI conformance, Production web build/validation, and Cloudflare state checks. The web artifact
+4. Run four parallel preflight lanes in the same runner: focused Worker-boundary tests, deterministic and
+   live Workers AI conformance, Production web build/validation, and Cloudflare state checks. The web artifact
    retains immutable release metadata, hashed assets, headers, and secret-free validation.
+   The AI lane explicitly permits quota deferral (`--allow-quota-deferral`): a validated
+   `ProviderQuotaExceeded` report from a live inference check emits a GitHub warning and allows
+   deployment after deterministic inference tests pass. It does not establish model conformance.
+   Configuration failures, invalid output, other provider failures, malformed reports, and client
+   timeouts still fail the lane. Standalone `test:workers-ai-conformance` remains strict; run it
+   after quota resets to obtain live evidence. Provider quota never substitutes for launch approval.
 5. In the Cloudflare lane, compare Production's applied D1 migration names and hashes with checked-in
    SQL before bootstrapping; fail closed on any missing file, hash mismatch, incomplete history, or
    inability to query the ledger.

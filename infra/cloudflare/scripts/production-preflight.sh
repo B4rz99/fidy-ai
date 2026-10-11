@@ -23,7 +23,7 @@ trap 'exit 143' TERM
 
 commands=(
   'bun run --cwd infra/cloudflare test -- workers.test.ts'
-  'bun run --cwd infra/cloudflare test:workers-ai-conformance'
+  'bun run --cwd infra/cloudflare test:workers-ai-conformance --allow-quota-deferral'
   'bun run --cwd apps/web build:production'
   'cd infra/cloudflare
    bun scripts/check-applied-migration-drift.ts

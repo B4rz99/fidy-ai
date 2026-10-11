@@ -96,7 +96,7 @@ if [[ "$status" != 200 ]] || ! jq --exit-status \
   diagnostic=$(jq --raw-output '
     if .modelApprovalRevision == "workers-ai-gemma-4-2026-09-22"
       and .outcome == "non_conforming"
-      and (.check | IN("configuration", "canonical_query", "canonical_mutation", "canonical_mutation_money", "canonical_mutation_time", "invalid_output_recovery", "structured_es_co", "internal"))
+      and (.check | IN("configuration", "canonical_query", "canonical_mutation", "canonical_mutation_money", "canonical_mutation_time", "canonical_correction", "canonical_deletion", "canonical_date_only", "invalid_output_recovery", "structured_es_co", "internal"))
       and (.category | IN("InvalidAuthority", "CapacityExceeded", "ActiveRequestCapacityExceeded", "InvalidOutput", "ProviderUnavailable", "StructuredOutputExceeded", "StructuredOutputTimedOut", "UnexpectedFailure"))
     then "check=\(.check) category=\(.category)"
     else "check=internal category=UnexpectedFailure"

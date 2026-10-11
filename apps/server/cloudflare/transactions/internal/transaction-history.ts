@@ -273,7 +273,7 @@ const presentationStatement = ({
         AND decision.second_transaction_id = linked.second_transaction_id
       INNER JOIN effective_transaction effective
         ON effective.id = COALESCE(decision.visible_transaction_id, requested.id)
-      WHERE requested.user_id = ? AND requested.id = ?${guard.sql}`
+      WHERE requested.user_id = ? AND requested.id = ? AND requested.deleted_at_ms IS NULL${guard.sql}`
     )
     .bind(...relation.bindings, userId, id, ...guard.bindings);
 };
@@ -337,7 +337,7 @@ export const findTransaction = ({
 > =>
   db
     .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes, occurred_at, created_at, revision
-      FROM transactions WHERE user_id = ? AND id = ?`)
+      FROM transactions WHERE user_id = ? AND id = ? AND deleted_at_ms IS NULL`)
     .bind(userId, id)
     .first()
     .then(decodeTransactionRow);
@@ -476,7 +476,7 @@ const browserHistoryStatements = (
       missingWhen: Option.match(selection.id, {
         onNone: () => ({ sql: "SELECT 1 WHERE 0", params: [] }),
         onSome: (id) => ({
-          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id = ? AND id = ?)",
+          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id = ? AND id = ? AND deleted_at_ms IS NULL)",
           params: [subject.userId, id],
         }),
       }),

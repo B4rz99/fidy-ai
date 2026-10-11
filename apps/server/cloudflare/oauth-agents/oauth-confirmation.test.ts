@@ -749,6 +749,7 @@ const nativeOwnerJourneys = [
   "memory.forget",
   "dashboard.applyDashboardEdit",
   "transactions.updateTransaction",
+  "transactions.deleteTransaction",
   "insights.markInsightRead",
   "insights.dismissInsight",
   "insights.markInsightDelivered",
@@ -833,16 +834,18 @@ const ownerJourneyArgs = (
       expect(yield* wait(initialized.json())).toMatchObject({ result: { isError: false } });
       return ownerArgs({ payload: { op: "set-title", title: "Revisión nativa" } });
     }
-    if (name === "transactions.updateTransaction") {
+    if (name.startsWith("transactions.")) {
       const created = yield* wait(ordinary("transactions.createTransaction", transactionArguments));
       expect(yield* wait(created.json())).toMatchObject({ result: { isError: false } });
       const id = yield* wait(
         fixture.db.prepare("SELECT id FROM transactions LIMIT 1").first<string>("id")
       );
-      return ownerArgs({
-        params: { id },
-        payload: { expectedRevision: 0, changes: { counterparty: "Corregida" } },
-      });
+      return name === "transactions.deleteTransaction"
+        ? ownerArgs({ params: { id } })
+        : ownerArgs({
+            params: { id },
+            payload: { expectedRevision: 0, changes: { counterparty: "Corregida" } },
+          });
     }
     return yield* insightJourneyArgs(fixture, name);
   });

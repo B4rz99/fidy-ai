@@ -6990,3 +6990,97 @@ it("admits a web-provider onboarding grant through the native Agent service and 
       ]);
     })
   ));
+
+it("confirms a hosted Transaction deletion exactly once and retains the hidden original", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => seedHistoryTransaction(db, "Deletion fixture"));
+      const id = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT id FROM transactions WHERE user_id = ?")
+          .bind(users[0])
+          .first<string>("id")
+      );
+      expect(id).toBeTruthy();
+      let requests = 0;
+      const coordinator = coordinatorFor(db, () => {
+        requests++;
+        return Promise.resolve(
+          Response.json({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "delete-request",
+                      type: "function",
+                      function: {
+                        name: "transactions__deleteTransaction",
+                        arguments: encodeJson({ params: { id } }),
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+            usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+          })
+        );
+      });
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const send = (text: string): Promise<Response> =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text,
+            }),
+          })
+        );
+      const response = yield* Effect.tryPromise(() => send("Elimina la transacción de prueba"));
+      const challenge = yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, response));
+      expect(challenge).toContain("transactions.deleteTransaction");
+      expect(challenge).toContain(id);
+      const command = challenge.split("Responde exactamente: ")[1] ?? "";
+      expect(command).toMatch(/^CONFIRMAR [0-9a-f]{64}$/u);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .bind(users[0])
+            .first<number>("total")
+        )
+      ).toBe(1);
+      const confirmed = yield* Effect.tryPromise(() => send(command));
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, confirmed))).toBe(
+        "Operación confirmada."
+      );
+      expect(requests).toBe(1);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .bind(users[0])
+            .first<number>("total")
+        )
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT COUNT(*) AS total FROM transactions WHERE user_id = ? AND deleted_at_ms IS NOT NULL"
+            )
+            .bind(users[0])
+            .first<number>("total")
+        )
+      ).toBe(1);
+      expect((yield* Effect.tryPromise(() => send(command))).status).toBe(401);
+    })
+  ));

@@ -1,3 +1,4 @@
+import { TransactionId } from "../../../src/core/transactions/contract";
 import type { TransactionOutcome } from "../contract";
 import { dailyAuditMessage } from "../../canonical-work/contract";
 import { Effect, Option, Schema } from "effect";
@@ -182,6 +183,32 @@ export const transactionTriggerRefusal = ({
   return Option.some(transactionBudgetRefusal());
 };
 
+const findDeletedTransactionValue = ({
+  db,
+  userId,
+  outcome,
+}: Readonly<{ db: D1Database; userId: string; outcome: TransactionOutcome }>): Effect.Effect<
+  Option.Option<CommittedMutationValue>
+> =>
+  Effect.gen(function* () {
+    const row = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "SELECT id FROM transactions WHERE user_id = ? AND id = ? AND deleted_at_ms IS NOT NULL"
+        )
+        .bind(userId, outcome.transactionId)
+        .first()
+    ).pipe(Effect.orElseSucceed(() => null));
+    return Option.map(
+      Schema.decodeUnknownOption(Schema.Struct({ id: TransactionId }))(row),
+      ({ id }) => ({
+        _tag: "Owner" as const,
+        payload: id,
+        encode: () => Schema.encodeEffect(Schema.toCodecJson(TransactionId))(id),
+      })
+    );
+  });
+
 /**
  * Read the records one committed Transaction child presents, or None when the unit read back an
  * incomplete set. The individual response and the atomic-batch child output encode the same value.
@@ -196,6 +223,9 @@ export const findTransactionValue = ({
   outcome: TransactionOutcome;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
+    if (outcome.readback._tag === "DeletedTransaction") {
+      return yield* findDeletedTransactionValue({ db, userId, outcome });
+    }
     if (outcome.readback._tag === "Transaction") {
       const found = yield* Effect.tryPromise(() =>
         findTransaction({ db, userId, id: outcome.transactionId })
@@ -402,7 +432,9 @@ export const transactionAbortRefusal = ({
       repeated,
     });
   }
-  if (outcome.readback._tag === "Transaction") return Effect.succeedNone;
+  if (outcome.readback._tag === "Transaction" || outcome.readback._tag === "DeletedTransaction") {
+    return Effect.succeedNone;
+  }
   return outcome.readback._tag === "EffectiveTransaction"
     ? linkPremiseRefusal({ db, userId, pair: outcome.readback.pair })
     : unlinkPremiseRefusal({ db, userId, pair: outcome.readback.pair });

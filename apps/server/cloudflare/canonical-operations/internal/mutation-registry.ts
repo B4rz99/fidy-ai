@@ -55,6 +55,7 @@ import {
 import {
   prepareCapture,
   prepareCorrection,
+  prepareDeletion,
   prepareLink,
   prepareUnlink,
   transactionRefusal,
@@ -486,6 +487,23 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
       ),
       present: present(HTTP_OK),
       invalidRefusal: correctionInvalidRefusal,
+    },
+  ],
+  [
+    CanonicalOperationId.make("transactions.deleteTransaction"),
+    {
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("transactions.deleteTransaction"),
+        ({ params }, work) =>
+          prepareDeletion({
+            db: work.db,
+            subject: work.subject,
+            id: params.id,
+            current: work.current,
+          })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: transactionInvalidRefusal("transactions.deleteTransaction"),
     },
   ],
   [

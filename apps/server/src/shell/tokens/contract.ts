@@ -347,6 +347,7 @@ export type AuditedPATMutation = Extract<
   | "transactions.createTransaction"
   | "transactions.linkTransactions"
   | "transactions.unlinkTransactions"
+  | "transactions.deleteTransaction"
   | "transactions.updateTransaction"
 >;
 

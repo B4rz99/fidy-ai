@@ -4282,7 +4282,7 @@ it("does not assign a child to a forged guard marker from an unrelated write", (
     })
   ));
 
-it("fails closed on a canonical mutation without a batch adapter", () =>
+it("rolls back a batch containing deletion of an absent Transaction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -4303,7 +4303,7 @@ it("fails closed on a canonical mutation without a batch adapter", () =>
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
-      expect(rejection.error.code).toBe("unavailable");
+      expect(rejection.error.code).toBe("not_found");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.deleteTransaction");
       expect(
@@ -4313,7 +4313,7 @@ it("fails closed on a canonical mutation without a batch adapter", () =>
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
         )
-      ).toBe(0);
+      ).toBe(1);
     })
   ));
 
@@ -6583,5 +6583,199 @@ it("refuses a cookie-admitted batch without the browser origin and writes nothin
       expect(
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM pat_audit"))
       ).toBe(0);
+    })
+  ));
+
+it("permanently deletes visible history with provenance retained and rejects another User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const id = "30000000-0000-4000-8000-000000000991";
+      const owner = users[0] ?? "";
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedManualAttestation({
+          db,
+          userId: owner,
+          transactionId: id,
+          id: "30000000-0000-4000-8000-000000000992",
+        })
+      );
+      const deletion = (index: number): Request =>
+        new Request(request(index, `/transactions/${id}`), {
+          method: "DELETE",
+          headers: {
+            cookie: `__Host-fidy_session=${bearer(index)}`,
+            origin: "https://app.fidyapp.com",
+          },
+        });
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion(1)))).status).toBe(404);
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion(0)))).status).toBe(200);
+      expect(
+        (yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            new Request(request(0, `/transactions/${id}`), {
+              headers: {
+                cookie: `__Host-fidy_session=${bearer(0)}`,
+                origin: "https://app.fidyapp.com",
+              },
+            })
+          )
+        )).status
+      ).toBe(404);
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion(0)))).status).toBe(404);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'transactions.deleteTransaction' AND outcome = 'success'"
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
+it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
+  "does not delete a Transaction when %s refuses the write",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromTestPromise(() => setup());
+        const owner = users[0] ?? "";
+        const id = "30000000-0000-4000-8000-000000000993";
+        yield* fromTestPromise(() =>
+          seedRetainedTransaction({ db, userId: owner, id, categoryId: category })
+        );
+        let deletion = new Request(request(0, `/transactions/${id}`), {
+          method: "DELETE",
+          headers: {
+            cookie: `__Host-fidy_session=${bearer(0)}`,
+            origin: "https://app.fidyapp.com",
+          },
+        });
+        if (failure === "linked") {
+          const second = "30000000-0000-4000-8000-000000000994";
+          yield* fromTestPromise(() =>
+            seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category })
+          );
+          yield* fromTestPromise(() =>
+            seedLinkedPair({ db, userId: owner, first: id, second, visible: id })
+          );
+        } else if (failure === "audit-outage") {
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                "CREATE TRIGGER refuse_delete_audit BEFORE INSERT ON transaction_audit WHEN NEW.operation = 'transactions.deleteTransaction' BEGIN SELECT RAISE(ABORT, 'audit_unavailable'); END"
+              )
+              .run()
+          );
+        } else {
+          const token = `fin_${"j".repeat(8)}_${"k".repeat(43)}`;
+          const current = yield* Clock.currentTimeMillis;
+          yield* seedPAT({
+            db,
+            userId: owner,
+            token,
+            scopes: [failure === "read-only" ? "read" : "write"],
+            current,
+          });
+          if (failure === "revoked") {
+            yield* fromTestPromise(() =>
+              db
+                .prepare("UPDATE pats SET revoked_at_ms = ? WHERE user_id = ?")
+                .bind(current, owner)
+                .run()
+            );
+          }
+          deletion = new Request(`https://api.fidyapp.com/transactions/${id}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${token}` },
+          });
+        }
+        const response = yield* fromTestPromise(() => sendPublicRequest(db, deletion));
+        const status = { linked: 400, "audit-outage": 503, "read-only": 403, revoked: 401 };
+        expect(response.status).toBe(status[failure]);
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare("SELECT deleted_at_ms FROM transactions WHERE user_id = ? AND id = ?")
+              .bind(owner, id)
+              .first()
+          )
+        ).toMatchObject({ deleted_at_ms: null });
+        expect(
+          yield* fromTestPromise(() =>
+            countRows(
+              db,
+              "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'transactions.deleteTransaction' AND outcome = 'success'"
+            )
+          )
+        ).toBe(0);
+      })
+    )
+);
+
+it("rolls back deletion and dashboard removal when a later batch child fails at commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const id = "30000000-0000-4000-8000-000000000995";
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER abort_next_capture BEFORE INSERT ON transactions BEGIN SELECT RAISE(ABORT, 'capture_unavailable'); END"
+          )
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            {
+              callId: batchCallId(1),
+              operation: "transactions.deleteTransaction",
+              input: { params: { id } },
+            },
+            transactionCall(2, input()),
+          ])
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT deleted_at_ms FROM transactions WHERE user_id = ? AND id = ?")
+            .bind(owner, id)
+            .first()
+        )
+      ).toMatchObject({ deleted_at_ms: null });
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+        )
+      ).toBe(1);
+      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([]);
     })
   ));

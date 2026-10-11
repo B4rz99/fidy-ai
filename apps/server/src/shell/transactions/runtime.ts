@@ -11,6 +11,7 @@ const implemented = [
   "transactions.linkTransactions",
   "transactions.unlinkTransactions",
   "transactions.updateTransaction",
+  "transactions.deleteTransaction",
 ] as const;
 
 const routes = implemented.map((id) => {

@@ -12,6 +12,7 @@ import {
   userOwnedAgentScopedChildren,
   verifiedWhatsAppHostedOnly,
   webOrHosted,
+  webSessionOnly,
 } from "./contract";
 import { completesHostedTurn, decideOperationAccess, isHostedVisible } from "./operations";
 
@@ -40,6 +41,7 @@ it("round-trips every published access variant through the canonical codec", () 
       published: { type: "fresh-web-session-only" },
       canonical: freshWebSessionOnly,
     },
+    { published: { type: "web-session-only" }, canonical: webSessionOnly },
     { published: { type: "web-or-hosted" }, canonical: webOrHosted },
     {
       published: { type: "verified-whatsapp-hosted-only" },
@@ -85,6 +87,18 @@ it("decides every canonical caller class from one access requirement", () => {
     reason: "caller_ineligible",
   });
 
+  expect(decideOperationAccess(webSessionOnly, web(false))).toEqual({ _tag: "Allowed" });
+  expect(decideOperationAccess(webSessionOnly, web(true))).toEqual({ _tag: "Allowed" });
+  for (const caller of [
+    pat(["read", "write", "dashboard"]),
+    hosted("verified-whatsapp"),
+    { _tag: "OAuthAgent", capabilities: ["write"] },
+  ] as const) {
+    expect(decideOperationAccess(webSessionOnly, caller)).toEqual({
+      _tag: "Denied",
+      reason: "caller_ineligible",
+    });
+  }
   expect(decideOperationAccess(webOrHosted, web(false))).toEqual({ _tag: "Allowed" });
   expect(decideOperationAccess(webOrHosted, hosted("no-verified-whatsapp-authority"))).toEqual({
     _tag: "Allowed",

@@ -662,7 +662,7 @@
       "id": "pats.approvePATPairing",
       "policy": {
         "access": {
-          "type": "fresh-web-session-only"
+          "type": "web-session-only"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -695,7 +695,7 @@
       "id": "pats.inspectPATPairing",
       "policy": {
         "access": {
-          "type": "fresh-web-session-only"
+          "type": "web-session-only"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",

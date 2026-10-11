@@ -37,6 +37,7 @@ import {
   freshWebSessionOnly,
   operationPolicy,
   webOrHosted,
+  webSessionOnly,
 } from "~/shell/canonical-policy/contract";
 import { type AuditCredentialOperation } from "~/shell/audit/contract";
 
@@ -278,7 +279,7 @@ const inspectPATPairing = HttpApiEndpoint.post("inspectPATPairing", "/pats/pairi
   )
   .annotateMerge(
     operationPolicy({
-      access: freshWebSessionOnly,
+      access: webSessionOnly,
       requiredTier: "free",
       agentConfirmation: "not-required",
       kind: "mutation",
@@ -296,7 +297,7 @@ const approvePATPairing = HttpApiEndpoint.post("approvePATPairing", "/pats/pairi
   )
   .annotateMerge(
     operationPolicy({
-      access: freshWebSessionOnly,
+      access: webSessionOnly,
       requiredTier: "free",
       agentConfirmation: "not-required",
       kind: "mutation",

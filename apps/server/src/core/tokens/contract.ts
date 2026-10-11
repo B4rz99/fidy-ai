@@ -369,7 +369,7 @@ export const ClaimedPATPairing = IssuedPAT.annotate({
   httpApiStatus: 200,
 });
 
-/** Safe immutable snapshot reviewed in a fresh WebSession. */
+/** Safe immutable snapshot reviewed in an authenticated WebSession. */
 export const PATPairingReview = Schema.Struct({
   pairingId: PATPairingId,
   recipientLabel: PATRecipientLabel,

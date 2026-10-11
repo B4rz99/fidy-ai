@@ -222,6 +222,13 @@ for (const count of [0, pageSize, multiplePages]) {
         const fixture = yield* wait(() => installHistory(page, count));
         yield* wait(() => page.goto("/app/transactions"));
         const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
+        if (count === 0) {
+          yield* wait(() =>
+            expect(
+              page.getByText("No hay transacciones para mostrar", { exact: true })
+            ).toBeVisible()
+          );
+        }
         yield* wait(() => expect(rows).toHaveCount(Math.min(count, pageSize)));
         for (let loaded = pageSize; loaded < count; loaded += pageSize) {
           yield* wait(() => scrollHistoryEnd(page));

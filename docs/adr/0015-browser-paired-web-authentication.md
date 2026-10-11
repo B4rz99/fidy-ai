@@ -48,7 +48,7 @@ whose onboarding Consent is explicitly revoked may still authenticate to reach F
 re-consent and data-rights surfaces; ordinary canonical work remains blocked until re-consent.
 
 A fresh browser pairing is sufficient for security-sensitive web actions, including PAT issuance and
-credential replacement. The MVP does not require a passkey. This accepts control of one previously
+credential replacement. CLI PATPairing review and explicit approval instead accept an existing live WebSession, rechecking ownership, revocation and both session deadlines atomically at approval. This exception does not change manual PAT issuance, recovery or OAuthConnection approval freshness. The MVP does not require a passkey. This accepts control of one previously
 established User proof together with the independent browser verifier under the launch threat model;
 surviving a total Kapso, Meta, or Resend compromise remains out of scope.
 

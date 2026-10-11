@@ -240,7 +240,7 @@ The built static browser checks cover both paths against real public/Core/D1 wit
 
 `/connect/cli` owns focused PATPairing review, separate from ordinary PAT management. Its optional
 `cliCode` is decoded with the server's public-code schema. A mounted runtime atom inspects the
-request; navigation never approves it. The view displays the terminal code, unverified recipient
+request using the existing live WebSession, without requiring its ten-minute freshness window; navigation never approves it. The view displays the terminal code, unverified recipient
 metadata, scopes and fixed lifetime before an explicit approval click. Only the CLI claims the
 bearer. Browser pairing and provider login preserve this allowlisted destination/code; no arbitrary
 return URL, private verifier or bearer is placed in navigation state. Without a code, the page offers

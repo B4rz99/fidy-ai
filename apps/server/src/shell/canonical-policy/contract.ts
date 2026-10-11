@@ -27,6 +27,7 @@ export type UserOwnedAgentScopeCheck = typeof UserOwnedAgentScopeCheck.Type;
 const CanonicalOperationAccess = Schema.Union([
   Schema.TaggedStruct("UserOwnedAgentScoped", { scope: UserOwnedAgentScopeCheck }),
   Schema.TaggedStruct("FreshWebSessionOnly", {}),
+  Schema.TaggedStruct("WebSessionOnly", {}),
   Schema.TaggedStruct("WebOrHosted", {}),
   Schema.TaggedStruct("VerifiedWhatsAppHostedOnly", {}),
   Schema.TaggedStruct("FreshWebOrVerifiedWhatsAppHosted", {}),
@@ -44,6 +45,7 @@ const PublishedOperationAccessWire = Schema.Union([
     ]),
   }),
   Schema.Struct({ type: Schema.Literal("fresh-web-session-only") }),
+  Schema.Struct({ type: Schema.Literal("web-session-only") }),
   Schema.Struct({ type: Schema.Literal("web-or-hosted") }),
   Schema.Struct({ type: Schema.Literal("verified-whatsapp-hosted-only") }),
   Schema.Struct({ type: Schema.Literal("fresh-web-or-verified-whatsapp-hosted") }),
@@ -64,6 +66,8 @@ const decodePublishedAccess = (access: PublishedOperationAccessWire): CanonicalO
       };
     case "fresh-web-session-only":
       return { _tag: "FreshWebSessionOnly" };
+    case "web-session-only":
+      return { _tag: "WebSessionOnly" };
     case "web-or-hosted":
       return { _tag: "WebOrHosted" };
     case "verified-whatsapp-hosted-only":
@@ -85,6 +89,8 @@ const encodePublishedAccess = (access: CanonicalOperationAccess): PublishedOpera
       };
     case "FreshWebSessionOnly":
       return { type: "fresh-web-session-only" };
+    case "WebSessionOnly":
+      return { type: "web-session-only" };
     case "WebOrHosted":
       return { type: "web-or-hosted" };
     case "VerifiedWhatsAppHostedOnly":
@@ -147,6 +153,9 @@ export const userOwnedAgentScopedChildren: OperationAccess = {
 
 /** Declares an operation available only to a currently fresh WebSession. */
 export const freshWebSessionOnly: OperationAccess = { _tag: "FreshWebSessionOnly" };
+
+/** Declares an operation available only to a live WebSession. */
+export const webSessionOnly: OperationAccess = { _tag: "WebSessionOnly" };
 
 /** Declares an operation available to web and hosted callers but never User-owned-agent callers. */
 export const webOrHosted: OperationAccess = { _tag: "WebOrHosted" };

@@ -623,134 +623,205 @@ it("authenticated scope and input refusals retain commercial allowance headers w
 
 afterEach(() => vi.useRealTimers());
 afterAll(() => databases.dispose());
-it("releases one scoped bearer to the private-code holder after web approval, never on replay", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const start = yield* awaitPromise(
-        send({
-          path: "/pat-pairings",
-          method: "POST",
-          payload: {
-            recipientLabel: "My agent",
-            scopes: ["read"],
-            lifetimeDays: 7,
-          },
-        })
-      );
-      expect(start.status).toBe(200);
-      const created = yield* Schema.decodeUnknownEffect(Started)(yield* awaitPromise(start.json()));
-      expect(
-        (yield* awaitPromise(
+it.each(["fresh", "live"] as const)(
+  "releases one scoped bearer after approval by a %s browser session, never on replay",
+  (sessionAge) =>
+    runTest(
+      Effect.gen(function* () {
+        const { db, send, sessions } = yield* awaitPromise(setup());
+        if (sessionAge === "live") {
+          vi.useFakeTimers({ toFake: ["Date"] });
+          vi.setSystemTime(clock() + 600_001);
+        }
+        const start = yield* awaitPromise(
           send({
-            path: "/pat-pairings/claim",
+            path: "/pat-pairings",
             method: "POST",
             payload: {
-              pairingId: created.pairingId,
-              privateDeviceCode: "x".repeat(43),
+              recipientLabel: "My agent",
+              scopes: ["read"],
+              lifetimeDays: 7,
             },
           })
-        )).status
-      ).toBe(400);
-      const reviewResponse = yield* awaitPromise(
-        send({
-          path: "/pats/pairings/inspect",
-          method: "POST",
-          payload: {
-            publicCode: created.publicCode,
-          },
-          session: sessions[0],
-        })
-      );
-      expect(reviewResponse.status).toBe(200);
-      const review = (yield* Schema.decodeUnknownEffect(Review)(
-        yield* awaitPromise(reviewResponse.json())
-      )).data;
-      expect(review).toMatchObject({
-        scopes: ["read"],
-        lifetimeDays: 7,
-      });
-      const rejectedOrigin = yield* awaitPromise(
-        send({
-          path: "/pats/pairings/approve",
-          method: "POST",
-          payload: {
-            pairingId: review.pairingId,
-          },
-          session: sessions[0],
-          origin: "https://evil.example",
-        })
-      );
-      expect(rejectedOrigin.status).toBe(403);
-      expect(
-        (yield* awaitPromise(
-          db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(review.pairingId).first()
-        ))?.state
-      ).toBe("pending_approval");
-      expect(
-        (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first()
-        ))?.total
-      ).toBe(0);
-      vi.useFakeTimers({
-        toFake: ["Date"],
-      });
-      vi.setSystemTime(clock() + 240_000);
-      const approval = yield* awaitPromise(
-        send({
-          path: "/pats/pairings/approve",
-          method: "POST",
-          payload: {
-            pairingId: review.pairingId,
-          },
-          session: sessions[0],
-        })
-      );
-      expect(approval.status).toBe(200);
-      const proof = {
-        pairingId: created.pairingId,
-        privateDeviceCode: created.privateDeviceCode,
-      };
-      const claim = yield* awaitPromise(
-        send({
-          path: "/pat-pairings/claim",
-          method: "POST",
-          payload: proof,
-        })
-      );
-      expect(claim.status).toBe(200);
-      const issued = yield* Schema.decodeUnknownEffect(Issued)(yield* awaitPromise(claim.json()));
-      expect(issued.bearer).toMatch(/^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{43}$/u);
-      expect(Date.parse(issued.pat.expiresAt) - Date.parse(issued.pat.createdAt)).toBe(
-        7 * 86_400_000
-      );
-      expect(
-        (yield* awaitPromise(
+        );
+        expect(start.status).toBe(200);
+        const created = yield* Schema.decodeUnknownEffect(Started)(
+          yield* awaitPromise(start.json())
+        );
+        expect(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings/claim",
+              method: "POST",
+              payload: {
+                pairingId: created.pairingId,
+                privateDeviceCode: "x".repeat(43),
+              },
+            })
+          )).status
+        ).toBe(400);
+        const reviewResponse = yield* awaitPromise(
+          send({
+            path: "/pats/pairings/inspect",
+            method: "POST",
+            payload: {
+              publicCode: created.publicCode,
+            },
+            session: sessions[0],
+          })
+        );
+        expect(reviewResponse.status).toBe(200);
+        const review = (yield* Schema.decodeUnknownEffect(Review)(
+          yield* awaitPromise(reviewResponse.json())
+        )).data;
+        expect(review).toMatchObject({
+          scopes: ["read"],
+          lifetimeDays: 7,
+        });
+        const rejectedOrigin = yield* awaitPromise(
+          send({
+            path: "/pats/pairings/approve",
+            method: "POST",
+            payload: {
+              pairingId: review.pairingId,
+            },
+            session: sessions[0],
+            origin: "https://evil.example",
+          })
+        );
+        expect(rejectedOrigin.status).toBe(403);
+        expect(
+          (yield* awaitPromise(
+            db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(review.pairingId).first()
+          ))?.state
+        ).toBe("pending_approval");
+        expect(
+          (yield* awaitPromise(
+            db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first()
+          ))?.total
+        ).toBe(0);
+        vi.useFakeTimers({
+          toFake: ["Date"],
+        });
+        vi.setSystemTime(clock() + 240_000);
+        const approval = yield* awaitPromise(
+          send({
+            path: "/pats/pairings/approve",
+            method: "POST",
+            payload: {
+              pairingId: review.pairingId,
+            },
+            session: sessions[0],
+          })
+        );
+        expect(approval.status).toBe(200);
+        const proof = {
+          pairingId: created.pairingId,
+          privateDeviceCode: created.privateDeviceCode,
+        };
+        const claim = yield* awaitPromise(
           send({
             path: "/pat-pairings/claim",
             method: "POST",
             payload: proof,
           })
-        )).status
-      ).toBe(400);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare("SELECT count(*) AS total FROM pats WHERE pairing_id = ?")
-            .bind(created.pairingId)
-            .first()
-        ))?.total
-      ).toBe(1);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare("SELECT bearer_digest FROM pats WHERE pairing_id = ?")
-            .bind(created.pairingId)
-            .first()
-        ))?.bearer_digest
-      ).not.toBe(issued.bearer);
-    })
-  ));
+        );
+        expect(claim.status).toBe(200);
+        const issued = yield* Schema.decodeUnknownEffect(Issued)(yield* awaitPromise(claim.json()));
+        expect(issued.bearer).toMatch(/^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{43}$/u);
+        expect(Date.parse(issued.pat.expiresAt) - Date.parse(issued.pat.createdAt)).toBe(
+          7 * 86_400_000
+        );
+        expect(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings/claim",
+              method: "POST",
+              payload: proof,
+            })
+          )).status
+        ).toBe(400);
+        expect(
+          (yield* awaitPromise(
+            db
+              .prepare("SELECT count(*) AS total FROM pats WHERE pairing_id = ?")
+              .bind(created.pairingId)
+              .first()
+          ))?.total
+        ).toBe(1);
+        expect(
+          (yield* awaitPromise(
+            db
+              .prepare("SELECT bearer_digest FROM pats WHERE pairing_id = ?")
+              .bind(created.pairingId)
+              .first()
+          ))?.bearer_digest
+        ).not.toBe(issued.bearer);
+      })
+    )
+);
+it.each(["revoked", "idle-expired"] as const)(
+  "refuses pairing review and approval with a %s browser session without partial effects",
+  (state) =>
+    runTest(
+      Effect.gen(function* () {
+        const { db, send, sessions } = yield* awaitPromise(setup());
+        if (state === "revoked") {
+          yield* awaitPromise(
+            db
+              .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
+              .bind(clock(), userA)
+              .run()
+          );
+        } else {
+          vi.useFakeTimers({ toFake: ["Date"] });
+          vi.setSystemTime(clock() + 2_592_000_000);
+        }
+        const started = yield* awaitPromise(
+          send({
+            path: "/pat-pairings",
+            method: "POST",
+            payload: { recipientLabel: "Desktop agent", scopes: ["read"], lifetimeDays: 7 },
+          })
+        );
+        expect(started.status).toBe(200);
+        const pairing = yield* Schema.decodeUnknownEffect(Started)(
+          yield* awaitPromise(started.json())
+        );
+        for (const [path, payload] of [
+          ["/pats/pairings/inspect", { publicCode: pairing.publicCode }],
+          ["/pats/pairings/approve", { pairingId: pairing.pairingId }],
+        ] as const) {
+          expect(
+            (yield* awaitPromise(send({ path, method: "POST", session: sessions[0], payload })))
+              .status
+          ).toBe(401);
+        }
+        expect(
+          (yield* awaitPromise(
+            db
+              .prepare("SELECT state FROM pat_pairings WHERE id = ?")
+              .bind(pairing.pairingId)
+              .first()
+          ))?.state
+        ).toBe("pending_approval");
+        expect(
+          (yield* awaitPromise(
+            db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first()
+          ))?.total
+        ).toBe(0);
+        expect(
+          (yield* awaitPromise(
+            db
+              .prepare(
+                "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.approvePATPairing'"
+              )
+              .first()
+          ))?.total
+        ).toBe(0);
+      })
+    )
+);
 it("refuses a source's PAT pairing burst without denying an unrelated client", () =>
   runTest(
     Effect.gen(function* () {

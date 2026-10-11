@@ -1,0 +1,25 @@
+apps/server/cloudflare/transactions/projection-write-costs.test.ts
+  s_b75995d26622a8::t_365bb9e71aca7b 168-169
+apps/server/cloudflare/migrations/0083_transaction_deletion.sql
+  s_b75995d26622a8::t_365bb9e71aca7b 34-35
+apps/server/cloudflare/transactions/internal/transaction-reconciliation.ts
+  s_b75995d26622a8::t_003e09f54f5376 112-114
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_b75995d26622a8::t_83b0123d35784b 6782-6833
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0c0c3827ff88a8cc99b1eff36cc9a1e35a4b0630",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

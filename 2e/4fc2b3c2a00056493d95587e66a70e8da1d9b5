@@ -1,0 +1,59 @@
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_b75995d26622a8::t_c1513a6901a63f 6993-7086
+apps/server/cloudflare/canonical-operations/internal/mutation-registry.ts
+  s_b75995d26622a8::t_f80ca3360dd0e9 58,492-508
+apps/server/cloudflare/canonical-work/contract.ts
+  s_b75995d26622a8::t_a066452de2e134 74
+apps/server/cloudflare/core-http/internal/http.ts
+  s_b75995d26622a8::t_04ee2fe070df93 1182-1190
+apps/server/cloudflare/d1-test-fixture.ts
+  s_b75995d26622a8::t_c5ffcaed6899ba 246-247
+apps/server/cloudflare/migrations/0084_transaction_deletion_audit.sql
+  s_b75995d26622a8::t_52daee2ec606de 1-64
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_b75995d26622a8::t_e118e6d9490754 56,74
+apps/server/cloudflare/oauth-agents/oauth-confirmation.test.ts
+  s_b75995d26622a8::t_fcca1dd2c2bb74 752,837,843-848
+apps/server/cloudflare/transactions/contract.ts
+  s_b75995d26622a8::t_e2af87fc634e14 155
+apps/server/cloudflare/transactions/internal/oauth-review.ts
+  s_b75995d26622a8::t_ad68572b27fdac 76
+apps/server/cloudflare/transactions/internal/transaction-deletion.ts
+  s_b75995d26622a8::t_59da166f1fd568 1-176
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  s_b75995d26622a8::t_3feeca1fa66994 276,340,479
+apps/server/cloudflare/transactions/internal/transaction-outcome.ts
+  s_b75995d26622a8::t_7767df40480d6d 1,186-211,226-228,435-437
+apps/server/cloudflare/transactions/oauth-review.test.ts
+  s_b75995d26622a8::t_fdfde26c17276f 510-513
+apps/server/cloudflare/transactions/operations.ts
+  s_b75995d26622a8::t_d388253b2ba4bf 1,205-207
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_b75995d26622a8::t_7fa3a290c44668 4285,4306,4316,6588-6781
+apps/server/contracts/openapi.json
+  s_b75995d26622a8::t_e7a36bcaccc2e8 20285
+apps/server/src/shell/audit/contract.ts
+  s_b75995d26622a8::t_c14ebc90d74c70 62
+apps/server/src/shell/tokens/contract.ts
+  s_b75995d26622a8::t_d42a184edb338c 350
+apps/server/src/shell/transactions/contract.ts
+  s_b75995d26622a8::t_22f010d69fec83 147
+apps/server/src/shell/transactions/runtime.ts
+  s_b75995d26622a8::t_5d925addf31520 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2e4fc2b3c2a00056493d95587e66a70e8da1d9b5",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

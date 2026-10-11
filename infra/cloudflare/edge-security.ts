@@ -73,7 +73,7 @@ const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
     description: "Allow browser-signature-independent reads of public marketing documents",
     enabled: true,
     expression:
-      '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/robots.txt" "/llms.txt" "/sitemap.xml" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes"})',
+      '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/robots.txt" "/llms.txt" "/sitemap.xml" "/install.sh" "/install.ps1" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes"})',
   },
 ];
 
@@ -107,6 +107,7 @@ const httpDdosRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
 // The Free plan permits one path-based rule. Static paths and parameterized route prefixes derive
 // from the canonical API; unmatched paths never charge legitimate callers' shared source-IP budget.
 const reservedRateLimitPaths = [
+  "/cli/latest.txt",
   "/health",
   ...Object.values(oauthPaths),
   ...Object.values(connectionBrowserPaths),

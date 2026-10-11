@@ -1,4 +1,4 @@
-import { Data, Effect, ManagedRuntime, Stream } from "effect";
+import { Data, Effect, ManagedRuntime, Option, Stream } from "effect";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 
 const maximumResponseBytes = 1_048_576;
@@ -13,7 +13,11 @@ class WorkerdResponseTooLarge extends Data.TaggedError("WorkerdResponseTooLarge"
 }> {}
 
 type WorkerdRequest = Readonly<
-  { readonly port: number; readonly path: string; readonly signal: AbortSignal } & (
+  {
+    readonly port: number;
+    readonly path: string;
+    readonly signal: AbortSignal;
+  } & (
     | { readonly method: "GET" }
     | {
         readonly method: "POST";
@@ -28,10 +32,14 @@ type WorkerdRequest = Readonly<
  * 1 MiB is retained; the supplied signal and deadline abort headers and unfinished bodies.
  * The returned response contains only buffered bytes and no live transport resource.
  */
-export const requestWorkerd = (options: WorkerdRequest): Promise<Response> =>
+const requestProof = (
+  options: WorkerdRequest,
+  origin: Option.Option<string> = Option.none()
+): Promise<Response> =>
   runtime.runPromise(
     Effect.gen(function* () {
-      const url = `http://127.0.0.1:${options.port}${options.path}`;
+      const baseUrl = Option.getOrElse(origin, () => `http://127.0.0.1:${options.port}`);
+      const url = new URL(options.path, baseUrl).href;
       const request =
         options.method === "GET"
           ? HttpClientRequest.get(url)
@@ -69,6 +77,14 @@ export const requestWorkerd = (options: WorkerdRequest): Promise<Response> =>
     ),
     { signal: options.signal }
   );
+
+/** Sends a bounded loopback request to the local proof runtime. */
+export const requestWorkerd = (options: WorkerdRequest): Promise<Response> => requestProof(options);
+
+/** Sends a bounded request to the owned HTTPS Cloudflare Preview. */
+export const requestHostedProof = (
+  options: WorkerdRequest & Readonly<{ origin: string }>
+): Promise<Response> => requestProof(options, Option.some(options.origin));
 
 /** Releases the local-only HTTP runtime when the proof process is finished. */
 export const closeWorkerdHttp = (): Promise<void> => runtime.dispose();

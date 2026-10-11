@@ -109,7 +109,9 @@ const findCandidate = ({
   Effect.tryPromise({
     try: () =>
       db
-        .prepare(`${candidateQuery} WHERE retained.user_id = ? AND retained.id = ?`)
+        .prepare(
+          `${candidateQuery} WHERE retained.user_id = ? AND retained.id = ? AND retained.deleted_at_ms IS NULL`
+        )
         .bind(userId, id)
         .first(),
     catch: boundaryFailure,

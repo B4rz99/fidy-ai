@@ -260,12 +260,18 @@ stderr/stdout presentation as production. It proves Free success, exhausted and 
 metadata, shared-PAT replay standing, Trial uncapped standing and security refusal. This is local
 server-adapter-to-CLI evidence, not a live ingress/provider or Production test.
 
-## Standalone release candidates
+## Standalone CLI distribution
 
-`command/installation.ts` publishes only version and basic help before credential-store startup;
+`command/installation.ts` publishes version and basic help before credential-store startup;
 canonical operation discovery still uses the saved grant. `scripts/cli-release/build.sh` compiles
-natively with the same pinned Bun bytes and packages a single executable. The read-only release
-candidate workflow validates Linux x64, macOS arm64 and Windows x64; it never publishes a release.
-See [installation and release gates](../../docs/guides/cli-installation.md). Runtime revision guards,
-credential storage and server authorization are unchanged. Public installer URLs must not be
-advertised until an approved release is actually available anonymously.
+natively with the pinned Bun bytes and embeds the assigned release version. The candidate and
+publication workflows validate Linux x64, macOS arm64 and Windows x64, including same-source
+repeat builds and installer checks. The publication workflow runs after successful trunk checks.
+Its resolved CLI input fingerprint includes consumed contracts, bundled dependency code and metadata,
+runtime pin, packaging and emitted bundle bytes; compiler configuration that changes the bundle
+triggers a release, while unrelated edits do not allocate a new version. Publication freezes a
+complete GitHub release before anonymous verification and advancing GitHub's latest marker.
+The web artifact serves canonical installer bytes; the API exposes the bounded anonymous latest
+version manifest. Installers configure user PATH idempotently and upgrades run on demand.
+See [installation and automated releases](../../docs/guides/cli-installation.md). Runtime guards,
+credential storage and server authorization remain the same.

@@ -152,6 +152,7 @@ export type DashboardTransactionRead<A> = Readonly<{
 /** How one Transaction mutation presents the records its response reads back. */
 type TransactionReadback =
   | Readonly<{ _tag: "Transaction" }>
+  | Readonly<{ _tag: "DeletedTransaction" }>
   /** The effective Transaction of one linked pair, presented as ordinary history returns it. */
   | Readonly<{ _tag: "EffectiveTransaction"; pair: TransactionPair }>
   /** The two independent originals one successful unlink restored, in canonical pair order. */

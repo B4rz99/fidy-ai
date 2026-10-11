@@ -69,6 +69,15 @@ bound the client graph. Semantic leakage through an otherwise legal interface st
 See root architecture's public-surface review and
 [ADR 0031](../../docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
 
+### CLI distribution metadata
+
+`cloudflare/cli-distribution/runtime.ts` owns the anonymous GET `/cli/latest.txt` route at public
+ingress. It reads only the fixed GitHub latest-release asset, validates a maximum 64-byte numeric
+release version within 15 seconds and returns plain text under the existing API security policy.
+Outbound HTTP bounds every provider response to 4 KiB, permits at most two explicit redirects to
+reviewed GitHub release destinations and exports only closed provider telemetry. Failure returns 503; it never invents a default or accesses private Core. Request cancellation owns
+the upstream read. The route shares the edge's source-IP request bound.
+
 ### Connection browser preparation
 
 The portable Connections runtime derives browser transport identity and methods from its declared

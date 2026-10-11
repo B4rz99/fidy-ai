@@ -49,6 +49,18 @@ const ready: Model = {
   },
 };
 
+it("renders the canonical Dashboard title", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const view = makeView(standardOptions);
+      yield* render({
+        ...ready,
+        query: { ...ready.query, view: Option.some({ ...view, title: "Mi tablero financiero" }) },
+      });
+      expect(screen.getByRole("heading", { name: "Mi tablero financiero" })).toBeVisible();
+    })
+  ));
+
 it.each([
   ["reading", "Cargando tablero…"],
   ["initializing", "Inicializando tablero…"],

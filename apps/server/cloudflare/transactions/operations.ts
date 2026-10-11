@@ -1,3 +1,4 @@
+import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
   findSnapshot,
   readFacts,
@@ -201,3 +202,6 @@ export const readDashboardTransactions: typeof ownerReadDashboardTransactions = 
 /** Read exact Currency-preserving contributions over a bounded half-open UTC interval. */
 export const findDashboardAggregate: typeof ownerFindDashboardAggregate = (input) =>
   ownerFindDashboardAggregate(input);
+
+/** Prepare irreversible history removal under live authority and the observed revision. */
+export const prepareDeletion: typeof ownerPrepareDeletion = (input) => ownerPrepareDeletion(input);

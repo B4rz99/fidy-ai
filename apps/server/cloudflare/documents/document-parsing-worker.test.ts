@@ -26,6 +26,30 @@ const parse = (body: BodyInit, headers?: HeadersInit, signal?: AbortSignal): Pro
   );
 
 describe("Document parsing Worker proof", () => {
+  it.effect("requires the isolated hosted proof key before reading a statement", () =>
+    Effect.gen(function* () {
+      const env = { XLSX_PROOF_KEY: "synthetic-proof-key" };
+      const request = (key: string): Request =>
+        new Request("https://document-parser.internal/statement", {
+          method: "POST",
+          body: "Date,Amount\n2026-01-01,1000",
+          headers: { "X-Xlsx-Proof-Key": key },
+        });
+      const refused = yield* Effect.tryPromise(() =>
+        documentParsingWorker.fetch(request("wrong"), env)
+      );
+      expect(refused.status).toBe(404);
+      const accepted = yield* Effect.tryPromise(() =>
+        documentParsingWorker.fetch(request(env.XLSX_PROOF_KEY), env)
+      );
+      expect(accepted.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => accepted.json())).toMatchObject({
+        outcome: "parsed",
+        rowCount: 1,
+      });
+    })
+  );
+
   it.effect("sniffs CSV bytes instead of trusting a mismatched type claim", () =>
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() =>

@@ -40,6 +40,9 @@ const AwaitingDelivery = Schema.Struct({ status: Schema.Literal("awaiting_delive
 const CapacityExceeded = Schema.Struct({ status: Schema.Literal("capacity_exceeded") }).annotate({
   httpApiStatus: 429,
 });
+export const HostedTurnQuotaExceeded = Schema.Struct({
+  status: Schema.Literal("provider_quota_exceeded"),
+}).annotate({ httpApiStatus: 429 });
 const HostedTurnGroup = HttpApiGroup.make("hostedTurn")
   .add(
     HttpApiEndpoint.post("propose", "/web/hosted-turns", {
@@ -52,6 +55,7 @@ const HostedTurnGroup = HttpApiGroup.make("hostedTurn")
         Unavailable,
         AwaitingDelivery,
         CapacityExceeded,
+        HostedTurnQuotaExceeded,
       ],
     })
   )
@@ -59,7 +63,7 @@ const HostedTurnGroup = HttpApiGroup.make("hostedTurn")
     HttpApiEndpoint.post("progress", "/web/hosted-turns/progress", {
       payload: HostedTurnProgressRequest,
       success: HostedTurnReply,
-      error: [Unauthenticated, Unavailable, Invalid],
+      error: [Unauthenticated, Unavailable, Invalid, HostedTurnQuotaExceeded],
     })
   )
   .add(

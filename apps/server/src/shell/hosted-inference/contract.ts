@@ -133,6 +133,7 @@ export type HostedInferenceFailureReason =
     }>
   | Readonly<{ _tag: "InvalidOutput"; description: HostedInvalidOutputDescription }>
   | Readonly<{ _tag: "ProviderUnavailable" }>
+  | Readonly<{ _tag: "ProviderQuotaExceeded" }>
   | Readonly<{ _tag: "ResourceLimit" }>
   | Readonly<{ _tag: "AdmissionUnavailable" }>
   | Readonly<{ _tag: "StructuredOutputExceeded" }>
@@ -145,6 +146,7 @@ const hostedInferenceErrorMessages: Readonly<Record<HostedInferenceFailureReason
     ActiveRequestCapacityExceeded: "The active User request exceeds its token capacity",
     InvalidOutput: "The hosted provider returned invalid output",
     ProviderUnavailable: "The hosted provider is unavailable",
+    ProviderQuotaExceeded: "The hosted provider daily allocation is exhausted",
     ResourceLimit: "Hosted inference resource admission was refused",
     AdmissionUnavailable: "Hosted inference admission authority is unavailable",
     StructuredOutputExceeded: "The hosted structured response exceeded its bound",

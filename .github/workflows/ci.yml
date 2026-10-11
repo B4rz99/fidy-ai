@@ -1,8 +1,9 @@
 name: Checks
 
-# Pull requests only. The protect ruleset requires the branch to be up to date
-# with trunk before merging.
+# Validate PRs and exact trunk revisions used by automatic CLI releases.
 on:
+  push:
+    branches: [trunk]
   pull_request:
     branches:
       - trunk
@@ -43,8 +44,8 @@ jobs:
       - name: Plan checks from the complete PR diff
         id: plan
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bun scripts/ci-changes.ts
       - name: Export the authoritative required-check script
         id: results-gate
@@ -66,7 +67,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Fetch base branch tip
         env:
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
       # Oxlint's RuleTester requires Node 22+; pin the static gate rather than
@@ -77,11 +78,13 @@ jobs:
       - name: Static repository validation
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
           VERIFY_TIMING_REPORT: test-results/verify-static.json
-        run: bun run verify -- --group static
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
+          bun run verify -- --group static
       - name: Preserve Workspace Gate phase timings
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -101,7 +104,7 @@ jobs:
       - uses: ./.github/actions/bun-install
       - name: Build validation
         env:
-          RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bun run verify -- --group builds
 
   unit:
@@ -256,7 +259,7 @@ jobs:
           fetch-depth: 0
       - name: Fetch base ref
         env:
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch origin "$BASE_BRANCH"
       - name: Gitleaks — pattern-based secret scan
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3

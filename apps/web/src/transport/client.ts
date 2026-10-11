@@ -6,6 +6,7 @@ import {
   HostedTurnProcessing,
   HostedTurnProgressRequest,
   HostedTurnProposal,
+  HostedTurnQuotaExceeded,
   HostedTurnReceipt,
   HostedTurnRequest,
   SubscriptionEnrollmentApi,
@@ -143,6 +144,7 @@ const observeAuthenticationExpiration =
 
 export {
   HostedTurnRequest,
+  HostedTurnQuotaExceeded,
   HostedTurnReceipt,
   HostedTurnProposal,
   HostedTurnProcessing,

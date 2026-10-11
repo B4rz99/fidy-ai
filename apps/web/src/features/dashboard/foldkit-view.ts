@@ -471,7 +471,7 @@ const loadNotice = (configuration: Configuration): Html => {
     ]
   );
 };
-const header = (configuration: Configuration): Html => {
+const header = (configuration: Configuration, title: string): Html => {
   const { html, model } = configuration;
   return html.header(
     [html.Key("header"), html.Class("flex flex-wrap items-center justify-between gap-4")],
@@ -479,7 +479,7 @@ const header = (configuration: Configuration): Html => {
       html.div(
         [],
         [
-          html.h1([html.Class("font-heading text-3xl font-semibold tracking-tight")], ["Tablero"]),
+          html.h1([html.Class("font-heading text-3xl font-semibold tracking-tight")], [title]),
           html.p([html.Class("text-muted-foreground")], ["Lectura actual de tus finanzas."]),
         ]
       ),
@@ -503,7 +503,7 @@ export const dashboardView = (configuration: Configuration): Html => {
   return html.main(
     [html.Class("flex w-full flex-col gap-5 p-4 sm:p-6")],
     [
-      header(configuration),
+      header(configuration, view.title),
       ...notices(configuration),
       ...(editing(model) ? [catalogTray(configuration)] : []),
       html.section(

@@ -4,6 +4,7 @@ import {
   type HostedTurnClient,
   type HostedTurnProcessing,
   type HostedTurnProposal,
+  HostedTurnQuotaExceeded,
   HostedTurnRequest,
 } from "@/transport/client";
 import type { Action, ConversationView } from "./model";
@@ -11,7 +12,7 @@ import type { Action, ConversationView } from "./model";
 type Proposal = typeof HostedTurnProposal.Type;
 type Processing = typeof HostedTurnProcessing.Type;
 type Turn =
-  | Readonly<{ tag: "idle" | "waiting" | "error" }>
+  | Readonly<{ tag: "idle" | "waiting" | "error" | "quota" }>
   | Readonly<{ tag: "proposal" | "confirming" | "completed" | "unconfirmed"; value: Proposal }>
   | Readonly<{ tag: "processing" | "uncertain"; value: Processing }>;
 type Entry = ConversationView["history"][number];
@@ -20,6 +21,8 @@ const statuses: Readonly<Record<Turn["tag"], string>> = {
   idle: "",
   waiting: "Esperando respuesta…",
   error: "No se pudo completar el turno. Inténtalo de nuevo.",
+  quota:
+    "El agente alcanzó su límite diario. Tu borrador sigue aquí. Inténtalo cuando se restablezca el acceso; si pediste cambios, revisa tus datos antes de reenviar.",
   proposal: "",
   processing: "El turno sigue en curso. Consulta el estado antes de volver a intentarlo.",
   uncertain:
@@ -28,7 +31,8 @@ const statuses: Readonly<Record<Turn["tag"], string>> = {
   completed: "",
   unconfirmed: "No pudimos guardar la respuesta. Reintenta la conexión para continuar.",
 };
-const canSubmit = (turn: Turn): boolean => ["idle", "error", "completed"].includes(turn.tag);
+const canSubmit = (turn: Turn): boolean =>
+  ["idle", "error", "quota", "completed"].includes(turn.tag);
 const proposed = (value: Proposal | Processing): Turn =>
   "status" in value ? { tag: "processing", value } : { tag: "proposal", value };
 const presentation = ({ turn, history, busy, draft }: State): ConversationView => ({
@@ -93,9 +97,9 @@ const propose = (state: State, client: HostedTurnClient): Effect.Effect<void> =>
             state.turn = proposed(reply);
           }
         },
-        onFailure: () => {
+        onFailure: (failure) => {
           if (state.active) {
-            state.turn = { tag: "error" };
+            state.turn = { tag: Schema.is(HostedTurnQuotaExceeded)(failure) ? "quota" : "error" };
             state.history = state.history.filter((entry) => entry.id !== entryId);
           }
         },

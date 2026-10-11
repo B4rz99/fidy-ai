@@ -1,3 +1,4 @@
+import { cliDistributionResponse } from "./cli-distribution/runtime";
 import {
   microsoftProviderPaths,
   providerPaths,
@@ -746,6 +747,10 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
     });
     if (Option.isSome(recoveryResponse)) {
       return applyApiPolicy(recoveryResponse.value, browserOrigin.value, origin);
+    }
+    const distributionResponse = yield* cliDistributionResponse(request);
+    if (Option.isSome(distributionResponse)) {
+      return applyApiPolicy(distributionResponse.value, browserOrigin.value, origin);
     }
     const sandboxResponse = bancolombiaSandboxResponse(request);
     if (Option.isSome(sandboxResponse)) {

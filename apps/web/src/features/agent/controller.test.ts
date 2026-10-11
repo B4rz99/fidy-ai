@@ -84,6 +84,33 @@ it("removes failed proposals from history and preserves a draft for retry", () =
     })
   ));
 
+it("preserves exact mounted drafts after quota rejection and retries without duplicate history", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let available = false;
+      const { controller, views, paths } = setup(() =>
+        available
+          ? proposal()
+          : Response.json({ status: "provider_quota_exceeded" }, { status: 429 })
+      );
+      const draft = "  Revisa mis transacciones\nantes de cambiar nada  ";
+      controller.edit(draft);
+      const input = document.createElement("textarea");
+      const release = controller.mountInput(input);
+      yield* controller.run("Submit");
+      expect(input.value).toBe(draft);
+      expect(views.at(-1)?.status).toContain("límite diario");
+      expect(views.at(-1)?.history).toEqual([]);
+      expect(views.at(-1)?.canSubmit).toBe(true);
+      available = true;
+      yield* controller.run("Submit");
+      expect(input.value).toBe("");
+      expect(views.at(-1)?.history).toHaveLength(1);
+      expect(paths).toHaveLength(2);
+      release();
+    })
+  ));
+
 it("recovers uncertain progress and retries delivery without resubmitting a turn", () =>
   Effect.runPromise(
     Effect.gen(function* () {

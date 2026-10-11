@@ -12,6 +12,27 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
 import { mountTransactions } from "./program";
 
+const continuations = vi.hoisted(() => new Map<Element, () => void>());
+vi.mock("./scroll-continuation", () => ({
+  observeContinuation: ({
+    element,
+    onMore,
+  }: Readonly<{ element: HTMLElement; onMore: () => void }>): (() => void) => {
+    continuations.set(element, onMore);
+    return (): void => {
+      continuations.delete(element);
+    };
+  },
+}));
+const intersectContinuation = (): Promise<void> =>
+  waitFor(() => {
+    const element = screen.getByLabelText("Continuación de transacciones").querySelector("div");
+    if (element === null) throw new Error("Missing continuation observer");
+    const callback = continuations.get(element);
+    expect(callback).toBeDefined();
+    callback?.();
+  });
+
 const selectChoice = (label: string, choice: string): void => {
   const element = screen.getByRole<HTMLSelectElement>("combobox", { name: label });
   const option = Array.from(element.options).find((item) => item.text === choice);
@@ -912,12 +933,13 @@ it("retains loaded scope while a continuation waits, appends unique rows and ref
       expect(
         screen.getByText("No hay coincidencias entre las transacciones cargadas")
       ).toBeVisible();
-      fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+      yield* Effect.tryPromise(intersectContinuation);
       yield* nextPaint;
-      yield* Effect.tryPromise(() =>
-        screen.findByRole("button", { name: "Cargando más transacciones…" })
+      yield* Effect.tryPromise(() => screen.findByText("Cargando más transacciones…"));
+      expect(screen.getByLabelText("Continuación de transacciones")).toHaveAttribute(
+        "aria-busy",
+        "true"
       );
-      expect(screen.getByRole("button", { name: "Cargando más transacciones…" })).toBeDisabled();
       yield* Deferred.succeed(gate, undefined);
       yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Ver transacción La Cocina" })
@@ -940,7 +962,7 @@ it("retains rows after continuation transport failure and retries the same curso
       const fixture: PaginationFixture = { mode: "failure", requests: [], gate: Effect.void };
       renderPaginationJourney(fixture);
       yield* Effect.tryPromise(firstPaginationRow);
-      fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+      yield* Effect.tryPromise(intersectContinuation);
       yield* nextPaint;
       const retry = yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Reintentar carga de más transacciones" })
@@ -964,12 +986,12 @@ it.each(["repeat", "wrong-period", "missing-args"] as const)(
         renderPaginationJourney(fixture);
         yield* Effect.tryPromise(firstPaginationRow);
         if (mode === "repeat") {
-          fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+          yield* Effect.tryPromise(intersectContinuation);
           yield* nextPaint;
           yield* Effect.tryPromise(() =>
             screen.findByRole("button", { name: "Ver transacción La Cocina" })
           );
-          fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+          yield* Effect.tryPromise(intersectContinuation);
           yield* nextPaint;
         }
         yield* Effect.tryPromise(() =>
@@ -981,9 +1003,7 @@ it.each(["repeat", "wrong-period", "missing-args"] as const)(
         fixture.mode = "ready";
         fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
         yield* nextPaint;
-        yield* Effect.tryPromise(() =>
-          screen.findByRole("button", { name: "Cargar más transacciones" })
-        );
+        yield* Effect.tryPromise(() => screen.findByLabelText("Continuación de transacciones"));
         expect(screen.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(1);
       })
     )

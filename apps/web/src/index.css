@@ -2,35 +2,35 @@
 @import "tw-animate-css";
 @font-face {
   font-family: Poppins;
-  src: url("./ui/fonts/Poppins-Regular.ttf") format("truetype");
+  src: url("./ui/fonts/Poppins-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: Poppins;
-  src: url("./ui/fonts/Poppins-Medium.ttf") format("truetype");
+  src: url("./ui/fonts/Poppins-Medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: Poppins;
-  src: url("./ui/fonts/Poppins-SemiBold.ttf") format("truetype");
+  src: url("./ui/fonts/Poppins-SemiBold.woff2") format("woff2");
   font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: Poppins;
-  src: url("./ui/fonts/Poppins-Bold.ttf") format("truetype");
+  src: url("./ui/fonts/Poppins-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: Poppins;
-  src: url("./ui/fonts/Poppins-ExtraBold.ttf") format("truetype");
+  src: url("./ui/fonts/Poppins-ExtraBold.woff2") format("woff2");
   font-weight: 800;
   font-style: normal;
   font-display: swap;

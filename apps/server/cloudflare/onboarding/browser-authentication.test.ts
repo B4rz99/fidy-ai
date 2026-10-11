@@ -10,7 +10,7 @@ import { EmailAddress, EmailVerificationCode } from "../../src/core/email-authen
 import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { startBrowserPairing } from "../browser-login/operations";
+import { approveBrowserPairing, startBrowserPairing } from "../browser-login/operations";
 
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 
@@ -376,6 +376,34 @@ it("refuses an idle-expired WebSession without writing a canonical User read", (
             .first<{ count: number }>()
         ))?.count
       ).toBe(0);
+    })
+  ));
+
+it("rotates the backup recovery proof under a fresh WebSession", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+      const token = "R".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const before = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
+      );
+      const response = yield* Effect.tryPromise(() =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
+            method: "POST",
+            headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+          })
+        )
+      );
+      expect(response.status).toBe(200);
+      yield* Effect.tryPromise(() => response.arrayBuffer());
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
+        )
+      ).not.toEqual(before);
     })
   ));
 
@@ -1818,3 +1846,31 @@ const deliverBrowserPairingEmail = (
 const deliverEmailReplacement = (
   input: Parameters<typeof runProofDelivery>[1]
 ): ((id: string) => Promise<void>) => runProofDelivery("email-replacement", input);
+
+it("approves a pending pairing through its verified WhatsApp owner", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+      const pairing = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ publicCode: Schema.String })
+      )(
+        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
+          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
+        )
+      );
+      const now = yield* Clock.currentTimeMillis;
+      const response = yield* approveBrowserPairing({
+        db,
+        input: {
+          portfolioId: "portfolio",
+          bsuid: "CO.Person1",
+          messageId: "native-performance-approval",
+          publicCode: pairing.publicCode,
+          occurredAtMs: now,
+          receivedAtMs: now,
+        },
+      });
+      expect(response.status).toBe(200);
+    })
+  ));

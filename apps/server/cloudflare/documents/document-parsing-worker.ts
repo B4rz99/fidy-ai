@@ -42,7 +42,16 @@ const parseRequest = Effect.fn(function* (request: Request) {
   });
 });
 
-const fetch = (request: Request): Promise<Response> => {
+const fetch = (
+  request: Request,
+  env: Readonly<Record<string, unknown>> = {}
+): Promise<Response> => {
+  if (
+    typeof env.XLSX_PROOF_KEY === "string" &&
+    request.headers.get("X-Xlsx-Proof-Key") !== env.XLSX_PROOF_KEY
+  ) {
+    return Promise.resolve(failureResponse("not-found"));
+  }
   const url = new URL(request.url);
   if (request.method !== "POST" || !["/statement", "/statement-work"].includes(url.pathname)) {
     return Promise.resolve(failureResponse("not-found"));

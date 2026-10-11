@@ -2,38 +2,38 @@ import { Effect, Option } from "effect";
 import type { AuthenticationLifetime } from "@/session/lifetime";
 import { apiResources } from "./native-lifetime";
 
-/** Loads Dashboard only when requested and drops acquisition after route/account teardown. */
-export const mountDashboardPage = ({
+/** Drops lazy feature acquisition after its route or account closes. */
+export const mountLazyFeature = <Feature>({
   container,
-  lifetime,
-}: Readonly<{ container: HTMLElement; lifetime: AuthenticationLifetime }>): (() => void) => {
+  load,
+  mount,
+  loading,
+}: Readonly<{
+  container: HTMLElement;
+  load: () => Promise<Feature>;
+  mount: (feature: Feature) => () => void;
+  loading: string;
+}>): (() => void) => {
   let active = true;
   let release = Option.none<() => void>();
   const status = document.createElement("p");
   status.setAttribute("role", "status");
-  status.textContent = "Cargando tablero…";
+  status.textContent = loading;
   container.replaceChildren(status);
   const fiber = Effect.runFork(
-    Effect.tryPromise(() => import("@/features/dashboard/feature")).pipe(
+    Effect.tryPromise(load).pipe(
       Effect.tap((feature) =>
         Effect.sync(() => {
           if (!active) return;
           container.replaceChildren();
-          release = Option.some(
-            feature.mountDashboard({
-              container,
-              client: lifetime.apiClient,
-              registry: lifetime.registry,
-              resources: apiResources(lifetime),
-            })
-          );
+          release = Option.some(mount(feature));
         })
       ),
       Effect.catch(() =>
         Effect.sync(() => {
           if (!active) return;
           status.setAttribute("role", "alert");
-          status.textContent = "No pudimos cargar el tablero. Recarga la página para continuar.";
+          status.textContent = "No pudimos cargar esta página. Recarga la página para continuar.";
           container.replaceChildren(status);
         })
       )
@@ -47,3 +47,21 @@ export const mountDashboardPage = ({
     container.replaceChildren();
   };
 };
+
+/** Loads Dashboard on demand within the current authentication lifetime. */
+export const mountDashboardPage = ({
+  container,
+  lifetime,
+}: Readonly<{ container: HTMLElement; lifetime: AuthenticationLifetime }>): (() => void) =>
+  mountLazyFeature({
+    container,
+    loading: "Cargando tablero…",
+    load: () => import("@/features/dashboard/feature"),
+    mount: (feature) =>
+      feature.mountDashboard({
+        container,
+        client: lifetime.apiClient,
+        registry: lifetime.registry,
+        resources: apiResources(lifetime),
+      }),
+  });

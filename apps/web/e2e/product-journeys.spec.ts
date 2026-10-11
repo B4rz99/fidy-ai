@@ -287,7 +287,7 @@ test("loads a Dashboard through canonical queries and commits an edited Widget t
       });
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Tablero" })).toBeVisible()
+        expect(page.getByRole("heading", { name: "Mi tablero", exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Gastos por categoría").first()).toBeVisible()

@@ -390,6 +390,48 @@ const validateProviderResponse = (
   return Effect.succeed(response);
 };
 
+const ProviderErrors = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Struct({ errors: Schema.Array(Schema.Struct({ code: Schema.Finite })) }),
+    Schema.Struct({ internalCode: Schema.Finite }),
+  ])
+);
+const DAILY_ALLOCATION_EXHAUSTED = 3036;
+// Observed on the production REST boundary for the same daily-allocation refusal.
+const REST_DAILY_ALLOCATION_EXHAUSTED = 4006;
+
+const providerRefusal = (response: Response): Effect.Effect<never, HostedInferenceError> => {
+  const fallback = providerUnavailable(
+    response.status === HTTP_REQUEST_TIMEOUT ||
+      response.status === HTTP_TOO_MANY_REQUESTS ||
+      response.status >= HTTP_SERVER_ERROR_MINIMUM
+  );
+  if (
+    response.status !== HTTP_TOO_MANY_REQUESTS ||
+    response.headers.get("content-type")?.startsWith("application/json") !== true
+  ) {
+    return (response.body === null ? Effect.void : cancelBody(response.body)).pipe(
+      Effect.andThen(Effect.fail(fallback))
+    );
+  }
+  return readBoundedBody(response, () => fallback).pipe(
+    Effect.flatMap((body) => Schema.decodeEffect(ProviderErrors)(body)),
+    Effect.map((body) =>
+      ("errors" in body ? body.errors.map(({ code }) => code) : [body.internalCode]).some(
+        (code) => code === DAILY_ALLOCATION_EXHAUSTED || code === REST_DAILY_ALLOCATION_EXHAUSTED
+      )
+        ? new HostedInferenceError({
+            reason: { _tag: "ProviderQuotaExceeded" },
+            retryable: false,
+            retryAfter: Option.none(),
+          })
+        : fallback
+    ),
+    Effect.orElseSucceed(() => fallback),
+    Effect.flatMap(Effect.fail)
+  );
+};
+
 // Hosted-turn orchestration owns the Work span and reports provider failure once. This adapter adds
 // no provider span because model attributes and response details are forbidden telemetry.
 const invoke = ({
@@ -407,17 +449,7 @@ const invoke = ({
     Effect.flatMap((response) =>
       response.status >= HTTP_OK_MINIMUM && response.status < HTTP_REDIRECTION_MINIMUM
         ? readBoundedBody(response, overflow)
-        : (response.body === null ? Effect.void : cancelBody(response.body)).pipe(
-            Effect.andThen(
-              Effect.fail(
-                providerUnavailable(
-                  response.status === HTTP_REQUEST_TIMEOUT ||
-                    response.status === HTTP_TOO_MANY_REQUESTS ||
-                    response.status >= HTTP_SERVER_ERROR_MINIMUM
-                )
-              )
-            )
-          )
+        : providerRefusal(response)
     ),
     Effect.flatMap((body) =>
       Schema.decodeEffect(Schema.fromJsonString(ProviderResponse))(body).pipe(

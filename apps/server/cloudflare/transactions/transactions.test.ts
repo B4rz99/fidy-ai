@@ -9,7 +9,7 @@ import {
   statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { it as effectIt } from "@effect/vitest";
-import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Clock, Config, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   CreateTransactionInput,
   RestoredTransactionPair,
@@ -767,6 +767,7 @@ const concurrentMoneyCorrection = ({
         .bind(amount, userId, transactionId)
         .run()
     );
+let measuringLoad = false;
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
 const sendPublicRequest = (
@@ -774,7 +775,9 @@ const sendPublicRequest = (
   request: Request,
   coordinator?: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>
 ): Promise<Response> => {
-  vi.setSystemTime(Effect.runSync(Clock.currentTimeMillis) + 1000);
+  if (!measuringLoad) {
+    vi.setSystemTime(Effect.runSync(Clock.currentTimeMillis) + 1000);
+  }
   const headers = new Headers(request.headers);
   headers.set("cf-connecting-ip", "192.0.2.35");
   return publicWorker.fetch(new Request(request, { headers }), {
@@ -3391,6 +3394,7 @@ it("continues the canonical history beyond its first bounded page without losing
       const db = yield* fromTestPromise(() => setup());
       const createdAt = DateTime.formatIso(DateTime.nowUnsafe());
       const previous = "2025-01-09T12:00:00.000Z";
+      const period = "from=2025-01-01T00%3A00%3A00.000Z&to=2025-02-01T00%3A00%3A00.000Z";
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 101)
@@ -3412,15 +3416,18 @@ it("continues the canonical history beyond its first bounded page without losing
           transactionSession({ request: request(0), db, current: transactionNow() })
         )
       );
-      const first = yield* browseTransactions({
-        db,
-        selection: {
-          request: request(0, "/transactions?direction=outflow"),
-          subject,
-          search: false,
-          id: Option.none(),
-        },
-      });
+      const first = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com/transactions?direction=outflow&${period}`, {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+            },
+          })
+        )
+      );
+      expect(first.status).toBe(200);
       const Page = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(
@@ -3428,7 +3435,12 @@ it("continues the canonical history beyond its first bounded page without losing
             tool: Schema.String,
             hint: Schema.String,
             args: Schema.Struct({
-              query: Schema.Struct({ cursor: Schema.String, direction: Schema.String }),
+              query: Schema.Struct({
+                cursor: Schema.String,
+                direction: Schema.String,
+                from: Schema.String,
+                to: Schema.String,
+              }),
             }),
           })
         ),
@@ -3438,22 +3450,27 @@ it("continues the canonical history beyond its first bounded page without losing
       ).pipe(Effect.orDie);
       expect(page.data).toHaveLength(100);
       expect(page.next).toHaveLength(1);
-      expect(page.next[0]?.tool).toBe("transactions.listTransactions");
-      const cursor = page.next[0]?.args.query.cursor;
-      if (cursor === undefined) throw new Error("Missing continuation");
-      expect(page.next[0]?.args.query.direction).toBe("outflow");
-      const second = yield* browseTransactions({
-        db,
-        selection: {
-          request: request(
-            0,
-            `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`
-          ),
-          subject,
-          search: false,
-          id: Option.none(),
-        },
-      });
+      const continuation = Option.getOrThrow(Option.fromUndefinedOr(page.next[0]));
+      expect(continuation.tool).toBe("transactions.listTransactions");
+      const cursor = continuation.args.query.cursor;
+      expect(continuation.args.query.direction).toBe("outflow");
+      expect(continuation.args.query.from).toBe("2025-01-01T00:00:00.000Z");
+      expect(continuation.args.query.to).toBe("2025-02-01T00:00:00.000Z");
+      const second = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request(
+            `https://api.fidyapp.com/transactions?direction=outflow&${period}&cursor=${encodeURIComponent(cursor)}`,
+            {
+              headers: {
+                origin: "https://app.fidyapp.com",
+                cookie: `__Host-fidy_session=${bearer(0)}`,
+              },
+            }
+          )
+        )
+      );
+      expect(second.status).toBe(200);
       const remainder = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => second.json())
       ).pipe(Effect.orDie);
@@ -3470,6 +3487,7 @@ it("continues the canonical history beyond its first bounded page without losing
           search: true,
         },
       });
+      expect(search.status).toBe(200);
       const SearchPage = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(
@@ -4267,7 +4285,7 @@ it("does not assign a child to a forged guard marker from an unrelated write", (
     })
   ));
 
-it("fails closed on a canonical mutation without a batch adapter", () =>
+it("rolls back a batch containing deletion of an absent Transaction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -4288,7 +4306,7 @@ it("fails closed on a canonical mutation without a batch adapter", () =>
       const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
-      expect(rejection.error.code).toBe("unavailable");
+      expect(rejection.error.code).toBe("not_found");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.deleteTransaction");
       expect(
@@ -4298,7 +4316,7 @@ it("fails closed on a canonical mutation without a batch adapter", () =>
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
         )
-      ).toBe(0);
+      ).toBe(1);
     })
   ));
 
@@ -6570,3 +6588,451 @@ it("refuses a cookie-admitted batch without the browser origin and writes nothin
       ).toBe(0);
     })
   ));
+
+it("permanently deletes visible history with provenance retained and rejects another User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const id = "30000000-0000-4000-8000-000000000991";
+      const owner = users[0] ?? "";
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedManualAttestation({
+          db,
+          userId: owner,
+          transactionId: id,
+          id: "30000000-0000-4000-8000-000000000992",
+        })
+      );
+      const deletion = (index: number): Request =>
+        new Request(request(index, `/transactions/${id}`), {
+          method: "DELETE",
+          headers: {
+            cookie: `__Host-fidy_session=${bearer(index)}`,
+            origin: "https://app.fidyapp.com",
+          },
+        });
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion(1)))).status).toBe(404);
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion(0)))).status).toBe(200);
+      expect(
+        (yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            new Request(request(0, `/transactions/${id}`), {
+              headers: {
+                cookie: `__Host-fidy_session=${bearer(0)}`,
+                origin: "https://app.fidyapp.com",
+              },
+            })
+          )
+        )).status
+      ).toBe(404);
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion(0)))).status).toBe(404);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM source_attestations")
+        )
+      ).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'transactions.deleteTransaction' AND outcome = 'success'"
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
+it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
+  "does not delete a Transaction when %s refuses the write",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromTestPromise(() => setup());
+        const owner = users[0] ?? "";
+        const id = "30000000-0000-4000-8000-000000000993";
+        yield* fromTestPromise(() =>
+          seedRetainedTransaction({ db, userId: owner, id, categoryId: category })
+        );
+        let deletion = new Request(request(0, `/transactions/${id}`), {
+          method: "DELETE",
+          headers: {
+            cookie: `__Host-fidy_session=${bearer(0)}`,
+            origin: "https://app.fidyapp.com",
+          },
+        });
+        if (failure === "linked") {
+          const second = "30000000-0000-4000-8000-000000000994";
+          yield* fromTestPromise(() =>
+            seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category })
+          );
+          yield* fromTestPromise(() =>
+            seedLinkedPair({ db, userId: owner, first: id, second, visible: id })
+          );
+        } else if (failure === "audit-outage") {
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                "CREATE TRIGGER refuse_delete_audit BEFORE INSERT ON transaction_audit WHEN NEW.operation = 'transactions.deleteTransaction' BEGIN SELECT RAISE(ABORT, 'audit_unavailable'); END"
+              )
+              .run()
+          );
+        } else {
+          const token = `fin_${"j".repeat(8)}_${"k".repeat(43)}`;
+          const current = yield* Clock.currentTimeMillis;
+          yield* seedPAT({
+            db,
+            userId: owner,
+            token,
+            scopes: [failure === "read-only" ? "read" : "write"],
+            current,
+          });
+          if (failure === "revoked") {
+            yield* fromTestPromise(() =>
+              db
+                .prepare("UPDATE pats SET revoked_at_ms = ? WHERE user_id = ?")
+                .bind(current, owner)
+                .run()
+            );
+          }
+          deletion = new Request(`https://api.fidyapp.com/transactions/${id}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${token}` },
+          });
+        }
+        const response = yield* fromTestPromise(() => sendPublicRequest(db, deletion));
+        const status = { linked: 400, "audit-outage": 503, "read-only": 403, revoked: 401 };
+        expect(response.status).toBe(status[failure]);
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare("SELECT deleted_at_ms FROM transactions WHERE user_id = ? AND id = ?")
+              .bind(owner, id)
+              .first()
+          )
+        ).toMatchObject({ deleted_at_ms: null });
+        expect(
+          yield* fromTestPromise(() =>
+            countRows(
+              db,
+              "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'transactions.deleteTransaction' AND outcome = 'success'"
+            )
+          )
+        ).toBe(0);
+      })
+    )
+);
+
+it("rolls back deletion and dashboard removal when a later batch child fails at commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const id = "30000000-0000-4000-8000-000000000995";
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER abort_next_capture BEFORE INSERT ON transactions BEGIN SELECT RAISE(ABORT, 'capture_unavailable'); END"
+          )
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          batchRequest(0, [
+            {
+              callId: batchCallId(1),
+              operation: "transactions.deleteTransaction",
+              input: { params: { id } },
+            },
+            transactionCall(2, input()),
+          ])
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT deleted_at_ms FROM transactions WHERE user_id = ? AND id = ?")
+            .bind(owner, id)
+            .first()
+        )
+      ).toMatchObject({ deleted_at_ms: null });
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_projection_leaf")
+        )
+      ).toBe(1);
+      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([]);
+    })
+  ));
+
+it("cannot link a hidden Transaction or restore its visibility", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const first = "30000000-0000-4000-8000-000000000997";
+      const second = "30000000-0000-4000-8000-000000000998";
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id: first, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category })
+      );
+      const deletion = new Request(request(0, `/transactions/${first}`), {
+        method: "DELETE",
+        headers: { cookie: `__Host-fidy_session=${bearer(0)}`, origin: "https://app.fidyapp.com" },
+      });
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion))).status).toBe(200);
+      const link = new Request(
+        request(0, "/transactions/link", {
+          firstTransactionId: first,
+          secondTransactionId: second,
+        }),
+        {
+          headers: {
+            cookie: `__Host-fidy_session=${bearer(0)}`,
+            origin: "https://app.fidyapp.com",
+            "content-type": "application/json",
+          },
+        }
+      );
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, link))).status).toBe(404);
+      yield* fromTestPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE transactions SET deleted_at_ms = NULL WHERE user_id = ? AND id = ?")
+            .bind(owner, first)
+            .run()
+        ).rejects.toThrow("transaction_deleted")
+      );
+      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+        decisions: [],
+        members: [],
+      });
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+        )
+      ).toBe(1);
+    })
+  ));
+const loadMeasurement =
+  Effect.runSync(Config.String("INFRA_PERFORMANCE_LOAD").pipe(Config.withDefault("0"))) === "1";
+const loadMeasurementCodec = Schema.fromJsonString(
+  Schema.Struct({
+    operation: Schema.Literal("native.mixed-load"),
+    users: Schema.Int,
+    concurrency: Schema.Int,
+    requests: Schema.Int,
+    elapsedMilliseconds: Schema.Finite,
+    requestsPerSecond: Schema.Finite,
+    acceptedRequests: Schema.Int,
+    acceptedRequestsPerSecond: Schema.Finite,
+    acceptedP95Milliseconds: Schema.Finite,
+    p50Milliseconds: Schema.Finite,
+    p95Milliseconds: Schema.Finite,
+    p99Milliseconds: Schema.Finite,
+    capturedTransactions: Schema.Int,
+    rateLimitedRequests: Schema.Int,
+    paceMilliseconds: Schema.Int,
+  })
+);
+
+const measureMixedRequest = Effect.fn(function* ({
+  db,
+  coordinator,
+  index,
+  userCount,
+  timings,
+  acceptedTimings,
+  capturesByUser,
+  started,
+  paceMilliseconds,
+}: Readonly<{
+  db: D1Database;
+  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+  index: number;
+  userCount: number;
+  timings: number[];
+  acceptedTimings: number[];
+  capturesByUser: number[];
+  started: number;
+  paceMilliseconds: number;
+}>) {
+  const user = Math.floor(index / 2) % userCount;
+  const mutation = index % 2 === 0;
+  const headers = {
+    origin: "https://app.fidyapp.com",
+    cookie: `__Host-fidy_session=${bearer(user)}`,
+    ...(mutation ? { "content-type": "application/json" } : {}),
+  };
+  const body = mutation
+    ? yield* Schema.encodeEffect(Schema.fromJsonString(TestTransactionPayload))(
+        input({ counterparty: `Load ${index}` })
+      )
+    : undefined;
+  const remaining = started + (index * paceMilliseconds) / userCount - performance.now();
+  if (remaining > 0) yield* Effect.sleep(remaining);
+  const before = performance.now();
+  const response = yield* fromTestPromise(() =>
+    sendPublicRequest(
+      db,
+      new Request("https://api.fidyapp.com/transactions", {
+        method: mutation ? "POST" : "GET",
+        headers,
+        body,
+      }),
+      coordinator
+    )
+  );
+  yield* fromTestPromise(() => response.arrayBuffer());
+  const elapsed = performance.now() - before;
+  timings.push(elapsed);
+  if (response.status < 300) acceptedTimings.push(elapsed);
+  expect([mutation ? 201 : 200, 429]).toContain(response.status);
+  if (response.status === 201) capturesByUser[user] = (capturesByUser[user] ?? 0) + 1;
+  return response.status;
+});
+// Opt-in characterization uses the real public/Core adapters and native SQLite coordinator.
+// Every scenario starts isolated state; wall time includes local transport and admission.
+it.runIf(loadMeasurement)(
+  "measures sustained mixed public requests and hot-User coordination",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useRealTimers();
+        measuringLoad = true;
+        const millisecondsPerSecond = 1000;
+        for (const userCount of [1, 2]) {
+          for (const scenario of [
+            { concurrency: 2, requestCount: 32, paceMilliseconds: 1050 },
+            ...[2, 8, 32].map((concurrency) => ({
+              concurrency,
+              requestCount: 128,
+              paceMilliseconds: 0,
+            })),
+          ]) {
+            const { concurrency, requestCount, paceMilliseconds } = scenario;
+            const db = yield* fromTestPromise(() => setup(true));
+            const instance = instances.at(-1);
+            if (instance === undefined) throw new Error("Missing native runtime");
+            const namespace = yield* fromTestPromise(() =>
+              instance.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR")
+            );
+            const coordinator = {
+              getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+                fetch: (command) => {
+                  const request = new Request(command);
+                  return request
+                    .text()
+                    .then((body) =>
+                      namespace.getByName(name).fetch(request.url, {
+                        method: request.method,
+                        headers: Object.fromEntries(request.headers),
+                        ...(request.body === null ? {} : { body }),
+                      })
+                    )
+                    .then(replayResponse);
+                },
+              }),
+            };
+            const timings: number[] = [];
+            const acceptedTimings: number[] = [];
+            const capturesByUser = Array.from({ length: userCount }, () => 0);
+            const started = performance.now();
+            const responses = yield* Effect.forEach(
+              Array.from({ length: requestCount }, (_, index) => index),
+              (index) =>
+                measureMixedRequest({
+                  db,
+                  coordinator,
+                  index,
+                  userCount,
+                  timings,
+                  acceptedTimings,
+                  capturesByUser,
+                  started,
+                  paceMilliseconds,
+                }),
+              { concurrency }
+            );
+            const elapsedMilliseconds = performance.now() - started;
+            expect(responses).toHaveLength(requestCount);
+            const capturedTransactions = yield* fromTestPromise(() =>
+              countRows(db, "SELECT COUNT(*) AS count FROM transactions")
+            );
+            expect(capturedTransactions).toBe(responses.filter((status) => status === 201).length);
+            expect(capturedTransactions).toBeGreaterThan(0);
+            expect(
+              yield* fromTestPromise(() =>
+                countRows(db, "SELECT COUNT(*) AS count FROM canonical_request_leases")
+              )
+            ).toBe(0);
+            if (paceMilliseconds > 0) {
+              expect(responses.filter((status) => status === 429)).toHaveLength(0);
+            }
+            for (let user = 0; user < userCount; user += 1) {
+              expect(
+                yield* fromTestPromise(() =>
+                  countRows(
+                    db,
+                    "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+                    users[user] ?? ""
+                  )
+                )
+              ).toBe(capturesByUser[user]);
+            }
+            timings.sort((left, right) => left - right);
+            acceptedTimings.sort((left, right) => left - right);
+            const percentile = (fraction: number): number =>
+              timings[Math.ceil(timings.length * fraction) - 1] ?? 0;
+            const encoded = yield* Schema.encodeEffect(loadMeasurementCodec)({
+              operation: "native.mixed-load",
+              users: userCount,
+              concurrency,
+              requests: requestCount,
+              elapsedMilliseconds,
+              requestsPerSecond: (requestCount * millisecondsPerSecond) / elapsedMilliseconds,
+              acceptedRequests: acceptedTimings.length,
+              acceptedRequestsPerSecond:
+                (acceptedTimings.length * millisecondsPerSecond) / elapsedMilliseconds,
+              acceptedP95Milliseconds:
+                acceptedTimings[Math.ceil(acceptedTimings.length * 0.95) - 1] ?? 0,
+              p50Milliseconds: percentile(0.5),
+              p95Milliseconds: percentile(0.95),
+              p99Milliseconds: percentile(0.99),
+              capturedTransactions,
+              rateLimitedRequests: responses.filter((status) => status === 429).length,
+              paceMilliseconds,
+            });
+            yield* Effect.sync(() => process.stdout.write(`INFRA_LOAD ${encoded}\n`));
+          }
+        }
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            measuringLoad = false;
+          })
+        )
+      )
+    ),
+  180_000
+);

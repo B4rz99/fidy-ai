@@ -28,7 +28,7 @@ const retry = (
 const continuationLabel = (state: Model["query"]["continuation"]): string => {
   if (state === "loading") return "Cargando más transacciones…";
   if (state === "failure") return "Reintentar carga de más transacciones";
-  return "Cargar más transacciones";
+  return "Al seguir bajando cargaremos más transacciones.";
 };
 const continuationDisabled = (model: Model): boolean =>
   model.query.continuation === "loading" ||
@@ -36,12 +36,35 @@ const continuationDisabled = (model: Model): boolean =>
   model.query.waiting ||
   model.query.stale ||
   !["Summary", "Selecting"].includes(model.panel);
-const continuation = (model: Model, html: HtmlBuilder<Message>): Html => {
+const continuation = ({
+  model,
+  html,
+  continuationMount,
+}: Readonly<{
+  model: Model;
+  html: HtmlBuilder<Message>;
+  continuationMount: PanelMount;
+}>): Html => {
   const state = model.query.continuation;
   if (state === "complete") return html.div([]);
   return html.div(
-    [html.Class("flex flex-col items-start gap-2 px-4 py-4")],
     [
+      html.Key("continuation"),
+      html.AriaLabel("Continuación de transacciones"),
+      html.AriaLive("polite"),
+      html.AriaBusy(state === "loading"),
+      html.Class("flex flex-col items-start gap-2 px-4 py-4"),
+    ],
+    [
+      html.div([
+        html.Key(
+          `observer-${state}-${model.query.transactions.length}-${continuationDisabled(model)}`
+        ),
+        html.Class("h-px w-full"),
+        ...(state === "available" && !continuationDisabled(model)
+          ? [html.OnMount(continuationMount({ model }))]
+          : []),
+      ]),
       html.output(
         [html.Class("text-sm text-muted-foreground")],
         [
@@ -54,15 +77,17 @@ const continuation = (model: Model, html: HtmlBuilder<Message>): Html => {
             ["No pudimos cargar más transacciones. Conservamos las transacciones cargadas."]
           )
         : null,
-      html.button(
-        [
-          html.Type("button"),
-          html.Class(buttonVariants({ variant: "outline" })),
-          html.Disabled(continuationDisabled(model)),
-          html.OnClick(state === "failure" ? Message.RetryMore() : Message.More()),
-        ],
-        [continuationLabel(state)]
-      ),
+      state === "failure"
+        ? html.button(
+            [
+              html.Type("button"),
+              html.Class(buttonVariants({ variant: "outline" })),
+              html.Disabled(continuationDisabled(model)),
+              html.OnClick(Message.RetryMore()),
+            ],
+            [continuationLabel(state)]
+          )
+        : html.span([], [continuationLabel(state)]),
     ]
   );
 };
@@ -72,6 +97,7 @@ const workspaceContent = (
     html: HtmlBuilder<Message>;
     mount: PanelMount;
     responsive: PanelMount;
+    continuationMount: PanelMount;
   }>
 ): Html => {
   const { model, html } = configuration;
@@ -85,7 +111,7 @@ const workspaceContent = (
         [html.Class("min-w-0 px-4 py-6")],
         [
           transactionLedger({ model, html, toolbar: workspaceToolbar(configuration) }),
-          continuation(model, html),
+          continuation(configuration),
         ]
       ),
       workspacePanel(configuration),
@@ -98,6 +124,7 @@ export const transactionsView = (
     html: HtmlBuilder<Message>;
     mount: PanelMount;
     responsive: PanelMount;
+    continuationMount: PanelMount;
   }>
 ): Html => {
   const { model, html } = configuration;

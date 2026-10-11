@@ -507,7 +507,10 @@ it("executes ordinary OAuth unlink without native confirmation while retaining r
         installed.find(({ id }) => id === "transactions.unlinkTransactions")?.policy
           .agentConfirmation
       ).toBe("not-required");
-      expect(installed.find(({ id }) => id === "transactions.deleteTransaction")).toBeUndefined();
+      expect(
+        installed.find(({ id }) => id === "transactions.deleteTransaction")?.policy
+          .agentConfirmation
+      ).toBe("required");
       const mutation = yield* prepare(db, "unlink");
       expect(Option.isSome(mutation.oauthReview)).toBe(true);
       yield* fromTestPromise(() => db.batch([...mutation.statements]));

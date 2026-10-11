@@ -78,6 +78,8 @@ const compositionRoots = new Set([
   "cloudflare/insights/reminder-canonical.test.ts",
 ]);
 const testRunner = new Set([
+  // Opt-in measurement runner composes the native test config; it is never production authority.
+  "../../scripts/infra-performance/vitest.config.ts",
   "cloudflare/vitest.config.ts",
   "cloudflare/test-sequencer.ts",
   "cloudflare/test-shards.ts",

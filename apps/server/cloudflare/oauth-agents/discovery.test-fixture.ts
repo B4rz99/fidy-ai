@@ -53,6 +53,7 @@ const sensitiveWriteDiscovery = [
   "memory.revise",
   "subscription.cancelSubscription",
   "transactions.updateTransaction",
+  "transactions.deleteTransaction",
 ];
 const writeDiscovery = [...ordinaryWriteDiscovery, ...sensitiveWriteDiscovery];
 const dashboardDiscovery = ["dashboard.initializeDashboard", "dashboard.applyDashboardEdit"];
@@ -70,10 +71,7 @@ const additionalReadDeclarations = [
   "identity.getCurrentUser",
   "transactions.listSourceAttestations",
 ];
-const additionalWriteDeclarations = [
-  "identity.updateUserPreferences",
-  "transactions.deleteTransaction",
-];
+const additionalWriteDeclarations = ["identity.updateUserPreferences"];
 
 export const discoveryCases = [
   {

@@ -1179,6 +1179,15 @@ const transactionResponse = (
       )
     );
   }
+  if (operation.id === "transactions.deleteTransaction") {
+    return Option.some(
+      sendToCoordinator({
+        environment,
+        subject,
+        work: canonicalCall(operation.id, { params: { id: rawPathId({ request }) } }),
+      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
+    );
+  }
   const reconciliation = reconciliationOperation(operation);
   if (Option.isSome(reconciliation)) {
     return Option.some(

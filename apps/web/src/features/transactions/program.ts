@@ -6,6 +6,8 @@ import { bindResponsivePanel } from "@/browser/responsive-panel";
 import { type FidyClient, Transaction, TransactionId } from "@/transport/client";
 import { mountTransactionCapture } from "./capture-program";
 import { mountTransactionEditor } from "./editor-program";
+import { observeContinuation } from "./scroll-continuation";
+import { type PanelMount } from "./panel-view";
 import { transactionsView } from "./foldkit-view";
 import { Message, Model, initialModel } from "./model";
 import { type QueryOwner, makeTransactionQueryOwner } from "./query-owner";
@@ -135,6 +137,21 @@ const makeMounts = (
           ).pipe(Effect.as(Message.Mounted())),
   }),
 });
+const makeContinuationMount = (dispatch: (message: Message) => void): PanelMount =>
+  Mount.define("TransactionContinuation", {
+    args: { model: Model },
+    messages: [Message.Mounted],
+    execute: ({ element }) =>
+      !(element instanceof HTMLElement)
+        ? Effect.succeed(Message.Mounted())
+        : Effect.acquireRelease(
+            Effect.sync(() =>
+              observeContinuation({ element, onMore: () => dispatch(Message.More()) })
+            ),
+            (release) => Effect.sync(release)
+          ).pipe(Effect.as(Message.Mounted())),
+  });
+
 /** Owns native workspace interaction for the authentication lifetime's canonical query registry. */
 export const mountTransactions = (configuration: Configuration): (() => void) => {
   const events = Effect.runSync(Queue.unbounded<Message>());
@@ -148,6 +165,7 @@ export const mountTransactions = (configuration: Configuration): (() => void) =>
   });
   const commands = makeCommands(configuration.client, owner);
   const mounts = makeMounts(configuration, dispatch);
+  const continuationMount = makeContinuationMount(dispatch);
   const dispose = (): void => {
     active = false;
     owner.dispose();
@@ -161,7 +179,13 @@ export const mountTransactions = (configuration: Configuration): (() => void) =>
       init: (): Update.Return<Model, Message> => ({ model: initialModel }),
       update: makeWorkspaceUpdate(commands),
       view: (model, html) =>
-        transactionsView({ model, html, mount: mounts.child, responsive: mounts.responsive }),
+        transactionsView({
+          model,
+          html,
+          mount: mounts.child,
+          responsive: mounts.responsive,
+          continuationMount,
+        }),
       subscriptions: Subscription.make<Model, Message>()(() => ({
         queries: Subscription.persistent(Stream.fromQueue(events)),
       })),

@@ -144,7 +144,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "Permanently remove one Transaction from the caller's visible product history. It cannot be restored; immutable SourceAttestations remain retained as provenance."
+        "Permanently remove one Transaction from the caller's visible product history. It cannot be restored; immutable SourceAttestations remain retained as provenance. Unlink a Reconciliation pair before deleting either original."
       )
       .annotateMerge(destructiveWrite)
   )

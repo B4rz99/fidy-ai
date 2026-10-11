@@ -6990,3 +6990,143 @@ it("admits a web-provider onboarding grant through the native Agent service and 
       ]);
     })
   ));
+
+it("returns safe quota feedback and retains a terminal failure without an assistant reply", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const model = vi.fn(() =>
+        Promise.resolve(
+          Response.json(
+            { errors: [{ code: 4006, message: "private provider quota detail" }] },
+            { status: 429 }
+          )
+        )
+      );
+      const service = makeAgentService({
+        environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const response = yield* Effect.tryPromise(() => accepted.response);
+      yield* Effect.tryPromise(() => accepted.settled);
+      expect(response.status).toBe(429);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+        status: "provider_quota_exceeded",
+      });
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "failed", kind: "user", text: "Hola" },
+        { status: "failed", kind: "failed", text: null },
+      ]);
+      expect(model).toHaveBeenCalledOnce();
+    })
+  ));
+
+it("confirms a hosted Transaction deletion exactly once and retains the hidden original", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => seedHistoryTransaction(db, "Deletion fixture"));
+      const id = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT id FROM transactions WHERE user_id = ?")
+          .bind(users[0])
+          .first<string>("id")
+      );
+      expect(id).toBeTruthy();
+      let requests = 0;
+      const coordinator = coordinatorFor(db, () => {
+        requests++;
+        return Promise.resolve(
+          Response.json({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "delete-request",
+                      type: "function",
+                      function: {
+                        name: "transactions__deleteTransaction",
+                        arguments: encodeJson({ params: { id } }),
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+            usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+          })
+        );
+      });
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const send = (text: string): Promise<Response> =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text,
+            }),
+          })
+        );
+      const response = yield* Effect.tryPromise(() => send("Elimina la transacción de prueba"));
+      const challenge = yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, response));
+      expect(challenge).toContain("transactions.deleteTransaction");
+      expect(challenge).toContain(id);
+      const command = challenge.split("Responde exactamente: ")[1] ?? "";
+      expect(command).toMatch(/^CONFIRMAR [0-9a-f]{64}$/u);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .bind(users[0])
+            .first<number>("total")
+        )
+      ).toBe(1);
+      const confirmed = yield* Effect.tryPromise(() => send(command));
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, confirmed))).toBe(
+        "Operación confirmada."
+      );
+      expect(requests).toBe(1);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS total FROM dashboard_effective_source WHERE user_id = ?")
+            .bind(users[0])
+            .first<number>("total")
+        )
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT COUNT(*) AS total FROM transactions WHERE user_id = ? AND deleted_at_ms IS NOT NULL"
+            )
+            .bind(users[0])
+            .first<number>("total")
+        )
+      ).toBe(1);
+      expect((yield* Effect.tryPromise(() => send(command))).status).toBe(401);
+    })
+  ));

@@ -7,6 +7,7 @@ import type { WorkBook, WorkSheet } from "xlsx";
 import { closeWorkerdHttp, requestHostedProof, requestWorkerd } from "./local-workerd-http";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
 import { type HostedWorkerProof, hostedWorkerProof } from "./hosted-worker";
+import { FetchHttpClient } from "effect/http";
 
 const baseline = process.argv.includes("--baseline");
 const remote = process.argv.includes("--remote");
@@ -482,6 +483,7 @@ const program = Effect.gen(function* () {
     ? Option.some(
         yield* hostedWorkerProof({
           directory,
+          name,
           retirement: durable
             ? Option.some({
                 config: proofConfig(name, true),
@@ -510,5 +512,8 @@ const program = Effect.gen(function* () {
   });
 });
 await Effect.runPromise(
-  program.pipe(Effect.scoped, Effect.provide([BunFileSystem.layer, BunCrypto.layer]))
+  program.pipe(
+    Effect.scoped,
+    Effect.provide([BunFileSystem.layer, BunCrypto.layer, FetchHttpClient.layer])
+  )
 );

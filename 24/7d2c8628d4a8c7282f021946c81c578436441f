@@ -1,0 +1,22 @@
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_b75995d26622a8::t_12318ab035d4d2 100
+infra/cloudflare/workers-ai-conformance-script.test.ts
+  s_b75995d26622a8::t_c7cf8aa0343c5e 26,156,182-184
+  s_b75995d26622a8::t_9febe4c0dfb65a 23-25,27,99,185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "247d2c8628d4a8c7282f021946c81c578436441f",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

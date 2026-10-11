@@ -1026,8 +1026,31 @@
     },
     {
       "operation": "transactions.deleteTransaction",
-      "assessment": "declared operation without installed canonical owner; performance unavailable",
-      "cohorts": []
+      "assessment": "measured successful native fixture after trunk installed deletion in PR #1203",
+      "cohorts": [
+        {
+          "cohort": "fidy-deletion-performance.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 404],
+          "p50Milliseconds": 27.192457999999988,
+          "p95Milliseconds": 27.192457999999988,
+          "maxRowsRead": 167,
+          "maxRowsWritten": 52
+        },
+        {
+          "cohort": "fidy-deletion-performance.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 404],
+          "p50Milliseconds": 51.21174999999994,
+          "p95Milliseconds": 51.21174999999994,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        }
+      ]
     },
     {
       "operation": "transactions.listSourceAttestations",
@@ -2765,5 +2788,112 @@
   },
   "hostedXlsx": {
     "status": "pending protected-trunk workflow run"
+  },
+  "productionFollowup": {
+    "observedAtUtc": "2026-10-11T12:18:00Z",
+    "deploymentRuns": [38136020384, 38137254930, 38138130053],
+    "status": "preflight refused before promotion",
+    "reason": "Workers AI daily free allocation exhausted",
+    "diagnostic": {
+      "httpStatus": 429,
+      "restErrorCode": 4006,
+      "limitNeuronsPerDay": 10000
+    },
+    "impact": "Live AI conformance and subsequent deployment promotion unavailable until quota resets or account billing changes",
+    "credentials": "Read-only API access works; this is provider quota, not missing access",
+    "windowUtc": {
+      "startInclusive": "2026-10-11T11:50:00Z",
+      "endExclusive": "2026-10-11T12:20:00Z"
+    },
+    "d1": [
+      {
+        "dimensions": {
+          "databaseId": "2622d5b0-5e0f-4766-b836-ff0f635a92a6",
+          "date": "2026-10-11",
+          "servedByRegion": "ENAM"
+        },
+        "quantiles": {
+          "queryBatchTimeMsP50": 0.25,
+          "queryBatchTimeMsP95": 0.95,
+          "queryBatchTimeMsP99": 1.62
+        },
+        "sum": {
+          "readQueries": 2987,
+          "rowsRead": 18748,
+          "rowsWritten": 939,
+          "writeQueries": 857
+        }
+      }
+    ],
+    "doPeriodic": [
+      {
+        "dimensions": {
+          "date": "2026-10-11",
+          "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64"
+        },
+        "max": {
+          "memoryUsageBytes": 20819706
+        },
+        "quantiles": {
+          "memoryUsageBytesP99": 20819706
+        },
+        "sum": {
+          "activeTime": 541166173,
+          "cpuTime": 2200073,
+          "duration": 69.26927014400002,
+          "exceededCpuErrors": 0,
+          "exceededMemoryErrors": 0,
+          "fatalInternalErrors": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        }
+      },
+      {
+        "dimensions": {
+          "date": "2026-10-11",
+          "namespaceId": "832b57e975dd4db38affd98b6953d005"
+        },
+        "max": {
+          "memoryUsageBytes": 10962694
+        },
+        "quantiles": {
+          "memoryUsageBytesP99": 10962694
+        },
+        "sum": {
+          "activeTime": 6568460,
+          "cpuTime": 448733,
+          "duration": 0.84076288,
+          "exceededCpuErrors": 0,
+          "exceededMemoryErrors": 0,
+          "fatalInternalErrors": 0,
+          "rowsRead": 547,
+          "rowsWritten": 0
+        }
+      }
+    ],
+    "cron": {
+      "samples": 34,
+      "successes": 33,
+      "exceptions": 1,
+      "exceptionAtUtc": "2026-10-11T12:06:10Z",
+      "attribution": "unresolved; GraphQL observation cannot establish exception cause"
+    },
+    "ai": [
+      {
+        "count": 7,
+        "dimensions": {
+          "date": "2026-10-11",
+          "errorCode": 4006,
+          "modelId": "@cf/google/gemma-4-26b-a4b-it",
+          "requestSource": "unknown"
+        },
+        "sum": {
+          "totalInferenceTimeMs": 779,
+          "totalInputTokens": 0,
+          "totalNeurons": 0,
+          "totalOutputTokens": 0
+        }
+      }
+    ]
   }
 }

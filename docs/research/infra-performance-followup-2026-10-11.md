@@ -2,7 +2,7 @@
 
 ## Scope and evidence boundaries
 
-All 68 declared canonical operations were assessed. Successful native fixture measurements cover 65 operations. `identity.updateUserPreferences`, `transactions.deleteTransaction`, and `transactions.listSourceAttestations` have no installed canonical owner. Their feature performance cannot be measured; implementing those features is outside infrastructure optimization. No result here establishes production traffic capacity or a production latency SLO.
+All 68 declared canonical operations were assessed. Successful native fixture measurements cover 66 operations after measuring the deletion owner newly installed on trunk. `identity.updateUserPreferences` and `transactions.listSourceAttestations` have no installed canonical owner. Their feature performance cannot be measured; implementing those features is outside infrastructure optimization. No result here establishes production traffic capacity or a production latency SLO.
 
 The adjacent JSON preserves separate cohorts and cost boundaries. Direct Core D1 excludes coordinator and provider work; held-owner D1 excludes transport admission. Do not add these overlapping observations. Host-process CPU excludes workerd and is not Worker CPU. Integration fixtures include adversarial cases and variable local contention. Full-suite measurements are exploratory because the observer was refreshed during that run; focused cohorts are the repeatable evidence.
 
@@ -47,10 +47,11 @@ Local workerd: 1,000 statement rows parsed and interpreted successfully; 8,000 Ã
 
 ## Production verification
 
-Earlier release verification recorded successful promotion, smoke, drift and retirement gates; D1 schema and capacity-counter triggers matched the release. Post-release D1 p95 was 0.91 ms in ENAM, observed Durable Object sample maximum was 20.54 MB, active Queues were empty and no CPU, memory or fatal errors were observed. Traffic was low development/CI/smoke/canary volume. The follow-up web deployment and hosted parser run still require their final recorded evidence.
+Earlier release verification recorded successful promotion, smoke, drift and retirement gates; D1 schema and capacity-counter triggers matched the release. Post-release D1 p95 was 0.91 ms in ENAM, observed Durable Object sample maximum was 20.54 MB, active Queues were empty and no CPU, memory or fatal errors were observed. Traffic was low development/CI/smoke/canary volume. The follow-up web deployment and hosted parser run still require their final recorded evidence. Three newer production runs (38136020384, 38137254930, 38138130053) failed the live Workers AI gate before promotion. A direct synthetic API check confirmed HTTP 429 / REST error 4006: the account exhausted its daily free allocation of 10,000 neurons. Read-only access works. Repeated retries cannot resolve this daily limit; promotion needs the quota reset or an account billing change. The gate remains intact. The 11:50â€“12:20 UTC observation has D1 p95 0.95 ms, coordinator memory sample maximum 20.82 MB and zero coordinator resource errors. Scheduled invocations include 33 successes and one exception at 12:06:10 UTC; its cause is unresolved, so this is not reported as a clean window.
 
 ## References
 
+- [Workers AI pricing and daily reset](https://developers.cloudflare.com/workers-ai/platform/pricing/)
 - [Remote development](https://developers.cloudflare.com/workers/local-development/)
 - [Memory inspection](https://developers.cloudflare.com/workers/observability/dev-tools/memory-usage/)
 - [Queue local-development limits](https://developers.cloudflare.com/queues/configuration/local-development/)

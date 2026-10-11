@@ -9,7 +9,7 @@ import {
   statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { it as effectIt } from "@effect/vitest";
-import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Clock, Config, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   CreateTransactionInput,
   RestoredTransactionPair,
@@ -767,6 +767,7 @@ const concurrentMoneyCorrection = ({
         .bind(amount, userId, transactionId)
         .run()
     );
+let measuringLoad = false;
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
 const sendPublicRequest = (
@@ -774,7 +775,9 @@ const sendPublicRequest = (
   request: Request,
   coordinator?: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>
 ): Promise<Response> => {
-  vi.setSystemTime(Effect.runSync(Clock.currentTimeMillis) + 1000);
+  if (!measuringLoad) {
+    vi.setSystemTime(Effect.runSync(Clock.currentTimeMillis) + 1000);
+  }
   const headers = new Headers(request.headers);
   headers.set("cf-connecting-ip", "192.0.2.35");
   return publicWorker.fetch(new Request(request, { headers }), {
@@ -6831,3 +6834,205 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
       ).toBe(1);
     })
   ));
+const loadMeasurement =
+  Effect.runSync(Config.String("INFRA_PERFORMANCE_LOAD").pipe(Config.withDefault("0"))) === "1";
+const loadMeasurementCodec = Schema.fromJsonString(
+  Schema.Struct({
+    operation: Schema.Literal("native.mixed-load"),
+    users: Schema.Int,
+    concurrency: Schema.Int,
+    requests: Schema.Int,
+    elapsedMilliseconds: Schema.Finite,
+    requestsPerSecond: Schema.Finite,
+    acceptedRequests: Schema.Int,
+    acceptedRequestsPerSecond: Schema.Finite,
+    acceptedP95Milliseconds: Schema.Finite,
+    p50Milliseconds: Schema.Finite,
+    p95Milliseconds: Schema.Finite,
+    p99Milliseconds: Schema.Finite,
+    capturedTransactions: Schema.Int,
+    rateLimitedRequests: Schema.Int,
+    paceMilliseconds: Schema.Int,
+  })
+);
+
+const measureMixedRequest = Effect.fn(function* ({
+  db,
+  coordinator,
+  index,
+  userCount,
+  timings,
+  acceptedTimings,
+  capturesByUser,
+  started,
+  paceMilliseconds,
+}: Readonly<{
+  db: D1Database;
+  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+  index: number;
+  userCount: number;
+  timings: number[];
+  acceptedTimings: number[];
+  capturesByUser: number[];
+  started: number;
+  paceMilliseconds: number;
+}>) {
+  const user = Math.floor(index / 2) % userCount;
+  const mutation = index % 2 === 0;
+  const headers = {
+    origin: "https://app.fidyapp.com",
+    cookie: `__Host-fidy_session=${bearer(user)}`,
+    ...(mutation ? { "content-type": "application/json" } : {}),
+  };
+  const body = mutation
+    ? yield* Schema.encodeEffect(Schema.fromJsonString(TestTransactionPayload))(
+        input({ counterparty: `Load ${index}` })
+      )
+    : undefined;
+  const remaining = started + (index * paceMilliseconds) / userCount - performance.now();
+  if (remaining > 0) yield* Effect.sleep(remaining);
+  const before = performance.now();
+  const response = yield* fromTestPromise(() =>
+    sendPublicRequest(
+      db,
+      new Request("https://api.fidyapp.com/transactions", {
+        method: mutation ? "POST" : "GET",
+        headers,
+        body,
+      }),
+      coordinator
+    )
+  );
+  yield* fromTestPromise(() => response.arrayBuffer());
+  const elapsed = performance.now() - before;
+  timings.push(elapsed);
+  if (response.status < 300) acceptedTimings.push(elapsed);
+  expect([mutation ? 201 : 200, 429]).toContain(response.status);
+  if (response.status === 201) capturesByUser[user] = (capturesByUser[user] ?? 0) + 1;
+  return response.status;
+});
+// Opt-in characterization uses the real public/Core adapters and native SQLite coordinator.
+// Every scenario starts isolated state; wall time includes local transport and admission.
+it.runIf(loadMeasurement)(
+  "measures sustained mixed public requests and hot-User coordination",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useRealTimers();
+        measuringLoad = true;
+        const millisecondsPerSecond = 1000;
+        for (const userCount of [1, 2]) {
+          for (const scenario of [
+            { concurrency: 2, requestCount: 32, paceMilliseconds: 1050 },
+            ...[2, 8, 32].map((concurrency) => ({
+              concurrency,
+              requestCount: 128,
+              paceMilliseconds: 0,
+            })),
+          ]) {
+            const { concurrency, requestCount, paceMilliseconds } = scenario;
+            const db = yield* fromTestPromise(() => setup(true));
+            const instance = instances.at(-1);
+            if (instance === undefined) throw new Error("Missing native runtime");
+            const namespace = yield* fromTestPromise(() =>
+              instance.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR")
+            );
+            const coordinator = {
+              getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+                fetch: (command) => {
+                  const request = new Request(command);
+                  return request
+                    .text()
+                    .then((body) =>
+                      namespace.getByName(name).fetch(request.url, {
+                        method: request.method,
+                        headers: Object.fromEntries(request.headers),
+                        ...(request.body === null ? {} : { body }),
+                      })
+                    )
+                    .then(replayResponse);
+                },
+              }),
+            };
+            const timings: number[] = [];
+            const acceptedTimings: number[] = [];
+            const capturesByUser = Array.from({ length: userCount }, () => 0);
+            const started = performance.now();
+            const responses = yield* Effect.forEach(
+              Array.from({ length: requestCount }, (_, index) => index),
+              (index) =>
+                measureMixedRequest({
+                  db,
+                  coordinator,
+                  index,
+                  userCount,
+                  timings,
+                  acceptedTimings,
+                  capturesByUser,
+                  started,
+                  paceMilliseconds,
+                }),
+              { concurrency }
+            );
+            const elapsedMilliseconds = performance.now() - started;
+            expect(responses).toHaveLength(requestCount);
+            const capturedTransactions = yield* fromTestPromise(() =>
+              countRows(db, "SELECT COUNT(*) AS count FROM transactions")
+            );
+            expect(capturedTransactions).toBe(responses.filter((status) => status === 201).length);
+            expect(capturedTransactions).toBeGreaterThan(0);
+            expect(
+              yield* fromTestPromise(() =>
+                countRows(db, "SELECT COUNT(*) AS count FROM canonical_request_leases")
+              )
+            ).toBe(0);
+            if (paceMilliseconds > 0) {
+              expect(responses.filter((status) => status === 429)).toHaveLength(0);
+            }
+            for (let user = 0; user < userCount; user += 1) {
+              expect(
+                yield* fromTestPromise(() =>
+                  countRows(
+                    db,
+                    "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+                    users[user] ?? ""
+                  )
+                )
+              ).toBe(capturesByUser[user]);
+            }
+            timings.sort((left, right) => left - right);
+            acceptedTimings.sort((left, right) => left - right);
+            const percentile = (fraction: number): number =>
+              timings[Math.ceil(timings.length * fraction) - 1] ?? 0;
+            const encoded = yield* Schema.encodeEffect(loadMeasurementCodec)({
+              operation: "native.mixed-load",
+              users: userCount,
+              concurrency,
+              requests: requestCount,
+              elapsedMilliseconds,
+              requestsPerSecond: (requestCount * millisecondsPerSecond) / elapsedMilliseconds,
+              acceptedRequests: acceptedTimings.length,
+              acceptedRequestsPerSecond:
+                (acceptedTimings.length * millisecondsPerSecond) / elapsedMilliseconds,
+              acceptedP95Milliseconds:
+                acceptedTimings[Math.ceil(acceptedTimings.length * 0.95) - 1] ?? 0,
+              p50Milliseconds: percentile(0.5),
+              p95Milliseconds: percentile(0.95),
+              p99Milliseconds: percentile(0.99),
+              capturedTransactions,
+              rateLimitedRequests: responses.filter((status) => status === 429).length,
+              paceMilliseconds,
+            });
+            yield* Effect.sync(() => process.stdout.write(`INFRA_LOAD ${encoded}\n`));
+          }
+        }
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            measuringLoad = false;
+          })
+        )
+      )
+    ),
+  180_000
+);

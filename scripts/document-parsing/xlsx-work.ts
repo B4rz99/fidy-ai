@@ -8,6 +8,8 @@ import { closeWorkerdHttp, requestWorkerd } from "./local-workerd-http";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
 
 const baseline = process.argv.includes("--baseline");
+const remote = process.argv.includes("--remote");
+if (baseline && remote) throw new Error("Hosted proof only supports the current bounded parser");
 const port = 8795;
 const inspectorPort = 9295;
 const readinessAttempts = 80;
@@ -38,6 +40,7 @@ const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, reject
 
 const measurementBase = Schema.Struct({
   baseline: Schema.Boolean,
+  runtime: Schema.Literals(["local-workerd", "cloudflare-preview"]),
   fixture: Schema.String,
   zipBytes: Schema.Int,
   expandedBytes: Schema.Int,
@@ -54,6 +57,7 @@ const measurementCodec = Schema.fromJsonString(
 const overlapCodec = Schema.fromJsonString(
   Schema.Struct({
     baseline: Schema.Boolean,
+    runtime: Schema.Literals(["local-workerd", "cloudflare-preview"]),
     fixture: Schema.String,
     elapsedMilliseconds: Schema.Finite,
     outcomes: Schema.Array(Schema.Literals(["parsed", "rejected"])),
@@ -199,6 +203,7 @@ const measure = Effect.fn(function* (
   const after = yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(measurementCodec)({
     baseline,
+    runtime: remote ? "cloudflare-preview" : "local-workerd",
     fixture: fixture.name,
     zipBytes: fixture.bytes.length,
     expandedBytes,
@@ -262,7 +267,7 @@ const startWorker = (): ReturnType<typeof Bun.spawn> =>
       String(port),
       "--inspector-port",
       String(inspectorPort),
-      "--local",
+      remote ? "--remote" : "--local",
       "--persist-to",
       `${directory}/state`,
     ],
@@ -289,6 +294,7 @@ const overlapRequests = Effect.fn(function* (
   );
   const output = yield* Schema.encodeEffect(overlapCodec)({
     baseline,
+    runtime: remote ? "cloudflare-preview" : "local-workerd",
     fixture: name,
     elapsedMilliseconds: performance.now() - startedAt,
     outcomes: results.map((result) => result.outcome),

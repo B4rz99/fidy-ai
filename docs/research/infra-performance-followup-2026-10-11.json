@@ -1,0 +1,4428 @@
+{
+  "date": "2026-10-11",
+  "limitations": [
+    "Host-process CPU excludes workerd; no Worker CPU claim",
+    "Fixture cohorts contain adversarial correctness cases, not representative traffic or SLO percentiles",
+    "Outer Core D1 excludes coordinator/provider; owner D1 excludes transport admission; never sum boundaries",
+    "Full-suite pilot observer was refreshed while running; use focused cohorts for reproducible measurements",
+    "Local load used one hot User and two balanced Users; not population capacity"
+  ],
+  "operations": [
+    {
+      "operation": "browserLogin.approvePairing",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-approval-performance.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 4.788917000000083,
+          "p95Milliseconds": 4.788917000000083,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 4
+        },
+        {
+          "cohort": "fidy-native-proof-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 4.447584000000006,
+          "p95Milliseconds": 4.447584000000006,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 4
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 4.226709000000028,
+          "p95Milliseconds": 4.226709000000028,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 4
+        }
+      ]
+    },
+    {
+      "operation": "identity.getCurrentUser",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 401],
+          "p50Milliseconds": 7.610500000000002,
+          "p95Milliseconds": 12.22395899999998,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 3,
+          "statuses": [200, 401],
+          "p50Milliseconds": 8.687542000000008,
+          "p95Milliseconds": 10.621999999999957,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 3,
+          "statuses": [200, 401],
+          "p50Milliseconds": 9.159166999999911,
+          "p95Milliseconds": 12.569792000000007,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-native-proof-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 3,
+          "statuses": [200, 401],
+          "p50Milliseconds": 7.963874999999916,
+          "p95Milliseconds": 12.103959000000032,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 3,
+          "statuses": [200, 401],
+          "p50Milliseconds": 7.678041000000007,
+          "p95Milliseconds": 12.205624999999998,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 3
+        }
+      ]
+    },
+    {
+      "operation": "identity.updateUserPreferences",
+      "assessment": "declared operation without installed canonical owner; performance unavailable",
+      "cohorts": []
+    },
+    {
+      "operation": "categories.listCategories",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 39,
+          "successfulSamples": 11,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 33.71716600000036,
+          "p95Milliseconds": 63.808583,
+          "maxRowsRead": 551,
+          "maxRowsWritten": 35
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 3.6761249999999563,
+          "p95Milliseconds": 3.6761249999999563,
+          "maxRowsRead": 34,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 41,
+          "successfulSamples": 13,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 35.22674999999981,
+          "p95Milliseconds": 73.5578750000002,
+          "maxRowsRead": 551,
+          "maxRowsWritten": 35
+        }
+      ]
+    },
+    {
+      "operation": "categories.listKeywordRules",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 6,
+          "statuses": [200, 401],
+          "p50Milliseconds": 21.673833999999943,
+          "p95Milliseconds": 94.71275000000014,
+          "maxRowsRead": 48,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 6,
+          "statuses": [200, 401],
+          "p50Milliseconds": 22.039457999999286,
+          "p95Milliseconds": 37.53125,
+          "maxRowsRead": 48,
+          "maxRowsWritten": 32
+        }
+      ]
+    },
+    {
+      "operation": "categories.createKeywordRule",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 19,
+          "successfulSamples": 11,
+          "statuses": [201, 400, 401, 403, 404],
+          "p50Milliseconds": 42.133917,
+          "p95Milliseconds": 127.77149999999983,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 16,
+          "successfulSamples": 11,
+          "statuses": [201, 400, 404],
+          "p50Milliseconds": 14.2040420000003,
+          "p95Milliseconds": 29.82400000000007,
+          "maxRowsRead": 39,
+          "maxRowsWritten": 13
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 19,
+          "successfulSamples": 11,
+          "statuses": [201, 400, 401, 403, 404],
+          "p50Milliseconds": 35.60795899999994,
+          "p95Milliseconds": 61.25912500000004,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        }
+      ]
+    },
+    {
+      "operation": "categories.updateKeywordRule",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 2,
+          "statuses": [200, 404],
+          "p50Milliseconds": 25.06295900000032,
+          "p95Milliseconds": 35.837125000000015,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 404],
+          "p50Milliseconds": 11.456707999999935,
+          "p95Milliseconds": 15.229417000000012,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 2,
+          "statuses": [200, 404],
+          "p50Milliseconds": 27.925834000000123,
+          "p95Milliseconds": 30.738749999999982,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "categories.deleteKeywordRule",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 2,
+          "statuses": [200, 403, 404],
+          "p50Milliseconds": 23.95641700000033,
+          "p95Milliseconds": 24.772041000000172,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 404],
+          "p50Milliseconds": 6.802292000000307,
+          "p95Milliseconds": 7.907375000000002,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 7
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 2,
+          "statuses": [200, 403, 404],
+          "p50Milliseconds": 21.824291999999787,
+          "p95Milliseconds": 25.80683299999987,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "budgets.createBudget",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 38,
+          "successfulSamples": 33,
+          "statuses": [201, 400, 403],
+          "p50Milliseconds": 50.210667000000285,
+          "p95Milliseconds": 67.37533299999996,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [201],
+          "p50Milliseconds": 51.96887499999866,
+          "p95Milliseconds": 51.96887499999866,
+          "maxRowsRead": 25,
+          "maxRowsWritten": 23
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [201],
+          "p50Milliseconds": 70.53229199999987,
+          "p95Milliseconds": 70.53229199999987,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [201],
+          "p50Milliseconds": 55.9229579999992,
+          "p95Milliseconds": 55.9229579999992,
+          "maxRowsRead": 25,
+          "maxRowsWritten": 23
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [201],
+          "p50Milliseconds": 83.63325000000077,
+          "p95Milliseconds": 83.63325000000077,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 37,
+          "successfulSamples": 35,
+          "statuses": [201, 400],
+          "p50Milliseconds": 42.090291000000434,
+          "p95Milliseconds": 74.60299999999916,
+          "maxRowsRead": 48,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 42,
+          "successfulSamples": 37,
+          "statuses": [201, 400, 403],
+          "p50Milliseconds": 59.68445799999972,
+          "p95Milliseconds": 183.98225000000002,
+          "maxRowsRead": 225,
+          "maxRowsWritten": 34
+        }
+      ]
+    },
+    {
+      "operation": "budgets.listBudgets",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 3,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 32.38024999999925,
+          "p95Milliseconds": 40.001625000000786,
+          "maxRowsRead": 75,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 3,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 35.433750000000146,
+          "p95Milliseconds": 41.86608400000114,
+          "maxRowsRead": 75,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 503],
+          "p50Milliseconds": 6.046542000000045,
+          "p95Milliseconds": 6.046542000000045,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 6
+        }
+      ]
+    },
+    {
+      "operation": "budgets.getBudget",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 4,
+          "statuses": [200, 403, 404],
+          "p50Milliseconds": 20.31491700000015,
+          "p95Milliseconds": 31.92949999999837,
+          "maxRowsRead": 44,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 4,
+          "statuses": [200, 403, 404],
+          "p50Milliseconds": 20.425875000000815,
+          "p95Milliseconds": 33.026459000000614,
+          "maxRowsRead": 44,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 5.833375000001979,
+          "p95Milliseconds": 5.833375000001979,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 6
+        }
+      ]
+    },
+    {
+      "operation": "budgets.updateBudget",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 45.13829200000009,
+          "p95Milliseconds": 47.61041699999987,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 32.211999999999534,
+          "p95Milliseconds": 38.256500000001324,
+          "maxRowsRead": 46,
+          "maxRowsWritten": 15
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 44.993624999999156,
+          "p95Milliseconds": 53.79279200000019,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "budgets.deleteBudget",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 403, 404, 503],
+          "p50Milliseconds": 23.851333000000068,
+          "p95Milliseconds": 23.851333000000068,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 1,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 14.518540999999459,
+          "p95Milliseconds": 14.518540999999459,
+          "maxRowsRead": 36,
+          "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 403, 404, 503],
+          "p50Milliseconds": 27.384874999999738,
+          "p95Milliseconds": 27.384874999999738,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "budgets.getBudgetStatus",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 15,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 403, 503],
+          "p50Milliseconds": 39.2675420000005,
+          "p95Milliseconds": 53.997833000000355,
+          "maxRowsRead": 11449,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 15,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 403, 503],
+          "p50Milliseconds": 38.81895900000018,
+          "p95Milliseconds": 45.05291700000089,
+          "maxRowsRead": 11449,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 10.53966600000058,
+          "p95Milliseconds": 10.53966600000058,
+          "maxRowsRead": 31,
+          "maxRowsWritten": 6
+        }
+      ]
+    },
+    {
+      "operation": "connections.listInstitutions",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 4,
+          "statuses": [200],
+          "p50Milliseconds": 23.69104100000004,
+          "p95Milliseconds": 34.62970899999982,
+          "maxRowsRead": 537,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 4,
+          "statuses": [200],
+          "p50Milliseconds": 22.089500000000044,
+          "p95Milliseconds": 41.24400000000003,
+          "maxRowsRead": 537,
+          "maxRowsWritten": 33
+        }
+      ]
+    },
+    {
+      "operation": "connections.connectInstitution",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 44,
+          "successfulSamples": 36,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 27.28125,
+          "p95Milliseconds": 53.53120899999976,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 41,
+          "successfulSamples": 36,
+          "statuses": [200, 400, 404, 429, 503],
+          "p50Milliseconds": 15.424833999999919,
+          "p95Milliseconds": 20.057459000000108,
+          "maxRowsRead": 57,
+          "maxRowsWritten": 19
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 44,
+          "successfulSamples": 36,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 34.514500000000226,
+          "p95Milliseconds": 63.67679199999975,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 26
+        }
+      ]
+    },
+    {
+      "operation": "connections.listConnections",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 8,
+          "statuses": [200, 401, 403],
+          "p50Milliseconds": 21.52641699999981,
+          "p95Milliseconds": 24.52508399999988,
+          "maxRowsRead": 33,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 8,
+          "statuses": [200, 401, 403],
+          "p50Milliseconds": 23.315292,
+          "p95Milliseconds": 25.30529099999967,
+          "maxRowsRead": 33,
+          "maxRowsWritten": 22
+        }
+      ]
+    },
+    {
+      "operation": "connections.getConnection",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 404],
+          "p50Milliseconds": 19.82554200000004,
+          "p95Milliseconds": 31.56079200000022,
+          "maxRowsRead": 39,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 404],
+          "p50Milliseconds": 21.581290999999965,
+          "p95Milliseconds": 25.398375000000215,
+          "maxRowsRead": 39,
+          "maxRowsWritten": 22
+        }
+      ]
+    },
+    {
+      "operation": "dashboard.initializeDashboard",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 82,
+          "successfulSamples": 74,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 50.88708300000144,
+          "p95Milliseconds": 291.8262909999994,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 79,
+          "successfulSamples": 74,
+          "statuses": [200, 401, 429, 503],
+          "p50Milliseconds": 11.608625000000757,
+          "p95Milliseconds": 17.60833300000013,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 82,
+          "successfulSamples": 74,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 31.811499999999796,
+          "p95Milliseconds": 51.45637499999975,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 79,
+          "successfulSamples": 74,
+          "statuses": [200, 401, 429, 503],
+          "p50Milliseconds": 11.048792000001413,
+          "p95Milliseconds": 20.923625000003085,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 82,
+          "successfulSamples": 74,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 29.849207999999635,
+          "p95Milliseconds": 58.50183399999878,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 83,
+          "successfulSamples": 78,
+          "statuses": [200, 401, 429, 503],
+          "p50Milliseconds": 10.201915999999983,
+          "p95Milliseconds": 19.396583000000646,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 86,
+          "successfulSamples": 78,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 28.13079199999993,
+          "p95Milliseconds": 56.13183300000037,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        }
+      ]
+    },
+    {
+      "operation": "dashboard.getDashboard",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 23.375,
+          "p95Milliseconds": 38.14908300000002,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 27.8851250000007,
+          "p95Milliseconds": 77.07791599999973,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 8.90020800000002,
+          "p95Milliseconds": 8.90020800000002,
+          "maxRowsRead": 8,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 27.130708000000595,
+          "p95Milliseconds": 68.11962500000118,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 8.316707999999835,
+          "p95Milliseconds": 8.316707999999835,
+          "maxRowsRead": 8,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 26.185999999999694,
+          "p95Milliseconds": 45.0460420000004,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 8.10629199999994,
+          "p95Milliseconds": 8.10629199999994,
+          "maxRowsRead": 8,
+          "maxRowsWritten": 5
+        }
+      ]
+    },
+    {
+      "operation": "dashboard.getDashboardView",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 48,
+          "successfulSamples": 30,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 30.006540999998833,
+          "p95Milliseconds": 54.73341699999946,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 48,
+          "successfulSamples": 30,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 34.74841600000036,
+          "p95Milliseconds": 61.10212500000125,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 21.828457999999955,
+          "p95Milliseconds": 21.828457999999955,
+          "maxRowsRead": 36,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 48,
+          "successfulSamples": 30,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 46.99187499999971,
+          "p95Milliseconds": 90.44908299999952,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 14.102582999999868,
+          "p95Milliseconds": 14.102582999999868,
+          "maxRowsRead": 36,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 48,
+          "successfulSamples": 30,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 36.04862499999945,
+          "p95Milliseconds": 52.00933400000031,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 17.84829200000013,
+          "p95Milliseconds": 17.84829200000013,
+          "maxRowsRead": 36,
+          "maxRowsWritten": 5
+        }
+      ]
+    },
+    {
+      "operation": "dashboard.listDashboardCatalog",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 38.60020799999984,
+          "p95Milliseconds": 38.60020799999984,
+          "maxRowsRead": 15,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 37.68295899999998,
+          "p95Milliseconds": 37.68295899999998,
+          "maxRowsRead": 15,
+          "maxRowsWritten": 22
+        }
+      ]
+    },
+    {
+      "operation": "dashboard.applyDashboardEdit",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 20,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403, 404, 503],
+          "p50Milliseconds": 26.712250000000495,
+          "p95Milliseconds": 36.36112499999945,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 18,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403, 404, 503],
+          "p50Milliseconds": 34.84962499999892,
+          "p95Milliseconds": 48.69724999999926,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 16,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 11.768667000000278,
+          "p95Milliseconds": 20.445749999998952,
+          "maxRowsRead": 41,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 18,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403, 404, 503],
+          "p50Milliseconds": 34.207000000002154,
+          "p95Milliseconds": 74.02304099999856,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 16,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 14.490499999999884,
+          "p95Milliseconds": 37.45583400000032,
+          "maxRowsRead": 41,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 20,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403, 404, 503],
+          "p50Milliseconds": 29.464458000000377,
+          "p95Milliseconds": 36.81995800000004,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 16,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 12.494708000000173,
+          "p95Milliseconds": 18.201583999998547,
+          "maxRowsRead": 41,
+          "maxRowsWritten": 11
+        }
+      ]
+    },
+    {
+      "operation": "emailAuthentication.requestEmailReplacement",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 11,
+          "successfulSamples": 11,
+          "statuses": [200],
+          "p50Milliseconds": 8.364041999999927,
+          "p95Milliseconds": 14.589083000000073,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 11,
+          "successfulSamples": 11,
+          "statuses": [200],
+          "p50Milliseconds": 8.128917000000001,
+          "p95Milliseconds": 13.135708999999906,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-native-proof-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 11,
+          "successfulSamples": 11,
+          "statuses": [200],
+          "p50Milliseconds": 7.368582999999944,
+          "p95Milliseconds": 12.034291999999823,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 11,
+          "successfulSamples": 11,
+          "statuses": [200],
+          "p50Milliseconds": 7.277374999999893,
+          "p95Milliseconds": 14.31595799999991,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 10
+        }
+      ]
+    },
+    {
+      "operation": "emailAuthentication.completeEmailReplacement",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 22,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 14.468625000000088,
+          "p95Milliseconds": 14.468625000000088,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 22,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 17.728707999999983,
+          "p95Milliseconds": 17.728707999999983,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-native-proof-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 22,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 13.601042000000007,
+          "p95Milliseconds": 13.601042000000007,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 22,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 13.655709000000002,
+          "p95Milliseconds": 13.655709000000002,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 5
+        }
+      ]
+    },
+    {
+      "operation": "transactions.createTransaction",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 77,
+          "successfulSamples": 60,
+          "statuses": [201, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 45.43083300000035,
+          "p95Milliseconds": 93.95929199999955,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 27
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 14,
+          "successfulSamples": 12,
+          "statuses": [201, 403],
+          "p50Milliseconds": 45.39650000000074,
+          "p95Milliseconds": 77.8871250000011,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 12,
+          "successfulSamples": 12,
+          "statuses": [201],
+          "p50Milliseconds": 26.329000000001543,
+          "p95Milliseconds": 42.21062499999971,
+          "maxRowsRead": 233,
+          "maxRowsWritten": 129
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 14,
+          "successfulSamples": 12,
+          "statuses": [201, 403],
+          "p50Milliseconds": 48.344333999999435,
+          "p95Milliseconds": 187.17449999999735,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 12,
+          "successfulSamples": 12,
+          "statuses": [201],
+          "p50Milliseconds": 28.05804100000023,
+          "p95Milliseconds": 79.26233299999876,
+          "maxRowsRead": 233,
+          "maxRowsWritten": 129
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 68,
+          "successfulSamples": 59,
+          "statuses": [201, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 30.577666999997746,
+          "p95Milliseconds": 87.00624999999854,
+          "maxRowsRead": 107272,
+          "maxRowsWritten": 287
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 77,
+          "successfulSamples": 60,
+          "statuses": [201, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 53.26141700000153,
+          "p95Milliseconds": 102.9407910000009,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 27
+        }
+      ]
+    },
+    {
+      "operation": "transactions.listTransactions",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 47,
+          "successfulSamples": 25,
+          "statuses": [200, 400, 401, 403, 429, 503],
+          "p50Milliseconds": 29.498415999998542,
+          "p95Milliseconds": 168.12904100000105,
+          "maxRowsRead": 89,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 14,
+          "successfulSamples": 11,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 4.8159580000010465,
+          "p95Milliseconds": 8.949790999999095,
+          "maxRowsRead": 48,
+          "maxRowsWritten": 6
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 49,
+          "successfulSamples": 27,
+          "statuses": [200, 400, 401, 403, 429, 503],
+          "p50Milliseconds": 26.12079199999971,
+          "p95Milliseconds": 38.787374999999884,
+          "maxRowsRead": 338,
+          "maxRowsWritten": 33
+        }
+      ]
+    },
+    {
+      "operation": "transactions.searchTransactions",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 19,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403],
+          "p50Milliseconds": 27.51104200000009,
+          "p95Milliseconds": 203.4155839999985,
+          "maxRowsRead": 61,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 19,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403],
+          "p50Milliseconds": 25.142083000000184,
+          "p95Milliseconds": 37.15450000000055,
+          "maxRowsRead": 61,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 11.459833000000799,
+          "p95Milliseconds": 11.459833000000799,
+          "maxRowsRead": 30,
+          "maxRowsWritten": 6
+        }
+      ]
+    },
+    {
+      "operation": "transactions.getTransaction",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 21,
+          "successfulSamples": 7,
+          "statuses": [200, 400, 401, 403, 404],
+          "p50Milliseconds": 31.434792000000016,
+          "p95Milliseconds": 135.7400829999997,
+          "maxRowsRead": 101,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 22,
+          "successfulSamples": 7,
+          "statuses": [200, 400, 401, 403, 404],
+          "p50Milliseconds": 23.792207999999846,
+          "p95Milliseconds": 35.373874999999316,
+          "maxRowsRead": 101,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 0,
+          "statuses": [404],
+          "p50Milliseconds": 4.795500000000175,
+          "p95Milliseconds": 5.589749999999185,
+          "maxRowsRead": 24,
+          "maxRowsWritten": 6
+        }
+      ]
+    },
+    {
+      "operation": "transactions.linkTransactions",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 24,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 403, 404, 429],
+          "p50Milliseconds": 42.45000000000027,
+          "p95Milliseconds": 699.0677500000002,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 24.758749999999054,
+          "p95Milliseconds": 24.758749999999054,
+          "maxRowsRead": 436,
+          "maxRowsWritten": 135
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 38.742959000001065,
+          "p95Milliseconds": 38.742959000001065,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 46.15799999999945,
+          "p95Milliseconds": 46.15799999999945,
+          "maxRowsRead": 436,
+          "maxRowsWritten": 135
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 102.52879200000098,
+          "p95Milliseconds": 102.52879200000098,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 17,
+          "successfulSamples": 8,
+          "statuses": [200, 400, 404],
+          "p50Milliseconds": 27.361666000000696,
+          "p95Milliseconds": 63.06762499999968,
+          "maxRowsRead": 679,
+          "maxRowsWritten": 242
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 403, 404, 429],
+          "p50Milliseconds": 48.28070799999978,
+          "p95Milliseconds": 79.6820829999997,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
+        }
+      ]
+    },
+    {
+      "operation": "transactions.unlinkTransactions",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 3,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 42.48745800000006,
+          "p95Milliseconds": 702.0751660000005,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 33.0290410000016,
+          "p95Milliseconds": 33.0290410000016,
+          "maxRowsRead": 338,
+          "maxRowsWritten": 142
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 45.849709000000075,
+          "p95Milliseconds": 45.849709000000075,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 33.71045900000172,
+          "p95Milliseconds": 33.71045900000172,
+          "maxRowsRead": 338,
+          "maxRowsWritten": 142
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 56.61670899999808,
+          "p95Milliseconds": 56.61670899999808,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 400],
+          "p50Milliseconds": 27.54004200000054,
+          "p95Milliseconds": 29.21916599999986,
+          "maxRowsRead": 490,
+          "maxRowsWritten": 241
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 3,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 46.28491699999995,
+          "p95Milliseconds": 54.43825000000015,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
+        }
+      ]
+    },
+    {
+      "operation": "transactions.updateTransaction",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 34,
+          "successfulSamples": 13,
+          "statuses": [200, 400, 401, 403, 404, 503],
+          "p50Milliseconds": 56.2182499999999,
+          "p95Milliseconds": 148.8357500000002,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 21.949875000000247,
+          "p95Milliseconds": 35.28116600000067,
+          "maxRowsRead": 365,
+          "maxRowsWritten": 140
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 50.47112500000003,
+          "p95Milliseconds": 96.47599999999875,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 26.189374999999927,
+          "p95Milliseconds": 39.91541700000016,
+          "maxRowsRead": 365,
+          "maxRowsWritten": 140
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 51.797709000000395,
+          "p95Milliseconds": 65.31745899999805,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 32,
+          "successfulSamples": 13,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 25.628249999999753,
+          "p95Milliseconds": 48.424167000000125,
+          "maxRowsRead": 749,
+          "maxRowsWritten": 368
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 34,
+          "successfulSamples": 13,
+          "statuses": [200, 400, 401, 403, 404, 503],
+          "p50Milliseconds": 52.64158300000054,
+          "p95Milliseconds": 78.43554200000017,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "transactions.deleteTransaction",
+      "assessment": "measured successful native fixture after trunk installed deletion in PR #1204",
+      "cohorts": [
+        {
+          "cohort": "fidy-deletion-performance.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 404],
+          "p50Milliseconds": 27.192457999999988,
+          "p95Milliseconds": 27.192457999999988,
+          "maxRowsRead": 167,
+          "maxRowsWritten": 52
+        },
+        {
+          "cohort": "fidy-deletion-performance.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 404],
+          "p50Milliseconds": 51.21174999999994,
+          "p95Milliseconds": 51.21174999999994,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 7,
+          "successfulSamples": 3,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 26.643041999999696,
+          "p95Milliseconds": 179.7647079999988,
+          "maxRowsRead": 167,
+          "maxRowsWritten": 52
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 9,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 401, 403, 404, 503],
+          "p50Milliseconds": 40.655791999997746,
+          "p95Milliseconds": 275.9891669999997,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        }
+      ]
+    },
+    {
+      "operation": "transactions.listSourceAttestations",
+      "assessment": "declared operation without installed canonical owner; performance unavailable",
+      "cohorts": []
+    },
+    {
+      "operation": "ingestion.enableEmailForwarding",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 35.21312499999999,
+          "p95Milliseconds": 35.21312499999999,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 13.19879200000014,
+          "p95Milliseconds": 13.19879200000014,
+          "maxRowsRead": 37,
+          "maxRowsWritten": 6
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 40.70804099999987,
+          "p95Milliseconds": 40.70804099999987,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [0, 200, 400, 401],
+          "p50Milliseconds": 12.902667000000065,
+          "p95Milliseconds": 16.71025000000003,
+          "maxRowsRead": 37,
+          "maxRowsWritten": 6
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 41.58620900000005,
+          "p95Milliseconds": 41.58620900000005,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        }
+      ]
+    },
+    {
+      "operation": "ingestion.getEmailForwarding",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 2,
+          "statuses": [200],
+          "p50Milliseconds": 20.12895800000001,
+          "p95Milliseconds": 21.729916000000003,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 2,
+          "statuses": [200],
+          "p50Milliseconds": 21.13866599999983,
+          "p95Milliseconds": 22.984500000000025,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 2,
+          "statuses": [200],
+          "p50Milliseconds": 23.458041999999978,
+          "p95Milliseconds": 25.846082999999908,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 3.9502919999999904,
+          "p95Milliseconds": 3.9502919999999904,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 3
+        }
+      ]
+    },
+    {
+      "operation": "ingestion.submitForExtraction",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 0,
+          "statuses": [403],
+          "p50Milliseconds": 18.591625000000022,
+          "p95Milliseconds": 20.36791699999958,
+          "maxRowsRead": 25,
+          "maxRowsWritten": 19
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 0,
+          "statuses": [403],
+          "p50Milliseconds": 21.293666999999914,
+          "p95Milliseconds": 24.949375000000146,
+          "maxRowsRead": 25,
+          "maxRowsWritten": 19
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [202, 503],
+          "p50Milliseconds": 24.177332999999635,
+          "p95Milliseconds": 24.177332999999635,
+          "maxRowsRead": 53,
+          "maxRowsWritten": 30
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 13,
+          "successfulSamples": 10,
+          "statuses": [202, 402, 503],
+          "p50Milliseconds": 19.876916999999594,
+          "p95Milliseconds": 56.72304200000053,
+          "maxRowsRead": 53,
+          "maxRowsWritten": 30
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 0,
+          "statuses": [403],
+          "p50Milliseconds": 101.28750000000036,
+          "p95Milliseconds": 211.18925000000127,
+          "maxRowsRead": 25,
+          "maxRowsWritten": 19
+        }
+      ]
+    },
+    {
+      "operation": "ingestion.getStatementSubmission",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 5,
+          "statuses": [200, 401, 404, 429],
+          "p50Milliseconds": 22.936875000000327,
+          "p95Milliseconds": 24.71854200000007,
+          "maxRowsRead": 43,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 5,
+          "statuses": [200, 401, 404, 429],
+          "p50Milliseconds": 23.536667000000307,
+          "p95Milliseconds": 28.282916999999543,
+          "maxRowsRead": 43,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 5,
+          "statuses": [200, 401, 404, 429],
+          "p50Milliseconds": 23.495207999999366,
+          "p95Milliseconds": 28.084542000000056,
+          "maxRowsRead": 43,
+          "maxRowsWritten": 21
+        }
+      ]
+    },
+    {
+      "operation": "ingestion.listNeedsReviewItems",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 403],
+          "p50Milliseconds": 28.226708000000144,
+          "p95Milliseconds": 28.960000000000036,
+          "maxRowsRead": 33,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 403],
+          "p50Milliseconds": 26.446458000000348,
+          "p95Milliseconds": 34.1372080000001,
+          "maxRowsRead": 33,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 403],
+          "p50Milliseconds": 27.09679199999937,
+          "p95Milliseconds": 28.28258300000016,
+          "maxRowsRead": 33,
+          "maxRowsWritten": 21
+        }
+      ]
+    },
+    {
+      "operation": "ingestion.resolveNeedsReviewItem",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 401, 404],
+          "p50Milliseconds": 37.99708399999963,
+          "p95Milliseconds": 37.99708399999963,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 8,
+          "successfulSamples": 2,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 16.01866600000085,
+          "p95Milliseconds": 21.436125000000175,
+          "maxRowsRead": 370,
+          "maxRowsWritten": 164
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 401, 404],
+          "p50Milliseconds": 38.73333299999922,
+          "p95Milliseconds": 38.73333299999922,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 15.673584000000119,
+          "p95Milliseconds": 27.697124999999687,
+          "maxRowsRead": 417,
+          "maxRowsWritten": 164
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 401, 404],
+          "p50Milliseconds": 46.4965000000002,
+          "p95Milliseconds": 46.4965000000002,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        }
+      ]
+    },
+    {
+      "operation": "ingestion.skipNeedsReviewItem",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 26.532625000000735,
+          "p95Milliseconds": 31.128959000000577,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 9.156874999999673,
+          "p95Milliseconds": 11.519458000000668,
+          "maxRowsRead": 53,
+          "maxRowsWritten": 12
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 30.86920800000007,
+          "p95Milliseconds": 44.88787500000035,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 6,
+          "statuses": [200],
+          "p50Milliseconds": 8.558625000000575,
+          "p95Milliseconds": 16.49829100000079,
+          "maxRowsRead": 114,
+          "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 28.54724999999962,
+          "p95Milliseconds": 60.31237500000043,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        }
+      ]
+    },
+    {
+      "operation": "ingestion.abandonStatementSubmission",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 23.322000000000116,
+          "p95Milliseconds": 23.322000000000116,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 9.253082999999606,
+          "p95Milliseconds": 9.253082999999606,
+          "maxRowsRead": 44,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 25.668250000000626,
+          "p95Milliseconds": 25.668250000000626,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 2,
+          "statuses": [200],
+          "p50Milliseconds": 8.289582999999766,
+          "p95Milliseconds": 8.689666000000216,
+          "maxRowsRead": 109,
+          "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 25.564916000000267,
+          "p95Milliseconds": 25.564916000000267,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        }
+      ]
+    },
+    {
+      "operation": "insights.getRecurringDigestReport",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 3.8732500000000982,
+          "p95Milliseconds": 4.045749999999771,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 8,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 3.881833999999799,
+          "p95Milliseconds": 4.6622080000001915,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 8
+        }
+      ]
+    },
+    {
+      "operation": "insights.getReminderSchedule",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [200, 503],
+          "p50Milliseconds": 3.9352080000001024,
+          "p95Milliseconds": 6.3112089999999625,
+          "maxRowsRead": 22,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 9,
+          "successfulSamples": 5,
+          "statuses": [200, 503],
+          "p50Milliseconds": 5.678708000000029,
+          "p95Milliseconds": 6.760667000000012,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 8
+        }
+      ]
+    },
+    {
+      "operation": "insights.updateReminderSchedule",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 401],
+          "p50Milliseconds": 17.39929099999995,
+          "p95Milliseconds": 18.794083,
+          "maxRowsRead": 42,
+          "maxRowsWritten": 13
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 401],
+          "p50Milliseconds": 15.085000000000036,
+          "p95Milliseconds": 17.420082999999977,
+          "maxRowsRead": 42,
+          "maxRowsWritten": 13
+        },
+        {
+          "cohort": "fidy-canonical-owner-pilot.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 401],
+          "p50Milliseconds": 69.71895899999981,
+          "p95Milliseconds": 279.72749999999996,
+          "maxRowsRead": 42,
+          "maxRowsWritten": 13
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 2,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 16.150375000000167,
+          "p95Milliseconds": 18.336250000000064,
+          "maxRowsRead": 42,
+          "maxRowsWritten": 13
+        }
+      ]
+    },
+    {
+      "operation": "insights.listPendingInsights",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 5,
+          "statuses": [200, 503],
+          "p50Milliseconds": 22.38762500000007,
+          "p95Milliseconds": 37.18495800000005,
+          "maxRowsRead": 80,
+          "maxRowsWritten": 34
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 5,
+          "statuses": [200, 503],
+          "p50Milliseconds": 23.032624999999825,
+          "p95Milliseconds": 39.843583999999964,
+          "maxRowsRead": 80,
+          "maxRowsWritten": 34
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 5,
+          "statuses": [200, 503],
+          "p50Milliseconds": 24.921291999999994,
+          "p95Milliseconds": 44.453042000000096,
+          "maxRowsRead": 80,
+          "maxRowsWritten": 34
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 5,
+          "statuses": [200, 503],
+          "p50Milliseconds": 23.233833000000004,
+          "p95Milliseconds": 38.50854199999981,
+          "maxRowsRead": 80,
+          "maxRowsWritten": 34
+        }
+      ]
+    },
+    {
+      "operation": "insights.markInsightDelivered",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 27.14449999999988,
+          "p95Milliseconds": 27.14449999999988,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 30.13341700000001,
+          "p95Milliseconds": 30.13341700000001,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 12.813916000000063,
+          "p95Milliseconds": 12.813916000000063,
+          "maxRowsRead": 18,
+          "maxRowsWritten": 12
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 37.712208000000146,
+          "p95Milliseconds": 37.712208000000146,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 15.5122080000001,
+          "p95Milliseconds": 15.5122080000001,
+          "maxRowsRead": 18,
+          "maxRowsWritten": 12
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 27.81683399999997,
+          "p95Milliseconds": 27.81683399999997,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 11.113417000000027,
+          "p95Milliseconds": 11.113417000000027,
+          "maxRowsRead": 18,
+          "maxRowsWritten": 12
+        }
+      ]
+    },
+    {
+      "operation": "insights.markInsightRead",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 0,
+          "statuses": [403, 404, 503],
+          "p50Milliseconds": 19.575292000000445,
+          "p95Milliseconds": 21.697666000000027,
+          "maxRowsRead": 30,
+          "maxRowsWritten": 18
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 10.839790999999991,
+          "p95Milliseconds": 10.839790999999991,
+          "maxRowsRead": 14,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 1,
+          "statuses": [200, 403, 404, 503],
+          "p50Milliseconds": 36.828125,
+          "p95Milliseconds": 36.828125,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 0,
+          "statuses": [403, 404, 503],
+          "p50Milliseconds": 27.50395800000001,
+          "p95Milliseconds": 30.58633399999985,
+          "maxRowsRead": 30,
+          "maxRowsWritten": 18
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 5,
+          "successfulSamples": 0,
+          "statuses": [404, 503],
+          "p50Milliseconds": 5.387291000000005,
+          "p95Milliseconds": 6.492375000000038,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 4
+        },
+        {
+          "cohort": "fidy-insight-public-measure.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 14.10508300000015,
+          "p95Milliseconds": 14.10508300000015,
+          "maxRowsRead": 14,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-insight-public-measure.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 42.20174999999995,
+          "p95Milliseconds": 42.20174999999995,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 7,
+          "successfulSamples": 1,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 11.189875000000029,
+          "p95Milliseconds": 11.189875000000029,
+          "maxRowsRead": 14,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 8,
+          "successfulSamples": 1,
+          "statuses": [200, 403, 404, 503],
+          "p50Milliseconds": 37.49462500000004,
+          "p95Milliseconds": 37.49462500000004,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        }
+      ]
+    },
+    {
+      "operation": "insights.dismissInsight",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-insight-public-measure.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 10.755832999999939,
+          "p95Milliseconds": 10.755832999999939,
+          "maxRowsRead": 13,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-insight-public-measure.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 29.556416000000127,
+          "p95Milliseconds": 29.556416000000127,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 9.016916000000037,
+          "p95Milliseconds": 9.016916000000037,
+          "maxRowsRead": 13,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 29.681249999999977,
+          "p95Milliseconds": 29.681249999999977,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "recurring.listRecurringSeries",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 5,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 47.421291999999994,
+          "p95Milliseconds": 192.042958,
+          "maxRowsRead": 547,
+          "maxRowsWritten": 37
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 5,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 33.39220900000009,
+          "p95Milliseconds": 48.26179199999933,
+          "maxRowsRead": 547,
+          "maxRowsWritten": 37
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 15.903916999999865,
+          "p95Milliseconds": 15.903916999999865,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 9
+        }
+      ]
+    },
+    {
+      "operation": "memory.remember",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 36,
+          "successfulSamples": 25,
+          "statuses": [201, 400, 401, 403, 409, 429],
+          "p50Milliseconds": 26.384000000000015,
+          "p95Milliseconds": 39.85312500000009,
+          "maxRowsRead": 19,
+          "maxRowsWritten": 27
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 30,
+          "successfulSamples": 26,
+          "statuses": [201, 409, 429, 503],
+          "p50Milliseconds": 12.435582999999951,
+          "p95Milliseconds": 18.35095799999999,
+          "maxRowsRead": 103,
+          "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 36,
+          "successfulSamples": 25,
+          "statuses": [201, 400, 401, 403, 409, 429],
+          "p50Milliseconds": 31.40754099999981,
+          "p95Milliseconds": 49.086667000000034,
+          "maxRowsRead": 19,
+          "maxRowsWritten": 27
+        }
+      ]
+    },
+    {
+      "operation": "memory.revise",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 404, 409],
+          "p50Milliseconds": 27.813666999999896,
+          "p95Milliseconds": 27.813666999999896,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 1,
+          "statuses": [200, 404, 409],
+          "p50Milliseconds": 12.106415999999854,
+          "p95Milliseconds": 12.106415999999854,
+          "maxRowsRead": 54,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 404, 409],
+          "p50Milliseconds": 29.279583999999886,
+          "p95Milliseconds": 29.279583999999886,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "memory.forget",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 403, 404],
+          "p50Milliseconds": 21.313083000000006,
+          "p95Milliseconds": 21.313083000000006,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 9,
+          "successfulSamples": 3,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 9.40662500000144,
+          "p95Milliseconds": 19.89050000000134,
+          "maxRowsRead": 47,
+          "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 403, 404],
+          "p50Milliseconds": 27.044541999999865,
+          "p95Milliseconds": 27.044541999999865,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        }
+      ]
+    },
+    {
+      "operation": "memory.recall",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 21,
+          "successfulSamples": 15,
+          "statuses": [200, 401, 403, 429],
+          "p50Milliseconds": 22.403082999999924,
+          "p95Milliseconds": 37.0112079999999,
+          "maxRowsRead": 77,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 21,
+          "successfulSamples": 15,
+          "statuses": [200, 401, 403, 429],
+          "p50Milliseconds": 21.855458,
+          "p95Milliseconds": 40.37991699999975,
+          "maxRowsRead": 77,
+          "maxRowsWritten": 32
+        }
+      ]
+    },
+    {
+      "operation": "subscription.getUpgradeUrl",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 22.77108300000009,
+          "p95Milliseconds": 22.77108300000009,
+          "maxRowsRead": 12,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 20.19812500000012,
+          "p95Milliseconds": 20.19812500000012,
+          "maxRowsRead": 12,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 5,
+          "successfulSamples": 3,
+          "statuses": [200, 429, 503],
+          "p50Milliseconds": 3.2595000000001164,
+          "p95Milliseconds": 4.225500000000011,
+          "maxRowsRead": 22,
+          "maxRowsWritten": 7
+        }
+      ]
+    },
+    {
+      "operation": "subscription.listSubscriptionOffers",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 25.87758299999996,
+          "p95Milliseconds": 25.87758299999996,
+          "maxRowsRead": 16,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 4.0277920000007725,
+          "p95Milliseconds": 4.0277920000007725,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 25.96441700000014,
+          "p95Milliseconds": 25.96441700000014,
+          "maxRowsRead": 16,
+          "maxRowsWritten": 22
+        }
+      ]
+    },
+    {
+      "operation": "subscription.getSubscriptionStatus",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 401],
+          "p50Milliseconds": 30.247416999999928,
+          "p95Milliseconds": 30.247416999999928,
+          "maxRowsRead": 16,
+          "maxRowsWritten": 19
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 401],
+          "p50Milliseconds": 5.585540999999921,
+          "p95Milliseconds": 5.585540999999921,
+          "maxRowsRead": 4,
+          "maxRowsWritten": 2
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 401],
+          "p50Milliseconds": 29.588999999999942,
+          "p95Milliseconds": 29.588999999999942,
+          "maxRowsRead": 16,
+          "maxRowsWritten": 19
+        }
+      ]
+    },
+    {
+      "operation": "subscription.cancelSubscription",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-pilot.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 30,
+          "successfulSamples": 17,
+          "statuses": [200, 401, 403, 409, 503],
+          "p50Milliseconds": 8.564332999999351,
+          "p95Milliseconds": 12.26445799999965,
+          "maxRowsRead": 45,
+          "maxRowsWritten": 9
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 30,
+          "successfulSamples": 17,
+          "statuses": [200, 401, 403, 409, 503],
+          "p50Milliseconds": 8.315499999999702,
+          "p95Milliseconds": 12.379874999999629,
+          "maxRowsRead": 45,
+          "maxRowsWritten": 9
+        }
+      ]
+    },
+    {
+      "operation": "quota.getQuota",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 29.23287500000015,
+          "p95Milliseconds": 29.23287500000015,
+          "maxRowsRead": 14,
+          "maxRowsWritten": 25
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 29.380083000000013,
+          "p95Milliseconds": 29.380083000000013,
+          "maxRowsRead": 14,
+          "maxRowsWritten": 25
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 23,
+          "successfulSamples": 21,
+          "statuses": [200, 429, 503],
+          "p50Milliseconds": 6.6316249999999854,
+          "p95Milliseconds": 8.575916000000234,
+          "maxRowsRead": 72,
+          "maxRowsWritten": 10
+        }
+      ]
+    },
+    {
+      "operation": "pats.listPATs",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 16,
+          "successfulSamples": 9,
+          "statuses": [200, 401, 429],
+          "p50Milliseconds": 20.69054099999994,
+          "p95Milliseconds": 23.569250000000466,
+          "maxRowsRead": 536,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 16,
+          "successfulSamples": 9,
+          "statuses": [200, 401, 429],
+          "p50Milliseconds": 19.440625000000182,
+          "p95Milliseconds": 27.361832999999933,
+          "maxRowsRead": 536,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 9,
+          "successfulSamples": 2,
+          "statuses": [200, 401],
+          "p50Milliseconds": 2.624374999999418,
+          "p95Milliseconds": 3.2372499999992215,
+          "maxRowsRead": 24,
+          "maxRowsWritten": 5
+        }
+      ]
+    },
+    {
+      "operation": "pats.getPATActivity",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 15,
+          "successfulSamples": 7,
+          "statuses": [200, 401, 404, 429, 503],
+          "p50Milliseconds": 5.940916999999899,
+          "p95Milliseconds": 9.1957910000001,
+          "maxRowsRead": 533,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 15,
+          "successfulSamples": 7,
+          "statuses": [200, 401, 404, 429, 503],
+          "p50Milliseconds": 6.019084000001385,
+          "p95Milliseconds": 9.753625000001193,
+          "maxRowsRead": 533,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 7,
+          "successfulSamples": 1,
+          "statuses": [200, 401, 404, 503],
+          "p50Milliseconds": 3.2883330000004207,
+          "p95Milliseconds": 3.2883330000004207,
+          "maxRowsRead": 27,
+          "maxRowsWritten": 5
+        }
+      ]
+    },
+    {
+      "operation": "pats.revokePAT",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 12,
+          "successfulSamples": 8,
+          "statuses": [200, 401, 404, 503],
+          "p50Milliseconds": 6.654541999999765,
+          "p95Milliseconds": 13.38854100000026,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 12,
+          "successfulSamples": 8,
+          "statuses": [200, 401, 404, 503],
+          "p50Milliseconds": 6.573875000000044,
+          "p95Milliseconds": 13.96179200000006,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 14
+        }
+      ]
+    },
+    {
+      "operation": "pats.revokeAllPATs",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 27,
+          "successfulSamples": 25,
+          "statuses": [200, 503],
+          "p50Milliseconds": 152.8337919999999,
+          "p95Milliseconds": 154.5523750000002,
+          "maxRowsRead": 154,
+          "maxRowsWritten": 167
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 28,
+          "successfulSamples": 26,
+          "statuses": [200, 503],
+          "p50Milliseconds": 141.44112500000028,
+          "p95Milliseconds": 143.41429199999993,
+          "maxRowsRead": 154,
+          "maxRowsWritten": 167
+        }
+      ]
+    },
+    {
+      "operation": "pats.createManualPAT",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 73,
+          "successfulSamples": 67,
+          "statuses": [200, 400, 403, 409, 422, 429, 503],
+          "p50Milliseconds": 9.136666999999761,
+          "p95Milliseconds": 129.1167919999998,
+          "maxRowsRead": 44,
+          "maxRowsWritten": 18
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 12.253624999999829,
+          "p95Milliseconds": 12.253624999999829,
+          "maxRowsRead": 8,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 12.249874999999975,
+          "p95Milliseconds": 12.249874999999975,
+          "maxRowsRead": 8,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 78,
+          "successfulSamples": 72,
+          "statuses": [200, 400, 403, 409, 422, 429, 503],
+          "p50Milliseconds": 8.93066699999963,
+          "p95Milliseconds": 129.81254200000012,
+          "maxRowsRead": 44,
+          "maxRowsWritten": 18
+        }
+      ]
+    },
+    {
+      "operation": "pats.inspectPATPairing",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 8,
+          "successfulSamples": 8,
+          "statuses": [200],
+          "p50Milliseconds": 6.178708000000142,
+          "p95Milliseconds": 7.555166999999528,
+          "maxRowsRead": 4,
+          "maxRowsWritten": 4
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 8,
+          "successfulSamples": 8,
+          "statuses": [200],
+          "p50Milliseconds": 6.0729580000006536,
+          "p95Milliseconds": 8.746625000000222,
+          "maxRowsRead": 4,
+          "maxRowsWritten": 4
+        }
+      ]
+    },
+    {
+      "operation": "pats.approvePATPairing",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 7,
+          "statuses": [200, 503],
+          "p50Milliseconds": 8.226583000000119,
+          "p95Milliseconds": 15.931833000000097,
+          "maxRowsRead": 7,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 7,
+          "statuses": [200, 503],
+          "p50Milliseconds": 8.441666000000168,
+          "p95Milliseconds": 11.240791000000172,
+          "maxRowsRead": 7,
+          "maxRowsWritten": 11
+        }
+      ]
+    },
+    {
+      "operation": "recovery.rotateBackupRecoveryCode",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 403],
+          "p50Milliseconds": 8.475084000000038,
+          "p95Milliseconds": 8.475084000000038,
+          "maxRowsRead": 3,
+          "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 0,
+          "statuses": [403],
+          "p50Milliseconds": 5.955208999999968,
+          "p95Milliseconds": 5.955208999999968,
+          "maxRowsRead": 2,
+          "maxRowsWritten": 0
+        },
+        {
+          "cohort": "fidy-native-proof-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 403],
+          "p50Milliseconds": 6.135041000000001,
+          "p95Milliseconds": 6.135041000000001,
+          "maxRowsRead": 3,
+          "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 403],
+          "p50Milliseconds": 6.251457999999957,
+          "p95Milliseconds": 6.251457999999957,
+          "maxRowsRead": 3,
+          "maxRowsWritten": 3
+        }
+      ]
+    },
+    {
+      "operation": "operations.executeAtomicBatch",
+      "assessment": "measured successful native fixture",
+      "cohorts": [
+        {
+          "cohort": "fidy-canonical-performance-stdout-full.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 105,
+          "successfulSamples": 21,
+          "statuses": [200, 400, 401, 403, 429, 503],
+          "p50Milliseconds": 44.00887499999999,
+          "p95Milliseconds": 70.17679199999839,
+          "maxRowsRead": 21,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 27.53504200000043,
+          "p95Milliseconds": 27.53504200000043,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-final-gaps.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 0,
+          "statuses": [400],
+          "p50Milliseconds": 9.183666999999332,
+          "p95Milliseconds": 9.183666999999332,
+          "maxRowsRead": 1,
+          "maxRowsWritten": 0
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 88,
+          "successfulSamples": 44,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 15.668292000000292,
+          "p95Milliseconds": 35.68262500000128,
+          "maxRowsRead": 16464,
+          "maxRowsWritten": 9
+        },
+        {
+          "cohort": "fidy-canonical-owner-expanded.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 21,
+          "successfulSamples": 5,
+          "statuses": [200, 400, 401, 403, 503],
+          "p50Milliseconds": 34.129249999999956,
+          "p95Milliseconds": 55.29070800000045,
+          "maxRowsRead": 21,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 88,
+          "successfulSamples": 44,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 20.63808400000198,
+          "p95Milliseconds": 37.58650000000125,
+          "maxRowsRead": 16464,
+          "maxRowsWritten": 9
+        },
+        {
+          "cohort": "fidy-canonical-owner-final.log",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 21,
+          "successfulSamples": 5,
+          "statuses": [200, 400, 401, 403, 503],
+          "p50Milliseconds": 36.710666000000856,
+          "p95Milliseconds": 46.97904100000051,
+          "maxRowsRead": 21,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 147,
+          "successfulSamples": 58,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 18.692291999999725,
+          "p95Milliseconds": 59.5054999999993,
+          "maxRowsRead": 16464,
+          "maxRowsWritten": 573
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 106,
+          "successfulSamples": 21,
+          "statuses": [200, 400, 401, 403, 429, 503],
+          "p50Milliseconds": 48.61854200000016,
+          "p95Milliseconds": 87.46645800000078,
+          "maxRowsRead": 21,
+          "maxRowsWritten": 26
+        }
+      ]
+    }
+  ],
+  "mixedLoad": [
+    {
+      "operation": "native.mixed-load",
+      "users": 1,
+      "concurrency": 2,
+      "requests": 32,
+      "elapsedMilliseconds": 32582.400292,
+      "requestsPerSecond": 0.9821253103890263,
+      "acceptedRequests": 32,
+      "acceptedRequestsPerSecond": 0.9821253103890263,
+      "acceptedP95Milliseconds": 62.01591700000063,
+      "p50Milliseconds": 28.92266600000039,
+      "p95Milliseconds": 62.01591700000063,
+      "p99Milliseconds": 330.0016249999999,
+      "capturedTransactions": 16,
+      "rateLimitedRequests": 0,
+      "paceMilliseconds": 1050
+    },
+    {
+      "operation": "native.mixed-load",
+      "users": 1,
+      "concurrency": 2,
+      "requests": 128,
+      "elapsedMilliseconds": 944.1630839999998,
+      "requestsPerSecond": 135.5697995072216,
+      "acceptedRequests": 10,
+      "acceptedRequestsPerSecond": 10.591390586501687,
+      "acceptedP95Milliseconds": 47.13558299999568,
+      "p50Milliseconds": 12.479250000003958,
+      "p95Milliseconds": 30.657333000002836,
+      "p99Milliseconds": 40.59741699999722,
+      "capturedTransactions": 5,
+      "rateLimitedRequests": 118,
+      "paceMilliseconds": 0
+    },
+    {
+      "operation": "native.mixed-load",
+      "users": 1,
+      "concurrency": 8,
+      "requests": 128,
+      "elapsedMilliseconds": 971.5482080000002,
+      "requestsPerSecond": 131.7484803595047,
+      "acceptedRequests": 10,
+      "acceptedRequestsPerSecond": 10.292850028086304,
+      "acceptedP95Milliseconds": 137.80929099999776,
+      "p50Milliseconds": 54.2634590000016,
+      "p95Milliseconds": 117.50983300000371,
+      "p99Milliseconds": 128.1726670000062,
+      "capturedTransactions": 5,
+      "rateLimitedRequests": 118,
+      "paceMilliseconds": 0
+    },
+    {
+      "operation": "native.mixed-load",
+      "users": 1,
+      "concurrency": 32,
+      "requests": 128,
+      "elapsedMilliseconds": 878.9123330000002,
+      "requestsPerSecond": 145.63454760396448,
+      "acceptedRequests": 8,
+      "acceptedRequestsPerSecond": 9.10215922524778,
+      "acceptedP95Milliseconds": 485.2358749999985,
+      "p50Milliseconds": 209.51804200000333,
+      "p95Milliseconds": 275.47829099999944,
+      "p99Milliseconds": 478.61237500000425,
+      "capturedTransactions": 4,
+      "rateLimitedRequests": 120,
+      "paceMilliseconds": 0
+    },
+    {
+      "operation": "native.mixed-load",
+      "users": 2,
+      "concurrency": 2,
+      "requests": 32,
+      "elapsedMilliseconds": 16312.328332999998,
+      "requestsPerSecond": 1.9617064680621767,
+      "acceptedRequests": 32,
+      "acceptedRequestsPerSecond": 1.9617064680621767,
+      "acceptedP95Milliseconds": 51.31945799999812,
+      "p50Milliseconds": 40.390166999997746,
+      "p95Milliseconds": 51.31945799999812,
+      "p99Milliseconds": 190.76212499999383,
+      "capturedTransactions": 16,
+      "rateLimitedRequests": 0,
+      "paceMilliseconds": 1050
+    },
+    {
+      "operation": "native.mixed-load",
+      "users": 2,
+      "concurrency": 2,
+      "requests": 128,
+      "elapsedMilliseconds": 1059.971749999997,
+      "requestsPerSecond": 120.75793529403059,
+      "acceptedRequests": 22,
+      "acceptedRequestsPerSecond": 20.755270128661508,
+      "acceptedP95Milliseconds": 49.15370800000528,
+      "p50Milliseconds": 12.526791000003868,
+      "p95Milliseconds": 35.45695799999521,
+      "p99Milliseconds": 49.15370800000528,
+      "capturedTransactions": 11,
+      "rateLimitedRequests": 106,
+      "paceMilliseconds": 0
+    },
+    {
+      "operation": "native.mixed-load",
+      "users": 2,
+      "concurrency": 8,
+      "requests": 128,
+      "elapsedMilliseconds": 1160.7743750000009,
+      "requestsPerSecond": 110.27121442097643,
+      "acceptedRequests": 22,
+      "acceptedRequestsPerSecond": 18.952864978605323,
+      "acceptedP95Milliseconds": 220.4134170000034,
+      "p50Milliseconds": 54.98595799999748,
+      "p95Milliseconds": 190.74991699999373,
+      "p99Milliseconds": 220.4134170000034,
+      "capturedTransactions": 13,
+      "rateLimitedRequests": 106,
+      "paceMilliseconds": 0
+    },
+    {
+      "operation": "native.mixed-load",
+      "users": 2,
+      "concurrency": 32,
+      "requests": 128,
+      "elapsedMilliseconds": 987.5469589999993,
+      "requestsPerSecond": 129.61408957161305,
+      "acceptedRequests": 17,
+      "acceptedRequestsPerSecond": 17.214371271229858,
+      "acceptedP95Milliseconds": 493.5102079999997,
+      "p50Milliseconds": 218.1614999999947,
+      "p95Milliseconds": 416.3733330000032,
+      "p99Milliseconds": 490.98512499999924,
+      "capturedTransactions": 11,
+      "rateLimitedRequests": 111,
+      "paceMilliseconds": 0
+    }
+  ],
+  "web": {
+    "observedAtUtc": "2026-10-11T11:46:53.518Z",
+    "conditions": "Alternating three fresh contexts per version; same loopback server, gzip compression, cache disabled, Pixel 5 emulation, 1.6Mbps download / 750Kbps upload / 150ms latency / 4x CPU. External requests blocked. Local lab comparison, not production Web Vitals.",
+    "samples": [
+      {
+        "variant": "baseline",
+        "iteration": 0,
+        "status": 200,
+        "errors": [],
+        "blocked": [],
+        "fcp": 3596,
+        "lcp": 3596,
+        "cls": 0.07333643062823696,
+        "heading": "Tu plata, m\u00e1s clara. Tu vida, m\u00e1s tranquila.",
+        "fonts": "loaded",
+        "resources": [
+          {
+            "name": "/assets/index-DKZS3FA0.js",
+            "encodedBytes": 459580,
+            "decodedBytes": 1499700,
+            "duration": 2575.6999999955297,
+            "initiator": "script"
+          },
+          {
+            "name": "/assets/index-CLn7X7_z.css",
+            "encodedBytes": 23475,
+            "decodedBytes": 136526,
+            "duration": 395.30000000447035,
+            "initiator": "link"
+          },
+          {
+            "name": "/assets/Poppins-SemiBold-DVCj-rhG.ttf",
+            "encodedBytes": 72048,
+            "decodedBytes": 157312,
+            "duration": 2556.39999999851,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Regular-B2YTLo9r.ttf",
+            "encodedBytes": 72264,
+            "decodedBytes": 160316,
+            "duration": 2562.8000000044703,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Medium-1iPSBYoM.ttf",
+            "encodedBytes": 71553,
+            "decodedBytes": 158576,
+            "duration": 2532.8000000044703,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Bold-CdT-0Mts.ttf",
+            "encodedBytes": 71331,
+            "decodedBytes": 155996,
+            "duration": 2538.39999999851,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-ExtraBold-CQJI8RUG.ttf",
+            "encodedBytes": 71055,
+            "decodedBytes": 154836,
+            "duration": 2545.7000000029802,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/fidy-logo-B9D5jpJk.png",
+            "encodedBytes": 48737,
+            "decodedBytes": 55568,
+            "duration": 1644.4000000059605,
+            "initiator": "img"
+          }
+        ]
+      },
+      {
+        "variant": "candidate",
+        "iteration": 0,
+        "status": 200,
+        "errors": [],
+        "blocked": [],
+        "fcp": 2440,
+        "lcp": 2440,
+        "cls": 0.05940437838762794,
+        "heading": "Tu plata, m\u00e1s clara. Tu vida, m\u00e1s tranquila.",
+        "fonts": "loaded",
+        "resources": [
+          {
+            "name": "/assets/index-BbOdhsZo.js",
+            "encodedBytes": 222764,
+            "decodedBytes": 722497,
+            "duration": 1892,
+            "initiator": "script"
+          },
+          {
+            "name": "/assets/rolldown-runtime-hePW80VL.js",
+            "encodedBytes": 428,
+            "decodedBytes": 716,
+            "duration": 184.60000000149012,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/with-selector-DN3j4LbN.js",
+            "encodedBytes": 751,
+            "decodedBytes": 1678,
+            "duration": 199.80000000447035,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useSelector-DgL0Z34B.js",
+            "encodedBytes": 1654,
+            "decodedBytes": 3505,
+            "duration": 235.70000000298023,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/class-names-BiMW_83D.js",
+            "encodedBytes": 80871,
+            "decodedBytes": 251228,
+            "duration": 1187.8000000044703,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useRouter-KMRnvLL7.js",
+            "encodedBytes": 167,
+            "decodedBytes": 196,
+            "duration": 212.79999999701977,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/matchContext-qvGpEdYE.js",
+            "encodedBytes": 156,
+            "decodedBytes": 187,
+            "duration": 377.40000000596046,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useMatch-DMJ2LjJm.js",
+            "encodedBytes": 425,
+            "decodedBytes": 671,
+            "duration": 399.5,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/link-DCu7P4rR.js",
+            "encodedBytes": 3065,
+            "decodedBytes": 6305,
+            "duration": 473.8999999985099,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/index-C3_XSeMn.css",
+            "encodedBytes": 23474,
+            "decodedBytes": 136521,
+            "duration": 728.1999999955297,
+            "initiator": "link"
+          },
+          {
+            "name": "/assets/Poppins-SemiBold-a0jdhGrK.woff2",
+            "encodedBytes": 51538,
+            "decodedBytes": 51500,
+            "duration": 1788.8999999985099,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Regular-dDwLtfIe.woff2",
+            "encodedBytes": 51602,
+            "decodedBytes": 51564,
+            "duration": 1797,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Medium-CgYQMvHF.woff2",
+            "encodedBytes": 50830,
+            "decodedBytes": 50792,
+            "duration": 1803.2000000029802,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Bold-B-vfrz4s.woff2",
+            "encodedBytes": 51062,
+            "decodedBytes": 51024,
+            "duration": 1812.4000000059605,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-ExtraBold-C5gSKbHd.woff2",
+            "encodedBytes": 51034,
+            "decodedBytes": 50996,
+            "duration": 1816.8999999985099,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/fidy-logo-B9D5jpJk.png",
+            "encodedBytes": 48737,
+            "decodedBytes": 55568,
+            "duration": 1639.5999999940395,
+            "initiator": "img"
+          }
+        ]
+      },
+      {
+        "variant": "baseline",
+        "iteration": 1,
+        "status": 200,
+        "errors": [],
+        "blocked": [],
+        "fcp": 3200,
+        "lcp": 3200,
+        "cls": 0.07333643062823696,
+        "heading": "Tu plata, m\u00e1s clara. Tu vida, m\u00e1s tranquila.",
+        "fonts": "loaded",
+        "resources": [
+          {
+            "name": "/assets/index-DKZS3FA0.js",
+            "encodedBytes": 459580,
+            "decodedBytes": 1499700,
+            "duration": 2581.8000000044703,
+            "initiator": "script"
+          },
+          {
+            "name": "/assets/index-CLn7X7_z.css",
+            "encodedBytes": 23475,
+            "decodedBytes": 136526,
+            "duration": 399.5,
+            "initiator": "link"
+          },
+          {
+            "name": "/assets/Poppins-SemiBold-DVCj-rhG.ttf",
+            "encodedBytes": 72048,
+            "decodedBytes": 157312,
+            "duration": 2310.89999999851,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Regular-B2YTLo9r.ttf",
+            "encodedBytes": 72264,
+            "decodedBytes": 160316,
+            "duration": 2319.0999999940395,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Medium-1iPSBYoM.ttf",
+            "encodedBytes": 71553,
+            "decodedBytes": 158576,
+            "duration": 2286.7999999970198,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Bold-CdT-0Mts.ttf",
+            "encodedBytes": 71331,
+            "decodedBytes": 155996,
+            "duration": 2293.60000000149,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-ExtraBold-CQJI8RUG.ttf",
+            "encodedBytes": 71055,
+            "decodedBytes": 154836,
+            "duration": 2300.7999999970198,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/fidy-logo-B9D5jpJk.png",
+            "encodedBytes": 48737,
+            "decodedBytes": 55568,
+            "duration": 1640.8999999985099,
+            "initiator": "img"
+          }
+        ]
+      },
+      {
+        "variant": "candidate",
+        "iteration": 1,
+        "status": 200,
+        "errors": [],
+        "blocked": [],
+        "fcp": 2440,
+        "lcp": 2440,
+        "cls": 0.05940437838762794,
+        "heading": "Tu plata, m\u00e1s clara. Tu vida, m\u00e1s tranquila.",
+        "fonts": "loaded",
+        "resources": [
+          {
+            "name": "/assets/index-BbOdhsZo.js",
+            "encodedBytes": 222764,
+            "decodedBytes": 722497,
+            "duration": 1884.6000000014901,
+            "initiator": "script"
+          },
+          {
+            "name": "/assets/rolldown-runtime-hePW80VL.js",
+            "encodedBytes": 428,
+            "decodedBytes": 716,
+            "duration": 173.10000000149012,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/with-selector-DN3j4LbN.js",
+            "encodedBytes": 751,
+            "decodedBytes": 1678,
+            "duration": 189.79999999701977,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useRouter-KMRnvLL7.js",
+            "encodedBytes": 167,
+            "decodedBytes": 196,
+            "duration": 203.69999999552965,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useSelector-DgL0Z34B.js",
+            "encodedBytes": 1654,
+            "decodedBytes": 3505,
+            "duration": 227.10000000149012,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/class-names-BiMW_83D.js",
+            "encodedBytes": 80871,
+            "decodedBytes": 251228,
+            "duration": 1179.1000000014901,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/matchContext-qvGpEdYE.js",
+            "encodedBytes": 156,
+            "decodedBytes": 187,
+            "duration": 368.79999999701977,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useMatch-DMJ2LjJm.js",
+            "encodedBytes": 425,
+            "decodedBytes": 671,
+            "duration": 392.79999999701977,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/link-DCu7P4rR.js",
+            "encodedBytes": 3065,
+            "decodedBytes": 6305,
+            "duration": 472.80000000447035,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/index-C3_XSeMn.css",
+            "encodedBytes": 23474,
+            "decodedBytes": 136521,
+            "duration": 722,
+            "initiator": "link"
+          },
+          {
+            "name": "/assets/Poppins-SemiBold-a0jdhGrK.woff2",
+            "encodedBytes": 51538,
+            "decodedBytes": 51500,
+            "duration": 1793.6000000014901,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Regular-dDwLtfIe.woff2",
+            "encodedBytes": 51602,
+            "decodedBytes": 51564,
+            "duration": 1801.2000000029802,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Medium-CgYQMvHF.woff2",
+            "encodedBytes": 50830,
+            "decodedBytes": 50792,
+            "duration": 1808.6999999955297,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Bold-B-vfrz4s.woff2",
+            "encodedBytes": 51062,
+            "decodedBytes": 51024,
+            "duration": 1814,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-ExtraBold-C5gSKbHd.woff2",
+            "encodedBytes": 51034,
+            "decodedBytes": 50996,
+            "duration": 1824.3000000044703,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/fidy-logo-B9D5jpJk.png",
+            "encodedBytes": 48737,
+            "decodedBytes": 55568,
+            "duration": 1643.7000000029802,
+            "initiator": "img"
+          }
+        ]
+      },
+      {
+        "variant": "baseline",
+        "iteration": 2,
+        "status": 200,
+        "errors": [],
+        "blocked": [],
+        "fcp": 3216,
+        "lcp": 3216,
+        "cls": 0.06120725447661768,
+        "heading": "Tu plata, m\u00e1s clara. Tu vida, m\u00e1s tranquila.",
+        "fonts": "loaded",
+        "resources": [
+          {
+            "name": "/assets/index-CLn7X7_z.css",
+            "encodedBytes": 23475,
+            "decodedBytes": 136526,
+            "duration": 391.30000000447035,
+            "initiator": "link"
+          },
+          {
+            "name": "/assets/index-DKZS3FA0.js",
+            "encodedBytes": 459580,
+            "decodedBytes": 1499700,
+            "duration": 2574.7000000029802,
+            "initiator": "script"
+          },
+          {
+            "name": "/assets/Poppins-SemiBold-DVCj-rhG.ttf",
+            "encodedBytes": 72048,
+            "decodedBytes": 157312,
+            "duration": 2333.6999999955297,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Medium-1iPSBYoM.ttf",
+            "encodedBytes": 71553,
+            "decodedBytes": 158576,
+            "duration": 2312.5,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Regular-B2YTLo9r.ttf",
+            "encodedBytes": 72264,
+            "decodedBytes": 160316,
+            "duration": 2341.60000000149,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Bold-CdT-0Mts.ttf",
+            "encodedBytes": 71331,
+            "decodedBytes": 155996,
+            "duration": 2319.2999999970198,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-ExtraBold-CQJI8RUG.ttf",
+            "encodedBytes": 71055,
+            "decodedBytes": 154836,
+            "duration": 2326.5,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/fidy-logo-B9D5jpJk.png",
+            "encodedBytes": 48737,
+            "decodedBytes": 55568,
+            "duration": 1643.1999999955297,
+            "initiator": "img"
+          }
+        ]
+      },
+      {
+        "variant": "candidate",
+        "iteration": 2,
+        "status": 200,
+        "errors": [],
+        "blocked": [],
+        "fcp": 2452,
+        "lcp": 2452,
+        "cls": 0.07071592593947568,
+        "heading": "Tu plata, m\u00e1s clara. Tu vida, m\u00e1s tranquila.",
+        "fonts": "loaded",
+        "resources": [
+          {
+            "name": "/assets/index-BbOdhsZo.js",
+            "encodedBytes": 222764,
+            "decodedBytes": 722497,
+            "duration": 1880.8999999985099,
+            "initiator": "script"
+          },
+          {
+            "name": "/assets/rolldown-runtime-hePW80VL.js",
+            "encodedBytes": 428,
+            "decodedBytes": 716,
+            "duration": 170.10000000149012,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/with-selector-DN3j4LbN.js",
+            "encodedBytes": 751,
+            "decodedBytes": 1678,
+            "duration": 184.79999999701977,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useRouter-KMRnvLL7.js",
+            "encodedBytes": 167,
+            "decodedBytes": 196,
+            "duration": 199.10000000149012,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useSelector-DgL0Z34B.js",
+            "encodedBytes": 1654,
+            "decodedBytes": 3505,
+            "duration": 222.19999999552965,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/class-names-BiMW_83D.js",
+            "encodedBytes": 80871,
+            "decodedBytes": 251228,
+            "duration": 1173.3999999985099,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/matchContext-qvGpEdYE.js",
+            "encodedBytes": 156,
+            "decodedBytes": 187,
+            "duration": 363.8999999985099,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/useMatch-DMJ2LjJm.js",
+            "encodedBytes": 425,
+            "decodedBytes": 671,
+            "duration": 380.59999999403954,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/link-DCu7P4rR.js",
+            "encodedBytes": 3065,
+            "decodedBytes": 6305,
+            "duration": 470.8999999985099,
+            "initiator": "other"
+          },
+          {
+            "name": "/assets/index-C3_XSeMn.css",
+            "encodedBytes": 23474,
+            "decodedBytes": 136521,
+            "duration": 717.4000000059605,
+            "initiator": "link"
+          },
+          {
+            "name": "/assets/Poppins-SemiBold-a0jdhGrK.woff2",
+            "encodedBytes": 51538,
+            "decodedBytes": 51500,
+            "duration": 1795.1000000014901,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Regular-dDwLtfIe.woff2",
+            "encodedBytes": 51602,
+            "decodedBytes": 51564,
+            "duration": 1800.5999999940395,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Medium-CgYQMvHF.woff2",
+            "encodedBytes": 50830,
+            "decodedBytes": 50792,
+            "duration": 1808,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-Bold-B-vfrz4s.woff2",
+            "encodedBytes": 51062,
+            "decodedBytes": 51024,
+            "duration": 1813.1000000014901,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/Poppins-ExtraBold-C5gSKbHd.woff2",
+            "encodedBytes": 51034,
+            "decodedBytes": 50996,
+            "duration": 1820.6999999955297,
+            "initiator": "css"
+          },
+          {
+            "name": "/assets/fidy-logo-B9D5jpJk.png",
+            "encodedBytes": 48737,
+            "decodedBytes": 55568,
+            "duration": 1641.1999999955297,
+            "initiator": "img"
+          }
+        ]
+      }
+    ]
+  },
+  "hostedXlsx": {
+    "status": "pending protected-trunk workflow run"
+  },
+  "productionFollowup": {
+    "observedAtUtc": "2026-10-11T12:18:00Z",
+    "deploymentRuns": [38136020384, 38137254930, 38138130053, 38139226567],
+    "status": "preflight refused before promotion",
+    "reason": "Workers AI daily free allocation exhausted",
+    "diagnostic": {
+      "httpStatus": 429,
+      "restErrorCode": 4006,
+      "limitNeuronsPerDay": 10000
+    },
+    "impact": "Live AI conformance and subsequent deployment promotion unavailable until quota resets or account billing changes",
+    "credentials": "Read-only API access works; this is provider quota, not missing access",
+    "windowUtc": {
+      "startInclusive": "2026-10-11T11:50:00Z",
+      "endExclusive": "2026-10-11T12:20:00Z"
+    },
+    "d1": [
+      {
+        "dimensions": {
+          "databaseId": "2622d5b0-5e0f-4766-b836-ff0f635a92a6",
+          "date": "2026-10-11",
+          "servedByRegion": "ENAM"
+        },
+        "quantiles": {
+          "queryBatchTimeMsP50": 0.25,
+          "queryBatchTimeMsP95": 0.95,
+          "queryBatchTimeMsP99": 1.62
+        },
+        "sum": {
+          "readQueries": 2987,
+          "rowsRead": 18748,
+          "rowsWritten": 939,
+          "writeQueries": 857
+        }
+      }
+    ],
+    "doPeriodic": [
+      {
+        "dimensions": {
+          "date": "2026-10-11",
+          "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64"
+        },
+        "max": {
+          "memoryUsageBytes": 20819706
+        },
+        "quantiles": {
+          "memoryUsageBytesP99": 20819706
+        },
+        "sum": {
+          "activeTime": 541166173,
+          "cpuTime": 2200073,
+          "duration": 69.26927014400002,
+          "exceededCpuErrors": 0,
+          "exceededMemoryErrors": 0,
+          "fatalInternalErrors": 0,
+          "rowsRead": 0,
+          "rowsWritten": 0
+        }
+      },
+      {
+        "dimensions": {
+          "date": "2026-10-11",
+          "namespaceId": "832b57e975dd4db38affd98b6953d005"
+        },
+        "max": {
+          "memoryUsageBytes": 10962694
+        },
+        "quantiles": {
+          "memoryUsageBytesP99": 10962694
+        },
+        "sum": {
+          "activeTime": 6568460,
+          "cpuTime": 448733,
+          "duration": 0.84076288,
+          "exceededCpuErrors": 0,
+          "exceededMemoryErrors": 0,
+          "fatalInternalErrors": 0,
+          "rowsRead": 547,
+          "rowsWritten": 0
+        }
+      }
+    ],
+    "cron": {
+      "samples": 34,
+      "successes": 33,
+      "exceptions": 1,
+      "exceptionAtUtc": "2026-10-11T12:06:10Z",
+      "attribution": "Native structured warning identifies async.health; ScheduledWorkFailed surfaces after independent activities are attempted. Provider/root cause not established."
+    },
+    "ai": [
+      {
+        "count": 7,
+        "dimensions": {
+          "date": "2026-10-11",
+          "errorCode": 4006,
+          "modelId": "@cf/google/gemma-4-26b-a4b-it",
+          "requestSource": "unknown"
+        },
+        "sum": {
+          "totalInferenceTimeMs": 779,
+          "totalInputTokens": 0,
+          "totalNeurons": 0,
+          "totalOutputTokens": 0
+        }
+      }
+    ],
+    "webMergeCommit": "6f5c3bf70b1d576269a2508d00cb7df56357f035"
+  },
+  "pinnedNativeRun": {
+    "sourceCommit": "93fdd16c2",
+    "passedFiles": 133,
+    "skippedFiles": 1,
+    "passedTests": 1772,
+    "skippedTests": 15,
+    "elapsedSeconds": 521.84,
+    "observerChangesAfterRun": "Moved unchanged observer logic into the server TypeScript project; Queue proof now waits for all ten dead letters before count assertions"
+  },
+  "localXlsx": [
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-small",
+      "zipBytes": 2258,
+      "expandedBytes": 11191,
+      "sampledV8ActiveMilliseconds": 11.429,
+      "retainedHeapBeforeBytes": 9404680,
+      "retainedHeapAfterBytes": 11682824,
+      "outcome": "parsed",
+      "rowCount": 1,
+      "elapsedMilliseconds": 9,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 786432,
+      "serializedEvidenceBytes": 530315,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-row-limit",
+      "zipBytes": 2278,
+      "expandedBytes": 23479,
+      "sampledV8ActiveMilliseconds": 11.163,
+      "retainedHeapBeforeBytes": 11682824,
+      "retainedHeapAfterBytes": 15397360,
+      "outcome": "parsed",
+      "rowCount": 1,
+      "elapsedMilliseconds": 10,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 3145728,
+      "serializedEvidenceBytes": 2103179,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-total-limit",
+      "zipBytes": 7594,
+      "expandedBytes": 85307,
+      "sampledV8ActiveMilliseconds": 13.79,
+      "retainedHeapBeforeBytes": 15397360,
+      "retainedHeapAfterBytes": 12149024,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-accepted",
+      "zipBytes": 3601,
+      "expandedBytes": 1209495,
+      "sampledV8ActiveMilliseconds": 38.704,
+      "retainedHeapBeforeBytes": 12149024,
+      "retainedHeapAfterBytes": 17177824,
+      "outcome": "parsed",
+      "rowCount": 34,
+      "elapsedMilliseconds": 38,
+      "interpretationMilliseconds": 3,
+      "logicalTextBytes": 3602013,
+      "serializedEvidenceBytes": 2417418,
+      "interpretedRows": 34,
+      "acceptedRows": 34,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-review",
+      "zipBytes": 3605,
+      "expandedBytes": 1209495,
+      "sampledV8ActiveMilliseconds": 47.243,
+      "retainedHeapBeforeBytes": 17177824,
+      "retainedHeapAfterBytes": 22190640,
+      "outcome": "parsed",
+      "rowCount": 34,
+      "elapsedMilliseconds": 44,
+      "interpretationMilliseconds": 2,
+      "logicalTextBytes": 3602013,
+      "serializedEvidenceBytes": 2417418,
+      "interpretedRows": 34,
+      "acceptedRows": 33,
+      "reviewRows": 1
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-repeated-accepted",
+      "zipBytes": 19123,
+      "expandedBytes": 271062,
+      "sampledV8ActiveMilliseconds": 11.392,
+      "retainedHeapBeforeBytes": 22190640,
+      "retainedHeapAfterBytes": 21045356,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "different-amounts",
+      "zipBytes": 54421,
+      "expandedBytes": 178647,
+      "sampledV8ActiveMilliseconds": 121.106,
+      "retainedHeapBeforeBytes": 21045356,
+      "retainedHeapAfterBytes": 22383740,
+      "outcome": "parsed",
+      "rowCount": 1000,
+      "elapsedMilliseconds": 118,
+      "interpretationMilliseconds": 57,
+      "logicalTextBytes": 12335679,
+      "serializedEvidenceBytes": 8702266,
+      "interpretedRows": 1000,
+      "acceptedRows": 1000,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "escaped-formatted",
+      "zipBytes": 15778,
+      "expandedBytes": 44139,
+      "sampledV8ActiveMilliseconds": 25.068,
+      "retainedHeapBeforeBytes": 22383740,
+      "retainedHeapAfterBytes": 25127388,
+      "outcome": "parsed",
+      "rowCount": 128,
+      "elapsedMilliseconds": 23,
+      "interpretationMilliseconds": 8,
+      "logicalTextBytes": 1186236,
+      "serializedEvidenceBytes": 1638806,
+      "interpretedRows": 128,
+      "acceptedRows": 0,
+      "reviewRows": 128
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "formatted-work-outside-envelope",
+      "zipBytes": 33117,
+      "expandedBytes": 103767,
+      "sampledV8ActiveMilliseconds": 7.125,
+      "retainedHeapBeforeBytes": 25127388,
+      "retainedHeapAfterBytes": 22675400,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "numeric-outside-envelope",
+      "zipBytes": 5978,
+      "expandedBytes": 15512,
+      "sampledV8ActiveMilliseconds": 2.466,
+      "retainedHeapBeforeBytes": 22675400,
+      "retainedHeapAfterBytes": 23159212,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "many-cells",
+      "zipBytes": 1695716,
+      "expandedBytes": 7357998,
+      "sampledV8ActiveMilliseconds": 318.716,
+      "retainedHeapBeforeBytes": 23159212,
+      "retainedHeapAfterBytes": 34395856,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "bounded-cells",
+      "zipBytes": 676645,
+      "expandedBytes": 2835958,
+      "sampledV8ActiveMilliseconds": 616.493,
+      "retainedHeapBeforeBytes": 34395856,
+      "retainedHeapAfterBytes": 54083816,
+      "outcome": "parsed",
+      "rowCount": 8000,
+      "elapsedMilliseconds": 615,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 1112148,
+      "serializedEvidenceBytes": 10679080,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "two-overlapping-requests",
+      "elapsedMilliseconds": 165.5994169999999,
+      "outcomes": ["parsed", "parsed"],
+      "retainedHeapAfterBytes": 31334400
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "two-overlapping-bounded-cell-requests",
+      "elapsedMilliseconds": 1166.0085840000002,
+      "outcomes": ["parsed", "parsed"],
+      "retainedHeapAfterBytes": 51055384
+    }
+  ]
+}

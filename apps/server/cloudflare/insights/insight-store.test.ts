@@ -346,6 +346,30 @@ effectIt.effect(
     })
 );
 
+effectIt.effect("reads and dismisses an owned Insight through the public canonical boundary", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    yield* fromTestPromise(() => authorizeBrowser(db));
+    const event = Option.getOrThrow(yield* generated(db));
+    for (const action of ["read", "dismiss"] as const) {
+      const response = yield* fromTestPromise(() =>
+        send({
+          db,
+          index: 0,
+          path: `/insights/${event.id}/${action === "dismiss" ? "dismissed" : action}`,
+          method: "POST",
+          body: Option.none(),
+        })
+      );
+      expect(response.status).toBe(200);
+      yield* fromTestPromise(() => response.arrayBuffer());
+    }
+    expect(
+      Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
+    ).toBe("dismissed");
+  })
+);
+
 effectIt.effect("rejects a foreign event before writing any lifecycle or delivery evidence", () =>
   Effect.gen(function* () {
     const db = yield* setup();

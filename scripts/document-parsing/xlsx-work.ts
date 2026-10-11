@@ -6,7 +6,7 @@ import * as XLSX from "xlsx/xlsx.mjs";
 import type { WorkBook, WorkSheet } from "xlsx";
 import { closeWorkerdHttp, requestHostedProof, requestWorkerd } from "./local-workerd-http";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
-import { type HostedPreview, hostedPreview } from "./hosted-preview";
+import { type HostedWorkerProof, hostedWorkerProof } from "./hosted-worker";
 
 const baseline = process.argv.includes("--baseline");
 const remote = process.argv.includes("--remote");
@@ -61,7 +61,7 @@ const readProofResponse = Effect.fn(function* (response: Response) {
 
 const measurementBase = Schema.Struct({
   baseline: Schema.Boolean,
-  runtime: Schema.Literals(["local-workerd", "cloudflare-preview"]),
+  runtime: Schema.Literals(["local-workerd", "cloudflare-worker"]),
   fixture: Schema.String,
   zipBytes: Schema.Int,
   expandedBytes: Schema.Int,
@@ -80,7 +80,7 @@ const measurementCodec = Schema.fromJsonString(
 const overlapCodec = Schema.fromJsonString(
   Schema.Struct({
     baseline: Schema.Boolean,
-    runtime: Schema.Literals(["local-workerd", "cloudflare-preview"]),
+    runtime: Schema.Literals(["local-workerd", "cloudflare-worker"]),
     fixture: Schema.String,
     elapsedMilliseconds: Schema.Finite,
     outcomes: Schema.Array(Schema.Literals(["parsed", "rejected", "runtime-failure"])),
@@ -187,7 +187,7 @@ const fixtures = Effect.fn(function* () {
 const send = (
   bytes: Uint8Array,
   signal: AbortSignal,
-  target: Option.Option<HostedPreview>
+  target: Option.Option<HostedWorkerProof>
 ): Promise<Response> => {
   const input = {
     method: "POST" as const,
@@ -205,7 +205,7 @@ const send = (
       })
     : requestWorkerd(input);
 };
-const probeReady = Effect.fn(function* (target: Option.Option<HostedPreview>) {
+const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
   const reply = yield* Effect.tryPromise(() =>
     send(
       synthetic({ rows: 1, text: "Cafe", formatted: false }),
@@ -224,7 +224,7 @@ const probeReady = Effect.fn(function* (target: Option.Option<HostedPreview>) {
     }
   });
 });
-const waitReady = Effect.fn(function* (target: Option.Option<HostedPreview>) {
+const waitReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
   for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
     const response = yield* Effect.result(probeReady(target));
     if (response._tag === "Success") return;
@@ -250,7 +250,7 @@ const waitInspector = Effect.fn(function* () {
 const measure = Effect.fn(function* (
   fixture: Readonly<{ name: string; bytes: Uint8Array }>,
   debuggerUrl: string,
-  target: Option.Option<HostedPreview>
+  target: Option.Option<HostedWorkerProof>
 ) {
   const expandedBytes = Object.values(unzipSync(fixture.bytes)).reduce(
     (sum, entry) => sum + entry.length,
@@ -281,7 +281,7 @@ const measure = Effect.fn(function* (
     : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(measurementCodec)({
     baseline,
-    runtime: remote ? "cloudflare-preview" : "local-workerd",
+    runtime: remote ? "cloudflare-worker" : "local-workerd",
     fixture: fixture.name,
     zipBytes: fixture.bytes.length,
     expandedBytes,
@@ -309,8 +309,8 @@ const proofConfig = (name: string): string =>
     main: "worker.js",
     compatibility_date: "2026-09-08",
     limits: { cpu_ms: cpuLimit },
-    workers_dev: false,
-    preview_urls: true,
+    workers_dev: remote,
+    preview_urls: false,
   });
 const buildWorker = Effect.fn(function* (name: string) {
   const built = yield* Effect.tryPromise(() =>
@@ -358,7 +358,7 @@ const startWorker = (): ReturnType<typeof Bun.spawn> =>
 const overlapRequests = Effect.fn(function* (
   debuggerUrl: string,
   overlap: Uint8Array,
-  input: Readonly<{ name: string; target: Option.Option<HostedPreview> }>
+  input: Readonly<{ name: string; target: Option.Option<HostedWorkerProof> }>
 ) {
   const { name, target } = input;
   const startedAt = performance.now();
@@ -374,7 +374,7 @@ const overlapRequests = Effect.fn(function* (
     : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(overlapCodec)({
     baseline,
-    runtime: remote ? "cloudflare-preview" : "local-workerd",
+    runtime: remote ? "cloudflare-worker" : "local-workerd",
     fixture: name,
     elapsedMilliseconds: performance.now() - startedAt,
     outcomes: results.map((result) => result.outcome),
@@ -400,8 +400,8 @@ const program = Effect.gen(function* () {
     : "local";
   yield* buildWorker(`xlsx-proof-${suffix}`);
   const target = remote
-    ? Option.some(yield* hostedPreview(directory))
-    : Option.none<HostedPreview>();
+    ? Option.some(yield* hostedWorkerProof(directory))
+    : Option.none<HostedWorkerProof>();
   if (!remote) yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
   yield* waitReady(target);
   const debuggerUrl = remote ? "" : yield* waitInspector();

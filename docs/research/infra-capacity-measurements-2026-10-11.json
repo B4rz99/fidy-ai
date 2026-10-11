@@ -32992,5 +32992,90 @@
         "maxCoordinatorCalls": 0
       }
     ]
+  },
+  "productionHostedTurnDistribution": {
+    "collectedAtUtc": "2026-10-11T19:04:27.826136+00:00",
+    "scope": "retained production hosted Turns since 2026-10-04; anonymous aggregate only; development/CI traffic may be included; no release or caller attribution",
+    "success": true,
+    "errors": [],
+    "result": [
+      {
+        "results": [
+          {
+            "day": "2026-10-10",
+            "status": "completed",
+            "samples": 16,
+            "minimumMs": 1134,
+            "meanMs": 8330.6875,
+            "p50Ms": 5608,
+            "p95Ms": 45016,
+            "p99Ms": 45016,
+            "maximumMs": 45016
+          },
+          {
+            "day": "2026-10-10",
+            "status": "failed",
+            "samples": 4,
+            "minimumMs": 1458,
+            "meanMs": 3056.5,
+            "p50Ms": 3547,
+            "p95Ms": 3663,
+            "p99Ms": 3663,
+            "maximumMs": 3663
+          },
+          {
+            "day": "2026-10-10",
+            "status": "interrupted",
+            "samples": 1,
+            "minimumMs": 121513,
+            "meanMs": 121513,
+            "p50Ms": 121513,
+            "p95Ms": 121513,
+            "p99Ms": 121513,
+            "maximumMs": 121513
+          },
+          {
+            "day": "2026-10-11",
+            "status": "completed",
+            "samples": 2,
+            "minimumMs": 8141,
+            "meanMs": 10673,
+            "p50Ms": 8141,
+            "p95Ms": 13205,
+            "p99Ms": 13205,
+            "maximumMs": 13205
+          },
+          {
+            "day": "2026-10-11",
+            "status": "failed",
+            "samples": 6,
+            "minimumMs": 535,
+            "meanMs": 3128.8333333333335,
+            "p50Ms": 2967,
+            "p95Ms": 6591,
+            "p99Ms": 6591,
+            "maximumMs": 6591
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "ENAM",
+          "served_by_colo": "EWR",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.392
+          },
+          "duration": 0.392,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 6664192,
+          "rows_read": 244,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ]
   }
 }

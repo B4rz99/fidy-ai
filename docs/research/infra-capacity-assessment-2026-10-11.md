@@ -15,9 +15,10 @@ Reconciliation density grow. There is no evidence supporting a general caching o
 Two further changes are supported: eliminate redundant idle PAT assertion writes, and terminate
 permanent statement capture refusals without futile durable retries.
 
-Successful live hosted Turn measurements are still unavailable in the current window: an authorized
-minimal inference returned HTTP 429 / error 4006, daily allocation exhausted. Production AI usage
-and native hosted execution are measured separately below. This report does **not** turn that
+Retained production hosted Turn completion timings are measured below. Fresh controlled live Turn
+growth testing is unavailable in the current window: an authorized minimal inference returned
+HTTP 429 / error 4006, daily allocation exhausted. Production AI usage and native hosted execution
+are measured separately. This report does **not** turn that
 refusal, synthetic provider behavior, short bursts, or sparse production samples into a successful
 live Turn capacity claim. Guaranteed peak heap, a statistically identified cold-start population,
 and actual Kapso/Wompi/Resend product latency tails are also unavailable. These are explicit limits
@@ -223,6 +224,22 @@ attribution or reporting lag means the dashboard total cannot authorize further 
 call cohorts report aggregate provider inference time, not end-to-end hosted Turn time. No raw
 prompts, User data, credentials or provider response bodies are retained in this report.
 
+Retained production hosted Turns provide an anonymous completion baseline collected at 19:04 UTC:
+
+| UTC day | Status | Count | Median | p95 / p99 | Maximum |
+| ------- | ------ | ----- | ------ | --------- | ------- |
+| Oct 10 | completed | 16 | 5,608 ms | 45,016 ms | 45,016 ms |
+| Oct 10 | failed | 4 | 3,547 ms | 3,663 ms | 3,663 ms |
+| Oct 10 | interrupted | 1 | 121,513 ms | 121,513 ms | 121,513 ms |
+| Oct 11 | completed | 2 | 8,141 ms | 13,205 ms | 13,205 ms |
+| Oct 11 | failed | 6 | 2,967 ms | 6,591 ms | 6,591 ms |
+
+These are start-to-terminal times, using nearest-rank percentiles. The small retained population can
+include development/CI traffic and spans deployments; it has no caller or release attribution.
+Failures cannot all be attributed to AI quota from these status aggregates. No retained production
+statement submissions were present in the same read-only query. These observations establish a
+sparse production baseline, not successful controlled growth or a production latency SLO.
+
 ## Capacity, cost and operating budgets
 
 Run `python3 scripts/infra-performance/capacity.py`, or supply a JSON scenario overriding the defaults.
@@ -268,7 +285,7 @@ Use account-level warning budgets of 50,000 dynamic Worker requests/day, 9,100 D
 350 MB in the primary D1 and 7 GB R2 Standard storage. These retain headroom; they are recommendations,
 not enforced configuration or proven peak concurrency. Native 32-User results establish a short
 local tested envelope only. The fixed canary consumes 43.2% of Free Queue operations/day; keep
-product messages below roughly 890/day within a 7,000-operation planning budget with the 1,000-op
+product messages below roughly 560/day within a 7,000-operation planning budget with the 1,000-op
 reserve. Maintain the current canary freshness until a separately justified product decision changes it.
 
 Free D1/Queues/AI allocation exhaustion is a service refusal risk, not an automatically payable

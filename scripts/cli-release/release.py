@@ -113,8 +113,6 @@ def publish(plan_path, directory):
         raise ValueError('Source was superseded; leaving the previous default active')
     if fingerprint() != release['fingerprint']:
         raise ValueError('CLI inputs changed after planning')
-    if not api('immutable-releases')['enabled']:
-        raise ValueError('Enable GitHub release immutability before CLI publication')
     directory = Path(directory)
     assets = []
     for target in TARGETS:
@@ -147,6 +145,8 @@ def publish(plan_path, directory):
     run('gh', 'release', 'upload', tag, '--repo', REPOSITORY, *(str(path) for path in assets))
     run('gh', 'release', 'edit', tag, '--repo', REPOSITORY, '--draft=false', '--latest=false')
     published = json.loads(run('gh', 'api', f'repos/{REPOSITORY}/releases/tags/{tag}'))
+    # The workflow token can read releases but cannot read administrative settings.
+    # Require the published artifact itself to be immutable before advancing latest.
     if not published.get('immutable') or published.get('draft'):
         raise ValueError('Release is not published and immutable; default unchanged')
     # No token or ambient authentication: verify every final asset before changing the public default.

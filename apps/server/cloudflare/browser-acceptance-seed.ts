@@ -21,6 +21,7 @@ const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 export const pairingUserId = "24000000-0000-4000-8000-000000000321";
+export const dashboardUserId = "24000000-0000-4000-8000-000000000331";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
 const expiredTrialAgeMs = 691_200_000;
@@ -83,6 +84,12 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+await seedIdentity({
+  userId: dashboardUserId,
+  bsuid: "CO.Dashboard",
+  email: "tablero@example.com",
+  consentId: "24000000-0000-4000-8000-000000000332",
+});
 // Pairing owns its standing and Dashboard; enrollment journeys may run first or concurrently.
 await seedIdentity({
   userId: pairingUserId,

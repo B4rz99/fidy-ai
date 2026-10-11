@@ -8,7 +8,13 @@ import {
 } from "./browser-acceptance-core-module";
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
-import { db, firstCardUserId, fixtureUserId, pairingUserId } from "./browser-acceptance-seed";
+import {
+  dashboardUserId,
+  db,
+  firstCardUserId,
+  fixtureUserId,
+  pairingUserId,
+} from "./browser-acceptance-seed";
 import { observeBrowserCost } from "./browser-cost/operations";
 import {
   providerPrivateKey,
@@ -321,7 +327,11 @@ const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
     return Option.some(
       db
         .prepare("DELETE FROM dashboard_documents WHERE user_id = ?")
-        .bind(firstCardUserId)
+        .bind(
+          new URL(request.url).searchParams.get("dashboard") === "true"
+            ? dashboardUserId
+            : firstCardUserId
+        )
         .run()
         .then(() => new Response(null, { status: noContent }))
     );
@@ -380,6 +390,7 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
 const approvedFixtureUser = (parameters: URLSearchParams): string => {
+  if (parameters.get("dashboard") === "true") return dashboardUserId;
   if (parameters.get("firstCard") === "true") return firstCardUserId;
   return parameters.get("pairing") === "true" ? pairingUserId : fixtureUserId;
 };

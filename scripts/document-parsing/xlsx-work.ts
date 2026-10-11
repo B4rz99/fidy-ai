@@ -10,6 +10,9 @@ import { type HostedWorkerProof, hostedWorkerProof } from "./hosted-worker";
 
 const baseline = process.argv.includes("--baseline");
 const remote = process.argv.includes("--remote");
+const durable = process.argv.includes("--durable");
+if (durable && !remote) throw new Error("Durable proof requires hosted mode");
+const hostedRuntime = durable ? "cloudflare-durable-object" : "cloudflare-worker";
 if (baseline && remote) throw new Error("Hosted proof only supports the current bounded parser");
 const port = 8795;
 const proofNameSuffixLength = 8;
@@ -71,7 +74,7 @@ const readProofResponse = Effect.fn(function* (response: Response) {
 
 const measurementBase = Schema.Struct({
   baseline: Schema.Boolean,
-  runtime: Schema.Literals(["local-workerd", "cloudflare-worker"]),
+  runtime: Schema.Literals(["local-workerd", "cloudflare-worker", "cloudflare-durable-object"]),
   fixture: Schema.String,
   zipBytes: Schema.Int,
   expandedBytes: Schema.Int,
@@ -91,7 +94,7 @@ const measurementCodec = Schema.fromJsonString(
 const overlapCodec = Schema.fromJsonString(
   Schema.Struct({
     baseline: Schema.Boolean,
-    runtime: Schema.Literals(["local-workerd", "cloudflare-worker"]),
+    runtime: Schema.Literals(["local-workerd", "cloudflare-worker", "cloudflare-durable-object"]),
     fixture: Schema.String,
     elapsedMilliseconds: Schema.Finite,
     outcomes: Schema.Array(Schema.Literals(["parsed", "rejected", "runtime-failure"])),
@@ -106,6 +109,20 @@ const configCodec = Schema.fromJsonString(
     limits: Schema.optionalKey(Schema.Struct({ cpu_ms: Schema.Int })),
     workers_dev: Schema.Boolean,
     preview_urls: Schema.Boolean,
+    durable_objects: Schema.optionalKey(
+      Schema.Struct({
+        bindings: Schema.Array(Schema.Struct({ name: Schema.String, class_name: Schema.String })),
+      })
+    ),
+    migrations: Schema.optionalKey(
+      Schema.Array(
+        Schema.Struct({
+          tag: Schema.String,
+          new_sqlite_classes: Schema.optionalKey(Schema.Array(Schema.String)),
+          deleted_classes: Schema.optionalKey(Schema.Array(Schema.String)),
+        })
+      )
+    ),
   })
 );
 const writeWorkbook = (book: WorkBook): Uint8Array => {
@@ -304,7 +321,7 @@ const measure = Effect.fn(function* (
     : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(measurementCodec)({
     baseline,
-    runtime: remote ? "cloudflare-worker" : "local-workerd",
+    runtime: remote ? hostedRuntime : "local-workerd",
     fixture: fixture.name,
     zipBytes: fixture.bytes.length,
     expandedBytes,
@@ -326,7 +343,7 @@ const previousParser = baseline
       { cwd: root }
     ).stdout.toString()
   : "";
-const proofConfig = (name: string): string =>
+const proofConfig = (name: string, retiring = false): string =>
   Schema.encodeSync(configCodec)({
     name,
     main: "worker.js",
@@ -334,6 +351,17 @@ const proofConfig = (name: string): string =>
     ...(remote ? {} : { limits: { cpu_ms: cpuLimit } }),
     workers_dev: remote,
     preview_urls: false,
+    ...(durable
+      ? {
+          durable_objects: {
+            bindings: retiring ? [] : [{ name: "PARSER_PROOF", class_name: "XlsxParserProof" }],
+          },
+          migrations: [
+            { tag: "created", new_sqlite_classes: ["XlsxParserProof"] },
+            ...(retiring ? [{ tag: "retired", deleted_classes: ["XlsxParserProof"] }] : []),
+          ],
+        }
+      : {}),
   });
 const buildWorker = Effect.fn(function* (name: string) {
   const built = yield* Effect.tryPromise(() =>
@@ -351,7 +379,11 @@ const buildWorker = Effect.fn(function* (name: string) {
             },
           ]
         : [],
-      entrypoints: [`${root}/apps/server/cloudflare/documents/document-parsing-worker.ts`],
+      entrypoints: [
+        durable
+          ? `${root}/apps/server/cloudflare/documents/durable-parser-proof-worker.ts`
+          : `${root}/apps/server/cloudflare/documents/document-parsing-worker.ts`,
+      ],
       target: "browser",
       outdir: directory,
       naming: "worker.js",
@@ -397,7 +429,7 @@ const overlapRequests = Effect.fn(function* (
     : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(overlapCodec)({
     baseline,
-    runtime: remote ? "cloudflare-worker" : "local-workerd",
+    runtime: remote ? hostedRuntime : "local-workerd",
     fixture: name,
     elapsedMilliseconds: performance.now() - startedAt,
     outcomes: results.map((result) => result.outcome),
@@ -409,25 +441,10 @@ const releaseWorker = Effect.fn(function* (worker: ReturnType<typeof Bun.spawn>)
   worker.kill();
   yield* Effect.tryPromise(() => worker.exited);
 }, Effect.orDie);
-const program = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory(directory, { recursive: true });
-  yield* Effect.addFinalizer(() =>
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(closeWorkerdHttp);
-      yield* fs.remove(directory, { recursive: true, force: true });
-    }).pipe(Effect.orDie)
-  );
-  const suffix = remote
-    ? (yield* (yield* Crypto.Crypto).randomUUIDv4).slice(0, proofNameSuffixLength)
-    : "local";
-  yield* buildWorker(`xlsx-proof-${suffix}`);
-  const target = remote
-    ? Option.some(yield* hostedWorkerProof(directory))
-    : Option.none<HostedWorkerProof>();
-  if (!remote) yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
-  yield* waitReady(target);
-  const debuggerUrl = remote ? "" : yield* waitInspector();
+const measureParserOnly = Effect.fn(function* (
+  debuggerUrl: string,
+  target: Option.Option<HostedWorkerProof>
+) {
   for (const rows of [
     1,
     smallStatementRows,
@@ -446,6 +463,39 @@ const program = Effect.gen(function* () {
       target
     );
   }
+});
+const program = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.makeDirectory(directory, { recursive: true });
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(closeWorkerdHttp);
+      yield* fs.remove(directory, { recursive: true, force: true });
+    }).pipe(Effect.orDie)
+  );
+  const suffix = remote
+    ? (yield* (yield* Crypto.Crypto).randomUUIDv4).slice(0, proofNameSuffixLength)
+    : "local";
+  const name = `xlsx-proof-${suffix}`;
+  yield* buildWorker(name);
+  const target = remote
+    ? Option.some(
+        yield* hostedWorkerProof({
+          directory,
+          retirement: durable
+            ? Option.some({
+                config: proofConfig(name, true),
+                worker:
+                  "export default { fetch() { return new Response(null, { status: 404 }); } };",
+              })
+            : Option.none(),
+        })
+      )
+    : Option.none<HostedWorkerProof>();
+  if (!remote) yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
+  yield* waitReady(target);
+  const debuggerUrl = remote ? "" : yield* waitInspector();
+  yield* measureParserOnly(debuggerUrl, target);
   for (const fixture of yield* fixtures()) {
     yield* measure({ ...fixture, path: "/statement-work" }, debuggerUrl, target);
   }

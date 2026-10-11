@@ -1,4 +1,4 @@
-import { Crypto, Data, Effect, FileSystem, Schema } from "effect";
+import { Crypto, Data, Effect, FileSystem, Option, Schema } from "effect";
 import { requestHostedProof } from "./local-workerd-http";
 
 const proofRequestTimeout = 5000;
@@ -33,8 +33,14 @@ const runWrangler = Effect.fn(function* (directory: string, args: ReadonlyArray<
   return output;
 });
 
-/** Owns one unique, binding-free deployed proof Worker through cleanup. */
-export const hostedWorkerProof = Effect.fn(function* (directory: string) {
+/** Owns one unique synthetic proof Worker and optional namespace retirement through cleanup. */
+export const hostedWorkerProof = Effect.fn(function* (
+  input: Readonly<{
+    directory: string;
+    retirement: Option.Option<Readonly<{ config: string; worker: string }>>;
+  }>
+) {
+  const { directory, retirement } = input;
   const token = yield* (yield* Crypto.Crypto).randomUUIDv4;
   const secrets = `${directory}/proof-secrets.json`;
   const fs = yield* FileSystem.FileSystem;
@@ -54,6 +60,16 @@ export const hostedWorkerProof = Effect.fn(function* (directory: string) {
     )
   );
   const output = yield* runWrangler(directory, ["deploy", "--secrets-file", secrets]);
+  if (Option.isSome(retirement)) {
+    const retired = retirement.value;
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        yield* fs.writeFileString(`${directory}/worker.js`, retired.worker);
+        yield* fs.writeFileString(`${directory}/wrangler.json`, retired.config);
+        yield* runWrangler(directory, ["deploy"]);
+      }).pipe(Effect.orDie)
+    );
+  }
   const origin = /https:\/\/[a-z0-9.-]+\.workers\.dev/iu.exec(output)?.[0];
   if (origin === undefined) throw new Error("Isolated parser Worker did not expose its HTTPS URL");
   const unauthorized = yield* Effect.tryPromise(() =>

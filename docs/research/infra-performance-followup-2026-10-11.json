@@ -4184,7 +4184,16 @@
       "successes": 33,
       "exceptions": 1,
       "exceptionAtUtc": "2026-10-11T12:06:10Z",
-      "attribution": "Native structured warning identifies async.health; ScheduledWorkFailed surfaces after independent activities are attempted. Provider/root cause not established."
+      "attribution": "Retained resolved inspection_unavailable/onboarding alert last attempted at 12:06:10.542 UTC, matching the async.health exception. The retired owner fails current OperationalAlert decoding before a provider send. Native reproduction and targeted migration 0086 recovery passed (26 tests); production verification remains gated.",
+      "obsoleteResolution": {
+        "kind": "inspection_unavailable",
+        "owner": "onboarding",
+        "state": "resolved",
+        "deliveryConfirmed": false,
+        "lastAttemptUtc": "2026-10-11T12:06:10.542Z",
+        "nextAttemptUtc": "2026-10-11T16:06:10.542Z",
+        "migration": "0086_retire_onboarding_alert_resolution.sql"
+      }
     },
     "ai": [
       {

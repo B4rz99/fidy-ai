@@ -243,7 +243,9 @@ export const canonicalAdmissionMigrationNames = (
   [
     ...new Set([
       ...names,
-      ...(names.includes("0020_dashboard_projection") ? ["0083_transaction_deletion"] : []),
+      ...(names.includes("0020_dashboard_projection")
+        ? ["0083_transaction_deletion", "0085_budget_contribution_pages"]
+        : []),
       ...(names.includes("0029_audit_owner_retention") ? ["0084_transaction_deletion_audit"] : []),
       ...(names.includes("0016_budgets")
         ? ["0037_budget_crossing_facts", "0038_proactivity_consent", "0042_budget_proactivity"]

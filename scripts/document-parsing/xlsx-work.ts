@@ -14,7 +14,9 @@ const port = 8795;
 const inspectorPort = 9295;
 const readinessAttempts = 80;
 const readinessDelay = 500;
-const requestTimeout = 1000;
+const localRequestTimeout = 1000;
+const remoteRequestTimeout = 5000;
+const requestTimeout = remote ? remoteRequestTimeout : localRequestTimeout;
 const cpuLimit = 30000;
 const sharedLength = 4096;
 const formattedRows = 512;
@@ -168,20 +170,46 @@ const send = (bytes: Uint8Array, signal: AbortSignal): Promise<Response> =>
     headers: {},
     signal,
   });
+const probeReady = Effect.fn(function* () {
+  const reply = yield* Effect.tryPromise(() =>
+    send(
+      synthetic({ rows: 1, text: "Cafe", formatted: false }),
+      AbortSignal.timeout(requestTimeout)
+    )
+  );
+  yield* Effect.try(() => {
+    if (!reply.ok) throw new Error("XLSX preview is not ready");
+  });
+  const value = yield* Effect.tryPromise(() => reply.json());
+  yield* Effect.try(() => {
+    const parsed = decodeResponse(value);
+    if (parsed.outcome !== "parsed" || parsed.rowCount !== 1) {
+      throw new Error("XLSX readiness fixture did not parse");
+    }
+  });
+});
 const waitReady = Effect.fn(function* () {
   for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-    const response = yield* Effect.result(
-      Effect.tryPromise(() =>
-        send(
-          synthetic({ rows: 1, text: "Cafe", formatted: false }),
-          AbortSignal.timeout(requestTimeout)
-        ).then((value) => value.arrayBuffer())
-      )
-    );
+    const response = yield* Effect.result(probeReady());
     if (response._tag === "Success") return;
     yield* Effect.sleep(readinessDelay);
   }
   throw new Error("XLSX proof worker did not become ready");
+});
+const waitInspector = Effect.fn(function* () {
+  for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
+    const target = yield* Effect.result(
+      Effect.tryPromise(() =>
+        inspectorTarget({
+          port: inspectorPort,
+          signal: Option.some(AbortSignal.timeout(requestTimeout)),
+        })
+      )
+    );
+    if (target._tag === "Success") return target.success;
+    yield* Effect.sleep(readinessDelay);
+  }
+  throw new Error("XLSX proof inspector did not become ready");
 });
 const measure = Effect.fn(function* (
   fixture: Readonly<{ name: string; bytes: Uint8Array }>,
@@ -315,9 +343,7 @@ const program = Effect.gen(function* () {
   yield* buildWorker();
   yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
   yield* waitReady();
-  const debuggerUrl = yield* Effect.tryPromise(() =>
-    inspectorTarget({ port: inspectorPort, signal: Option.none() })
-  );
+  const debuggerUrl = yield* waitInspector();
   for (const fixture of yield* fixtures()) yield* measure(fixture, debuggerUrl);
   yield* overlapRequests(
     debuggerUrl,

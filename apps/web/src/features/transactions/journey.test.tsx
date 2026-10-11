@@ -134,7 +134,29 @@ const renderJourney = (
   mountJourney(client);
   return { updates: () => updates, updateBody: () => updateBody };
 };
+const intersections = new Set<() => void>();
+const scrollToContinuation = (): void => {
+  act(() => {
+    for (const intersect of intersections) intersect();
+  });
+};
 beforeEach(() => {
+  intersections.clear();
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      readonly intersect: () => void;
+      constructor(callback: (entries: ReadonlyArray<{ isIntersecting: boolean }>) => void) {
+        this.intersect = (): void => callback([{ isIntersecting: true }]);
+      }
+      observe(): void {
+        intersections.add(this.intersect);
+      }
+      disconnect(): void {
+        intersections.delete(this.intersect);
+      }
+    }
+  );
   vi.stubGlobal("matchMedia", () => ({
     matches: true,
     addEventListener: (): void => undefined,
@@ -866,11 +888,12 @@ it("retains loaded scope while a continuation waits, appends unique rows and ref
       expect(
         screen.getByText("No hay coincidencias entre las transacciones cargadas")
       ).toBeVisible();
-      fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
-      yield* Effect.tryPromise(() =>
-        screen.findByRole("button", { name: "Cargando más transacciones…" })
+      scrollToContinuation();
+      yield* Effect.tryPromise(() => screen.findByLabelText("Continuación de transacciones"));
+      expect(screen.getByLabelText("Continuación de transacciones")).toHaveAttribute(
+        "aria-busy",
+        "true"
       );
-      expect(screen.getByRole("button", { name: "Cargando más transacciones…" })).toBeDisabled();
       yield* Deferred.succeed(gate, undefined);
       yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Ver transacción La Cocina" })
@@ -891,7 +914,7 @@ it("retains rows after continuation transport failure and retries the same curso
       const fixture: PaginationFixture = { mode: "failure", requests: [], gate: Effect.void };
       renderPaginationJourney(fixture);
       yield* Effect.tryPromise(firstPaginationRow);
-      fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+      scrollToContinuation();
       const retry = yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Reintentar carga de más transacciones" })
       );
@@ -913,11 +936,11 @@ it.each(["repeat", "wrong-period", "missing-args"] as const)(
         renderPaginationJourney(fixture);
         yield* Effect.tryPromise(firstPaginationRow);
         if (mode === "repeat") {
-          fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+          scrollToContinuation();
           yield* Effect.tryPromise(() =>
             screen.findByRole("button", { name: "Ver transacción La Cocina" })
           );
-          fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+          scrollToContinuation();
         }
         yield* Effect.tryPromise(() =>
           screen.findByText("No pudimos actualizar las transacciones")
@@ -927,9 +950,7 @@ it.each(["repeat", "wrong-period", "missing-args"] as const)(
         ).not.toBeInTheDocument();
         fixture.mode = "ready";
         fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
-        yield* Effect.tryPromise(() =>
-          screen.findByRole("button", { name: "Cargar más transacciones" })
-        );
+        yield* Effect.tryPromise(() => screen.findByLabelText("Continuación de transacciones"));
         expect(screen.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(1);
       })
     )

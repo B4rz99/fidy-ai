@@ -132,13 +132,50 @@ const installHistory = (page: Page, count: number): Promise<HistoryFixture> => {
     })
     .then(() => fixture);
 };
+test("loads the next Transaction page only when scrolling to the end", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const fixture = yield* wait(() => installHistory(page, beyondPage));
+      yield* wait(() => page.goto("/app/transactions"));
+      const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
+      yield* wait(() => expect(rows).toHaveCount(pageSize));
+      expect(fixture.requests).toHaveLength(1);
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      expect(fixture.requests).toHaveLength(2);
+    })
+  ));
+test("pauses automatic continuation while a capture draft is open", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const fixture = yield* wait(() => installHistory(page, beyondPage));
+      yield* wait(() => page.goto("/app/transactions"));
+      yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+      yield* wait(() => page.getByLabel("Monto ($)", { exact: true }).fill("123"));
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => expect(page.getByLabel("Monto ($)", { exact: true })).toHaveValue("123"));
+      expect(fixture.requests).toHaveLength(1);
+      yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
+          beyondPage
+        )
+      );
+    })
+  ));
 
 test("browses beyond 100 Transactions and discloses loaded filter and summary scope", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => installUser(page));
       yield* Effect.tryPromise(() => installCategories({ page, categories: [category] }));
-      yield* Effect.tryPromise(() => installHistory(page, beyondPage));
+      const fixture = yield* Effect.tryPromise(() => installHistory(page, beyondPage));
+      fixture.mode = "hold";
       yield* Effect.tryPromise(() => page.goto("/app/transactions"));
       yield* Effect.tryPromise(() =>
         expect(
@@ -154,9 +191,8 @@ test("browses beyond 100 Transactions and discloses loaded filter and summary sc
           page.getByText("No hay coincidencias entre las transacciones cargadas")
         ).toBeVisible()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Cargar más transacciones" }).click()
-      );
+      yield* Effect.tryPromise(() => expect.poll(pendingReceived(fixture)).toBe(true));
+      yield* wait(() => completePending(fixture));
       yield* Effect.tryPromise(() =>
         expect(
           page.getByRole("button", { name: "Ver transacción Registro 101", exact: true })
@@ -186,7 +222,7 @@ for (const count of [0, pageSize, multiplePages]) {
         yield* wait(() => expect(rows).toHaveCount(Math.min(count, pageSize)));
         for (let loaded = pageSize; loaded < count; loaded += pageSize) {
           yield* wait(() =>
-            page.getByRole("button", { name: "Cargar más transacciones", exact: true }).click()
+            page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded()
           );
           yield* wait(() => expect(rows).toHaveCount(Math.min(loaded + pageSize, count)));
         }
@@ -216,11 +252,12 @@ test("retains loaded Transactions on interruption and retries the same bounded p
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       fixture.mode = "hold";
       yield* wait(() => page.goto("/app/transactions"));
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() =>
-        page.getByRole("button", { name: "Cargar más transacciones", exact: true }).click()
-      );
-      yield* wait(() =>
-        expect(page.getByRole("button", { name: "Cargando más transacciones…" })).toBeDisabled()
+        expect(page.getByLabel("Continuación de transacciones")).toHaveAttribute(
+          "aria-busy",
+          "true"
+        )
       );
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
@@ -270,9 +307,7 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
         page.getByRole("checkbox", { name: "Seleccionar Registro 1", exact: true }).click()
       );
       yield* wait(() => expect(page.getByText("1 seleccionadas", { exact: true })).toBeVisible());
-      yield* wait(() =>
-        page.getByRole("button", { name: "Cargar más transacciones", exact: true }).click()
-      );
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
       yield* wait(() =>
         page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click()
@@ -287,9 +322,7 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
         )
       );
       fixture.mode = "ready";
-      yield* wait(() =>
-        page.getByRole("button", { name: "Cargar más transacciones", exact: true }).click()
-      );
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           beyondPage
@@ -307,9 +340,7 @@ test("expires authentication during continuation and starts a clean replacement 
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       fixture.mode = "expired";
       yield* wait(() => page.goto("/app/transactions"));
-      yield* wait(() =>
-        page.getByRole("button", { name: "Cargar más transacciones", exact: true }).click()
-      );
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() =>
         expect(page.getByText("Tu sesión venció. Inicia sesión de nuevo.")).toBeVisible()
       );
@@ -346,9 +377,7 @@ test("saving a later Transaction resets pages and reloads its correction without
       const last = Option.getOrThrow(Option.fromNullishOr(fixture.rows.at(-1)));
       yield* wait(() => installCorrection(page, fixture, last));
       yield* wait(() => page.goto("/app/transactions"));
-      yield* wait(() =>
-        page.getByRole("button", { name: "Cargar más transacciones", exact: true }).click()
-      );
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() =>
         page
           .getByRole("button", { name: `Ver transacción ${last.counterparty}`, exact: true })
@@ -362,9 +391,7 @@ test("saving a later Transaction resets pages and reloads its correction without
           pageSize
         )
       );
-      yield* wait(() =>
-        page.getByRole("button", { name: "Cargar más transacciones", exact: true }).click()
-      );
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           beyondPage

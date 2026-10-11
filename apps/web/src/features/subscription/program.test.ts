@@ -41,6 +41,7 @@ const mount = (
     const dispose = mountSubscription({
       container,
       client,
+      registry,
       resources: registry.get(client.runtime.layer),
       gateway,
     });

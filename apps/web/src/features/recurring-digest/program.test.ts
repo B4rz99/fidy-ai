@@ -46,6 +46,7 @@ const mount = (respond: () => Response): ReturnType<typeof renderFoldkit> => {
     const dispose = mountRecurringDigest({
       container,
       apiClient,
+      registry,
       resources: registry.get(apiClient.runtime.layer),
       id: report.insightEventId,
     });

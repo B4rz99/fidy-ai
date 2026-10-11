@@ -1,4 +1,6 @@
 import { Effect, type Layer, Option, Schema } from "effect";
+import { type AtomRegistry } from "effect/reactivity";
+import { makeCanonicalRead } from "@/transport/canonical-read";
 import { Command, Runtime, type Update } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
@@ -75,28 +77,40 @@ const view = (model: Model, html: HtmlBuilder<Message>): Html => {
   });
 };
 
+const makeLoad = <E>(
+  read: Option.Option<Effect.Effect<Readonly<{ data: RecurringDigestReport }>, E>>
+): (() => Command.Command<Message>) =>
+  Command.define("LoadRecurringDigest", {
+    messages: [Message.LoadedReport, Message.FailedReport],
+    execute: Effect.gen(function* () {
+      if (Option.isNone(read)) return Message.FailedReport();
+      const response = yield* read.value;
+      return Message.LoadedReport({ report: response.data });
+    }).pipe(Effect.catchCause(() => Effect.succeed(Message.FailedReport()))),
+  });
+
 /** Renders every frozen report item as escaped text, with canonical exact Money formatting. */
 export const mountRecurringDigest = ({
   container,
   apiClient,
+  registry,
   resources,
   id,
 }: Readonly<{
   container: HTMLElement;
   apiClient: FidyClient;
+  registry: AtomRegistry.AtomRegistry;
   resources: Layer.Layer<never>;
   id: unknown;
 }>): (() => void) => {
   const params = Schema.decodeUnknownOption(RecurringDigestReportParams)({ id });
-  const Load = Command.define("LoadRecurringDigest", {
-    messages: [Message.LoadedReport, Message.FailedReport],
-    execute: Effect.gen(function* () {
-      if (Option.isNone(params)) return Message.FailedReport();
-      const client = yield* apiClient;
-      const response = yield* client.insights.getRecurringDigestReport({ params: params.value });
-      return Message.LoadedReport({ report: response.data });
-    }).pipe(Effect.catchCause(() => Effect.succeed(Message.FailedReport()))),
-  });
+  const read = Option.map(params, (params) =>
+    makeCanonicalRead({
+      registry,
+      query: apiClient.query("insights", "getRecurringDigestReport", { params }),
+    })
+  );
+  const Load = makeLoad(Option.map(read, (owner) => owner.read));
   const handle = Runtime.embed(
     Runtime.makeElement({
       Model,
@@ -125,5 +139,8 @@ export const mountRecurringDigest = ({
       },
     })
   );
-  return () => handle.dispose();
+  return () => {
+    handle.dispose();
+    Option.map(read, (owner) => owner.dispose());
+  };
 };

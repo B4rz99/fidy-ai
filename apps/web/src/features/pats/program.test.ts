@@ -64,6 +64,7 @@ const renderPATs = (
     const dispose = mountPATManagement({
       container,
       client,
+      registry,
       resources: registry.get(client.runtime.layer),
     });
     return () => {

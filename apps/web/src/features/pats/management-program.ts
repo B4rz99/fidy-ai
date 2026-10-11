@@ -1,7 +1,9 @@
 import { Effect, type Layer, Option, Queue, Stream } from "effect";
+import { type AtomRegistry } from "effect/reactivity";
+import { makeCanonicalRead } from "@/transport/canonical-read";
 import { Command, Mount, Runtime, Subscription, type Update } from "foldkit";
 import { mountElementProgram } from "@/browser/element-program";
-import type { FidyClient } from "@/transport/client";
+import type { ActivePATList, FidyClient } from "@/transport/client";
 import { managementView } from "./management-foldkit-view";
 import {
   ManagementMessage as Message,
@@ -14,11 +16,13 @@ type Commands = Readonly<{
   Load: () => Command.Command<Message>;
   Revoke: (args: Readonly<{ selection: Selection }>) => Command.Command<Message>;
 }>;
-const makeCommands = (client: FidyClient): Commands => ({
+const makeCommands = <ReadError>(
+  client: FidyClient,
+  read: Effect.Effect<Readonly<{ data: ActivePATList }>, ReadError>
+): Commands => ({
   Load: Command.define("LoadActivePATs", {
     messages: [Message.Loaded, Message.Failed],
-    execute: client.pipe(
-      Effect.flatMap((api) => api.pats.listPATs({})),
+    execute: read.pipe(
       Effect.map(({ data }) => Message.Loaded({ result: data })),
       Effect.catchCause(() => Effect.succeed(Message.Failed()))
     ),
@@ -101,11 +105,13 @@ export const mountPATManagement = (
   configuration: Readonly<{
     container: HTMLElement;
     client: FidyClient;
+    registry: AtomRegistry.AtomRegistry;
     resources: Layer.Layer<never>;
   }>
 ): (() => void) => {
-  const { container, client, resources } = configuration;
-  const commands = makeCommands(client);
+  const { container, client, registry, resources } = configuration;
+  const query = makeCanonicalRead({ registry, query: client.query("pats", "listPATs", {}) });
+  const commands = makeCommands(client, query.read);
   const events = Effect.runSync(Queue.unbounded<Message>());
   const children = new Set<() => void>();
   const manual = makeManualMount({ container, client, resources, events, children });
@@ -143,6 +149,7 @@ export const mountPATManagement = (
     for (const dispose of children) dispose();
     children.clear();
     handle.dispose();
+    query.dispose();
     Effect.runSync(Queue.shutdown(events));
   };
 };

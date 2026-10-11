@@ -90,12 +90,32 @@ const subscriptionPage = ({ container, lifetime }: PageMount): (() => void) => {
     mount: ({ mountSubscription, makeEnrollmentGateway }) =>
       mountSubscription({
         container,
+        registry: lifetime.registry,
         client,
         resources,
         gateway: makeEnrollmentGateway(lifetime.enrollmentClient),
       }),
   });
 };
+const recurringPage = ({
+  container,
+  lifetime,
+  route,
+}: Pick<PageMount, "container" | "lifetime"> &
+  Readonly<{ route: typeof AppRoute.Recurring.Type }>): (() => void) =>
+  mountLazyFeature({
+    container,
+    loading: "Cargando página…",
+    load: () => import("@/features/recurring-digest/feature"),
+    mount: ({ mountRecurringDigest }) =>
+      mountRecurringDigest({
+        container,
+        apiClient: lifetime.apiClient,
+        resources: apiResources(lifetime),
+        registry: lifetime.registry,
+        id: route.id,
+      }),
+  });
 const authenticatedPage = ({ container, route, lifetime, owner }: PageMount): (() => void) => {
   const client = lifetime.apiClient;
   const resources = apiResources(lifetime);
@@ -115,7 +135,8 @@ const authenticatedPage = ({ container, route, lifetime, owner }: PageMount): ((
         container,
         loading: "Cargando página…",
         load: () => import("@/features/pats/feature"),
-        mount: ({ mountPATManagement }) => mountPATManagement({ container, client, resources }),
+        mount: ({ mountPATManagement }) =>
+          mountPATManagement({ container, client, resources, registry: lifetime.registry }),
       })
     ),
     Match.tag("Email", () =>
@@ -141,15 +162,7 @@ const authenticatedPage = ({ container, route, lifetime, owner }: PageMount): ((
           }),
       })
     ),
-    Match.tag("Recurring", (route) =>
-      mountLazyFeature({
-        container,
-        loading: "Cargando página…",
-        load: () => import("@/features/recurring-digest/feature"),
-        mount: ({ mountRecurringDigest }) =>
-          mountRecurringDigest({ container, apiClient: client, resources, id: route.id }),
-      })
-    ),
+    Match.tag("Recurring", (route) => recurringPage({ container, lifetime, route })),
     Match.tag("Upgrade", () => subscriptionPage({ container, route, lifetime, owner })),
     Match.orElse(() => (): void => undefined)
   );

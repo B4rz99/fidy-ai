@@ -20,7 +20,7 @@ Capability and verification map for `/app/dashboard`. This records implementatio
 - `program.ts` owns independent query feedback and serialized canonical edits.
 - `query.ts` owns read/initialize/read and its workflow phase.
 - `editor-model.ts` translates closed UI gestures to canonical edits.
-- `drag-adapter.tsx` owns drag transport validation and semantic destinations.
+- `native-drag.ts` owns drag transport validation and semantic destinations.
 - `foldkit-view.ts`, `presentation.ts`, and Money presentation own rendering.
 - Server Core Dashboard owns the document grammar, edit rules, periods, aggregation, and authoritative results. Cloudflare adapters own admitted persistence and execution.
 

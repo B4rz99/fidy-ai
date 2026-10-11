@@ -12,18 +12,49 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
 import { mountTransactions } from "./program";
 
-const continuations = vi.hoisted(() => new Map<Element, () => void>());
-vi.mock("./scroll-continuation", () => ({
-  observeContinuation: ({
-    element,
-    onMore,
-  }: Readonly<{ element: HTMLElement; onMore: () => void }>): (() => void) => {
-    continuations.set(element, onMore);
-    return (): void => {
-      continuations.delete(element);
-    };
-  },
-}));
+const continuations = new Map<Element, () => void>();
+class JourneyObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = "0px 0px 160px 0px";
+  readonly scrollMargin = "0px";
+  readonly thresholds = [0];
+  private readonly elements = new Set<Element>();
+  private readonly callback: IntersectionObserverCallback;
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+  }
+  observe(element: Element): void {
+    this.elements.add(element);
+    continuations.set(element, () => {
+      const rectangle = element.getBoundingClientRect();
+      this.callback(
+        [
+          {
+            target: element,
+            time: 0,
+            isIntersecting: true,
+            intersectionRatio: 1,
+            boundingClientRect: rectangle,
+            intersectionRect: rectangle,
+            rootBounds: null,
+          },
+        ],
+        this
+      );
+    });
+  }
+  disconnect(): void {
+    for (const element of this.elements) continuations.delete(element);
+    this.elements.clear();
+  }
+  unobserve(element: Element): void {
+    continuations.delete(element);
+    this.elements.delete(element);
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+}
 const intersectContinuation = (): Promise<void> =>
   waitFor(() => {
     const element = screen.getByLabelText("Continuación de transacciones").querySelector("div");
@@ -153,6 +184,7 @@ const renderJourney = (
   return { updates: () => updates, updateBody: () => updateBody };
 };
 beforeEach(() => {
+  vi.stubGlobal("IntersectionObserver", JourneyObserver);
   vi.stubGlobal("matchMedia", () => ({
     matches: true,
     addEventListener: (): void => undefined,
@@ -163,6 +195,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanupFoldkit();
+  continuations.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });

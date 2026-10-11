@@ -6,9 +6,9 @@ This is a capability and verification map for the authenticated floating chat, n
 
 | Capability         | Implemented behaviour                                                                                                                                                                              | Verification and limits                                                                                                                                                                               |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Conversation       | One User message followed by one assistant reply. A visible successful reply is acknowledged automatically; ordinary conversation has no receipt confirmation button or success footer.            | `application.test.tsx` exercises two consecutive replies and exact delivery requests. Live conversation was exercised before the latest deletion fix; repeat after deployment.                        |
+| Conversation       | One User message followed by one assistant reply. A visible successful reply is acknowledged automatically; ordinary conversation has no receipt confirmation button or success footer.            | `application.test.ts` exercises two consecutive replies and exact delivery requests. Live conversation was exercised before the latest deletion fix; repeat after deployment.                         |
 | Lifetime           | Dismissal and navigation retain the draft and mounted conversation. Logout discards them. Visible history is bounded to 40 entries; the browser does not persist conversation state.               | Application tests exercise dismissal, navigation, closed replies and logout.                                                                                                                          |
-| Visibility         | A reply received while closed is acknowledged only once it is visibly rendered in an open chat and visible document.                                                                               | Application tests plus `visible-reply.test.tsx`; these use controlled transport responses.                                                                                                            |
+| Visibility         | A reply received while closed is acknowledged only once it is visibly rendered in an open chat and visible document.                                                                               | Application tests plus `mounts.test.ts`; these use controlled transport responses.                                                                                                                    |
 | Failure            | A failed proposal retains the draft, removes its temporary User entry and allows another submission. Processing or uncertain execution blocks a new submission until the retained Turn is checked. | Code in `controller.ts`; progress recovery has an application test. Two rendered regressions verify exact draft retention and duplicate-free explicit retry for generic failure and quota exhaustion. |
 | Delivery recovery  | A failed delivery receipt retains the exact reply and receipt. An explicit connection retry resends the receipt, not the original message or mutation.                                             | Application test verifies identical receipt bodies and blocks submission until delivery succeeds.                                                                                                     |
 | Transaction tools  | Hosted inference uses installed canonical operations; Transaction capture, correction, query and deletion retain their authority and Audit checks.                                                 | Core and actual local Worker/D1 tests, with deterministic inference. They do not prove live model decisions.                                                                                          |
@@ -20,7 +20,7 @@ This is a capability and verification map for the authenticated floating chat, n
 
 - `program.ts` composes the chat window, messages, composer and recovery actions.
 - `controller.ts` owns submission, bounded history, pending state and exact delivery receipts.
-- `visible-reply.tsx` reports committed visible replies; presentation does not decide receipt transitions.
+- `mounts.ts` reports committed visible replies; presentation does not decide receipt transitions.
 - Server HostedTurn owns admission, inference, canonical tool execution, confirmation and retained delivery evidence. Workers AI is a provider boundary, not browser authority.
 
 ## Evidence and remaining checks
@@ -44,7 +44,7 @@ Remaining checks:
 ## Rerun
 
 ```sh
-bun run --cwd apps/web test src/features/agent src/application.test.tsx
+bun run --cwd apps/web test src/features/agent src/application.test.ts
 bun run --cwd apps/server test:core src/core/agent/hosted-agent-session.test.ts --coverage.enabled=false
 bun run --cwd apps/server test:hosted-inference
 bun run --cwd apps/server test:cloudflare cloudflare/agent/hosted-turn.test.ts --maxWorkers=1

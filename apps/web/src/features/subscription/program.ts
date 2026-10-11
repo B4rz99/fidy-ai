@@ -1,7 +1,15 @@
 import { Cause, Effect, type Layer, Option, Queue, Schema, Stream } from "effect";
+import { type AtomRegistry } from "effect/reactivity";
+import { makeCanonicalRead } from "@/transport/canonical-read";
 import { HttpClientError } from "effect/http";
 import { Command, Mount, Runtime, Subscription, type Update } from "foldkit";
-import { type FidyClient, PriceId } from "@/transport/client";
+import type { Html, HtmlBuilder } from "foldkit/html";
+import {
+  type FidyClient,
+  PriceId,
+  type SubscriptionOffers,
+  type SubscriptionStatus,
+} from "@/transport/client";
 import type { EnrollmentGateway } from "./enrollment-gateway";
 import { subscriptionView } from "./foldkit-view";
 import { Message, Model, initialModel } from "./model";
@@ -9,15 +17,17 @@ import { type PaymentController, makePaymentController } from "./payment-control
 import { PaymentAction, PaymentField, PaymentMethod } from "./payment-model";
 import { type SubscriptionCommands, makeSubscriptionUpdate } from "./workspace-update";
 
-const makeCommands = (
-  client: FidyClient,
+const makeCommands = <OffersError, StandingError>(
+  reads: Readonly<{
+    offers: Effect.Effect<Readonly<{ data: SubscriptionOffers }>, OffersError>;
+    standing: Effect.Effect<Readonly<{ data: SubscriptionStatus }>, StandingError>;
+  }>,
   gateway: EnrollmentGateway,
   controller: PaymentController
 ): SubscriptionCommands => ({
   Offers: Command.define("SubscriptionOffers", {
     messages: [Message.LoadedOffers, Message.FailedOffers],
-    execute: client.pipe(
-      Effect.flatMap((api) => api.subscription.listSubscriptionOffers({})),
+    execute: reads.offers.pipe(
       Effect.map(({ data }) => Message.LoadedOffers({ offers: data })),
       Effect.catchCause((cause) =>
         Effect.succeed(
@@ -35,8 +45,7 @@ const makeCommands = (
   }),
   Standing: Command.define("SubscriptionStanding", {
     messages: [Message.LoadedStanding, Message.FailedStanding],
-    execute: client.pipe(
-      Effect.flatMap((api) => api.subscription.getSubscriptionStatus({})),
+    execute: reads.standing.pipe(
       Effect.map(({ data }) => Message.LoadedStanding({ standing: data })),
       Effect.catchCause(() => Effect.succeed(Message.FailedStanding()))
     ),
@@ -96,16 +105,22 @@ const makeInputMount = (
       ).pipe(Effect.as(Message.Mounted()));
     },
   });
+const crashView = (_error: unknown, html: HtmlBuilder<never>): Html =>
+  html.p(
+    [html.Role("alert")],
+    ["No pudimos continuar. Recarga la página y consulta el estado antes de repetir un pago."]
+  );
 /** Owns canonical subscription queries and a private, interruptible payment workflow. */
 export const mountSubscription = (
   configuration: Readonly<{
     container: HTMLElement;
     client: FidyClient;
+    registry: AtomRegistry.AtomRegistry;
     resources: Layer.Layer<never>;
     gateway: EnrollmentGateway;
   }>
 ): (() => void) => {
-  const { container, client, resources, gateway } = configuration;
+  const { container, client, registry, resources, gateway } = configuration;
   const events = Effect.runSync(Queue.unbounded<Message>());
   const controller = makePaymentController({
     gateway,
@@ -113,7 +128,19 @@ export const mountSubscription = (
       Queue.offerUnsafe(events, Message.ChangedPayment({ payment }));
     },
   });
-  const commands = makeCommands(client, gateway, controller);
+  const offers = makeCanonicalRead({
+    registry,
+    query: client.query("subscription", "listSubscriptionOffers", {}),
+  });
+  const standing = makeCanonicalRead({
+    registry,
+    query: client.query("subscription", "getSubscriptionStatus", {}),
+  });
+  const commands = makeCommands(
+    { offers: offers.read, standing: standing.read },
+    gateway,
+    controller
+  );
   const mount = makeInputMount(controller);
   const handle = Runtime.embed(
     Runtime.makeElement({
@@ -132,19 +159,15 @@ export const mountSubscription = (
       })),
       crash: {
         report: controller.dispose,
-        view: (_, html) =>
-          html.p(
-            [html.Role("alert")],
-            [
-              "No pudimos continuar. Recarga la página y consulta el estado antes de repetir un pago.",
-            ]
-          ),
+        view: crashView,
       },
     })
   );
   return () => {
     controller.dispose();
     handle.dispose();
+    offers.dispose();
+    standing.dispose();
     Effect.runSync(Queue.shutdown(events));
   };
 };

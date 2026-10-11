@@ -1,22 +1,17 @@
-import { RegistryProvider } from "@effect/atom-react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import {
-  RouterProvider,
-  createMemoryHistory,
-  createRootRouteWithContext,
-  createRoute,
-  createRouter,
-} from "@tanstack/react-router";
-import { type Cause, Effect, Layer } from "effect";
+import { fireEvent, screen, waitFor } from "@testing-library/dom";
+import { type Cause, Effect, Layer, Option, Schema } from "effect";
 import {
   HttpClient,
   type HttpClientError,
   type HttpClientRequest,
   HttpClientResponse,
 } from "effect/http";
+import { AtomRegistry } from "effect/reactivity";
 import { afterEach, expect, it } from "vitest";
-import { type WebAuthClient, makeWebAuthClient } from "@/transport/client";
-import { OAuthManagementFeature, OAuthReviewFeature } from "./feature";
+import { OAuthConnectionId, makeWebAuthClient } from "@/transport/client";
+import { cleanupFoldkit, renderFoldkit } from "@/testing/foldkit";
+import { mountOAuthManagement } from "./management-program";
+import { mountOAuthReview } from "./review-program";
 
 const requestId = "10000000-0000-4000-8000-000000000001";
 const review = {
@@ -41,12 +36,12 @@ const connection = {
 };
 const successStatus = 200;
 type Reply = Readonly<{ body: unknown }> | Readonly<{ body: unknown; status: number }>;
-const wait = <A,>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
+const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const renderFeature = (
   path: string,
   handler: (request: HttpClientRequest.HttpClientRequest) => Effect.Effect<Reply>
-): (() => Readonly<Record<string, unknown>>) => {
+): void => {
   const httpClient = HttpClient.makeWith<
     HttpClientError.HttpClientError,
     never,
@@ -73,30 +68,35 @@ const renderFeature = (
     apiOrigin: "https://api.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
   });
-  const root = createRootRouteWithContext<{ webAuthClient: WebAuthClient }>()();
-  const reviewRoute = createRoute({
-    getParentRoute: () => root,
-    path: "/oauth/$requestId",
-    component: OAuthReviewFeature,
+  const registry = AtomRegistry.make();
+  const location = new URL(path, "https://app.fidyapp.com");
+  renderFoldkit((container): (() => void) => {
+    const resources = registry.get(client.runtime.layer);
+    const dispose =
+      location.pathname === "/settings/agents"
+        ? mountOAuthManagement({
+            container,
+            client,
+            resources,
+            after: Option.map(
+              Option.fromNullOr(location.searchParams.get("after")),
+              OAuthConnectionId.make
+            ),
+          })
+        : mountOAuthReview({
+            container,
+            client,
+            resources,
+            requestId: location.pathname.split("/").at(-1),
+            redirect: () => undefined,
+          });
+    return () => {
+      dispose();
+      registry.dispose();
+    };
   });
-  const managementRoute = createRoute({
-    getParentRoute: () => root,
-    path: "/settings/agents",
-    component: OAuthManagementFeature,
-  });
-  const router = createRouter({
-    routeTree: root.addChildren([reviewRoute, managementRoute]),
-    context: { webAuthClient: client },
-    history: createMemoryHistory({ initialEntries: [path] }),
-  });
-  render(
-    <RegistryProvider>
-      <RouterProvider router={router} />
-    </RegistryProvider>
-  );
-  return () => router.state.location.search;
 };
-afterEach(cleanup);
+afterEach(cleanupFoldkit);
 
 it("refuses malformed review references without querying authority", () =>
   Effect.runPromise(
@@ -263,14 +263,66 @@ it("marks previous connection evidence stale and disables revocation after refre
       expect(screen.getByRole("button", { name: "Revocar este agente" })).toBeDisabled();
     })
   ));
-it("puts connection pagination in the router and offers a first-page link", () =>
+it("offers public pagination and a first-page link", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const router = renderFeature("/settings/agents", () =>
+      renderFeature(`/settings/agents?after=${requestId}`, () =>
         Effect.succeed({ body: { connections: [connection], nextCursor: requestId } })
       );
-      fireEvent.click(yield* wait(screen.findByRole("button", { name: "Siguiente página" })));
-      expect(yield* wait(screen.findByRole("link", { name: "Primera página" }))).toBeVisible();
-      expect(router()).toMatchObject({ after: requestId });
+      expect(yield* wait(screen.findByRole("link", { name: "Siguiente página" }))).toHaveAttribute(
+        "href",
+        `/settings/agents?after=${requestId}`
+      );
+      expect(screen.getByRole("link", { name: "Primera página" })).toHaveAttribute(
+        "href",
+        "/settings/agents"
+      );
+    })
+  ));
+
+it("submits only reviewed scopes with the selected absolute expiration", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let choice: unknown;
+      renderFeature(`/oauth/${requestId}`, (request) => {
+        if (request.method === "GET") {
+          return Effect.succeed({
+            body: { ...review, claimedClientName: "<img src=x onerror=alert(1)>" },
+          });
+        }
+        if (request.body._tag === "Uint8Array") {
+          choice = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(
+            new TextDecoder().decode(request.body.body)
+          );
+        }
+        return Effect.succeed({ body: { error: "temporarily_unavailable" }, status: 503 });
+      });
+      expect(yield* wait(screen.findByText("<img src=x onerror=alert(1)>"))).toBeVisible();
+      expect(document.querySelector("img")).toBeNull();
+      expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+      fireEvent.click(screen.getByRole("checkbox"));
+      yield* wait(
+        waitFor(() => expect(screen.getByRole("button", { name: "Conectar" })).toBeDisabled())
+      );
+      fireEvent.click(screen.getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "7 días" }));
+      yield* wait(
+        waitFor(() =>
+          expect(screen.getByRole("button", { name: "7 días" })).toHaveAttribute(
+            "aria-pressed",
+            "true"
+          )
+        )
+      );
+      expect(document.querySelector('time[datetime="2026-10-10T12:00:00.000Z"]')).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "Conectar" }));
+      yield* wait(screen.findByText(/no repitas esta aprobación/u));
+      expect(choice).toEqual({
+        requestId,
+        scopes: ["read"],
+        lifetimeDays: 7,
+        reviewedAt: review.reviewedAt,
+        expiresAt: "2026-10-10T12:00:00.000Z",
+      });
     })
   ));

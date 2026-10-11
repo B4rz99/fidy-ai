@@ -59,6 +59,11 @@ const makeHttpClient = (
     never
   >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
 
+const waitForEnabled = (name: string): Promise<void> =>
+  waitFor(() => {
+    expect(screen.getByRole("button", { name })).not.toBeDisabled();
+  });
+
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 
 const fromPromise = <A,>(promise: Promise<A>): Effect.Effect<A, TestPromiseFailure> =>
@@ -199,22 +204,22 @@ const recoveryClients = (): Readonly<{
 const beginRenderedEmailReplacement = (candidateEmail: string): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      fireEvent.change(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
+      fireEvent.input(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
         target: { value: candidateEmail },
       });
+      yield* fromPromise(waitForEnabled("Enviar código"));
       fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
-      expect(
-        yield* fromPromise(screen.findByText(`Enviamos un código a ${candidateEmail}.`))
-      ).toBeVisible();
+      expect(yield* fromPromise(screen.findByText(candidateEmail))).toBeVisible();
     })
   );
 
 const enterReplacementCode = (): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      fireEvent.change(yield* fromPromise(screen.findByLabelText("Código de verificación")), {
+      fireEvent.input(yield* fromPromise(screen.findByLabelText("Código de verificación")), {
         target: { value: "BCDF-GHJK-MNPQ-RSTW-XY23-4567" },
       });
+      yield* fromPromise(waitForEnabled("Cambiar correo"));
       fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
     })
   );
@@ -577,9 +582,10 @@ describe("verified-email replacement request route", () => {
           renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
         );
 
-        fireEvent.change(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
+        fireEvent.input(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
           target: { value: "new.mailbox@example.com" },
         });
+        yield* fromPromise(waitForEnabled("Enviar código"));
         fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
 
         expect(
@@ -659,7 +665,7 @@ describe("verified-email replacement malformed candidate", () => {
           renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
         );
         const input = yield* fromPromise(screen.findByLabelText("Nuevo correo"));
-        fireEvent.change(input, { target: { value: "not-an-email" } });
+        fireEvent.input(input, { target: { value: "not-an-email" } });
         const form = input.closest("form");
         if (form === null) throw new Error("replacement form missing");
         fireEvent.submit(form);
@@ -685,7 +691,8 @@ describe("verified-email replacement malformed proof", () => {
         );
         yield* fromPromise(beginRenderedEmailReplacement("new.mailbox@example.com"));
         const input = yield* fromPromise(screen.findByLabelText("Código de verificación"));
-        fireEvent.change(input, { target: { value: "not-a-code" } });
+        fireEvent.input(input, { target: { value: "not-a-code" } });
+        yield* fromPromise(waitForEnabled("Cambiar correo"));
         fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
         expect(yield* fromPromise(screen.findByText("El código no es válido"))).toBeVisible();
         expect(requests).toEqual(["/email/replacement"]);
@@ -733,9 +740,10 @@ const automaticReplyTest = Effect.fnUntraced(function* () {
   });
   const route = renderHostedRoute(channel);
   yield* fromPromise(route);
-  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+  fireEvent.input(yield* fromPromise(screen.findByLabelText("Mensaje")), {
     target: { value: "Hola" },
   });
+  yield* fromPromise(waitForEnabled("Enviar"));
   fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
   expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
   yield* fromPromise(
@@ -748,7 +756,8 @@ const automaticReplyTest = Effect.fnUntraced(function* () {
   expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();
   expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
   expect(screen.queryByText(/Confirma que la recibiste/)).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Mensaje"), { target: { value: "Otra pregunta" } });
+  fireEvent.input(screen.getByLabelText("Mensaje"), { target: { value: "Otra pregunta" } });
+  yield* fromPromise(waitForEnabled("Enviar"));
   fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
   expect(yield* fromPromise(screen.findByText("Segunda respuesta"))).toBeVisible();
   yield* fromPromise(waitFor(assertComposerEnabled));
@@ -810,9 +819,10 @@ describe("hosted Agent progress", () => {
         });
         const route = renderHostedRoute(channel);
         yield* fromPromise(route);
-        fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+        fireEvent.input(yield* fromPromise(screen.findByLabelText("Mensaje")), {
           target: { value: "Consulta" },
         });
+        yield* fromPromise(waitForEnabled("Enviar"));
         fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
         fireEvent.click(
           yield* fromPromise(screen.findByRole("button", { name: "Consultar estado" }))
@@ -876,15 +886,21 @@ const receiptRetryTest = Effect.fnUntraced(function* () {
     httpClient: Layer.succeed(HttpClient.HttpClient, receiptRetryClient(receipts)),
   });
   yield* channel.pipe(renderHostedRoute, fromPromise);
-  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+  fireEvent.input(yield* fromPromise(screen.findByLabelText("Mensaje")), {
     target: { value: "Hola" },
   });
+  yield* fromPromise(waitForEnabled("Enviar"));
   fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
   expect(yield* fromPromise(screen.findByText(/No pudimos guardar la respuesta/u))).toBeVisible();
   expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Reintentar conexión" })).toBeEnabled();
   // Reopening a retained reply must not turn visibility into an automatic receipt retry.
   fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+  yield* fromPromise(
+    waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Cerrar chat" })).not.toBeInTheDocument()
+    )
+  );
   fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
   expect(yield* fromPromise(screen.findByText("Respuesta sin confirmar"))).toBeVisible();
   expect(receipts).toHaveLength(1);
@@ -1067,7 +1083,7 @@ const draftLifetimeTest = (): Promise<void> =>
         request: Option.none<HttpClientRequest.HttpClientRequest>(),
       };
       yield* closedReplyClient(fixture).pipe(renderHostedRoute, fromPromise);
-      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+      fireEvent.input(yield* fromPromise(screen.findByLabelText("Mensaje")), {
         target: { value: "Mi borrador" },
       });
       fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
@@ -1090,9 +1106,10 @@ const closedReplyTest = (): Promise<void> =>
         request: Option.none<HttpClientRequest.HttpClientRequest>(),
       };
       yield* closedReplyClient(fixture).pipe(renderHostedRoute, fromPromise);
-      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+      fireEvent.input(yield* fromPromise(screen.findByLabelText("Mensaje")), {
         target: { value: "Hola" },
       });
+      yield* fromPromise(waitForEnabled("Enviar"));
       fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
       fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
       yield* fromPromise(waitFor(() => expect(fixture.paths).toEqual(["/web/hosted-turns"])));
@@ -1132,9 +1149,10 @@ const signedOutChatTest = (): Promise<void> =>
       const router = yield* fromPromise(
         renderHostedRoute(closedReplyClient(fixture), clients.webAuthClient)
       );
-      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+      fireEvent.input(yield* fromPromise(screen.findByLabelText("Mensaje")), {
         target: { value: "Mensaje privado anterior" },
       });
+      yield* fromPromise(waitForEnabled("Enviar"));
       fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
       yield* fromPromise(waitFor(() => expect(fixture.paths).toHaveLength(1)));
       fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
@@ -1159,7 +1177,7 @@ const signedOutChatTest = (): Promise<void> =>
         )
       );
       yield* fromPromise(act(() => fixture.deferred.promise.then(() => undefined)));
-      expect(screen.getByLabelText("Mensaje")).toHaveValue("");
+      expect(yield* fromPromise(screen.findByLabelText("Mensaje"))).toHaveValue("");
       expect(screen.queryByText("Mensaje privado anterior")).not.toBeInTheDocument();
       expect(screen.queryByText("Respuesta privada anterior")).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();

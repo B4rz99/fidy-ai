@@ -1,0 +1,30 @@
+apps/web/src/features/transactions/workspace.tsx
+  s_6d017cc65783af::t_3d1543b22741f1 542-547,549,556,558,585
+  s_6d017cc65783af::t_59e4f07b0d8dc7 2-3,535,540-541,548,550-555,557,559-567
+  s_6d017cc65783af::t_4dea27bd812346 570-576,582-584,586-592
+apps/web/src/features/transactions/journey.test.tsx
+  s_6d017cc65783af::t_7a9e17dbc51f85 137-142,144-159,891-895,917,939,943,953
+apps/web/e2e/transaction-pagination.spec.ts
+  s_6d017cc65783af::t_a8f83a61f5e187 177-178,194-195,225
+  s_6d017cc65783af::t_fc7e5a76f46260 150-170,255,260,310,325,343,380,394
+  s_6d017cc65783af::t_47d425a4e5627d 135-149
+  s_6d017cc65783af::t_bc7c8694c4ee56 257-259
+apps/web/src/features/transactions/FEATURE.md
+  s_6d017cc65783af::t_fbb9e9c6793158 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "95fdc7d61d5e48582135b05e1d112c704f786823",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

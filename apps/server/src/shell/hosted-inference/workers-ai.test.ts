@@ -291,6 +291,65 @@ it.effect("rejects malformed canonical tool arguments without exposing provider 
   })
 );
 
+it.effect("requires the observed Transaction revision inside the Correction payload", () =>
+  Effect.gen(function* () {
+    for (const correctlyNested of [false, true]) {
+      const binding = captureRun(() =>
+        Promise.resolve(
+          completed({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "call-correction",
+                      type: "function",
+                      function: {
+                        name: "transactions__updateTransaction",
+                        arguments: JSON.stringify({
+                          params: { id: "00000000-0000-4000-8000-000000000001" },
+                          payload: {
+                            changes: { money: { amount: "2345", currency: "COP" } },
+                            ...(correctlyNested ? { expectedRevision: 2 } : {}),
+                          },
+                          ...(correctlyNested ? {} : { expectedRevision: 2 }),
+                        }),
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+          })
+        )
+      );
+      const inference = yield* makeConfiguredInference(binding.run);
+      const prepared = yield* inference.prepareText({
+        context: initialContext(),
+        availableOperations: [CanonicalOperationId.make("transactions.updateTransaction")],
+        toolChoice: "auto",
+        maximumToolCalls: HostedToolCallMaximum.make(1),
+      });
+      const exit = yield* Effect.exit(prepared.execute);
+      if (correctlyNested) {
+        assert(Exit.isSuccess(exit));
+        expect(exit.value.toolCalls[0]?.params).toHaveProperty("payload.expectedRevision", 2);
+      } else {
+        assertHostedFailure(
+          exit,
+          hostedFailure({
+            _tag: "InvalidOutput",
+            description: "Hosted tool arguments were invalid",
+          })
+        );
+      }
+    }
+  })
+);
+
 it.effect("rejects unfinished, refused, and empty provider output", () =>
   Effect.gen(function* () {
     const invalidResponses = [

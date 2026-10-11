@@ -1,0 +1,74 @@
+import { Crypto, Data, Effect, FileSystem, Schema } from "effect";
+import { requestHostedProof } from "./local-workerd-http";
+
+const proofRequestTimeout = 5000;
+const hiddenProofStatus = 404;
+class HostedProofCommandFailed extends Data.TaggedError("HostedProofCommandFailed")<{
+  readonly operation: string;
+  readonly exitCode: number;
+  readonly codes: ReadonlyArray<string>;
+}> {}
+export type HostedWorkerProof = Readonly<{ origin: string; token: string }>;
+
+const runWrangler = Effect.fn(function* (directory: string, args: ReadonlyArray<string>) {
+  const command = Bun.spawn(
+    ["node_modules/.bin/wrangler", ...args, "--config", `${directory}/wrangler.json`],
+    { stdout: "pipe", stderr: "pipe" }
+  );
+  const [output, diagnostics] = yield* Effect.tryPromise(() =>
+    Promise.all([new Response(command.stdout).text(), new Response(command.stderr).text()])
+  );
+  const exitCode = yield* Effect.tryPromise(() => command.exited);
+  if (exitCode !== 0) {
+    const codes = Array.from(
+      `${output}\n${diagnostics}`.matchAll(/(?:code[:\s]*|"code"\s*:)\s*(\d+)/gu),
+      (match) => match[1] ?? "unknown"
+    );
+    return yield* new HostedProofCommandFailed({
+      operation: args[0] ?? "unknown",
+      exitCode,
+      codes,
+    });
+  }
+  return output;
+});
+
+/** Owns one unique, binding-free deployed proof Worker through cleanup. */
+export const hostedWorkerProof = Effect.fn(function* (directory: string) {
+  const token = yield* (yield* Crypto.Crypto).randomUUIDv4;
+  const secrets = `${directory}/proof-secrets.json`;
+  const fs = yield* FileSystem.FileSystem;
+  const encoded = yield* Schema.encodeEffect(
+    Schema.fromJsonString(Schema.Struct({ XLSX_PROOF_KEY: Schema.String }))
+  )({ XLSX_PROOF_KEY: token });
+  yield* fs.writeFileString(secrets, encoded, { mode: 0o600 });
+  yield* Effect.addFinalizer(() =>
+    runWrangler(directory, ["delete", "--force"]).pipe(
+      Effect.asVoid,
+      Effect.catchTag("HostedProofCommandFailed", (failure) =>
+        failure.codes.includes("10090") || failure.codes.includes("10007")
+          ? Effect.void
+          : Effect.fail(failure)
+      ),
+      Effect.orDie
+    )
+  );
+  const output = yield* runWrangler(directory, ["deploy", "--secrets-file", secrets]);
+  const origin = /https:\/\/[a-z0-9.-]+\.workers\.dev/iu.exec(output)?.[0];
+  if (origin === undefined) throw new Error("Isolated parser Worker did not expose its HTTPS URL");
+  const unauthorized = yield* Effect.tryPromise(() =>
+    requestHostedProof({
+      origin,
+      port: 0,
+      path: "/statement-work",
+      method: "POST",
+      body: "Date,Amount\n2026-01-01,1",
+      headers: {},
+      signal: AbortSignal.timeout(proofRequestTimeout),
+    })
+  );
+  if (unauthorized.status !== hiddenProofStatus) {
+    throw new Error("Isolated parser Worker did not require its access key");
+  }
+  return { origin, token };
+});

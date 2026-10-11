@@ -1,16 +1,18 @@
 #!/usr/bin/env bun
-import { BunFileSystem } from "@effect/platform-bun";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
+import { Crypto, Effect, FileSystem, Option, Schema } from "effect";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { WorkBook, WorkSheet } from "xlsx";
-import { closeWorkerdHttp, requestWorkerd } from "./local-workerd-http";
+import { closeWorkerdHttp, requestHostedProof, requestWorkerd } from "./local-workerd-http";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
+import { type HostedPreview, hostedPreview } from "./hosted-preview";
 
 const baseline = process.argv.includes("--baseline");
 const remote = process.argv.includes("--remote");
 if (baseline && remote) throw new Error("Hosted proof only supports the current bounded parser");
 const port = 8795;
+const proofNameSuffixLength = 8;
 const inspectorPort = 9295;
 const readinessAttempts = 80;
 const readinessDelay = 500;
@@ -91,6 +93,8 @@ const configCodec = Schema.fromJsonString(
     main: Schema.String,
     compatibility_date: Schema.String,
     limits: Schema.Struct({ cpu_ms: Schema.Int }),
+    workers_dev: Schema.Boolean,
+    preview_urls: Schema.Boolean,
   })
 );
 const writeWorkbook = (book: WorkBook): Uint8Array => {
@@ -180,20 +184,33 @@ const fixtures = Effect.fn(function* () {
     { name: "bounded-cells", bytes: manyCells(boundedRows) },
   ];
 });
-const send = (bytes: Uint8Array, signal: AbortSignal): Promise<Response> =>
-  requestWorkerd({
-    method: "POST",
+const send = (
+  bytes: Uint8Array,
+  signal: AbortSignal,
+  target: Option.Option<HostedPreview>
+): Promise<Response> => {
+  const input = {
+    method: "POST" as const,
     port,
     path: "/statement-work",
     body: bytes,
     headers: {},
     signal,
-  });
-const probeReady = Effect.fn(function* () {
+  };
+  return Option.isSome(target)
+    ? requestHostedProof({
+        ...input,
+        origin: target.value.origin,
+        headers: { "X-Xlsx-Proof-Key": target.value.token },
+      })
+    : requestWorkerd(input);
+};
+const probeReady = Effect.fn(function* (target: Option.Option<HostedPreview>) {
   const reply = yield* Effect.tryPromise(() =>
     send(
       synthetic({ rows: 1, text: "Cafe", formatted: false }),
-      AbortSignal.timeout(requestTimeout)
+      AbortSignal.timeout(requestTimeout),
+      target
     )
   );
   yield* Effect.try(() => {
@@ -207,9 +224,9 @@ const probeReady = Effect.fn(function* () {
     }
   });
 });
-const waitReady = Effect.fn(function* () {
+const waitReady = Effect.fn(function* (target: Option.Option<HostedPreview>) {
   for (let attempt = 0; attempt < readinessAttempts; attempt += 1) {
-    const response = yield* Effect.result(probeReady());
+    const response = yield* Effect.result(probeReady(target));
     if (response._tag === "Success") return;
     yield* Effect.sleep(readinessDelay);
   }
@@ -232,7 +249,8 @@ const waitInspector = Effect.fn(function* () {
 });
 const measure = Effect.fn(function* (
   fixture: Readonly<{ name: string; bytes: Uint8Array }>,
-  debuggerUrl: string
+  debuggerUrl: string,
+  target: Option.Option<HostedPreview>
 ) {
   const expandedBytes = Object.values(unzipSync(fixture.bytes)).reduce(
     (sum, entry) => sum + entry.length,
@@ -245,7 +263,7 @@ const measure = Effect.fn(function* (
   const profiled = remote
     ? {
         response: yield* Effect.tryPromise(() =>
-          send(fixture.bytes, AbortSignal.timeout(cpuLimit))
+          send(fixture.bytes, AbortSignal.timeout(cpuLimit), target)
         ),
         cpuMilliseconds: undefined,
       }
@@ -253,7 +271,7 @@ const measure = Effect.fn(function* (
         profileWorkerRequest({
           debuggerUrl,
           signal: Option.none(),
-          sendRequest: (signal) => send(fixture.bytes, signal),
+          sendRequest: (signal) => send(fixture.bytes, signal, target),
         })
       );
   const result = yield* readProofResponse(profiled.response);
@@ -285,14 +303,16 @@ const previousParser = baseline
       { cwd: root }
     ).stdout.toString()
   : "";
-const proofConfig = (): string =>
+const proofConfig = (name: string): string =>
   Schema.encodeSync(configCodec)({
-    name: "xlsx-work-proof",
+    name,
     main: "worker.js",
     compatibility_date: "2026-09-08",
     limits: { cpu_ms: cpuLimit },
+    workers_dev: false,
+    preview_urls: true,
   });
-const buildWorker = Effect.fn(function* () {
+const buildWorker = Effect.fn(function* (name: string) {
   const built = yield* Effect.tryPromise(() =>
     Bun.build({
       plugins: baseline
@@ -315,7 +335,7 @@ const buildWorker = Effect.fn(function* () {
     })
   );
   if (!built.success) throw new Error("XLSX proof bundle failed");
-  yield* Effect.tryPromise(() => Bun.write(`${directory}/wrangler.json`, proofConfig()));
+  yield* Effect.tryPromise(() => Bun.write(`${directory}/wrangler.json`, proofConfig(name)));
 });
 const startWorker = (): ReturnType<typeof Bun.spawn> =>
   Bun.spawn(
@@ -328,7 +348,7 @@ const startWorker = (): ReturnType<typeof Bun.spawn> =>
       String(port),
       "--inspector-port",
       String(inspectorPort),
-      remote ? "--remote" : "--local",
+      "--local",
       "--persist-to",
       `${directory}/state`,
     ],
@@ -338,13 +358,14 @@ const startWorker = (): ReturnType<typeof Bun.spawn> =>
 const overlapRequests = Effect.fn(function* (
   debuggerUrl: string,
   overlap: Uint8Array,
-  name: string
+  input: Readonly<{ name: string; target: Option.Option<HostedPreview> }>
 ) {
+  const { name, target } = input;
   const startedAt = performance.now();
   const responses = yield* Effect.tryPromise(() =>
     Promise.all([
-      send(overlap, AbortSignal.timeout(cpuLimit)),
-      send(overlap, AbortSignal.timeout(cpuLimit)),
+      send(overlap, AbortSignal.timeout(cpuLimit), target),
+      send(overlap, AbortSignal.timeout(cpuLimit), target),
     ])
   );
   const results = yield* Effect.forEach(responses, readProofResponse);
@@ -362,29 +383,39 @@ const overlapRequests = Effect.fn(function* (
   process.stdout.write(output + "\n");
 });
 const releaseWorker = Effect.fn(function* (worker: ReturnType<typeof Bun.spawn>) {
-  const fs = yield* FileSystem.FileSystem;
   worker.kill();
   yield* Effect.tryPromise(() => worker.exited);
-  yield* Effect.tryPromise(closeWorkerdHttp);
-  yield* fs.remove(directory, { recursive: true, force: true });
 }, Effect.orDie);
 const program = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(directory, { recursive: true });
-  yield* buildWorker();
-  yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
-  yield* waitReady();
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(closeWorkerdHttp);
+      yield* fs.remove(directory, { recursive: true, force: true });
+    }).pipe(Effect.orDie)
+  );
+  const suffix = remote
+    ? (yield* (yield* Crypto.Crypto).randomUUIDv4).slice(0, proofNameSuffixLength)
+    : "local";
+  yield* buildWorker(`xlsx-proof-${suffix}`);
+  const target = remote
+    ? Option.some(yield* hostedPreview(directory))
+    : Option.none<HostedPreview>();
+  if (!remote) yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
+  yield* waitReady(target);
   const debuggerUrl = remote ? "" : yield* waitInspector();
-  for (const fixture of yield* fixtures()) yield* measure(fixture, debuggerUrl);
+  for (const fixture of yield* fixtures()) yield* measure(fixture, debuggerUrl, target);
   yield* overlapRequests(
     debuggerUrl,
     synthetic({ rows: 1000, text: " ".repeat(sharedLength - 4) + "Cafe", formatted: false }),
-    "two-overlapping-requests"
+    { name: "two-overlapping-requests", target }
   );
-  yield* overlapRequests(
-    debuggerUrl,
-    manyCells(boundedRows),
-    "two-overlapping-bounded-cell-requests"
-  );
+  yield* overlapRequests(debuggerUrl, manyCells(boundedRows), {
+    name: "two-overlapping-bounded-cell-requests",
+    target,
+  });
 });
-await Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
+await Effect.runPromise(
+  program.pipe(Effect.scoped, Effect.provide([BunFileSystem.layer, BunCrypto.layer]))
+);

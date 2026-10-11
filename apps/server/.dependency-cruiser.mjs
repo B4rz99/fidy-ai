@@ -157,16 +157,14 @@ export default {
     {
       name: "composition-contract-imports-implementation",
       severity: "error",
-      comment:
-        "Composition contracts publish only inert binding and handler declarations (#615).",
+      comment: "Composition contracts publish only inert binding and handler declarations (#615).",
       from: { path: "^cloudflare/(core-http|queue)/contract\\.ts$" },
       to: { path: "^cloudflare/.*/(internal/|operations\\.ts$|runtime\\.ts$)" },
     },
     {
       name: "composition-internal-imports-runtime",
       severity: "error",
-      comment:
-        "Private dispatch cannot reacquire its outward construction authority (#615).",
+      comment: "Private dispatch cannot reacquire its outward construction authority (#615).",
       from: { path: "^cloudflare/(core-http|queue)/internal/" },
       to: { path: "^cloudflare/$1/runtime\\.ts$" },
     },
@@ -181,8 +179,7 @@ export default {
     {
       name: "native-composition-cycle",
       severity: "error",
-      comment:
-        "Native HTTP, Queue and Worker compositions remain acyclic (#615).",
+      comment: "Native HTTP, Queue and Worker compositions remain acyclic (#615).",
       from: {
         path: "^cloudflare/(core-http/|queue/|core-worker\\.ts$|public-worker\\.ts$|ingestion/email-worker\\.ts$)",
       },
@@ -346,8 +343,7 @@ export default {
     {
       name: "memory-operations-imports-runtime",
       severity: "error",
-      comment:
-        "Memory operations do not acquire runtime construction authority (#607).",
+      comment: "Memory operations do not acquire runtime construction authority (#607).",
       from: { path: "^cloudflare/memory/operations\\.ts$" },
       to: { path: "^cloudflare/memory/runtime\\.ts$" },
     },
@@ -615,8 +611,7 @@ export default {
     {
       name: "foreign-module-imports-cloudflare-onboarding-internal",
       severity: "error",
-      comment:
-        "Onboarding composition is private; callers consume its bounded operations (#611).",
+      comment: "Onboarding composition is private; callers consume its bounded operations (#611).",
       from: {
         path: "^(src|cloudflare|scripts|tools)/",
         pathNot: "^cloudflare/onboarding/",
@@ -653,8 +648,7 @@ export default {
     {
       name: "onboarding-contract-imports-implementation",
       severity: "error",
-      comment:
-        "Onboarding declarations carry no native execution authority (#611).",
+      comment: "Onboarding declarations carry no native execution authority (#611).",
       from: { path: "^cloudflare/onboarding/contract\\.ts$" },
       to: {
         path: "^cloudflare/onboarding/(internal/|operations\\.ts$|runtime\\.ts$)",
@@ -663,16 +657,14 @@ export default {
     {
       name: "onboarding-internal-imports-outward-interface",
       severity: "error",
-      comment:
-        "Private Onboarding execution depends inward on declarations (#611).",
+      comment: "Private Onboarding execution depends inward on declarations (#611).",
       from: { path: "^cloudflare/onboarding/internal/" },
       to: { path: "^cloudflare/onboarding/(operations|runtime)\\.ts$" },
     },
     {
       name: "onboarding-operations-imports-runtime",
       severity: "error",
-      comment:
-        "Onboarding operations cannot acquire construction authority (#611).",
+      comment: "Onboarding operations cannot acquire construction authority (#611).",
       from: { path: "^cloudflare/onboarding/operations\\.ts$" },
       to: { path: "^cloudflare/onboarding/runtime\\.ts$" },
     },
@@ -720,8 +712,7 @@ export default {
     {
       name: "web-authentication-contract-imports-implementation",
       severity: "error",
-      comment:
-        "Web Authentication declarations carry no native execution authority (#610).",
+      comment: "Web Authentication declarations carry no native execution authority (#610).",
       from: { path: "^cloudflare/web-authentication/contract\\.ts$" },
       to: {
         path: "^cloudflare/web-authentication/(internal/|operations\\.ts$|runtime\\.ts$)",
@@ -730,16 +721,14 @@ export default {
     {
       name: "web-authentication-internal-imports-outward-interface",
       severity: "error",
-      comment:
-        "Private Web Authentication execution depends inward on declarations (#610).",
+      comment: "Private Web Authentication execution depends inward on declarations (#610).",
       from: { path: "^cloudflare/web-authentication/internal/" },
       to: { path: "^cloudflare/web-authentication/(operations|runtime)\\.ts$" },
     },
     {
       name: "web-authentication-operations-imports-runtime",
       severity: "error",
-      comment:
-        "Web Authentication operations cannot acquire construction authority (#610).",
+      comment: "Web Authentication operations cannot acquire construction authority (#610).",
       from: { path: "^cloudflare/web-authentication/operations\\.ts$" },
       to: { path: "^cloudflare/web-authentication/runtime\\.ts$" },
     },
@@ -849,8 +838,7 @@ export default {
     {
       name: "login-recovery-internal-imports-outward-interface",
       severity: "error",
-      comment:
-        "Browser Login and Recovery implementation depends inward on declarations (#601).",
+      comment: "Browser Login and Recovery implementation depends inward on declarations (#601).",
       from: { path: "^cloudflare/(browser-login|recovery)/internal/" },
       to: { path: "^cloudflare/$1/(operations|runtime)\\.ts$" },
     },
@@ -910,8 +898,7 @@ export default {
     {
       name: "tokens-operations-imports-runtime",
       severity: "error",
-      comment:
-        "Tokens operations do not acquire runtime construction authority (#602).",
+      comment: "Tokens operations do not acquire runtime construction authority (#602).",
       from: { path: "^cloudflare/tokens/operations\\.ts$" },
       to: { path: "^cloudflare/tokens/runtime\\.ts$" },
     },
@@ -1028,8 +1015,7 @@ export default {
     {
       name: "subscription-operations-imports-runtime",
       severity: "error",
-      comment:
-        "Subscription operations do not acquire Workflow construction authority (#599).",
+      comment: "Subscription operations do not acquire Workflow construction authority (#599).",
       from: { path: "^cloudflare/subscription/operations\\.ts$" },
       to: { path: "^cloudflare/subscription/runtime\\.ts$" },
     },
@@ -1628,16 +1614,7 @@ export default {
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "node", "default", "types"],
-      extensions: [
-        ".ts",
-        ".tsx",
-        ".mts",
-        ".cts",
-        ".js",
-        ".jsx",
-        ".mjs",
-        ".cjs",
-      ],
+      extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
       mainFields: ["module", "main", "types", "typings"],
     },
   },

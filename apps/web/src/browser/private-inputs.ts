@@ -3,6 +3,7 @@ import { Option } from "effect";
 type Input = HTMLInputElement | HTMLTextAreaElement;
 export type PrivateInputs<Name extends string> = Readonly<{
   read: (name: Name) => string;
+  set: (name: Name, value: string) => void;
   bind: (name: Name, input: Input) => () => void;
   clear: (name: Name) => void;
   dispose: () => void;
@@ -16,6 +17,16 @@ export const makePrivateInputs = <Name extends string>(): PrivateInputs<Name> =>
     Option.getOrElse(Option.fromUndefinedOr(values.get(name)), () => "");
   return {
     read,
+    set: (name, value) => {
+      if (!active) return;
+      values.set(name, value);
+      for (const input of Option.getOrElse(
+        Option.fromUndefinedOr(elements.get(name)),
+        () => new Set<Input>()
+      )) {
+        input.value = value;
+      }
+    },
     bind: (name, input) => {
       const inputs = Option.getOrElse(
         Option.fromUndefinedOr(elements.get(name)),

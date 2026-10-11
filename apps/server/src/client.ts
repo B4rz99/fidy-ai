@@ -120,7 +120,7 @@ export {
   emailReplacementCompletionPath,
 } from "~/shell/email-authentication/contract";
 export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/contract";
-export type { SubscriptionStatus } from "~/core/subscription/contract";
+export { SubscriptionStatus, SubscriptionOffers } from "~/core/subscription/contract";
 export { PriceId } from "~/core/subscription/contract";
 export { IanaTimeZone } from "~/core/_shared/context";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";

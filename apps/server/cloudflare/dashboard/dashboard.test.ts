@@ -313,6 +313,23 @@ const listIds = (
     return list.widget.result.transactions.map((transaction) => transaction.id);
   });
 
+it("reads catalog, quota and Subscription discovery through public admission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      for (const path of [
+        "/dashboard/catalog",
+        "/quota",
+        "/subscription/offers",
+        "/subscription/upgrade-url",
+      ]) {
+        const response = yield* Effect.tryPromise(() => send(db, 0, path));
+        expect(response.status, path).toBe(200);
+        yield* Effect.tryPromise(() => response.arrayBuffer());
+      }
+    })
+  ));
+
 it(
   "uninitialized queries observe absence for each User without creating domain state",
   () =>

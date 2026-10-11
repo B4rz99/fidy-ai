@@ -83,7 +83,13 @@ export default {
         "HTTP and Queue runtime construction belongs to the Core root or an explicit broad harness, not ordinary owner implementation (#615).",
       from: {
         path: "^(src|cloudflare|scripts|tools)/",
-        pathNot: ["^cloudflare/core-worker\\.ts$", "\\.test\\.ts$", "(?:runtime|harness)\\.ts$"],
+        pathNot: [
+          "^cloudflare/core-worker\\.ts$",
+          // The isolated Queue proof constructs the real native consumer with synthetic bindings.
+          "^cloudflare/queue/recovery-worker\\.fixture\\.ts$",
+          "\\.test\\.ts$",
+          "(?:runtime|harness)\\.ts$",
+        ],
       },
       to: { path: "^cloudflare/(core-http|queue)/runtime\\.ts$" },
     },

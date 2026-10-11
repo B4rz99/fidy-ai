@@ -272,7 +272,11 @@
     },
     // Vitest discovers these standalone configurations through its required default-export contract.
     {
-      "files": ["apps/server/tools/contracts/vitest.config.ts", "scripts/vitest.config.ts"],
+      "files": [
+        "apps/server/tools/contracts/vitest.config.ts",
+        "scripts/vitest.config.ts",
+        "scripts/infra-performance/vitest.config.ts"
+      ],
       "rules": {
         "import/no-default-export": "off"
       }
@@ -314,6 +318,7 @@
         "apps/server/cloudflare/public-worker.ts",
         "apps/server/cloudflare/resource-admission/resource-admission-worker.fixture.ts",
         "apps/server/cloudflare/coordinator-test-harness.ts",
+        "apps/server/cloudflare/queue/recovery-worker.fixture.ts",
         "apps/server/cloudflare/ai/workers-ai-conformance-worker.ts",
         "infra/cloudflare/vitest.config.ts",
         "apps/server/cloudflare/vitest.config.ts"

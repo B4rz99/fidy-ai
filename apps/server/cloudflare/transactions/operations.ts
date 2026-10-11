@@ -55,6 +55,7 @@ import {
 import {
   prepareNotificationEmailCapture as ownerPrepareNotificationEmailCapture,
   prepareStatementCapture as ownerPrepareStatementCapture,
+  statementCaptureCapacityExceeded as ownerStatementCaptureCapacityExceeded,
 } from "./internal/ingestion-capture";
 
 export * from "./contract";
@@ -205,3 +206,8 @@ export const findDashboardAggregate: typeof ownerFindDashboardAggregate = (input
 
 /** Prepare irreversible history removal under live authority and the observed revision. */
 export const prepareDeletion: typeof ownerPrepareDeletion = (input) => ownerPrepareDeletion(input);
+
+/** Recognize a permanent Transaction admission refusal during statement capture. */
+export const statementCaptureCapacityExceeded: typeof ownerStatementCaptureCapacityExceeded = (
+  cause
+) => ownerStatementCaptureCapacityExceeded(cause);

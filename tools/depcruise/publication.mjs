@@ -30,6 +30,8 @@ const compositionRoots = new Set([
   "cloudflare/maintenance/admission-retention.test.ts",
   // Fault injection runs the actual Core maintenance composition against an isolated D1.
   "cloudflare/maintenance/monitoring-isolation.test.ts",
+  // Measures real full maintenance beside owner-private indexed History in isolated D1.
+  "cloudflare/transactions/performance.test.ts",
   "cloudflare/agent/hosted-turn.test.ts",
   "cloudflare/budgets/budgets.test.ts",
   "cloudflare/connections/connections.test.ts",
@@ -90,6 +92,8 @@ const sharedTestSupport = new Set([
   "src/shell/testing/crypto-harness.ts",
   "src/shell/outbound-http/testing.ts",
   "cloudflare/d1-test-fixture.ts",
+  // Synthetic complete environment shared only by maintenance and contention measurements.
+  "cloudflare/maintenance-performance.test-fixture.ts",
   "cloudflare/d1-migration-test-worker.fixture.ts",
   "cloudflare/coordinator-test-harness.ts",
   "cloudflare/workflow-test-runtime.ts",

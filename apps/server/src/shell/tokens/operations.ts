@@ -505,7 +505,8 @@ export const patExpiryCompletion = (current: number): OwnedStatement => {
       SELECT 1, CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pats p ON p.id = r.id
         WHERE p.revoked_at_ms IS NULL
-      ) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`,
+      ) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted
+      WHERE pat_atomic_assertion.accepted <> excluded.accepted`,
     params: evidence.params,
   };
 };
@@ -517,7 +518,8 @@ export const pairingExpiryCompletion = (current: number): OwnedStatement => {
       SELECT 1, CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pat_pairings p ON p.id = r.id
         WHERE p.state = 'approved_awaiting_claim'
-      ) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`,
+      ) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted
+      WHERE pat_atomic_assertion.accepted <> excluded.accepted`,
     params: evidence.params,
   };
 };

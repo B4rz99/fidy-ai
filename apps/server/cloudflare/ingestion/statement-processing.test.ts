@@ -2883,12 +2883,139 @@ effectIt.effect(
     })
 );
 
+it(
+  "settles the installed daily capture limit without retrying or losing committed statement rows",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fullMigrations = Array.from(
+          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
+        )
+          .sort()
+          .map((name) => name.slice(0, -4));
+        const content =
+          "fecha,valor,moneda,contraparte\n" +
+          Array.from({ length: 101 }, (_, index) => `2026-08-01,-${index + 1},COP,Cafe`).join(
+            "\n"
+          ) +
+          "\n";
+        const { db, bucket } = yield* fromTestPromise(() => setup(content, "csv", fullMigrations));
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+            )
+            .bind(userA, submissionId)
+            .run()
+        );
+        let result: "continue" | "completed" = "continue";
+        let activities = 0;
+        while (result === "continue") {
+          result = yield* processStatementSubmission({
+            DB: db,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId: userA,
+            submissionId,
+          });
+          activities++;
+        }
+        expect(activities).toBe(4);
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                "SELECT status,failure_reason,input_rows,accepted_rows,needs_review_rows FROM statement_submissions WHERE id=?"
+              )
+              .bind(submissionId)
+              .first()
+          )
+        ).toEqual({
+          status: "failed",
+          failure_reason: "resource-limit",
+          input_rows: 100,
+          accepted_rows: 100,
+          needs_review_rows: 0,
+        });
+        for (const table of ["transactions", "source_attestations", "statement_record_outcomes"]) {
+          expect(
+            yield* fromTestPromise(() =>
+              db
+                .prepare(`SELECT count(*) AS total FROM ${table} WHERE user_id=?`)
+                .bind(userA)
+                .first<number>("total")
+            )
+          ).toBe(100);
+          expect(
+            yield* fromTestPromise(() =>
+              db
+                .prepare(`SELECT count(*) AS total FROM ${table} WHERE user_id=?`)
+                .bind(userB)
+                .first<number>("total")
+            )
+          ).toBe(0);
+        }
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                "SELECT count(*) AS total FROM statement_ingestion_outbox WHERE submission_id=?"
+              )
+              .bind(submissionId)
+              .first<number>("total")
+          )
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare("SELECT consumed_at_ms FROM statement_backfill_entitlements WHERE user_id=?")
+              .bind(userA)
+              .first<number>("consumed_at_ms")
+          )
+        ).not.toBeNull();
+        expect(
+          yield* processStatementSubmission({
+            DB: db,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId: userA,
+            submissionId,
+          })
+        ).toBe("completed");
+      })
+    ),
+  30_000
+);
+
+const fullStatementContent = (kind: string, rows: number): string =>
+  kind === "review"
+    ? "unmapped\n" + "row\n".repeat(rows)
+    : "fecha,valor,moneda,contraparte\n" +
+      Array.from({ length: rows }, (_, index) => `2026-08-01,-${index + 1},COP,Cafe`).join("\n") +
+      "\n";
+const fullStatementCohorts = (["captures", "review"] as const).flatMap((kind) =>
+  [96, 1024, 4096].flatMap((rows) => [0, 1, 2].map((sample) => ({ kind, rows, sample })))
+);
+const expectedStatementProgress = (
+  kind: "captures" | "review",
+  rows: number
+): Readonly<{ processedRows: number; status: "completed" | "failed" }> => ({
+  processedRows: kind === "captures" ? Math.min(rows, 100) : rows,
+  status: kind === "captures" && rows > 100 ? "failed" : "completed",
+});
 const measureFullStatements =
   Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
 const fullStatementMeasurement = Schema.fromJsonString(
   Schema.Struct({
     scenario: Schema.Literal("full-statement-processing"),
     rows: Schema.Int,
+    kind: Schema.Literals(["captures", "review"]),
+    sample: Schema.Int,
+    processedRows: Schema.Int,
+    status: Schema.Literals(["completed", "failed"]),
+    sourceBytes: Schema.Int,
+    r2Heads: Schema.Int,
+    r2Gets: Schema.Int,
+    r2ReadBytes: Schema.Int,
+    r2Puts: Schema.Int,
     rowsRead: Schema.Int,
     rowsWritten: Schema.Int,
     accountingReads: Schema.Int,
@@ -2906,10 +3033,35 @@ it.skipIf(!measureFullStatements)(
         )
           .sort()
           .map((name) => name.slice(0, -4));
-        for (const rows of [96, 192, 1_024]) {
+        for (const { kind, rows, sample } of fullStatementCohorts) {
+          const content = fullStatementContent(kind, rows);
           const { db, bucket } = yield* fromTestPromise(() =>
-            setup("unmapped\n" + "row\n".repeat(rows), "csv", fullMigrations)
+            setup(content, "csv", fullMigrations)
           );
+          if (kind === "captures") {
+            yield* fromTestPromise(() =>
+              db
+                .prepare(
+                  "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+                )
+                .bind(userA, submissionId)
+                .run()
+            );
+          }
+          let puts = 0;
+          const counted = new Proxy(bucket, {
+            get(target, property): unknown {
+              if (property === "put") {
+                return (...args: Parameters<R2Bucket["put"]>): ReturnType<R2Bucket["put"]> => {
+                  puts++;
+                  return target.put(...args);
+                };
+              }
+              const method: unknown = Reflect.get(target, property, target);
+              return typeof method === "function" ? method.bind(target) : method;
+            },
+          });
+          const readCalls = observeStatementReads(counted);
           const measured = observeRetentionCost(db);
           const start = yield* Clock.currentTimeMillis;
           let result: "continue" | "completed" = "continue";
@@ -2917,27 +3069,49 @@ it.skipIf(!measureFullStatements)(
           while (result === "continue") {
             result = yield* processStatementSubmission({
               DB: measured.database,
-              STATEMENT_STAGING_BUCKET: bucket,
+              STATEMENT_STAGING_BUCKET: readCalls.bucket,
               userId: userA,
               submissionId,
             });
             activities++;
           }
           const end = yield* Clock.currentTimeMillis;
-          expect(measured.cost().rowsRead).toBeLessThan(rows * 60);
+          if (kind === "review") expect(measured.cost().rowsRead).toBeLessThan(rows * 60);
+          const { processedRows, status } = expectedStatementProgress(kind, rows);
           expect(
             yield* fromTestPromise(() =>
               db
                 .prepare(
-                  "SELECT input_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
+                  "SELECT status,input_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
                 )
                 .bind(submissionId)
                 .first()
             )
-          ).toEqual({ input_rows: rows, needs_review_rows: rows });
+          ).toEqual({
+            status,
+            input_rows: processedRows,
+            needs_review_rows: kind === "review" ? rows : 0,
+          });
+          expect(
+            yield* fromTestPromise(() =>
+              db
+                .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
+                .bind(userB)
+                .first<number>("total")
+            )
+          ).toBe(0);
           const encoded = yield* Schema.encodeEffect(fullStatementMeasurement)({
             scenario: "full-statement-processing",
             rows,
+            kind,
+            sample,
+            processedRows,
+            status,
+            sourceBytes: new TextEncoder().encode(content).byteLength,
+            r2Heads: readCalls.observed.heads,
+            r2Gets: readCalls.observed.gets,
+            r2ReadBytes: readCalls.observed.bytes,
+            r2Puts: puts,
             ...measured.cost(),
             accountingReads: accountingReads(measured),
             activities,
@@ -2947,7 +3121,7 @@ it.skipIf(!measureFullStatements)(
         }
       })
     ),
-  120_000
+  300_000
 );
 
 it(

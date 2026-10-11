@@ -6,6 +6,10 @@ import { encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { prepareConsentAction } from "../../consent/operations";
 import type { NotificationEmailCaptureInput, StatementCaptureInput } from "../contract";
 
+/** Decode the installed Transaction admission trigger from a native D1 batch failure. */
+export const statementCaptureCapacityExceeded = (cause: unknown): boolean =>
+  String(cause).includes("transaction_resource_limit");
+
 const sourceAuthority = ({
   userId,
   sourceGuard,

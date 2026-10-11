@@ -1,5 +1,7 @@
 # Infrastructure performance follow-up — 2026-10-11
 
+Current reconciliation: [expanded capacity assessment](infra-capacity-assessment-2026-10-11.md). This document preserves its original dated cohort and status; the newer report supersedes deployment and remaining-work statements.
+
 ## Scope and evidence boundaries
 
 All 68 declared canonical operations were assessed. Successful native fixture measurements cover 66 operations after measuring the deletion owner newly installed on trunk. `identity.updateUserPreferences` and `transactions.listSourceAttestations` have no installed canonical owner. Their feature performance cannot be measured; implementing those features is outside infrastructure optimization. No result here establishes production traffic capacity or a production latency SLO.

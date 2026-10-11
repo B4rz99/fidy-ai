@@ -73,6 +73,7 @@ export {
   ApprovedPATPairing,
   PATPairingId,
   PATPairingPublicCode,
+  PATPairingPublicCodeInput,
   PATPairingReview,
   PATRecipientLabel,
   PATScope,

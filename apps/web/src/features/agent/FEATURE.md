@@ -31,7 +31,7 @@ The deterministic hosted inference suite passed 37 checks, including date-only c
 
 The quota-feedback patch on release base `a2483f5dd1939fc3c3a37887c4e93c8081893666` passed all 27 current rendered chat/application checks. This includes two consecutive messages, delivery recovery, and exact failed-draft retention followed by explicit retry without duplicate messages. The expanded provider adapter suite passed 38 checks, including raw binding and REST quota formats and capacity refusal.
 
-The deployment of [PR #1204](https://github.com/B4rz99/fidy-ai/pull/1204) is blocked by live Workers AI conformance, which reports `ProviderUnavailable`. A direct provider diagnostic confirmed exhausted daily free allocation. No successful deployment or completed production rerun is claimed.
+The deployment of [PR #1204](https://github.com/B4rz99/fidy-ai/pull/1204) remains blocked by live Workers AI conformance. Earlier runs reported `ProviderUnavailable`; a direct provider diagnostic confirmed exhausted daily free allocation. Quota classification merged in [PR #1213](https://github.com/B4rz99/fidy-ai/pull/1213), and the sanitized preflight diagnostic was corrected in [PR #1218](https://github.com/B4rz99/fidy-ai/pull/1218). The subsequent [production run](https://github.com/B4rz99/fidy-ai/actions/runs/38148906550) at `55f0e03e4afb22f11848f7f2b5bb7d8cc45a77fb` refused deployment with `check=canonical_query category=ProviderQuotaExceeded`. No successful deployment or completed production rerun is claimed.
 
 Remaining checks:
 

@@ -4,7 +4,7 @@ import { Data, DateTime, Deferred, Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
 import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
@@ -338,6 +338,10 @@ const transactionCaptureInstant = (request: HttpClientRequest.HttpClientRequest)
 
 const httpCreated = 201;
 const httpUnavailable = 503;
+// TZDate must inherit the native Date before this fixture replaces the global constructor.
+// Lazy routes otherwise import the date subclass under fake timers and corrupt calendar instants.
+beforeAll(() => import("@/ui/components/calendar"));
+
 const stubTransactionScreen = (): void => {
   vi.stubGlobal("matchMedia", () => ({
     matches: true,

@@ -73,7 +73,7 @@ const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
       'statement_source', EXISTS (SELECT 1 FROM source_attestations source
         WHERE source.user_id = retained.user_id AND source.transaction_id = retained.id
           AND source.kind = 'statement-line')))
-      FROM (SELECT * FROM transactions WHERE user_id = ? AND id IN selected ORDER BY id) retained)),
+      FROM (SELECT * FROM transactions WHERE user_id = ? AND deleted_at_ms IS NULL AND id IN selected ORDER BY id) retained)),
     'effective', json((SELECT json_group_array(json_object(
       'id', id, 'amount', amount, 'currency', currency, 'direction', direction,
       'counterparty', counterparty, 'category_id', category_id, 'notes', notes,

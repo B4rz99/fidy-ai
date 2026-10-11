@@ -71,6 +71,7 @@ export const unlinkedPairMessage = "That exact Transaction pair is not currently
 export type TransactionMutationOperation =
   | "transactions.createTransaction"
   | "transactions.updateTransaction"
+  | "transactions.deleteTransaction"
   | "transactions.linkTransactions"
   | "transactions.unlinkTransactions";
 

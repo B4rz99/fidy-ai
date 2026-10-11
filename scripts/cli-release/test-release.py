@@ -38,8 +38,10 @@ with open(os.environ['CALL_LOG'],'a') as log: log.write(json.dumps(args)+'\\n')
 if args[0]=='api':
     if args[1].endswith('/releases'): print(json.dumps([json.load(open(os.environ['STATE']))]))
     elif args[1].endswith('/releases/latest'): print(json.dumps(json.load(open(os.environ['STATE']))[0]))
-    elif '/releases/tags/' in args[1]: print('{"draft":false,"immutable":true}')
-    elif args[1].endswith('/immutable-releases'): print('{"enabled":true}')
+    elif '/releases/tags/' in args[1]: print(json.dumps({'draft':False,'immutable':os.environ.get('IMMUTABLE_RELEASE')=='true'}))
+    elif args[1].endswith('/immutable-releases'):
+        print('HTTP 403: Resource not accessible by integration',file=sys.stderr)
+        sys.exit(1)
     elif '/git/ref/' in args[1]: print('{"object":{"sha":"' + 'a'*40 + '"}}')
 elif args[:2]==['release','download']:
     shutil.copy(os.environ['PREVIOUS'],pathlib.Path(args[args.index('--dir')+1])/'cli-release.json')
@@ -119,7 +121,7 @@ elif args[:2]==['release','edit'] and '--latest=true' in args:
         self.assertFalse(next_plan['changed'])
         self.assertEqual(next_plan['version'], '0.1.0')
 
-    def publication(self, corrupt=False, missing=False, superseded=False):
+    def publication(self, corrupt=False, missing=False, superseded=False, immutable=True):
         plan = self.plan()
         directory = self.root / 'assets'
         directory.mkdir()
@@ -149,7 +151,8 @@ else: shutil.copy(pathlib.Path(os.environ['FIXTURE_ASSETS'])/url.rsplit('/',1)[1
         result = subprocess.run(['python3', 'scripts/cli-release/release.py', 'publish', '--plan',
                                  str(self.root / 'plan.json'), '--directory', str(directory)],
                                 cwd=self.root, env=dict(self.env, FIXTURE_ASSETS=str(directory),
-                                                       CORRUPT_DOWNLOAD=str(corrupt).lower()),
+                                                       CORRUPT_DOWNLOAD=str(corrupt).lower(),
+                                                       IMMUTABLE_RELEASE=str(immutable).lower()),
                                 capture_output=True, text=True, timeout=30)
         return result, (self.root / 'default').read_text()
 
@@ -157,6 +160,12 @@ else: shutil.copy(pathlib.Path(os.environ['FIXTURE_ASSETS'])/url.rsplit('/',1)[1
         result, default = self.publication()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(default, 'cli-v0.1.0')
+
+    def test_mutable_release_preserves_default(self):
+        result, default = self.publication(immutable=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Release is not published and immutable', result.stderr)
+        self.assertEqual(default, 'previous-release')
 
     def test_missing_platform_prevents_publication_and_preserves_default(self):
         result, default = self.publication(missing=True)

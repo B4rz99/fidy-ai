@@ -185,3 +185,21 @@ await db
   )
   .bind(recoveryUserId, recoveryDigest, now)
   .run();
+
+// Rotation must not replace the proof used by the parallel recovery sign-in journey.
+const recoveryDisclosureUserId = "24000000-0000-4000-8000-000000000331";
+const recoveryDisclosureDigest = new Uint8Array(
+  await crypto.subtle.digest("SHA-256", new TextEncoder().encode("23456-789AB-CDEFG-HJKLM-NPQRS"))
+);
+await seedIdentity({
+  userId: recoveryDisclosureUserId,
+  bsuid: "CO.RecoveryDisclosure",
+  email: "recovery-disclosure@example.com",
+  consentId: "24000000-0000-4000-8000-000000000332",
+});
+await db
+  .prepare(
+    "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?,?,?)"
+  )
+  .bind(recoveryDisclosureUserId, recoveryDisclosureDigest, now)
+  .run();

@@ -35,18 +35,21 @@ On 2026-10-11, audited release checkout based on `a2483f5dd1939fc3c3a37887c4e93c
 
 A separate `dashboard-live-title.spec.ts` check signed in through real Core, edited the title through admitted HTTP, reloaded the built browser, and verified the persisted heading (**1 passed**). It uses isolated local D1 and no route interception.
 
+The real built-browser customization check also passed (**1 check**, 12.5 seconds): rename through the visible Widget editor, verify the name after reload, remove that Widget, and verify removal after another reload. Its first assertion stopped at a temporary 429 resource refusal; the corrected test waits for the client's admitted retry and then checks persisted UI state. Application code and admission policy were unchanged.
+
 The seven initial-load built-browser scenarios intercept API responses. They verify the built UI and request sequence, not production financial results. The separate Worker/D1 suite exercises actual local persistence and admitted execution. This document is an audit artifact in the development checkout, not evidence that this checkout has been deployed.
 
 ## Open audit findings and remaining checks
 
-- [Issue #1214](https://github.com/B4rz99/fidy-ai/issues/1214): canonical title was ignored by the web heading. The focused regression reproduced it, then all **45 web feature checks** and **24 application checks** passed after rendering `view.title`. The real local browser edit/reload check also passed. The fix is prepared on its task branch; production verification remains pending.
+- [Issue #1214](https://github.com/B4rz99/fidy-ai/issues/1214): canonical title was ignored by the web heading. The focused regression reproduced it, then all **45 web feature checks** and **24 application checks** passed after rendering `view.title`. The real local browser edit/reload check also passed. The fix merged in [PR #1216](https://github.com/B4rz99/fidy-ai/pull/1216); production verification remains pending because deployment failed its live Workers AI preflight.
 - Real admitted Dashboard initialization/edit/read, ownership refusals, and retained Audit evidence passed the local Worker/D1 suite; repeat production behaviour separately.
-- Verify browser customization against a real local server, including keyboard add/move/resize, rejected/uncertain edits, and read-after-save.
+- Widget rename/remove and read-after-save passed against the real local server. Keyboard add/move/resize and rejected/uncertain edits still need real browser verification.
 - Production totals and read-after-delete remain pending the chat release and provider availability. Use only this chat's labelled fixtures.
 
 ```sh
 bun run --cwd apps/web test src/features/dashboard
 bun run --cwd apps/server test:core src/core/dashboard --coverage.enabled=false
 bun run --cwd apps/web test:browser dashboard-queries.spec.ts --workers=1
+BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser dashboard-live-customization.spec.ts --workers=1 --timeout=120000
 bun run --cwd apps/server test:cloudflare cloudflare/dashboard --maxWorkers=1
 ```

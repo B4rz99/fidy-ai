@@ -176,7 +176,7 @@ export default {
       to: {
         path: "^src/",
         pathNot: [
-          "^src/core/(browser-login|dashboard|email-authentication|ingestion|insights|recovery|subscription|tokens)/contract\\.ts$",
+          "^src/core/(browser-login|categories|dashboard|email-authentication|identity|ingestion|insights|recovery|subscription|tokens)/contract\\.ts$",
 
           "^src/core/tokens/operations\\.ts$",
           // Pure Transaction query values own canonical browser continuation decoding.
@@ -186,7 +186,7 @@ export default {
           "^src/core/_shared/context\\.ts$",
           "^src/shell/api\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
-          "^src/shell/(agent|canonical-operations|connections|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
+          "^src/shell/(agent|canonical-operations|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
           // Pure shared access decisions are deliberate CLI/browser discovery authority (#970).
           "^src/shell/canonical-policy/operations\\.ts$",
         ],
@@ -1338,7 +1338,7 @@ export default {
           "^src/shell/canonical-policy/operations\\.ts$",
           // Canonical ordered-batch schemas and pure child projection, with no execution authority (#971).
           "^src/shell/operations/contract\\.ts$",
-          "^src/shell/(connections|oauth-agents|public-http|quotas|schema-codecs|tokens|subscription|web-authentication)/contract\\.ts$",
+          "^src/shell/(connections|dashboard|oauth-agents|public-http|quotas|schema-codecs|tokens|subscription|web-authentication)/contract\\.ts$",
           "^src/shell/email-authentication/(contract|path)\\.ts$",
         ],
       },
@@ -1442,7 +1442,7 @@ export default {
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "node", "default", "types"],
-      extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+      extensions: [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"],
       mainFields: ["module", "main", "types", "typings"],
     },
   },

@@ -10,9 +10,9 @@ disable-model-invocation: true
 
    | checkout | prefix           | remote             | URL                                        | branch |
    | -------- | ---------------- | ------------------ | ------------------------------------------ | ------ |
-   | Effect   | `.repos/effect`  | `effect-upstream`  | https://github.com/Effect-TS/effect.git      | `main` |
-   | Alchemy  | `.repos/alchemy` | `alchemy-upstream` | https://github.com/alchemy-run/alchemy.git  | `main` |
-   | Foldkit  | `.repos/foldkit` | `foldkit-upstream` | https://github.com/foldkit/foldkit.git      | `main` |
+   | Effect   | `.repos/effect`  | `effect-upstream`  | https://github.com/Effect-TS/effect.git    | `main` |
+   | Alchemy  | `.repos/alchemy` | `alchemy-upstream` | https://github.com/alchemy-run/alchemy.git | `main` |
+   | Foldkit  | `.repos/foldkit` | `foldkit-upstream` | https://github.com/foldkit/foldkit.git     | `main` |
 
    Inspect `git remote -v`. Add a missing remote with `git remote add <remote> <URL>`;
    resolve a mismatched URL before fetching. Remotes are local Git configuration and do not

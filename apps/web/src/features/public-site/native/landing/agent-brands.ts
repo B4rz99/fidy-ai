@@ -1,5 +1,5 @@
 import type { Html } from "foldkit/html";
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 /** Brand symbols from LobeHub lobe-icons; see agent-brands.LICENSE. */
 export const AgentBrands = (configuration: ViewConfiguration): ViewContent => {
   const html = configuration.html;

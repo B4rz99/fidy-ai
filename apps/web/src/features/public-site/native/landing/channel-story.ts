@@ -1,5 +1,5 @@
 import type { Html } from "foldkit/html";
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 /** One illustrative transaction, shown through each supported entry point. */
 export const ChannelStory = (configuration: ViewConfiguration): ViewContent => [
   channelStoryViewPart(configuration),

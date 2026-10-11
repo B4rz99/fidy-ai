@@ -109,10 +109,7 @@ test("reviews, issues, discloses once, and revokes a manually created PAT", ({ p
         page.getByLabel("Nombre", { exact: true }).fill("Agente de casa")
       );
       yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Duración del token" }).click()
-      );
-      yield* Effect.tryPromise(() => page.getByRole("menuitemradio", { name: "30 días" }).click());
+      yield* Effect.tryPromise(() => page.getByLabel("Duración del token").selectOption("30"));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Crear token" }).click());
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible()

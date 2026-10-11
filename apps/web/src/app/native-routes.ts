@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, pipe } from "effect";
+import { Effect, Match, Option, Schema, pipe } from "effect";
 import { Route } from "foldkit";
 import { defineRouteUnion } from "foldkit/route";
 import type { Url } from "foldkit/url";
@@ -52,7 +52,7 @@ export const AppRoute = defineRouteUnion({
     cliCode: Schema.Option(PATPairingPublicCode),
   },
   OAuthReview: {
-    requestId: OAuthRequestId,
+    requestId: Schema.String,
   },
   Connections: {
     attempt: Schema.Option(ConnectionAttemptReference),
@@ -111,7 +111,7 @@ const parser = Route.oneOf(
   ),
   pipe(
     fixed("oauth/review"),
-    Route.slash(Route.schemaSegment("requestId", OAuthRequestId)),
+    Route.slash(Route.schemaSegment("requestId", Schema.String)),
     Route.mapTo(AppRoute.OAuthReview)
   ),
   pipe(
@@ -162,21 +162,13 @@ export const isSignedRoute = (route: AppRoute): boolean =>
     "Recovery",
   ].includes(route._tag);
 /** Selects a public page without retaining query strings or fragments in its feature model. */
-export const publicPage = (route: AppRoute): Option.Option<string> => {
-  switch (route._tag) {
-    case "Home":
-      return Option.some("/");
-    case "Privacy":
-      return Option.some("/politica");
-    case "Cookies":
-      return Option.some("/cookies");
-    case "Terms":
-      return Option.some("/terminos");
-    case "Feature":
-      return Option.some(`/funciones/${route.slug}`);
-    case "NotFound":
-      return Option.some(route.path);
-    default:
-      return Option.none();
-  }
-};
+export const publicPage = (route: AppRoute): Option.Option<string> =>
+  Match.value(route).pipe(
+    Match.tag("Home", () => Option.some("/")),
+    Match.tag("Privacy", () => Option.some("/politica")),
+    Match.tag("Cookies", () => Option.some("/cookies")),
+    Match.tag("Terms", () => Option.some("/terminos")),
+    Match.tag("Feature", (route) => Option.some(`/funciones/${route.slug}`)),
+    Match.tag("NotFound", (route) => Option.some(route.path)),
+    Match.orElse(() => Option.none())
+  );

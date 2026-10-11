@@ -1,5 +1,8 @@
 # Anti-slop Effect rules against Fidy's patterns
 
+> Historical research snapshot. The current frontend uses native Foldkit; implementation guidance
+> is in [web architecture](../../apps/web/ARCHITECTURE.md) and [Foldkit patterns](../../.patterns/foldkit.md).
+
 Snapshot: [`dmmulroy/anti-slop@c44ef22`](https://github.com/dmmulroy/anti-slop/tree/c44ef22ca116d0ba62a3ff663a0bd13a3f3fa40b/src/effect/rules). This is an adoption assessment, not an enabled gate. The five rules and their opt-in config are listed in [the upstream README](https://github.com/dmmulroy/anti-slop/blob/c44ef22ca116d0ba62a3ff663a0bd13a3f3fa40b/README.md#L78-L105). The upstream package is `private` and targets Oxlint and `@oxlint/plugins` 1.78.0 ([package.json](https://github.com/dmmulroy/anti-slop/blob/c44ef22ca116d0ba62a3ff663a0bd13a3f3fa40b/package.json#L1-L30)); Fidy uses Oxlint 1.83.0 and an existing JS plugin ([package.json](../../package.json), [`.oxlintrc.json`](../../.oxlintrc.json#L1-L10)). Its plugin loaded successfully for the one-off probe below, but that is **not** a support or packaging guarantee.
 
 ## Measured scope

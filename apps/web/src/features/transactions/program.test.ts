@@ -94,7 +94,11 @@ afterEach(() => {
 it("preserves the editing draft across mobile and desktop layouts and restores focus on close", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const media = { matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+      const media = {
+        matches: false,
+        addEventListener: vi.fn<(type: string, listener: () => void) => void>(),
+        removeEventListener: vi.fn(),
+      };
       vi.stubGlobal("matchMedia", () => media);
       mount(respondWithRecords);
       const opener = yield* Effect.tryPromise(() =>

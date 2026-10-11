@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -38,6 +38,11 @@ const view = {
     ],
   },
 };
+const delayedView =
+  (gate: Promise<void>): ((route: Route) => Promise<void>) =>
+  (route) =>
+    gate.then(() => route.fulfill({ contentType: "application/json", body: response(view) }));
+
 const install = Effect.fnUntraced(function* (page: Page, edits: Array<unknown>) {
   yield* Effect.tryPromise(() => installUser(page));
   yield* Effect.tryPromise(() =>
@@ -125,6 +130,12 @@ test("native Dashboard supports keyboard resize and cancellation without another
     Effect.gen(function* () {
       const edits: Array<unknown> = [];
       yield* install(page, edits);
+      // Hold the canonical reread so the test observes the pending render before retrying
+      // input. Capturing the POST alone happens before Foldkit patches its disabled controls.
+      const refresh = Promise.withResolvers<void>();
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/dashboard/view`, delayedView(refresh.promise))
+      );
       const separator = page.getByRole("separator", {
         name: "Redimensionar límite después de Gastos visibles",
         exact: true,
@@ -137,6 +148,8 @@ test("native Dashboard supports keyboard resize and cancellation without another
         size: { kind: "weight", weight: 1.1 },
       });
       const handle = page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true });
+      yield* Effect.tryPromise(() => expect(handle).toBeDisabled());
+      refresh.resolve();
       yield* Effect.tryPromise(() => expect(handle).toBeEnabled());
       yield* Effect.tryPromise(() => handle.press("Space"));
       yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "true"));

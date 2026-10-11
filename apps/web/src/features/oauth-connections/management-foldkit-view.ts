@@ -6,7 +6,7 @@ import type {
   OAuthConnectionMetadata,
 } from "@/transport/client";
 import { card } from "@/ui/card";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { Message, type Model } from "./management-model";
 
 const dateFormat = new Intl.DateTimeFormat("es-CO", {

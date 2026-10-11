@@ -1,6 +1,10 @@
 import type { Html } from "foldkit/html";
 import { Option } from "effect";
-import { Message, type ViewConfiguration, type ViewContent } from "../model";
+import {
+  Message,
+  type ViewConfiguration,
+  type ViewContent,
+} from "@/features/public-site/native/model";
 import { features } from "./feature-content";
 
 const lastFeature = features.length - 1;

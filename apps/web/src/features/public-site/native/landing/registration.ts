@@ -1,4 +1,4 @@
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 /** Opens the first-party account signup and returning-login surface. */
 export const LaunchButton = (
   configuration: ViewConfiguration & {

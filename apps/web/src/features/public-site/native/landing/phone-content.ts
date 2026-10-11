@@ -1,5 +1,5 @@
 import type { Html } from "foldkit/html";
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 
 export const PhoneContent = (
   configuration: ViewConfiguration & {

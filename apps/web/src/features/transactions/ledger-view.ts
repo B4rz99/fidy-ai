@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { maximumAtomicBatchCalls } from "@/transport/client";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { categoryIllustration } from "./category-illustration";
 import {
   dailyLedgerTotal,

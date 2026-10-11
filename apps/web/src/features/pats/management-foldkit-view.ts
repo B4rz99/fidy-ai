@@ -2,7 +2,7 @@ import { DateTime, Option } from "effect";
 import type { Mount } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { type ActivePATMetadata, patScopeCopy } from "@/transport/client";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import {
   ManagementMessage as Message,
   type ManagementModel as Model,

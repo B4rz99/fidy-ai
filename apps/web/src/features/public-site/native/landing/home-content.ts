@@ -1,5 +1,5 @@
 import type { Html } from "foldkit/html";
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 import { AgentBrands } from "./agent-brands";
 import { Footer } from "./footer";
 import { LaunchButton } from "./registration";

@@ -2,6 +2,7 @@ import { Effect, Layer, Queue, Schema, Stream } from "effect";
 import { Command, Runtime, Subscription, type Update } from "foldkit";
 import { UrlRequest, load, pushUrl, replaceUrl } from "foldkit/navigation";
 import { type Url, toString } from "foldkit/url";
+import { parseApiOrigin } from "@/transport/origin";
 import { makeAuthenticationLifetime } from "@/session/lifetime";
 import { Message, Model } from "./native-model";
 import { AppRoute, parseAppRoute } from "./native-routes";
@@ -78,7 +79,14 @@ const makeUpdate = (owner: ApplicationOwner): ((model: Model, message: Message) 
           ...result,
           commands: [
             ...(result.commands ?? []),
-            restoreScroll({ url, reset: model.route._tag !== route._tag }),
+            restoreScroll({
+              url,
+              reset:
+                model.route._tag !== route._tag ||
+                (model.route._tag === "Feature" &&
+                  route._tag === "Feature" &&
+                  model.route.slug !== route.slug),
+            }),
           ],
         };
       },
@@ -164,8 +172,9 @@ export const mountWebApplication = ({
 export const mountProductionApplication = ({
   container,
   apiOrigin,
-}: Readonly<{ container: HTMLElement; apiOrigin: string }>): (() => void) =>
+}: Readonly<{ container: HTMLElement; apiOrigin: unknown }>): (() => void) =>
   mountWebApplication({
     container,
-    createLifetime: (onExpired) => makeAuthenticationLifetime({ apiOrigin, onExpired }),
+    createLifetime: (onExpired) =>
+      makeAuthenticationLifetime({ apiOrigin: parseApiOrigin(apiOrigin), onExpired }),
   });

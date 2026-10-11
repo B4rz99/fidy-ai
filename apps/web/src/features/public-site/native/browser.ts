@@ -1,7 +1,7 @@
 import type { ClickKind, Message, Model } from "./model";
 import { Message as Messages } from "./model";
-import { moveIndicator } from "../landing/tab-indicator";
-import { playConversation } from "../landing/demo-motion";
+import { moveIndicator } from "@/features/public-site/landing/tab-indicator";
+import { playConversation } from "@/features/public-site/landing/demo-motion";
 
 const replay = (kind: ClickKind, index: number, model: Model): boolean =>
   kind === "Replay" || model.scenario === index;

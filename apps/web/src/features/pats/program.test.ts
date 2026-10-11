@@ -102,7 +102,6 @@ it("reviews the exact grant, reveals only after confirmation, copies by gesture 
       const requests: unknown[] = [];
       let copied = "";
       vi.stubGlobal("navigator", {
-        ...navigator,
         clipboard: {
           writeText: (value: string) => {
             copied = value;

@@ -6,7 +6,7 @@ import { makeMountedClipboard } from "@/browser/mounted-clipboard";
 import { type SensitiveClipboard, sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 import { card } from "@/ui/card";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 
 const Model = Schema.Struct({
   status: Schema.Literals(["Idle", "Rotating", "Disclosed", "Failed", "FreshSessionRequired"]),

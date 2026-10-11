@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Match, Option } from "effect";
 import type { Mount } from "foldkit";
 import type { Document, Html, HtmlBuilder } from "foldkit/html";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { fidyLogoUrl } from "@/ui/brand";
 import { icon } from "@/ui/icon";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { Message, type Model } from "./native-model";
 import { type AppRoute, isSignedRoute, publicPage } from "./native-routes";
 
@@ -271,22 +271,15 @@ const featureTitles = {
   insights: "Hallazgos",
   agentes: "Tus agentes",
 };
-export const pageTitle = (route: AppRoute): string => {
-  switch (route._tag) {
-    case "Home":
-      return "Fidy — Tu plata, más clara";
-    case "Privacy":
-      return "Política de privacidad — Fidy";
-    case "Cookies":
-      return "Cookies y almacenamiento — Fidy";
-    case "Terms":
-      return "Términos de servicio — Fidy";
-    case "Feature":
-      return `${featureTitles[route.slug]} — Fidy`;
-    default:
-      return "Fidy";
-  }
-};
+export const pageTitle = (route: AppRoute): string =>
+  Match.value(route).pipe(
+    Match.tag("Home", () => "Fidy — Tu plata, más clara"),
+    Match.tag("Privacy", () => "Política de privacidad — Fidy"),
+    Match.tag("Cookies", () => "Cookies y almacenamiento — Fidy"),
+    Match.tag("Terms", () => "Términos de servicio — Fidy"),
+    Match.tag("Feature", (route) => `${featureTitles[route.slug]} — Fidy`),
+    Match.orElse(() => "Fidy")
+  );
 /** The root owns routing and the document while embedded features own their local state. */
 export const applicationView = (configuration: ViewConfiguration): Document => {
   const page = publicPage(configuration.model.route);

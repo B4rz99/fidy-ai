@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { formatMoney } from "@/transport/money";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { Message, type Model } from "./model";
 import { type InputMount, otpFieldsView, paymentFieldsView } from "./payment-fields-view";
 import type { PaymentAction, PaymentMethod, PaymentStage } from "./payment-model";

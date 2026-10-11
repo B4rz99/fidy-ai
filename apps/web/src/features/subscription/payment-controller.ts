@@ -311,7 +311,10 @@ const ordinaryAction = (owner: Owner, action: PaymentAction): Work => {
       return refresh(owner);
     case "Prepare":
       return restart(owner);
-    default:
+    case "Cancel":
+    case "Confirm":
+    case "Resend":
+    case "RetrySubmission":
       return Effect.void;
   }
 };

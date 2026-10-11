@@ -222,15 +222,16 @@ it("sends one atomic revision-bound batch for explicitly changed bulk facts and 
         categoryId: secondCategory.id,
         occurredAt: "2026-10-08T05:00:00.000Z",
       };
+      const anyCallId: unknown = expect.any(String);
       expect(decodeJson(bodies[0])).toEqual({
         calls: [
           {
-            callId: expect.any(String),
+            callId: anyCallId,
             operation: "transactions.updateTransaction",
             input: { params: { id: transaction.id }, payload: { expectedRevision: 3, changes } },
           },
           {
-            callId: expect.any(String),
+            callId: anyCallId,
             operation: "transactions.updateTransaction",
             input: { params: { id: other.id }, payload: { expectedRevision: 7, changes } },
           },

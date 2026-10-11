@@ -62,23 +62,20 @@ export class MyAgent extends Agent<Env> {
 
 ## Reading Order
 
-| Task               | Files to Read                                 |
-| ------------------ | --------------------------------------------- |
-| Quick start        | README only                                   |
-| Build chat agent   | README → api.md (AIChatAgent) → patterns.md   |
-| Setup project      | README → configuration.md                     |
-| Add React frontend | README → api.md (Client Hooks) → patterns.md  |
-| Build MCP server   | api.md (MCP) → patterns.md                    |
-| Background tasks   | api.md (Scheduling, Task Queue) → patterns.md |
-| Debug issues       | gotchas.md                                    |
+| Task             | Files to Read                                 |
+| ---------------- | --------------------------------------------- |
+| Quick start      | README only                                   |
+| Build chat agent | README → api.md (AIChatAgent) → patterns.md   |
+| Setup project    | README → configuration.md                     |
+| Build MCP server | api.md (MCP) → patterns.md                    |
+| Background tasks | api.md (Scheduling, Task Queue) → patterns.md |
+| Debug issues     | gotchas.md                                    |
 
 ## Package Entry Points
 
-| Import            | Purpose                                     |
-| ----------------- | ------------------------------------------- |
-| `agents`          | Server-side Agent classes, lifecycle        |
-| `agents/react`    | `useAgent()` hook for WebSocket connections |
-| `agents/ai-react` | `useAgentChat()` hook for AI chat UIs       |
+| Import   | Purpose                              |
+| -------- | ------------------------------------ |
+| `agents` | Server-side Agent classes, lifecycle |
 
 ## In This Reference
 

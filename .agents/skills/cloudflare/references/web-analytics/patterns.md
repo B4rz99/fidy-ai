@@ -62,11 +62,6 @@ Alternative: Dashboard → "Enable, excluding visitor data in the EU"
 
 ## SPA Navigation
 
-```html
-<!-- REQUIRED for React/Vue/etc routing -->
-<script data-cf-beacon='{"token": "TOKEN", "spa": true}' ...></script>
-```
-
 Without `spa: true`: only initial pageload tracked.
 
 ## Staging/Production Separation

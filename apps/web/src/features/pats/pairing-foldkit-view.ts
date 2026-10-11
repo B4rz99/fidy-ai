@@ -2,7 +2,7 @@ import { DateTime, Option } from "effect";
 import type { Mount } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { type PATPairingReview, patScopeCopy } from "@/transport/client";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { PairingMessage as Message, type PairingModel } from "./pairing-model";
 
 type Builder = HtmlBuilder<Message>;

@@ -1,6 +1,6 @@
 import type { Html } from "foldkit/html";
 import { fidyLogoUrl } from "@/ui/brand";
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 import { LaunchButton } from "./registration";
 import { ThemeToggle } from "./theme";
 

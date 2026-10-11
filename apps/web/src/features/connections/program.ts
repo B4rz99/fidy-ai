@@ -8,7 +8,7 @@ import {
   type WebAuthClient,
 } from "@/transport/client";
 import { card } from "@/ui/card";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 
 const Model = Schema.Struct({
   review: Schema.Option(ConnectionContinuationReview),

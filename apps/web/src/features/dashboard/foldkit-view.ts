@@ -3,7 +3,7 @@ import { Option } from "effect";
 import type { Mount } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { type IconData, icon } from "@/ui/icon";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
 import { Message, type Model, canEditDashboard } from "./model";

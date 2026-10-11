@@ -1,5 +1,4 @@
 import { mountProductionApplication } from "@/app/native-program";
-import { parseApiOrigin } from "@/transport/origin";
 import "./index.css";
 
 const root = document.querySelector("#root");
@@ -11,5 +10,5 @@ if (!(root instanceof HTMLElement)) {
 for (const metadata of document.querySelectorAll("[data-fidy-public-meta]")) metadata.remove();
 mountProductionApplication({
   container: root,
-  apiOrigin: parseApiOrigin(import.meta.env.VITE_API_ORIGIN),
+  apiOrigin: import.meta.env.VITE_API_ORIGIN,
 });

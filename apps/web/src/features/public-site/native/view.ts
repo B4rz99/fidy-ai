@@ -1,12 +1,12 @@
 import { Option } from "effect";
 import type { Html } from "foldkit/html";
 import { PublicHome } from "./home";
-import { CookiesPolicy } from "./legal/cookies";
-import { PrivacyPolicy } from "./legal/privacy-policy";
-import { Terms } from "./legal/terms";
+import { CookiesPolicy } from "@/features/public-site/native/legal/cookies";
+import { PrivacyPolicy } from "@/features/public-site/native/legal/privacy-policy";
+import { Terms } from "@/features/public-site/native/legal/terms";
 import { PublicSiteNotFound } from "./not-found";
-import { detailViews } from "./landing/detail-content";
-import { features } from "./landing/feature-content";
+import { detailViews } from "@/features/public-site/native/landing/detail-content";
+import { features } from "@/features/public-site/native/landing/feature-content";
 import { PublicMetadata } from "./metadata";
 import type { ViewConfiguration, ViewContent } from "./model";
 

@@ -2,21 +2,6 @@
 
 ## UI Kit (Minimal Code)
 
-```tsx
-// React
-import { RtkMeeting } from '@cloudflare/realtimekit-react-ui';
-<RtkMeeting authToken="<token>" onLeave={() => console.log('Left')} />
-
-// Angular
-@Component({ template: `<rtk-meeting [authToken]="authToken" (rtkLeave)="onLeave($event)"></rtk-meeting>` })
-export class AppComponent { authToken = '<token>'; onLeave(event: unknown) {} }
-
-// HTML/Web Components
-<script type="module" src="https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui/dist/realtimekit-ui/realtimekit-ui.esm.js"></script>
-<rtk-meeting id="meeting"></rtk-meeting>
-<script>document.getElementById('meeting').authToken = '<token>';</script>
-```
-
 ## UI Components
 
 RealtimeKit provides 133+ pre-built Stencil.js Web Components with framework wrappers:
@@ -58,59 +43,6 @@ await meeting.join();
 
 ### Video Grid & Device Selection
 
-```typescript
-// Video grid
-function VideoGrid({ meeting }) {
-  const [participants, setParticipants] = useState([]);
-  useEffect(() => {
-    const update = () => setParticipants(meeting.participants.joined.toArray());
-    meeting.participants.joined.on('participantJoined', update);
-    meeting.participants.joined.on('participantLeft', update);
-    update();
-    return () => { meeting.participants.joined.off('participantJoined', update); meeting.participants.joined.off('participantLeft', update); };
-  }, [meeting]);
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-    {participants.map(p => <VideoTile key={p.id} participant={p} />)}
-  </div>;
-}
-
-function VideoTile({ participant }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    if (videoRef.current && participant.videoTrack) videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
-  }, [participant.videoTrack]);
-  return <div><video ref={videoRef} autoPlay playsInline muted /><div>{participant.name}</div></div>;
-}
-
-// Device selection
-const devices = await meeting.self.getAllDevices();
-const switchCamera = (deviceId: string) => {
-  const device = devices.find(d => d.deviceId === deviceId);
-  if (device) await meeting.self.setDevice(device);
-};
-```
-
-## React Hooks (Official)
-
-```typescript
-import { useRealtimeKitClient, useRealtimeKitSelector } from '@cloudflare/realtimekit-react-ui';
-
-function MyComponent() {
-  const [meeting, initMeeting] = useRealtimeKitClient();
-  const audioEnabled = useRealtimeKitSelector(m => m.self.audioEnabled);
-  const participantCount = useRealtimeKitSelector(m => m.participants.joined.size());
-
-  useEffect(() => { initMeeting({ authToken: '<token>' }); }, []);
-
-  return <div>
-    <button onClick={() => meeting?.self.enableAudio()}>{audioEnabled ? 'Mute' : 'Unmute'}</button>
-    <span>{participantCount} participants</span>
-  </div>;
-}
-```
-
-**Benefits:** Automatic re-renders, memoized selectors, type-safe
-
 ## Waitlist Handling
 
 ```typescript
@@ -135,25 +67,6 @@ meeting.self.on("roomJoined", () => console.log("Approved and joined"));
 ```
 
 ## Audio-Only Mode
-
-```typescript
-const meeting = new RealtimeKitClient({
-  authToken: '<token>',
-  video: false,  // Disable video
-  audio: true,
-  mediaConfiguration: {
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-  }
-});
-
-// Use audio grid component
-import { RtkAudioGrid } from '@cloudflare/realtimekit-react-ui';
-<RtkAudioGrid meeting={meeting} />
-```
 
 ## Addon System
 

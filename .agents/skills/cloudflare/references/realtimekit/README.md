@@ -42,16 +42,6 @@ curl -X POST 'https://api.cloudflare.com/client/v4/accounts/<account_id>/realtim
 
 ### 2. Client Integration
 
-**React**:
-
-```tsx
-import { RtkMeeting } from "@cloudflare/realtimekit-react-ui";
-
-function App() {
-  return <RtkMeeting authToken="<participant_auth_token>" onLeave={() => {}} />;
-}
-```
-
 **Core SDK**:
 
 ```typescript
@@ -73,10 +63,10 @@ await meeting.join();
 
 ## RealtimeKit vs Realtime SFU
 
-| Choose           | When                                                    |
-| ---------------- | ------------------------------------------------------- |
-| **RealtimeKit**  | Need pre-built UI, fast integration, React/Angular/HTML |
-| **Realtime SFU** | Building from scratch, custom WebRTC, full control      |
+| Choose           | When                                               |
+| ---------------- | -------------------------------------------------- |
+| **RealtimeKit**  | Need pre-built UI, fast integration, HTML          |
+| **Realtime SFU** | Building from scratch, custom WebRTC, full control |
 
 RealtimeKit is built on Realtime SFU but abstracts WebRTC complexity with UI components and SDKs.
 
@@ -84,7 +74,6 @@ RealtimeKit is built on Realtime SFU but abstracts WebRTC complexity with UI com
 
 Need pre-built meeting UI?
 
-- React → `@cloudflare/realtimekit-react-ui` (`<RtkMeeting>`)
 - Angular → `@cloudflare/realtimekit-angular-ui`
 - HTML/Vanilla → `@cloudflare/realtimekit-ui`
 

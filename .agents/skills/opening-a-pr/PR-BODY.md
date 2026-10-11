@@ -47,7 +47,7 @@ submitForm
 - Show UI structure as a component tree, including state and module boundaries that matter:
 
 ```text
-<SessionPage> (apps/example/src/routes/session.tsx)
+<SessionPage> (apps/example/src/routes/session.ts)
   useSessionEvents()
   <SessionToolbar>
     <RunSkillButton> (packages/ui)

@@ -10,13 +10,13 @@ pnpm create cloudflare@latest [name] [-- flags]
 
 ## Core Flags
 
-| Flag               | Values                                                                                        | Description                               |
-| ------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `--type`           | `hello-world`, `web-app`, `demo`, `pre-existing`, `remote-template`                           | Application type                          |
-| `--platform`       | `workers` (default), `pages`                                                                  | Target platform                           |
-| `--framework`      | `next`, `remix`, `astro`, `react-router`, `solid`, `svelte`, `qwik`, `vue`, `angular`, `hono` | Web framework (requires `--type=web-app`) |
-| `--lang`           | `ts`, `js`, `python`                                                                          | Language (for `--type=hello-world`)       |
-| `--ts` / `--no-ts` | -                                                                                             | TypeScript for web apps                   |
+| Flag               | Values                                                                        | Description                               |
+| ------------------ | ----------------------------------------------------------------------------- | ----------------------------------------- |
+| `--type`           | `hello-world`, `web-app`, `demo`, `pre-existing`, `remote-template`           | Application type                          |
+| `--platform`       | `workers` (default), `pages`                                                  | Target platform                           |
+| `--framework`      | `next`, `remix`, `astro`, `solid`, `svelte`, `qwik`, `vue`, `angular`, `hono` | Web framework (requires `--type=web-app`) |
+| `--lang`           | `ts`, `js`, `python`                                                          | Language (for `--type=hello-world`)       |
+| `--ts` / `--no-ts` | -                                                                             | TypeScript for web apps                   |
 
 ## Deployment Flags
 

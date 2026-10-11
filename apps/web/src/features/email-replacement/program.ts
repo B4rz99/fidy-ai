@@ -10,7 +10,7 @@ import {
   type FidyClient,
 } from "@/transport/client";
 import { card } from "@/ui/card";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 
 const Status = Schema.Literals([
   "Editing",

@@ -11,16 +11,16 @@ examples for a newer release match this version.
 upstream `main` at `0cc0d50dab9fc7757f495bd05ae70c4a10fd865c` (package version 0.167.0).
 It is a newer reference, not a replacement for the installed declarations.
 
-| Area | Source |
-| ---- | ------ |
-| Runtime, application and element ownership | `packages/foldkit/src/runtime/` |
-| HTML rendering and scoped DOM resources | `packages/foldkit/src/html/`, `packages/foldkit/src/mount/` |
-| Commands and persistent subscriptions | `packages/foldkit/src/command/`, `packages/foldkit/src/subscription/` |
-| Routing and browser navigation | `packages/foldkit/src/route/`, `packages/foldkit/src/navigation/` |
-| State transitions and submodels | `packages/foldkit/src/update/`, `packages/foldkit/src/submodel/` |
-| Framework test helpers | `packages/foldkit/src/test/` |
-| UI component architecture | `packages/ui/src/`, `examples/ui-showcase/` |
-| Complete programs | `examples/auth/`, `examples/routing/`, `examples/form/`, `examples/kanban/` |
+| Area                                       | Source                                                                      |
+| ------------------------------------------ | --------------------------------------------------------------------------- |
+| Runtime, application and element ownership | `packages/foldkit/src/runtime/`                                             |
+| HTML rendering and scoped DOM resources    | `packages/foldkit/src/html/`, `packages/foldkit/src/mount/`                 |
+| Commands and persistent subscriptions      | `packages/foldkit/src/command/`, `packages/foldkit/src/subscription/`       |
+| Routing and browser navigation             | `packages/foldkit/src/route/`, `packages/foldkit/src/navigation/`           |
+| State transitions and submodels            | `packages/foldkit/src/update/`, `packages/foldkit/src/submodel/`            |
+| Framework test helpers                     | `packages/foldkit/src/test/`                                                |
+| UI component architecture                  | `packages/ui/src/`, `examples/ui-showcase/`                                 |
+| Complete programs                          | `examples/auth/`, `examples/routing/`, `examples/form/`, `examples/kanban/` |
 
 Read the relevant implementation and example before designing a feature. Verify every chosen
 API against `node_modules/foldkit/dist/`. Refresh this checkout using the update-repos skill,

@@ -1,4 +1,4 @@
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 import { PhoneContent } from "./phone-content";
 import { conversations } from "./conversations";
 

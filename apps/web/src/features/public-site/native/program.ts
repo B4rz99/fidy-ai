@@ -3,7 +3,7 @@ import { Command, Runtime, Subscription, type Update } from "foldkit";
 import { Message, Model, isDark } from "./model";
 import { makePublicMounts } from "./mounts";
 import { publicView } from "./view";
-import "../landing/landing.css";
+import "@/features/public-site/landing/landing.css";
 
 const storageKey = "fidy-landing-theme";
 const readTheme = (): Model["theme"] => {

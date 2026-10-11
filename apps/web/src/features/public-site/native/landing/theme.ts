@@ -1,4 +1,9 @@
-import { Message, type ViewConfiguration, type ViewContent, isDark } from "../model";
+import {
+  Message,
+  type ViewConfiguration,
+  type ViewContent,
+  isDark,
+} from "@/features/public-site/native/model";
 
 export const ThemeToggle = ({ html, model }: ViewConfiguration): ViewContent => {
   const dark = isDark(model);

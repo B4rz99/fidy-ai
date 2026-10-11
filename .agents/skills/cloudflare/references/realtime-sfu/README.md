@@ -36,20 +36,20 @@ Cloudflare Realtime SFU: WebRTC infrastructure on global network (310+ cities). 
 
 ## Choose Your Approach
 
-| Approach        | When to Use                                  | Complexity                                     |
-| --------------- | -------------------------------------------- | ---------------------------------------------- |
-| **PartyTracks** | Production apps with device switching, React | Low - Observable-based, handles reconnections  |
-| **Raw API**     | Custom requirements, non-browser, learning   | Medium - Full control, manual WebRTC lifecycle |
-| **RealtimeKit** | End-to-end SDK with UI components            | Lowest - Managed state, React hooks            |
+| Approach        | When to Use                                | Complexity                                     |
+| --------------- | ------------------------------------------ | ---------------------------------------------- |
+| **PartyTracks** | Production apps with device switching      | Low - Observable-based, handles reconnections  |
+| **Raw API**     | Custom requirements, non-browser, learning | Medium - Full control, manual WebRTC lifecycle |
+| **RealtimeKit** | End-to-end SDK with UI components          | Lowest - Managed state, SDK events             |
 
 **Recommendation:** Start with PartyTracks for most production applications. See patterns.md for PartyTracks examples.
 
 ## SFU vs RealtimeKit
 
 - **Realtime SFU:** WebRTC infrastructure (this reference). Build your own signaling, presence, UI.
-- **RealtimeKit:** SDK layer on top of SFU. Includes React hooks, state management, UI components. Part of Cloudflare AI platform.
+- **RealtimeKit:** SDK layer on top of SFU. Includes SDK events, state management, UI components. Part of Cloudflare AI platform.
 
-Use SFU directly when you need custom signaling or non-React framework. Use RealtimeKit for faster development with React.
+Use SFU directly when you need custom signaling or native DOM ownership. Use RealtimeKit for framework-agnostic SDK events.
 
 ## Setup
 

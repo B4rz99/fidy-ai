@@ -1,6 +1,6 @@
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 import { PublicMetadata } from "@/features/public-site/native/metadata";
-import policyHtml from "../../legal/policy.html?raw";
+import policyHtml from "@/features/public-site/legal/policy.html?raw";
 import { PublicPageLayout } from "@/features/public-site/native/page-layout";
 
 /** Renders the immutable privacy policy from its source-controlled legal copy. */

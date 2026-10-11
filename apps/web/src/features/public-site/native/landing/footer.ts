@@ -1,5 +1,5 @@
 import type { Html } from "foldkit/html";
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 import { fidyLogoUrl } from "@/ui/brand";
 
 /** Keeps privacy, support and agent setup discoverable across marketing pages. */

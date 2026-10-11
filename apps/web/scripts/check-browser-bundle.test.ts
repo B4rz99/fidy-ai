@@ -14,20 +14,20 @@ it.effect("rejects Effect SQL runtime modules from the current published distrib
       Effect.gen(function* () {
         yield* Effect.tryPromise(() =>
           Bun.write(
-            join(fixtureRoot, "src/main.tsx"),
+            join(fixtureRoot, "src/main.ts"),
             'import { SqlClient } from "effect/sql";\nexport const Root = SqlClient.SqlClient;\nexport const loadDashboard = () => import("./features/dashboard/fixture");\n'
           )
         );
         yield* Effect.tryPromise(() =>
           Bun.write(
             join(fixtureRoot, "src/features/dashboard/fixture.ts"),
-            'export { LineChart } from "recharts";\n'
+            'export { Draggable } from "@dnd-kit/dom";\n'
           )
         );
         yield* Effect.tryPromise(() =>
           expect(
             checkBrowserBundle({
-              entrypoint: "src/main.tsx",
+              entrypoint: "src/main.ts",
               outdir: join(fixtureRoot, "bundle"),
               webRoot: fixtureRoot,
               workspaceRoot,
@@ -49,20 +49,20 @@ it.effect("rejects a forbidden runtime dependency reachable from the web entrypo
         );
         yield* Effect.tryPromise(() =>
           Bun.write(
-            join(fixtureRoot, "src/main.tsx"),
+            join(fixtureRoot, "src/main.ts"),
             'import { PublicSiteFeature } from "@/features/public-site/feature";\n\nexport const Root = PublicSiteFeature;\n'
           )
         );
         yield* Effect.tryPromise(() =>
           Bun.write(
-            join(fixtureRoot, "src/features/public-site/feature.tsx"),
+            join(fixtureRoot, "src/features/public-site/feature.ts"),
             'import { readFileSync } from "node:fs";\n\nexport const PublicSiteFeature = readFileSync;\n'
           )
         );
         yield* Effect.tryPromise(() =>
           expect(
             checkBrowserBundle({
-              entrypoint: "src/main.tsx",
+              entrypoint: "src/main.ts",
               outdir: join(fixtureRoot, "bundle"),
               webRoot: fixtureRoot,
               workspaceRoot,
@@ -86,7 +86,7 @@ it.effect.each([
         const importPath = `../../../server/cloudflare/${nativePath}`;
         yield* Effect.tryPromise(() =>
           Bun.write(
-            join(fixtureWebRoot, "src/main.tsx"),
+            join(fixtureWebRoot, "src/main.ts"),
             'export type { NativeTransport } from "./transport/native";\nexport const Root = true;\n'
           )
         );
@@ -105,7 +105,7 @@ it.effect.each([
         yield* Effect.tryPromise(() =>
           expect(
             checkBrowserBundle({
-              entrypoint: "src/main.tsx",
+              entrypoint: "src/main.ts",
               outdir: join(fixtureRoot, "bundle"),
               webRoot: fixtureWebRoot,
               workspaceRoot: fixtureRoot,

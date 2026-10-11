@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from "foldkit/html";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { transactionLedger } from "./ledger-view";
 import { Message, type Model } from "./model";
 import { type PanelMount, workspacePanel } from "./panel-view";

@@ -38,7 +38,7 @@ const transportSession = transportPath("session");
 const transportUi = transportPath("ui");
 const transportOwner = featurePath("client-bypass");
 const sourceEntrypoint = sourcePath("entrypoint");
-const sourceMain = "src/main.tsx";
+const sourceMain = "src/main.ts";
 const sourceGeneric = sourcePath("generic-dumping-ground");
 const genericDirectory = `src/utils/${probePrefix}generic-dumping-ground`;
 const sourceCycle = sourcePath("cycle");
@@ -62,7 +62,7 @@ const probes: readonly Probe[] = [
         source: `import { SiblingFeature } from "@/features/${probePrefix}sibling-b/feature";\n\nexport const featureSiblingProbe = SiblingFeature;\n`,
       },
       {
-        path: `${featureSiblingB}/feature.tsx`,
+        path: `${featureSiblingB}/feature.ts`,
         source: 'export const SiblingFeature = "probe" as const;\n',
       },
     ],
@@ -73,7 +73,7 @@ const probes: readonly Probe[] = [
     files: [
       {
         path: `${appInterface}/probe.ts`,
-        source: `import { createPublicSiteRoute } from "@/features/public-site/feature";\n\nexport const featureInterfaceProbe = createPublicSiteRoute;\n`,
+        source: `import { mountPublicSite } from "@/features/public-site/feature";\n\nexport const featureInterfaceProbe = mountPublicSite;\n`,
       },
     ],
   },
@@ -87,8 +87,8 @@ const probes: readonly Probe[] = [
       {
         path: sourceMain,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const mainProbe = createPublicSiteRoute;\n",
+          'import { mountPublicSite } from "@/features/public-site/feature";\n\n' +
+          "export const mainProbe = mountPublicSite;\n",
       },
     ],
   },
@@ -138,8 +138,8 @@ const probes: readonly Probe[] = [
       {
         path: `${featureApplication}/probe.ts`,
         source:
-          'import { WebApplication } from "@/app/application";\n\n' +
-          "export const featureApplicationProbe = WebApplication;\n",
+          'import { mountWebApplication } from "@/app/native-program";\n\n' +
+          "export const featureApplicationProbe = mountWebApplication;\n",
       },
     ],
   },
@@ -153,8 +153,8 @@ const probes: readonly Probe[] = [
       {
         path: `${uiApplication}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const uiApplicationProbe = createPublicSiteRoute;\n",
+          'import { mountPublicSite } from "@/features/public-site/feature";\n\n' +
+          "export const uiApplicationProbe = mountPublicSite;\n",
       },
     ],
   },
@@ -236,8 +236,8 @@ const probes: readonly Probe[] = [
       {
         path: `${sessionFeature}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const sessionFeatureProbe = createPublicSiteRoute;\n",
+          'import { mountPublicSite } from "@/features/public-site/feature";\n\n' +
+          "export const sessionFeatureProbe = mountPublicSite;\n",
       },
     ],
   },
@@ -251,8 +251,8 @@ const probes: readonly Probe[] = [
       {
         path: `${sessionApplication}/probe.ts`,
         source:
-          'import { WebApplication } from "@/app/application";\n\n' +
-          "export const sessionApplicationProbe = WebApplication;\n",
+          'import { mountWebApplication } from "@/app/native-program";\n\n' +
+          "export const sessionApplicationProbe = mountWebApplication;\n",
       },
     ],
   },
@@ -280,8 +280,8 @@ const probes: readonly Probe[] = [
       {
         path: `${transportFeature}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const transportFeatureProbe = createPublicSiteRoute;\n",
+          'import { mountPublicSite } from "@/features/public-site/feature";\n\n' +
+          "export const transportFeatureProbe = mountPublicSite;\n",
       },
     ],
   },
@@ -295,8 +295,8 @@ const probes: readonly Probe[] = [
       {
         path: `${transportApplication}/probe.ts`,
         source:
-          'import { WebApplication } from "@/app/application";\n\n' +
-          "export const transportApplicationProbe = WebApplication;\n",
+          'import { mountWebApplication } from "@/app/native-program";\n\n' +
+          "export const transportApplicationProbe = mountWebApplication;\n",
       },
     ],
   },
@@ -310,8 +310,8 @@ const probes: readonly Probe[] = [
       {
         path: `${transportSession}/probe.ts`,
         source:
-          'import { SessionRegistryProvider } from "@/session/session";\n\n' +
-          "export const transportSessionProbe = SessionRegistryProvider;\n",
+          'import { makeAuthenticationLifetime } from "@/session/lifetime";\n\n' +
+          "export const transportSessionProbe = makeAuthenticationLifetime;\n",
       },
     ],
   },
@@ -417,8 +417,8 @@ const probes: readonly Probe[] = [
       {
         path: `${sourceRelative}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "../../features/public-site/feature";\n\n' +
-          "export const relativeProbe = createPublicSiteRoute;\n",
+          'import { mountPublicSite } from "../../features/public-site/feature";\n\n' +
+          "export const relativeProbe = mountPublicSite;\n",
       },
     ],
   },

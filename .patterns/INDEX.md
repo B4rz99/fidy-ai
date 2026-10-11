@@ -25,7 +25,7 @@ integrity-locked release before using an API. See [foldkit.md](foldkit.md) for t
 | Streams, incremental encoding, backpressure                       | [streams.md](streams.md)                   |
 | Tracing, logging, metrics                                         | [observability.md](observability.md)       |
 | Effect Vitest, TestClock, test layers                             | [testing.md](testing.md)                   |
-| Effect Atom resources and auth-lifetime isolation                | [effect-atom.md](effect-atom.md)           |
+| Effect Atom resources and auth-lifetime isolation                 | [effect-atom.md](effect-atom.md)           |
 | Alchemy and Cloudflare deployment topology                        | [alchemy.md](alchemy.md)                   |
 | dnd-kit drag and drop                                             | [dnd-kit.md](dnd-kit.md)                   |
-| Foldkit runtime, routing, UI, scoped DOM and authentication state  | [foldkit.md](foldkit.md)                   |
+| Foldkit runtime, routing, UI, scoped DOM and authentication state | [foldkit.md](foldkit.md)                   |

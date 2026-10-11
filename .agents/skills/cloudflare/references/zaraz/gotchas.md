@@ -42,15 +42,6 @@ window.addEventListener("hashchange", () => {
 });
 ```
 
-**React fix:**
-
-```javascript
-const location = useLocation();
-useEffect(() => {
-  zaraz.track("pageview", { page_path: location.pathname });
-}, [location]); // Include dependency
-```
-
 ## Performance
 
 **Slow page load:**

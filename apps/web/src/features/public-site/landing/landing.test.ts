@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { cleanupFoldkit, renderFoldkit } from "@/testing/foldkit";
-import { mountPublicSite } from "../native/program";
+import { mountPublicSite } from "@/features/public-site/native/program";
 import { fireEvent, screen, within } from "@testing-library/dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mountConversation, mountPreview } from "./demo-motion";

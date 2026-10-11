@@ -1,6 +1,6 @@
 import type { Html } from "foldkit/html";
-import { Message } from "../model";
-import type { ViewConfiguration, ViewContent } from "../model";
+import { Message } from "@/features/public-site/native/model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 
 export const CorrectionDemo = (configuration: ViewConfiguration): ViewContent => {
   const html = configuration.html;

@@ -1,7 +1,7 @@
 import type { Mount } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { card } from "@/ui/card";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { invalidPairingMessage } from "./controller";
 import { Message, type PairingState } from "./model";
 import { browserLoginPairingWhatsAppUrl } from "./whatsapp-link";

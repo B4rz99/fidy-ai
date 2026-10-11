@@ -56,11 +56,13 @@ it("preserves the invalid connection review without retaining malformed input", 
     attempt: Option.none(),
   });
 });
-it.each([
-  "/missing?privateVerifier=secret",
-  "/funciones/missing",
-  "/oauth/review/invalid",
-  "/app/dashboard/extra",
-])("rejects %s while keeping query data out of the fallback model", (path) => {
-  expect(parse(path)).toEqual({ _tag: "NotFound", path: path.split("?")[0] });
+it.each(["/missing?privateVerifier=secret", "/funciones/missing", "/app/dashboard/extra"])(
+  "rejects %s while keeping query data out of the fallback model",
+  (path) => {
+    expect(parse(path)).toEqual({ _tag: "NotFound", path: path.split("?")[0] });
+  }
+);
+
+it("retains invalid OAuth review paths for the feature to refuse without API work", () => {
+  expect(parse("/oauth/review/invalid")).toEqual({ _tag: "OAuthReview", requestId: "invalid" });
 });

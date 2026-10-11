@@ -2,7 +2,7 @@ import { DateTime, Duration, Option } from "effect";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { type OAuthReview, PATLifetimeDays, patLifetimeDayOptions } from "@/transport/client";
 import { card } from "@/ui/card";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { Message, type Model, editable } from "./review-model";
 
 const formatter = new Intl.DateTimeFormat("es-CO", {

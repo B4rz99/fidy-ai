@@ -4,8 +4,6 @@
 
 **History Change Trigger (Recommended):** Configure in dashboard - no code needed, Zaraz auto-detects route changes.
 
-**Manual tracking (React/Vue/Next.js):**
-
 ```javascript
 // On route change
 zaraz.track("pageview", { page_path: pathname, page_title: document.title });

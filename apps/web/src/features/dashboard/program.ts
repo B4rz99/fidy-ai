@@ -19,8 +19,8 @@ import { type DashboardMounts, dashboardView } from "./foldkit-view";
 import { Message, Model, canEditDashboard, initialModel } from "./model";
 import { makeDashboardDragOwner } from "./native-drag";
 import { bindDashboardResize } from "./native-resize";
-import type { DashboardLayout, DashboardWidget } from "./presentation";
 import { makeDashboardQueryOwner } from "./query-owner";
+import { type DashboardCommands, makeDashboardUpdate } from "./workspace-update";
 
 type Configuration = Readonly<{
   container: HTMLElement;
@@ -28,14 +28,6 @@ type Configuration = Readonly<{
   registry: AtomRegistry.AtomRegistry;
   resources: Layer.Layer<never>;
 }>;
-const findWidget = (layout: DashboardLayout, id: string): Option.Option<DashboardWidget> => {
-  if (layout.kind !== "leaf") {
-    return Option.fromUndefinedOr(
-      layout.children.flatMap(({ node }) => Option.toArray(findWidget(node, id)))[0]
-    );
-  }
-  return layout.widget.widget.id === id ? Option.some(layout.widget.widget) : Option.none();
-};
 const applyEdit = Effect.fn("dashboard.applyCanonicalEdit")(function* (
   client: FidyClient,
   edit: DashboardEdit
@@ -66,120 +58,10 @@ const rejected = (cause: Cause.Cause<unknown>): boolean =>
     (error) =>
       Predicate.isTagged(error, "NotFound") || Predicate.isTagged(error, "ValidationFailed")
   );
-type Commands = Readonly<{
-  edit: (args: Readonly<{ edit: DashboardEdit }>) => Command.Command<Message>;
-  refresh: () => Command.Command<Message>;
-  refreshCatalog: () => Command.Command<Message>;
-}>;
-const requestEdit = ({
-  model,
-  edit,
-  commands,
-}: Readonly<{ model: Model; edit: DashboardEdit; commands: Commands }>): Update.Return<
-  Model,
-  Message
-> =>
-  canEditDashboard(model)
-    ? {
-        model: {
-          ...model,
-          submitting: true,
-          error: "None",
-          renaming: Option.none(),
-          titleDraft: "",
-        },
-        commands: [commands.edit({ edit })],
-      }
-    : { model };
-const saveTitle = (model: Model, commands: Commands): Update.Return<Model, Message> => {
-  if (Option.isNone(model.renaming) || Option.isNone(model.query.view)) return { model };
-  const widget = findWidget(model.query.view.value.layout, model.renaming.value);
-  if (Option.isNone(widget)) return { model };
-  const edit = compileDashboardGesture({
-    kind: "retitle-widget",
-    widget: widget.value,
-    title: model.titleDraft.trim(),
-  });
-  return Result.isFailure(edit)
-    ? { model: { ...model, error: "Rejected" } }
-    : requestEdit({ model, edit: edit.success, commands });
-};
-type Return = Update.Return<Model, Message>;
-type Handlers = { [Tag in Message["_tag"]]: (message: Extract<Message, { _tag: Tag }>) => Return };
-const editorHandlers = (
-  model: Model,
-  commands: Commands
-): Pick<
-  Handlers,
-  "ToggleEditing" | "RequestedEdit" | "Rename" | "ChangedTitle" | "SaveTitle" | "CancelTitle"
-> => ({
-  ToggleEditing: (): Return => ({
-    model: model.submitting
-      ? model
-      : { ...model, editing: !model.editing, renaming: Option.none(), titleDraft: "" },
-  }),
-  RequestedEdit: ({ edit }): Return => requestEdit({ model, edit, commands }),
-  Rename: ({ id, title }): Return => ({
-    model: canEditDashboard(model)
-      ? { ...model, renaming: Option.some(id), titleDraft: title }
-      : model,
-  }),
-  ChangedTitle: ({ title }): Return => ({
-    model: canEditDashboard(model) ? { ...model, titleDraft: title } : model,
-  }),
-  SaveTitle: (): Return => saveTitle(model, commands),
-  CancelTitle: (): Return => ({ model: { ...model, renaming: Option.none(), titleDraft: "" } }),
-});
-const queryHandlers = (
-  model: Model,
-  commands: Commands
-): Pick<
-  Handlers,
-  | "ChangedQuery"
-  | "SavedEdit"
-  | "FailedEdit"
-  | "InvalidEdit"
-  | "Refresh"
-  | "RefreshCatalog"
-  | "Completed"
-  | "Mounted"
-> => ({
-  ChangedQuery: ({ query }): Return => ({ model: { ...model, query } }),
-  SavedEdit: (): Return => ({
-    model: { ...model, submitting: false, query: { ...model.query, waiting: true } },
-    commands: [commands.refresh()],
-  }),
-  FailedEdit: ({ rejected }): Return => ({
-    model: { ...model, submitting: false, error: rejected ? "Rejected" : "Uncertain" },
-  }),
-  InvalidEdit: (): Return => ({ model: { ...model, error: "Rejected" } }),
-  Refresh: (): Return => ({
-    model: model.submitting
-      ? model
-      : {
-          ...model,
-          query: { ...model.query, waiting: true },
-          error: "None",
-          renaming: Option.none(),
-          titleDraft: "",
-        },
-    commands: model.submitting ? [] : [commands.refresh()],
-  }),
-  RefreshCatalog: (): Return => ({ model, commands: [commands.refreshCatalog()] }),
-  Completed: (): Return => ({ model }),
-  Mounted: (): Return => ({ model }),
-});
-const makeUpdate =
-  (commands: Commands): ((model: Model, message: Message) => Return) =>
-  (model, message) =>
-    Message.match<Return>(message, {
-      ...editorHandlers(model, commands),
-      ...queryHandlers(model, commands),
-    });
 const makeCommands = (
   client: FidyClient,
   owner: ReturnType<typeof makeDashboardQueryOwner>
-): Commands => {
+): DashboardCommands => {
   const action = (name: string, run: () => void): (() => Command.Command<Message>) =>
     Command.define(name, {
       messages: [Message.Completed],
@@ -299,7 +181,7 @@ export const mountDashboard = (configuration: Configuration): (() => void) => {
       resources: configuration.resources,
       devTools: false,
       init: (): Update.Return<Model, Message> => ({ model: initialModel }),
-      update: makeUpdate(makeCommands(configuration.client, owner)),
+      update: makeDashboardUpdate(makeCommands(configuration.client, owner)),
       view: (model, html) => {
         editable = canEditDashboard(model);
         return dashboardView({ model, html, mounts, targetLabel: Option.none() });

@@ -1,5 +1,5 @@
 import type { Html, HtmlBuilder } from "foldkit/html";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { type EditorContext, mixedEditorCurrencies } from "./editor-draft";
 import { EditorMessage, type EditorModel } from "./editor-model";
 

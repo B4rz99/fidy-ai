@@ -9,7 +9,7 @@ import {
 } from "@/transport/client";
 import { formatMoney } from "@/transport/money";
 import { card } from "@/ui/card";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 
 const Model = Schema.Struct({
   report: Schema.Option(RecurringDigestReport),

@@ -174,10 +174,7 @@ export const makeWorkspaceUpdate =
       ...filterHandlers(model),
       ...panelHandlers(model),
       ChangedWorking: ({ working }) => ({ model: { ...model, working } }),
-      ChangedCategory: () =>
-        message._tag === "ChangedCategory"
-          ? changeCategory({ model, message, commands })
-          : { model },
+      ChangedCategory: (category) => changeCategory({ model, message: category, commands }),
       FailedCategory: () => ({
         model: {
           ...model,

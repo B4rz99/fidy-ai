@@ -1,5 +1,5 @@
 import type { Html } from "foldkit/html";
-import type { ViewConfiguration, ViewContent } from "../model";
+import type { ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 import { PublicMetadata } from "@/features/public-site/native/metadata";
 import { PublicPageLayout } from "@/features/public-site/native/page-layout";
 

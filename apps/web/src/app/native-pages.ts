@@ -1,24 +1,20 @@
-import { Effect, Option } from "effect";
+import { destinationAfterLogin, mountBrowserPairing } from "@/features/browser-login/feature";
+import { mountProviderAuthentication } from "@/features/provider-authentication/feature";
+import { mountConnectionContinuation } from "@/features/connections/feature";
+import { mountOAuthManagement, mountOAuthReview } from "@/features/oauth-connections/feature";
+import { mountCLIPairing, mountPATManagement } from "@/features/pats/feature";
+import { mountEmailReplacement } from "@/features/email-replacement/feature";
+import { mountBackupRecovery } from "@/features/recovery/feature";
+import { mountRecurringDigest } from "@/features/recurring-digest/feature";
+import { makeEnrollmentGateway, mountSubscription } from "@/features/subscription/feature";
+import { mountTransactions } from "@/features/transactions/feature";
+import { mountHostedAgent } from "@/features/agent/feature";
+import { mountPublicSite } from "@/features/public-site/feature";
+import { Effect, Match, Option } from "effect";
 import { mountElementProgram } from "@/browser/element-program";
-import { mountBrowserPairing } from "@/features/browser-login/program";
-import { destinationAfterLogin } from "@/features/browser-login/destination";
-import { mountProviderAuthentication } from "@/features/provider-authentication/program";
-import { mountConnectionContinuation } from "@/features/connections/program";
-import { mountOAuthManagement } from "@/features/oauth-connections/management-program";
-import { mountOAuthReview } from "@/features/oauth-connections/review-program";
-import { mountCLIPairing } from "@/features/pats/pairing-program";
-import { mountPATManagement } from "@/features/pats/management-program";
-import { mountEmailReplacement } from "@/features/email-replacement/program";
-import { mountBackupRecovery } from "@/features/recovery/program";
-import { mountRecurringDigest } from "@/features/recurring-digest/program";
-import { mountSubscription } from "@/features/subscription/program";
-import { makeEnrollmentGateway } from "@/features/subscription/enrollment-gateway";
-import { mountTransactions } from "@/features/transactions/program";
-import { mountDashboard } from "@/features/dashboard/program";
-import { mountHostedAgent } from "@/features/agent/program";
-import { mountPublicSite } from "@/features/public-site/native/program";
 import type { AuthenticationLifetime } from "@/session/lifetime";
 import { pushUrl } from "foldkit/navigation";
+import { mountDashboardPage } from "./native-dashboard";
 import { type AppRoute, publicPage } from "./native-routes";
 import { type ApplicationOwner, apiResources, authResources } from "./native-lifetime";
 
@@ -84,72 +80,72 @@ const provider = ({
 const authenticatedPage = ({ container, route, lifetime }: PageMount): (() => void) => {
   const client = lifetime.apiClient;
   const resources = apiResources(lifetime);
-  switch (route._tag) {
-    case "Dashboard":
-      return mountDashboard({ container, client, resources, registry: lifetime.registry });
-    case "Transactions":
-      return mountTransactions({ container, client, resources, registry: lifetime.registry });
-    case "PATs":
-      return mountPATManagement({ container, client, resources });
-    case "Email":
-      return mountEmailReplacement({ container, apiClient: client, resources });
-    case "Recovery":
-      return mountBackupRecovery({
+  return Match.value(route).pipe(
+    Match.tag("Dashboard", () => mountDashboardPage({ container, lifetime })),
+    Match.tag("Transactions", () =>
+      mountTransactions({ container, client, resources, registry: lifetime.registry })
+    ),
+    Match.tag("PATs", () => mountPATManagement({ container, client, resources })),
+    Match.tag("Email", () => mountEmailReplacement({ container, apiClient: client, resources })),
+    Match.tag("Recovery", () =>
+      mountBackupRecovery({
         container,
         apiClient: client,
         resources,
         clipboard: Option.none(),
-      });
-    case "Recurring":
-      return mountRecurringDigest({ container, apiClient: client, resources, id: route.id });
-    case "Upgrade":
-      return mountSubscription({
+      })
+    ),
+    Match.tag("Recurring", (route) =>
+      mountRecurringDigest({ container, apiClient: client, resources, id: route.id })
+    ),
+    Match.tag("Upgrade", () =>
+      mountSubscription({
         container,
         client,
         resources,
         gateway: makeEnrollmentGateway(lifetime.enrollmentClient),
-      });
-    default:
-      return (): void => undefined;
-  }
+      })
+    ),
+    Match.orElse(() => (): void => undefined)
+  );
 };
 const authPage = (configuration: PageMount): (() => void) => {
   const { container, route, lifetime } = configuration;
   const client = lifetime.webAuthClient;
   const resources = authResources(lifetime);
-  switch (route._tag) {
-    case "Pair":
-      return pairing({ ...configuration, route });
-    case "Google":
-    case "Microsoft":
-      return provider({ ...configuration, route });
-    case "Agents":
-      return mountOAuthManagement({ container, client, resources, after: route.after });
-    case "OAuthReview":
-      return mountOAuthReview({
+  return Match.value(route).pipe(
+    Match.tag("Pair", (route) => pairing({ ...configuration, route })),
+    Match.tag("Google", "Microsoft", (route) => provider({ ...configuration, route })),
+    Match.tag("Agents", (route) =>
+      mountOAuthManagement({ container, client, resources, after: route.after })
+    ),
+    Match.tag("OAuthReview", (route) =>
+      mountOAuthReview({
         container,
         client,
         resources,
         requestId: route.requestId,
         redirect: (callback) => window.location.assign(callback),
-      });
-    case "Connections":
-      return mountConnectionContinuation({
+      })
+    ),
+    Match.tag("Connections", (route) =>
+      mountConnectionContinuation({
         container,
         client,
         resources,
         attempt: Option.getOrUndefined(route.attempt),
-      });
-    case "CLI":
-      return mountCLIPairing({
+      })
+    ),
+    Match.tag("CLI", (route) =>
+      mountCLIPairing({
         container,
         client: lifetime.apiClient,
         resources: apiResources(lifetime),
         code: Option.getOrUndefined(route.cliCode),
-      });
-    default:
-      return authenticatedPage(configuration);
-  }
+      })
+    ),
+    Match.orElse(() => authenticatedPage(configuration))
+  );
 };
 /** Embeds one independently scoped feature; only the private owner holds its capabilities. */
 export const mountRoutePage = (configuration: PageMount): (() => void) => {

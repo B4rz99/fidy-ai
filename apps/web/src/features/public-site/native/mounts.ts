@@ -1,8 +1,12 @@
 import { Effect, Schema, type Scope } from "effect";
 import { Mount } from "foldkit";
-import { mountMotion } from "../landing/motion";
-import { mountChannels, mountConversation, mountPreview } from "../landing/demo-motion";
-import { mountIndicator } from "../landing/tab-indicator";
+import { mountMotion } from "@/features/public-site/landing/motion";
+import {
+  mountChannels,
+  mountConversation,
+  mountPreview,
+} from "@/features/public-site/landing/demo-motion";
+import { mountIndicator } from "@/features/public-site/landing/tab-indicator";
 import { bindPublicClick, bindPublicDisclosure, bindPublicNavigation } from "./browser";
 import { ClickKind, Message, type Model, type PublicMounts } from "./model";
 

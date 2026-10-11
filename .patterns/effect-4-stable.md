@@ -7,7 +7,7 @@ package version strings alone do not establish identical source.
 
 The npm artifacts include upstream TypeScript source. The frozen lock records integrity;
 #978 compared every new resolved identity with its registry integrity. Current primary
-sources are `node_modules/effect/src`, `node_modules/@effect/atom-react/src` and
+sources are `node_modules/effect/src` and
 `node_modules/alchemy/src` (and its patched `lib` counterpart).
 
 `.repos/effect` is refreshed to upstream main **43416c4142**, which declares 4.0.0 but differs from
@@ -24,7 +24,6 @@ available at `https://unpkg.com/effect@4.0.0/src/<module>.ts` and
 | API / OpenAPI            | `effect/http-api`; `src/http-api/{HttpApi,HttpApiClient,OpenApi}.ts`                            |
 | SQL                      | `effect/sql`; `src/sql/SqlClient.ts`; installed `@effect/sql-d1` source                         |
 | Atom / Reactivity        | `effect/reactivity`; `src/reactivity/{Atom,AtomRegistry,AtomHttpApi,AsyncResult,Reactivity}.ts` |
-| React bindings           | `@effect/atom-react`; `src/{Hooks,RegistryContext}.ts`                                          |
 | Inference                | `effect/ai`; `src/ai/{LanguageModel,Prompt,Response,Tool,Toolkit}.ts`                           |
 | Model / schema compilers | `effect/schema`; `src/schema/Model.ts` and the compiler sources                                 |
 | Arbitrary                | `effect/Arbitrary`; `src/Arbitrary.ts`                                                          |
@@ -51,8 +50,8 @@ available at `https://unpkg.com/effect@4.0.0/src/<module>.ts` and
 - `OptionFromOptionalKey` permits omitted query keys. Stable OpenAPI now describes that
   optionality correctly. A documentation flag must not add a runtime default or authority.
 - `AtomHttpApi` still turns Schema/low-level HTTP failures into defects while retaining declared
-  endpoint failures. The session registry remains the isolation boundary. React registry
-  disposal remains delayed 500 ms; it is not credential revocation. Web transport/lifetime
+  endpoint failures. The session registry remains the isolation boundary. The native application
+  synchronously closes retained features and their registry before replacing an account. Web transport/lifetime
   tests exercise these behaviors against the stable distribution.
 - With Bun, beta.80's `bin/cli.js` launcher forces its package TS config globally and loses
   Fidy's `~` aliases. Invoke its `bin/alchemy.js` entrypoint directly with the pinned Bun;

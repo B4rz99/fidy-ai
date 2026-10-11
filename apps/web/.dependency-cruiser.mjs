@@ -8,7 +8,7 @@ export default {
       severity: "error",
       comment:
         "A feature imported another feature. Features are vertical modules with one public " +
-        "feature.tsx interface; compose them in app/routes.tsx instead.",
+        "feature.ts interface; compose them in app/native-program.ts instead.",
       from: { path: "^src/features/([^/]+)/" },
       to: {
         path: "^src/features/[^/]+/",
@@ -29,23 +29,23 @@ export default {
       severity: "error",
       comment:
         "Application composition reached a feature private module. Import only that feature's " +
-        "feature.tsx interface; its atoms, views, policies, and transport remain private.",
-      from: { path: "^src/(app|main\\.tsx$)" },
+        "feature.ts interface; its atoms, views, policies, and transport remain private.",
+      from: { path: "^src/(app|main\\.ts$)" },
       to: {
         path: "^src/features/",
-        pathNot: "^src/features/[^/]+/feature\\.tsx$",
+        pathNot: "^src/features/[^/]+/feature\\.ts$",
       },
     },
     {
       name: "main-imports-only-application",
       severity: "error",
       comment:
-        "The browser entrypoint may mount only WebApplication. Compose session, transport, and " +
-        "features in app rather than turning main.tsx into a second composition root.",
-      from: { path: "^src/main\\.tsx$" },
+        "The browser entrypoint may mount only the Foldkit application. Compose session, transport, and " +
+        "features in app rather than turning main.ts into a second composition root.",
+      from: { path: "^src/main\\.ts$" },
       to: {
         path: "^src/",
-        pathNot: ["^src/app/application\\.tsx$", "^src/index\\.css$"],
+        pathNot: ["^src/app/native-program\\.ts$", "^src/index\\.css$"],
       },
     },
     {
@@ -69,14 +69,14 @@ export default {
       severity: "error",
       comment:
         "A non-feature module imported a feature implementation. The only public feature " +
-        "surface is feature.tsx.",
+        "surface is feature.ts.",
       from: {
         path: "^src/",
-        pathNot: ["^src/features/", "^src/app/", "^src/main\\.tsx$"],
+        pathNot: ["^src/features/", "^src/app/", "^src/main\\.ts$"],
       },
       to: {
         path: "^src/features/",
-        pathNot: "^src/features/[^/]+/feature\\.tsx$",
+        pathNot: "^src/features/[^/]+/feature\\.ts$",
       },
     },
     {
@@ -178,10 +178,10 @@ export default {
       name: "entrypoint-is-imported",
       severity: "error",
       comment:
-        "The browser entrypoint was imported. main.tsx mounts the application and is not a " +
+        "The browser entrypoint was imported. main.ts mounts the application and is not a " +
         "module boundary for application behavior.",
       from: { path: "^src/" },
-      to: { path: "^src/main\\.tsx$" },
+      to: { path: "^src/main\\.ts$" },
     },
     {
       name: "cycle",
@@ -234,7 +234,7 @@ export default {
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "browser", "default", "types"],
-      extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+      extensions: [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"],
       mainFields: ["module", "browser", "main", "types", "typings"],
     },
   },

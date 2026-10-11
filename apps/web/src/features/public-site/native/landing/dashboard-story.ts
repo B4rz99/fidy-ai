@@ -1,6 +1,6 @@
 import type { Html } from "foldkit/html";
 import type { Mount } from "foldkit";
-import type { Message, ViewConfiguration, ViewContent } from "../model";
+import type { Message, ViewConfiguration, ViewContent } from "@/features/public-site/native/model";
 
 export const DashboardStory = (configuration: ViewConfiguration): ViewContent => {
   const html = configuration.html;

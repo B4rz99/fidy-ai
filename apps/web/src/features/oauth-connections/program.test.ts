@@ -78,9 +78,8 @@ const renderFeature = (
             container,
             client,
             resources,
-            after: Option.map(
-              Option.fromNullOr(location.searchParams.get("after")),
-              OAuthConnectionId.make
+            after: Option.map(Option.fromNullOr(location.searchParams.get("after")), (id) =>
+              OAuthConnectionId.make(id)
             ),
           })
         : mountOAuthReview({

@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import type { Mount } from "foldkit";
 import type { Html, HtmlBuilder } from "foldkit/html";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { categoryIllustration } from "./category-illustration";
 import { filteredTransactions } from "./ledger-presentation";
 import { Message, type Model } from "./model";

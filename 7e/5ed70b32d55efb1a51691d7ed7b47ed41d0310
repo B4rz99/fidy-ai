@@ -1,0 +1,22 @@
+apps/web/src/features/dashboard/FEATURE.md
+  s_6d017cc65783af::t_202be5036f777d 26-29
+  s_6d017cc65783af::t_6c818c0fe33bd9 10-11,13,30-33,45
+apps/server/cloudflare/tokens/pats.test.ts
+  s_6d017cc65783af::t_e5d8ff0cb3b5a8 637,639-640,644,645
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7e5ed70b32d55efb1a51691d7ed7b47ed41d0310",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

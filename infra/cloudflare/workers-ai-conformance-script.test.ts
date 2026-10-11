@@ -20,10 +20,73 @@ const workerReady = (path: string): Promise<void> =>
   );
 
 type Scenario = "readiness-headers" | "post-headers" | "post-body" | "healthy" | "refused";
+const strictReport = {
+  category: "InvalidOutput",
+  allowQuotaDeferral: false,
+  deferred: false,
+  revision: "workers-ai-gemma-4-2026-09-22",
+  prerequisiteFailure: false,
+  trailingJson: "",
+};
+type Report = typeof strictReport;
+type ScriptResult = {
+  report: Report;
+  result: number;
+  output: string;
+  diagnostic: string;
+  gets: number;
+  posts: number;
+  directory: string;
+};
+const failureDiagnostic = (check: string, report: Report): string => {
+  if (report.revision !== strictReport.revision || report.trailingJson !== "") {
+    return "Workers AI conformance failed: check=internal category=UnexpectedFailure\n";
+  }
+  return `Workers AI conformance failed: check=${check} category=${report.category}\n`;
+};
+const assertDiagnostic = (scenario: Scenario, result: ScriptResult, check?: string): void => {
+  const { report, diagnostic, output } = result;
+  if (scenario === "readiness-headers") expect(diagnostic).toContain("readiness request timed out");
+  if (scenario === "post-headers" || scenario === "post-body") {
+    expect(diagnostic).toBe("Workers AI conformance request failed.\n");
+  }
+  if (check !== undefined) {
+    expect(diagnostic).toBe(
+      report.deferred
+        ? `::warning::Workers AI live conformance deferred: check=${check} category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed.\n`
+        : failureDiagnostic(check, report)
+    );
+    expect(output + diagnostic).not.toContain("fixture-private-content");
+  }
+};
+const assertOutcome = Effect.fn(function* (
+  scenario: Scenario,
+  result: ScriptResult,
+  check?: string
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const { report, directory } = result;
+  expect(yield* fs.readDirectory(`${directory}/tmp`)).toEqual([]);
+  if (report.prerequisiteFailure) {
+    expect(result.result).toBe(23);
+    expect(result.gets).toBe(0);
+    expect(result.posts).toBe(0);
+    expect(result.output + result.diagnostic).toBe("");
+    expect(yield* fs.exists(`${directory}/worker.settled.ready`)).toBe(false);
+    return;
+  }
+  const passed = scenario === "healthy" && check === undefined;
+  expect(result.result).toBe(passed || report.deferred ? 0 : 1);
+  expect(result.gets).toBe(1);
+  expect(result.posts).toBe(scenario === "readiness-headers" ? 0 : 1);
+  expect(result.output.includes("Workers AI model conformance passed.")).toBe(passed);
+  assertDiagnostic(scenario, result, check);
+  expect(yield* fs.exists(`${directory}/worker.settled`)).toBe(true);
+});
 const exercise = Effect.fn(function* (
   scenario: Scenario,
   check?: string,
-  category: string = "InvalidOutput"
+  report: Report = strictReport
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Config.String("PATH");
@@ -38,7 +101,10 @@ const exercise = Effect.fn(function* (
   );
   yield* fs.writeFileString(`${directory}/check.sh`, source);
   // Only the prerequisite and launcher are fixtures. curl, jq and deadline enforcement stay real.
-  yield* fs.writeFileString(`${directory}/bin/bun`, "#!/bin/sh\nexit 0\n");
+  yield* fs.writeFileString(
+    `${directory}/bin/bun`,
+    `#!/bin/sh\nexit ${report.prerequisiteFailure ? 23 : 0}\n`
+  );
   yield* fs.writeFileString(
     `${directory}/bin/wrangler`,
     `#!/bin/sh\nexec '${process.execPath}' '${directory}/worker.js'\n`
@@ -93,12 +159,12 @@ const exercise = Effect.fn(function* (
             check === undefined
               ? conforming
               : JSON.stringify({
-                  modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
+                  modelApprovalRevision: report.revision,
                   outcome: "non_conforming",
                   check,
-                  category,
+                  category: report.category,
                   privateContent: "fixture-private-content",
-                }),
+                }) + report.trailingJson,
             { status: scenario === "refused" ? 503 : 200 }
           );
         },
@@ -112,18 +178,25 @@ const exercise = Effect.fn(function* (
   );
   const owned = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const child = Bun.spawn(["bash", `${directory}/check.sh`], {
-        cwd: directory,
-        env: {
-          PATH: `${directory}/bin:${path}`,
-          TMPDIR: `${directory}/tmp`,
-          HOSTED_AI_MODEL: "fixture-model",
-          WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: "1",
-          WORKERS_AI_CONFORMANCE_PORT: String(server.port),
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      const child = Bun.spawn(
+        [
+          "bash",
+          `${directory}/check.sh`,
+          ...(report.allowQuotaDeferral ? ["--allow-quota-deferral"] : []),
+        ],
+        {
+          cwd: directory,
+          env: {
+            PATH: `${directory}/bin:${path}`,
+            TMPDIR: `${directory}/tmp`,
+            HOSTED_AI_MODEL: "fixture-model",
+            WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: "1",
+            WORKERS_AI_CONFORMANCE_PORT: String(server.port),
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      );
       return {
         child,
         stdout: new Response(child.stdout).text(),
@@ -144,20 +217,19 @@ const exercise = Effect.fn(function* (
   const result = yield* wait(() => child.exited).pipe(Effect.timeout("20 seconds"));
   const output = yield* wait(() => stdout);
   const diagnostic = yield* wait(() => stderr);
-  expect(result).toBe(scenario === "healthy" ? 0 : 1);
-  expect(gets).toBe(1);
-  expect(posts).toBe(scenario === "readiness-headers" ? 0 : 1);
-  expect(output.includes("Workers AI model conformance passed.")).toBe(scenario === "healthy");
-  if (scenario === "readiness-headers") expect(diagnostic).toContain("readiness request timed out");
-  if (scenario === "post-headers" || scenario === "post-body") {
-    expect(diagnostic).toBe("Workers AI conformance request failed.\n");
-  }
-  if (check !== undefined) {
-    expect(diagnostic).toBe(`Workers AI conformance failed: check=${check} category=${category}\n`);
-    expect(output + diagnostic).not.toContain("fixture-private-content");
-  }
-  expect(yield* fs.readDirectory(`${directory}/tmp`)).toEqual([]);
-  expect(yield* fs.exists(`${directory}/worker.settled`)).toBe(true);
+  yield* assertOutcome(
+    scenario,
+    {
+      report,
+      result,
+      output,
+      diagnostic,
+      gets,
+      posts,
+      directory,
+    },
+    check
+  );
 }, Effect.scoped);
 
 layer(BunServices.layer, { excludeTestServices: true })((it) => {
@@ -179,9 +251,67 @@ layer(BunServices.layer, { excludeTestServices: true })((it) => {
       exercise("refused", check)
     );
   }
-  it.effect(
-    "reports provider quota without admitting a deployment or exposing private content",
-    () => exercise("refused", "canonical_query", "ProviderQuotaExceeded")
+  it.effect("keeps standalone live verification strict when provider quota is exhausted", () =>
+    exercise("refused", "canonical_query", { ...strictReport, category: "ProviderQuotaExceeded" })
+  );
+  for (const check of ["canonical_query", "structured_es_co"]) {
+    it.effect(`allows a release to defer quota-exhausted ${check} verification explicitly`, () =>
+      exercise("refused", check, {
+        ...strictReport,
+        category: "ProviderQuotaExceeded",
+        allowQuotaDeferral: true,
+        deferred: true,
+      })
+    );
+  }
+  for (const check of ["configuration", "internal"]) {
+    it.effect(`refuses a quota report from ${check}`, () =>
+      exercise("refused", check, {
+        ...strictReport,
+        category: "ProviderQuotaExceeded",
+        allowQuotaDeferral: true,
+      })
+    );
+  }
+  it.effect("refuses quota reports with an unexpected approval revision", () =>
+    exercise("refused", "canonical_query", {
+      ...strictReport,
+      category: "ProviderQuotaExceeded",
+      allowQuotaDeferral: true,
+      revision: "unapproved",
+    })
+  );
+  it.effect("refuses quota reports with an inconsistent HTTP status", () =>
+    exercise("healthy", "canonical_query", {
+      ...strictReport,
+      category: "ProviderQuotaExceeded",
+      allowQuotaDeferral: true,
+    })
+  );
+  for (const trailingJson of ["{}", "not-json"]) {
+    it.effect(`refuses a quota report followed by ${trailingJson}`, () =>
+      exercise("refused", "canonical_query", {
+        ...strictReport,
+        category: "ProviderQuotaExceeded",
+        allowQuotaDeferral: true,
+        trailingJson,
+      })
+    );
+  }
+  it.effect("does not defer a failed deterministic prerequisite or start live inference", () =>
+    exercise("refused", "canonical_query", {
+      ...strictReport,
+      category: "ProviderQuotaExceeded",
+      allowQuotaDeferral: true,
+      prerequisiteFailure: true,
+    })
+  );
+  it.effect("keeps non-quota provider failures blocking releases", () =>
+    exercise("refused", "canonical_query", {
+      ...strictReport,
+      category: "ProviderUnavailable",
+      allowQuotaDeferral: true,
+    })
   );
   it.effect("refuses invalid or raised client deadlines before starting conformance work", () =>
     Effect.gen(function* () {

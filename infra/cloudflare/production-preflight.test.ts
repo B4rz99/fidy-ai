@@ -44,7 +44,9 @@ const fixtureCommand = `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
   *workers.test.ts) gate=worker-boundary ;;
-  *test:workers-ai-conformance) gate=workers-ai ;;
+  *test:workers-ai-conformance*) gate=workers-ai
+    if [[ "$*" != *--allow-quota-deferral ]]; then exit 97; fi
+    ;;
   *build:production) gate=static-artifact ;;
   *check-applied-migration-drift.ts) gate=migration ;;
   *'provider cloudflare bootstrap'*) gate=bootstrap ;;

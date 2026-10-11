@@ -1,3 +1,5 @@
+import { readBudgetContributions } from "../transactions/operations";
+import { observeBrowserCost } from "../browser-cost/operations";
 import {
   evaluateBudgetAlerts,
   prepareDeleteBudget,
@@ -2627,5 +2629,55 @@ it("does not drain another User's pending Budget alerts from a non-request evalu
       expect((yield* Effect.tryPromise(thresholds)).results.map((row) => row.threshold)).toEqual([
         80,
       ]);
+    })
+  ));
+
+it("seeks equal-time Budget pages and uses authoritative facts during projection repair", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const period = deriveCurrentBudgetMonth({
+        now: DateTime.nowUnsafe(),
+        timeZone: IanaTimeZone.make("America/Bogota"),
+      });
+      const occurredAt = DateTime.formatIso(period.from);
+      yield* seedMonthlyMovements(db, {
+        categoryId: category,
+        currency: "COP",
+        count: 513,
+        offset: 0,
+        occurredAt,
+      });
+      const observed = observeBrowserCost(db);
+      const input = {
+        db: observed.database,
+        userId: users[0],
+        categoryId: Transaction.fields.categoryId.make(category),
+        currency: "COP" as const,
+        period,
+        cursor: { occurredAt: "2020-01-01T00:00:00.000Z", transactionId: "" },
+      };
+      const first = Option.getOrThrow(yield* readBudgetContributions(input));
+      expect(first.movements).toHaveLength(512);
+      expect(first.complete).toBe(false);
+      const second = Option.getOrThrow(
+        yield* readBudgetContributions({ ...input, cursor: first.cursor })
+      );
+      expect(second.movements).toHaveLength(1);
+      expect(second.complete).toBe(true);
+      expect(observed.cost().rowsRead).toBeLessThan(1600);
+      expect(
+        Option.getOrThrow(yield* readBudgetContributions({ ...input, userId: users[1] })).movements
+      ).toEqual([]);
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+            .bind(users[0]),
+          db.prepare("DELETE FROM dashboard_projection_leaf WHERE user_id = ?").bind(users[0]),
+        ])
+      );
+      const fallback = Option.getOrThrow(yield* readBudgetContributions(input));
+      expect(fallback).toEqual(first);
     })
   ));

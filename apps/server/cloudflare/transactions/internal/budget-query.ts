@@ -39,37 +39,11 @@ const decodeContribution = (
  * report progress and revision checks. A failed or malformed page never advances its cursor or
  * supplies a partial sum; equal timestamps progress by Transaction identity without skipping rows.
  */
-export const readBudgetContributions = ({
-  db,
-  userId,
-  categoryId,
-  currency,
-  period,
-  cursor,
-}: BudgetContributionQuery): Effect.Effect<Option.Option<BudgetContributionPage>> =>
+export const readBudgetContributions = (
+  input: BudgetContributionQuery
+): Effect.Effect<Option.Option<BudgetContributionPage>> =>
   Effect.gen(function* () {
-    const relation = effectiveTransactionRelation(userId);
-    const result = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`WITH ${relation.sql}
-      SELECT id, amount, currency, category_id, direction, occurred_at FROM effective_transaction
-      WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?
-        AND category_id = ? AND currency = ? AND direction = 'outflow'
-        AND (occurred_at > ? OR (occurred_at = ? AND id > ?))
-      ORDER BY occurred_at, id LIMIT ${contributionPageSize}`)
-        .bind(
-          ...relation.bindings,
-          userId,
-          DateTime.formatIso(period.from),
-          DateTime.formatIso(period.to),
-          categoryId,
-          currency,
-          cursor.occurredAt,
-          cursor.occurredAt,
-          cursor.transactionId
-        )
-        .all()
-    );
+    const result = yield* Effect.tryPromise(() => budgetPageStatement(input).all());
     if (result.results.length > contributionPageSize) return Option.none();
     const rows = Option.all(
       result.results.map((raw) => Schema.decodeUnknownOption(ContributionRow)(raw))
@@ -81,7 +55,55 @@ export const readBudgetContributions = ({
     return Option.some({
       movements: movements.value,
       cursor:
-        last === undefined ? cursor : { occurredAt: last.occurred_at, transactionId: last.id },
+        last === undefined
+          ? input.cursor
+          : { occurredAt: last.occurred_at, transactionId: last.id },
       complete: rows.value.length < contributionPageSize,
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+const budgetPageStatement = ({
+  db,
+  userId,
+  categoryId,
+  currency,
+  period,
+  cursor,
+}: BudgetContributionQuery): D1PreparedStatement => {
+  const relation = effectiveTransactionRelation(userId);
+  const columns = "id, amount, currency, category_id, direction, occurred_at";
+  const fields = columns.split(", ");
+  const encoded = `json_object(${fields.flatMap((field) => [`'${field}'`, field]).join(", ")})`;
+  const decoded = fields.map((field) => `json_extract(value, '$.${field}') AS ${field}`).join(", ");
+  const where = `user_id = ? AND occurred_at < ?
+      AND category_id = ? AND currency = ? AND direction = 'outflow'
+      AND (occurred_at, id) > (?, ?)`;
+  const periodStart = DateTime.formatIso(period.from);
+  const after =
+    cursor.occurredAt < periodStart ? { occurredAt: periodStart, transactionId: "" } : cursor;
+  const bindings = [
+    userId,
+    DateTime.formatIso(period.to),
+    categoryId,
+    currency,
+    after.occurredAt,
+    after.transactionId,
+  ];
+  const ordered = `ORDER BY occurred_at, id LIMIT ${contributionPageSize}`;
+  return (
+    db
+      // Readiness and the selected facts share one snapshot; CASE evaluates only its chosen branch.
+      .prepare(
+        `WITH selected AS (SELECT CASE WHEN EXISTS (
+          SELECT 1 FROM dashboard_projection_state
+          WHERE user_id = ? AND version = 1 AND readiness = 'ready')
+        THEN (SELECT json_group_array(${encoded}) FROM (
+          SELECT ${columns} FROM dashboard_projection_leaf WHERE ${where} ${ordered}))
+        ELSE (WITH ${relation.sql} SELECT json_group_array(${encoded}) FROM (
+          SELECT ${columns} FROM effective_transaction WHERE ${where} ${ordered}))
+        END AS records)
+        SELECT ${decoded} FROM selected, json_each(selected.records) ${ordered}`
+      )
+      .bind(userId, ...bindings, ...relation.bindings, ...bindings)
+  );
+};

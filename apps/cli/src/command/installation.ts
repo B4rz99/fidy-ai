@@ -1,7 +1,9 @@
 import { Option } from "effect";
 
-/** Version of the installable CLI candidate; publishing remains a separate release action. */
-export const cliVersion = "0.1.0";
+declare const FIDY_CLI_VERSION: string;
+
+/** Release builds embed their assigned version; source execution reports the initial candidate version. */
+export const cliVersion = typeof FIDY_CLI_VERSION === "undefined" ? "0.1.0" : FIDY_CLI_VERSION;
 
 /** Public installation diagnostics never open a credential store or make a network request. */
 export const installationOutput = (args: ReadonlyArray<string>): Option.Option<string> => {
@@ -15,6 +17,6 @@ export const installationOutput = (args: ReadonlyArray<string>): Option.Option<s
       "fidy logout      Elimina el acceso guardado en este equipo.\n" +
       "fidy commands    Lista operaciones según los permisos de tu acceso.\n" +
       "fidy GRUPO OPERACIÓN --help    Consulta la entrada de una operación.\n\n" +
-      "Instalación y requisitos: docs/guides/cli-installation.md en B4rz99/fidy-ai.\n"
+      "Instalación: https://fidyapp.com/install.sh (macOS/Linux), https://fidyapp.com/install.ps1 (Windows).\n"
   );
 };

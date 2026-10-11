@@ -117,6 +117,7 @@ export const TelemetryRegistry = {
     "disclosure_not_current",
   ],
   provider: [
+    "github",
     "cloudflare-access",
     "google",
     "microsoft",

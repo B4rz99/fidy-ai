@@ -8,9 +8,13 @@ case "$(uname -s)/$(uname -m)" in
   MINGW*/x86_64|MSYS*/x86_64) target=windows-x64; executable=fidy.exe ;;
   *) echo 'This release supports Linux x64, macOS arm64 and Windows x64.' >&2; exit 1 ;;
 esac
+version="${FIDY_CLI_VERSION:-0.1.0}"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid CLI release version.' >&2; exit 1; }
 output="${1:-dist/cli-release}"
 mkdir -p "$output/$target"
-bun build apps/cli/src/main.ts --compile --minify --outfile "$output/$target/$executable"
+bun build apps/cli/src/main.ts --compile --minify --define "FIDY_CLI_VERSION=\"$version\"" --outfile "$output/$target/$executable"
+bun build apps/cli/src/main.ts --target=bun --minify --define "FIDY_CLI_VERSION=\"$version\"" --outfile "$output/fidy.js" --metafile="$output/cli-inputs.json"
+python3 scripts/cli-release/notices.py "$output"
 "$output/$target/$executable" --version
 "$output/$target/$executable" --help
 cp scripts/cli-release/install.sh scripts/cli-release/install.ps1 "$output/"

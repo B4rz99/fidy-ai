@@ -42,6 +42,8 @@ export type ProductionArtifactRequest = {
 
 const allowedPath = (path: string): boolean =>
   REQUIRED_PATHS.has(path) ||
+  path === "install.sh" ||
+  path === "install.ps1" ||
   path === "robots.txt" ||
   path === "llms.txt" ||
   path === "sitemap.xml" ||

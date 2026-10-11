@@ -1,3 +1,4 @@
+import { cliReleaseHttp } from "~/shell/outbound-http/internal/cli-release-http";
 import { oidcHttp } from "~/shell/outbound-http/internal/oidc-http";
 import { type DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { WompiEnvironment } from "~/shell/secret-material/contract";
@@ -13,6 +14,7 @@ import {
   makeOutboundHttp,
 } from "~/shell/outbound-http/internal/outbound-http";
 import type {
+  CliReleaseHttpService,
   OutboundHttpFailure,
   OutboundHttpRequest,
   OutboundHttpResponse,
@@ -152,3 +154,8 @@ export const makeMicrosoftOutboundHttp = (
     httpClient: HttpClient.HttpClient;
   }>
 ): ProviderOidcHttpService => oidcHttp({ ...input, provider: "microsoft" });
+
+/** Fixed, anonymous GitHub release transport under shared response and telemetry policy. */
+export const makeCliReleaseOutboundHttp = (
+  httpClient: HttpClient.HttpClient
+): CliReleaseHttpService => cliReleaseHttp(httpClient);

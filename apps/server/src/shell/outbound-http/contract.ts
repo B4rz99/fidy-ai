@@ -106,3 +106,8 @@ export type ProviderOidcHttpService = Readonly<{
         }>
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
 }>;
+
+/** Anonymous CLI release metadata transport; requests cannot select coordinates or authority. */
+export type CliReleaseHttpService = Readonly<{
+  readLatest: () => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
+}>;

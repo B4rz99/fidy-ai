@@ -35,6 +35,11 @@ Then read the architecture document for every application the change touches:
 
 ## Source-backed references
 
-For Effect, Alchemy, React, or drag-and-drop work, consult the relevant topic in
+For Effect, Alchemy, Foldkit, or drag-and-drop work, consult the relevant topic in
 [`.patterns/INDEX.md`](.patterns/INDEX.md) before coding. Verify APIs and behavior against its
 upstream checkout rather than memory.
+
+For frontend work, inspect `.repos/foldkit/packages/foldkit/src/` and the matching examples in
+`.repos/foldkit/`. Check APIs against the installed version as described in
+[`.patterns/foldkit.md`](.patterns/foldkit.md). Refresh upstream checkouts with
+[the update-repos skill](.agents/skills/update-repos/SKILL.md).

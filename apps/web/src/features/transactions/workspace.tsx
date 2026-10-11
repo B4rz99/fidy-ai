@@ -1,6 +1,7 @@
 import { Toaster, toast } from "sonner";
 import { useState } from "react";
-import type { JSX, ReactNode } from "react";
+import type { JSX, ReactNode, RefCallback } from "react";
+import { observeContinuation } from "./scroll-continuation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FilterHorizontalIcon } from "@hugeicons/core-free-icons";
 import { Array, DateTime, Option } from "effect";
@@ -532,26 +533,47 @@ const continuationLabels = {
   complete: "",
   loading: "Cargando más transacciones…",
   failure: "Reintentar carga de más transacciones",
-  available: "Cargar más transacciones",
+  available: "Al seguir bajando cargaremos más transacciones.",
 };
 const ContinuationControl = (
   props: WorkspaceProps & Readonly<{ editing: boolean }>
 ): JSX.Element => {
+  const attachContinuation: RefCallback<HTMLDivElement> = (element) => {
+    if (
+      element === null ||
+      props.continuation !== "available" ||
+      props.editing ||
+      !props.editable
+    ) {
+      return;
+    }
+    return observeContinuation({ element, onMore: props.onMore });
+  };
   if (props.continuation === "complete") return <></>;
   return (
-    <div className="flex flex-col items-start gap-2 px-4 py-4">
+    <div
+      ref={attachContinuation}
+      aria-label="Continuación de transacciones"
+      aria-live="polite"
+      aria-busy={props.continuation === "loading"}
+      className="flex flex-col items-start gap-2 px-4 py-4"
+    >
       {props.continuation === "failure" ? (
         <p role="alert">
           No pudimos cargar más transacciones. Conservamos las transacciones cargadas.
         </p>
       ) : null}
-      <Button
-        variant="outline"
-        disabled={props.continuation === "loading" || props.editing || !props.editable}
-        onClick={props.continuation === "failure" ? props.onRetryMore : props.onMore}
-      >
-        {continuationLabels[props.continuation]}
-      </Button>
+      {props.continuation === "failure" ? (
+        <Button
+          variant="outline"
+          disabled={props.editing || !props.editable}
+          onClick={props.onRetryMore}
+        >
+          {continuationLabels[props.continuation]}
+        </Button>
+      ) : (
+        <span>{continuationLabels[props.continuation]}</span>
+      )}
     </div>
   );
 };

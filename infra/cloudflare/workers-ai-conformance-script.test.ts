@@ -20,7 +20,7 @@ const workerReady = (path: string): Promise<void> =>
   );
 
 type Scenario = "readiness-headers" | "post-headers" | "post-body" | "healthy" | "refused";
-const exercise = Effect.fn(function* (scenario: Scenario) {
+const exercise = Effect.fn(function* (scenario: Scenario, check?: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Config.String("PATH");
   const directory = yield* Effect.acquireRelease(
@@ -85,7 +85,18 @@ const exercise = Effect.fn(function* (scenario: Scenario) {
               },
             });
           }
-          return new Response(conforming, { status: scenario === "refused" ? 503 : 200 });
+          return new Response(
+            check === undefined
+              ? conforming
+              : JSON.stringify({
+                  modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
+                  outcome: "non_conforming",
+                  check,
+                  category: "InvalidOutput",
+                  privateContent: "fixture-private-content",
+                }),
+            { status: scenario === "refused" ? 503 : 200 }
+          );
         },
       })
     ),
@@ -137,6 +148,12 @@ const exercise = Effect.fn(function* (scenario: Scenario) {
   if (scenario === "post-headers" || scenario === "post-body") {
     expect(diagnostic).toBe("Workers AI conformance request failed.\n");
   }
+  if (check !== undefined) {
+    expect(diagnostic).toBe(
+      `Workers AI conformance failed: check=${check} category=InvalidOutput\n`
+    );
+    expect(output + diagnostic).not.toContain("fixture-private-content");
+  }
   expect(yield* fs.readDirectory(`${directory}/tmp`)).toEqual([]);
   expect(yield* fs.exists(`${directory}/worker.settled`)).toBe(true);
 }, Effect.scoped);
@@ -153,6 +170,11 @@ layer(BunServices.layer, { excludeTestServices: true })((it) => {
       `settles the native conformance script and owned resources for ${scenario}`,
       () => exercise(scenario),
       25_000
+    );
+  }
+  for (const check of ["canonical_correction", "canonical_deletion", "canonical_date_only"]) {
+    it.effect(`reports the closed ${check} failure without private content`, () =>
+      exercise("refused", check)
     );
   }
   it.effect("refuses invalid or raised client deadlines before starting conformance work", () =>

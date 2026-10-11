@@ -45,7 +45,7 @@ Existing Core failure-isolation tests cover poison positions, lost acknowledgmen
 
 ## XLSX runtime measurements
 
-The protected-trunk workflow runs the binding-free parser against an isolated Cloudflare remote preview, using existing production-environment credentials. It does not bind production D1, R2, Queues or routes. Hosted results are pending this workflow's first completed run.
+The protected-trunk workflow runs the binding-free parser against an isolated Cloudflare remote preview, using existing production-environment credentials. It does not bind production D1, R2, Queues or routes. Hosted run 38141518340 parsed its readiness fixture but failed inspector discovery. The installed Wrangler explicitly disables its inspector when `dev.remote` is true (`ProxyController.inspectorEnabled`). Hosted measurements therefore record parser outcomes, Worker-reported elapsed time for successful parses, and end-to-end request time; sampled CPU and retained heap remain local-only. Hosted results are pending the corrected workflow's first completed run.
 
 Local workerd: 1,000 statement rows parsed and interpreted successfully; 8,000 × 12 synthetic cells accepted within bounds; 20,000 × 12, formatted expansion and numeric expansion fixtures refused. Two concurrent bounded parses succeeded. The 8,000-row synthetic headers produce zero interpreted transactions by design. CDP CPU profiles report sampled V8 work; before/after heap reports retained V8 heap, excluding a guaranteed peak or external-buffer accounting. No 128 MB peak-memory claim is made.
 

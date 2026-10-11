@@ -46,9 +46,10 @@ const measurementBase = Schema.Struct({
   fixture: Schema.String,
   zipBytes: Schema.Int,
   expandedBytes: Schema.Int,
-  sampledV8ActiveMilliseconds: Schema.Finite,
-  retainedHeapBeforeBytes: Schema.Int,
-  retainedHeapAfterBytes: Schema.Int,
+  requestRoundTripMilliseconds: Schema.Finite,
+  sampledV8ActiveMilliseconds: Schema.optional(Schema.Finite),
+  retainedHeapBeforeBytes: Schema.optional(Schema.Int),
+  retainedHeapAfterBytes: Schema.optional(Schema.Int),
 });
 const measurementCodec = Schema.fromJsonString(
   Schema.Union([
@@ -63,7 +64,7 @@ const overlapCodec = Schema.fromJsonString(
     fixture: Schema.String,
     elapsedMilliseconds: Schema.Finite,
     outcomes: Schema.Array(Schema.Literals(["parsed", "rejected"])),
-    retainedHeapAfterBytes: Schema.Int,
+    retainedHeapAfterBytes: Schema.optional(Schema.Int),
   })
 );
 const configCodec = Schema.fromJsonString(
@@ -219,22 +220,36 @@ const measure = Effect.fn(function* (
     (sum, entry) => sum + entry.length,
     0
   );
-  const before = yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
-  const profiled = yield* Effect.tryPromise(() =>
-    profileWorkerRequest({
-      debuggerUrl,
-      signal: Option.none(),
-      sendRequest: (signal) => send(fixture.bytes, signal),
-    })
-  );
+  const before = remote
+    ? undefined
+    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+  const startedAt = performance.now();
+  const profiled = remote
+    ? {
+        response: yield* Effect.tryPromise(() =>
+          send(fixture.bytes, AbortSignal.timeout(cpuLimit))
+        ),
+        cpuMilliseconds: undefined,
+      }
+    : yield* Effect.tryPromise(() =>
+        profileWorkerRequest({
+          debuggerUrl,
+          signal: Option.none(),
+          sendRequest: (signal) => send(fixture.bytes, signal),
+        })
+      );
   const result = decodeResponse(yield* Effect.tryPromise(() => profiled.response.json()));
-  const after = yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
+  const requestRoundTripMilliseconds = performance.now() - startedAt;
+  const after = remote
+    ? undefined
+    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(measurementCodec)({
     baseline,
     runtime: remote ? "cloudflare-preview" : "local-workerd",
     fixture: fixture.name,
     zipBytes: fixture.bytes.length,
     expandedBytes,
+    requestRoundTripMilliseconds,
     ...result,
     sampledV8ActiveMilliseconds: profiled.cpuMilliseconds,
     retainedHeapBeforeBytes: before,
@@ -317,9 +332,9 @@ const overlapRequests = Effect.fn(function* (
   const results = yield* Effect.forEach(responses, (response) =>
     Effect.tryPromise(() => response.json()).pipe(Effect.map(decodeResponse))
   );
-  const retainedHeapAfterBytes = yield* Effect.tryPromise(() =>
-    heapUsage({ debuggerUrl, signal: Option.none() })
-  );
+  const retainedHeapAfterBytes = remote
+    ? undefined
+    : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(overlapCodec)({
     baseline,
     runtime: remote ? "cloudflare-preview" : "local-workerd",
@@ -343,7 +358,7 @@ const program = Effect.gen(function* () {
   yield* buildWorker();
   yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
   yield* waitReady();
-  const debuggerUrl = yield* waitInspector();
+  const debuggerUrl = remote ? "" : yield* waitInspector();
   for (const fixture of yield* fixtures()) yield* measure(fixture, debuggerUrl);
   yield* overlapRequests(
     debuggerUrl,

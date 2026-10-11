@@ -9,6 +9,7 @@ type Metadata = Readonly<{
   path: string;
   description: string;
   noIndex: boolean;
+  ownsDocument: boolean;
 }>;
 const metadataFields = ({
   title,
@@ -56,21 +57,25 @@ const metadataFields = ({
 /** Owns only page metadata created by this mount, releasing it before the next page mounts. */
 export const bindPublicMetadata = (metadata: Metadata): (() => void) => {
   const previousTitle = document.title;
-  document.title = metadata.title;
-  const nodes: Array<HTMLElement> = metadataFields(metadata).map(({ attribute, name, content }) => {
-    const node = document.createElement("meta");
-    node.setAttribute(attribute, name);
-    node.content = content;
-    return node;
-  });
-  const canonical = document.createElement("link");
-  canonical.rel = "canonical";
-  canonical.href = `${origin}${metadata.path}`;
-  nodes.push(canonical);
+  if (metadata.ownsDocument) document.title = metadata.title;
+  const nodes: Array<HTMLElement> = metadataFields(metadata)
+    .filter(({ name }) => metadata.ownsDocument || name !== "og:url")
+    .map(({ attribute, name, content }) => {
+      const node = document.createElement("meta");
+      node.setAttribute(attribute, name);
+      node.content = content;
+      return node;
+    });
+  if (metadata.ownsDocument) {
+    const canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    canonical.href = `${origin}${metadata.path}`;
+    nodes.push(canonical);
+  }
   for (const node of nodes) document.head.append(node);
   return (): void => {
     for (const node of nodes) node.remove();
-    if (document.title === metadata.title) document.title = previousTitle;
+    if (metadata.ownsDocument && document.title === metadata.title) document.title = previousTitle;
   };
 };
 const MetadataMount = Mount.define("PublicPageMetadata", {
@@ -79,6 +84,7 @@ const MetadataMount = Mount.define("PublicPageMetadata", {
     path: Schema.String,
     description: Schema.String,
     noIndex: Schema.Boolean,
+    ownsDocument: Schema.Boolean,
   },
   messages: [Message.Mounted],
   execute: (metadata) =>
@@ -87,7 +93,9 @@ const MetadataMount = Mount.define("PublicPageMetadata", {
       (release) => Effect.sync(release)
     ).pipe(Effect.as(Message.Mounted())),
 });
-export const PublicMetadata = (configuration: ViewConfiguration & Metadata): ViewContent => {
+export const PublicMetadata = (
+  configuration: ViewConfiguration & Omit<Metadata, "ownsDocument">
+): ViewContent => {
   const html = configuration.html;
   return [
     html.span([
@@ -98,7 +106,8 @@ export const PublicMetadata = (configuration: ViewConfiguration & Metadata): Vie
           title: configuration.title,
           path: configuration.path,
           description: configuration.description,
-          noIndex: configuration.noIndex === true,
+          noIndex: configuration.noIndex,
+          ownsDocument: configuration.headOwnership === "Feature",
         })
       ),
     ]),

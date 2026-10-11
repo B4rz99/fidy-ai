@@ -54,6 +54,7 @@ export type PublicMounts = Readonly<{
   disclosure: () => Mount.MountAction<Message>;
 }>;
 export type ViewConfiguration = Readonly<{
+  headOwnership: "Feature" | "Application";
   html: HtmlBuilder<Message>;
   model: Model;
   mounts: PublicMounts;

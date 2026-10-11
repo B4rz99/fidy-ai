@@ -1,53 +1,34 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import {
-  RouterProvider,
-  createMemoryHistory,
-  createRootRouteWithContext,
-  createRoute,
-  createRouter,
-} from "@tanstack/react-router";
-import { Effect, Layer, Option } from "effect";
+import { fireEvent, screen, waitFor } from "@testing-library/dom";
+import { Effect, Layer } from "effect";
 import { HttpClient } from "effect/http";
-import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { SessionRegistryProvider } from "@/session/session";
+import { mountWebApplication } from "@/app/native-program";
+import { makeAuthenticationLifetime } from "@/session/lifetime";
+import { cleanupFoldkit, renderFoldkit } from "@/testing/foldkit";
 import { makeFidyClient, makeHostedTurnClient, makeWebAuthClient } from "@/transport/client";
-import { ProviderAuthenticationFeature } from "./feature";
 
 afterEach(() => {
-  cleanup();
+  cleanupFoldkit();
   vi.restoreAllMocks();
 });
-
-const renderAuthentication = (httpClient: HttpClient.HttpClient): ReturnType<typeof render> => {
+const renderAuthentication = (
+  httpClient: HttpClient.HttpClient
+): ReturnType<typeof renderFoldkit> => {
   const options = {
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
   };
-  const context = {
-    apiClient: makeFidyClient(options),
-    hostedTurnClient: makeHostedTurnClient(options),
-    webAuthClient: makeWebAuthClient(options),
-  };
-  const root = createRootRouteWithContext<typeof context>()();
-  const route = createRoute({
-    getParentRoute: () => root,
-    path: "/auth/google",
-    component: () => (
-      <ProviderAuthenticationFeature provider="google" handoffReference={Option.none()} />
-    ),
-  });
-  const router = createRouter({
-    context,
-    routeTree: root.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/auth/google"] }),
-  });
-  return render(
-    <StrictMode>
-      <SessionRegistryProvider>
-        <RouterProvider router={router} />
-      </SessionRegistryProvider>
-    </StrictMode>
+  history.replaceState({}, "", "/auth/google");
+  return renderFoldkit((container) =>
+    mountWebApplication({
+      container,
+      createLifetime: (onExpired) => ({
+        ...makeAuthenticationLifetime({ apiOrigin: options.apiOrigin, onExpired }),
+        apiClient: makeFidyClient(options),
+        hostedTurnClient: makeHostedTurnClient(options),
+        webAuthClient: makeWebAuthClient(options),
+      }),
+    })
   );
 };
 
@@ -87,5 +68,5 @@ const authenticationLifetime = Effect.gen(function* () {
   expect(started).toHaveBeenCalledTimes(1);
 });
 
-it("survives Strict Mode replay and revokes pending authentication on unmount", () =>
+it("revokes pending authentication on unmount and starts a fresh lifetime on remount", () =>
   Effect.runPromise(authenticationLifetime));

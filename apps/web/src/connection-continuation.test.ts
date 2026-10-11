@@ -1,10 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
-import { type Cause, DateTime, Effect, Layer, Option } from "effect";
+import { fireEvent, screen } from "@testing-library/dom";
+import { cleanupFoldkit, renderFoldkit } from "@/testing/foldkit";
+import { mountWebApplication } from "@/app/native-program";
+import { makeAuthenticationLifetime } from "@/session/lifetime";
+import { type Cause, DateTime, Effect, Layer } from "effect";
 import { HttpClient, type HttpClientError, HttpClientResponse, UrlParams } from "effect/http";
 import { afterEach, expect, it } from "vitest";
-import { createWebRouter } from "@/app/routes";
-import { SessionRegistryProvider } from "@/session/session";
 import { makeFidyClient, makeHostedTurnClient, makeWebAuthClient } from "@/transport/client";
 
 const attempt = "10000000-0000-4000-8000-000000000001";
@@ -49,20 +49,21 @@ const show = (path: string, reply: (method: string, url: string) => Reply): void
     apiOrigin: "https://api.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
   };
-  const router = createWebRouter({
-    apiClient: makeFidyClient(options),
-    webAuthClient: makeWebAuthClient(options),
-    hostedTurnClient: makeHostedTurnClient(options),
-    history: Option.some(createMemoryHistory({ initialEntries: [path] })),
-  });
-  render(
-    <SessionRegistryProvider>
-      <RouterProvider router={router} />
-    </SessionRegistryProvider>
+  history.replaceState({}, "", path);
+  renderFoldkit((container) =>
+    mountWebApplication({
+      container,
+      createLifetime: (onExpired) => ({
+        ...makeAuthenticationLifetime({ apiOrigin: options.apiOrigin, onExpired }),
+        apiClient: makeFidyClient(options),
+        webAuthClient: makeWebAuthClient(options),
+        hostedTurnClient: makeHostedTurnClient(options),
+      }),
+    })
   );
 };
-afterEach(cleanup);
-const wait = <A,>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
+afterEach(cleanupFoldkit);
+const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const loginTestDeadlineMilliseconds = 10000;
 const verifierLength = 43;

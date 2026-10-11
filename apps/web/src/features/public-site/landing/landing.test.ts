@@ -840,7 +840,7 @@ it("moves the feature underline on roving keyboard focus", () =>
     })
   ));
 const mountNative = (page: string): ReturnType<typeof renderFoldkit> =>
-  renderFoldkit((container) => mountPublicSite({ container, page }));
+  renderFoldkit((container) => mountPublicSite({ container, page, headOwnership: "Feature" }));
 const nextPaint: Effect.Effect<void> = Effect.callback((resume) => {
   const frame = requestAnimationFrame(() => queueMicrotask(() => resume(Effect.void)));
   return Effect.sync(() => cancelAnimationFrame(frame));

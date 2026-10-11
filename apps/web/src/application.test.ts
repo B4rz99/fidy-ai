@@ -1,13 +1,12 @@
-import { StrictMode } from "react";
-import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Data, DateTime, Deferred, Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import type * as HttpClientError from "effect/http/HttpClientError";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/dom";
+import { pushUrl } from "foldkit/navigation";
+import { cleanupFoldkit, renderFoldkit } from "@/testing/foldkit";
+import { mountWebApplication } from "@/app/native-program";
+import { makeAuthenticationLifetime } from "@/session/lifetime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createWebRouter } from "@/app/routes";
-import { SessionRegistryProvider } from "@/session/session";
-import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
 import {
   BackupRecoveryCode,
   type FidyClient,
@@ -15,7 +14,6 @@ import {
   type WebAuthClient,
   makeFidyClient,
   makeHostedTurnClient,
-  makeSubscriptionEnrollmentClient,
   makeWebAuthClient,
 } from "@/transport/client";
 
@@ -66,70 +64,85 @@ const waitForEnabled = (name: string): Promise<void> =>
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 
-const fromPromise = <A,>(promise: Promise<A>): Effect.Effect<A, TestPromiseFailure> =>
+const fromPromise = <A>(promise: Promise<A>): Effect.Effect<A, TestPromiseFailure> =>
   Effect.tryPromise({
     try: () => promise,
     catch: (cause) => new TestPromiseFailure({ cause }),
   });
 
+const nextPaint: Effect.Effect<void> = Effect.callback((resume) => {
+  requestAnimationFrame(() => queueMicrotask(() => resume(Effect.void)));
+});
+type TestNavigation = Readonly<{
+  navigate: (configuration: Readonly<{ to: string }>) => Promise<void>;
+}>;
+const mountRoute = (
+  configuration: Readonly<{
+    path: string;
+    apiClient: FidyClient;
+    webAuthClient: WebAuthClient;
+    hostedTurnClient: HostedTurnClient;
+  }>
+): Promise<TestNavigation> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
+      history.replaceState({}, "", configuration.path);
+      renderFoldkit((container) =>
+        mountWebApplication({
+          container,
+          createLifetime: (onExpired) => ({
+            ...makeAuthenticationLifetime({ apiOrigin: "https://api.test.fidyapp.com", onExpired }),
+            apiClient: configuration.apiClient,
+            webAuthClient: configuration.webAuthClient,
+            hostedTurnClient: configuration.hostedTurnClient,
+          }),
+        })
+      );
+      yield* nextPaint;
+      yield* nextPaint;
+      return {
+        navigate: ({ to }) =>
+          Effect.runPromiseWith(context)(
+            pushUrl(to).pipe(Effect.andThen(nextPaint), Effect.andThen(nextPaint))
+          ),
+      };
+    })
+  );
 const renderRoute = (
   path: string,
   apiClient = makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
   webAuthClient: WebAuthClient = makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" })
-): Promise<ReturnType<typeof createWebRouter>> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const router = createWebRouter({
-        apiClient,
-        webAuthClient,
-        hostedTurnClient: makeHostedTurnClient({ apiOrigin: "https://api.test.fidyapp.com" }),
-        history: Option.some(createMemoryHistory({ initialEntries: [path] })),
-      });
-      render(
-        <SessionRegistryProvider>
-          <SubscriptionEnrollmentLifetime
-            makeClient={() =>
-              makeSubscriptionEnrollmentClient({ apiOrigin: "https://api.test.fidyapp.com" })
-            }
-          >
-            <RouterProvider router={router} />
-          </SubscriptionEnrollmentLifetime>
-        </SessionRegistryProvider>
-      );
-      yield* fromPromise(router.load());
-      return router;
-    })
-  );
-
+): Promise<TestNavigation> =>
+  mountRoute({
+    path,
+    apiClient,
+    webAuthClient,
+    hostedTurnClient: makeHostedTurnClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+  });
 const renderHostedRoute = (
   hostedTurnClient: HostedTurnClient,
   webAuthClient: WebAuthClient = makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" })
-): Promise<ReturnType<typeof createWebRouter>> =>
+): Promise<TestNavigation> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const router = createWebRouter({
-        apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
-        webAuthClient,
-        hostedTurnClient,
-        history: Option.some(createMemoryHistory({ initialEntries: ["/settings/email"] })),
-      });
-      render(
-        <SessionRegistryProvider>
-          <StrictMode>
-            <RouterProvider router={router} />
-          </StrictMode>
-        </SessionRegistryProvider>
+      const navigation = yield* fromPromise(
+        mountRoute({
+          path: "/settings/email",
+          hostedTurnClient,
+          webAuthClient,
+          apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+        })
       );
-      yield* fromPromise(router.load());
       fireEvent.click(
         yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
       );
-      return router;
+      return navigation;
     })
   );
 
 const resetApplicationTest = (): void => {
-  cleanup();
+  cleanupFoldkit();
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -512,11 +525,11 @@ describe("backup recovery route", () => {
 
         const navigateToEmail = (): ReturnType<typeof router.navigate> =>
           router.navigate({ to: "/settings/email" });
-        yield* fromPromise(act(navigateToEmail));
+        yield* fromPromise(navigateToEmail());
         expect(screen.queryByText(code)).not.toBeInTheDocument();
         const navigateToRecovery = (): ReturnType<typeof router.navigate> =>
           router.navigate({ to: "/settings/recovery" });
-        yield* fromPromise(act(navigateToRecovery));
+        yield* fromPromise(navigateToRecovery());
         expect(screen.queryByText(code)).not.toBeInTheDocument();
 
         fireEvent.click(
@@ -533,7 +546,7 @@ describe("backup recovery route", () => {
         ).toBeVisible();
         expect(screen.queryByText(code)).not.toBeInTheDocument();
 
-        cleanup();
+        cleanupFoldkit();
         yield* fromPromise(
           renderRoute("/settings/recovery", clients.apiClient, clients.webAuthClient)
         );
@@ -629,7 +642,7 @@ describe("verified-email replacement completion failures", () => {
           yield* fromPromise(screen.findByText("Vincula el navegador de nuevo"))
         ).toBeVisible();
 
-        cleanup();
+        cleanupFoldkit();
         const invalidRequests: Array<string> = [];
         const invalidClients = emailReplacementClients(
           invalidRequests,
@@ -1127,7 +1140,7 @@ const closedReplyTest = (): Promise<void> =>
           proposedStatus
         )
       );
-      yield* fromPromise(act(() => fixture.deferred.promise.then(() => undefined)));
+      yield* fromPromise(fixture.deferred.promise.then(() => undefined));
       expect(fixture.paths).toEqual(["/web/hosted-turns"]);
       fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
       expect(yield* fromPromise(screen.findByText("Respuesta en segundo plano"))).toBeVisible();
@@ -1164,7 +1177,7 @@ const signedOutChatTest = (): Promise<void> =>
         yield* fromPromise(screen.findByRole("heading", { name: "Inicia sesión en Fidy" }))
       ).toBeVisible();
       expect(clients.requests).toContain("/web/session/logout");
-      yield* fromPromise(act(() => router.navigate({ to: "/settings/email" })));
+      yield* fromPromise(router.navigate({ to: "/settings/email" }));
       fireEvent.click(
         yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
       );
@@ -1179,7 +1192,7 @@ const signedOutChatTest = (): Promise<void> =>
           proposedStatus
         )
       );
-      yield* fromPromise(act(() => fixture.deferred.promise.then(() => undefined)));
+      yield* fromPromise(fixture.deferred.promise.then(() => undefined));
       expect(yield* fromPromise(screen.findByLabelText("Mensaje"))).toHaveValue("");
       expect(screen.queryByText("Mensaje privado anterior")).not.toBeInTheDocument();
       expect(screen.queryByText("Respuesta privada anterior")).not.toBeInTheDocument();

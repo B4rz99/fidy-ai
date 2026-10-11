@@ -11,7 +11,7 @@ export const PublicPage = (): JSX.Element => {
         ? undefined
         : mountElementProgram({
             host,
-            mount: (container) => mountPublicSite({ container, page }),
+            mount: (container) => mountPublicSite({ container, page, headOwnership: "Feature" }),
           }),
     [page]
   );

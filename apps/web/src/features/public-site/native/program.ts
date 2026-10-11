@@ -115,9 +115,11 @@ const update = (model: Model, message: Message): Update.Return<Model, Message> =
 export const mountPublicSite = ({
   container,
   page,
+  headOwnership,
 }: Readonly<{
   container: HTMLElement;
   page: string;
+  headOwnership: "Feature" | "Application";
 }>): (() => void) => {
   const queue = Effect.runSync(Queue.unbounded<Message>());
   let active = true;
@@ -157,6 +159,7 @@ export const mountPublicSite = ({
         current = model;
         return publicView({
           model,
+          headOwnership,
           html,
           mounts,
         });

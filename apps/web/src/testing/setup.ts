@@ -44,3 +44,16 @@ if (typeof Element !== "undefined") {
     getAnimations: { configurable: true, value: (): Array<Animation> => [] },
   });
 }
+
+// JSDOM does not implement the browser's native popover methods.
+if (typeof HTMLElement !== "undefined") {
+  Object.defineProperties(HTMLElement.prototype, {
+    hidePopover: { configurable: true, value: (): void => undefined },
+    showPopover: { configurable: true, value: (): void => undefined },
+  });
+}
+
+if (typeof window !== "undefined") {
+  window.scrollTo = (): void => undefined;
+  Element.prototype.scrollIntoView = (): void => undefined;
+}

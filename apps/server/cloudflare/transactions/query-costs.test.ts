@@ -1,3 +1,4 @@
+import { seedHistory } from "./history-growth.test-fixture";
 import { Clock, Config, Data, Effect, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -49,94 +50,6 @@ const setup = (upgrade = false): Effect.Effect<D1Database> =>
     return db;
   });
 
-// Suppress only per-row projection refresh during bulk arrangement. All measured operations run
-// with the complete migrated trigger graph restored, including exact aggregate maintenance.
-const seedHistory = (
-  db: D1Database,
-  {
-    subject,
-    transactionPrefix,
-    count,
-    linked,
-  }: Readonly<{
-    subject: string;
-    transactionPrefix: string;
-    count: number;
-    linked: boolean;
-  }>
-): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    const triggers = yield* Schema.decodeUnknownEffect(
-      Schema.Array(
-        Schema.Struct({
-          name: Schema.String,
-          sql: Schema.String,
-        })
-      )
-    )(
-      (yield* fromTestPromise(() =>
-        db
-          .prepare(`SELECT name, sql FROM sqlite_master WHERE name IN
-    ('dashboard_projection_capture', 'dashboard_projection_link_member')`)
-          .all()
-      )).results
-    ).pipe(Effect.orDie);
-    yield* fromTestPromise(() =>
-      db.batch(triggers.map((trigger) => db.prepare(`DROP TRIGGER ${trigger.name}`)))
-    );
-    yield* fromTestPromise(() =>
-      db
-        .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
-    INSERT INTO transactions(id, user_id, amount, currency, direction, counterparty,
-      category_id, occurred_at, created_at)
-    SELECT ? || printf('%012d', i), ?, '100', 'COP', 'outflow', 'shop', ?,
-      strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || (i * 20) || ' minutes'),
-      strftime('%Y-%m-%dT%H:%M:%fZ', '2020-01-01', '+' || i || ' days') FROM n`)
-        .bind(count, transactionPrefix, subject, categoryId)
-        .run()
-    );
-    if (linked) {
-      yield* fromTestPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
-      INSERT INTO transaction_reconciliation_decisions
-      SELECT ?, ? || printf('%012d', 2 * i - 1), ? || printf('%012d', 2 * i),
-        'linked', ? || printf('%012d', 2 * i - 1), '2026-01-01T00:00:00.000Z' FROM n`)
-          .bind(count / 2, subject, transactionPrefix, transactionPrefix, transactionPrefix)
-          .run()
-      );
-      yield* fromTestPromise(() =>
-        db
-          .prepare(`INSERT INTO transaction_reconciliation_members
-      SELECT user_id, first_transaction_id, first_transaction_id, second_transaction_id
-        FROM transaction_reconciliation_decisions WHERE user_id = ?
-      UNION ALL SELECT user_id, second_transaction_id, first_transaction_id, second_transaction_id
-        FROM transaction_reconciliation_decisions WHERE user_id = ?`)
-          .bind(subject, subject)
-          .run()
-      );
-    }
-    yield* fromTestPromise(() => db.batch(triggers.map((trigger) => db.prepare(trigger.sql))));
-    yield* fromTestPromise(() =>
-      db.batch([
-        db
-          .prepare(
-            "UPDATE dashboard_projection_state SET readiness = 'rebuilding' WHERE user_id = ?"
-          )
-          .bind(subject),
-        db
-          .prepare(`INSERT INTO dashboard_projection_leaf
-      (user_id, id, amount, currency, direction, counterparty, category_id, notes,
-        occurred_at, created_at, revision)
-      SELECT user_id, id, amount, currency, direction, counterparty, category_id, notes,
-        occurred_at, created_at, revision FROM dashboard_effective_source WHERE user_id = ?`)
-          .bind(subject),
-        db
-          .prepare("UPDATE dashboard_projection_state SET readiness = 'ready' WHERE user_id = ?")
-          .bind(subject),
-      ])
-    );
-  });
 const historyPage = (db: D1Database, subject: string): Promise<D1Result> => {
   const page = effectiveHistoryPage({
     userId: subject,
@@ -153,11 +66,13 @@ it("bounds ready effective History pages while preserving authoritative rows", (
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      yield* seedHistory(db, {
+      yield* seedHistory({
+        db,
         subject: userId,
         transactionPrefix: prefix,
         count: 2_000,
         linked: true,
+        linkedFraction: 1,
       });
       const page = yield* fromTestPromise(() => historyPage(db, userId));
       expect(page.results).toHaveLength(101);
@@ -170,17 +85,21 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* seedHistory(db, {
+        yield* seedHistory({
+          db,
           subject: userId,
           transactionPrefix: prefix,
           count: 220,
           linked: true,
+          linkedFraction: 1,
         });
-        yield* seedHistory(db, {
+        yield* seedHistory({
+          db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
           count: 220,
           linked: true,
+          linkedFraction: 1,
         });
         yield* fromTestPromise(() => correctNotes(db, 219));
         const relation = effectiveTransactionRelation(userId);
@@ -267,6 +186,8 @@ const measuringCapacity =
 const historyMeasurement = Schema.fromJsonString(
   Schema.Struct({
     scenario: Schema.Literal("history-growth"),
+    linkedFraction: Schema.Finite,
+    sample: Schema.Int,
     count: Schema.Int,
     foreignCount: Schema.Int,
     linked: Schema.Boolean,
@@ -281,31 +202,47 @@ it.skipIf(!measuringCapacity)(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        for (const linked of [false, true]) {
+        for (const linkedFraction of [0, 0.25, 0.5, 1]) {
+          const linked = linkedFraction > 0;
           for (const count of [200, 2_000, 20_000]) {
             const db = yield* setup();
-            yield* seedHistory(db, { subject: userId, transactionPrefix: prefix, count, linked });
-            yield* seedHistory(db, {
+            yield* seedHistory({
+              db,
+              subject: userId,
+              transactionPrefix: prefix,
+              count,
+              linked,
+              linkedFraction,
+            });
+            yield* seedHistory({
+              db,
               subject: otherUserId,
               transactionPrefix: otherPrefix,
               count,
               linked,
+              linkedFraction,
             });
-            const started = yield* Clock.currentTimeMillis;
-            const page = yield* fromTestPromise(() => historyPage(db, userId));
-            const ended = yield* Clock.currentTimeMillis;
-            expect(page.results).toHaveLength(Math.min(101, linked ? count / 2 : count));
-            const encoded = yield* Schema.encodeEffect(historyMeasurement)({
-              scenario: "history-growth",
-              count,
-              foreignCount: count,
-              linked,
-              rowsReturned: page.results.length,
-              rowsRead: page.meta.rows_read,
-              nativeDurationMs: page.meta.duration,
-              elapsedMs: ended - started,
-            }).pipe(Effect.orDie);
-            yield* Effect.sync(() => process.stdout.write(`INFRA_COST ${encoded}\n`));
+            for (const sample of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+              const started = yield* Clock.currentTimeMillis;
+              const page = yield* fromTestPromise(() => historyPage(db, userId));
+              const ended = yield* Clock.currentTimeMillis;
+              expect(page.results).toHaveLength(
+                Math.min(101, count - Math.floor((count * linkedFraction) / 2))
+              );
+              const encoded = yield* Schema.encodeEffect(historyMeasurement)({
+                scenario: "history-growth",
+                linkedFraction,
+                sample,
+                count,
+                foreignCount: count,
+                linked,
+                rowsReturned: page.results.length,
+                rowsRead: page.meta.rows_read,
+                nativeDurationMs: page.meta.duration,
+                elapsedMs: ended - started,
+              }).pipe(Effect.orDie);
+              yield* Effect.sync(() => process.stdout.write(`INFRA_COST ${encoded}\n`));
+            }
           }
         }
       })
@@ -318,11 +255,13 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* seedHistory(db, {
+        yield* seedHistory({
+          db,
           subject: userId,
           transactionPrefix: prefix,
           count: 2_000,
           linked: true,
+          linkedFraction: 1,
         });
         const before = yield* fromTestPromise(() => historyPage(db, userId));
         expect(before.results).toHaveLength(101);
@@ -331,11 +270,13 @@ it(
           amount: "100",
         });
         expect(before.meta.rows_read).toBeLessThan(60_000);
-        yield* seedHistory(db, {
+        yield* seedHistory({
+          db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
           count: 2_000,
           linked: true,
+          linkedFraction: 1,
         });
         for (const analyzed of [false, true]) {
           if (analyzed) yield* fromTestPromise(() => db.prepare("ANALYZE").run());
@@ -405,17 +346,21 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* seedHistory(db, {
+        yield* seedHistory({
+          db,
           subject: userId,
           transactionPrefix: prefix,
           count: 2_000,
           linked: false,
+          linkedFraction: 1,
         });
-        yield* seedHistory(db, {
+        yield* seedHistory({
+          db,
           subject: otherUserId,
           transactionPrefix: otherPrefix,
           count: 2_000,
           linked: false,
+          linkedFraction: 1,
         });
         const unlinkedPage = yield* fromTestPromise(() => historyPage(db, userId));
         expect(unlinkedPage.results).toHaveLength(101);
@@ -617,11 +562,13 @@ it.skipIf(!measuringCapacity)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* seedHistory(db, {
+        yield* seedHistory({
+          db,
           subject: userId,
           transactionPrefix: prefix,
           count: 20_000,
           linked: true,
+          linkedFraction: 1,
         });
         const expected = (yield* fromTestPromise(() => historyPage(db, userId))).results;
         for (const concurrency of [1, 8, 32]) {
@@ -650,4 +597,73 @@ it.skipIf(!measuringCapacity)(
       })
     ),
   60_000
+);
+
+const sparseHistoryMeasurement = Schema.fromJsonString(
+  Schema.Struct({
+    scenario: Schema.Literal("history-sparse-search"),
+    count: Schema.Int,
+    linked: Schema.Boolean,
+    sample: Schema.Int,
+    rowsRead: Schema.Int,
+    rowsReturned: Schema.Int,
+    elapsedMs: Schema.Finite,
+  })
+);
+it.skipIf(!measuringCapacity)(
+  "measures absent substring search as histories and foreign records grow",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const count of [200, 2000, 20000]) {
+          for (const linked of [false, true]) {
+            const db = yield* setup();
+            yield* seedHistory({
+              db,
+              subject: userId,
+              transactionPrefix: prefix,
+              count,
+              linked,
+              linkedFraction: 1,
+            });
+            yield* seedHistory({
+              db,
+              subject: otherUserId,
+              transactionPrefix: otherPrefix,
+              count,
+              linked,
+              linkedFraction: 1,
+            });
+            const page = effectiveHistoryPage({
+              userId,
+              where:
+                "user_id = ? AND (instr(lower(counterparty),lower(?)) > 0 OR instr(lower(notes),lower(?)) > 0)",
+              bindings: [userId, "absent", "absent"],
+              limit: 101,
+            });
+            for (const sample of [0, 1, 2, 3, 4]) {
+              const started = performance.now();
+              const result = yield* fromTestPromise(() =>
+                db
+                  .prepare(page.sql)
+                  .bind(...page.bindings)
+                  .all()
+              );
+              expect(result.results).toHaveLength(0);
+              const encoded = yield* Schema.encodeEffect(sparseHistoryMeasurement)({
+                scenario: "history-sparse-search",
+                count,
+                linked,
+                sample,
+                rowsRead: result.meta.rows_read,
+                rowsReturned: result.results.length,
+                elapsedMs: performance.now() - started,
+              });
+              yield* Effect.sync(() => process.stdout.write(`INFRA_COST ${encoded}\n`));
+            }
+          }
+        }
+      })
+    ),
+  60000
 );

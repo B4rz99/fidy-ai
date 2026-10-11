@@ -46,6 +46,8 @@ const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
     catch: () => new TestPromiseFailure(),
   }).pipe(Effect.orDie);
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
+const loadUserId = (index: number): string =>
+  users[index] ?? `10000000-0000-4000-8000-${String(51 + index).padStart(12, "0")}`;
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const category = "10000000-0000-4000-8000-000000000016";
 let sequence = 0;
@@ -68,7 +70,8 @@ const replayResponse = (
       (text) =>
         new Response(text, { status: result.status, headers: Object.fromEntries(result.headers) })
     );
-const bearer = (index: number): string => String(index + 1).repeat(43);
+const bearer = (index: number): string =>
+  index < 2 ? String(index + 1).repeat(43) : String(index + 1).padStart(43, "0");
 const request = (index: number, path = "/transactions", body?: object): Request =>
   new Request(`https://core.internal${path}`, {
     method: body === undefined ? "GET" : "POST",
@@ -167,7 +170,7 @@ const platformDatabase = (): Promise<D1Database> =>
   );
 afterAll(() => databases.dispose());
 
-const setup = (platform = false): Promise<D1Database> =>
+const setup = (platform = false, userCount = 2): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       // Every test starts its own deterministic PAT sequence instead of inheriting module order.
@@ -215,7 +218,7 @@ const setup = (platform = false): Promise<D1Database> =>
       );
       const current = yield* Clock.currentTimeMillis;
       yield* Effect.forEach(
-        users,
+        Array.from({ length: userCount }, (_, index) => loadUserId(index)),
         (user, index) =>
           Effect.gen(function* () {
             yield* fromTestPromise(() =>
@@ -233,8 +236,8 @@ const setup = (platform = false): Promise<D1Database> =>
                   "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
                 )
                 .bind(
-                  `10000000-0000-4000-8000-00000000007${index}`,
-                  `ABCD-123${index}`,
+                  `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
+                  `ABCD-${String(1230 + index)}`,
                   verifierDigest,
                   user,
                   current,
@@ -249,8 +252,9 @@ const setup = (platform = false): Promise<D1Database> =>
                   "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 )
                 .bind(
-                  sessions[index],
-                  `10000000-0000-4000-8000-00000000007${index}`,
+                  sessions[index] ??
+                    `10000000-0000-4000-8000-${String(61 + index).padStart(12, "0")}`,
+                  `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
                   user,
                   sessionDigest,
                   current,
@@ -6836,6 +6840,8 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
   ));
 const loadMeasurement =
   Effect.runSync(Config.String("INFRA_PERFORMANCE_LOAD").pipe(Config.withDefault("0"))) === "1";
+const growthMeasurement =
+  Effect.runSync(Config.String("INFRA_PERFORMANCE_GROWTH").pipe(Config.withDefault("0"))) === "1";
 const loadMeasurementCodec = Schema.fromJsonString(
   Schema.Struct({
     operation: Schema.Literal("native.mixed-load"),
@@ -6911,9 +6917,32 @@ const measureMixedRequest = Effect.fn(function* ({
   if (response.status === 201) capturesByUser[user] = (capturesByUser[user] ?? 0) + 1;
   return response.status;
 });
+const mixedLoadScenarios = (
+  userCount: number
+): ReadonlyArray<
+  Readonly<{ concurrency: number; requestCount: number; paceMilliseconds: number }>
+> =>
+  growthMeasurement
+    ? [
+        {
+          concurrency: Math.max(2, userCount),
+          requestCount: userCount * 24,
+          paceMilliseconds: 1050,
+        },
+        { concurrency: 32, requestCount: userCount * 128, paceMilliseconds: 0 },
+      ]
+    : [
+        { concurrency: 2, requestCount: 32, paceMilliseconds: 1050 },
+        ...[2, 8, 32].map((concurrency) => ({
+          concurrency,
+          requestCount: 128,
+          paceMilliseconds: 0,
+        })),
+      ];
+
 // Opt-in characterization uses the real public/Core adapters and native SQLite coordinator.
 // Every scenario starts isolated state; wall time includes local transport and admission.
-it.runIf(loadMeasurement)(
+it.runIf(loadMeasurement || growthMeasurement)(
   "measures sustained mixed public requests and hot-User coordination",
   () =>
     Effect.runPromise(
@@ -6921,17 +6950,10 @@ it.runIf(loadMeasurement)(
         vi.useRealTimers();
         measuringLoad = true;
         const millisecondsPerSecond = 1000;
-        for (const userCount of [1, 2]) {
-          for (const scenario of [
-            { concurrency: 2, requestCount: 32, paceMilliseconds: 1050 },
-            ...[2, 8, 32].map((concurrency) => ({
-              concurrency,
-              requestCount: 128,
-              paceMilliseconds: 0,
-            })),
-          ]) {
+        for (const userCount of growthMeasurement ? [1, 8, 32] : [1, 2]) {
+          for (const scenario of mixedLoadScenarios(userCount)) {
             const { concurrency, requestCount, paceMilliseconds } = scenario;
-            const db = yield* fromTestPromise(() => setup(true));
+            const db = yield* fromTestPromise(() => setup(true, userCount));
             const instance = instances.at(-1);
             if (instance === undefined) throw new Error("Missing native runtime");
             const namespace = yield* fromTestPromise(() =>
@@ -6995,7 +7017,7 @@ it.runIf(loadMeasurement)(
                   countRows(
                     db,
                     "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-                    users[user] ?? ""
+                    loadUserId(user)
                   )
                 )
               ).toBe(capturesByUser[user]);
@@ -7034,5 +7056,5 @@ it.runIf(loadMeasurement)(
         )
       )
     ),
-  180_000
+  300_000
 );

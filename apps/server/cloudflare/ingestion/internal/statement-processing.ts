@@ -20,7 +20,10 @@ import {
   unmappedStatementRow,
 } from "../../../src/core/ingestion/operations";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
-import { prepareStatementCapture } from "../../transactions/operations";
+import {
+  prepareStatementCapture,
+  statementCaptureCapacityExceeded,
+} from "../../transactions/operations";
 import { StatementProcessingUnavailable } from "../contract";
 import { newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
@@ -59,6 +62,7 @@ class StatementProcessingDependencyFailed extends Data.TaggedError(
 )<{
   readonly cause: unknown;
 }> {}
+class StatementCaptureBudgetExceeded extends Data.TaggedError("StatementCaptureBudgetExceeded") {}
 class StatementReviewBudgetExceeded extends Data.TaggedError("StatementReviewBudgetExceeded") {}
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, StatementProcessingDependencyFailed> =>
   Effect.tryPromise({
@@ -267,7 +271,7 @@ const commitOutcome = ({
   id: string;
   activeArgs: ReadonlyArray<string | number>;
   statements: ReadonlyArray<D1PreparedStatement>;
-}>): Effect.Effect<void, StatementProcessingDependencyFailed> =>
+}>): Effect.Effect<void, StatementProcessingDependencyFailed | StatementCaptureBudgetExceeded> =>
   attempt(() =>
     work.db.batch([
       ...statements,
@@ -287,11 +291,23 @@ const commitOutcome = ({
       VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
       ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`),
     ])
-  ).pipe(Effect.asVoid);
+  ).pipe(
+    Effect.mapError((error) =>
+      work.result.outcome === "accepted" && statementCaptureCapacityExceeded(error.cause)
+        ? new StatementCaptureBudgetExceeded()
+        : error
+    ),
+    Effect.asVoid
+  );
 
 const rowOutcome = (
   work: RowWork
-): Effect.Effect<void, StatementProcessingDependencyFailed | StatementReviewBudgetExceeded> =>
+): Effect.Effect<
+  void,
+  | StatementProcessingDependencyFailed
+  | StatementCaptureBudgetExceeded
+  | StatementReviewBudgetExceeded
+> =>
   Effect.gen(function* () {
     const { db, userId, submissionId, row, result } = work;
     const existing = yield* attempt(() =>
@@ -420,7 +436,10 @@ const finalizeChunk = ({
   rows: ReadonlyArray<ParsedStatementRow>;
 }>): Effect.Effect<
   void,
-  StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
+  | StatementProcessingDependencyFailed
+  | StatementCaptureBudgetExceeded
+  | StatementReviewBudgetExceeded
+  | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const chunk = rows.slice(0, statementChunkSize);
@@ -524,7 +543,10 @@ const advanceSubmission = (
   parsed: ParsedStatement & Readonly<{ totalRows: number }>
 ): Effect.Effect<
   "continue" | "completed",
-  StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
+  | StatementProcessingDependencyFailed
+  | StatementCaptureBudgetExceeded
+  | StatementReviewBudgetExceeded
+  | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeEffect(Schema.toType(Schema.Array(ParsedStatementRow)))(
@@ -610,6 +632,13 @@ export const processStatementSubmission = (
           userId: input.userId,
           submissionId: input.submissionId,
           reason: error.reason,
+        }).pipe(Effect.as("completed" as const)),
+      StatementCaptureBudgetExceeded: () =>
+        markFailed({
+          db: input.DB,
+          userId: input.userId,
+          submissionId: input.submissionId,
+          reason: "resource-limit",
         }).pipe(Effect.as("completed" as const)),
       StatementReviewBudgetExceeded: () =>
         markFailed({

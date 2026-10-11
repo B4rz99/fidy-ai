@@ -31,8 +31,12 @@ const workflow = (db: D1Database): Workflow => ({
           db.prepare("SELECT id FROM blocked WHERE id = ?").bind(id).first()
         );
         if (blocked !== null) throw new Error("Synthetic provider outage");
+        const current = yield* Clock.currentTimeMillis;
         yield* Effect.tryPromise(() =>
-          db.prepare("INSERT INTO handoffs VALUES (?)").bind(id).run()
+          db
+            .prepare("INSERT INTO handoffs(id,completed_at_ms) VALUES (?,?)")
+            .bind(id, current)
+            .run()
         );
         return instance(id);
       })
@@ -65,7 +69,21 @@ export default {
             .all()
         );
         const work = yield* Schema.decodeUnknownEffect(Schema.Array(Work))(rows.results);
-        yield* Effect.tryPromise(() => environment.WORK.sendBatch(work.map((body) => ({ body }))));
+        yield* Effect.tryPromise(() =>
+          environment.DB.prepare(
+            "UPDATE statement_submissions SET queued_at_ms=coalesce(queued_at_ms,?) WHERE status IN ('queued','processing')"
+          )
+            .bind(now)
+            .run()
+        );
+        const maximumOfferBatch = 100;
+        for (let offset = 0; offset < work.length; offset += maximumOfferBatch) {
+          yield* Effect.tryPromise(() =>
+            environment.WORK.sendBatch(
+              work.slice(offset, offset + maximumOfferBatch).map((body) => ({ body }))
+            )
+          );
+        }
         return new Response(null, { status: 202 });
       })
     ),

@@ -1,5 +1,7 @@
 # Infrastructure performance coverage — 2026-10-10
 
+Current reconciliation: [expanded capacity assessment](infra-capacity-assessment-2026-10-11.md). This document preserves its original dated cohort and status; the newer report supersedes deployment and remaining-work statements.
+
 Assessment revision: `2284a6e8a3a43bb6a45ea905fe855cd711d5cc87`, with local candidate changes.
 This inventory distinguishes measured work, functional proof and unavailable production evidence.
 It is not a claim that every endpoint or traffic mix has been benchmarked.

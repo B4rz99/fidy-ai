@@ -3391,6 +3391,7 @@ it("continues the canonical history beyond its first bounded page without losing
       const db = yield* fromTestPromise(() => setup());
       const createdAt = DateTime.formatIso(DateTime.nowUnsafe());
       const previous = "2025-01-09T12:00:00.000Z";
+      const period = "from=2025-01-01T00%3A00%3A00.000Z&to=2025-02-01T00%3A00%3A00.000Z";
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 101)
@@ -3412,15 +3413,18 @@ it("continues the canonical history beyond its first bounded page without losing
           transactionSession({ request: request(0), db, current: transactionNow() })
         )
       );
-      const first = yield* browseTransactions({
-        db,
-        selection: {
-          request: request(0, "/transactions?direction=outflow"),
-          subject,
-          search: false,
-          id: Option.none(),
-        },
-      });
+      const first = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com/transactions?direction=outflow&${period}`, {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+            },
+          })
+        )
+      );
+      expect(first.status).toBe(200);
       const Page = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(
@@ -3428,7 +3432,12 @@ it("continues the canonical history beyond its first bounded page without losing
             tool: Schema.String,
             hint: Schema.String,
             args: Schema.Struct({
-              query: Schema.Struct({ cursor: Schema.String, direction: Schema.String }),
+              query: Schema.Struct({
+                cursor: Schema.String,
+                direction: Schema.String,
+                from: Schema.String,
+                to: Schema.String,
+              }),
             }),
           })
         ),
@@ -3438,22 +3447,27 @@ it("continues the canonical history beyond its first bounded page without losing
       ).pipe(Effect.orDie);
       expect(page.data).toHaveLength(100);
       expect(page.next).toHaveLength(1);
-      expect(page.next[0]?.tool).toBe("transactions.listTransactions");
-      const cursor = page.next[0]?.args.query.cursor;
-      if (cursor === undefined) throw new Error("Missing continuation");
-      expect(page.next[0]?.args.query.direction).toBe("outflow");
-      const second = yield* browseTransactions({
-        db,
-        selection: {
-          request: request(
-            0,
-            `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`
-          ),
-          subject,
-          search: false,
-          id: Option.none(),
-        },
-      });
+      const continuation = Option.getOrThrow(Option.fromUndefinedOr(page.next[0]));
+      expect(continuation.tool).toBe("transactions.listTransactions");
+      const cursor = continuation.args.query.cursor;
+      expect(continuation.args.query.direction).toBe("outflow");
+      expect(continuation.args.query.from).toBe("2025-01-01T00:00:00.000Z");
+      expect(continuation.args.query.to).toBe("2025-02-01T00:00:00.000Z");
+      const second = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request(
+            `https://api.fidyapp.com/transactions?direction=outflow&${period}&cursor=${encodeURIComponent(cursor)}`,
+            {
+              headers: {
+                origin: "https://app.fidyapp.com",
+                cookie: `__Host-fidy_session=${bearer(0)}`,
+              },
+            }
+          )
+        )
+      );
+      expect(second.status).toBe(200);
       const remainder = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => second.json())
       ).pipe(Effect.orDie);
@@ -3470,6 +3484,7 @@ it("continues the canonical history beyond its first bounded page without losing
           search: true,
         },
       });
+      expect(search.status).toBe(200);
       const SearchPage = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(

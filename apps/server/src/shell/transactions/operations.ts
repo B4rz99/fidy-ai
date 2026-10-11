@@ -3,10 +3,11 @@ import { NextOperations } from "~/shell/public-http/contract";
 import {
   checkpointSuggestedOperations,
   freePatCaller,
+  getCanonicalOperationInput,
   suggestOperation,
 } from "~/shell/canonical-operations/operations";
 
-/** An authorized, typed canonical continuation for the next bounded Transaction history page. */
+/** A bounded Transaction history continuation that preserves valid URL filters and rejects undeclared inputs. */
 export const nextTransactionPage = ({
   cursor,
   filters,
@@ -22,7 +23,13 @@ export const nextTransactionPage = ({
         suggestOperation({
           tool: operation,
           hint: "Continue browsing the next page of your FinancialRecord.",
-          args: Option.some({ query: { ...filters, cursor } }),
+          args: Option.some(
+            Schema.decodeSync(getCanonicalOperationInput(operation), { onExcessProperty: "error" })(
+              {
+                query: { ...filters, cursor },
+              }
+            )
+          ),
         }),
       ],
       caller: freePatCaller(["read"]),

@@ -28,15 +28,22 @@ jobs:
         uses: ./.github/actions/bun-runtime
       - name: Install locked workspace
         run: bash scripts/install-workspace.sh --ignore-scripts
-      - name: Measure synthetic XLSX in an isolated Cloudflare preview
+      - name: Measure synthetic XLSX under the account CPU allowance
         run: |
           set -o pipefail
           bun scripts/document-parsing/xlsx-work.ts --remote | tee "$RUNNER_TEMP/xlsx-performance.jsonl"
+      - name: Measure synthetic XLSX in an isolated SQLite Durable Object
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          bun scripts/document-parsing/xlsx-work.ts --remote --durable | tee "$RUNNER_TEMP/xlsx-durable-performance.jsonl"
       - name: Preserve synthetic measurements
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hosted-xlsx-performance
-          path: ${{ runner.temp }}/xlsx-performance.jsonl
+          path: |
+            ${{ runner.temp }}/xlsx-performance.jsonl
+            ${{ runner.temp }}/xlsx-durable-performance.jsonl
           if-no-files-found: error
           retention-days: 7

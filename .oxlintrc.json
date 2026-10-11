@@ -314,6 +314,7 @@
         "apps/server/cloudflare/ingestion/email-worker.ts",
         "apps/server/cloudflare/documents/document-extraction-worker.ts",
         "apps/server/cloudflare/documents/document-parsing-worker.ts",
+        "apps/server/cloudflare/documents/durable-parser-proof-worker.ts",
         "apps/server/cloudflare/documents/protected-document-worker.ts",
         "apps/server/cloudflare/public-worker.ts",
         "apps/server/cloudflare/resource-admission/resource-admission-worker.fixture.ts",

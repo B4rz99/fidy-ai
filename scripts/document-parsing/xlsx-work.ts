@@ -10,6 +10,9 @@ import { type HostedWorkerProof, hostedWorkerProof } from "./hosted-worker";
 
 const baseline = process.argv.includes("--baseline");
 const remote = process.argv.includes("--remote");
+const durable = process.argv.includes("--durable");
+if (durable && !remote) throw new Error("Durable proof requires hosted mode");
+const hostedRuntime = durable ? "cloudflare-durable-object" : "cloudflare-worker";
 if (baseline && remote) throw new Error("Hosted proof only supports the current bounded parser");
 const port = 8795;
 const proofNameSuffixLength = 8;
@@ -20,6 +23,11 @@ const localRequestTimeout = 1000;
 const remoteRequestTimeout = 5000;
 const requestTimeout = remote ? remoteRequestTimeout : localRequestTimeout;
 const cpuLimit = 30000;
+const smallStatementRows = 8;
+const mediumStatementRows = 32;
+const largerStatementRows = 128;
+const thousandStatementRows = 1000;
+const malformedFileStatus = 422;
 const sharedLength = 4096;
 const formattedRows = 512;
 const boundedRows = 8000;
@@ -39,13 +47,18 @@ const workResult = Schema.Struct({
   acceptedRows: Schema.Int,
   reviewRows: Schema.Int,
 });
+const parsedOnly = Schema.Struct({
+  outcome: Schema.Literal("parsed"),
+  rowCount: Schema.Int,
+  elapsedMilliseconds: Schema.Finite,
+});
 const rejected = Schema.Struct({ outcome: Schema.Literal("rejected"), reason: Schema.String });
 const runtimeFailure = Schema.Struct({
   outcome: Schema.Literal("runtime-failure"),
   httpStatus: Schema.Int,
   cloudflareErrorCode: Schema.optional(Schema.String),
 });
-const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, rejected]));
+const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, parsedOnly, rejected]));
 const readProofResponse = Effect.fn(function* (response: Response) {
   if (response.headers.get("content-type")?.includes("application/json") === true) {
     return decodeResponse(yield* Effect.tryPromise(() => response.json()));
@@ -61,7 +74,7 @@ const readProofResponse = Effect.fn(function* (response: Response) {
 
 const measurementBase = Schema.Struct({
   baseline: Schema.Boolean,
-  runtime: Schema.Literals(["local-workerd", "cloudflare-worker"]),
+  runtime: Schema.Literals(["local-workerd", "cloudflare-worker", "cloudflare-durable-object"]),
   fixture: Schema.String,
   zipBytes: Schema.Int,
   expandedBytes: Schema.Int,
@@ -73,6 +86,7 @@ const measurementBase = Schema.Struct({
 const measurementCodec = Schema.fromJsonString(
   Schema.Union([
     Schema.Struct({ ...measurementBase.fields, ...workResult.fields }),
+    Schema.Struct({ ...measurementBase.fields, ...parsedOnly.fields }),
     Schema.Struct({ ...measurementBase.fields, ...rejected.fields }),
     Schema.Struct({ ...measurementBase.fields, ...runtimeFailure.fields }),
   ])
@@ -80,7 +94,7 @@ const measurementCodec = Schema.fromJsonString(
 const overlapCodec = Schema.fromJsonString(
   Schema.Struct({
     baseline: Schema.Boolean,
-    runtime: Schema.Literals(["local-workerd", "cloudflare-worker"]),
+    runtime: Schema.Literals(["local-workerd", "cloudflare-worker", "cloudflare-durable-object"]),
     fixture: Schema.String,
     elapsedMilliseconds: Schema.Finite,
     outcomes: Schema.Array(Schema.Literals(["parsed", "rejected", "runtime-failure"])),
@@ -92,9 +106,23 @@ const configCodec = Schema.fromJsonString(
     name: Schema.String,
     main: Schema.String,
     compatibility_date: Schema.String,
-    limits: Schema.Struct({ cpu_ms: Schema.Int }),
+    limits: Schema.optionalKey(Schema.Struct({ cpu_ms: Schema.Int })),
     workers_dev: Schema.Boolean,
     preview_urls: Schema.Boolean,
+    durable_objects: Schema.optionalKey(
+      Schema.Struct({
+        bindings: Schema.Array(Schema.Struct({ name: Schema.String, class_name: Schema.String })),
+      })
+    ),
+    migrations: Schema.optionalKey(
+      Schema.Array(
+        Schema.Struct({
+          tag: Schema.String,
+          new_sqlite_classes: Schema.optionalKey(Schema.Array(Schema.String)),
+          deleted_classes: Schema.optionalKey(Schema.Array(Schema.String)),
+        })
+      )
+    ),
   })
 );
 const writeWorkbook = (book: WorkBook): Uint8Array => {
@@ -163,6 +191,10 @@ const fixtures = Effect.fn(function* () {
           Effect.map((bytes) => ({ name, bytes }))
         )
     )),
+    ...[1, smallStatementRows, mediumStatementRows, largerStatementRows].map((rows) => ({
+      name: `ordinary-${rows}-rows`,
+      bytes: synthetic({ rows, text: "Cafe", formatted: false }),
+    })),
     {
       name: "different-amounts",
       bytes: synthetic({
@@ -185,15 +217,15 @@ const fixtures = Effect.fn(function* () {
   ];
 });
 const send = (
-  bytes: Uint8Array,
+  payload: Readonly<{ bytes: Uint8Array; path: "/statement" | "/statement-work" }>,
   signal: AbortSignal,
   target: Option.Option<HostedWorkerProof>
 ): Promise<Response> => {
   const input = {
     method: "POST" as const,
     port,
-    path: "/statement-work",
-    body: bytes,
+    path: payload.path,
+    body: payload.bytes,
     headers: {},
     signal,
   };
@@ -208,18 +240,26 @@ const send = (
 const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
   const reply = yield* Effect.tryPromise(() =>
     send(
-      synthetic({ rows: 1, text: "Cafe", formatted: false }),
+      {
+        bytes: remote ? new Uint8Array() : synthetic({ rows: 1, text: "Cafe", formatted: false }),
+        path: "/statement-work",
+      },
       AbortSignal.timeout(requestTimeout),
       target
     )
   );
   yield* Effect.try(() => {
-    if (!reply.ok) throw new Error("XLSX preview is not ready");
+    if (remote ? reply.status !== malformedFileStatus : !reply.ok) {
+      throw new Error("XLSX proof is not ready");
+    }
   });
   const value = yield* Effect.tryPromise(() => reply.json());
   yield* Effect.try(() => {
     const parsed = decodeResponse(value);
-    if (parsed.outcome !== "parsed" || parsed.rowCount !== 1) {
+    const ready = remote
+      ? parsed.outcome === "rejected" && parsed.reason === "malformed-file"
+      : parsed.outcome === "parsed" && parsed.rowCount === 1;
+    if (!ready) {
       throw new Error("XLSX readiness fixture did not parse");
     }
   });
@@ -248,7 +288,7 @@ const waitInspector = Effect.fn(function* () {
   throw new Error("XLSX proof inspector did not become ready");
 });
 const measure = Effect.fn(function* (
-  fixture: Readonly<{ name: string; bytes: Uint8Array }>,
+  fixture: Readonly<{ name: string; bytes: Uint8Array; path: "/statement" | "/statement-work" }>,
   debuggerUrl: string,
   target: Option.Option<HostedWorkerProof>
 ) {
@@ -263,7 +303,7 @@ const measure = Effect.fn(function* (
   const profiled = remote
     ? {
         response: yield* Effect.tryPromise(() =>
-          send(fixture.bytes, AbortSignal.timeout(cpuLimit), target)
+          send(fixture, AbortSignal.timeout(cpuLimit), target)
         ),
         cpuMilliseconds: undefined,
       }
@@ -271,7 +311,7 @@ const measure = Effect.fn(function* (
         profileWorkerRequest({
           debuggerUrl,
           signal: Option.none(),
-          sendRequest: (signal) => send(fixture.bytes, signal, target),
+          sendRequest: (signal) => send(fixture, signal, target),
         })
       );
   const result = yield* readProofResponse(profiled.response);
@@ -281,7 +321,7 @@ const measure = Effect.fn(function* (
     : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(measurementCodec)({
     baseline,
-    runtime: remote ? "cloudflare-worker" : "local-workerd",
+    runtime: remote ? hostedRuntime : "local-workerd",
     fixture: fixture.name,
     zipBytes: fixture.bytes.length,
     expandedBytes,
@@ -303,14 +343,25 @@ const previousParser = baseline
       { cwd: root }
     ).stdout.toString()
   : "";
-const proofConfig = (name: string): string =>
+const proofConfig = (name: string, retiring = false): string =>
   Schema.encodeSync(configCodec)({
     name,
     main: "worker.js",
     compatibility_date: "2026-09-08",
-    limits: { cpu_ms: cpuLimit },
+    ...(remote ? {} : { limits: { cpu_ms: cpuLimit } }),
     workers_dev: remote,
     preview_urls: false,
+    ...(durable
+      ? {
+          durable_objects: {
+            bindings: retiring ? [] : [{ name: "PARSER_PROOF", class_name: "XlsxParserProof" }],
+          },
+          migrations: [
+            { tag: "created", new_sqlite_classes: ["XlsxParserProof"] },
+            ...(retiring ? [{ tag: "retired", deleted_classes: ["XlsxParserProof"] }] : []),
+          ],
+        }
+      : {}),
   });
 const buildWorker = Effect.fn(function* (name: string) {
   const built = yield* Effect.tryPromise(() =>
@@ -328,7 +379,11 @@ const buildWorker = Effect.fn(function* (name: string) {
             },
           ]
         : [],
-      entrypoints: [`${root}/apps/server/cloudflare/documents/document-parsing-worker.ts`],
+      entrypoints: [
+        durable
+          ? `${root}/apps/server/cloudflare/documents/durable-parser-proof-worker.ts`
+          : `${root}/apps/server/cloudflare/documents/document-parsing-worker.ts`,
+      ],
       target: "browser",
       outdir: directory,
       naming: "worker.js",
@@ -364,8 +419,8 @@ const overlapRequests = Effect.fn(function* (
   const startedAt = performance.now();
   const responses = yield* Effect.tryPromise(() =>
     Promise.all([
-      send(overlap, AbortSignal.timeout(cpuLimit), target),
-      send(overlap, AbortSignal.timeout(cpuLimit), target),
+      send({ bytes: overlap, path: "/statement-work" }, AbortSignal.timeout(cpuLimit), target),
+      send({ bytes: overlap, path: "/statement-work" }, AbortSignal.timeout(cpuLimit), target),
     ])
   );
   const results = yield* Effect.forEach(responses, readProofResponse);
@@ -374,7 +429,7 @@ const overlapRequests = Effect.fn(function* (
     : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));
   const output = yield* Schema.encodeEffect(overlapCodec)({
     baseline,
-    runtime: remote ? "cloudflare-worker" : "local-workerd",
+    runtime: remote ? hostedRuntime : "local-workerd",
     fixture: name,
     elapsedMilliseconds: performance.now() - startedAt,
     outcomes: results.map((result) => result.outcome),
@@ -386,6 +441,29 @@ const releaseWorker = Effect.fn(function* (worker: ReturnType<typeof Bun.spawn>)
   worker.kill();
   yield* Effect.tryPromise(() => worker.exited);
 }, Effect.orDie);
+const measureParserOnly = Effect.fn(function* (
+  debuggerUrl: string,
+  target: Option.Option<HostedWorkerProof>
+) {
+  for (const rows of [
+    1,
+    smallStatementRows,
+    mediumStatementRows,
+    largerStatementRows,
+    thousandStatementRows,
+    boundedRows,
+  ]) {
+    yield* measure(
+      {
+        name: `parse-only-ordinary-${rows}-rows`,
+        path: "/statement",
+        bytes: synthetic({ rows, text: "Cafe", formatted: false }),
+      },
+      debuggerUrl,
+      target
+    );
+  }
+});
 const program = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(directory, { recursive: true });
@@ -398,14 +476,29 @@ const program = Effect.gen(function* () {
   const suffix = remote
     ? (yield* (yield* Crypto.Crypto).randomUUIDv4).slice(0, proofNameSuffixLength)
     : "local";
-  yield* buildWorker(`xlsx-proof-${suffix}`);
+  const name = `xlsx-proof-${suffix}`;
+  yield* buildWorker(name);
   const target = remote
-    ? Option.some(yield* hostedWorkerProof(directory))
+    ? Option.some(
+        yield* hostedWorkerProof({
+          directory,
+          retirement: durable
+            ? Option.some({
+                config: proofConfig(name, true),
+                worker:
+                  "export default { fetch() { return new Response(null, { status: 404 }); } };",
+              })
+            : Option.none(),
+        })
+      )
     : Option.none<HostedWorkerProof>();
   if (!remote) yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
   yield* waitReady(target);
   const debuggerUrl = remote ? "" : yield* waitInspector();
-  for (const fixture of yield* fixtures()) yield* measure(fixture, debuggerUrl, target);
+  yield* measureParserOnly(debuggerUrl, target);
+  for (const fixture of yield* fixtures()) {
+    yield* measure({ ...fixture, path: "/statement-work" }, debuggerUrl, target);
+  }
   yield* overlapRequests(
     debuggerUrl,
     synthetic({ rows: 1000, text: " ".repeat(sharedLength - 4) + "Cafe", formatted: false }),

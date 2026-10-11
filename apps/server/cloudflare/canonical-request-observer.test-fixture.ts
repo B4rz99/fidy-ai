@@ -1,13 +1,13 @@
 import { Effect, Option, Schema } from "effect";
 import { beforeEach, vi } from "vitest";
-import coreWorker, { type makeCoreWorker } from "../../apps/server/cloudflare/core-worker";
-import * as core from "../../apps/server/cloudflare/core-worker";
-import { observeBrowserCost } from "../../apps/server/cloudflare/browser-cost/operations";
-import { operationCatalog } from "../../apps/server/src/shell/api";
-import { matchesRouteTemplate } from "../../apps/server/src/shell/public-http/operations";
-import * as canonical from "../../apps/server/cloudflare/canonical-operations/operations";
-import * as insights from "../../apps/server/cloudflare/insights/operations";
-import * as browserLogin from "../../apps/server/cloudflare/browser-login/operations";
+import coreWorker, { type makeCoreWorker } from "./core-worker";
+import * as core from "./core-worker";
+import { observeBrowserCost } from "./browser-cost/operations";
+import { operationCatalog } from "../src/shell/api";
+import { matchesRouteTemplate } from "../src/shell/public-http/operations";
+import * as canonical from "./canonical-operations/operations";
+import * as insights from "./insights/operations";
+import * as browserLogin from "./browser-login/operations";
 
 type Worker = ReturnType<typeof makeCoreWorker>;
 type Database = Parameters<Worker["fetch"]>[1]["DB"];

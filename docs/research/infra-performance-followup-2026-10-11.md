@@ -4,7 +4,7 @@
 
 All 68 declared canonical operations were assessed. Successful native fixture measurements cover 66 operations after measuring the deletion owner newly installed on trunk. `identity.updateUserPreferences` and `transactions.listSourceAttestations` have no installed canonical owner. Their feature performance cannot be measured; implementing those features is outside infrastructure optimization. No result here establishes production traffic capacity or a production latency SLO.
 
-The adjacent JSON preserves separate cohorts and cost boundaries. Direct Core D1 excludes coordinator and provider work; held-owner D1 excludes transport admission. Do not add these overlapping observations. Host-process CPU excludes workerd and is not Worker CPU. Integration fixtures include adversarial cases and variable local contention. Full-suite measurements are exploratory because the observer was refreshed during that run; focused cohorts are the repeatable evidence.
+The adjacent JSON preserves separate cohorts and cost boundaries. Direct Core D1 excludes coordinator and provider work; held-owner D1 excludes transport admission. Do not add these overlapping observations. Host-process CPU excludes workerd and is not Worker CPU. Integration fixtures include adversarial cases and variable local contention. The initial full-suite pilot is exploratory because its observer was refreshed during execution. A separate pinned full-suite run and the focused cohorts provide repeatable evidence.
 
 ## Shipped database optimization
 
@@ -15,6 +15,8 @@ PR #1194 removed unused trigram FTS and replaced pending-review scans with an at
 PR #1201 splits additional routes with TanStack Router preload-aware lazy loading and serves full-glyph WOFF2 fonts. Three alternating cold contexts per version used Pixel 5 emulation, 4× CPU slowdown, 1.6 Mbps download, 750 Kbps upload and 150 ms latency. Local gzip delivery, cache disabled, external requests blocked. Downloaded response bodies: 890,043 → 638,558 bytes (28.3% reduction). Median lab LCP: 3,216 → 2,440 ms (24.1% reduction). All six samples and conditions are in the JSON. This is not production Core Web Vitals.
 
 Web verification: 418 unit tests in UTC, 78 browser tests with 3 existing skips; typecheck and build passed. Font glyph mapping, metrics and glyph order match the original fonts. Router preload preserves recovery disclosure cleanup.
+
+Pinned native verification at `93fdd16c2`: 133 files and 1,772 tests passed, with 1 file and 15 tests skipped (521.84 seconds). The final observer logic is unchanged; its file moved into the server TypeScript project for correct type-aware lint resolution. The web PR merged as `6f5c3bf70b1d576269a2508d00cb7df56357f035`; deployment run 38139226567 refused at the exhausted AI gate before promotion.
 
 ## Mixed and hot-User load
 
@@ -47,7 +49,7 @@ Local workerd: 1,000 statement rows parsed and interpreted successfully; 8,000 �
 
 ## Production verification
 
-Earlier release verification recorded successful promotion, smoke, drift and retirement gates; D1 schema and capacity-counter triggers matched the release. Post-release D1 p95 was 0.91 ms in ENAM, observed Durable Object sample maximum was 20.54 MB, active Queues were empty and no CPU, memory or fatal errors were observed. Traffic was low development/CI/smoke/canary volume. The follow-up web deployment and hosted parser run still require their final recorded evidence. Three newer production runs (38136020384, 38137254930, 38138130053) failed the live Workers AI gate before promotion. A direct synthetic API check confirmed HTTP 429 / REST error 4006: the account exhausted its daily free allocation of 10,000 neurons. Read-only access works. Repeated retries cannot resolve this daily limit; promotion needs the quota reset or an account billing change. The gate remains intact. The 11:50–12:20 UTC observation has D1 p95 0.95 ms, coordinator memory sample maximum 20.82 MB and zero coordinator resource errors. Scheduled invocations include 33 successes and one exception at 12:06:10 UTC; its cause is unresolved, so this is not reported as a clean window.
+Earlier release verification recorded successful promotion, smoke, drift and retirement gates; D1 schema and capacity-counter triggers matched the release. Post-release D1 p95 was 0.91 ms in ENAM, observed Durable Object sample maximum was 20.54 MB, active Queues were empty and no CPU, memory or fatal errors were observed. Traffic was low development/CI/smoke/canary volume. The follow-up web deployment and hosted parser run still require their final recorded evidence. Three newer production runs (38136020384, 38137254930, 38138130053) failed the live Workers AI gate before promotion. A direct synthetic API check confirmed HTTP 429 / REST error 4006: the account exhausted its daily free allocation of 10,000 neurons. Read-only access works. Repeated retries cannot resolve this daily limit; promotion needs the quota reset or an account billing change. The gate remains intact. The 11:50–12:20 UTC observation has D1 p95 0.95 ms, coordinator memory sample maximum 20.82 MB and zero coordinator resource errors. Scheduled invocations include 33 successes and one exception at 12:06:10 UTC; structured logs identify the failed activity as `async.health`. The provider/root cause is unresolved, so this is not reported as a clean window.
 
 ## References
 
@@ -93,7 +95,7 @@ Earlier release verification recorded successful promotion, smoke, drift and ret
 | `transactions.linkTransactions`                | measured successful native fixture                                            |
 | `transactions.unlinkTransactions`              | measured successful native fixture                                            |
 | `transactions.updateTransaction`               | measured successful native fixture                                            |
-| `transactions.deleteTransaction`               | declared operation without installed canonical owner; performance unavailable |
+| `transactions.deleteTransaction`               | measured successful native fixture                                            |
 | `transactions.listSourceAttestations`          | declared operation without installed canonical owner; performance unavailable |
 | `ingestion.enableEmailForwarding`              | measured successful native fixture                                            |
 | `ingestion.getEmailForwarding`                 | measured successful native fixture                                            |

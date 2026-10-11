@@ -33,6 +33,18 @@
           "p95Milliseconds": 4.447584000000006,
           "maxRowsRead": 9,
           "maxRowsWritten": 4
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 4.226709000000028,
+          "p95Milliseconds": 4.226709000000028,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 4
         }
       ]
     },
@@ -83,6 +95,18 @@
           "p95Milliseconds": 12.103959000000032,
           "maxRowsRead": 6,
           "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 3,
+          "statuses": [200, 401],
+          "p50Milliseconds": 7.678041000000007,
+          "p95Milliseconds": 12.205624999999998,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 3
         }
       ]
     },
@@ -105,6 +129,30 @@
           "p95Milliseconds": 63.808583,
           "maxRowsRead": 551,
           "maxRowsWritten": 35
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 3.6761249999999563,
+          "p95Milliseconds": 3.6761249999999563,
+          "maxRowsRead": 34,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 41,
+          "successfulSamples": 13,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 35.22674999999981,
+          "p95Milliseconds": 73.5578750000002,
+          "maxRowsRead": 551,
+          "maxRowsWritten": 35
         }
       ]
     },
@@ -120,6 +168,18 @@
           "statuses": [200, 401],
           "p50Milliseconds": 21.673833999999943,
           "p95Milliseconds": 94.71275000000014,
+          "maxRowsRead": 48,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 6,
+          "statuses": [200, 401],
+          "p50Milliseconds": 22.039457999999286,
+          "p95Milliseconds": 37.53125,
           "maxRowsRead": 48,
           "maxRowsWritten": 32
         }
@@ -139,6 +199,30 @@
           "p95Milliseconds": 127.77149999999983,
           "maxRowsRead": 20,
           "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 16,
+          "successfulSamples": 11,
+          "statuses": [201, 400, 404],
+          "p50Milliseconds": 14.2040420000003,
+          "p95Milliseconds": 29.82400000000007,
+          "maxRowsRead": 39,
+          "maxRowsWritten": 13
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 19,
+          "successfulSamples": 11,
+          "statuses": [201, 400, 401, 403, 404],
+          "p50Milliseconds": 35.60795899999994,
+          "p95Milliseconds": 61.25912500000004,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
         }
       ]
     },
@@ -156,6 +240,30 @@
           "p95Milliseconds": 35.837125000000015,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 404],
+          "p50Milliseconds": 11.456707999999935,
+          "p95Milliseconds": 15.229417000000012,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 2,
+          "statuses": [200, 404],
+          "p50Milliseconds": 27.925834000000123,
+          "p95Milliseconds": 30.738749999999982,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
         }
       ]
     },
@@ -171,6 +279,30 @@
           "statuses": [200, 403, 404],
           "p50Milliseconds": 23.95641700000033,
           "p95Milliseconds": 24.772041000000172,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 3,
+          "successfulSamples": 2,
+          "statuses": [200, 404],
+          "p50Milliseconds": 6.802292000000307,
+          "p95Milliseconds": 7.907375000000002,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 7
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 2,
+          "statuses": [200, 403, 404],
+          "p50Milliseconds": 21.824291999999787,
+          "p95Milliseconds": 25.80683299999987,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
         }
@@ -234,6 +366,30 @@
           "p95Milliseconds": 83.63325000000077,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 37,
+          "successfulSamples": 35,
+          "statuses": [201, 400],
+          "p50Milliseconds": 42.090291000000434,
+          "p95Milliseconds": 74.60299999999916,
+          "maxRowsRead": 48,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 42,
+          "successfulSamples": 37,
+          "statuses": [201, 400, 403],
+          "p50Milliseconds": 59.68445799999972,
+          "p95Milliseconds": 183.98225000000002,
+          "maxRowsRead": 225,
+          "maxRowsWritten": 34
         }
       ]
     },
@@ -251,6 +407,30 @@
           "p95Milliseconds": 40.001625000000786,
           "maxRowsRead": 75,
           "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 7,
+          "successfulSamples": 3,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 35.433750000000146,
+          "p95Milliseconds": 41.86608400000114,
+          "maxRowsRead": 75,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 503],
+          "p50Milliseconds": 6.046542000000045,
+          "p95Milliseconds": 6.046542000000045,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 6
         }
       ]
     },
@@ -268,6 +448,30 @@
           "p95Milliseconds": 31.92949999999837,
           "maxRowsRead": 44,
           "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 4,
+          "statuses": [200, 403, 404],
+          "p50Milliseconds": 20.425875000000815,
+          "p95Milliseconds": 33.026459000000614,
+          "maxRowsRead": 44,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 5.833375000001979,
+          "p95Milliseconds": 5.833375000001979,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 6
         }
       ]
     },
@@ -283,6 +487,30 @@
           "statuses": [200, 400, 404, 503],
           "p50Milliseconds": 45.13829200000009,
           "p95Milliseconds": 47.61041699999987,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 32.211999999999534,
+          "p95Milliseconds": 38.256500000001324,
+          "maxRowsRead": 46,
+          "maxRowsWritten": 15
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 44.993624999999156,
+          "p95Milliseconds": 53.79279200000019,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
         }
@@ -302,6 +530,30 @@
           "p95Milliseconds": 23.851333000000068,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 1,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 14.518540999999459,
+          "p95Milliseconds": 14.518540999999459,
+          "maxRowsRead": 36,
+          "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 403, 404, 503],
+          "p50Milliseconds": 27.384874999999738,
+          "p95Milliseconds": 27.384874999999738,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
         }
       ]
     },
@@ -319,6 +571,30 @@
           "p95Milliseconds": 53.997833000000355,
           "maxRowsRead": 11449,
           "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 15,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 403, 503],
+          "p50Milliseconds": 38.81895900000018,
+          "p95Milliseconds": 45.05291700000089,
+          "maxRowsRead": 11449,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 10.53966600000058,
+          "p95Milliseconds": 10.53966600000058,
+          "maxRowsRead": 31,
+          "maxRowsWritten": 6
         }
       ]
     },
@@ -334,6 +610,18 @@
           "statuses": [200],
           "p50Milliseconds": 23.69104100000004,
           "p95Milliseconds": 34.62970899999982,
+          "maxRowsRead": 537,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 4,
+          "statuses": [200],
+          "p50Milliseconds": 22.089500000000044,
+          "p95Milliseconds": 41.24400000000003,
           "maxRowsRead": 537,
           "maxRowsWritten": 33
         }
@@ -353,6 +641,30 @@
           "p95Milliseconds": 53.53120899999976,
           "maxRowsRead": 23,
           "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 41,
+          "successfulSamples": 36,
+          "statuses": [200, 400, 404, 429, 503],
+          "p50Milliseconds": 15.424833999999919,
+          "p95Milliseconds": 20.057459000000108,
+          "maxRowsRead": 57,
+          "maxRowsWritten": 19
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 44,
+          "successfulSamples": 36,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 34.514500000000226,
+          "p95Milliseconds": 63.67679199999975,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 26
         }
       ]
     },
@@ -370,6 +682,18 @@
           "p95Milliseconds": 24.52508399999988,
           "maxRowsRead": 33,
           "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 8,
+          "statuses": [200, 401, 403],
+          "p50Milliseconds": 23.315292,
+          "p95Milliseconds": 25.30529099999967,
+          "maxRowsRead": 33,
+          "maxRowsWritten": 22
         }
       ]
     },
@@ -385,6 +709,18 @@
           "statuses": [200, 404],
           "p50Milliseconds": 19.82554200000004,
           "p95Milliseconds": 31.56079200000022,
+          "maxRowsRead": 39,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 404],
+          "p50Milliseconds": 21.581290999999965,
+          "p95Milliseconds": 25.398375000000215,
           "maxRowsRead": 39,
           "maxRowsWritten": 22
         }
@@ -448,6 +784,30 @@
           "p95Milliseconds": 58.50183399999878,
           "maxRowsRead": 20,
           "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 83,
+          "successfulSamples": 78,
+          "statuses": [200, 401, 429, 503],
+          "p50Milliseconds": 10.201915999999983,
+          "p95Milliseconds": 19.396583000000646,
+          "maxRowsRead": 32,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 86,
+          "successfulSamples": 78,
+          "statuses": [200, 401, 403, 429, 503],
+          "p50Milliseconds": 28.13079199999993,
+          "p95Milliseconds": 56.13183300000037,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
         }
       ]
     },
@@ -507,6 +867,30 @@
           "statuses": [200, 400, 401, 404, 503],
           "p50Milliseconds": 8.316707999999835,
           "p95Milliseconds": 8.316707999999835,
+          "maxRowsRead": 8,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 26.185999999999694,
+          "p95Milliseconds": 45.0460420000004,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 8.10629199999994,
+          "p95Milliseconds": 8.10629199999994,
           "maxRowsRead": 8,
           "maxRowsWritten": 5
         }
@@ -570,6 +954,30 @@
           "p95Milliseconds": 14.102582999999868,
           "maxRowsRead": 36,
           "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 48,
+          "successfulSamples": 30,
+          "statuses": [200, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 36.04862499999945,
+          "p95Milliseconds": 52.00933400000031,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 11,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 17.84829200000013,
+          "p95Milliseconds": 17.84829200000013,
+          "maxRowsRead": 36,
+          "maxRowsWritten": 5
         }
       ]
     },
@@ -585,6 +993,18 @@
           "statuses": [200],
           "p50Milliseconds": 38.60020799999984,
           "p95Milliseconds": 38.60020799999984,
+          "maxRowsRead": 15,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 37.68295899999998,
+          "p95Milliseconds": 37.68295899999998,
           "maxRowsRead": 15,
           "maxRowsWritten": 22
         }
@@ -648,6 +1068,30 @@
           "p95Milliseconds": 37.45583400000032,
           "maxRowsRead": 41,
           "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 20,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403, 404, 503],
+          "p50Milliseconds": 29.464458000000377,
+          "p95Milliseconds": 36.81995800000004,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 16,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 12.494708000000173,
+          "p95Milliseconds": 18.201583999998547,
+          "maxRowsRead": 41,
+          "maxRowsWritten": 11
         }
       ]
     },
@@ -687,6 +1131,18 @@
           "p95Milliseconds": 12.034291999999823,
           "maxRowsRead": 11,
           "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 11,
+          "successfulSamples": 11,
+          "statuses": [200],
+          "p50Milliseconds": 7.277374999999893,
+          "p95Milliseconds": 14.31595799999991,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 10
         }
       ]
     },
@@ -724,6 +1180,18 @@
           "statuses": [200, 400, 401],
           "p50Milliseconds": 13.601042000000007,
           "p95Milliseconds": 13.601042000000007,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 22,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 13.655709000000002,
+          "p95Milliseconds": 13.655709000000002,
           "maxRowsRead": 9,
           "maxRowsWritten": 5
         }
@@ -787,6 +1255,30 @@
           "p95Milliseconds": 79.26233299999876,
           "maxRowsRead": 233,
           "maxRowsWritten": 129
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 68,
+          "successfulSamples": 59,
+          "statuses": [201, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 30.577666999997746,
+          "p95Milliseconds": 87.00624999999854,
+          "maxRowsRead": 107272,
+          "maxRowsWritten": 287
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 77,
+          "successfulSamples": 60,
+          "statuses": [201, 400, 401, 403, 404, 429, 503],
+          "p50Milliseconds": 53.26141700000153,
+          "p95Milliseconds": 102.9407910000009,
+          "maxRowsRead": 23,
+          "maxRowsWritten": 27
         }
       ]
     },
@@ -803,6 +1295,30 @@
           "p50Milliseconds": 29.498415999998542,
           "p95Milliseconds": 168.12904100000105,
           "maxRowsRead": 89,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 14,
+          "successfulSamples": 11,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 4.8159580000010465,
+          "p95Milliseconds": 8.949790999999095,
+          "maxRowsRead": 48,
+          "maxRowsWritten": 6
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 49,
+          "successfulSamples": 27,
+          "statuses": [200, 400, 401, 403, 429, 503],
+          "p50Milliseconds": 26.12079199999971,
+          "p95Milliseconds": 38.787374999999884,
+          "maxRowsRead": 338,
           "maxRowsWritten": 33
         }
       ]
@@ -821,6 +1337,30 @@
           "p95Milliseconds": 203.4155839999985,
           "maxRowsRead": 61,
           "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 19,
+          "successfulSamples": 10,
+          "statuses": [200, 400, 403],
+          "p50Milliseconds": 25.142083000000184,
+          "p95Milliseconds": 37.15450000000055,
+          "maxRowsRead": 61,
+          "maxRowsWritten": 33
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 11.459833000000799,
+          "p95Milliseconds": 11.459833000000799,
+          "maxRowsRead": 30,
+          "maxRowsWritten": 6
         }
       ]
     },
@@ -838,6 +1378,30 @@
           "p95Milliseconds": 135.7400829999997,
           "maxRowsRead": 101,
           "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 22,
+          "successfulSamples": 7,
+          "statuses": [200, 400, 401, 403, 404],
+          "p50Milliseconds": 23.792207999999846,
+          "p95Milliseconds": 35.373874999999316,
+          "maxRowsRead": 101,
+          "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 0,
+          "statuses": [404],
+          "p50Milliseconds": 4.795500000000175,
+          "p95Milliseconds": 5.589749999999185,
+          "maxRowsRead": 24,
+          "maxRowsWritten": 6
         }
       ]
     },
@@ -899,6 +1463,30 @@
           "p95Milliseconds": 102.52879200000098,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 17,
+          "successfulSamples": 8,
+          "statuses": [200, 400, 404],
+          "p50Milliseconds": 27.361666000000696,
+          "p95Milliseconds": 63.06762499999968,
+          "maxRowsRead": 679,
+          "maxRowsWritten": 242
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 400, 401, 403, 404, 429],
+          "p50Milliseconds": 48.28070799999978,
+          "p95Milliseconds": 79.6820829999997,
+          "maxRowsRead": 20,
+          "maxRowsWritten": 26
         }
       ]
     },
@@ -960,6 +1548,30 @@
           "p95Milliseconds": 56.61670899999808,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 400],
+          "p50Milliseconds": 27.54004200000054,
+          "p95Milliseconds": 29.21916599999986,
+          "maxRowsRead": 490,
+          "maxRowsWritten": 241
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 3,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 46.28491699999995,
+          "p95Milliseconds": 54.43825000000015,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 26
         }
       ]
     },
@@ -1021,12 +1633,36 @@
           "p95Milliseconds": 65.31745899999805,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 32,
+          "successfulSamples": 13,
+          "statuses": [200, 400, 401, 404, 503],
+          "p50Milliseconds": 25.628249999999753,
+          "p95Milliseconds": 48.424167000000125,
+          "maxRowsRead": 749,
+          "maxRowsWritten": 368
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 34,
+          "successfulSamples": 13,
+          "statuses": [200, 400, 401, 403, 404, 503],
+          "p50Milliseconds": 52.64158300000054,
+          "p95Milliseconds": 78.43554200000017,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
         }
       ]
     },
     {
       "operation": "transactions.deleteTransaction",
-      "assessment": "measured successful native fixture after trunk installed deletion in PR #1203",
+      "assessment": "measured successful native fixture after trunk installed deletion in PR #1204",
       "cohorts": [
         {
           "cohort": "fidy-deletion-performance.log",
@@ -1047,6 +1683,30 @@
           "statuses": [200, 404],
           "p50Milliseconds": 51.21174999999994,
           "p95Milliseconds": 51.21174999999994,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 7,
+          "successfulSamples": 3,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 26.643041999999696,
+          "p95Milliseconds": 179.7647079999988,
+          "maxRowsRead": 167,
+          "maxRowsWritten": 52
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 9,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 401, 403, 404, 503],
+          "p50Milliseconds": 40.655791999997746,
+          "p95Milliseconds": 275.9891669999997,
           "maxRowsRead": 9,
           "maxRowsWritten": 17
         }
@@ -1093,6 +1753,30 @@
           "p95Milliseconds": 40.70804099999987,
           "maxRowsRead": 9,
           "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 2,
+          "statuses": [0, 200, 400, 401],
+          "p50Milliseconds": 12.902667000000065,
+          "p95Milliseconds": 16.71025000000003,
+          "maxRowsRead": 37,
+          "maxRowsWritten": 6
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 41.58620900000005,
+          "p95Milliseconds": 41.58620900000005,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
         }
       ]
     },
@@ -1121,6 +1805,30 @@
           "p95Milliseconds": 22.984500000000025,
           "maxRowsRead": 29,
           "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 2,
+          "statuses": [200],
+          "p50Milliseconds": 23.458041999999978,
+          "p95Milliseconds": 25.846082999999908,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 3.9502919999999904,
+          "p95Milliseconds": 3.9502919999999904,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 3
         }
       ]
     },
@@ -1160,6 +1868,30 @@
           "p95Milliseconds": 24.177332999999635,
           "maxRowsRead": 53,
           "maxRowsWritten": 30
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 13,
+          "successfulSamples": 10,
+          "statuses": [202, 402, 503],
+          "p50Milliseconds": 19.876916999999594,
+          "p95Milliseconds": 56.72304200000053,
+          "maxRowsRead": 53,
+          "maxRowsWritten": 30
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 0,
+          "statuses": [403],
+          "p50Milliseconds": 101.28750000000036,
+          "p95Milliseconds": 211.18925000000127,
+          "maxRowsRead": 25,
+          "maxRowsWritten": 19
         }
       ]
     },
@@ -1188,6 +1920,18 @@
           "p95Milliseconds": 28.282916999999543,
           "maxRowsRead": 43,
           "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 5,
+          "statuses": [200, 401, 404, 429],
+          "p50Milliseconds": 23.495207999999366,
+          "p95Milliseconds": 28.084542000000056,
+          "maxRowsRead": 43,
+          "maxRowsWritten": 21
         }
       ]
     },
@@ -1214,6 +1958,18 @@
           "statuses": [200, 403],
           "p50Milliseconds": 26.446458000000348,
           "p95Milliseconds": 34.1372080000001,
+          "maxRowsRead": 33,
+          "maxRowsWritten": 21
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 4,
+          "successfulSamples": 3,
+          "statuses": [200, 403],
+          "p50Milliseconds": 27.09679199999937,
+          "p95Milliseconds": 28.28258300000016,
           "maxRowsRead": 33,
           "maxRowsWritten": 21
         }
@@ -1255,6 +2011,30 @@
           "p95Milliseconds": 38.73333299999922,
           "maxRowsRead": 9,
           "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 25,
+          "successfulSamples": 9,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 15.673584000000119,
+          "p95Milliseconds": 27.697124999999687,
+          "maxRowsRead": 417,
+          "maxRowsWritten": 164
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 401, 404],
+          "p50Milliseconds": 46.4965000000002,
+          "p95Milliseconds": 46.4965000000002,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
         }
       ]
     },
@@ -1292,6 +2072,30 @@
           "statuses": [200],
           "p50Milliseconds": 30.86920800000007,
           "p95Milliseconds": 44.88787500000035,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 6,
+          "successfulSamples": 6,
+          "statuses": [200],
+          "p50Milliseconds": 8.558625000000575,
+          "p95Milliseconds": 16.49829100000079,
+          "maxRowsRead": 114,
+          "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 5,
+          "successfulSamples": 5,
+          "statuses": [200],
+          "p50Milliseconds": 28.54724999999962,
+          "p95Milliseconds": 60.31237500000043,
           "maxRowsRead": 10,
           "maxRowsWritten": 17
         }
@@ -1333,6 +2137,30 @@
           "p95Milliseconds": 25.668250000000626,
           "maxRowsRead": 9,
           "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 2,
+          "statuses": [200],
+          "p50Milliseconds": 8.289582999999766,
+          "p95Milliseconds": 8.689666000000216,
+          "maxRowsRead": 109,
+          "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 25.564916000000267,
+          "p95Milliseconds": 25.564916000000267,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
         }
       ]
     },
@@ -1348,6 +2176,18 @@
           "statuses": [200, 400, 404, 503],
           "p50Milliseconds": 3.8732500000000982,
           "p95Milliseconds": 4.045749999999771,
+          "maxRowsRead": 26,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 8,
+          "successfulSamples": 2,
+          "statuses": [200, 400, 404, 503],
+          "p50Milliseconds": 3.881833999999799,
+          "p95Milliseconds": 4.6622080000001915,
           "maxRowsRead": 26,
           "maxRowsWritten": 8
         }
@@ -1366,6 +2206,18 @@
           "p50Milliseconds": 3.9352080000001024,
           "p95Milliseconds": 6.3112089999999625,
           "maxRowsRead": 22,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 9,
+          "successfulSamples": 5,
+          "statuses": [200, 503],
+          "p50Milliseconds": 5.678708000000029,
+          "p95Milliseconds": 6.760667000000012,
+          "maxRowsRead": 26,
           "maxRowsWritten": 8
         }
       ]
@@ -1406,6 +2258,18 @@
           "p95Milliseconds": 279.72749999999996,
           "maxRowsRead": 42,
           "maxRowsWritten": 13
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 2,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 16.150375000000167,
+          "p95Milliseconds": 18.336250000000064,
+          "maxRowsRead": 42,
+          "maxRowsWritten": 13
         }
       ]
     },
@@ -1443,6 +2307,18 @@
           "statuses": [200, 503],
           "p50Milliseconds": 24.921291999999994,
           "p95Milliseconds": 44.453042000000096,
+          "maxRowsRead": 80,
+          "maxRowsWritten": 34
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 5,
+          "statuses": [200, 503],
+          "p50Milliseconds": 23.233833000000004,
+          "p95Milliseconds": 38.50854199999981,
           "maxRowsRead": 80,
           "maxRowsWritten": 34
         }
@@ -1504,6 +2380,30 @@
           "statuses": [200, 400],
           "p50Milliseconds": 15.5122080000001,
           "p95Milliseconds": 15.5122080000001,
+          "maxRowsRead": 18,
+          "maxRowsWritten": 12
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 3,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401],
+          "p50Milliseconds": 27.81683399999997,
+          "p95Milliseconds": 27.81683399999997,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 400],
+          "p50Milliseconds": 11.113417000000027,
+          "p95Milliseconds": 11.113417000000027,
           "maxRowsRead": 18,
           "maxRowsWritten": 12
         }
@@ -1589,6 +2489,30 @@
           "p95Milliseconds": 42.20174999999995,
           "maxRowsRead": 9,
           "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 7,
+          "successfulSamples": 1,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 11.189875000000029,
+          "p95Milliseconds": 11.189875000000029,
+          "maxRowsRead": 14,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 8,
+          "successfulSamples": 1,
+          "statuses": [200, 403, 404, 503],
+          "p50Milliseconds": 37.49462500000004,
+          "p95Milliseconds": 37.49462500000004,
+          "maxRowsRead": 9,
+          "maxRowsWritten": 17
         }
       ]
     },
@@ -1617,6 +2541,30 @@
           "p95Milliseconds": 29.556416000000127,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 9.016916000000037,
+          "p95Milliseconds": 9.016916000000037,
+          "maxRowsRead": 13,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 29.681249999999977,
+          "p95Milliseconds": 29.681249999999977,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
         }
       ]
     },
@@ -1634,6 +2582,30 @@
           "p95Milliseconds": 192.042958,
           "maxRowsRead": 547,
           "maxRowsWritten": 37
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 5,
+          "statuses": [200, 401, 503],
+          "p50Milliseconds": 33.39220900000009,
+          "p95Milliseconds": 48.26179199999933,
+          "maxRowsRead": 547,
+          "maxRowsWritten": 37
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 15.903916999999865,
+          "p95Milliseconds": 15.903916999999865,
+          "maxRowsRead": 29,
+          "maxRowsWritten": 9
         }
       ]
     },
@@ -1649,6 +2621,30 @@
           "statuses": [201, 400, 401, 403, 409, 429],
           "p50Milliseconds": 26.384000000000015,
           "p95Milliseconds": 39.85312500000009,
+          "maxRowsRead": 19,
+          "maxRowsWritten": 27
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 30,
+          "successfulSamples": 26,
+          "statuses": [201, 409, 429, 503],
+          "p50Milliseconds": 12.435582999999951,
+          "p95Milliseconds": 18.35095799999999,
+          "maxRowsRead": 103,
+          "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 36,
+          "successfulSamples": 25,
+          "statuses": [201, 400, 401, 403, 409, 429],
+          "p50Milliseconds": 31.40754099999981,
+          "p95Milliseconds": 49.086667000000034,
           "maxRowsRead": 19,
           "maxRowsWritten": 27
         }
@@ -1668,6 +2664,30 @@
           "p95Milliseconds": 27.813666999999896,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 4,
+          "successfulSamples": 1,
+          "statuses": [200, 404, 409],
+          "p50Milliseconds": 12.106415999999854,
+          "p95Milliseconds": 12.106415999999854,
+          "maxRowsRead": 54,
+          "maxRowsWritten": 8
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 404, 409],
+          "p50Milliseconds": 29.279583999999886,
+          "p95Milliseconds": 29.279583999999886,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
         }
       ]
     },
@@ -1683,6 +2703,30 @@
           "statuses": [200, 400, 401, 403, 404],
           "p50Milliseconds": 21.313083000000006,
           "p95Milliseconds": 21.313083000000006,
+          "maxRowsRead": 10,
+          "maxRowsWritten": 16
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 9,
+          "successfulSamples": 3,
+          "statuses": [200, 404, 503],
+          "p50Milliseconds": 9.40662500000144,
+          "p95Milliseconds": 19.89050000000134,
+          "maxRowsRead": 47,
+          "maxRowsWritten": 10
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 6,
+          "successfulSamples": 1,
+          "statuses": [200, 400, 401, 403, 404],
+          "p50Milliseconds": 27.044541999999865,
+          "p95Milliseconds": 27.044541999999865,
           "maxRowsRead": 10,
           "maxRowsWritten": 16
         }
@@ -1702,6 +2746,18 @@
           "p95Milliseconds": 37.0112079999999,
           "maxRowsRead": 77,
           "maxRowsWritten": 32
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 21,
+          "successfulSamples": 15,
+          "statuses": [200, 401, 403, 429],
+          "p50Milliseconds": 21.855458,
+          "p95Milliseconds": 40.37991699999975,
+          "maxRowsRead": 77,
+          "maxRowsWritten": 32
         }
       ]
     },
@@ -1719,6 +2775,30 @@
           "p95Milliseconds": 22.77108300000009,
           "maxRowsRead": 12,
           "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 20.19812500000012,
+          "p95Milliseconds": 20.19812500000012,
+          "maxRowsRead": 12,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 5,
+          "successfulSamples": 3,
+          "statuses": [200, 429, 503],
+          "p50Milliseconds": 3.2595000000001164,
+          "p95Milliseconds": 4.225500000000011,
+          "maxRowsRead": 22,
+          "maxRowsWritten": 7
         }
       ]
     },
@@ -1734,6 +2814,30 @@
           "statuses": [200],
           "p50Milliseconds": 25.87758299999996,
           "p95Milliseconds": 25.87758299999996,
+          "maxRowsRead": 16,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 4.0277920000007725,
+          "p95Milliseconds": 4.0277920000007725,
+          "maxRowsRead": 6,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 25.96441700000014,
+          "p95Milliseconds": 25.96441700000014,
           "maxRowsRead": 16,
           "maxRowsWritten": 22
         }
@@ -1753,6 +2857,30 @@
           "p95Milliseconds": 30.247416999999928,
           "maxRowsRead": 16,
           "maxRowsWritten": 19
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 401],
+          "p50Milliseconds": 5.585540999999921,
+          "p95Milliseconds": 5.585540999999921,
+          "maxRowsRead": 4,
+          "maxRowsWritten": 2
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 401],
+          "p50Milliseconds": 29.588999999999942,
+          "p95Milliseconds": 29.588999999999942,
+          "maxRowsRead": 16,
+          "maxRowsWritten": 19
         }
       ]
     },
@@ -1768,6 +2896,18 @@
           "statuses": [200, 401, 403, 409, 503],
           "p50Milliseconds": 8.564332999999351,
           "p95Milliseconds": 12.26445799999965,
+          "maxRowsRead": 45,
+          "maxRowsWritten": 9
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 30,
+          "successfulSamples": 17,
+          "statuses": [200, 401, 403, 409, 503],
+          "p50Milliseconds": 8.315499999999702,
+          "p95Milliseconds": 12.379874999999629,
           "maxRowsRead": 45,
           "maxRowsWritten": 9
         }
@@ -1787,6 +2927,30 @@
           "p95Milliseconds": 29.23287500000015,
           "maxRowsRead": 14,
           "maxRowsWritten": 25
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 1,
+          "successfulSamples": 1,
+          "statuses": [200],
+          "p50Milliseconds": 29.380083000000013,
+          "p95Milliseconds": 29.380083000000013,
+          "maxRowsRead": 14,
+          "maxRowsWritten": 25
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 23,
+          "successfulSamples": 21,
+          "statuses": [200, 429, 503],
+          "p50Milliseconds": 6.6316249999999854,
+          "p95Milliseconds": 8.575916000000234,
+          "maxRowsRead": 72,
+          "maxRowsWritten": 10
         }
       ]
     },
@@ -1804,6 +2968,30 @@
           "p95Milliseconds": 23.569250000000466,
           "maxRowsRead": 536,
           "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 16,
+          "successfulSamples": 9,
+          "statuses": [200, 401, 429],
+          "p50Milliseconds": 19.440625000000182,
+          "p95Milliseconds": 27.361832999999933,
+          "maxRowsRead": 536,
+          "maxRowsWritten": 22
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 9,
+          "successfulSamples": 2,
+          "statuses": [200, 401],
+          "p50Milliseconds": 2.624374999999418,
+          "p95Milliseconds": 3.2372499999992215,
+          "maxRowsRead": 24,
+          "maxRowsWritten": 5
         }
       ]
     },
@@ -1820,6 +3008,30 @@
           "p50Milliseconds": 5.940916999999899,
           "p95Milliseconds": 9.1957910000001,
           "maxRowsRead": 533,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 15,
+          "successfulSamples": 7,
+          "statuses": [200, 401, 404, 429, 503],
+          "p50Milliseconds": 6.019084000001385,
+          "p95Milliseconds": 9.753625000001193,
+          "maxRowsRead": 533,
+          "maxRowsWritten": 5
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 7,
+          "successfulSamples": 1,
+          "statuses": [200, 401, 404, 503],
+          "p50Milliseconds": 3.2883330000004207,
+          "p95Milliseconds": 3.2883330000004207,
+          "maxRowsRead": 27,
           "maxRowsWritten": 5
         }
       ]
@@ -1838,6 +3050,18 @@
           "p95Milliseconds": 13.38854100000026,
           "maxRowsRead": 11,
           "maxRowsWritten": 14
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 12,
+          "successfulSamples": 8,
+          "statuses": [200, 401, 404, 503],
+          "p50Milliseconds": 6.573875000000044,
+          "p95Milliseconds": 13.96179200000006,
+          "maxRowsRead": 11,
+          "maxRowsWritten": 14
         }
       ]
     },
@@ -1853,6 +3077,18 @@
           "statuses": [200, 503],
           "p50Milliseconds": 152.8337919999999,
           "p95Milliseconds": 154.5523750000002,
+          "maxRowsRead": 154,
+          "maxRowsWritten": 167
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 28,
+          "successfulSamples": 26,
+          "statuses": [200, 503],
+          "p50Milliseconds": 141.44112500000028,
+          "p95Milliseconds": 143.41429199999993,
           "maxRowsRead": 154,
           "maxRowsWritten": 167
         }
@@ -1894,6 +3130,18 @@
           "p95Milliseconds": 12.249874999999975,
           "maxRowsRead": 8,
           "maxRowsWritten": 17
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 78,
+          "successfulSamples": 72,
+          "statuses": [200, 400, 403, 409, 422, 429, 503],
+          "p50Milliseconds": 8.93066699999963,
+          "p95Milliseconds": 129.81254200000012,
+          "maxRowsRead": 44,
+          "maxRowsWritten": 18
         }
       ]
     },
@@ -1911,6 +3159,18 @@
           "p95Milliseconds": 7.555166999999528,
           "maxRowsRead": 4,
           "maxRowsWritten": 4
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 8,
+          "successfulSamples": 8,
+          "statuses": [200],
+          "p50Milliseconds": 6.0729580000006536,
+          "p95Milliseconds": 8.746625000000222,
+          "maxRowsRead": 4,
+          "maxRowsWritten": 4
         }
       ]
     },
@@ -1926,6 +3186,18 @@
           "statuses": [200, 503],
           "p50Milliseconds": 8.226583000000119,
           "p95Milliseconds": 15.931833000000097,
+          "maxRowsRead": 7,
+          "maxRowsWritten": 11
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 10,
+          "successfulSamples": 7,
+          "statuses": [200, 503],
+          "p50Milliseconds": 8.441666000000168,
+          "p95Milliseconds": 11.240791000000172,
           "maxRowsRead": 7,
           "maxRowsWritten": 11
         }
@@ -1965,6 +3237,18 @@
           "statuses": [200, 403],
           "p50Milliseconds": 6.135041000000001,
           "p95Milliseconds": 6.135041000000001,
+          "maxRowsRead": 3,
+          "maxRowsWritten": 3
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 2,
+          "successfulSamples": 1,
+          "statuses": [200, 403],
+          "p50Milliseconds": 6.251457999999957,
+          "p95Milliseconds": 6.251457999999957,
           "maxRowsRead": 3,
           "maxRowsWritten": 3
         }
@@ -2048,6 +3332,30 @@
           "statuses": [200, 400, 401, 403, 503],
           "p50Milliseconds": 36.710666000000856,
           "p95Milliseconds": 46.97904100000051,
+          "maxRowsRead": 21,
+          "maxRowsWritten": 26
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "held canonical owner D1 binding; transport admission excluded",
+          "samples": 147,
+          "successfulSamples": 58,
+          "statuses": [200, 400, 401, 404, 429, 503],
+          "p50Milliseconds": 18.692291999999725,
+          "p95Milliseconds": 59.5054999999993,
+          "maxRowsRead": 16464,
+          "maxRowsWritten": 573
+        },
+        {
+          "cohort": "fidy-canonical-performance-pinned.log",
+          "sourceCommit": "93fdd16c2",
+          "costBoundary": "direct Core D1 binding only; coordinator/provider work excluded",
+          "samples": 106,
+          "successfulSamples": 21,
+          "statuses": [200, 400, 401, 403, 429, 503],
+          "p50Milliseconds": 48.61854200000016,
+          "p95Milliseconds": 87.46645800000078,
           "maxRowsRead": 21,
           "maxRowsWritten": 26
         }
@@ -2791,7 +4099,7 @@
   },
   "productionFollowup": {
     "observedAtUtc": "2026-10-11T12:18:00Z",
-    "deploymentRuns": [38136020384, 38137254930, 38138130053],
+    "deploymentRuns": [38136020384, 38137254930, 38138130053, 38139226567],
     "status": "preflight refused before promotion",
     "reason": "Workers AI daily free allocation exhausted",
     "diagnostic": {
@@ -2876,7 +4184,7 @@
       "successes": 33,
       "exceptions": 1,
       "exceptionAtUtc": "2026-10-11T12:06:10Z",
-      "attribution": "unresolved; GraphQL observation cannot establish exception cause"
+      "attribution": "Native structured warning identifies async.health; ScheduledWorkFailed surfaces after independent activities are attempted. Provider/root cause not established."
     },
     "ai": [
       {
@@ -2894,6 +4202,227 @@
           "totalOutputTokens": 0
         }
       }
-    ]
-  }
+    ],
+    "webMergeCommit": "6f5c3bf70b1d576269a2508d00cb7df56357f035"
+  },
+  "pinnedNativeRun": {
+    "sourceCommit": "93fdd16c2",
+    "passedFiles": 133,
+    "skippedFiles": 1,
+    "passedTests": 1772,
+    "skippedTests": 15,
+    "elapsedSeconds": 521.84,
+    "observerChangesAfterRun": "Moved unchanged observer logic into the server TypeScript project; Queue proof now waits for all ten dead letters before count assertions"
+  },
+  "localXlsx": [
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-small",
+      "zipBytes": 2258,
+      "expandedBytes": 11191,
+      "sampledV8ActiveMilliseconds": 11.429,
+      "retainedHeapBeforeBytes": 9404680,
+      "retainedHeapAfterBytes": 11682824,
+      "outcome": "parsed",
+      "rowCount": 1,
+      "elapsedMilliseconds": 9,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 786432,
+      "serializedEvidenceBytes": 530315,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-row-limit",
+      "zipBytes": 2278,
+      "expandedBytes": 23479,
+      "sampledV8ActiveMilliseconds": 11.163,
+      "retainedHeapBeforeBytes": 11682824,
+      "retainedHeapAfterBytes": 15397360,
+      "outcome": "parsed",
+      "rowCount": 1,
+      "elapsedMilliseconds": 10,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 3145728,
+      "serializedEvidenceBytes": 2103179,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-total-limit",
+      "zipBytes": 7594,
+      "expandedBytes": 85307,
+      "sampledV8ActiveMilliseconds": 13.79,
+      "retainedHeapBeforeBytes": 15397360,
+      "retainedHeapAfterBytes": 12149024,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-accepted",
+      "zipBytes": 3601,
+      "expandedBytes": 1209495,
+      "sampledV8ActiveMilliseconds": 38.704,
+      "retainedHeapBeforeBytes": 12149024,
+      "retainedHeapAfterBytes": 17177824,
+      "outcome": "parsed",
+      "rowCount": 34,
+      "elapsedMilliseconds": 38,
+      "interpretationMilliseconds": 3,
+      "logicalTextBytes": 3602013,
+      "serializedEvidenceBytes": 2417418,
+      "interpretedRows": 34,
+      "acceptedRows": 34,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-review",
+      "zipBytes": 3605,
+      "expandedBytes": 1209495,
+      "sampledV8ActiveMilliseconds": 47.243,
+      "retainedHeapBeforeBytes": 17177824,
+      "retainedHeapAfterBytes": 22190640,
+      "outcome": "parsed",
+      "rowCount": 34,
+      "elapsedMilliseconds": 44,
+      "interpretationMilliseconds": 2,
+      "logicalTextBytes": 3602013,
+      "serializedEvidenceBytes": 2417418,
+      "interpretedRows": 34,
+      "acceptedRows": 33,
+      "reviewRows": 1
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "shared-string-repeated-accepted",
+      "zipBytes": 19123,
+      "expandedBytes": 271062,
+      "sampledV8ActiveMilliseconds": 11.392,
+      "retainedHeapBeforeBytes": 22190640,
+      "retainedHeapAfterBytes": 21045356,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "different-amounts",
+      "zipBytes": 54421,
+      "expandedBytes": 178647,
+      "sampledV8ActiveMilliseconds": 121.106,
+      "retainedHeapBeforeBytes": 21045356,
+      "retainedHeapAfterBytes": 22383740,
+      "outcome": "parsed",
+      "rowCount": 1000,
+      "elapsedMilliseconds": 118,
+      "interpretationMilliseconds": 57,
+      "logicalTextBytes": 12335679,
+      "serializedEvidenceBytes": 8702266,
+      "interpretedRows": 1000,
+      "acceptedRows": 1000,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "escaped-formatted",
+      "zipBytes": 15778,
+      "expandedBytes": 44139,
+      "sampledV8ActiveMilliseconds": 25.068,
+      "retainedHeapBeforeBytes": 22383740,
+      "retainedHeapAfterBytes": 25127388,
+      "outcome": "parsed",
+      "rowCount": 128,
+      "elapsedMilliseconds": 23,
+      "interpretationMilliseconds": 8,
+      "logicalTextBytes": 1186236,
+      "serializedEvidenceBytes": 1638806,
+      "interpretedRows": 128,
+      "acceptedRows": 0,
+      "reviewRows": 128
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "formatted-work-outside-envelope",
+      "zipBytes": 33117,
+      "expandedBytes": 103767,
+      "sampledV8ActiveMilliseconds": 7.125,
+      "retainedHeapBeforeBytes": 25127388,
+      "retainedHeapAfterBytes": 22675400,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "numeric-outside-envelope",
+      "zipBytes": 5978,
+      "expandedBytes": 15512,
+      "sampledV8ActiveMilliseconds": 2.466,
+      "retainedHeapBeforeBytes": 22675400,
+      "retainedHeapAfterBytes": 23159212,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "many-cells",
+      "zipBytes": 1695716,
+      "expandedBytes": 7357998,
+      "sampledV8ActiveMilliseconds": 318.716,
+      "retainedHeapBeforeBytes": 23159212,
+      "retainedHeapAfterBytes": 34395856,
+      "outcome": "rejected",
+      "reason": "resource-limit"
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "bounded-cells",
+      "zipBytes": 676645,
+      "expandedBytes": 2835958,
+      "sampledV8ActiveMilliseconds": 616.493,
+      "retainedHeapBeforeBytes": 34395856,
+      "retainedHeapAfterBytes": 54083816,
+      "outcome": "parsed",
+      "rowCount": 8000,
+      "elapsedMilliseconds": 615,
+      "interpretationMilliseconds": 0,
+      "logicalTextBytes": 1112148,
+      "serializedEvidenceBytes": 10679080,
+      "interpretedRows": 0,
+      "acceptedRows": 0,
+      "reviewRows": 0
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "two-overlapping-requests",
+      "elapsedMilliseconds": 165.5994169999999,
+      "outcomes": ["parsed", "parsed"],
+      "retainedHeapAfterBytes": 31334400
+    },
+    {
+      "baseline": false,
+      "runtime": "local-workerd",
+      "fixture": "two-overlapping-bounded-cell-requests",
+      "elapsedMilliseconds": 1166.0085840000002,
+      "outcomes": ["parsed", "parsed"],
+      "retainedHeapAfterBytes": 51055384
+    }
+  ]
 }

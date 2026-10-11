@@ -31,7 +31,9 @@ export default {
       comment:
         "Scripts and broad application harnesses compose published owner interfaces; they cannot turn private fixtures into shared test APIs (#616).",
       from: { path: "^(scripts/|tools/|cloudflare/[^/]+\\.ts$)" },
-      to: { path: "^(src|cloudflare)/.+/(?:test-fixtures\\.ts|[^/]+\\.test-fixture\\.ts)$" },
+      to: {
+        path: "^(src|cloudflare)/.+/(?:test-fixtures\\.ts|[^/]+\\.test-fixture\\.ts)$",
+      },
     },
     {
       name: "production-imports-test-support",
@@ -70,7 +72,9 @@ export default {
       severity: "error",
       comment:
         "Owner fixtures stay beside their owner; foreign tests use published contracts and operations, never private fixture exports (#616).",
-      from: { path: "^(src/(?:core|shell)/(?:channels/)?[^/]+/|cloudflare/[^/]+/)" },
+      from: {
+        path: "^(src/(?:core|shell)/(?:channels/)?[^/]+/|cloudflare/[^/]+/)",
+      },
       to: {
         path: "^(src|cloudflare)/.+/(?:test-fixtures\\.ts|[^/]+\\.test-fixture\\.ts)$",
         pathNot: "^$1",
@@ -103,6 +107,8 @@ export default {
         pathNot: [
           "\\.test\\.ts$",
           "^cloudflare/oauth-agents/oauth-ingress\\.test-fixture\\.ts$",
+          // Performance fixtures observe the real Core request composition.
+          "^cloudflare/canonical-request-observer\\.test-fixture\\.ts$",
           // Native scheduler journeys compose the real Core root with private test bindings.
           "^cloudflare/core-worker\\.test-fixture\\.ts$",
           // Both provider journeys compose the real Public/Core Worker boundary.
@@ -131,7 +137,10 @@ export default {
       severity: "error",
       comment:
         "HTTP and Queue dispatch stay private to their named platform composition; consumers construct the published runtime (#615).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/(core-http|queue)/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/(core-http|queue)/",
+      },
       to: { path: "^cloudflare/(core-http|queue)/internal/" },
     },
     {
@@ -140,19 +149,24 @@ export default {
       comment:
         "HTTP and Queue are distinct composition owners and cannot import each other's internals (#615).",
       from: { path: "^cloudflare/(core-http|queue)/" },
-      to: { path: "^cloudflare/(core-http|queue)/internal/", pathNot: "^cloudflare/$1/internal/" },
+      to: {
+        path: "^cloudflare/(core-http|queue)/internal/",
+        pathNot: "^cloudflare/$1/internal/",
+      },
     },
     {
       name: "composition-contract-imports-implementation",
       severity: "error",
-      comment: "Composition contracts publish only inert binding and handler declarations (#615).",
+      comment:
+        "Composition contracts publish only inert binding and handler declarations (#615).",
       from: { path: "^cloudflare/(core-http|queue)/contract\\.ts$" },
       to: { path: "^cloudflare/.*/(internal/|operations\\.ts$|runtime\\.ts$)" },
     },
     {
       name: "composition-internal-imports-runtime",
       severity: "error",
-      comment: "Private dispatch cannot reacquire its outward construction authority (#615).",
+      comment:
+        "Private dispatch cannot reacquire its outward construction authority (#615).",
       from: { path: "^cloudflare/(core-http|queue)/internal/" },
       to: { path: "^cloudflare/$1/runtime\\.ts$" },
     },
@@ -167,7 +181,8 @@ export default {
     {
       name: "native-composition-cycle",
       severity: "error",
-      comment: "Native HTTP, Queue and Worker compositions remain acyclic (#615).",
+      comment:
+        "Native HTTP, Queue and Worker compositions remain acyclic (#615).",
       from: {
         path: "^cloudflare/(core-http/|queue/|core-worker\\.ts$|public-worker\\.ts$|ingestion/email-worker\\.ts$)",
       },
@@ -234,7 +249,9 @@ export default {
       severity: "error",
       comment:
         "Schedule execution is independent of runtime construction; only the composition interface binds owners (#614).",
-      from: { path: "^cloudflare/(maintenance|maintenance/.+)/operations\\.ts$" },
+      from: {
+        path: "^cloudflare/(maintenance|maintenance/.+)/operations\\.ts$",
+      },
       to: { path: "^cloudflare/.+/runtime\\.ts$" },
     },
     {
@@ -257,7 +274,10 @@ export default {
       severity: "error",
       comment:
         "Platform scheduled health and retention internals remain private; callers use the published platform runtime (#614).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/runtime/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/runtime/",
+      },
       to: { path: "^cloudflare/runtime/internal/" },
     },
     {
@@ -265,7 +285,9 @@ export default {
       severity: "error",
       comment:
         "Published scheduling and platform interfaces declare their contract rather than laundering private implementation (#614).",
-      from: { path: "^cloudflare/(maintenance|runtime)/.*(contract|operations|runtime)\\.ts$" },
+      from: {
+        path: "^cloudflare/(maintenance|runtime)/.*(contract|operations|runtime)\\.ts$",
+      },
       to: { path: "^cloudflare/$1/internal/", dependencyTypes: ["export"] },
     },
     {
@@ -281,7 +303,10 @@ export default {
       severity: "error",
       comment:
         "Memory owns current prose, persistence, capacity and readback. Peers use its published operations, never retained rows or SQL (#607).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/memory/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/memory/",
+      },
       to: { path: "^cloudflare/memory/internal/" },
     },
     {
@@ -306,7 +331,9 @@ export default {
       comment:
         "Memory declarations are independent of private implementation and runtime construction (#607).",
       from: { path: "^cloudflare/memory/contract\\.ts$" },
-      to: { path: "^cloudflare/memory/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/memory/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "memory-internal-imports-outward-interface",
@@ -319,7 +346,8 @@ export default {
     {
       name: "memory-operations-imports-runtime",
       severity: "error",
-      comment: "Memory operations do not acquire runtime construction authority (#607).",
+      comment:
+        "Memory operations do not acquire runtime construction authority (#607).",
       from: { path: "^cloudflare/memory/operations\\.ts$" },
       to: { path: "^cloudflare/memory/runtime\\.ts$" },
     },
@@ -355,7 +383,9 @@ export default {
       severity: "error",
       comment:
         "Agent publication never launders Transcript, context, tool or lifecycle implementation (#613).",
-      from: { path: "^cloudflare/(agent|agent/.+)/(contract|operations|runtime)\\.ts$" },
+      from: {
+        path: "^cloudflare/(agent|agent/.+)/(contract|operations|runtime)\\.ts$",
+      },
       to: { path: "^cloudflare/agent/internal/", dependencyTypes: ["export"] },
     },
     {
@@ -364,7 +394,9 @@ export default {
       comment:
         "Agent declarations expose inert work and observations, never executable lifecycle implementation (#613).",
       from: { path: "^cloudflare/(agent|agent/.+)/contract\\.ts$" },
-      to: { path: "^cloudflare/agent/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/agent/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "agent-internal-imports-outward-interface",
@@ -387,7 +419,10 @@ export default {
       severity: "error",
       comment:
         "Agent owns Transcript, context, tools, Compaction, delivery and lifecycle implementation; peers consume only published operations or runtime construction (#613).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/agent/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/agent/",
+      },
       to: { path: "^cloudflare/agent/internal/" },
     },
     {
@@ -395,7 +430,10 @@ export default {
       severity: "error",
       comment:
         "WhatsApp owns replay, delivery, provider evidence and retention; peers use bounded published operations (#608).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/whatsapp/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/whatsapp/",
+      },
       to: { path: "^cloudflare/whatsapp/internal/" },
     },
     {
@@ -419,8 +457,13 @@ export default {
       severity: "error",
       comment:
         "WhatsApp publication declares bounded owner behavior without laundering private implementations (#608).",
-      from: { path: "^cloudflare/whatsapp/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/whatsapp/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/whatsapp/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/whatsapp/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "whatsapp-contract-imports-implementation",
@@ -428,7 +471,9 @@ export default {
       comment:
         "WhatsApp declarations carry safe channel evidence, never transport or persistence implementation (#608).",
       from: { path: "^cloudflare/whatsapp/contract\\.ts$" },
-      to: { path: "^cloudflare/whatsapp/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/whatsapp/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "whatsapp-internal-imports-outward-interface",
@@ -493,7 +538,9 @@ export default {
       severity: "error",
       comment:
         "Canonical execution internals depend on declarations and sibling implementation, never backwards on their published operations or runtime (#612).",
-      from: { path: "^cloudflare/(canonical-operations|canonical-operations/.+)/internal/" },
+      from: {
+        path: "^cloudflare/(canonical-operations|canonical-operations/.+)/internal/",
+      },
       to: { path: "^cloudflare/$1/(operations|runtime)\\.ts$" },
     },
     {
@@ -512,7 +559,10 @@ export default {
       severity: "error",
       comment:
         "Ingestion owns R2 material, outbox, parser finalization and retained rows. Peers use published admission and finalization operations (#605).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/ingestion/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/ingestion/",
+      },
       to: { path: "^cloudflare/ingestion/internal/" },
     },
     {
@@ -528,8 +578,13 @@ export default {
       severity: "error",
       comment:
         "Ingestion declares owner behavior without laundering private storage, parser or Workflow exports (#605).",
-      from: { path: "^cloudflare/ingestion/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/ingestion/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/ingestion/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/ingestion/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "ingestion-contract-imports-implementation",
@@ -537,7 +592,9 @@ export default {
       comment:
         "Ingestion declarations carry bounded inputs and outcomes, never private implementation or runtime authority (#605).",
       from: { path: "^cloudflare/ingestion/contract\\.ts$" },
-      to: { path: "^cloudflare/ingestion/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/ingestion/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "ingestion-internal-imports-outward-interface",
@@ -558,7 +615,8 @@ export default {
     {
       name: "foreign-module-imports-cloudflare-onboarding-internal",
       severity: "error",
-      comment: "Onboarding composition is private; callers consume its bounded operations (#611).",
+      comment:
+        "Onboarding composition is private; callers consume its bounded operations (#611).",
       from: {
         path: "^(src|cloudflare|scripts|tools)/",
         pathNot: "^cloudflare/onboarding/",
@@ -584,27 +642,37 @@ export default {
       severity: "error",
       comment:
         "Onboarding publication declares behavior without laundering private composition (#611).",
-      from: { path: "^cloudflare/onboarding/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/onboarding/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/onboarding/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/onboarding/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "onboarding-contract-imports-implementation",
       severity: "error",
-      comment: "Onboarding declarations carry no native execution authority (#611).",
+      comment:
+        "Onboarding declarations carry no native execution authority (#611).",
       from: { path: "^cloudflare/onboarding/contract\\.ts$" },
-      to: { path: "^cloudflare/onboarding/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/onboarding/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "onboarding-internal-imports-outward-interface",
       severity: "error",
-      comment: "Private Onboarding execution depends inward on declarations (#611).",
+      comment:
+        "Private Onboarding execution depends inward on declarations (#611).",
       from: { path: "^cloudflare/onboarding/internal/" },
       to: { path: "^cloudflare/onboarding/(operations|runtime)\\.ts$" },
     },
     {
       name: "onboarding-operations-imports-runtime",
       severity: "error",
-      comment: "Onboarding operations cannot acquire construction authority (#611).",
+      comment:
+        "Onboarding operations cannot acquire construction authority (#611).",
       from: { path: "^cloudflare/onboarding/operations\\.ts$" },
       to: { path: "^cloudflare/onboarding/runtime\\.ts$" },
     },
@@ -624,7 +692,10 @@ export default {
       severity: "error",
       comment:
         "The data-free coordinator invokes published owners; persistence and runtime authority stay private (#610).",
-      from: { path: "^cloudflare/web-authentication/", pathNot: "\\.test\\.ts$" },
+      from: {
+        path: "^cloudflare/web-authentication/",
+        pathNot: "\\.test\\.ts$",
+      },
       to: {
         path: "^cloudflare/",
         pathNot: [
@@ -638,27 +709,37 @@ export default {
       severity: "error",
       comment:
         "Web Authentication publication declares behavior without laundering private dispatch (#610).",
-      from: { path: "^cloudflare/web-authentication/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/web-authentication/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/web-authentication/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/web-authentication/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "web-authentication-contract-imports-implementation",
       severity: "error",
-      comment: "Web Authentication declarations carry no native execution authority (#610).",
+      comment:
+        "Web Authentication declarations carry no native execution authority (#610).",
       from: { path: "^cloudflare/web-authentication/contract\\.ts$" },
-      to: { path: "^cloudflare/web-authentication/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/web-authentication/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "web-authentication-internal-imports-outward-interface",
       severity: "error",
-      comment: "Private Web Authentication execution depends inward on declarations (#610).",
+      comment:
+        "Private Web Authentication execution depends inward on declarations (#610).",
       from: { path: "^cloudflare/web-authentication/internal/" },
       to: { path: "^cloudflare/web-authentication/(operations|runtime)\\.ts$" },
     },
     {
       name: "web-authentication-operations-imports-runtime",
       severity: "error",
-      comment: "Web Authentication operations cannot acquire construction authority (#610).",
+      comment:
+        "Web Authentication operations cannot acquire construction authority (#610).",
       from: { path: "^cloudflare/web-authentication/operations\\.ts$" },
       to: { path: "^cloudflare/web-authentication/runtime\\.ts$" },
     },
@@ -730,7 +811,10 @@ export default {
       severity: "error",
       comment:
         "Recovery code material, support decisions and persistence remain owner-private (#601).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/recovery/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/recovery/",
+      },
       to: { path: "^cloudflare/recovery/internal/" },
     },
     {
@@ -746,8 +830,13 @@ export default {
       severity: "error",
       comment:
         "Recovery publication declares bounded behavior without laundering private code or case implementation (#601).",
-      from: { path: "^cloudflare/recovery/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/recovery/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/recovery/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/recovery/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "login-recovery-contract-imports-implementation",
@@ -760,7 +849,8 @@ export default {
     {
       name: "login-recovery-internal-imports-outward-interface",
       severity: "error",
-      comment: "Browser Login and Recovery implementation depends inward on declarations (#601).",
+      comment:
+        "Browser Login and Recovery implementation depends inward on declarations (#601).",
       from: { path: "^cloudflare/(browser-login|recovery)/internal/" },
       to: { path: "^cloudflare/$1/(operations|runtime)\\.ts$" },
     },
@@ -777,7 +867,10 @@ export default {
       severity: "error",
       comment:
         "Tokens PAT rows, pairing proofs, persistence and bearer verification remain owner-private (#602). Call its published contract, operations or runtime composition.",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/tokens/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/tokens/",
+      },
       to: { path: "^cloudflare/tokens/internal/" },
     },
     {
@@ -802,7 +895,9 @@ export default {
       comment:
         "Tokens's native contract is independently readable and never acquires proof, persistence or lifecycle implementation (#602).",
       from: { path: "^cloudflare/tokens/contract\\.ts$" },
-      to: { path: "^cloudflare/tokens/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/tokens/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "tokens-internal-imports-outward-interface",
@@ -815,7 +910,8 @@ export default {
     {
       name: "tokens-operations-imports-runtime",
       severity: "error",
-      comment: "Tokens operations do not acquire runtime construction authority (#602).",
+      comment:
+        "Tokens operations do not acquire runtime construction authority (#602).",
       from: { path: "^cloudflare/tokens/operations\\.ts$" },
       to: { path: "^cloudflare/tokens/runtime\\.ts$" },
     },
@@ -843,8 +939,13 @@ export default {
       severity: "error",
       comment:
         "Native Email Authentication publication declares behavior rather than laundering private provider or persistence implementation (#600).",
-      from: { path: "^cloudflare/email-authentication/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/email-authentication/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/email-authentication/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/email-authentication/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "email-authentication-contract-imports-implementation",
@@ -852,7 +953,9 @@ export default {
       comment:
         "Email Authentication's native contract is independently readable and never acquires provider, persistence or Workflow implementation (#600).",
       from: { path: "^cloudflare/email-authentication/contract\\.ts$" },
-      to: { path: "^cloudflare/email-authentication/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/email-authentication/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "email-authentication-internal-imports-outward-interface",
@@ -860,7 +963,9 @@ export default {
       comment:
         "Email Authentication internals depend inward on declarations, never on the outward operations or runtime interface (#600).",
       from: { path: "^cloudflare/email-authentication/internal/" },
-      to: { path: "^cloudflare/email-authentication/(operations|runtime)\\.ts$" },
+      to: {
+        path: "^cloudflare/email-authentication/(operations|runtime)\\.ts$",
+      },
     },
     {
       name: "email-authentication-operations-imports-runtime",
@@ -875,7 +980,10 @@ export default {
       severity: "error",
       comment:
         "Subscription billing rows, enrollment, Wompi and Workflows remain owner-private (#599). Call its published contract, operations or runtime composition.",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/subscription/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/subscription/",
+      },
       to: { path: "^cloudflare/subscription/internal/" },
     },
     {
@@ -891,8 +999,13 @@ export default {
       severity: "error",
       comment:
         "Native Subscription publication declares behavior rather than laundering private provider or persistence implementation (#599).",
-      from: { path: "^cloudflare/subscription/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/subscription/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/subscription/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/subscription/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "subscription-contract-imports-implementation",
@@ -900,7 +1013,9 @@ export default {
       comment:
         "Subscription's native contract is independently readable and never acquires provider, persistence or Workflow implementation (#599).",
       from: { path: "^cloudflare/subscription/contract\\.ts$" },
-      to: { path: "^cloudflare/subscription/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/subscription/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "subscription-internal-imports-outward-interface",
@@ -913,7 +1028,8 @@ export default {
     {
       name: "subscription-operations-imports-runtime",
       severity: "error",
-      comment: "Subscription operations do not acquire Workflow construction authority (#599).",
+      comment:
+        "Subscription operations do not acquire Workflow construction authority (#599).",
       from: { path: "^cloudflare/subscription/operations\\.ts$" },
       to: { path: "^cloudflare/subscription/runtime\\.ts$" },
     },
@@ -922,7 +1038,10 @@ export default {
       severity: "error",
       comment:
         "Insights owns scheduled occurrences, lifecycle and delivery evidence. Peers use published operations, never private SQL or rows (#606).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/insights/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/insights/",
+      },
       to: { path: "^cloudflare/insights/internal/" },
     },
     {
@@ -938,8 +1057,13 @@ export default {
       severity: "error",
       comment:
         "Insights publishes substantive behavior and declarations, never re-exported private rows, SQL or projection mechanics (#606).",
-      from: { path: "^cloudflare/insights/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/insights/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/insights/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/insights/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "insights-contract-imports-implementation",
@@ -947,7 +1071,9 @@ export default {
       comment:
         "The native Insights contract declares semantic inputs and projections independently of implementation or runtime authority (#606).",
       from: { path: "^cloudflare/insights/contract\\.ts$" },
-      to: { path: "^cloudflare/insights/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/insights/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "insights-internal-imports-outward-interface",
@@ -962,7 +1088,10 @@ export default {
       severity: "error",
       comment:
         "Dashboard owns documents, layout and validated financial projections. Peers use published operations, never private SQL or rows (#604).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/dashboard/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/dashboard/",
+      },
       to: { path: "^cloudflare/dashboard/internal/" },
     },
     {
@@ -978,8 +1107,13 @@ export default {
       severity: "error",
       comment:
         "Dashboard publishes substantive behavior and declarations, never re-exported private rows, SQL or projection mechanics (#604).",
-      from: { path: "^cloudflare/dashboard/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/dashboard/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/dashboard/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/dashboard/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "dashboard-contract-imports-implementation",
@@ -987,7 +1121,9 @@ export default {
       comment:
         "The native Dashboard contract declares semantic inputs and projections independently of implementation or runtime authority (#604).",
       from: { path: "^cloudflare/dashboard/contract\\.ts$" },
-      to: { path: "^cloudflare/dashboard/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/dashboard/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "dashboard-internal-imports-outward-interface",
@@ -1002,7 +1138,10 @@ export default {
       severity: "error",
       comment:
         "Budgets owns caps, exact monthly spending, alert latches and retained progress. Peers use published operations, never private SQL or rows (#603).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/budgets/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/budgets/",
+      },
       to: { path: "^cloudflare/budgets/internal/" },
     },
     {
@@ -1019,7 +1158,10 @@ export default {
       comment:
         "Budgets publishes substantive behavior and declarations, never re-exported private rows, SQL or monthly calculations (#603).",
       from: { path: "^cloudflare/budgets/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/budgets/internal/", dependencyTypes: ["export"] },
+      to: {
+        path: "^cloudflare/budgets/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "budgets-contract-imports-implementation",
@@ -1027,7 +1169,9 @@ export default {
       comment:
         "The native Budget contract declares semantic inputs and projections independently of implementation or runtime authority (#603).",
       from: { path: "^cloudflare/budgets/contract\\.ts$" },
-      to: { path: "^cloudflare/budgets/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/budgets/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "budgets-internal-imports-outward-interface",
@@ -1042,7 +1186,10 @@ export default {
       severity: "error",
       comment:
         "Transactions owns capture, exact effective relations, corrections and retained provenance. Peers use published operations, never private SQL or rows (#598).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/transactions/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/transactions/",
+      },
       to: { path: "^cloudflare/transactions/internal/" },
     },
     {
@@ -1058,8 +1205,13 @@ export default {
       severity: "error",
       comment:
         "Transactions publishes substantive behavior and declarations, never re-exported private rows, SQL or policy (#598).",
-      from: { path: "^cloudflare/transactions/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/transactions/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/transactions/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/transactions/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "transactions-contract-imports-implementation",
@@ -1067,7 +1219,9 @@ export default {
       comment:
         "The native Transaction contract declares semantic inputs and projections independently of implementation or runtime authority (#598).",
       from: { path: "^cloudflare/transactions/contract\\.ts$" },
-      to: { path: "^cloudflare/transactions/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^cloudflare/transactions/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "transactions-internal-imports-outward-interface",
@@ -1082,7 +1236,10 @@ export default {
       severity: "error",
       comment:
         "Categories owns keyword persistence, matching policy and native query assembly. Other owners use its published operations (#597).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/categories/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/categories/",
+      },
       to: { path: "^cloudflare/categories/internal/" },
     },
     {
@@ -1098,15 +1255,23 @@ export default {
       severity: "error",
       comment:
         "The Category owner declares its native public interface without re-exporting private persistence or policy.",
-      from: { path: "^cloudflare/categories/(contract|operations|runtime)\\.ts$" },
-      to: { path: "^cloudflare/categories/internal/", dependencyTypes: ["export"] },
+      from: {
+        path: "^cloudflare/categories/(contract|operations|runtime)\\.ts$",
+      },
+      to: {
+        path: "^cloudflare/categories/internal/",
+        dependencyTypes: ["export"],
+      },
     },
     {
       name: "foreign-module-imports-cloudflare-web-session-internal",
       severity: "error",
       comment:
         "WebSession credentials, rows and lifecycle are private; use the published owner contract and operations (#596).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/web-session/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/web-session/",
+      },
       to: { path: "^cloudflare/web-session/internal/" },
     },
     {
@@ -1114,7 +1279,10 @@ export default {
       severity: "error",
       comment:
         "BrowserLogin verifier handling and pairing rows stay private; callers use its published operations (#596).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/browser-login/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/browser-login/",
+      },
       to: { path: "^cloudflare/browser-login/internal/" },
     },
     {
@@ -1130,7 +1298,9 @@ export default {
       severity: "error",
       comment:
         "Session and pairing publication declares behavior without re-exporting private implementation (#596).",
-      from: { path: "^cloudflare/(web-session|browser-login)/(contract|operations|runtime)\\.ts$" },
+      from: {
+        path: "^cloudflare/(web-session|browser-login)/(contract|operations|runtime)\\.ts$",
+      },
       to: { path: "^cloudflare/$1/internal/", dependencyTypes: ["export"] },
     },
     {
@@ -1139,7 +1309,10 @@ export default {
       comment:
         "Identity's User rows, WhatsApp association and context projections are private. " +
         "Other adapters, portable modules, tests and tools use Identity contract.ts or operations.ts (#595).",
-      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/identity/" },
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/identity/",
+      },
       to: { path: "^cloudflare/identity/(internal/|user-context/internal/)" },
     },
     {
@@ -1228,7 +1401,9 @@ export default {
         "contract.ts is the independent declaration interface. It may depend on contracts, but not " +
         "on private implementation, substantive operations, or runtime composition.",
       from: { path: "^src/(core|shell)/(.+)/contract\\.ts$" },
-      to: { path: "^src/(core|shell)/.+/(internal/|operations\\.ts$|runtime\\.ts$)" },
+      to: {
+        path: "^src/(core|shell)/.+/(internal/|operations\\.ts$|runtime\\.ts$)",
+      },
     },
     {
       name: "internal-imports-outward-interface",
@@ -1256,7 +1431,9 @@ export default {
         "A published interface re-exported private implementation. contract.ts, operations.ts, and " +
         "runtime.ts may use internals in their permitted direction, but must declare the interface " +
         "they publish instead of laundering internal exports.",
-      from: { path: "^src/(core|shell)/(.+)/(contract|operations|runtime)\\.ts$" },
+      from: {
+        path: "^src/(core|shell)/(.+)/(contract|operations|runtime)\\.ts$",
+      },
       to: {
         path: "^src/$1/$2/internal/",
         dependencyTypes: ["export"],
@@ -1435,7 +1612,10 @@ export default {
       from: { path: "^(src|scripts|tools)/" },
       // `pathNot` rather than an `^src/` prefix on `path`: anchoring the whole
       // thing needs `(.*/)?`, which the cruiser rejects as an unsafe regex.
-      to: { path: "/index\\.(ts|mts|cts|js|mjs|cjs)$", pathNot: "(^|.*/)node_modules/" },
+      to: {
+        path: "/index\\.(ts|mts|cts|js|mjs|cjs)$",
+        pathNot: "(^|.*/)node_modules/",
+      },
     },
   ],
   options: {
@@ -1448,7 +1628,16 @@ export default {
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "node", "default", "types"],
-      extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+      extensions: [
+        ".ts",
+        ".tsx",
+        ".mts",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+      ],
       mainFields: ["module", "main", "types", "typings"],
     },
   },

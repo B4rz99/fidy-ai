@@ -37,6 +37,10 @@ Production on 2026-10-10: authenticated approved test User, clearly labelled `PR
 
 ## Rerun
 
+2026-10-11 follow-up at revision `b131e61435ec63c57470f57ed1ad3409261f0005`: 50 combined Transactions/chat rendered feature checks, 33 Transactions/hosted-session Core checks and 14 built-browser Transactions journeys passed. The browser journeys cover capture, loading, cross-User refusal, 0/100/201-record pagination, draft interruption, continuation retry, refresh, authentication replacement and saved correction without duplicates. Their controlled HTTP responses do not establish Production behaviour.
+
+The canonical deletion implementation is merged in [PR #1204](https://github.com/B4rz99/fidy-ai/pull/1204). It does not add a deletion control to this view. Its hosted confirmation and production cleanup are tracked in the [Hosted Agent feature map](../agent/FEATURE.md). Deployment and live pagination verification remain pending because Workers AI preflight is blocked by exhausted provider allocation; a direct D1 query still succeeded, so that provider failure is distinct from the reproduced continuation bug.
+
 ```sh
 bun run --cwd apps/web test src/features/transactions
 bun run --cwd apps/server test:core src/core/transactions --coverage.enabled=false

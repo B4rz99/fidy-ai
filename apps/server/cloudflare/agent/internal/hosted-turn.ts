@@ -175,6 +175,23 @@ const interrupted = (): Response =>
   Response.json({ status: "interrupted" }, { status: 503, headers: noStore });
 const resourceRefused = (): Response =>
   Response.json({ status: "capacity_exceeded" }, { status: 429, headers: noStore });
+const inferenceRefused = (error: Option.Option<unknown>): Response => {
+  if (
+    Option.exists(
+      error,
+      (failure) =>
+        failure instanceof HostedInferenceError && failure.reason._tag === "ProviderQuotaExceeded"
+    )
+  ) {
+    return Response.json({ status: "provider_quota_exceeded" }, { status: 429, headers: noStore });
+  }
+  return Option.exists(
+    error,
+    (failure) => failure instanceof HostedInferenceError && failure.reason._tag === "ResourceLimit"
+  )
+    ? resourceRefused()
+    : unavailable();
+};
 
 /** Construct a proposed reply. Only a separate browser-visible receipt permits completion. */
 export type HostedDelivery = (
@@ -995,16 +1012,11 @@ const executeAdmittedTurn = ({
         if (Exit.isFailure(generated)) {
           const error = Cause.findErrorOption(generated.cause);
           const timedOut = Option.exists(error, Cause.isTimeoutError);
-          const refused = Option.exists(
-            error,
-            (failure) =>
-              failure instanceof HostedInferenceError && failure.reason._tag === "ResourceLimit"
-          );
           yield* finish({
             _tag: "Failed",
             reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
           });
-          return refused ? resourceRefused() : unavailable();
+          return inferenceRefused(error);
         }
         if (generated.value.toolCalls.length > 0) {
           const nextCount = usedCalls + generated.value.toolCalls.length;

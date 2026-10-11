@@ -40,6 +40,15 @@ if (import.meta.main) {
     `${outputDirectory}/deployment-metadata.json`,
     `${JSON.stringify(metadata, null, 2)}\n`
   );
+  const installers = Bun.spawnSync(
+    ["bash", "../../scripts/cli-release/stage-installers.sh", outputDirectory],
+    {
+      cwd: webRoot,
+      stderr: "inherit",
+      stdout: "inherit",
+    }
+  );
+  if (installers.exitCode !== 0) throw new Error("CLI installer staging failed");
   await validateProductionArtifact({
     directory: outputDirectory,
     expectedDigest: metadata.contractDigest,

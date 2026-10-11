@@ -1,5 +1,6 @@
 # Exercise the real Windows binary and installer with local release fixtures, never the network.
 $ErrorActionPreference = 'Stop'
+$ExpectedVersion = if ($env:FIDY_CLI_VERSION) { $env:FIDY_CLI_VERSION } else { '0.1.0' }
 $OriginalLocalAppData = $env:LOCALAPPDATA
 $OriginalPath = $env:Path
 $OriginalTemp = $env:TEMP
@@ -10,7 +11,8 @@ $FixtureRelease = Join-Path $FixtureRoot 'release'
 New-Item -ItemType Directory -Path $FixtureRelease | Out-Null
 Copy-Item 'dist/cli-release/fidy-windows-x64.zip*' $FixtureRelease
 function Invoke-WebRequest {
-  param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
+  param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile, [int]$TimeoutSec)
+  if ($Uri -eq 'https://api.fidyapp.com/cli/latest.txt') { return @{ Content = "$ExpectedVersion`n" } }
   Copy-Item (Join-Path $FixtureRelease ([IO.Path]::GetFileName($Uri))) $OutFile
 }
 $Extraction = @{ Count = 0 }
@@ -45,14 +47,21 @@ try {
     throw 'Installer temporary paths are not isolated to the test fixture.'
   }
   $env:LOCALAPPDATA = Join-Path $FixtureRoot 'local'
-  & "$PSScriptRoot/install.ps1" -Version '0.1.0'
+  & "$PSScriptRoot/install.ps1" -Version $ExpectedVersion
   $Installed = Join-Path $env:LOCALAPPDATA 'Programs\Fidy\fidy.exe'
-  if ((& $Installed --version) -ne 'fidy 0.1.0') { throw 'Installed executable failed.' }
+  if ((& $Installed --version) -ne "fidy $ExpectedVersion") { throw 'Installed executable failed.' }
   if ($Extraction.Count -ne 1) { throw 'Positive installer did not exercise actual extraction.' }
+  & "$PSScriptRoot/install.ps1"
+  if ((& $Installed --version) -ne "fidy $ExpectedVersion" -or $Extraction.Count -ne 2) {
+    throw 'Upgrade did not replace the installation with the verified executable.'
+  }
+  if (@(Get-ChildItem (Split-Path $Installed) -File).Count -ne 1) {
+    throw 'Upgrade left staged files in the installation directory.'
+  }
   $PreviousHash = (Get-FileHash $Installed).Hash
   Set-Content (Join-Path $FixtureRelease 'fidy-windows-x64.zip') 'corrupt download'
   $Rejected = $false
-  try { & "$PSScriptRoot/install.ps1" -Version '0.1.0' } catch { $Rejected = $true }
+  try { & "$PSScriptRoot/install.ps1" -Version $ExpectedVersion } catch { $Rejected = $true }
   if (-not $Rejected -or (Get-FileHash $Installed).Hash -ne $PreviousHash) {
     throw 'A corrupt update did not preserve the prior installation.'
   }
@@ -70,7 +79,7 @@ try {
     $BeforeFiles = @(Get-ChildItem -Recurse -File $FixtureRoot | ForEach-Object FullName | Sort-Object)
     $BeforeExtraction = $Extraction.Count
     $Failure = ''
-    try { & "$PSScriptRoot/install.ps1" -Version '0.1.0' } catch { $Failure = $_.Exception.Message }
+    try { & "$PSScriptRoot/install.ps1" -Version $ExpectedVersion } catch { $Failure = $_.Exception.Message }
     if ($Failure -ne 'Unexpected archive contents.') {
       throw "Hostile archive did not reach and fail the entry-name gate: $Failure"
     }

@@ -26,6 +26,7 @@ const strictReport = {
   deferred: false,
   revision: "workers-ai-gemma-4-2026-09-22",
   prerequisiteFailure: false,
+  trailingJson: "",
 };
 type Report = typeof strictReport;
 type ScriptResult = {
@@ -37,6 +38,12 @@ type ScriptResult = {
   posts: number;
   directory: string;
 };
+const failureDiagnostic = (check: string, report: Report): string => {
+  if (report.revision !== strictReport.revision || report.trailingJson !== "") {
+    return "Workers AI conformance failed: check=internal category=UnexpectedFailure\n";
+  }
+  return `Workers AI conformance failed: check=${check} category=${report.category}\n`;
+};
 const assertDiagnostic = (scenario: Scenario, result: ScriptResult, check?: string): void => {
   const { report, diagnostic, output } = result;
   if (scenario === "readiness-headers") expect(diagnostic).toContain("readiness request timed out");
@@ -44,13 +51,10 @@ const assertDiagnostic = (scenario: Scenario, result: ScriptResult, check?: stri
     expect(diagnostic).toBe("Workers AI conformance request failed.\n");
   }
   if (check !== undefined) {
-    const approved = report.revision === strictReport.revision;
-    const safeCheck = approved ? check : "internal";
-    const safeCategory = approved ? report.category : "UnexpectedFailure";
     expect(diagnostic).toBe(
       report.deferred
         ? `::warning::Workers AI live conformance deferred: check=${check} category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed.\n`
-        : `Workers AI conformance failed: check=${safeCheck} category=${safeCategory}\n`
+        : failureDiagnostic(check, report)
     );
     expect(output + diagnostic).not.toContain("fixture-private-content");
   }
@@ -160,7 +164,7 @@ const exercise = Effect.fn(function* (
                   check,
                   category: report.category,
                   privateContent: "fixture-private-content",
-                }),
+                }) + report.trailingJson,
             { status: scenario === "refused" ? 503 : 200 }
           );
         },
@@ -284,6 +288,16 @@ layer(BunServices.layer, { excludeTestServices: true })((it) => {
       allowQuotaDeferral: true,
     })
   );
+  for (const trailingJson of ["{}", "not-json"]) {
+    it.effect(`refuses a quota report followed by ${trailingJson}`, () =>
+      exercise("refused", "canonical_query", {
+        ...strictReport,
+        category: "ProviderQuotaExceeded",
+        allowQuotaDeferral: true,
+        trailingJson,
+      })
+    );
+  }
   it.effect("does not defer a failed deterministic prerequisite or start live inference", () =>
     exercise("refused", "canonical_query", {
       ...strictReport,

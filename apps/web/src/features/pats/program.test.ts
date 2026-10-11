@@ -262,3 +262,25 @@ it("disables revocation after uncertain submission until a successful refresh", 
       );
     })
   ));
+
+it("retains dated metadata after a failed refresh and disables stale revocation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let reads = 0;
+      renderPATs(() => {
+        reads += 1;
+        return reads === 1
+          ? Response.json({
+              data: { pats: [{ ...metadata, lastUsedAt: "2026-10-02T15:30:00Z" }] },
+              next: [],
+            })
+          : new Response("private failure", { status: 503 });
+      });
+      yield* Effect.tryPromise(() => screen.findByText("02-10-2026"));
+      yield* click("Actualizar tokens");
+      yield* Effect.tryPromise(() => screen.findByText(/No pudimos actualizar tus tokens/u));
+      expect(screen.getByText("02-10-2026")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Desactivar" })).toBeDisabled();
+      expect(screen.queryByText("private failure")).not.toBeInTheDocument();
+    })
+  ));

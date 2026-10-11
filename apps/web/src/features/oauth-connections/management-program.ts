@@ -72,17 +72,20 @@ const makeUpdate =
       }),
     });
 /** Owns one canonical listing and revocation lifecycle, scoped to its route and account. */
-export const mountOAuthManagement = ({
-  container,
-  client,
-  resources,
-  after,
-}: Readonly<{
-  container: HTMLElement;
-  client: WebAuthClient;
-  resources: Layer.Layer<never>;
-  after: Option.Option<OAuthConnectionId>;
-}>): (() => void) => {
+const mountManagement = (
+  {
+    container,
+    client,
+    resources,
+    after,
+  }: Readonly<{
+    container: HTMLElement;
+    client: WebAuthClient;
+    resources: Layer.Layer<never>;
+    after: Option.Option<OAuthConnectionId>;
+  }>,
+  presentation: "Standalone" | "Access"
+): (() => void) => {
   const commands = makeCommands(client, after);
   const handle = Runtime.embed(
     Runtime.makeElement({
@@ -95,7 +98,7 @@ export const mountOAuthManagement = ({
         commands: [commands.Load()],
       }),
       update: makeUpdate(commands),
-      view: (model, html) => managementView({ model, html, after }),
+      view: (model, html) => managementView({ model, html, after, presentation }),
       crash: {
         view: (_, html) =>
           html.p(
@@ -107,3 +110,12 @@ export const mountOAuthManagement = ({
   );
   return () => handle.dispose();
 };
+
+export const mountOAuthManagement = (
+  configuration: Parameters<typeof mountManagement>[0]
+): (() => void) => mountManagement(configuration, "Standalone");
+
+/** Embeds MCP metadata and revocation without duplicating the surrounding Accesos page. */
+export const mountOAuthListing = (
+  configuration: Parameters<typeof mountManagement>[0]
+): (() => void) => mountManagement(configuration, "Access");

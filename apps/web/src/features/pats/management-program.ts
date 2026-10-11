@@ -4,7 +4,7 @@ import { makeCanonicalRead } from "@/transport/canonical-read";
 import { Command, Mount, Runtime, Subscription, type Update } from "foldkit";
 import { mountElementProgram } from "@/browser/element-program";
 import type { ActivePATList, FidyClient } from "@/transport/client";
-import { managementView } from "./management-foldkit-view";
+import { managementListing, managementView } from "./management-foldkit-view";
 import {
   ManagementMessage as Message,
   ManagementModel as Model,
@@ -100,15 +100,23 @@ const makeUpdate =
       }),
       Mounted: () => ({ model }),
     });
+const initialModel: Model = {
+  result: Option.none(),
+  status: "Loading",
+  selection: Option.none(),
+  notice: "",
+  uncertain: false,
+};
 /** Owns active metadata, explicit revocation and a separately scoped one-time manual disclosure. */
-export const mountPATManagement = (
+const mountManagement = (
   configuration: Readonly<{
     container: HTMLElement;
     client: FidyClient;
     registry: AtomRegistry.AtomRegistry;
     resources: Layer.Layer<never>;
-  }>
-): (() => void) => {
+  }>,
+  presentation: "Standalone" | "Listing"
+): Readonly<{ dispose: () => void; refresh: () => void }> => {
   const { container, client, registry, resources } = configuration;
   const query = makeCanonicalRead({ registry, query: client.query("pats", "listPATs", {}) });
   const commands = makeCommands(client, query.read);
@@ -122,17 +130,14 @@ export const mountPATManagement = (
       resources,
       devTools: false,
       init: (): Update.Return<Model, Message> => ({
-        model: {
-          result: Option.none(),
-          status: "Loading",
-          selection: Option.none(),
-          notice: "",
-          uncertain: false,
-        },
+        model: initialModel,
         commands: [commands.Load()],
       }),
       update: makeUpdate(commands),
-      view: (model, html) => managementView({ model, html, manual: manual() }),
+      view: (model, html) =>
+        presentation === "Listing"
+          ? managementListing({ model, html })
+          : managementView({ model, html, manual: manual() }),
       subscriptions: Subscription.make<Model, Message>()(() => ({
         changes: Subscription.persistent(Stream.fromQueue(events)),
       })),
@@ -145,14 +150,30 @@ export const mountPATManagement = (
       },
     })
   );
-  return () => {
-    for (const dispose of children) dispose();
-    children.clear();
-    handle.dispose();
-    query.dispose();
-    Effect.runSync(Queue.shutdown(events));
+  return {
+    refresh: () => {
+      Queue.offerUnsafe(events, Message.Refresh());
+    },
+    dispose: () => {
+      for (const dispose of children) dispose();
+      children.clear();
+      handle.dispose();
+      query.dispose();
+      Effect.runSync(Queue.shutdown(events));
+    },
   };
 };
+
+/** Embeds standalone token management and its privately scoped disclosure. */
+export const mountPATManagement = (
+  configuration: Parameters<typeof mountManagement>[0]
+): (() => void) => mountManagement(configuration, "Standalone").dispose;
+
+/** Embeds metadata and revocation; refresh follows a separately owned token issuance. */
+export const mountPATListing = (
+  configuration: Parameters<typeof mountManagement>[0]
+): Readonly<{ dispose: () => void; refresh: () => void }> =>
+  mountManagement(configuration, "Listing");
 
 const makeManualMount = (
   configuration: Readonly<{

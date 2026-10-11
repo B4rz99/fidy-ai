@@ -36,8 +36,7 @@ type ViewConfiguration = Readonly<{
 }>;
 const settings = [
   ["/settings/email", "Correo", "Email"],
-  ["/settings/pats", "Tokens personales (PAT)", "PATs"],
-  ["/settings/agents", "Agentes conectados", "Agents"],
+  ["/settings/access", "Accesos", "Access"],
   ["/settings/recovery", "Recuperación", "Recovery"],
 ] as const;
 const navigation = ({ model, html, mounts }: ViewConfiguration): Html =>

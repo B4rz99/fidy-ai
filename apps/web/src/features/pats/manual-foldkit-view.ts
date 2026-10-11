@@ -2,6 +2,7 @@ import { DateTime, Option, Schema } from "effect";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { patLifetimeDayOptions, patScopeCopy } from "@/transport/client";
 import { buttonVariants } from "@/ui/button-variants";
+import { inputClass } from "@/ui/reference-examples";
 import type { makeManualDisclosure } from "./manual-disclosure";
 import {
   GrantDraft,
@@ -30,12 +31,15 @@ const scopeSelector = (model: Model, html: Builder): Html =>
       ...scopes.map((scope) =>
         html.label(
           [
-            html.Class("flex cursor-pointer items-start gap-3 border-b py-3"),
+            html.Class(
+              `flex cursor-pointer items-start gap-3 border-b py-3 ${model.scopes.includes(scope) ? "bg-muted" : ""}`
+            ),
             html.For(`pat-scope-${scope}`),
           ],
           [
             html.input([
               html.Type("checkbox"),
+              html.Class("mt-0.5 size-4 shrink-0 accent-primary"),
               html.Id(`pat-scope-${scope}`),
               html.AriaLabel(`${patScopeCopy[scope].label}: ${descriptions[scope]}`),
               html.Checked(model.scopes.includes(scope)),
@@ -53,6 +57,26 @@ const scopeSelector = (model: Model, html: Builder): Html =>
       ),
     ]
   );
+const recipientField = (model: Model, html: Builder): Html =>
+  html.div(
+    [html.Class("flex flex-col gap-2")],
+    [
+      html.label([html.For("pat-recipient"), html.Class("text-sm font-semibold")], ["Nombre"]),
+      html.input([
+        html.Id("pat-recipient"),
+        html.Autocomplete("off"),
+        html.Class(inputClass),
+        html.Placeholder("Ej. Mi agente personal"),
+        html.Value(model.recipientLabel),
+        html.OnInput((value) => Message.EditedLabel({ value })),
+        html.AriaDescribedBy("pat-recipient-hint"),
+      ]),
+      html.p(
+        [html.Id("pat-recipient-hint"), html.Class("text-sm text-muted-foreground")],
+        ["Un nombre visible de 1 a 80 caracteres."]
+      ),
+    ]
+  );
 const editor = (model: Model, html: Builder): Html =>
   html.form(
     [
@@ -61,28 +85,27 @@ const editor = (model: Model, html: Builder): Html =>
       html.OnSubmit(Message.RequestedReview()),
     ],
     [
-      html.label([html.For("pat-recipient")], ["Nombre"]),
-      html.input([
-        html.Id("pat-recipient"),
-        html.Autocomplete("off"),
-        html.Class("rounded-md border p-2"),
-        html.Placeholder("Ej. Mi agente personal"),
-        html.Value(model.recipientLabel),
-        html.OnInput((value) => Message.EditedLabel({ value })),
-        html.AriaDescribedBy("pat-recipient-hint"),
-      ]),
-      html.p([html.Id("pat-recipient-hint")], ["Un nombre visible de 1 a 80 caracteres."]),
+      recipientField(model, html),
       scopeSelector(model, html),
-      html.label([html.For("pat-lifetime")], ["Duración del token"]),
-      html.select(
+      html.div(
+        [html.Class("flex flex-col gap-2")],
         [
-          html.Id("pat-lifetime"),
-          html.Value(String(model.lifetimeDays)),
-          html.OnChange((value) => Message.ChoseDays({ value })),
-        ],
-        patLifetimeDayOptions.map((days) =>
-          html.option([html.Value(String(days))], [`${days} días`])
-        )
+          html.label(
+            [html.For("pat-lifetime"), html.Class("text-sm font-semibold")],
+            ["Duración del token"]
+          ),
+          html.select(
+            [
+              html.Id("pat-lifetime"),
+              html.Class(inputClass),
+              html.Value(String(model.lifetimeDays)),
+              html.OnChange((value) => Message.ChoseDays({ value })),
+            ],
+            patLifetimeDayOptions.map((days) =>
+              html.option([html.Value(String(days))], [`${days} días`])
+            )
+          ),
+        ]
       ),
       html.button(
         [
@@ -205,7 +228,10 @@ export const manualView = (
     ],
     [
       html.h2([html.Id("create-pat-title"), html.Class("text-xl font-semibold")], ["Crear token"]),
-      html.p([], ["Dale un nombre y elige solo los permisos que necesita tu agente."]),
+      html.p(
+        [html.Class("text-sm text-muted-foreground")],
+        ["Dale un nombre y elige solo los permisos que necesita tu agente."]
+      ),
       content(model, html, disclosure),
     ]
   );

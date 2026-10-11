@@ -89,24 +89,29 @@ it("keeps claimed names as text and requires refresh after an uncertain revocati
       );
     })
   ));
-it.each(["expired", "revoked"])("preserves activity and pagination for %s connections", (state) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      mountListing(() =>
-        Response.json({ connections: [metadata(first, state)], nextCursor: second })
-      );
-      expect(
-        yield* Effect.tryPromise(() => screen.findByText("categories.listCategories"))
-      ).toBeVisible();
-      expect(screen.getByText(/Completada/u)).toBeVisible();
-      expect(screen.queryByRole("button", { name: "Revocar este agente" })).not.toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Siguiente página" })).toHaveAttribute(
-        "href",
-        `/settings/agents?after=${second}`
-      );
-      expect(screen.getByText(/necesitas una nueva aprobación/u)).toBeVisible();
-    })
-  )
+it.each(["expired", "revoked"])(
+  "preserves state and pagination without activity details for %s connections",
+  (state) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        mountListing(() =>
+          Response.json({ connections: [metadata(first, state)], nextCursor: second })
+        );
+        expect(
+          yield* Effect.tryPromise(() => screen.findByRole("table", { name: "Conexiones MCP" }))
+        ).toBeVisible();
+        expect(screen.queryByText("categories.listCategories")).not.toBeInTheDocument();
+        expect(screen.queryByText(first)).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: "Revocar este agente" })
+        ).not.toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Siguiente página" })).toHaveAttribute(
+          "href",
+          `/settings/agents?after=${second}`
+        );
+        expect(screen.getByText(/necesitas una nueva aprobación/u)).toBeVisible();
+      })
+    )
 );
 it("retains the last listing but disables revocation when refresh fails", () =>
   Effect.runPromise(

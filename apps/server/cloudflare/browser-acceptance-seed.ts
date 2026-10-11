@@ -1,4 +1,4 @@
-import { Clock, Effect } from "effect";
+import { Clock, DateTime, Effect } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
@@ -22,6 +22,7 @@ const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 export const pairingUserId = "24000000-0000-4000-8000-000000000321";
 export const dashboardUserId = "24000000-0000-4000-8000-000000000351";
+export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
 const expiredTrialAgeMs = 691_200_000;
@@ -90,6 +91,38 @@ await seedIdentity({
   email: "tablero@example.com",
   consentId: "24000000-0000-4000-8000-000000000352",
 });
+// History continuation has its own User so parallel mutation journeys cannot alter its pages.
+await seedIdentity({
+  userId: paginationUserId,
+  bsuid: "CO.Pagination",
+  email: "paginacion@example.com",
+  consentId: "24000000-0000-4000-8000-000000000342",
+});
+const historyPageSize = 100;
+const continuationRecords = 5;
+const millisecondsPerDay = 86_400_000;
+const uuidSuffixWidth = 12;
+await db.batch(
+  Array.from({ length: historyPageSize + continuationRecords }, (_, index) => {
+    // Creation spans two days to respect the native daily creation allowance.
+    const createdAt = now - (index < continuationRecords ? millisecondsPerDay : 0);
+    return db
+      .prepare(`INSERT INTO transactions
+      (id, user_id, amount, currency, direction, counterparty, category_id, occurred_at, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`)
+      .bind(
+        `25000000-0000-4000-8000-${String(index + 1).padStart(uuidSuffixWidth, "0")}`,
+        paginationUserId,
+        "1000",
+        "COP",
+        "outflow",
+        `Registro paginado ${index}`,
+        "10000000-0000-4000-8000-000000000001",
+        DateTime.formatIso(DateTime.makeUnsafe(now)),
+        DateTime.formatIso(DateTime.makeUnsafe(createdAt))
+      );
+  })
+);
 // Pairing owns its standing and Dashboard; enrollment journeys may run first or concurrently.
 await seedIdentity({
   userId: pairingUserId,

@@ -39,13 +39,18 @@ Production on 2026-10-10: authenticated approved test User, clearly labelled `PR
 
 2026-10-11 follow-up at revision `b131e61435ec63c57470f57ed1ad3409261f0005`: 50 combined Transactions/chat rendered feature checks, 33 Transactions/hosted-session Core checks and 14 built-browser Transactions journeys passed. The browser journeys cover capture, loading, cross-User refusal, 0/100/201-record pagination, draft interruption, continuation retry, refresh, authentication replacement and saved correction without duplicates. Their controlled HTTP responses do not establish Production behaviour.
 
-The canonical deletion implementation is merged in [PR #1204](https://github.com/B4rz99/fidy-ai/pull/1204). It does not add a deletion control to this view. Its hosted confirmation and production cleanup are tracked in the [Hosted Agent feature map](../agent/FEATURE.md). Deployment and live pagination verification remain pending because Workers AI preflight is blocked by exhausted provider allocation; a direct D1 query still succeeded, so that provider failure is distinct from the reproduced continuation bug.
+The canonical deletion implementation is merged in [PR #1204](https://github.com/B4rz99/fidy-ai/pull/1204). It does not add a deletion control to this view. Its hosted confirmation and production cleanup are tracked in the [Hosted Agent feature map](../agent/FEATURE.md). The deployment quota gate was corrected in [PR #1223](https://github.com/B4rz99/fidy-ai/pull/1223): exhausted Workers AI allocation no longer prevents deployment. Live AI verification remains separate from non-AI Transactions checks.
+
+2026-10-11 after updating this checkout to `8ce7fd176d98968250b080c8b8f06e5ef24d37f7` (Foldkit migration): all 102 Transactions unit checks and 14 controlled-response browser journeys passed. The obsolete React pagination patch was not carried forward: trunk already owns automatic continuation in `history.ts` and `scroll-continuation.ts`.
+
+An additional built-browser journey, `transaction-native-pagination.spec.ts`, signs in an isolated fixture User through actual Core pairing redemption. Real local public Ingress/Core/D1 returned the first 100 of 105 retained Transactions, then the remaining five without duplicate identities. A correction to a second-page Transaction survived browser reload and continuation. The fixture uses equal occurrence instants and two creation days, preserving the native daily allowance. No history or correction response is mocked in this journey, and it does not change Production records. Production verification of the current Foldkit artifact remains outstanding.
 
 ```sh
 bun run --cwd apps/web test src/features/transactions
 bun run --cwd apps/server test:core src/core/transactions --coverage.enabled=false
 bun run --cwd apps/server test:cloudflare cloudflare/transactions --maxWorkers=1
 bun run --cwd apps/web test:browser transaction-pagination.spec.ts financial-journeys.spec.ts --workers=1
+bun run --cwd apps/web test:browser transaction-native-pagination.spec.ts --workers=1
 ```
 
 For live reruns, use a logged-in approved test User and only labelled synthetic records. Check summary arithmetic, save/reload individual and bulk corrections, reject a stale edit from another tab, then verify page one loads before scrolling and the next page appears at the end. Record the matching web/API revision and distinguish safe live checks from failures only simulated locally.

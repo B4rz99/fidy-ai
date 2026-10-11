@@ -29,19 +29,28 @@ const row = (pat: ActivePATMetadata, model: Model, html: Builder): Html =>
     [html.Key(pat.shortId), html.Class("border-b")],
     [
       html.th(
-        [html.Attribute("scope", "row"), html.Class("p-3 text-left")],
+        [html.Attribute("scope", "row"), html.Class("px-2 py-3 text-left")],
         [
           html.span([html.Class("block font-semibold")], [pat.recipientLabel]),
           html.code([], [pat.shortId]),
         ]
       ),
       html.td(
-        [html.Class("p-3")],
-        pat.scopes.map((scope) => html.span([html.Class("mr-2")], [patScopeCopy[scope].label]))
+        [html.Class("px-2 py-3")],
+        pat.scopes.map((scope) =>
+          html.span(
+            [
+              html.Class(
+                "mr-1 inline-flex rounded-full bg-secondary px-2 py-0.5 text-xs font-medium"
+              ),
+            ],
+            [patScopeCopy[scope].label]
+          )
+        )
       ),
-      html.td([html.Class("p-3")], [time(pat.createdAt, html)]),
+      html.td([html.Class("whitespace-nowrap px-2 py-3")], [time(pat.createdAt, html)]),
       html.td(
-        [html.Class("p-3")],
+        [html.Class("whitespace-nowrap px-2 py-3")],
         [
           Option.match(pat.lastUsedAt, {
             onNone: () => "Nunca",
@@ -49,8 +58,8 @@ const row = (pat: ActivePATMetadata, model: Model, html: Builder): Html =>
           }),
         ]
       ),
-      html.td([html.Class("p-3")], [time(pat.expiresAt, html)]),
-      html.td([html.Class("p-3")], [action(model, pat.shortId, html)]),
+      html.td([html.Class("whitespace-nowrap px-2 py-3")], [time(pat.expiresAt, html)]),
+      html.td([html.Class("px-2 py-3")], [action(model, pat.shortId, html)]),
     ]
   );
 const confirmation = (model: Model, html: Builder): Html => {
@@ -109,10 +118,7 @@ const listing = (model: Model, html: Builder): Html => {
       [],
       [
         html.h3([], ["No tienes tokens activos."]),
-        html.p(
-          [],
-          ["Crea un token o autoriza a tu agente con su código para darle acceso a Fidy."]
-        ),
+        html.p([], ["Crea un token para darle acceso a tu agente."]),
       ]
     );
   }
@@ -120,7 +126,7 @@ const listing = (model: Model, html: Builder): Html => {
     [html.Class("overflow-x-auto")],
     [
       html.table(
-        [html.AriaLabelledBy("active-pats-title"), html.Class("min-w-[42rem] w-full")],
+        [html.AriaLabelledBy("active-pats-title"), html.Class("min-w-[42rem] w-full text-sm")],
         [
           html.thead(
             [],
@@ -129,7 +135,10 @@ const listing = (model: Model, html: Builder): Html => {
                 [],
                 ["Nombre", "Permisos", "Creado el", "Último uso", "Vence el", "Acciones"].map(
                   (label) =>
-                    html.th([html.Attribute("scope", "col"), html.Class("p-3 text-left")], [label])
+                    html.th(
+                      [html.Attribute("scope", "col"), html.Class("border-b px-2 py-3 text-left")],
+                      [label]
+                    )
                 )
               ),
             ]
@@ -143,7 +152,7 @@ const listing = (model: Model, html: Builder): Html => {
     ]
   );
 };
-const management = (model: Model, html: Builder): Html =>
+export const managementListing = (model: Model, html: Builder): Html =>
   html.section(
     [html.AriaLabelledBy("active-pats-title"), html.Class("flex flex-col gap-5")],
     [
@@ -189,7 +198,7 @@ export const managementView = (
       html.div(
         [html.Class("grid min-w-0 gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_24rem]")],
         [
-          management(model, html),
+          managementListing(model, html),
           html.aside(
             [html.Class("min-w-0 border-t p-5 xl:border-t-0 xl:border-l")],
             [html.div([html.Key("manual-pat-program"), html.OnMount(manual)])]

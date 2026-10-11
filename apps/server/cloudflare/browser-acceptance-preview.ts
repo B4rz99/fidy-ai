@@ -13,6 +13,7 @@ import {
   db,
   firstCardUserId,
   fixtureUserId,
+  paginationUserId,
   pairingUserId,
 } from "./browser-acceptance-seed";
 import { observeBrowserCost } from "./browser-cost/operations";
@@ -391,6 +392,7 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
 };
 const approvedFixtureUser = (parameters: URLSearchParams): string => {
   if (parameters.get("dashboard") === "true") return dashboardUserId;
+  if (parameters.get("pagination") === "true") return paginationUserId;
   if (parameters.get("firstCard") === "true") return firstCardUserId;
   return parameters.get("pairing") === "true" ? pairingUserId : fixtureUserId;
 };

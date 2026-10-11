@@ -494,6 +494,15 @@ without opening the panel. Income/expense icons precede compact amounts below th
 
 ### Compact management tables
 
+`/settings/access` combines Tokens activos and Conexiones MCP beneath one Accesos page header.
+Keep both sections in the main column, separated by one divider. Crear token occupies the white
+right rail and stretches with the viewport on desktop; stack it below both tables on narrow screens.
+Use the shared input and pill-button classes. The header does not repeat the creation action.
+MCP connections show name, state, permissions, expiration, and individual revocation in a compact
+table. Keep connection UUIDs and detailed activity out of the visible presentation. Place aggregate
+revocation below the connection table. Show a refresh/retry action only when connection evidence
+failed to load or a revocation outcome is uncertain.
+
 Active-token management uses native table builders with one row per token: name and safe short code,
 permissions, creation, last use, expiration, and action. Use compact cell classes for 14px text, 8px horizontal padding, and 12px body-cell vertical padding.
 Show dates as `dd-mm-yyyy` without times; retain the full UTC instant in each `time` element’s

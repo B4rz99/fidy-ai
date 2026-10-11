@@ -258,6 +258,11 @@ const callCategories = (request: APIRequestContext, bearer: string): Promise<API
       },
     },
   });
+const clickRevokeConnection = (page: Page, connectionId: string): Promise<void> =>
+  page
+    .locator(`tr[data-connection-id="${connectionId}"]`)
+    .getByRole("button", { name: "Revocar este agente" })
+    .click();
 const inspectAndRevoke = (
   input: Readonly<{
     page: Page;
@@ -270,7 +275,7 @@ const inspectAndRevoke = (
     const { page, request, query, token } = input;
     const connectionId = yield* inspectManagementPage({ page, request, token });
     const second = yield* reconnectFromBrowser({ page, request, query });
-    yield* Effect.tryPromise(() => page.goto("/settings/agents"));
+    yield* Effect.tryPromise(() => page.goto("/settings/access"));
     yield* Effect.tryPromise(() =>
       expect(page.getByText("<img src=x onerror=alert(1)>")).toHaveCount(2)
     );
@@ -285,19 +290,15 @@ const inspectAndRevoke = (
     expect(
       (yield* Effect.tryPromise(() => callCategories(request, token.access_token))).status()
     ).toBe(ok);
-    yield* Effect.tryPromise(() =>
-      page
-        .getByText(`Conexión: ${connectionId}`, { exact: true })
-        .locator("xpath=ancestor::section[1]")
-        .getByRole("button", { name: "Revocar este agente" })
-        .click()
-    );
+    yield* Effect.tryPromise(() => clickRevokeConnection(page, connectionId));
     yield* Effect.tryPromise(() =>
       expect(page.getByRole("status")).toHaveText(
         "Acceso revocado. Las acciones ya realizadas se conservan."
       )
     );
-    yield* Effect.tryPromise(() => expect(page.getByText("Estado: Revocado")).toBeVisible());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Revocado", { exact: true })).toBeVisible()
+    );
     expect(
       (yield* Effect.tryPromise(() => callCategories(request, token.access_token))).status()
     ).toBe(unauthorized);
@@ -330,16 +331,16 @@ const inspectManagementPage = (
     expect(
       (yield* Effect.tryPromise(() => callCategories(request, token.access_token))).status()
     ).toBe(ok);
-    yield* Effect.tryPromise(() => page.goto("/settings/agents"));
+    yield* Effect.tryPromise(() => page.goto("/settings/access"));
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("heading", { name: "Agentes conectados", exact: true })).toBeVisible()
+      expect(page.getByRole("heading", { name: "Conexiones MCP", exact: true })).toBeVisible()
     );
     yield* Effect.tryPromise(() =>
       expect(page.getByText("<img src=x onerror=alert(1)>")).toBeVisible()
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));
     yield* Effect.tryPromise(() =>
-      expect(page.getByText("categories.listCategories", { exact: true })).toBeVisible()
+      expect(page.getByText("categories.listCategories", { exact: true })).toHaveCount(0)
     );
     const listed = yield* Effect.tryPromise(() =>
       page.context().request.get(`${api}/web/oauth/connections`, { headers: { origin: app } })
@@ -371,7 +372,9 @@ const revokeAllWithRacingRefresh = (
         "Acceso revocado. Las acciones ya realizadas se conservan."
       )
     );
-    yield* Effect.tryPromise(() => expect(page.getByText("Estado: Revocado")).toHaveCount(2));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Revocado", { exact: true })).toHaveCount(2)
+    );
     expect(
       (yield* Effect.tryPromise(() => callCategories(request, second.access_token))).status()
     ).toBe(unauthorized);
@@ -444,7 +447,7 @@ const refuseOtherIdentity = (
   Effect.gen(function* () {
     const page = yield* Effect.tryPromise(() => input.context.newPage());
     yield* Effect.tryPromise(() => signInFirstCardThroughCore({ page, request: input.request }));
-    yield* Effect.tryPromise(() => page.goto("/settings/agents"));
+    yield* Effect.tryPromise(() => page.goto("/settings/access"));
     yield* Effect.tryPromise(() =>
       expect(page.getByText("No hay conexiones en esta página.")).toBeVisible()
     );
@@ -596,7 +599,7 @@ test("built agent settings report unavailable or malformed state without a false
       yield* loginFromReview(page, request, path);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
       yield* Effect.tryPromise(() => page.route("**/web/oauth/connections", unavailableManagement));
-      yield* Effect.tryPromise(() => page.goto("/settings/agents"));
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos consultar los agentes")
       );

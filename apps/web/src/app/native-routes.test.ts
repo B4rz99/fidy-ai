@@ -22,8 +22,9 @@ it.each([
   ["/app", "AppIndex"],
   ["/app/dashboard", "Dashboard"],
   ["/app/transactions", "Transactions"],
-  ["/settings/pats", "PATs"],
-  ["/settings/agents", "Agents"],
+  ["/settings/pats", "Access"],
+  ["/settings/access", "Access"],
+  ["/settings/agents", "Access"],
   ["/settings/email", "Email"],
   ["/settings/recovery", "Recovery"],
 ])("matches %s without confusing parent routes", (path, tag) => {
@@ -65,4 +66,13 @@ it.each(["/missing?privateVerifier=secret", "/funciones/missing", "/app/dashboar
 
 it("retains invalid OAuth review paths for the feature to refuse without API work", () => {
   expect(parse("/oauth/review/invalid")).toEqual({ _tag: "OAuthReview", requestId: "invalid" });
+});
+
+it("preserves only the canonical MCP continuation reference in Accesos", () => {
+  const reference = "10000000-0000-4000-8000-000000000001";
+  expect(parse(`/settings/access?after=${reference}&privateVerifier=secret`)).toEqual({
+    _tag: "Access",
+    after: Option.some(reference),
+  });
+  expect(parse("/settings/access?after=invalid")._tag).toBe("NotFound");
 });

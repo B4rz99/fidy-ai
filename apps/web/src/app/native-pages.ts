@@ -130,13 +130,13 @@ const authenticatedPage = ({ container, route, lifetime, owner }: PageMount): ((
           mountTransactions({ container, client, resources, registry: lifetime.registry }),
       })
     ),
-    Match.tag("PATs", () =>
+    Match.tag("Access", (route) =>
       mountLazyFeature({
         container,
-        loading: "Cargando página…",
-        load: () => import("@/features/pats/feature"),
-        mount: ({ mountPATManagement }) =>
-          mountPATManagement({ container, client, resources, registry: lifetime.registry }),
+        loading: "Cargando accesos…",
+        load: () => import("./native-access"),
+        mount: ({ mountAccessPage }) =>
+          mountAccessPage({ container, lifetime, after: route.after }),
       })
     ),
     Match.tag("Email", () =>
@@ -191,15 +191,6 @@ const authPage = (configuration: PageMount): (() => void) => {
   return Match.value(route).pipe(
     Match.tag("Pair", (route) => pairing({ ...configuration, route })),
     Match.tag("Google", "Microsoft", (route) => provider({ ...configuration, route })),
-    Match.tag("Agents", (route) =>
-      mountLazyFeature({
-        container,
-        loading: "Cargando página…",
-        load: () => import("@/features/oauth-connections/feature"),
-        mount: ({ mountOAuthManagement }) =>
-          mountOAuthManagement({ container, client, resources, after: route.after }),
-      })
-    ),
     Match.tag("OAuthReview", (route) =>
       mountLazyFeature({
         container,

@@ -64,8 +64,7 @@ export const AppRoute = defineRouteUnion({
   Recurring: {
     id: RecurringDigestReportParams.fields.id,
   },
-  PATs: {},
-  Agents: {
+  Access: {
     after: Schema.Option(OAuthConnectionId),
   },
   Email: {},
@@ -132,15 +131,10 @@ const parser = Route.oneOf(
     Route.slash(Route.schemaSegment("id", RecurringDigestReportParams.fields.id)),
     Route.mapTo(AppRoute.Recurring)
   ),
-  pipe(fixed("settings/pats"), Route.mapTo(AppRoute.PATs)),
   pipe(
-    fixed("settings/agents"),
-    Route.query(
-      Schema.Struct({
-        after: Schema.OptionFromOptionalKey(OAuthConnectionId),
-      })
-    ),
-    Route.mapTo(AppRoute.Agents)
+    Route.oneOf(fixed("settings/access"), fixed("settings/pats"), fixed("settings/agents")),
+    Route.query(Schema.Struct({ after: Schema.OptionFromOptionalKey(OAuthConnectionId) })),
+    Route.mapTo(AppRoute.Access)
   ),
   pipe(fixed("settings/email"), Route.mapTo(AppRoute.Email)),
   pipe(fixed("settings/recovery"), Route.mapTo(AppRoute.Recovery))
@@ -151,16 +145,9 @@ export const parseAppRoute: (url: Url) => AppRoute = Route.parseUrlWithFallback(
   AppRoute.NotFound
 );
 export const isSignedRoute = (route: AppRoute): boolean =>
-  [
-    "AppIndex",
-    "Dashboard",
-    "Transactions",
-    "Recurring",
-    "PATs",
-    "Agents",
-    "Email",
-    "Recovery",
-  ].includes(route._tag);
+  ["AppIndex", "Dashboard", "Transactions", "Recurring", "Access", "Email", "Recovery"].includes(
+    route._tag
+  );
 /** Selects a public page without retaining query strings or fragments in its feature model. */
 export const publicPage = (route: AppRoute): Option.Option<string> =>
   Match.value(route).pipe(

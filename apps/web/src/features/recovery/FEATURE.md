@@ -4,9 +4,9 @@ Capability and verification map for `/settings/recovery`. Product requirements r
 
 ## Behaviour
 
-An explicit click requests canonical backup-code rotation under a fresh WebSession. Rotation invalidates the preceding code immediately. The raw replacement is disclosed in one mounted view, with an explicit copy action. A changed React identity drops that disclosure; sensitive clipboard ownership handles clearing. Failed clipboard writes do not report “Copiado”.
+An explicit click requests canonical backup-code rotation under a fresh WebSession. Rotation invalidates the preceding code immediately. The raw replacement is disclosed in one mounted view, with an explicit copy action. Disposing the authenticated Foldkit mount drops that disclosure; sensitive clipboard ownership handles clearing. Failed clipboard writes do not report “Copiado”.
 
-The canonical command is serialized and consumes the response through a terminal callback rather than retaining its raw code in shared Atom results. A stale session requests new sign-in. Other failures disclose no code and offer another rotation; only the latest visibly disclosed code should be used. The server owns fresh authority, proof replacement and retained security evidence.
+The private recovery controller serializes canonical rotation and consumes its response inside the mounted lifetime. The raw code stays outside the Foldkit Model and shared Atom results. A stale session requests new sign-in. Other failures disclose no code and offer another rotation; only the latest visibly disclosed code should be used. The server owns fresh authority, proof replacement and retained security evidence.
 
 ## Verification
 

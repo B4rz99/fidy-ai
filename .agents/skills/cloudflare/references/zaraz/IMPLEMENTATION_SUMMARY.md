@@ -94,7 +94,7 @@ All tasks loaded 366 lines regardless of need.
 
 ### patterns.md (430 lines)
 
-- SPA tracking (React, Vue, Next.js)
+- SPA tracking (Foldkit)
 - User identification flows
 - Complete e-commerce funnel
 - A/B testing

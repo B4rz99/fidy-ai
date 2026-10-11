@@ -39,32 +39,6 @@ export class ChatAgent extends AIChatAgent<Env> {
 }
 ```
 
-**Client (React):**
-
-```tsx
-import { useAgent } from "agents/react";
-import { useAgentChat } from "@cloudflare/ai-chat/react";
-
-function ChatUI() {
-  const agent = useAgent({ agent: "ChatAgent" });
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useAgentChat({ agent });
-
-  return (
-    <div>
-      {messages.map((m) => (
-        <div key={m.id}>
-          {m.role}: {m.content}
-        </div>
-      ))}
-      <form onSubmit={handleSubmit}>
-        <input value={input} onChange={handleInputChange} disabled={isLoading} />
-        <button disabled={isLoading}>Send</button>
-      </form>
-    </div>
-  );
-}
-```
-
 ## Human-in-the-Loop (Client Tools)
 
 Server defines tool, client executes:

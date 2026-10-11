@@ -11,17 +11,17 @@ Capability and verification map for `/app/dashboard`. This records implementatio
 | Money             | Display uses authoritative decimal text, including values beyond safe binary-number precision. Charts use bounded dimensionless geometry without replacing Money with floating-point amounts.                                     | Six exact-Money presentation checks.                                                                                                                                              |
 | Layout            | The canonical recursive layout controls desktop axes and relative shares. Mobile stacks in canonical reading order.                                                                                                               | Responsive presentation and layout rule checks.                                                                                                                                   |
 | Personalization   | “Personalizar” reveals catalog drag sources, named keyboard destinations, Widget title/removal controls, and boundary resizing. Gestures compile to canonical edits.                                                              | Drag adapter, editor model, rendered feature, and command checks.                                                                                                                 |
-| Saving            | Each gesture sends its edit immediately through a serialized queue. “Guardar” exits editing; it does not commit a separate unsaved document. Successful edits invalidate the canonical view.                                      | `feature.tsx` and queued-command checks.                                                                                                                                          |
+| Saving            | Each gesture sends its edit immediately through a serialized queue. “Guardar” exits editing; it does not commit a separate unsaved document. Successful edits invalidate the canonical view.                                      | `program.ts` and queued-command checks.                                                                                                                                           |
 | Failure recovery  | Rejected edits and uncertain outcomes have different copy. A successful save followed by failed refresh retains the prior canvas and reports stale evidence. Catalog and view retries have independent ownership.                 | Feature/controller tests.                                                                                                                                                         |
 | Dashboard title   | The server supports `set-title` and returns the resulting User-visible title. The development heading now renders that canonical value with the existing typography.                                                              | A new rendered regression failed before the fix and passed after it; real local Worker/D1 and built-browser read-after-edit also passed; production verification remains pending. |
 
 ## Owners
 
-- `feature.tsx` owns independent query feedback and serialized canonical edits.
+- `program.ts` owns independent query feedback and serialized canonical edits.
 - `query.ts` owns read/initialize/read and its workflow phase.
 - `editor-model.ts` translates closed UI gestures to canonical edits.
-- `drag-adapter.tsx` owns drag transport validation and semantic destinations.
-- `view.tsx`, `presentation.ts`, and Money presentation own rendering.
+- `native-drag.ts` owns drag transport validation and semantic destinations.
+- `foldkit-view.ts`, `presentation.ts`, and Money presentation own rendering.
 - Server Core Dashboard owns the document grammar, edit rules, periods, aggregation, and authoritative results. Cloudflare adapters own admitted persistence and execution.
 
 ## Verification

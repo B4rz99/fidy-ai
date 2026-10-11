@@ -19,10 +19,21 @@ export const mountIndicator = (list: HTMLDivElement): (() => void) => {
     const active = list.querySelector<HTMLButtonElement>('[aria-selected="true"]');
     if (active !== null) moveIndicator({ tab: active, instant: true });
   };
+  const focus = (event: FocusEvent): void => {
+    if (event.target instanceof HTMLButtonElement) {
+      moveIndicator({ tab: event.target, instant: true });
+    }
+  };
   position();
-  if (typeof ResizeObserver === "undefined") return () => {};
+  list.addEventListener("focusin", focus);
+  if (typeof ResizeObserver === "undefined") {
+    return (): void => list.removeEventListener("focusin", focus);
+  }
   const observer = new ResizeObserver(position);
   observer.observe(list);
   list.querySelectorAll("button").forEach((tab) => observer.observe(tab));
-  return (): void => observer.disconnect();
+  return (): void => {
+    list.removeEventListener("focusin", focus);
+    observer.disconnect();
+  };
 };

@@ -15,7 +15,7 @@
 | Pageview        | Page load         | Track page views   |
 | Click           | Element clicked   | Button tracking    |
 | Form Submission | Form submitted    | Lead capture       |
-| History Change  | URL changes (SPA) | React/Vue routing  |
+| History Change  | URL changes (SPA) | Foldkit routing    |
 | Variable Match  | Custom condition  | Conditional firing |
 
 ### History Change (SPA)

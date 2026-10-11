@@ -33,7 +33,7 @@ class BrowserBundleFailure extends Data.TaggedError("BrowserBundleFailure")<{
 }> {}
 
 const defaultOptions = (): BrowserBundleCheckOptions => ({
-  entrypoint: "src/main.tsx",
+  entrypoint: "src/main.ts",
   outdir: `/tmp/fidy-web-bundle-${process.pid}`,
   webRoot: Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, ""),
   workspaceRoot: Bun.fileURLToPath(new URL("../../../", import.meta.url)).replace(/\/$/u, ""),
@@ -57,7 +57,7 @@ const repositoryPath = (input: string, webRoot: string, workspaceRoot: string): 
 };
 
 const resolveSourcePath = (basePath: string): Promise<string> => {
-  const extensions = ["", ".ts", ".tsx", ".js", ".jsx"];
+  const extensions = ["", ".ts", ".js"];
   const find = (index: number): Promise<string> => {
     const extension = extensions[index];
     if (extension === undefined) {
@@ -75,6 +75,13 @@ const browserBuildPlugins = (webRoot: string, workspaceRoot: string): Array<Brow
   {
     name: "vite-source-loaders",
     setup(build): void {
+      build.onResolve({ filter: /\.html\?raw$/u }, ({ importer, path }) => ({
+        path: path.startsWith("@/")
+          ? `${webRoot}/src/${path.slice(2).replace(/\?raw$/u, "")}`
+          : Bun.fileURLToPath(
+              new URL(path.replace(/\?raw$/u, ""), `file://${importer.replace(/[^/]+$/u, "")}`)
+            ),
+      }));
       build.onResolve({ filter: /^@\//u }, ({ path }) =>
         resolveSourcePath(`${webRoot}/src/${path.slice(2)}`).then((resolved) => ({
           path: resolved,
@@ -87,11 +94,6 @@ const browserBuildPlugins = (webRoot: string, workspaceRoot: string): Array<Brow
       );
       build.onResolve({ filter: /^@fidy\/server\/client$/u }, () => ({
         path: `${workspaceRoot}/apps/server/src/client.ts`,
-      }));
-      build.onResolve({ filter: /\.html\?raw$/u }, ({ importer, path }) => ({
-        path: Bun.fileURLToPath(
-          new URL(path.replace(/\?raw$/u, ""), `file://${importer.replace(/[^/]+$/u, "")}`)
-        ),
       }));
       build.onResolve({ filter: /\.css$/u }, () => ({ path: "web.css", external: true }));
     },
@@ -132,7 +134,7 @@ const sourceImports = (sources: ReadonlyArray<Source>): ReadonlyArray<SourceImpo
   );
 
 const readWebSources = (webRoot: string): Promise<ReadonlyArray<Source>> => {
-  const sourceFiles = Array.from(new Bun.Glob("src/**/*.{ts,tsx}").scanSync({ cwd: webRoot }));
+  const sourceFiles = Array.from(new Bun.Glob("src/**/*.ts").scanSync({ cwd: webRoot }));
   return Promise.all(
     sourceFiles.map((sourceFile) =>
       Bun.file(`${webRoot}/${sourceFile}`)
@@ -176,14 +178,12 @@ const collectStaticOutputs = (entry: string, outputs: BuildOutputs): ReadonlySet
 const findBrowserEntry = (outputs: BuildOutputs): Option.Option<string> =>
   Option.fromUndefinedOr(
     Object.entries(outputs).find(([, output]) =>
-      (output.entryPoint ?? "").replaceAll("\\", "/").endsWith("src/main.tsx")
+      (output.entryPoint ?? "").replaceAll("\\", "/").endsWith("src/main.ts")
     )
   ).pipe(Option.map(([outputPath]) => outputPath));
 
 const assertNoDashboardInInitialInputs = (inputs: ReadonlyArray<string>): void => {
-  const leaked = inputs.filter(
-    (input) => input.includes("/features/dashboard/") || input.includes("node_modules/recharts/")
-  );
+  const leaked = inputs.filter((input) => input.includes("/features/dashboard/"));
   if (leaked.length > 0) {
     throw new Error(
       `Dashboard modules entered the public/auth initial chunk:\n${leaked.join("\n")}`
@@ -195,8 +195,10 @@ const assertDashboardSplitEvidence = (inputs: ReadonlyArray<string>): void => {
   if (!inputs.some((input) => input.includes("/features/dashboard/"))) {
     throw new Error("Dashboard split-chunk evidence is missing from the browser build");
   }
-  if (!inputs.some((input) => input.includes("node_modules/recharts/"))) {
-    throw new Error("Recharts split-chunk evidence is missing from the browser build");
+  if (!inputs.some((input) => input.includes("node_modules/@dnd-kit/dom/"))) {
+    throw new Error(
+      "Dashboard drag-control split-chunk evidence is missing from the browser build"
+    );
   }
 };
 

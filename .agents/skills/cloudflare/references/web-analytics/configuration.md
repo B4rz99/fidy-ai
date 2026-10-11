@@ -37,7 +37,7 @@ Dashboard → Web Analytics → Add site → Enter hostname → Copy snippet
 
 ## SPA Mode
 
-**Enable `spa: true` for:** React Router, Next.js, Vue Router, Nuxt, SvelteKit, Angular
+**Enable `spa: true` for:** Foldkit navigation
 
 **Keep `spa: false` for:** Traditional multi-page apps, static sites, WordPress
 

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
+import type { APIRequestContext, BrowserContext, Page, Response, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { makeUser, response } from "./http-fixtures";
 import { visiblePairingCode } from "./real-core-fixture";
@@ -428,7 +428,7 @@ const finishRealPairing = ({
       yield* wait(page.getByLabel("Monto ($)").fill("12500"));
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("La Cocina"));
       yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
-      yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("La Cocina"));
+      yield* wait(expect(page.getByRole("status")).toContainText("La Cocina"));
       yield* wait(editAndCheckDashboard(page));
       yield* wait(page.goto("/upgrade"));
       yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
@@ -536,7 +536,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       yield* wait(page.getByLabel("Monto ($)").fill("12345"));
       yield* wait(page.getByLabel("Contraparte (opcional)").fill("Recuperación Fidy"));
       yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
-      yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("Recuperación Fidy"));
+      yield* wait(expect(page.getByRole("status")).toContainText("Recuperación Fidy"));
       yield* wait(page.reload());
       yield* wait(expect(page.getByText("Recuperación Fidy").first()).toBeVisible());
       expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
@@ -576,6 +576,9 @@ const installSlowdownRoutes = (page: Page): Promise<{ events: string[]; pendingR
       return { events, pendingRoutes };
     })
   );
+
+const isPairingRefusal = (reply: Response): boolean =>
+  reply.url().endsWith("/web/pairings/redeem") && reply.status() === invalidStatus;
 
 test("honors server slowdown before showing the generic terminal refusal", ({ page }) =>
   Effect.runPromise(
@@ -618,6 +621,7 @@ test("honors server slowdown before showing the generic terminal refusal", ({ pa
       expect(events).toEqual(["start", "redeem-1", "slowdown", "redeem-2"]);
       yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
       const second = Option.getOrThrow(Option.fromUndefinedOr(pendingRoutes[1]));
+      const refused = page.waitForResponse(isPairingRefusal);
       events.push("invalid");
       yield* wait(
         second.fulfill({
@@ -626,6 +630,9 @@ test("honors server slowdown before showing the generic terminal refusal", ({ pa
           body: json({ error: { code: "pairing_invalid", message: invalidPairingMessage } }),
         })
       );
+      yield* wait((yield* wait(refused)).finished());
+      // Foldkit commits queued views on animation frames; resume rendering after the timed polling assertions.
+      yield* wait(page.clock.resume());
       yield* wait(expect(page.getByText(invalidPairingMessage)).toBeVisible({ timeout: 20000 }));
       yield* wait(page.clock.runFor(slowdownDelayMilliseconds));
       expect(events).toEqual(["start", "redeem-1", "slowdown", "redeem-2", "invalid"]);

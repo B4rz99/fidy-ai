@@ -9,6 +9,12 @@ const pageSize = 100;
 const unauthorized = 401;
 const multiplePages = pageSize * 2 + 1;
 const wait = Effect.tryPromise;
+// Scroll the last persistent record; the sentinel retires immediately when history completes.
+const scrollHistoryEnd = (page: Page): Promise<void> =>
+  page
+    .getByRole("button", { name: /^Ver transacción Registro /u })
+    .last()
+    .scrollIntoViewIfNeeded();
 const uuidWidth = 12;
 const beyondPage = pageSize + 1;
 type HistoryRow = Readonly<{
@@ -142,7 +148,7 @@ test("loads the next Transaction page only when scrolling to the end", ({ page }
       const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
       yield* wait(() => expect(rows).toHaveCount(pageSize));
       expect(fixture.requests).toHaveLength(1);
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() => expect(rows).toHaveCount(beyondPage));
       expect(fixture.requests).toHaveLength(2);
     })
@@ -156,11 +162,11 @@ test("pauses automatic continuation while a capture draft is open", ({ page }) =
       yield* wait(() => page.goto("/app/transactions"));
       yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
       yield* wait(() => page.getByLabel("Monto ($)", { exact: true }).fill("123"));
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() => expect(page.getByLabel("Monto ($)", { exact: true })).toHaveValue("123"));
       expect(fixture.requests).toHaveLength(1);
       yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           beyondPage
@@ -181,9 +187,6 @@ test("browses beyond 100 Transactions and discloses loaded filter and summary sc
         expect(
           page.getByText("Filtros y resumen aplican a las transacciones cargadas.")
         ).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Buscar", exact: true }).click()
       );
       yield* Effect.tryPromise(() => page.getByLabel("Buscar transacciones").fill("Registro 101"));
       yield* Effect.tryPromise(() =>
@@ -221,9 +224,7 @@ for (const count of [0, pageSize, multiplePages]) {
         const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
         yield* wait(() => expect(rows).toHaveCount(Math.min(count, pageSize)));
         for (let loaded = pageSize; loaded < count; loaded += pageSize) {
-          yield* wait(() =>
-            page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded()
-          );
+          yield* wait(() => scrollHistoryEnd(page));
           yield* wait(() => expect(rows).toHaveCount(Math.min(loaded + pageSize, count)));
         }
         expect(yield* wait(() => rows.allTextContents())).toEqual(
@@ -252,7 +253,7 @@ test("retains loaded Transactions on interruption and retries the same bounded p
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       fixture.mode = "hold";
       yield* wait(() => page.goto("/app/transactions"));
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() =>
         expect(page.getByLabel("Continuación de transacciones")).toHaveAttribute(
           "aria-busy",
@@ -307,7 +308,7 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
         page.getByRole("checkbox", { name: "Seleccionar Registro 1", exact: true }).click()
       );
       yield* wait(() => expect(page.getByText("1 seleccionadas", { exact: true })).toBeVisible());
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
       yield* wait(() =>
         page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click()
@@ -322,7 +323,7 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
         )
       );
       fixture.mode = "ready";
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           beyondPage
@@ -340,7 +341,7 @@ test("expires authentication during continuation and starts a clean replacement 
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       fixture.mode = "expired";
       yield* wait(() => page.goto("/app/transactions"));
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() =>
         expect(page.getByText("Tu sesión venció. Inicia sesión de nuevo.")).toBeVisible()
       );
@@ -377,7 +378,7 @@ test("saving a later Transaction resets pages and reloads its correction without
       const last = Option.getOrThrow(Option.fromNullishOr(fixture.rows.at(-1)));
       yield* wait(() => installCorrection(page, fixture, last));
       yield* wait(() => page.goto("/app/transactions"));
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() =>
         page
           .getByRole("button", { name: `Ver transacción ${last.counterparty}`, exact: true })
@@ -391,7 +392,7 @@ test("saving a later Transaction resets pages and reloads its correction without
           pageSize
         )
       );
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => scrollHistoryEnd(page));
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
           beyondPage

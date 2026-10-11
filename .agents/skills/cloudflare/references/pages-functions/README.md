@@ -17,21 +17,6 @@ Serverless functions on Cloudflare Pages using Workers runtime. Full-stack dev w
 
 ## Decision Tree: Is This Pages Functions?
 
-```
-Need serverless backend?
-├─ Yes, for a static site → Pages Functions
-├─ Yes, standalone API → Workers
-└─ Just static hosting → Pages (no functions)
-
-Have existing Worker?
-├─ Complex routing logic → Use _worker.js (Advanced Mode)
-└─ Simple routes → Migrate to /functions (File-Based)
-
-Framework-based?
-├─ Next.js/SvelteKit/Remix → Uses _worker.js automatically
-└─ Vanilla/HTML/React SPA → Use /functions
-```
-
 ## File-Based Routing
 
 ```

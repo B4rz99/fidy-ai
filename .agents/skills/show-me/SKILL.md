@@ -27,11 +27,11 @@ submitForm
 
 - Show UI structure as a component tree, including state and module boundaries that matter:
 
-```tsx
-<SessionPage> (apps/example/src/routes/session.tsx)
-  useSessionEvents()
-  <SessionToolbar>
-    <RunSkillButton> (packages/ui)
+```text
+SessionPage builder (apps/example/src/routes/session.ts)
+  session events Subscription
+  SessionToolbar builder
+    RunSkillButton builder (shared UI)
 ```
 
 - Show file responsibility or a broad refactor as a shallow file tree:

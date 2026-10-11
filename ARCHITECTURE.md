@@ -10,7 +10,7 @@ separate responsibilities:
 - [`@fidy/cli`](apps/cli/ARCHITECTURE.md) owns the Bun executable, local credential storage,
   PATPairing presentation and server-derived direct client. Its native store is the deliberate
   recoverable-bearer exception; server persistence remains digest-only.
-- [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and static artifact.
+- [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the Foldkit/Vite browser application and static artifact.
 - [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the Alchemy stack, resource wiring, and edge
   policy, but no domain model or Worker implementation.
 

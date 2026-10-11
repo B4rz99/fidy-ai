@@ -298,11 +298,11 @@ motif, not a decoration to repeat throughout every section.
 
 ### Icons
 
-Use Hugeicons through the installed React packages, with the outline family and a
+Use Hugeicons geometry from `@hugeicons/core-free-icons` through `ui/icon.ts`, with the outline family and a
 consistent 1.5px stroke. Default to 20px in controls and 24px for standalone icons.
 Let icons inherit readable text color; pastel backgrounds can provide emphasis.
 Decorative icons are hidden from assistive technology, and icon-only buttons have
-an accessible name and a sufficient hit area. Base UI supplies component behavior;
+an accessible name and a sufficient hit area. Foldkit and scoped native DOM mounts own component behavior;
 Hugeicons supplies the icon artwork.
 
 ### Forms and states
@@ -443,30 +443,23 @@ control radius, calendar, or dropdown appearance.
 
 ### Shared component ownership
 
-Import components directly from `@/ui/components/<file>`, without a barrel or a
-feature-private import. Components receive values, accessible labels, children,
-and callbacks. Features own canonical queries, mutations, revision checks,
-selection limits, filtering, and save outcomes. A dropdown selection is an intent;
-the shared component never decides whether or how to persist it.
+Use the direct native builders in `@/ui`, including `button-variants.ts`, `card.ts` and `icon.ts`,
+without a barrel or feature-private import. Features own canonical queries, mutations, revision
+checks, selection limits, filtering and save outcomes. A selection is an intent; presentation
+never decides whether or how to persist it.
 
-| Pattern          | Shared implementation                                       | Contract                                                                                                                                                                                              |
-| ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single choice    | `choice-dropdown.tsx`: `ChoiceDropdown`                     | Outline pill, optional leading visual, explicit accessible label, selected radio item, shared keyboard and dismissal behavior. `width` selects full-width fields or automatic-width toolbar controls. |
-| Inline choice    | `choice-dropdown.tsx`: `InlineChoiceDropdown`               | Plain icon and label, no pill or chevron. Hover, focus, and open feedback reveal interactivity. Uses the same radio menu; the feature decides what selection does.                                    |
-| Choice menu      | `choice-dropdown.tsx`: `ChoiceMenuOptions`                  | Shared radio options for composed triggers; Columns retains checkbox items in the same `DropdownMenu` primitive.                                                                                      |
-| Calendar         | `calendar-field.tsx`: `CalendarField`                       | Spanish single-day calendar opens immediately. The caller supplies the IANA time zone and ISO local date; fields display `dd-mm-yyyy`. Required dates cannot be cleared.                              |
-| Header search    | `header-search.tsx`: `HeaderSearch`                         | Replaces Buscar with a focused input. Escape closes the input while retaining the query. Query and open state belong to the caller.                                                                   |
-| Indicators       | `icon-indicator.tsx`: `IconIndicator`, `DirectionIndicator` | Hugeicons outline at 1.5px, readable dark icons on semantic pastel fills. Named plain/category/category-large/direction treatments replace per-view dimensions. Adjacent text conveys meaning.        |
-| Page header      | `workspace-layout.tsx`: `WorkspaceHeader`                   | 24px Poppins title, aligned actions, 20px gutters. Actions become a two-column grid on phones. Context and actions are caller-supplied.                                                               |
-| Record controls  | `workspace-layout.tsx`: `RecordToolbar`                     | One wrapping control flow, compact horizontal padding, consistent 8px gaps. Filters and actions share the available row.                                                                              |
-| Content and rail | `workspace-layout.tsx`: `WorkspaceColumns`                  | Flexible content and a 384px rail from 1280px; stacked content below that viewport width.                                                                                                             |
-| Responsive panel | `workspace-panel.tsx`: `WorkspacePanel`                     | Desktop rail, stacked browsing summary, full-screen sheet for active work on smaller screens. The caller supplies title, description, close action, and save lock.                                    |
+| Pattern              | Implementation                                                       | Contract                                                                                         |
+| -------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Actions              | `ui/button-variants.ts`                                              | Named appearance and size, visible focus rings and comfortable targets.                          |
+| Icons                | `ui/icon.ts`                                                         | Hugeicons outline at 1.5px, decorative geometry hidden from assistive technology.                |
+| Content groups       | `ui/card.ts`                                                         | Shared surface, border, title and content spacing.                                               |
+| Transaction controls | `features/transactions/toolbar-view.ts`, `editor-view.ts`            | Native labeled inputs and selects; local ISO dates convert through the canonical time-zone seam. |
+| Responsive panel     | `browser/responsive-panel.ts`, `features/transactions/panel-view.ts` | Desktop rail and small-screen modal sheet, Escape/focus ownership and save locks.                |
+| Navigation           | `app/native-view.ts`                                                 | Shared wordmark, sidebar and native compact popover.                                             |
+| Conversation         | `features/agent/view.ts`, `browser/stick-to-end.ts`                  | Persistent scoped conversation, escaped text and reader-owned scrolling.                         |
 
-The application shell already owns the shared wordmark, sidebar, and floating
-phone navigation. Reuse that shell for signed-in views rather than copying it
-into each feature. `Button`, `Input`, `Label`, `Alert`, `Empty`, `Skeleton`, and
-the overlay primitives remain the base controls; preserve their named variants,
-focus rings, comfortable hit areas, and disabled treatments.
+The shell owns shared navigation and the floating Agent launcher. Preserve named appearance
+variants, readable labels, focus rings, comfortable hit areas and disabled treatments across views.
 
 Category-to-illustration mapping stays with its feature; an indicator never assigns
 or infers canonical Category identity. Financial values use the existing exact
@@ -482,13 +475,11 @@ choice menus, calendar, indicators, and workspace composition using local exampl
 data. Extend this reference when approving a new reusable treatment, including
 keyboard behavior, light/Grafito appearance, and narrow layouts.
 
-The root `.oxlintrc.json` runs `@shadcn/lint` in normal lint and CI. Raw colors and
-arbitrary non-layout values are rejected. `no-restyle` contracts reserve component
-colors, typography, shape, focus, and control spacing for the UI owner. Pages may
-place controls; use component props and named variants for their appearance, or
-put surrounding spacing on a parent. Shared implementations can define their own
-styles inside `src/ui/components`; that exception is not permission for a view to
-copy a control and restyle it.
+The root `.oxlintrc.json` checks semantic color tokens in native `Html.Class` calls. Shared
+appearance belongs in `src/ui`; features reuse its named treatments. Do not introduce a new
+palette or restyle a shared control inside a view. Layout and scoped browser behavior remain
+with their feature owners. Rendered tests and browser checks verify focus, composition and
+responsive behavior that static class inspection cannot establish.
 
 Approved design changes update the shared component, its reference example, and
 this document together. Lint enforces configured styling rules; rendered interaction
@@ -503,9 +494,8 @@ without opening the panel. Income/expense icons precede compact amounts below th
 
 ### Compact management tables
 
-Active-token management uses the shared `Table` with one row per token: name and safe short code,
-permissions, creation, last use, expiration, and action. Use `density="compact"` on `TableHead`
-and `TableCell` for 14px text, 8px horizontal padding, and 12px body-cell vertical padding.
+Active-token management uses native table builders with one row per token: name and safe short code,
+permissions, creation, last use, expiration, and action. Use compact cell classes for 14px text, 8px horizontal padding, and 12px body-cell vertical padding.
 Show dates as `dd-mm-yyyy` without times; retain the full UTC instant in each `time` element’s
 `dateTime` attribute. Use “Nunca” for tokens that have never been used and wrap names readably.
 On narrow screens, scroll
@@ -516,12 +506,12 @@ occupies a full-width row beneath that token. Default table density remains unch
 
 The signed-in shell exposes a green, circular Agent launcher at the bottom right, with a comfortable
 48px target and safe-area clearance. It opens a non-modal chat above the launcher, using
-`ChatWindow` and `ChatComposer` from `ui/components/chat.tsx`. The panel fits the viewport on phones,
+the native builders in `features/agent/view.ts`. The panel fits the viewport on phones,
 uses existing Fidy surface, border and focus tokens, and supports Escape, a labeled close action,
 and reduced motion. It leaves the underlying workspace usable.
 
-AI Elements `Conversation` and `Message` live in `ui/components/ai-elements`, adapted to the local
-aliases, Hugeicons and branded controls. Conversation scrolling stays immediate, honors a reader's
+Native conversation and message builders use the shared
+Hugeicons and branded controls. Conversation scrolling stays immediate, honors a reader's
 position, and offers a labeled jump-to-latest control. User entries use peach bubbles; assistant text
 stays plain and readable. Enter sends, Shift+Enter inserts a line, and composing IME text cannot send.
 The feature owns the draft, bounded session-only history and pending status. Delivery acknowledgement

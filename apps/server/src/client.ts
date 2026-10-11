@@ -92,9 +92,11 @@ export { buildPATDisclosure, getTokenShortId, patScopeCopy } from "~/core/tokens
 export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/contract";
 export type { CanonicalInput } from "~/shell/canonical-operations/contract";
 export type { CanonicalSuccess } from "~/shell/canonical-operations/contract";
+export { DashboardView, DashboardWidgetView } from "~/shell/dashboard/contract";
 export {
   DashboardCatalogEntry,
   DashboardDocument,
+  type LayoutNodeFor,
   DashboardEdit,
   maximumSplitWeight,
   minimumSplitWeight,
@@ -121,7 +123,7 @@ export {
   emailReplacementCompletionPath,
 } from "~/shell/email-authentication/contract";
 export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/contract";
-export type { SubscriptionStatus } from "~/core/subscription/contract";
+export { SubscriptionStatus, SubscriptionOffers } from "~/core/subscription/contract";
 export { PriceId } from "~/core/subscription/contract";
 export { IanaTimeZone } from "~/core/_shared/context";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";
@@ -166,4 +168,7 @@ export { ProviderHandoffSearch } from "~/shell/web-authentication/contract";
 
 export { Currency, currencyMetadata } from "~/core/_shared/money";
 
-export { TransactionQueryValues } from "~/core/transactions/contract";
+export { Transaction, TransactionId, TransactionQueryValues } from "~/core/transactions/contract";
+
+export { Category } from "~/core/categories/contract";
+export { User } from "~/core/identity/contract";

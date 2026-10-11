@@ -288,7 +288,7 @@ const inspectAndRevoke = (
     yield* Effect.tryPromise(() =>
       page
         .getByText(`Conexión: ${connectionId}`, { exact: true })
-        .locator("..")
+        .locator("xpath=ancestor::section[1]")
         .getByRole("button", { name: "Revocar este agente" })
         .click()
     );

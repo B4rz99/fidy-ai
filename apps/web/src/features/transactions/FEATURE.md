@@ -18,8 +18,8 @@
 
 ## Owners
 
-- `feature.tsx` and `history.ts` project the authenticated canonical query lifetime and declared continuations.
-- `workspace.tsx` owns filters, the scroll sentinel and panel interaction; `scroll-continuation.ts` owns observer setup and cleanup through the callback ref. Capture, detail, inline Category, bulk correction and summary stay in this directory.
+- `program.ts` and `history.ts` project the authenticated canonical query lifetime and declared continuations.
+- `foldkit-view.ts` owns filters, the scroll sentinel and panel interaction; `scroll-continuation.ts` owns observer setup and cleanup through a scoped Foldkit Mount. Capture, detail, inline Category, bulk correction and summary stay in this directory.
 - Server Transactions owns capture/correction/history/search and persistence. Public Ingress reaches private Core/D1; browser fixtures do not prove deployed infrastructure.
 - This view has no Reconciliation, deletion or SourceAttestation history controls. Those canonical capabilities require a separate map and checks.
 

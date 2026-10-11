@@ -4,12 +4,6 @@ Configuration guide for RealtimeKit setup, client SDKs, and wrangler integration
 
 ## Installation
 
-### React
-
-```bash
-npm install @cloudflare/realtimekit @cloudflare/realtimekit-react-ui
-```
-
 ### Angular
 
 ```bash
@@ -23,13 +17,6 @@ npm install @cloudflare/realtimekit @cloudflare/realtimekit-ui
 ```
 
 ## Client SDK Configuration
-
-### React UI Kit
-
-```tsx
-import { RtkMeeting } from "@cloudflare/realtimekit-react-ui";
-<RtkMeeting authToken="<token>" onLeave={() => {}} />;
-```
 
 ### Angular UI Kit
 
@@ -163,52 +150,9 @@ TURN automatically configured when enabled in account - no client-side changes n
 
 ## Theming & Design Tokens
 
-```typescript
-import type { UIConfig } from '@cloudflare/realtimekit';
-
-const uiConfig: UIConfig = {
-  designTokens: {
-    colors: {
-      brand: { 500: '#0066ff', 600: '#0052cc' },
-      background: { 1000: '#1A1A1A', 900: '#2D2D2D' },
-      text: { 1000: '#FFFFFF', 900: '#E0E0E0' }
-    },
-    borderRadius: 'extra-rounded',  // 'rounded' | 'extra-rounded' | 'sharp'
-    theme: 'dark'  // 'light' | 'dark'
-  },
-  logo: { url: 'https://example.com/logo.png', altText: 'Company' }
-};
-
-// Apply to React
-<RtkMeeting authToken={token} config={uiConfig} onLeave={() => {}} />
-
-// Or use CSS variables
-// :root { --rtk-color-brand-500: #0066ff; --rtk-border-radius: 12px; }
-```
-
 ## Internationalization (i18n)
 
 ### Custom Language Strings
-
-```typescript
-import { useLanguage } from '@cloudflare/realtimekit-ui';
-
-const customLanguage = {
-  'join': 'Entrar',
-  'leave': 'Salir',
-  'mute': 'Silenciar',
-  'unmute': 'Activar audio',
-  'turn_on_camera': 'Encender cámara',
-  'turn_off_camera': 'Apagar cámara',
-  'share_screen': 'Compartir pantalla',
-  'stop_sharing': 'Dejar de compartir'
-};
-
-const t = useLanguage(customLanguage);
-
-// React usage
-<RtkMeeting authToken={token} t={t} onLeave={() => {}} />
-```
 
 ### Supported Locales
 

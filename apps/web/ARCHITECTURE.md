@@ -8,8 +8,8 @@ production topology, and browser-to-server ownership.
 
 ## 1. Application shape
 
-`apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
-It owns browser routing, providers, styles, and public policy copy. Its only server import is the
+`apps/web` is the `@fidy/web` Foldkit/Vite application package and produces a portable static artifact.
+It owns browser routing, scoped lifetimes, styles, and public policy copy. Its only server import is the
 browser-safe `@fidy/server/client` declaration seam; it never imports server implementations. The API
 Workers do not serve web routes or static assets.
 
@@ -21,12 +21,20 @@ once. Canonical requests may additionally retry a decoded `ResourceLimited` refu
 `Retry-After` pacing (six retries, delays of one to five seconds) inside the original 15-second
 deadline. This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
-in-flight transport. Shared and server state belongs to Effect
-Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
-Provider Authentication is the first embedded Foldkit feature: its Model, update, view, commands,
-and subscriptions own that feature's presentation and work. A React callback ref mounts and disposes
-the program inside the existing route and passes the generated authentication client's policy layer.
-The rest of the application retains the React/Atom ownership above.
+in-flight transport. Canonical server projections belong to Effect Atom. The native Foldkit application in
+`src/app/native-program.ts` owns document metadata, URL transitions and the signed-in shell.
+`native-routes.ts` decodes canonical public references and discards unknown query keys.
+Each feature has its own mounted Foldkit program with Schema Models, Messages, commands,
+subscriptions and views; `browser/element-program.ts` provides the stable nested mount boundary.
+The application retains a separate Agent mount across signed-in route changes.
+
+`native-lifetime.ts` owns authentication epochs and generated private capabilities. Login,
+confirmed logout, canonical expiry and pairing restart synchronously dispose retained features,
+registry caches and enrollment work before admitting a fresh lifetime. Late callbacks from a
+previous epoch cannot expire or update another account. Failed logout keeps its current lifetime.
+Private input and receipt owners remain outside serializable Model/Message/command state,
+and production developer tools are disabled. Browser scopes close on both route removal and
+account revocation; no provider grace period postpones cleanup.
 
 ## 2. Behavioral ownership
 
@@ -42,7 +50,7 @@ transitions, exact receipt retention, delivery deduplication, submission gating 
 history. Presentation receives a receipt-free display projection and actions; draft text, popup state
 and the browser visibility adapter remain with presentation. The feature's mounted state keeps a draft and
 bounded visible conversation through popup dismissal and route navigation, and expires with the
-signed-in layout. AI Elements conversation/message presentation uses Fidy primitives and the existing
+signed-in layout. Native conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed
 as model-provided HTML. After a proposed reply renders in the open popup in a visible document,
 the browser automatically acknowledges its delivery once. The ordinary conversation shows no
@@ -61,8 +69,8 @@ activation switch, or a chatbot activation path; preparation still enforces the 
 restriction. Missing or failing availability does not advertise DaviPlata.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
-OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, URLs,
-or shared atoms. The form retains its opaque challenge in a mounted ref; the gateway and transport
+OTPs remain in private scoped browser inputs and travel directly to Wompi, never in Fidy payloads, browser storage, URLs,
+or shared atoms. The form retains its opaque challenge in a mounted closure; the gateway and transport
 closures enclose rotating, one-use bearer authority and the approved token. Only safe interaction
 state and selection locks can enter shared view state. The transport independently verifies the
 exact operator-reviewed destinations against the prepared merchant environment, bounds requests,
@@ -85,7 +93,7 @@ provider references are not part of web application state.
 
 The authenticated Dashboard's Effect Atom owner explicitly reads the canonical view, initializes
 only on the owner-declared `DashboardUninitialized` failure, then reads again. It exposes workflow
-phase feedback without copying server state into React. Initialization and second-read failures are
+phase feedback without copying server state into a second writable owner. Initialization and second-read failures are
 presented truthfully; unavailability never triggers creation, and a load makes at most one
 initialization attempt. Concurrent tabs rely on canonical initialization idempotence. Successful
 edits invalidate the same Dashboard resource; queries themselves never create or repair domain state.
@@ -215,7 +223,7 @@ traces, screenshots, or video.
 
 The authenticated `/insights/recurring/$id` route reads the complete frozen recurring-charge report
 through `insights.getRecurringDigestReport`. Its server-owned report/path schemas cross the single
-browser client publication. The feature renders every historical item as escaped React text with
+browser client publication. The feature renders every historical item as escaped Foldkit text with
 exact Money/Currency formatting and captured date/zone context. Canonical loading, retry and refresh
 failure states use the existing session registry and query presentation; the URL carries only the
 opaque report identity and supplies no authorization.

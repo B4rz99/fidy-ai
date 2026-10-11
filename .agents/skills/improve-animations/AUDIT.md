@@ -52,7 +52,7 @@ Hunt for: `ease-in` anywhere, bare `ease`/`linear` on entrances, durations > 300
   ```css
   .popover {
     transform-origin: var(--transform-origin);
-  } /* Base UI */
+  } /* Native mount attributes */
   ```
   **Modals are exempt** — they appear centered; `transform-origin: center` is correct there. Do not report it.
 - **Press feedback**: `transform: scale(0.97)` on `:active` with `transition: transform 160ms ease-out`. Keep it subtle (0.95–0.98).
@@ -63,7 +63,7 @@ Hunt for: `scale(0)`, pure-fade entrances with no initial transform, `transform-
 
 CSS **transitions** retarget from the current state mid-animation; **keyframes** restart from zero. Anything triggered rapidly or reversible mid-motion (toasts stacking, toggles, drags, expand/collapse) must use transitions or springs.
 
-- Entry without JS: `@starting-style` (legacy fallback: a `data-mounted` attribute set in `useEffect`).
+- Entry without JS: `@starting-style` (legacy fallback: a `data-mounted` attribute set by a scoped Foldkit Mount).
 - Gesture-driven motion should use springs — they carry velocity when interrupted.
 - Spring configs, Apple-style (recommended): `{ type: "spring", duration: 0.5, bounce: 0.2 }`. Keep bounce subtle (0.1–0.3); reserve visible bounce for drag-to-dismiss and playful moments.
 - **Asymmetric timing**: deliberate phases (press, hold, destructive confirm) animate slower; the system's response snaps. Symmetric timing on press-and-release is a finding.

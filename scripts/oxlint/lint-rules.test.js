@@ -14,58 +14,32 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RuleTester } from "oxlint/plugins-dev";
 import effectGuards from "./effect-guards.js";
+import foldkitStyle from "./foldkit-style.js";
 
-const routeFile = fileURLToPath(new URL("../../apps/web/src/app/routes.ts", import.meta.url));
-const publicSiteFile = fileURLToPath(
-  new URL("../../apps/web/src/features/public-site/feature.tsx", import.meta.url)
-);
-const otherFile = fileURLToPath(new URL("../../apps/web/src/app/other.ts", import.meta.url));
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
-
 tester.run("effect-guards/no-ordinary-interface", effectGuards.rules["no-ordinary-interface"], {
-  valid: [
-    { code: "type Status = { readonly current: boolean };", filename: otherFile },
+  valid: [{ code: "type Account = {id:string};" }],
+  invalid: [
+    { code: "interface Account { id:string }", errors: [{ messageId: "ordinaryInterface" }] },
     {
-      code: 'export {}; declare module "@tanstack/react-router" { interface Register { router: string } }',
-      filename: routeFile,
+      code: 'export {}; declare module "integration" { interface Register {value:string} }',
+      errors: [{ messageId: "ordinaryInterface" }],
     },
   ],
+});
+
+tester.run("foldkit-style/semantic-colors", foldkitStyle.rules["semantic-colors"], {
+  valid: [
+    { code: 'html.Class("bg-primary text-primary-foreground");' },
+    {
+      code: 'html.Class(`bg-secondary ${selected ? "text-foreground" : "text-muted-foreground"}`);',
+    },
+    { code: 'html.Class("grid-cols-[1fr_20rem]");' },
+  ],
   invalid: [
-    {
-      code: "interface Status { readonly current: boolean }",
-      filename: otherFile,
-      errors: [{ message: /aliases cannot be reopened by declaration merging/u }],
-    },
-    {
-      code: "interface Status { readonly current: boolean }",
-      filename: routeFile,
-      errors: [{ messageId: "ordinaryInterface" }],
-    },
-    {
-      code: 'export {}; declare module "@tanstack/react-router" { interface Register { router: string } interface Extra { value: string } }',
-      filename: routeFile,
-      errors: [{ messageId: "ordinaryInterface" }],
-    },
-    {
-      code: 'export {}; declare module "@tanstack/react-router" { interface Register { router: string } interface Register { extra: string } }',
-      filename: routeFile,
-      errors: [{ messageId: "ordinaryInterface" }],
-    },
-    {
-      code: 'export {}; declare module "other-router" { interface Register { router: string } }',
-      filename: routeFile,
-      errors: [{ messageId: "ordinaryInterface" }],
-    },
-    {
-      code: "export {}; namespace Router { interface Register { router: string } }",
-      filename: routeFile,
-      errors: [{ messageId: "ordinaryInterface" }],
-    },
-    {
-      code: 'export {}; declare module "@tanstack/react-router" { interface Register { router: string } }',
-      filename: otherFile,
-      errors: [{ messageId: "ordinaryInterface" }],
-    },
+    { code: 'html.Class("bg-blue-500");', errors: [{ messageId: "semantic" }] },
+    { code: 'html.Class("text-[#123456]");', errors: [{ messageId: "semantic" }] },
+    { code: "html.Class(`bg-red-500 ${selected}`);", errors: [{ messageId: "semantic" }] },
   ],
 });
 
@@ -89,16 +63,6 @@ tester.run("effect-guards/no-type-cast", effectGuards.rules["no-type-cast"], {
   ],
 });
 
-tester.run("effect-guards/no-react-use-effect", effectGuards.rules["no-react-use-effect"], {
-  valid: [],
-  invalid: [
-    {
-      code: 'import { useEffect } from "react";',
-      errors: [{ message: /event handlers.*narrow adapter.*file-scoped exception/u }],
-    },
-  ],
-});
-
 tester.run("effect-guards/no-nullable-type", effectGuards.rules["no-nullable-type"], {
   valid: [],
   invalid: [
@@ -112,56 +76,6 @@ tester.run("effect-guards/no-nullable-type", effectGuards.rules["no-nullable-typ
     },
   ],
 });
-
-tester.run(
-  "effect-guards/require-route-return-type",
-  effectGuards.rules["require-route-return-type"],
-  {
-    valid: [
-      { code: "export const createWebRouter = () => 1;", filename: routeFile },
-      { code: "export const createPublicSiteRoute = () => 1;", filename: publicSiteFile },
-      { code: "const local = (): number => 1;", filename: routeFile },
-      { code: "const values = [1].map((value) => value + 1);", filename: publicSiteFile },
-    ],
-    invalid: [
-      {
-        code: "export const unrelated = () => 1;",
-        filename: routeFile,
-        errors: [{ messageId: "routeReturnType" }],
-      },
-      {
-        code: "const helper = () => 1;",
-        filename: publicSiteFile,
-        errors: [{ messageId: "routeReturnType" }],
-      },
-      {
-        code: "export const createWebRouter = () => 1;",
-        filename: otherFile,
-        errors: [{ messageId: "routeReturnType" }],
-      },
-      {
-        code: "const createWebRouter = () => 1;",
-        filename: routeFile,
-        errors: [{ messageId: "routeReturnType" }],
-      },
-      {
-        code: "export function helper() { return 1; }",
-        filename: routeFile,
-        errors: [{ messageId: "routeReturnType" }],
-      },
-      {
-        code: "const helper = function () { return 1; };",
-        filename: publicSiteFile,
-        errors: [{ messageId: "routeReturnType" }],
-      },
-      {
-        code: "export const createWebRouter = () => 1; { const createWebRouter = () => 2; }",
-        filename: routeFile,
-        errors: [{ messageId: "routeReturnType" }],
-      },
-    ],
-  }
-);
 
 // Exercise the real lint config as well as the isolated rule: a new source file
 // must not escape merely because the old built-in rule was replaced.
@@ -180,48 +94,6 @@ try {
   assert.notEqual(result.status, 0);
 } finally {
   unlinkSync(probeFile);
-}
-
-// Verify the configured design policy through the same Oxlint command CI runs.
-const designProbe = join(workspaceRoot, "apps/web/src/app/.lint-design-probe.tsx");
-const designCases = [
-  { expression: '<div className="bg-blue-500" />', rule: "no-raw-colors" },
-  { expression: '<div className={cn("text-[#123456]")} />', rule: "no-arbitrary-values" },
-  { expression: '<Button className="bg-secondary">Guardar</Button>', rule: "no-restyle" },
-  { expression: '<Button className="p-4">Guardar</Button>', rule: "no-restyle" },
-  { expression: '<Button variant="outline" className="w-full">Guardar</Button>' },
-  { expression: '<CardContent className="flex gap-4 px-6">Contenido</CardContent>' },
-];
-try {
-  for (const { expression, rule } of designCases) {
-    writeFileSync(
-      designProbe,
-      `import type { JSX } from "react";\n` +
-        (expression.includes("Button")
-          ? `import { Button } from "@/ui/components/button";\n`
-          : "") +
-        (expression.includes("CardContent")
-          ? `import { CardContent } from "@/ui/components/card";\n`
-          : "") +
-        (expression.includes("cn(") ? `import { cn } from "@/ui/class-names";\n` : "") +
-        "\n" +
-        `export const DesignProbe = (): JSX.Element => ${expression};\n`
-    );
-    const result = spawnSync(
-      "./node_modules/.bin/oxlint",
-      ["--config", ".oxlintrc.json", designProbe],
-      { cwd: workspaceRoot, encoding: "utf8" }
-    );
-    const report = `${result.stdout}\n${result.stderr}`;
-    if (rule) {
-      assert.ok(report.includes(`shadcn(${rule})`), report);
-      assert.notEqual(result.status, 0);
-    } else {
-      assert.equal(result.status, 0, report);
-    }
-  }
-} finally {
-  unlinkSync(designProbe);
 }
 
 // Run the source guard in an isolated workspace so guidance is exercised without a probe file

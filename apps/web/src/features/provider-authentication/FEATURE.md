@@ -1,23 +1,18 @@
 # Signup and browser login
 
-## Local Foldkit migration — 2026-10-10
+## Foldkit implementation
 
-Google and Microsoft entry flows now run as embedded Foldkit programs. React retains only the
-route/session mounting boundary and the clean provider-return page. Foldkit owns public presentation
-state, Consent interaction, commands, status updates and the rendered workflow. The private
-controller retains pairing proof and one-time recovery outside serializable Model/messages; scoped
-DOM disclosure erases recovery on acknowledgement/disposal. The canonical authentication client,
-transport policy, server protocol and fixed post-login destinations are retained.
+Google and Microsoft entry flows, provider return pages, routing, and session lifetime run in
+Foldkit. Public Model/messages contain presentation state only. The private controller retains
+pairing proof and one-time recovery; scoped DOM disclosure erases recovery on acknowledgement and
+teardown. The canonical authentication client, transport policy, server protocol and fixed
+post-login destinations remain authoritative.
 
-The existing 18 Google/Microsoft browser journeys pass against the built SPA and local real
-public/Core/D1 topology with fixture provider edges. They cover signup/recovery/session reload,
-Consent loading, blocked popup, explicit retries, denial/closure, cancellation/timeout with late
-responses, ambiguous completion, pending redemption, and new/existing WhatsApp handoff. A rendered
-Strict Mode test also verifies popup closure and pending transport interruption on unmount, followed
-by a fresh mount without replay. All 409 web tests pass with two workers; typechecking, targeted
-type-aware lint, module/bundle boundaries, Effect-family compatibility, policy and shadcn integrity
-checks pass. This is local migration evidence; the Production observations below describe earlier
-deployed React revisions.
+Browser acceptance covers signup/recovery/session reload, Consent loading, blocked popups,
+retries, denial/closure, cancellation/timeout with late responses, ambiguous completion, pending
+redemption, and new/existing WhatsApp handoff. Native mount tests verify popup closure and pending
+transport interruption on disposal, followed by a fresh mount without replay. The Production
+observations below record prior release evidence; each new release requires its own smoke checks.
 
 ## Authentication contract
 

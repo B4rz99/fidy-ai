@@ -51,18 +51,6 @@ script-src 'self' https://static.cloudflareinsights.com https://cloudflareinsigh
 | 10-site limit reached | Delete old sites or proxy through CF (unlimited) |
 | Token not recognized  | Use exact alphanumeric token from dashboard      |
 
-## Framework-Specific
-
-### Next.js Hydration Warning
-
-```tsx
-<script suppressHydrationWarning ... />
-```
-
-### Gatsby Window Undefined
-
-Use `gatsby-browser.js` to load client-side only.
-
 ## Limits
 
 | Resource          | Limit                 |

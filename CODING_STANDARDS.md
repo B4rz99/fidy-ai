@@ -279,18 +279,21 @@ imagined behaviour before exercising the first slice.
 
 ---
 
-## React
+## Foldkit
 
-React application code is event-driven and keeps only irreducible interaction state.
+The application and every feature own a Schema Model, explicit Messages, pure update and view,
+and scoped commands, mounts and subscriptions. Use the installed Foldkit release and its upstream
+source-backed pattern before introducing framework APIs.
 
-- A state transition must never serve as an indirect command.
-- Shared and server state belongs to Effect Atom, navigation state to TanStack Router, and local
-  one-component interaction state to React. Keep each state value under exactly one owner.
-- Do not store values that can be derived from props, atom data, router state, or existing local
-  state. Reset interaction state through component identity and `key` where appropriate.
-- If a concrete imperative integration eventually requires React synchronization, isolate it behind
-  one narrow adapter and add an explicit file-scoped lint override. Do not add speculative
-  exceptions or expose the synchronization mechanism to application components.
+- Navigation belongs to the application router; feature interaction belongs to its mounted Model.
+  Canonical server projections belong to the authentication lifetime's Effect Atom registry.
+- A state transition must not serve as an indirect command. Emit an explicit command for work.
+- Keep private drafts, verifiers, receipts and payment authority in scoped closures or DOM inputs;
+  never place them in Models, Messages, command arguments, history or developer tools.
+- Dispose feature work synchronously when its authentication lifetime changes. Mount identity
+  resets feature interaction while persistent conversation identity survives ordinary navigation.
+- Read-only views derive presentation from their Model. Imperative browser behavior lives behind
+  a scoped mount with deterministic teardown. Render untrusted content as escaped text.
 
 ### Web feature ownership
 

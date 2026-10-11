@@ -86,6 +86,7 @@ const checks: Array<Check> = [
     cwd: `${workspaceRoot}/tools/depcruise`,
     env: Bun.env,
   },
+  rootCheck("static", "Foldkit source integrity", ["bun", "run", "check:foldkit"]),
   rootCheck("static", "Lint suppressions", ["bun", "run", "lint:suppressions"]),
   // Type-aware Oxlint also runs the ordinary rules; do not lint the same workspace twice.
   rootCheck("static", "oxlint type-aware", ["bun", "run", "lint:type-aware"]),
@@ -98,7 +99,6 @@ const checks: Array<Check> = [
   rootCheck("static", "Module graph", ["bun", "run", "lint:deps"]),
   rootCheck("static", "Browser client graph", ["bun", "run", "check:browser-client"]),
   rootCheck("static", "Web policy integrity", ["bun", "run", "check:policy"]),
-  rootCheck("static", "Shadcn output integrity", ["bun", "run", "check:shadcn"]),
   rootCheck("static", "Generated contract freshness", ["bun", "run", "contracts:check:freshness"]),
   rootCheck("static", "Generated notification-email format freshness", [
     "bun",

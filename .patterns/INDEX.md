@@ -6,8 +6,8 @@ For Effect/Alchemy, first read [the selected stable source map](effect-4-stable.
 API authority is the integrity-locked published TypeScript source in the installed 4.0.0 / beta.80
 packages, including Fidy's Alchemy patch. `.repos/effect` is a refreshed upstream-main reference;
 it is not byte-identical to the pinned release. `.repos/alchemy` remains an older snapshot.
-React 19.2.8 → `.repos/react`; for React application code, treat the installed
-public API and official React documentation as the application-facing contract.
+Foldkit → `.repos/foldkit`; verify its upstream implementation and examples against the installed,
+integrity-locked release before using an API. See [foldkit.md](foldkit.md) for the source map.
 
 | Area                                                              | Pattern                                    |
 | ----------------------------------------------------------------- | ------------------------------------------ |
@@ -25,8 +25,7 @@ public API and official React documentation as the application-facing contract.
 | Streams, incremental encoding, backpressure                       | [streams.md](streams.md)                   |
 | Tracing, logging, metrics                                         | [observability.md](observability.md)       |
 | Effect Vitest, TestClock, test layers                             | [testing.md](testing.md)                   |
-| Effect Atom, React atoms, auth-lifetime isolation                 | [effect-atom.md](effect-atom.md)           |
+| Effect Atom resources and auth-lifetime isolation                 | [effect-atom.md](effect-atom.md)           |
 | Alchemy and Cloudflare deployment topology                        | [alchemy.md](alchemy.md)                   |
 | dnd-kit drag and drop                                             | [dnd-kit.md](dnd-kit.md)                   |
-| React component behavior and runtime                              | [react.md](react.md)                       |
-| Foldkit embedded features, scoped DOM and authentication state    | [foldkit.md](foldkit.md)                   |
+| Foldkit runtime, routing, UI, scoped DOM and authentication state | [foldkit.md](foldkit.md)                   |

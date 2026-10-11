@@ -18,29 +18,17 @@ Cloudflare Web Analytics provides:
 
 ## Quick Start Decision Tree
 
-```
-Is your site proxied through Cloudflare?
-├─ YES → Use automatic injection (configuration.md)
-│   ├─ Enable auto-injection in dashboard
-│   └─ No code changes needed (unless Cache-Control: no-transform)
-│
-└─ NO → Use manual beacon integration (integration.md)
-    ├─ Add JS snippet to HTML
-    ├─ Use spa: true for React/Vue/Next.js
-    └─ Configure CSP if needed
-```
-
 ## Reading Order
 
 1. **[configuration.md](configuration.md)** - Setup for proxied vs non-proxied sites
-2. **[integration.md](integration.md)** - Framework-specific beacon integration (React, Next.js, Vue, Nuxt, etc.)
+2. **[integration.md](integration.md)** - Framework-specific beacon integration (native browser apps)
 3. **[patterns.md](patterns.md)** - Common use cases (performance monitoring, GDPR consent, multi-site tracking)
 4. **[gotchas.md](gotchas.md)** - Troubleshooting (SPA tracking, CSP issues, hash routing limitations)
 
 ## When to Use Each File
 
 - **Setting up for first time?** → Start with configuration.md
-- **Using React/Next.js/Vue/Nuxt?** → Go to integration.md for framework code
+- **Using Foldkit?** → Go to integration.md for framework code
 - **Need GDPR consent loading?** → See patterns.md
 - **Beacon not loading or no data?** → Check gotchas.md
 - **SPA not tracking navigation?** → See integration.md for `spa: true` config
@@ -62,7 +50,7 @@ Is your site proxied through Cloudflare?
 { "token": "YOUR_TOKEN", "spa": true }
 ```
 
-Without `spa: true`, client-side navigation (React Router, Vue Router, Next.js routing) will NOT be tracked. Only initial page loads will register.
+Without `spa: true`, client-side navigation (Foldkit navigation) will NOT be tracked. Only initial page loads will register.
 
 ### CSP Requirements
 

@@ -2,7 +2,7 @@ import { Option } from "effect";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import type { MountAction } from "foldkit/mount";
 import type { AuthenticationProvider } from "@/transport/client";
-import { buttonVariants } from "@/ui/components/button-variants";
+import { buttonVariants } from "@/ui/button-variants";
 import { Message, type Model, canContinue } from "./model";
 
 type Builder = HtmlBuilder<Message>;

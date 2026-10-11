@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 @font-face {
   font-family: Poppins;
   src: url("./ui/fonts/Poppins-Regular.woff2") format("woff2");
@@ -399,4 +398,9 @@
   .signed-in-compact-navigation:popover-open {
     display: none;
   }
+}
+
+.dashboard-drop-zone.dashboard-drop-active > span {
+  border-color: var(--primary);
+  opacity: 1;
 }

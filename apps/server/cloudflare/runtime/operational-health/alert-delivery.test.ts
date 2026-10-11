@@ -822,3 +822,52 @@ it.effect("retains unknown observation ordering against a delayed healthy tick",
     expect(phases).toEqual(["firing", "resolved"]);
   })
 );
+
+it.effect("retires an obsolete onboarding resolution without dropping live owner alerts", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO operational_alerts
+        (kind, owner, severity, state, first_seen_ms, last_seen_ms, next_attempt_ms)
+        VALUES ('inspection_unavailable', 'onboarding', 'warning', 'resolved', 0, 0, 0)`)
+        .run()
+    );
+    yield* rejects(runOperationalAlerts({ db, now: 1, alerts: [], send: accepted }));
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO operational_alerts
+        (kind, owner, severity, state, first_seen_ms, last_seen_ms, next_attempt_ms)
+        VALUES ('inspection_unavailable', 'browserPairing', 'warning', 'resolved', 0, 0, 0),
+          ('dead_letters', 'deadLetters', 'critical', 'firing', 0, 0, 0)`)
+        .run()
+    );
+    const migration = yield* Effect.tryPromise(() =>
+      Bun.file(
+        new URL("../../migrations/0086_retire_onboarding_alert_resolution.sql", import.meta.url)
+      ).text()
+    );
+    yield* Effect.tryPromise(() => db.prepare(migration).run());
+    const retained = yield* Effect.tryPromise(() =>
+      db.prepare("SELECT kind, owner, state FROM operational_alerts ORDER BY owner").all()
+    );
+    expect(retained.results).toEqual([
+      { kind: "inspection_unavailable", owner: "browserPairing", state: "resolved" },
+      { kind: "dead_letters", owner: "deadLetters", state: "firing" },
+    ]);
+    const delivered: ReadonlyArray<string>[] = [];
+    yield* Effect.tryPromise(() =>
+      runOperationalAlerts({
+        db,
+        now: 2,
+        alerts: [deadLetter],
+        send: (alert, _key, delivery) => {
+          delivered.push([alert.owner, delivery.phase]);
+          return Promise.resolve();
+        },
+      })
+    );
+    expect(delivered).toContainEqual(["browserPairing", "resolved"]);
+    expect(delivered).toContainEqual(["deadLetters", "firing"]);
+  })
+);

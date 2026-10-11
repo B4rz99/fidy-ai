@@ -225,7 +225,7 @@ for (const count of [0, pageSize, multiplePages]) {
         if (count === 0) {
           yield* wait(() =>
             expect(
-              page.getByRole("heading", { name: "No hay transacciones para mostrar" })
+              page.getByText("No hay transacciones para mostrar", { exact: true })
             ).toBeVisible()
           );
         }

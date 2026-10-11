@@ -125,14 +125,15 @@ const dragWidget = Effect.fnUntraced(function* ({
   const sourceBox = yield* Effect.fromOption(
     Option.fromNullOr(yield* Effect.tryPromise(() => source.boundingBox()))
   );
-  const destinationBox = yield* Effect.fromOption(
-    Option.fromNullOr(yield* Effect.tryPromise(() => destination.boundingBox()))
-  );
   yield* Effect.tryPromise(() =>
     page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
   );
   yield* Effect.tryPromise(() => page.mouse.down());
   yield* Effect.tryPromise(() => expect(source).toHaveAttribute("aria-pressed", "true"));
+  yield* Effect.tryPromise(() => destination.scrollIntoViewIfNeeded());
+  const destinationBox = yield* Effect.fromOption(
+    Option.fromNullOr(yield* Effect.tryPromise(() => destination.boundingBox()))
+  );
   yield* Effect.tryPromise(() =>
     page.mouse.move(
       destinationBox.x + destinationBox.width / 2,
@@ -140,54 +141,23 @@ const dragWidget = Effect.fnUntraced(function* ({
       { steps: 10 }
     )
   );
-  yield* Effect.tryPromise(() => expect(page.getByRole("status")).toContainText(announcement));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("status").filter({ hasText: announcement })).toBeVisible()
+  );
   yield* Effect.tryPromise(() => page.mouse.up());
 });
 
-test("Dashboard title, keyboard resize and removal survive real Core reloads", ({
-  page,
-  request,
-}) =>
+test("Dashboard keyboard resize survives a real Core reload", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* openDashboard({ page, request });
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
-      yield* Effect.tryPromise(() =>
-        page
-          .getByRole("button", { name: /^Renombrar /u })
-          .first()
-          .click()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("Nuevo nombre del Widget").fill("Lectura verificada")
-      );
-      yield* Effect.tryPromise(() => page.getByLabel("Guardar nombre del Widget").click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Lectura verificada" })).toBeVisible()
-      );
       const boundary = page.getByRole("separator").first();
       yield* Effect.tryPromise(() => boundary.press("ArrowRight"));
       yield* Effect.tryPromise(() => expect(boundary).toHaveAttribute("aria-valuenow", "1.1"));
       yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Lectura verificada" })).toBeVisible()
-      );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
       yield* Effect.tryPromise(() => expect(boundary).toHaveAttribute("aria-valuenow", "1.1"));
-      yield* Effect.tryPromise(() => page.getByLabel("Eliminar Lectura verificada").click());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Lectura verificada" })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { level: 2 })).toHaveCount(3)
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Lectura verificada" })).toHaveCount(0)
-      );
     })
   ));
 

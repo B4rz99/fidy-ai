@@ -15,13 +15,17 @@
 
 ## Owners
 
-- `feature.tsx` owns canonical query/edit state; `view.tsx` renders the canvas and editor. `editor-model.ts` translates gestures to canonical edits; `presentation.ts` and Money presentation own display decisions.
+- `program.ts` owns the mounted Foldkit lifecycle and commands; `query-owner.ts` owns canonical query/edit resources; `foldkit-view.ts` renders the canvas and editor. `editor-model.ts` translates gestures to canonical edits; `native-drag.ts` and `native-resize.ts` own scoped input; `presentation.ts` and Money presentation own display decisions.
 - Server `src/core/dashboard` owns documents, edits and projections; `cloudflare/dashboard` owns the persistence adapter. Public Ingress reaches private Core/D1.
 - The web editor exposes presets, arrangement, titles, weights and removal. Arbitrary Widget query/configuration editing is not a web control.
 
 ## Evidence
 
-2026-10-11: 44 web tests, 70 Core tests, 70 actual local Worker/D1 tests and seven shell tests passed. Fourteen browser checks passed with two workers: six real local Core/D1 journeys (five new) and eight HTTP-fixture checks. Those fixtures do not prove deployed infrastructure. Dashboard mutations use a separate fixture User to avoid concurrent enrollment resets. The lost-response check forwards real admission refusals unchanged and verifies one admitted edit, allowing the browser's existing bounded refusal retry policy.
+Historical checks before the Foldkit migration on 2026-10-11: 44 web tests, 70 Core tests, 70 actual local Worker/D1 tests and seven shell tests passed. Fourteen browser checks passed with two workers: six real local Core/D1 journeys (five new) and eight HTTP-fixture checks. Those fixtures do not prove deployed infrastructure. Dashboard mutations use a separate fixture User to avoid concurrent enrollment resets. The lost-response check forwards real admission refusals unchanged and verifies one admitted edit, allowing the browser's existing bounded refusal retry policy.
+
+After rebasing onto the Foldkit release `8ce7fd176d98968250b080c8b8f06e5ef24d37f7`, 84 web tests, 70 Core tests, 71 actual local Worker/D1 tests and seven shell tests passed. Sixteen built-browser checks passed: seven real Core/D1 journeys and nine HTTP-fixture loading/gesture checks. These include persisted rename/remove, resize, catalog insertion, pointer swap/edge move, keyboard cancellation, mobile layout and a committed edit with a lost response. The canonical Dashboard title regression from issue #1214 is covered by the real admitted edit/reload journey.
+
+Production on that Foldkit revision loaded the original four Widgets, ten recent Transactions, the explicit missing Budget and COP inflow/outflow totals of `2500` / `6387`. Renaming the category chart to a QA label survived reload; restoring `Gastos por categoría` also survived reload. No financial records were changed.
 
 Production used the approved authenticated test User. Web deployment metadata reported revision `fd6857ce67c1119d898d42ed1b6ae573b4efe254`. The capability table records observed live behaviour separately from local evidence. Initial title, resize and swap checks restored their original values; no financial records were modified. No AI request was needed.
 

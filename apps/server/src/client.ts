@@ -91,9 +91,11 @@ export { buildPATDisclosure, getTokenShortId, patScopeCopy } from "~/core/tokens
 export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/contract";
 export type { CanonicalInput } from "~/shell/canonical-operations/contract";
 export type { CanonicalSuccess } from "~/shell/canonical-operations/contract";
+export { DashboardView, DashboardWidgetView } from "~/shell/dashboard/contract";
 export {
   DashboardCatalogEntry,
   DashboardDocument,
+  type LayoutNodeFor,
   DashboardEdit,
   maximumSplitWeight,
   minimumSplitWeight,

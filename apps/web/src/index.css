@@ -400,3 +400,8 @@
     display: none;
   }
 }
+
+.dashboard-drop-zone.dashboard-drop-active > span {
+  border-color: var(--primary);
+  opacity: 1;
+}

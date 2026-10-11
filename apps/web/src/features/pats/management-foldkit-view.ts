@@ -152,7 +152,10 @@ const listing = (model: Model, html: Builder): Html => {
     ]
   );
 };
-export const managementListing = (model: Model, html: Builder): Html =>
+export const managementListing = ({
+  model,
+  html,
+}: Readonly<{ model: Model; html: Builder }>): Html =>
   html.section(
     [html.AriaLabelledBy("active-pats-title"), html.Class("flex flex-col gap-5")],
     [
@@ -198,7 +201,7 @@ export const managementView = (
       html.div(
         [html.Class("grid min-w-0 gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_24rem]")],
         [
-          managementListing(model, html),
+          managementListing({ model, html }),
           html.aside(
             [html.Class("min-w-0 border-t p-5 xl:border-t-0 xl:border-l")],
             [html.div([html.Key("manual-pat-program"), html.OnMount(manual)])]

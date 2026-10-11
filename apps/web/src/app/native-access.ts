@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect";
-import { Mount, Runtime } from "foldkit";
+import { Mount, Runtime, type Update } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
 import type { Html, HtmlBuilder } from "foldkit/html";
 import { mountElementProgram } from "@/browser/element-program";
@@ -178,7 +178,7 @@ export const mountAccessPage = (configuration: Configuration): (() => void) => {
       resources: Layer.empty,
       devTools: false,
       init: () => ({ model: {} }),
-      update: (model) => ({ model }),
+      update: (model): Update.Return<typeof Model.Type, typeof Message.Type> => ({ model }),
       view: (_, html) => accessView({ html, ...mounts }),
       crash: {
         report: clear,

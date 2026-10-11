@@ -136,7 +136,7 @@ const mountManagement = (
       update: makeUpdate(commands),
       view: (model, html) =>
         presentation === "Listing"
-          ? managementListing(model, html)
+          ? managementListing({ model, html })
           : managementView({ model, html, manual: manual() }),
       subscriptions: Subscription.make<Model, Message>()(() => ({
         changes: Subscription.persistent(Stream.fromQueue(events)),

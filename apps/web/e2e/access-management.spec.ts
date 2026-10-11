@@ -62,7 +62,7 @@ const documentWidths = (): Readonly<{ content: number; viewport: number }> => ({
 
 const disclosedBearer = "fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD";
 const createdToken = { ...token, shortId: "created1", recipientLabel: "Agente nuevo" };
-const installIssuance = (page: Page): Promise<void> => {
+const installIssuance = (page: Page): ReturnType<Page["route"]> => {
   let issued = false;
   return page.route(`${apiOrigin}/pats`, (route) => {
     if (route.request().method() === "GET") {
@@ -89,7 +89,7 @@ const installIssuance = (page: Page): Promise<void> => {
   });
 };
 
-const installEmptyHistory = (page: Page): Promise<void> =>
+const installEmptyHistory = (page: Page): ReturnType<Page["route"]> =>
   page.route(`${apiOrigin}/transactions**`, (route) =>
     route.fulfill({ contentType: "application/json", body: response([]) })
   );

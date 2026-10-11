@@ -131,10 +131,12 @@ const parser = Route.oneOf(
     Route.slash(Route.schemaSegment("id", RecurringDigestReportParams.fields.id)),
     Route.mapTo(AppRoute.Recurring)
   ),
-  pipe(
-    Route.oneOf(fixed("settings/access"), fixed("settings/pats"), fixed("settings/agents")),
-    Route.query(Schema.Struct({ after: Schema.OptionFromOptionalKey(OAuthConnectionId) })),
-    Route.mapTo(AppRoute.Access)
+  ...["settings/access", "settings/pats", "settings/agents"].map((path) =>
+    pipe(
+      fixed(path),
+      Route.query(Schema.Struct({ after: Schema.OptionFromOptionalKey(OAuthConnectionId) })),
+      Route.mapTo(AppRoute.Access)
+    )
   ),
   pipe(fixed("settings/email"), Route.mapTo(AppRoute.Email)),
   pipe(fixed("settings/recovery"), Route.mapTo(AppRoute.Recovery))

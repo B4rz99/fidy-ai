@@ -1,0 +1,45 @@
+apps/server/cloudflare/tokens/internal/pat-pairing.ts
+  s_6d017cc65783af::t_2c10820c4665b8 234,243,337
+apps/server/cloudflare/tokens/pats.test.ts
+  s_6d017cc65783af::t_e5d8ff0cb3b5a8 626-636,638,641-643,646-722,728-824
+apps/server/contracts/openapi.json
+  s_6d017cc65783af::t_e5c1a58803001b 18876,19009
+apps/server/contracts/operation-policy.json
+  s_6d017cc65783af::t_962b0662b2a8e5 665,698
+apps/server/src/core/tokens/contract.ts
+  s_6d017cc65783af::t_08a2e23aa7c0cf 372
+apps/server/src/shell/canonical-policy/contract.ts
+  s_6d017cc65783af::t_42e68ef5ca8947 30,48,69-70,92-93,157-159
+apps/server/src/shell/canonical-policy/operations.test.ts
+  s_6d017cc65783af::t_9fd7ae45bbe631 15,44,90-101
+apps/server/src/shell/canonical-policy/operations.ts
+  s_6d017cc65783af::t_666a8c138329b9 43-45,59-65,76-77,83,103
+apps/server/src/shell/operations/contract.ts
+  s_6d017cc65783af::t_13779f95bb0e3d 127-128
+apps/server/src/shell/tokens/contract.ts
+  s_6d017cc65783af::t_cdb2e53b97153d 40,282,300
+apps/server/src/shell/tokens/operations.ts
+  s_6d017cc65783af::t_fb23ce00dd54e3 25-29,103-105,108,115,121
+apps/web/ARCHITECTURE.md
+  s_6d017cc65783af::t_e2d607e2ff6cbe 235
+apps/web/src/features/pats/cli-feature.tsx
+  s_6d017cc65783af::t_50a2617326ff11 88-89
+docs/adr/0015-browser-paired-web-authentication.md
+  s_6d017cc65783af::t_f3ba1ef8e68adb 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7103f93ca31b07df709777ef71ea1719b89270b0",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

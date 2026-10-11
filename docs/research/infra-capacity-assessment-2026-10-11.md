@@ -226,13 +226,13 @@ prompts, User data, credentials or provider response bodies are retained in this
 
 Retained production hosted Turns provide an anonymous completion baseline collected at 19:04 UTC:
 
-| UTC day | Status | Count | Median | p95 / p99 | Maximum |
-| ------- | ------ | ----- | ------ | --------- | ------- |
-| Oct 10 | completed | 16 | 5,608 ms | 45,016 ms | 45,016 ms |
-| Oct 10 | failed | 4 | 3,547 ms | 3,663 ms | 3,663 ms |
-| Oct 10 | interrupted | 1 | 121,513 ms | 121,513 ms | 121,513 ms |
-| Oct 11 | completed | 2 | 8,141 ms | 13,205 ms | 13,205 ms |
-| Oct 11 | failed | 6 | 2,967 ms | 6,591 ms | 6,591 ms |
+| UTC day | Status      | Count | Median     | p95 / p99  | Maximum    |
+| ------- | ----------- | ----- | ---------- | ---------- | ---------- |
+| Oct 10  | completed   | 16    | 5,608 ms   | 45,016 ms  | 45,016 ms  |
+| Oct 10  | failed      | 4     | 3,547 ms   | 3,663 ms   | 3,663 ms   |
+| Oct 10  | interrupted | 1     | 121,513 ms | 121,513 ms | 121,513 ms |
+| Oct 11  | completed   | 2     | 8,141 ms   | 13,205 ms  | 13,205 ms  |
+| Oct 11  | failed      | 6     | 2,967 ms   | 6,591 ms   | 6,591 ms   |
 
 These are start-to-terminal times, using nearest-rank percentiles. The small retained population can
 include development/CI traffic and spans deployments; it has no caller or release attribution.

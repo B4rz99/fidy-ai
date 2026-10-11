@@ -38,7 +38,24 @@ const workResult = Schema.Struct({
   reviewRows: Schema.Int,
 });
 const rejected = Schema.Struct({ outcome: Schema.Literal("rejected"), reason: Schema.String });
+const runtimeFailure = Schema.Struct({
+  outcome: Schema.Literal("runtime-failure"),
+  httpStatus: Schema.Int,
+  cloudflareErrorCode: Schema.optional(Schema.String),
+});
 const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, rejected]));
+const readProofResponse = Effect.fn(function* (response: Response) {
+  if (response.headers.get("content-type")?.includes("application/json") === true) {
+    return decodeResponse(yield* Effect.tryPromise(() => response.json()));
+  }
+  const body = yield* Effect.tryPromise(() => response.text());
+  const errorCode = /(?:error code:|Error)\s*(\d{4})/iu.exec(body)?.[1];
+  return {
+    outcome: "runtime-failure" as const,
+    httpStatus: response.status,
+    cloudflareErrorCode: errorCode,
+  };
+});
 
 const measurementBase = Schema.Struct({
   baseline: Schema.Boolean,
@@ -55,6 +72,7 @@ const measurementCodec = Schema.fromJsonString(
   Schema.Union([
     Schema.Struct({ ...measurementBase.fields, ...workResult.fields }),
     Schema.Struct({ ...measurementBase.fields, ...rejected.fields }),
+    Schema.Struct({ ...measurementBase.fields, ...runtimeFailure.fields }),
   ])
 );
 const overlapCodec = Schema.fromJsonString(
@@ -63,7 +81,7 @@ const overlapCodec = Schema.fromJsonString(
     runtime: Schema.Literals(["local-workerd", "cloudflare-preview"]),
     fixture: Schema.String,
     elapsedMilliseconds: Schema.Finite,
-    outcomes: Schema.Array(Schema.Literals(["parsed", "rejected"])),
+    outcomes: Schema.Array(Schema.Literals(["parsed", "rejected", "runtime-failure"])),
     retainedHeapAfterBytes: Schema.optional(Schema.Int),
   })
 );
@@ -238,7 +256,7 @@ const measure = Effect.fn(function* (
           sendRequest: (signal) => send(fixture.bytes, signal),
         })
       );
-  const result = decodeResponse(yield* Effect.tryPromise(() => profiled.response.json()));
+  const result = yield* readProofResponse(profiled.response);
   const requestRoundTripMilliseconds = performance.now() - startedAt;
   const after = remote
     ? undefined
@@ -329,9 +347,7 @@ const overlapRequests = Effect.fn(function* (
       send(overlap, AbortSignal.timeout(cpuLimit)),
     ])
   );
-  const results = yield* Effect.forEach(responses, (response) =>
-    Effect.tryPromise(() => response.json()).pipe(Effect.map(decodeResponse))
-  );
+  const results = yield* Effect.forEach(responses, readProofResponse);
   const retainedHeapAfterBytes = remote
     ? undefined
     : yield* Effect.tryPromise(() => heapUsage({ debuggerUrl, signal: Option.none() }));

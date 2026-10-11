@@ -165,7 +165,8 @@ it("upgrades populated projections without losing facts or allowing foreign sear
       yield* wait(() => capture(db, "Retained café"));
       yield* wait(() =>
         db
-          .prepare(`INSERT INTO transactions
+          .prepare(`INSERT INTO transactions(id, user_id, amount, currency, direction,
+            counterparty, category_id, notes, occurred_at, created_at, revision, user_decisions)
         SELECT '30000000-0000-4000-8000-000000000001', ?, amount, currency,
           direction, counterparty, category_id, 'Foreign café', occurred_at,
           created_at, revision, user_decisions FROM transactions WHERE id = ?`)

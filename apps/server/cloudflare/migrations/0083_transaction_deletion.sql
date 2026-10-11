@@ -31,7 +31,8 @@ WITH linked_decision AS (
     COALESCE(json_extract(retained.user_decisions, '$.counterparty') = 1, 0) AS counterparty_decided,
     COALESCE(json_extract(retained.user_decisions, '$.notes') = 1, 0) AS notes_decided
   FROM linked_decision decision
-  JOIN transactions retained ON retained.user_id = decision.user_id
+  JOIN transactions retained INDEXED BY sqlite_autoindex_transactions_2
+    ON retained.user_id = decision.user_id
     AND retained.id IN (decision.first_transaction_id, decision.second_transaction_id)
 ), effective_transaction AS (
   SELECT retained.user_id, retained.id, retained.amount, retained.currency,

@@ -6779,3 +6779,55 @@ it("rolls back deletion and dashboard removal when a later batch child fails at 
       expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([]);
     })
   ));
+
+it("cannot link a hidden Transaction or restore its visibility", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const first = "30000000-0000-4000-8000-000000000997";
+      const second = "30000000-0000-4000-8000-000000000998";
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id: first, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category })
+      );
+      const deletion = new Request(request(0, `/transactions/${first}`), {
+        method: "DELETE",
+        headers: { cookie: `__Host-fidy_session=${bearer(0)}`, origin: "https://app.fidyapp.com" },
+      });
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion))).status).toBe(200);
+      const link = new Request(
+        request(0, "/transactions/link", {
+          firstTransactionId: first,
+          secondTransactionId: second,
+        }),
+        {
+          headers: {
+            cookie: `__Host-fidy_session=${bearer(0)}`,
+            origin: "https://app.fidyapp.com",
+            "content-type": "application/json",
+          },
+        }
+      );
+      expect((yield* fromTestPromise(() => sendPublicRequest(db, link))).status).toBe(404);
+      yield* fromTestPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE transactions SET deleted_at_ms = NULL WHERE user_id = ? AND id = ?")
+            .bind(owner, first)
+            .run()
+        ).rejects.toThrow("transaction_deleted")
+      );
+      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+        decisions: [],
+        members: [],
+      });
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM dashboard_effective_source")
+        )
+      ).toBe(1);
+    })
+  ));

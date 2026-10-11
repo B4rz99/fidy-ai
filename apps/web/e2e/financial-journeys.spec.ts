@@ -62,7 +62,9 @@ test("presents a Category by stable identity with a current-month Transaction", 
       yield* Effect.tryPromise(() => page.goto("/app/transactions"));
       yield* Effect.tryPromise(() => expect(page.getByText("La Cocina").first()).toBeVisible());
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Restaurantes").filter({ visible: true }).first()).toBeVisible()
+        expect(
+          page.getByLabel("Cambiar categoría de La Cocina").locator("option:checked")
+        ).toHaveText("Restaurantes")
       );
       expect(requestedPeriod).toBe(true);
     })
@@ -150,7 +152,9 @@ test("captures a Transaction by canonical mutation and displays the confirmed re
         expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.locator("[data-sonner-toast]")).toContainText("La Cocina")
+        expect(
+          page.getByRole("status").filter({ hasText: "Transacción registrada" })
+        ).toContainText("La Cocina")
       );
       expect(captured).toMatchObject({
         money: { amount: "12500", currency: "COP" },

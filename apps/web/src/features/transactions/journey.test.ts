@@ -1,12 +1,6 @@
-import { RegistryProvider } from "@effect/atom-react";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import {
-  RouterProvider,
-  createMemoryHistory,
-  createRootRouteWithContext,
-  createRoute,
-  createRouter,
-} from "@tanstack/react-router";
+import { fireEvent, screen, waitFor, within } from "@testing-library/dom";
+import { AtomRegistry } from "effect/reactivity";
+import { cleanupFoldkit, renderFoldkit } from "@/testing/foldkit";
 import { DateTime, Deferred, Effect, Layer, Option, Schema } from "effect";
 import {
   HttpClient,
@@ -15,9 +9,19 @@ import {
   HttpClientResponse,
 } from "effect/http";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { makeFidyClient, makeHostedTurnClient, makeWebAuthClient } from "@/transport/client";
-import { TransactionListFeature } from "./feature";
+import { makeFidyClient } from "@/transport/client";
+import { mountTransactions } from "./program";
 
+const selectChoice = (label: string, choice: string): void => {
+  const element = screen.getByRole<HTMLSelectElement>("combobox", { name: label });
+  const option = Array.from(element.options).find((item) => item.text === choice);
+  if (option === undefined) throw new Error("Missing choice");
+  fireEvent.change(element, { target: { value: option.value } });
+};
+const nextPaint = Effect.callback<void>((resume) => {
+  const frame = requestAnimationFrame(() => queueMicrotask(() => resume(Effect.void)));
+  return Effect.sync(() => cancelAnimationFrame(frame));
+});
 const waitForEditableHistory = (): Promise<void> =>
   waitFor(() => expect(screen.getByRole("button", { name: "+ Registrar" })).toBeEnabled()).then(
     () => {}
@@ -62,27 +66,20 @@ const mountJourney = (client: HttpClient.HttpClient): void => {
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(HttpClient.HttpClient, client),
   };
-  const context = {
-    apiClient: makeFidyClient(options),
-    webAuthClient: makeWebAuthClient(options),
-    hostedTurnClient: makeHostedTurnClient(options),
-  };
-  const root = createRootRouteWithContext<typeof context>()();
-  const route = createRoute({
-    getParentRoute: () => root,
-    path: "/",
-    component: TransactionListFeature,
+  const apiClient = makeFidyClient(options);
+  const registry = AtomRegistry.make();
+  renderFoldkit((container) => {
+    const dispose = mountTransactions({
+      container,
+      client: apiClient,
+      registry,
+      resources: registry.get(apiClient.runtime.layer),
+    });
+    return (): void => {
+      dispose();
+      registry.dispose();
+    };
   });
-  const router = createRouter({
-    context,
-    routeTree: root.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
-  });
-  render(
-    <RegistryProvider>
-      <RouterProvider router={router} />
-    </RegistryProvider>
-  );
 };
 const renderJourney = (
   uncertain = false,
@@ -144,7 +141,7 @@ beforeEach(() => {
   vi.setSystemTime(DateTime.makeUnsafe("2026-10-09T14:00:00Z").epochMilliseconds);
 });
 afterEach(() => {
-  cleanup();
+  cleanupFoldkit();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -157,8 +154,11 @@ it("corrects the selected transaction and refreshes the same history entry", () 
           screen.findByRole("button", { name: "Ver transacción El Corral" })
         )
       );
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       expect(yield* Effect.tryPromise(() => screen.findByText("Cambios guardados"))).toBeVisible();
       expect(
         yield* Effect.tryPromise(() =>
@@ -181,15 +181,20 @@ it("keeps an uncertain correction from being submitted a second time", () =>
           screen.findByRole("button", { name: "Ver transacción El Corral" })
         )
       );
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       expect(yield* Effect.tryPromise(() => screen.findByRole("alert"))).toHaveTextContent(
         "No pudimos confirmar los cambios"
       );
       expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       expect(requests.updates()).toBe(1);
       fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
+      yield* nextPaint;
       expect(screen.getByRole("region", { name: "Resumen de transacciones" })).toBeVisible();
     })
   ));
@@ -202,28 +207,35 @@ it("records a transaction, shows the saved history entry and opens its details",
         screen.findByRole("button", { name: "Ver transacción El Corral" })
       );
       fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
-      fireEvent.click(screen.getByRole("button", { name: "Dirección" }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name: "Ingreso" }));
-      expect(screen.getByRole("button", { name: "Dirección" })).toHaveTextContent("Ingreso");
-      fireEvent.click(screen.getByRole("button", { name: "Dirección" }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name: "Gasto" }));
-      expect(screen.getByRole("button", { name: "Dirección" })).toHaveTextContent("Gasto");
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "45000.001" } });
+      yield* nextPaint;
+      selectChoice("Dirección", "Ingreso");
+      yield* nextPaint;
+      expect(screen.getByLabelText("Dirección")).toHaveDisplayValue("Ingreso");
+      selectChoice("Dirección", "Gasto");
+      yield* nextPaint;
+      expect(screen.getByLabelText("Dirección")).toHaveDisplayValue("Gasto");
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "45000.001" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByRole("alert"));
       expect(
         screen.queryByRole("button", { name: "Ver transacción La Cocina" })
       ).not.toBeInTheDocument();
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "45000" } });
-      fireEvent.change(screen.getByLabelText("Contraparte (opcional)"), {
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "45000" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Contraparte (opcional)"), {
         target: { value: "La Cocina" },
       });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+      yield* nextPaint;
       const row = yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Ver transacción La Cocina" })
       );
       expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
       fireEvent.click(row);
+      yield* nextPaint;
       expect(
         within(screen.getByRole("region", { name: "Detalle de transacción" })).getByText(
           "$ 45.000,00"
@@ -245,8 +257,10 @@ it("opens transaction details in a dismissible sheet on a narrow screen", () =>
         screen.findByRole("button", { name: "Ver transacción El Corral" })
       );
       fireEvent.click(row);
+      yield* nextPaint;
       expect(yield* Effect.tryPromise(() => screen.findByRole("dialog"))).toBeVisible();
       fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
+      yield* nextPaint;
       expect(
         yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"))
       ).toBeVisible();
@@ -268,10 +282,8 @@ const resizeableScreen = (): ((desktop: boolean) => void) => {
     },
   }));
   return (desktop) => {
-    act(() => {
-      matches = desktop;
-      listeners.forEach((listener) => listener());
-    });
+    matches = desktop;
+    listeners.forEach((listener) => listener());
   };
 };
 it("preserves capture and correction drafts when the layout changes", () =>
@@ -283,14 +295,19 @@ it("preserves capture and correction drafts when the layout changes", () =>
         screen.findByRole("button", { name: "Ver transacción El Corral" })
       );
       fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "45000" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "45000" } });
+      yield* nextPaint;
       resize(false);
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("45000");
       resize(true);
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("45000");
       fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Ver transacción El Corral" }));
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
       resize(false);
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("30000");
       resize(true);
@@ -309,19 +326,23 @@ it("finishes a pending correction after crossing the responsive breakpoint", () 
           screen.findByRole("button", { name: "Ver transacción El Corral" })
         )
       );
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "30000" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       expect(
         yield* Effect.tryPromise(() => screen.findByRole("button", { name: "Guardando…" }))
       ).toBeDisabled();
-      expect(screen.getByLabelText("Notas (opcional)")).toBeDisabled();
+      expect(screen.getByLabelText("Notas")).toBeDisabled();
       resize(false);
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("30000");
-      expect(screen.getByLabelText("Notas (opcional)")).toBeDisabled();
+      expect(screen.getByLabelText("Notas")).toBeDisabled();
       yield* Deferred.succeed(complete, undefined);
       yield* Effect.tryPromise(() => screen.findByText("Cambios guardados"));
       yield* Effect.tryPromise(waitForEditableHistory);
       fireEvent.click(screen.getByRole("button", { name: "Ver transacción El Corral" }));
+      yield* nextPaint;
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("30000");
       expect(requests.updates()).toBe(1);
     })
@@ -336,29 +357,36 @@ it("rejects invalid corrections and discards cancelled field changes", () =>
           screen.findByRole("button", { name: "Ver transacción El Corral" })
         )
       );
+      yield* nextPaint;
       const invalidAmounts = ["0", "-1", "not money", "1.001"];
       for (const amount of invalidAmounts) {
-        fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: amount } });
+        fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: amount } });
+        yield* nextPaint;
         fireEvent.submit(screen.getByRole("form", { name: "Corregir transacción" }));
-        expect(screen.getByRole("alert")).toHaveTextContent("Revisa el monto");
+        yield* nextPaint;
+        expect(screen.getByRole("alert")).toHaveTextContent("Revisa los cambios");
         expect(requests.updates()).toBe(0);
       }
-      fireEvent.change(screen.getByLabelText("Contraparte"), {
+      fireEvent.input(screen.getByLabelText("Contraparte"), {
         target: { value: "Draft merchant" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /^Tipo$/ }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name: /^Ingreso$/ }));
-      fireEvent.change(screen.getByLabelText("Notas (opcional)"), {
+      yield* nextPaint;
+      selectChoice("Tipo", "Ingreso");
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Notas"), {
         target: { value: "Draft notes" },
       });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      yield* nextPaint;
       expect(screen.getByRole("region", { name: "Resumen de transacciones" })).toBeVisible();
       expect(screen.queryByText("Draft merchant")).not.toBeInTheDocument();
       expect(requests.updates()).toBe(0);
       fireEvent.click(screen.getByRole("button", { name: "Ver transacción El Corral" }));
+      yield* nextPaint;
       expect(screen.getByLabelText("Monto ($)")).toHaveValue("25000");
-      expect(screen.getByRole("button", { name: /^Tipo$/ })).toHaveTextContent("Gasto");
-      expect(screen.getByLabelText("Notas (opcional)")).toHaveValue("");
+      expect(screen.getByRole("combobox", { name: "Tipo" })).toHaveDisplayValue("Gasto");
+      expect(screen.getByLabelText("Notas")).toHaveValue("");
     })
   ));
 
@@ -480,12 +508,16 @@ const selectBulkRecords: Effect.Effect<void> = Effect.gen(function* () {
   fireEvent.click(
     yield* Effect.tryPromise(() => screen.findByRole("button", { name: "Editar varias" }))
   );
+  yield* nextPaint;
   expect(screen.queryByLabelText("Resumen de transacciones")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Editar selección" })).toBeDisabled();
   fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar El Corral" }));
+  yield* nextPaint;
   fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Éxito" }));
+  yield* nextPaint;
   expect(screen.getByText("2 seleccionadas")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Editar selección" }));
+  yield* nextPaint;
 }).pipe(Effect.orDie);
 it("corrects only selected records atomically at their observed revisions", () =>
   Effect.runPromise(
@@ -493,10 +525,13 @@ it("corrects only selected records atomically at their observed revisions", () =
       const requests = renderBulkJourney();
       yield* selectBulkRecords;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
-      expect(screen.getByRole("alert")).toHaveTextContent("Revisa los campos");
+      yield* nextPaint;
+      expect(screen.getByRole("alert")).toHaveTextContent("Revisa los cambios");
       expect(requests.bodies).toHaveLength(0);
-      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      fireEvent.input(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
       expect(requests.bodies).toHaveLength(1);
       const batch = yield* Schema.decodeEffect(bulkRequest)(
@@ -521,10 +556,13 @@ it("corrects only selected records atomically at their observed revisions", () =
         ]
       );
       fireEvent.click(screen.getByRole("button", { name: "Ver transacción Éxito" }));
-      expect(screen.getByLabelText("Notas (opcional)")).toHaveValue("Compra revisada");
+      yield* nextPaint;
+      expect(screen.getByLabelText("Notas")).toHaveValue("Compra revisada");
       fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Ver transacción Transporte" }));
-      expect(screen.getByLabelText("Notas (opcional)")).toHaveValue("");
+      yield* nextPaint;
+      expect(screen.getByLabelText("Notas")).toHaveValue("");
     })
   ));
 it.each(["rejected", "uncertain"] as const)("blocks replay after a %s bulk save", (result) =>
@@ -532,16 +570,20 @@ it.each(["rejected", "uncertain"] as const)("blocks replay after a %s bulk save"
     Effect.gen(function* () {
       const requests = renderBulkJourney(result);
       yield* selectBulkRecords;
-      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      fireEvent.input(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByRole("button", { name: "Actualizar historial" }));
       expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
       expect(screen.getByRole("alert")).toHaveTextContent(
-        result === "rejected" ? "No se guardó ningún cambio" : "No pudimos confirmar los cambios"
+        result === "rejected" ? "No se guardaron los cambios" : "No pudimos confirmar los cambios"
       );
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       expect(requests.bodies).toHaveLength(1);
       fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
       expect(requests.bodies).toHaveLength(1);
     })
@@ -557,11 +599,15 @@ it("opens corrections from transaction type and lets the user switch records", (
           screen.findByRole("button", { name: "Ver tipo de El Corral" })
         )
       );
+      yield* nextPaint;
       expect(screen.getByLabelText("Contraparte")).toHaveValue("El Corral");
-      fireEvent.change(screen.getByLabelText("Contraparte"), { target: { value: "Borrador" } });
+      fireEvent.input(screen.getByLabelText("Contraparte"), { target: { value: "Borrador" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Ver transacción Éxito" }));
+      yield* nextPaint;
       expect(screen.getByLabelText("Contraparte")).toHaveValue("Éxito");
       fireEvent.click(screen.getByRole("button", { name: "Ver monto de El Corral" }));
+      yield* nextPaint;
       expect(screen.getByLabelText("Contraparte")).toHaveValue("El Corral");
     })
   ));
@@ -569,14 +615,11 @@ it("saves a category from the ledger directly without opening correction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const requests = renderJourney();
-      fireEvent.click(
-        yield* Effect.tryPromise(() =>
-          screen.findByRole("button", { name: "Cambiar categoría de El Corral" })
-        )
+      yield* Effect.tryPromise(() =>
+        screen.findByRole("combobox", { name: "Cambiar categoría de El Corral" })
       );
-      fireEvent.click(
-        yield* Effect.tryPromise(() => screen.findByRole("menuitemradio", { name: "Mercado" }))
-      );
+      selectChoice("Cambiar categoría de El Corral", "Mercado");
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByText("Categoría guardada"));
       expect(requests.updates()).toBe(1);
       expect(requests.updateBody()).toContain('"expectedRevision":0');
@@ -591,18 +634,18 @@ it("blocks repeating an uncertain inline category correction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const requests = renderJourney(true);
-      fireEvent.click(
-        yield* Effect.tryPromise(() =>
-          screen.findByRole("button", { name: "Cambiar categoría de El Corral" })
-        )
+      yield* Effect.tryPromise(() =>
+        screen.findByRole("combobox", { name: "Cambiar categoría de El Corral" })
       );
-      fireEvent.click(
-        yield* Effect.tryPromise(() => screen.findByRole("menuitemradio", { name: "Mercado" }))
-      );
+      selectChoice("Cambiar categoría de El Corral", "Mercado");
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByRole("alert"));
-      expect(screen.getByRole("button", { name: "Cambiar categoría de El Corral" })).toBeDisabled();
+      expect(
+        screen.getByRole("combobox", { name: "Cambiar categoría de El Corral" })
+      ).toBeDisabled();
       expect(requests.updates()).toBe(1);
       fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
       expect(requests.updates()).toBe(1);
     })
@@ -613,31 +656,24 @@ it("sends every explicitly changed bulk fact and keeps the selected local date",
     Effect.gen(function* () {
       const requests = renderBulkJourney();
       yield* selectBulkRecords;
-      fireEvent.click(screen.getByRole("button", { name: "Categoría de la selección" }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name: "Mercado" }));
-      fireEvent.click(screen.getByRole("button", { name: "Tipo de la selección" }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name: "Ingreso" }));
-      fireEvent.change(screen.getByLabelText("Contraparte"), {
+      selectChoice("Categoría de la selección", "Mercado");
+      selectChoice("Tipo de la selección", "Ingreso");
+      fireEvent.input(screen.getByLabelText("Contraparte"), {
         target: { value: "  Nueva contraparte  " },
       });
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "125,50" } });
-      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
-      fireEvent.click(
-        within(screen.getByRole("form", { name: "Editar transacciones seleccionadas" })).getByRole(
-          "button",
-          { name: "Fecha" }
-        )
-      );
-      fireEvent.click(screen.getByRole("button", { name: "jueves, 8 de octubre de 2026" }));
-      fireEvent.click(screen.getByRole("button", { name: "Sin cambiar fecha" }));
-      fireEvent.click(
-        within(screen.getByRole("form", { name: "Editar transacciones seleccionadas" })).getByRole(
-          "button",
-          { name: "Fecha" }
-        )
-      );
-      fireEvent.click(screen.getByRole("button", { name: "jueves, 8 de octubre de 2026" }));
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: "125,50" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Fecha"), { target: { value: "2026-10-08" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Fecha"), { target: { value: "" } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Fecha"), { target: { value: "2026-10-08" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
       const request = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
         Option.getOrThrow(Option.fromNullishOr(requests.bodies[0]))
@@ -664,11 +700,14 @@ it.each(["-1", "125.123"])("refuses invalid bulk Money %s without issuing a batc
     Effect.gen(function* () {
       const requests = renderBulkJourney();
       yield* selectBulkRecords;
-      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: amount } });
+      fireEvent.input(screen.getByLabelText("Monto ($)"), { target: { value: amount } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
-      expect(screen.getByRole("alert")).toHaveTextContent("Revisa los campos");
+      yield* nextPaint;
+      expect(screen.getByRole("alert")).toHaveTextContent("Revisa los cambios");
       expect(requests.bodies).toHaveLength(0);
       fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      yield* nextPaint;
       expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
     })
   )
@@ -683,19 +722,17 @@ it("clears optional correction facts and sends the chosen type, category and dat
           screen.findByRole("button", { name: "Ver transacción El Corral" })
         )
       );
-      fireEvent.change(screen.getByLabelText("Contraparte"), { target: { value: " " } });
-      fireEvent.change(screen.getByLabelText("Notas (opcional)"), { target: { value: " " } });
-      fireEvent.click(screen.getByRole("button", { name: "Tipo" }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name: "Ingreso" }));
-      fireEvent.click(screen.getByRole("button", { name: "Categoría" }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name: "Mercado" }));
-      fireEvent.click(
-        within(screen.getByRole("form", { name: "Corregir transacción" })).getByRole("button", {
-          name: "Fecha",
-        })
-      );
-      fireEvent.click(screen.getByRole("button", { name: "jueves, 8 de octubre de 2026" }));
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Contraparte"), { target: { value: " " } });
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Notas"), { target: { value: " " } });
+      yield* nextPaint;
+      selectChoice("Tipo", "Ingreso");
+      selectChoice("Categoría", "Mercado");
+      fireEvent.input(screen.getByLabelText("Fecha"), { target: { value: "2026-10-08" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => waitForMutation(requests.updates));
       expect(
         yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests.updateBody())
@@ -721,7 +758,9 @@ it("closes an unchanged correction without issuing a mutation", () =>
           screen.findByRole("button", { name: "Ver transacción El Corral" })
         )
       );
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
       expect(requests.updates()).toBe(0);
     })
@@ -734,8 +773,10 @@ it("allows shared notes but prevents a shared amount across different currencies
       yield* selectBulkRecords;
       expect(screen.getByLabelText("Monto ($)")).toBeDisabled();
       expect(screen.getByText(/selecciona transacciones con la misma moneda/u)).toBeVisible();
-      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      fireEvent.input(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
       const request = yield* Schema.decodeEffect(bulkRequest)(
         Option.getOrThrow(Option.fromNullishOr(requests.bodies[0]))
@@ -755,13 +796,17 @@ it("trims a changed counterparty and retains the explicitly changed notes", () =
           screen.findByRole("button", { name: "Ver transacción El Corral" })
         )
       );
-      fireEvent.change(screen.getByLabelText("Contraparte"), {
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Contraparte"), {
         target: { value: "  Nueva contraparte  " },
       });
-      fireEvent.change(screen.getByLabelText("Notas (opcional)"), {
+      yield* nextPaint;
+      fireEvent.input(screen.getByLabelText("Notas"), {
         target: { value: "  Nota revisada  " },
       });
+      yield* nextPaint;
       fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() => waitForMutation(requests.updates));
       expect(
         yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests.updateBody())
@@ -859,14 +904,16 @@ it("retains loaded scope while a continuation waits, appends unique rows and ref
       };
       renderPaginationJourney(fixture);
       yield* Effect.tryPromise(firstPaginationRow);
-      fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
-      fireEvent.change(screen.getByLabelText("Buscar transacciones"), {
+
+      fireEvent.input(screen.getByLabelText("Buscar transacciones"), {
         target: { value: "La Cocina" },
       });
+      yield* nextPaint;
       expect(
         screen.getByText("No hay coincidencias entre las transacciones cargadas")
       ).toBeVisible();
       fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Cargando más transacciones…" })
       );
@@ -876,11 +923,13 @@ it("retains loaded scope while a continuation waits, appends unique rows and ref
         screen.findByRole("button", { name: "Ver transacción La Cocina" })
       );
       fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+      yield* nextPaint;
       expect(screen.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(2);
       expect(
         screen.queryByRole("button", { name: "Cargar más transacciones" })
       ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Actualizar transacciones" }));
+      yield* nextPaint;
       yield* Effect.tryPromise(waitForFirstPage);
       expect(fixture.requests).toEqual(["first", historyCursor, "first"]);
     })
@@ -892,12 +941,14 @@ it("retains rows after continuation transport failure and retries the same curso
       renderPaginationJourney(fixture);
       yield* Effect.tryPromise(firstPaginationRow);
       fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+      yield* nextPaint;
       const retry = yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Reintentar carga de más transacciones" })
       );
       expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
       fixture.mode = "ready";
       fireEvent.click(retry);
+      yield* nextPaint;
       yield* Effect.tryPromise(() =>
         screen.findByRole("button", { name: "Ver transacción La Cocina" })
       );
@@ -914,19 +965,22 @@ it.each(["repeat", "wrong-period", "missing-args"] as const)(
         yield* Effect.tryPromise(firstPaginationRow);
         if (mode === "repeat") {
           fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+          yield* nextPaint;
           yield* Effect.tryPromise(() =>
             screen.findByRole("button", { name: "Ver transacción La Cocina" })
           );
           fireEvent.click(screen.getByRole("button", { name: "Cargar más transacciones" }));
+          yield* nextPaint;
         }
         yield* Effect.tryPromise(() =>
-          screen.findByText("No pudimos actualizar las transacciones")
+          screen.findByText(/No pudimos actualizar las transacciones/u)
         );
         expect(
           screen.queryByText(/Invalid Transaction|Repeated Transaction/)
         ).not.toBeInTheDocument();
         fixture.mode = "ready";
-        fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
+        fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
+        yield* nextPaint;
         yield* Effect.tryPromise(() =>
           screen.findByRole("button", { name: "Cargar más transacciones" })
         );

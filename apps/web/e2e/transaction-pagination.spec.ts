@@ -145,9 +145,6 @@ test("browses beyond 100 Transactions and discloses loaded filter and summary sc
           page.getByText("Filtros y resumen aplican a las transacciones cargadas.")
         ).toBeVisible()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Buscar", exact: true }).click()
-      );
       yield* Effect.tryPromise(() => page.getByLabel("Buscar transacciones").fill("Registro 101"));
       yield* Effect.tryPromise(() =>
         expect(

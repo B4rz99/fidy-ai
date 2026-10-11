@@ -443,9 +443,12 @@ describe("signed-in web application routes", () => {
           yield* fromPromise(screen.findByText("No hay transacciones para mostrar"))
         ).toBeVisible();
         fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
-        fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "25000" } });
-        fireEvent.click(screen.getByRole("button", { name: "Fecha del movimiento" }));
-        fireEvent.click(screen.getByRole("button", { name: "viernes, 10 de enero de 2025" }));
+        fireEvent.input(yield* fromPromise(screen.findByLabelText("Monto ($)")), {
+          target: { value: "25000" },
+        });
+        fireEvent.input(screen.getByLabelText("Fecha del movimiento"), {
+          target: { value: "2025-01-10" },
+        });
         fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
         expect(yield* fromPromise(screen.findByText("El Corral · 10-01-2025"))).toHaveTextContent(
           "El Corral"
@@ -477,7 +480,7 @@ describe("signed-in web application routes — invalid Money", () => {
           yield* fromPromise(screen.findByText("No hay transacciones para mostrar"))
         ).toBeVisible();
         fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
-        fireEvent.change(screen.getByLabelText("Monto ($)"), {
+        fireEvent.input(yield* fromPromise(screen.findByLabelText("Monto ($)")), {
           target: { value: "not-a-number" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));

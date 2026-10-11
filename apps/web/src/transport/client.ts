@@ -31,7 +31,13 @@ export type {
   DaviplataOtpPolicy,
   SubmitPaymentEnrollmentPayload,
 } from "@fidy/server/client";
-export { TransactionQueryValues } from "@fidy/server/client";
+export {
+  Category,
+  User,
+  Transaction,
+  TransactionId,
+  TransactionQueryValues,
+} from "@fidy/server/client";
 export {
   ConnectionAttemptReference,
   ConnectionContinuationReview,

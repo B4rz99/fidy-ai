@@ -165,4 +165,7 @@ export { ProviderHandoffSearch } from "~/shell/web-authentication/contract";
 
 export { Currency, currencyMetadata } from "~/core/_shared/money";
 
-export { TransactionQueryValues } from "~/core/transactions/contract";
+export { Transaction, TransactionId, TransactionQueryValues } from "~/core/transactions/contract";
+
+export { Category } from "~/core/categories/contract";
+export { User } from "~/core/identity/contract";

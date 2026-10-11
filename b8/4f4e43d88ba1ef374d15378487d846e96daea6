@@ -1,0 +1,107 @@
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_b75995d26622a8::t_f3d410535ab172 105-110,113-125
+  s_b75995d26622a8::t_c9a6129da8403e 1
+  s_b75995d26622a8::t_9115682e79650f 25,94-104,111-112
+apps/web/src/app/native-pages.ts
+  s_b75995d26622a8::t_5166660e45e113 133,136-137
+  s_b75995d26622a8::t_3730980202f551 138-139
+apps/web/src/features/pats/manual-foldkit-view.ts
+  s_b75995d26622a8::t_53dc4d6b72a0b4 5,42
+  s_b75995d26622a8::t_3730980202f551 34-36,90-91,93-108,231-234
+  s_b75995d26622a8::t_f3d410535ab172 60-62,64,68,74-79
+  s_b75995d26622a8::t_f8aadfe42e2fbc 80-88
+apps/web/src/features/oauth-connections/feature.ts
+  s_b75995d26622a8::t_63dc680f562f4c 1
+apps/web/e2e/oauth-review.spec.ts
+  s_b75995d26622a8::t_97174b4645ad1f 263-265,278,293,299-301,334,336,343,375-377,450,602
+  s_b75995d26622a8::t_b90b4e93eb8c7b 261-262
+apps/web/ARCHITECTURE.md
+  s_b75995d26622a8::t_5eb0e008bffbdb 164
+apps/web/src/app/native-routes.test.ts
+  s_b75995d26622a8::t_5eb0e008bffbdb 70-78
+  s_b75995d26622a8::t_b2962a9414a0d6 25,27
+  s_b75995d26622a8::t_5166660e45e113 26
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_b75995d26622a8::t_3730980202f551 11,13-18
+  s_b75995d26622a8::t_9115682e79650f 395
+apps/web/src/app/native-access.ts
+  s_b75995d26622a8::t_fde69b0ab89c76 29,35,45,47-53,68-69,75,94,107,167-168,170
+  s_b75995d26622a8::t_5166660e45e113 1-3,5,7-14,58,194
+  s_b75995d26622a8::t_63dc680f562f4c 6
+  s_b75995d26622a8::t_e692a60c2fe763 77
+  s_b75995d26622a8::t_31df9d5c2ad79f 4,25,37-38,65,71,90,103,119-120,162-164,166,169,171-182
+  s_b75995d26622a8::t_3730980202f551 183-193
+  s_b75995d26622a8::t_f3d410535ab172 15-24,26-28,30-34,36,39-44,46,54-57,59-64,66-67,70,72-74,76,78-89,91-93,95-102,104-106,108-118,121-161,165
+apps/web/src/features/oauth-connections/management-program.ts
+  s_b75995d26622a8::t_63dc680f562f4c 101,113,117-118
+  s_b75995d26622a8::t_3730980202f551 75-88,114-116,119-121
+DESIGN.md
+  s_b75995d26622a8::t_b2962a9414a0d6 497-505
+apps/web/e2e/transaction-native-pagination.spec.ts
+  s_b75995d26622a8::t_c9a6129da8403e 2-8,10-47
+  s_b75995d26622a8::t_f8aadfe42e2fbc 1,9
+apps/web/src/features/transactions/FEATURE.md
+  s_b75995d26622a8::t_b2962a9414a0d6 42-46,53
+apps/web/src/app/native-view.ts
+  s_b75995d26622a8::t_5166660e45e113 39
+apps/web/src/features/oauth-connections/management-program.test.ts
+  s_b75995d26622a8::t_f3d410535ab172 92-114
+apps/web/src/features/pats/management-foldkit-view.ts
+  s_b75995d26622a8::t_91da6cfa88866e 155,201
+  s_b75995d26622a8::t_53dc4d6b72a0b4 32,39,51,53,61-62,129
+  s_b75995d26622a8::t_3730980202f551 40-49,121,138-141
+apps/web/src/app/native-routes.ts
+  s_b75995d26622a8::t_242eff77f86cd4 148-150
+  s_b75995d26622a8::t_5166660e45e113 67,136-137
+  s_b75995d26622a8::t_b2962a9414a0d6 135
+apps/web/src/features/pats/management-program.ts
+  s_b75995d26622a8::t_f3d410535ab172 154-156
+  s_b75995d26622a8::t_74b5968ced6aa9 103,109,133
+  s_b75995d26622a8::t_91da6cfa88866e 7,111,117-119,137-140,153,157-163,167-176
+  s_b75995d26622a8::t_08f078d3863fce 177
+  s_b75995d26622a8::t_b5ec4a80f9b875 104-108
+apps/web/src/features/pats/FEATURE.md
+  s_b75995d26622a8::t_b2962a9414a0d6 1-4,15-26,28-36
+  s_b75995d26622a8::t_ea871efa96f9e2 5-14,27
+apps/web/e2e/access-management.spec.ts
+  s_b75995d26622a8::t_f3d410535ab172 27-42,98-126,130,134-135,137-139
+  s_b75995d26622a8::t_32964d718a3961 1-2,4-26,43-44,97
+  s_b75995d26622a8::t_0e277ab28fb423 92-95
+  s_b75995d26622a8::t_116fd7789b7b76 3,63-68,73-74,89-91,140
+  s_b75995d26622a8::t_e82696309b8b74 96,149
+  s_b75995d26622a8::t_c0f7107b7d5d53 69-72,75-88,141-148,150-176,183-193
+  s_b75995d26622a8::t_74b5968ced6aa9 45,48-49,57,61-62,136
+  s_b75995d26622a8::t_b5ec4a80f9b875 46-47,50-56,58-60,127-129,131-133
+  s_b75995d26622a8::t_5eb0e008bffbdb 177-182
+apps/web/src/features/oauth-connections/management-foldkit-view.ts
+  s_b75995d26622a8::t_f8aadfe42e2fbc 204
+  s_b75995d26622a8::t_f3d410535ab172 153-158
+  s_b75995d26622a8::t_63dc680f562f4c 12-15,20,37,53-55,68,143,148,151,210,215,217,226,228
+  s_b75995d26622a8::t_fde69b0ab89c76 179-180,202-203,227
+  s_b75995d26622a8::t_0b741aaaecc460 85-94,96-113,116-117,134
+  s_b75995d26622a8::t_3730980202f551 42-43,49-51,57-65,69-70,72-80,83-84,219-225,230-237,242-245
+  s_b75995d26622a8::t_e692a60c2fe763 118-131,177-178,229
+  s_b75995d26622a8::t_6220c3bb791038 44-48,182-184,187-192,195-200
+  s_b75995d26622a8::t_46bb7da9a919d1 181,185-186,193-194,201
+apps/web/src/features/pats/feature.ts
+  s_b75995d26622a8::t_91da6cfa88866e 1-2
+apps/web/e2e/real-core-fixture.ts
+  s_b75995d26622a8::t_9115682e79650f 26-27,29,35,104-105,109-111
+  s_b75995d26622a8::t_cf0aa45751e44e 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b84f4e43d88ba1ef374d15378487d846e96daea6",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

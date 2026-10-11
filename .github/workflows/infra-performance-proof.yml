@@ -28,7 +28,7 @@ jobs:
         uses: ./.github/actions/bun-runtime
       - name: Install locked workspace
         run: bash scripts/install-workspace.sh --ignore-scripts
-      - name: Measure synthetic XLSX in an isolated Cloudflare preview
+      - name: Measure synthetic XLSX under the account CPU allowance
         run: |
           set -o pipefail
           bun scripts/document-parsing/xlsx-work.ts --remote | tee "$RUNNER_TEMP/xlsx-performance.jsonl"

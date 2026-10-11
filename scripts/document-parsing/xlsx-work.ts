@@ -20,6 +20,10 @@ const localRequestTimeout = 1000;
 const remoteRequestTimeout = 5000;
 const requestTimeout = remote ? remoteRequestTimeout : localRequestTimeout;
 const cpuLimit = 30000;
+const smallStatementRows = 8;
+const mediumStatementRows = 32;
+const largerStatementRows = 128;
+const malformedFileStatus = 422;
 const sharedLength = 4096;
 const formattedRows = 512;
 const boundedRows = 8000;
@@ -92,7 +96,7 @@ const configCodec = Schema.fromJsonString(
     name: Schema.String,
     main: Schema.String,
     compatibility_date: Schema.String,
-    limits: Schema.Struct({ cpu_ms: Schema.Int }),
+    limits: Schema.optionalKey(Schema.Struct({ cpu_ms: Schema.Int })),
     workers_dev: Schema.Boolean,
     preview_urls: Schema.Boolean,
   })
@@ -163,6 +167,10 @@ const fixtures = Effect.fn(function* () {
           Effect.map((bytes) => ({ name, bytes }))
         )
     )),
+    ...[1, smallStatementRows, mediumStatementRows, largerStatementRows].map((rows) => ({
+      name: `ordinary-${rows}-rows`,
+      bytes: synthetic({ rows, text: "Cafe", formatted: false }),
+    })),
     {
       name: "different-amounts",
       bytes: synthetic({
@@ -208,18 +216,23 @@ const send = (
 const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
   const reply = yield* Effect.tryPromise(() =>
     send(
-      synthetic({ rows: 1, text: "Cafe", formatted: false }),
+      remote ? new Uint8Array() : synthetic({ rows: 1, text: "Cafe", formatted: false }),
       AbortSignal.timeout(requestTimeout),
       target
     )
   );
   yield* Effect.try(() => {
-    if (!reply.ok) throw new Error("XLSX preview is not ready");
+    if (remote ? reply.status !== malformedFileStatus : !reply.ok) {
+      throw new Error("XLSX proof is not ready");
+    }
   });
   const value = yield* Effect.tryPromise(() => reply.json());
   yield* Effect.try(() => {
     const parsed = decodeResponse(value);
-    if (parsed.outcome !== "parsed" || parsed.rowCount !== 1) {
+    const ready = remote
+      ? parsed.outcome === "rejected" && parsed.reason === "malformed-file"
+      : parsed.outcome === "parsed" && parsed.rowCount === 1;
+    if (!ready) {
       throw new Error("XLSX readiness fixture did not parse");
     }
   });
@@ -308,7 +321,7 @@ const proofConfig = (name: string): string =>
     name,
     main: "worker.js",
     compatibility_date: "2026-09-08",
-    limits: { cpu_ms: cpuLimit },
+    ...(remote ? {} : { limits: { cpu_ms: cpuLimit } }),
     workers_dev: remote,
     preview_urls: false,
   });

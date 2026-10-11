@@ -23,6 +23,7 @@ const cpuLimit = 30000;
 const smallStatementRows = 8;
 const mediumStatementRows = 32;
 const largerStatementRows = 128;
+const thousandStatementRows = 1000;
 const malformedFileStatus = 422;
 const sharedLength = 4096;
 const formattedRows = 512;
@@ -43,13 +44,18 @@ const workResult = Schema.Struct({
   acceptedRows: Schema.Int,
   reviewRows: Schema.Int,
 });
+const parsedOnly = Schema.Struct({
+  outcome: Schema.Literal("parsed"),
+  rowCount: Schema.Int,
+  elapsedMilliseconds: Schema.Finite,
+});
 const rejected = Schema.Struct({ outcome: Schema.Literal("rejected"), reason: Schema.String });
 const runtimeFailure = Schema.Struct({
   outcome: Schema.Literal("runtime-failure"),
   httpStatus: Schema.Int,
   cloudflareErrorCode: Schema.optional(Schema.String),
 });
-const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, rejected]));
+const decodeResponse = Schema.decodeUnknownSync(Schema.Union([workResult, parsedOnly, rejected]));
 const readProofResponse = Effect.fn(function* (response: Response) {
   if (response.headers.get("content-type")?.includes("application/json") === true) {
     return decodeResponse(yield* Effect.tryPromise(() => response.json()));
@@ -77,6 +83,7 @@ const measurementBase = Schema.Struct({
 const measurementCodec = Schema.fromJsonString(
   Schema.Union([
     Schema.Struct({ ...measurementBase.fields, ...workResult.fields }),
+    Schema.Struct({ ...measurementBase.fields, ...parsedOnly.fields }),
     Schema.Struct({ ...measurementBase.fields, ...rejected.fields }),
     Schema.Struct({ ...measurementBase.fields, ...runtimeFailure.fields }),
   ])
@@ -193,15 +200,15 @@ const fixtures = Effect.fn(function* () {
   ];
 });
 const send = (
-  bytes: Uint8Array,
+  payload: Readonly<{ bytes: Uint8Array; path: "/statement" | "/statement-work" }>,
   signal: AbortSignal,
   target: Option.Option<HostedWorkerProof>
 ): Promise<Response> => {
   const input = {
     method: "POST" as const,
     port,
-    path: "/statement-work",
-    body: bytes,
+    path: payload.path,
+    body: payload.bytes,
     headers: {},
     signal,
   };
@@ -216,7 +223,10 @@ const send = (
 const probeReady = Effect.fn(function* (target: Option.Option<HostedWorkerProof>) {
   const reply = yield* Effect.tryPromise(() =>
     send(
-      remote ? new Uint8Array() : synthetic({ rows: 1, text: "Cafe", formatted: false }),
+      {
+        bytes: remote ? new Uint8Array() : synthetic({ rows: 1, text: "Cafe", formatted: false }),
+        path: "/statement-work",
+      },
       AbortSignal.timeout(requestTimeout),
       target
     )
@@ -261,7 +271,7 @@ const waitInspector = Effect.fn(function* () {
   throw new Error("XLSX proof inspector did not become ready");
 });
 const measure = Effect.fn(function* (
-  fixture: Readonly<{ name: string; bytes: Uint8Array }>,
+  fixture: Readonly<{ name: string; bytes: Uint8Array; path: "/statement" | "/statement-work" }>,
   debuggerUrl: string,
   target: Option.Option<HostedWorkerProof>
 ) {
@@ -276,7 +286,7 @@ const measure = Effect.fn(function* (
   const profiled = remote
     ? {
         response: yield* Effect.tryPromise(() =>
-          send(fixture.bytes, AbortSignal.timeout(cpuLimit), target)
+          send(fixture, AbortSignal.timeout(cpuLimit), target)
         ),
         cpuMilliseconds: undefined,
       }
@@ -284,7 +294,7 @@ const measure = Effect.fn(function* (
         profileWorkerRequest({
           debuggerUrl,
           signal: Option.none(),
-          sendRequest: (signal) => send(fixture.bytes, signal, target),
+          sendRequest: (signal) => send(fixture, signal, target),
         })
       );
   const result = yield* readProofResponse(profiled.response);
@@ -377,8 +387,8 @@ const overlapRequests = Effect.fn(function* (
   const startedAt = performance.now();
   const responses = yield* Effect.tryPromise(() =>
     Promise.all([
-      send(overlap, AbortSignal.timeout(cpuLimit), target),
-      send(overlap, AbortSignal.timeout(cpuLimit), target),
+      send({ bytes: overlap, path: "/statement-work" }, AbortSignal.timeout(cpuLimit), target),
+      send({ bytes: overlap, path: "/statement-work" }, AbortSignal.timeout(cpuLimit), target),
     ])
   );
   const results = yield* Effect.forEach(responses, readProofResponse);
@@ -418,7 +428,27 @@ const program = Effect.gen(function* () {
   if (!remote) yield* Effect.acquireRelease(Effect.sync(startWorker), releaseWorker);
   yield* waitReady(target);
   const debuggerUrl = remote ? "" : yield* waitInspector();
-  for (const fixture of yield* fixtures()) yield* measure(fixture, debuggerUrl, target);
+  for (const rows of [
+    1,
+    smallStatementRows,
+    mediumStatementRows,
+    largerStatementRows,
+    thousandStatementRows,
+    boundedRows,
+  ]) {
+    yield* measure(
+      {
+        name: `parse-only-ordinary-${rows}-rows`,
+        path: "/statement",
+        bytes: synthetic({ rows, text: "Cafe", formatted: false }),
+      },
+      debuggerUrl,
+      target
+    );
+  }
+  for (const fixture of yield* fixtures()) {
+    yield* measure({ ...fixture, path: "/statement-work" }, debuggerUrl, target);
+  }
   yield* overlapRequests(
     debuggerUrl,
     synthetic({ rows: 1000, text: " ".repeat(sharedLength - 4) + "Cafe", formatted: false }),

@@ -17,6 +17,8 @@ import {
   makeWebAuthClient,
 } from "@/transport/client";
 
+const coldFeatureLoadMilliseconds = 5_000;
+
 const responseJson = (
   request: HttpClientRequest.HttpClientRequest,
   body: unknown,
@@ -269,10 +271,15 @@ describe("public web application routes", () => {
 
         expect(
           yield* fromPromise(
-            screen.findByRole("heading", {
-              level: 1,
-              name: "Política de tratamiento de datos personales",
-            })
+            // This first route instruments the real lazy chunk on a cold test worker.
+            screen.findByRole(
+              "heading",
+              {
+                level: 1,
+                name: "Política de tratamiento de datos personales",
+              },
+              { timeout: coldFeatureLoadMilliseconds }
+            )
           )
         ).toBeVisible();
         expect(screen.getByText("policy-2026-10-09-browser-agents")).toBeVisible();

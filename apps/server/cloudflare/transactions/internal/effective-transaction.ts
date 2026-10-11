@@ -26,3 +26,55 @@ export const effectiveTransactionRelation = (userId: string): EffectiveTransacti
     effective_transaction AS (SELECT * FROM dashboard_effective_source WHERE user_id = ?)`,
   bindings: [userId, userId],
 });
+
+/**
+ * Read effective History from the complete current projection, or the authoritative source while
+ * that projection is absent or being repaired. Readiness and facts share the caller's SQL snapshot.
+ * Filters and ordering must apply to these effective facts, never to retained pair members.
+ * The caller supplies reviewed static SQL with an explicit User predicate, corresponding bound
+ * values and a bounded positive page limit. Request values never become SQL fragments.
+ */
+export const effectiveHistoryPage = ({
+  userId,
+  where,
+  bindings,
+  limit,
+}: Readonly<{
+  userId: string;
+  where: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+  limit: number;
+}>): Readonly<{ sql: string; bindings: ReadonlyArray<string | number | Uint8Array> }> => {
+  const relation = effectiveTransactionRelation(userId);
+  const fields = [
+    "user_id",
+    "id",
+    "amount",
+    "currency",
+    "direction",
+    "counterparty",
+    "category_id",
+    "notes",
+    "occurred_at",
+    "created_at",
+    "revision",
+  ];
+  const columns = fields.join(", ");
+  const encoded = `json_object(${fields.flatMap((field) => [`'${field}'`, field]).join(", ")})`;
+  const decoded = fields.map((field) => `json_extract(value, '$.${field}') AS ${field}`).join(", ");
+  const ordered = `ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${limit}`;
+  return {
+    // CASE is lazy; a false UNION branch can still materialize the expensive source view.
+    // Serialize only the bounded selected page, retaining one atomic readiness/authority snapshot.
+    sql: `WITH selected AS (SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM dashboard_projection_state
+        WHERE user_id = ? AND version = 1 AND readiness = 'ready')
+      THEN (SELECT json_group_array(${encoded}) FROM (
+        SELECT ${columns} FROM dashboard_projection_leaf WHERE (${where}) ${ordered}))
+      ELSE (WITH ${relation.sql} SELECT json_group_array(${encoded}) FROM (
+        SELECT ${columns} FROM effective_transaction WHERE (${where}) ${ordered}))
+      END AS records)
+      SELECT ${decoded} FROM selected, json_each(selected.records) ${ordered}`,
+    bindings: [userId, ...bindings, ...relation.bindings, ...bindings],
+  };
+};

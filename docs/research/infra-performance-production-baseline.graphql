@@ -1,0 +1,277 @@
+# Read-only aggregate baseline. Supply accountTag and completed UTC date/time bounds.
+# Workers/D1 baseline and supplemental datasets verified and executed on this account, 2026-10-10.
+# No query text, request contents or bindings selected. Worker CPU/wall quantiles: microseconds.
+# D1 duration and Workflow CPU: milliseconds. Adaptive totals are estimates; preserve sampling.
+# Run once per completed UTC day; check for limit truncation before treating totals as complete.
+# datetimeEnd is exclusive; dateEnd is inclusive. For one UTC day, dateStart = dateEnd.
+query InfrastructureBaseline(
+  $accountTag: string!
+  $datetimeStart: string!
+  $datetimeEnd: string!
+  $dateStart: Date!
+  $dateEnd: Date!
+) {
+  viewer {
+    accounts(filter: { accountTag: $accountTag }) {
+      workersInvocationsAdaptive(
+        limit: 10000
+        filter: { datetime_geq: $datetimeStart, datetime_lt: $datetimeEnd }
+      ) {
+        dimensions {
+          scriptName
+          status
+        }
+        sum {
+          requests
+          errors
+          subrequests
+        }
+        quantiles {
+          cpuTimeP50
+          cpuTimeP99
+        }
+      }
+      d1AnalyticsAdaptiveGroups(
+        limit: 10000
+        filter: { date_geq: $dateStart, date_leq: $dateEnd }
+        orderBy: [date_DESC]
+      ) {
+        dimensions {
+          date
+          databaseId
+        }
+        sum {
+          readQueries
+          writeQueries
+          rowsRead
+          rowsWritten
+        }
+        quantiles {
+          queryBatchTimeMsP90
+        }
+      }
+    }
+  }
+}
+
+# Run separately from InfrastructureBaseline with completed UTC datetime bounds.
+# Time scalar is the account GraphQL schema type; end is exclusive.
+query InfrastructureResourceBaseline($a: string!, $s: Time!, $e: Time!) {
+  viewer {
+    accounts(filter: { accountTag: $a }) {
+      d1StorageAdaptiveGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          databaseId
+        }
+        max {
+          databaseSizeBytes
+        }
+      }
+      queueMessageOperationsAdaptiveGroups(
+        limit: 10000
+        filter: { datetime_geq: $s, datetime_lt: $e }
+      ) {
+        dimensions {
+          date
+          queueId
+          actionType
+          outcome
+          consumerType
+        }
+        count
+        sum {
+          billableOperations
+          bytes
+        }
+        max {
+          messageSize
+        }
+      }
+      queueBacklogAdaptiveGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          datetimeHour
+          queueId
+        }
+        avg {
+          messages
+          bytes
+          sampleInterval
+        }
+      }
+      workflowsAdaptiveGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          workflowName
+          eventType
+        }
+        count
+        sum {
+          allStepCount
+          stepCount
+          retryCount
+          cpuTime
+          wallTime
+          executionDuration
+          storageRate
+        }
+      }
+      workflowsBlockedReasonAdaptiveGroups(
+        limit: 10000
+        filter: { datetime_geq: $s, datetime_lt: $e }
+      ) {
+        dimensions {
+          date
+          workflowId
+          reason
+        }
+        count
+        sum {
+          blockedCount
+        }
+      }
+      workflowsQueueWaitAdaptiveGroups(
+        limit: 10000
+        filter: { datetime_geq: $s, datetime_lt: $e }
+      ) {
+        dimensions {
+          date
+          workflowId
+        }
+        count
+        quantiles {
+          waitMsP50
+          waitMsP95
+          waitMsP99
+        }
+      }
+      r2OperationsAdaptiveGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          bucketName
+          actionType
+          actionStatus
+          responseStatusCode
+        }
+        sum {
+          requests
+          responseBytes
+        }
+      }
+      r2StorageAdaptiveGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          bucketName
+        }
+        max {
+          payloadSize
+          metadataSize
+          objectCount
+          uploadCount
+        }
+      }
+      durableObjectsInvocationsAdaptiveGroups(
+        limit: 10000
+        filter: { datetime_geq: $s, datetime_lt: $e }
+      ) {
+        dimensions {
+          date
+          namespaceId
+          scriptName
+          status
+          type
+        }
+        sum {
+          requests
+          errors
+          wallTime
+        }
+        quantiles {
+          cpuTimeP50
+          cpuTimeP95
+          cpuTimeP99
+          wallTimeP50
+          wallTimeP95
+          wallTimeP99
+        }
+      }
+      durableObjectsPeriodicGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          namespaceId
+        }
+        sum {
+          cpuTime
+          duration
+          activeTime
+          rowsRead
+          rowsWritten
+          exceededCpuErrors
+          exceededMemoryErrors
+          fatalInternalErrors
+        }
+        max {
+          memoryUsageBytes
+        }
+        quantiles {
+          memoryUsageBytesP99
+        }
+      }
+      durableObjectsSqlStorageGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          namespaceId
+        }
+        max {
+          storedBytes
+        }
+      }
+      aiInferenceAdaptiveGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          modelId
+          errorCode
+          requestSource
+        }
+        count
+        sum {
+          totalInputTokens
+          totalOutputTokens
+          totalNeurons
+          totalInferenceTimeMs
+        }
+      }
+      workersAssetsRequestsAdaptiveGroups(
+        limit: 10000
+        filter: { datetime_geq: $s, datetime_lt: $e }
+      ) {
+        dimensions {
+          date
+          cacheStatus
+          statusCode
+        }
+        sum {
+          requests
+        }
+      }
+      d1QueriesAdaptiveGroups(limit: 10000, filter: { datetime_geq: $s, datetime_lt: $e }) {
+        dimensions {
+          date
+          servedByRegion
+        }
+        count
+        sum {
+          rowsRead
+          rowsWritten
+          rowsReturned
+          queryDurationMs
+        }
+        quantiles {
+          queryDurationMsP50
+          queryDurationMsP95
+          queryDurationMsP99
+        }
+      }
+    }
+  }
+}

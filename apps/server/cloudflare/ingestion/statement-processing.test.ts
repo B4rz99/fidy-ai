@@ -1,5 +1,5 @@
 import { statementParserLimits } from "../../src/shell/ingestion/contract";
-import { Clock, Effect, Exit, Option, Schema } from "effect";
+import { Clock, Config, Effect, Exit, Option, Schema } from "effect";
 import {
   CapturedFieldIssue,
   type NeedsReviewStatementRow,
@@ -62,6 +62,7 @@ const migrations = [
   "0077_statement_materialization",
   "0078_statement_materialization_binding",
   "0079_statement_progress",
+  "0082_statement_review_capacity",
 ];
 const storage = isolatedTestStorage();
 
@@ -2880,4 +2881,138 @@ effectIt.effect(
       });
       expect(monitored.observed).toEqual({ heads: 1, gets: 1, bytes: source.byteLength });
     })
+);
+
+const measureFullStatements =
+  Effect.runSync(Config.String("INFRA_PERFORMANCE_MEASURE").pipe(Config.withDefault("0"))) === "1";
+const fullStatementMeasurement = Schema.fromJsonString(
+  Schema.Struct({
+    scenario: Schema.Literal("full-statement-processing"),
+    rows: Schema.Int,
+    rowsRead: Schema.Int,
+    rowsWritten: Schema.Int,
+    accountingReads: Schema.Int,
+    activities: Schema.Int,
+    elapsedMs: Schema.Finite,
+  })
+);
+it.skipIf(!measureFullStatements)(
+  "measures complete statement processing with every migration installed",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fullMigrations = Array.from(
+          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
+        )
+          .sort()
+          .map((name) => name.slice(0, -4));
+        for (const rows of [96, 192, 1_024]) {
+          const { db, bucket } = yield* fromTestPromise(() =>
+            setup("unmapped\n" + "row\n".repeat(rows), "csv", fullMigrations)
+          );
+          const measured = observeRetentionCost(db);
+          const start = yield* Clock.currentTimeMillis;
+          let result: "continue" | "completed" = "continue";
+          let activities = 0;
+          while (result === "continue") {
+            result = yield* processStatementSubmission({
+              DB: measured.database,
+              STATEMENT_STAGING_BUCKET: bucket,
+              userId: userA,
+              submissionId,
+            });
+            activities++;
+          }
+          const end = yield* Clock.currentTimeMillis;
+          expect(measured.cost().rowsRead).toBeLessThan(rows * 60);
+          expect(
+            yield* fromTestPromise(() =>
+              db
+                .prepare(
+                  "SELECT input_rows,needs_review_rows FROM statement_submissions WHERE id = ?"
+                )
+                .bind(submissionId)
+                .first()
+            )
+          ).toEqual({ input_rows: rows, needs_review_rows: rows });
+          const encoded = yield* Schema.encodeEffect(fullStatementMeasurement)({
+            scenario: "full-statement-processing",
+            rows,
+            ...measured.cost(),
+            accountingReads: accountingReads(measured),
+            activities,
+            elapsedMs: end - start,
+          });
+          yield* Effect.sync(() => process.stdout.write(`INFRA_COST ${encoded}\n`));
+        }
+      })
+    ),
+  120_000
+);
+
+it(
+  "upgrades populated review capacity and preserves the global cap through settlement, deletion and rollback",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db } = yield* fromTestPromise(() =>
+          setup(
+            "unmapped\nrow\n",
+            "csv",
+            migrations.filter((name) => name !== "0082_statement_review_capacity")
+          )
+        );
+        const insert = (reviewId: string, record: number): D1PreparedStatement =>
+          db
+            .prepare(`INSERT INTO statement_needs_review
+      (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,status,
+       evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
+      VALUES (?, ?, ?, ?, 'mapping-unavailable', '{}', NULL, '[]', 'pending', 9999999999999, 0,
+        'CO', 'es-CO', 'America/Bogota', 'csv', 'fixture', 'fixture')`)
+            .bind(reviewId, userA, submissionId, record);
+        yield* fromTestPromise(() => insert("template", 1).run());
+        yield* fromTestPromise(() =>
+          applyTestMigration({
+            db,
+            source: new URL("../migrations/0082_statement_review_capacity.sql", import.meta.url),
+          })
+        );
+        const count = (): Promise<number> =>
+          db
+            .prepare("SELECT pending_count FROM statement_review_capacity WHERE id = 1")
+            .first<number>("pending_count")
+            .then(Schema.decodeUnknownSync(Schema.Int));
+        expect(yield* fromTestPromise(count)).toBe(1);
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`WITH RECURSIVE n(i) AS (SELECT 2 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)
+      INSERT INTO statement_needs_review SELECT 'capacity-' || i, user_id, submission_id, i, reason,
+        original_evidence, known_money, issues, status, evidence_expires_at_ms, created_at_ms,
+        service_market, locale, time_zone, source_format, parser_revision, extractor_revision
+      FROM statement_needs_review, n WHERE id = 'template'`)
+            .run()
+        );
+        expect(yield* fromTestPromise(count)).toBe(5000);
+        yield* fromTestPromise(() => expect(insert("over-cap", 5001).run()).rejects.toThrow());
+        expect(yield* fromTestPromise(count)).toBe(5000);
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "UPDATE statement_needs_review SET status = 'expired', original_evidence = NULL, known_money = NULL WHERE id = 'template'"
+            )
+            .run()
+        );
+        expect(yield* fromTestPromise(count)).toBe(4999);
+        yield* fromTestPromise(() => db.prepare("DELETE FROM statement_needs_review").run());
+        expect(yield* fromTestPromise(count)).toBe(0);
+        yield* fromTestPromise(() =>
+          expect(db.batch([insert("rollback", 5002), insert("rollback", 5003)])).rejects.toThrow()
+        );
+        expect(yield* fromTestPromise(count)).toBe(0);
+        expect(
+          (yield* fromTestPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
+        ).toEqual([]);
+      })
+    ),
+  30_000
 );

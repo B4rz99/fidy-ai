@@ -33,7 +33,10 @@ const report = {
     })),
   },
 };
-const mount = (respond: () => Response): ReturnType<typeof renderFoldkit> => {
+const mount = (
+  respond: () => Response,
+  id: unknown = report.insightEventId
+): ReturnType<typeof renderFoldkit> => {
   const apiClient = makeFidyClient({
     apiOrigin: "https://api.test.fidyapp.com",
     httpClient: Layer.succeed(
@@ -48,7 +51,7 @@ const mount = (respond: () => Response): ReturnType<typeof renderFoldkit> => {
       apiClient,
       registry,
       resources: registry.get(apiClient.runtime.layer),
-      id: report.insightEventId,
+      id,
     });
     return () => {
       dispose();
@@ -87,5 +90,21 @@ it("presents safe retry and loads the report after the server recovers", () =>
       fireEvent.click(retry);
       yield* Effect.tryPromise(() => screen.findByRole("list"));
       expect(respond.mock.calls.length).toBeGreaterThan(requestsBeforeRetry);
+    })
+  ));
+
+it("refuses an invalid report identity locally without sending a canonical request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const respond = vi.fn(() => Response.json({ data: report, next: [] }));
+      mount(respond, "private-invalid-report-id");
+      const retry = yield* Effect.tryPromise(() =>
+        screen.findByRole("button", { name: "Reintentar" })
+      );
+      expect(respond).not.toHaveBeenCalled();
+      expect(document.body.textContent).not.toContain("private-invalid-report-id");
+      fireEvent.click(retry);
+      yield* Effect.tryPromise(() => screen.findByRole("button", { name: "Reintentar" }));
+      expect(respond).not.toHaveBeenCalled();
     })
   ));

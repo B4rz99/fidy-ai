@@ -1,0 +1,23 @@
+apps/web/src/features/pats/program.test.ts
+  s_b75995d26622a8::t_0c991b7981d304 273-276
+  s_b75995d26622a8::t_310d6ad813dbf7 265-272,277-286
+apps/web/src/features/oauth-connections/management-program.test.ts
+  s_b75995d26622a8::t_5fa3f9ff5f2e12 89
+  s_b75995d26622a8::t_3d9bffdba536b6 2,7-8,30-31,44-45,49-52,60-86,88,90-100,144-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2a92e4fe84d59653c664693c0a1ae880c475d4e0",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -24,6 +24,8 @@ apps/web/ARCHITECTURE.md
   s_6d017cc65783af::t_e2d607e2ff6cbe 243
 docs/adr/0015-browser-paired-web-authentication.md
   s_6d017cc65783af::t_f3ba1ef8e68adb 51
+apps/web/src/features/pats/pairing-foldkit-view.ts
+  s_6d017cc65783af::t_6266cd7f436474 94-99
 ---
 {
   "schema_version": "authorship/3.0.0",

@@ -74,3 +74,5 @@ bun run --cwd apps/server test:cloudflare cloudflare/dashboard --maxWorkers=1
 ```
 
 Production aggregation observation, 2026-10-12, React release `274f64ecdb1ff2d2997ecc52202d9e446e361653`: the monthly metric displayed COP 2,500 income and COP 6,387 spending. Transactions showed COP 2,931 spending for the first 100 loaded records, then loaded the remaining COP 3,456 test record. The complete-history sum matches the Dashboard spending metric. This is live aggregation evidence with existing fixtures; it does not establish canonical-title editing, source/Audit retention after deletion, or every Widget variant.
+
+Production cleanup verification, 2026-10-12, release `804b122e7f68eec439f165b42cf99b6aedff99f1`: after the three explicitly approved chat fixtures were deleted through exact hosted challenges, reloaded Transactions showed 99 retained rows, COP 2,500 income and COP 1,697 spending, with all three deleted names absent. Dashboard monthly income/spending matched those values. Only those three fixtures were deleted; the other labelled fixtures remain. Production retained Audit/SourceAttestation storage was not inspected.

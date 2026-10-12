@@ -1,0 +1,33 @@
+apps/web/src/features/dashboard/FEATURE.md
+  s_b75995d26622a8::t_ffa7552cd9d684 3-4,89-94
+apps/web/src/features/recovery/FEATURE.md
+  s_b75995d26622a8::t_c4ce055907bfc3 3-4,15-17
+  s_b75995d26622a8::t_8f1bf3ccd92067 18
+apps/web/src/features/email-replacement/FEATURE.md
+  s_b75995d26622a8::t_c4ce055907bfc3 3-4,17
+  s_b75995d26622a8::t_d5db4cc4825ce1 18
+apps/web/src/features/transactions/FEATURE.md
+  s_b75995d26622a8::t_ffa7552cd9d684 3-6
+apps/web/src/features/pats/FEATURE.md
+  s_b75995d26622a8::t_c4ce055907bfc3 3-10
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_b75995d26622a8::t_c4ce055907bfc3 3-8
+apps/web/src/features/agent/FEATURE.md
+  s_b75995d26622a8::t_ffa7552cd9d684 3-6,43,68-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dbaf8aa5374bd22c11d09b62aa22fab83c89581c",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

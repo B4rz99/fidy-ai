@@ -117,7 +117,7 @@ describe("Dashboard route resources", () => {
   });
 });
 
-const renderEditableDashboard = (): void => {
+const renderEditableDashboard = (): ReturnType<typeof render> =>
   render(
     <DashboardRouteContent
       apiClient={apiClient}
@@ -126,19 +126,27 @@ const renderEditableDashboard = (): void => {
       phase="reading"
     />
   );
-};
 
 describe("Dashboard route edits", () => {
-  effectIt.effect("queues a canonical edit and clears its pending state after success", () =>
+  effectIt.effect("keeps a successful edit pending until the canonical reread", () =>
     Effect.gen(function* () {
       const deferredEdit = Promise.withResolvers<Exit.Exit<unknown, unknown>>();
       atomHarness.applyEdit.mockReturnValueOnce(deferredEdit.promise);
-      renderEditableDashboard();
+      const rendered = renderEditableDashboard();
 
       triggerGesture({ kind: "remove-widget", widgetId });
       expect(currentEditor().submitting).toBe(true);
       yield* waitForAssertion(expectRemoveApplied);
       yield* settleEdit(deferredEdit);
+      expect(currentEditor().submitting).toBe(true);
+      rendered.rerender(
+        <DashboardRouteContent
+          apiClient={apiClient}
+          onRefresh={vi.fn()}
+          result={AsyncResult.success({ data: { ...view } })}
+          phase="reading"
+        />
+      );
       yield* waitForAssertion(expectEditSettled);
       expect(currentError()).toEqual(Option.none());
     })

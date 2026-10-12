@@ -24,6 +24,14 @@ Capability and verification map for `/app/dashboard`. This records implementatio
 - `view.tsx`, `presentation.ts`, and Money presentation own rendering.
 - Server Core Dashboard owns the document grammar, edit rules, periods, aggregation, and authoritative results. Cloudflare adapters own admitted persistence and execution.
 
+## Placement feedback
+
+Dragging previews the resulting Widget arrangement using the last canonical financial results. The drag destinations remain fixed during the preview. A catalog Widget shows a placeholder until Core calculates its results.
+
+Dropping shows the placement immediately and announces “Guardando cambio…”. Editing stays disabled until the canonical reread completes. Refused or uncertain edits and failed rereads restore the last confirmed arrangement; an uncertain edit is never automatically replayed. The preview is transient presentation state, not another persisted Dashboard document.
+
+`dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment, and keyboard cancellation through the built browser. `dashboard-core.spec.ts` checks preview geometry against the persisted result through public Ingress, private Core, and local D1. Production verification of this placement change is pending deployment.
+
 ## Verification
 
 On 2026-10-11, audited release checkout based on `a2483f5dd1939fc3c3a37887c4e93c8081893666` passed:

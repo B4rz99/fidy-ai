@@ -3,7 +3,7 @@ import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
 import { GripVerticalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Option } from "effect";
-import type { JSX, ReactNode } from "react";
+import { type JSX, type ReactNode, useRef } from "react";
 import { dashboardAnnouncements, dashboardCollisionPriority } from "./drag-accessibility";
 import { dashboardDragData } from "./drag-data";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
@@ -28,34 +28,45 @@ const resolvedTarget = (
   event: Pick<DragEndEvent, "operation">
 ): Option.Option<DashboardDropTarget> => decodeDashboardDropTarget(event.operation.target?.data);
 
-const completeDrag = (
-  event: DragEndEvent,
-  onGesture: (gesture: DashboardGesture) => void
-): void => {
-  const gesture = resolveDashboardDrop({
-    canceled: event.canceled,
-    makeWidgetId: freshWidgetId,
-    source: decodeDashboardDragSource(event.operation.source?.data),
-    target: resolvedTarget(event),
-  });
-  if (Option.isSome(gesture)) onGesture(gesture.value);
-};
-
-/** Owns all dnd-kit lifecycle and emits only closed Dashboard gestures. */
+/** Emits candidate placement during dragging and one closed gesture at completion. */
 export const DashboardDragProvider = ({
   children,
   onGesture,
+  onPreview,
 }: Readonly<{
   children: ReactNode;
   onGesture: (gesture: DashboardGesture) => void;
-}>): JSX.Element => (
-  <DragDropProvider<DashboardDragData>
-    onDragEnd={(event) => completeDrag(event, onGesture)}
-    plugins={(defaults) => [...defaults, dashboardAccessibility]}
-  >
-    {children}
-  </DragDropProvider>
-);
+  onPreview: (gesture: Option.Option<DashboardGesture>) => void;
+}>): JSX.Element => {
+  const candidateId = useRef(Option.none<ReturnType<typeof freshWidgetId>>());
+  const resolve = (
+    event: Pick<DragEndEvent, "operation">,
+    canceled: boolean
+  ): Option.Option<DashboardGesture> =>
+    resolveDashboardDrop({
+      canceled,
+      makeWidgetId: () => Option.getOrThrow(candidateId.current),
+      source: decodeDashboardDragSource(event.operation.source?.data),
+      target: resolvedTarget(event),
+    });
+  return (
+    <DragDropProvider<DashboardDragData>
+      onDragStart={() => {
+        candidateId.current = Option.some(freshWidgetId());
+      }}
+      onDragOver={(event) => onPreview(resolve(event, false))}
+      onDragEnd={(event) => {
+        const gesture = resolve(event, event.canceled);
+        onPreview(Option.none());
+        candidateId.current = Option.none();
+        if (Option.isSome(gesture)) onGesture(gesture.value);
+      }}
+      plugins={(defaults) => [...defaults, dashboardAccessibility]}
+    >
+      {children}
+    </DragDropProvider>
+  );
+};
 
 /** Visible, focusable activator for one existing or catalog Widget. */
 export const DashboardDragHandle = ({
@@ -137,35 +148,19 @@ export const DashboardDropZone = ({
   });
   if (target.kind === "dashboard-edge") {
     const position = target.edge === "top" ? "inset-x-0 top-0" : "inset-x-0 bottom-0";
-    const indicator =
-      target.edge === "top" ? "inset-x-4 top-1 border-t-2" : "inset-x-4 bottom-1 border-b-2";
     return (
       <section
         aria-label={label}
-        className={`pointer-events-none absolute z-20 h-16 ${position}`}
+        className={`dashboard-drop-zone pointer-events-none absolute z-20 h-16 ${position} ${active ? "dashboard-drop-active" : ""}`}
         ref={ref}
-      >
-        <span
-          aria-hidden="true"
-          className={`absolute border-dashed transition-colors ${indicator} ${
-            active ? "border-primary" : "border-transparent"
-          }`}
-        />
-      </section>
+      ></section>
     );
   }
   return (
     <section
       aria-label={label}
-      className={`pointer-events-none absolute z-20 ${widgetTargetClass[target.edge]}`}
+      className={`dashboard-drop-zone pointer-events-none absolute z-20 ${widgetTargetClass[target.edge]} ${active ? "dashboard-drop-active" : ""}`}
       ref={ref}
-    >
-      <span
-        aria-hidden="true"
-        className={`absolute inset-1 rounded-lg border-2 bg-primary/10 transition-opacity ${
-          active ? "border-primary opacity-100" : "border-transparent opacity-0"
-        }`}
-      />
-    </section>
+    ></section>
   );
 };

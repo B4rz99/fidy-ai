@@ -487,6 +487,7 @@ describe("read-only Dashboard responsive rendering", () => {
         });
         expect(
           screen.getByLabelText("Diseño responsivo del tablero").firstElementChild
+            ?.firstElementChild
         ).toHaveClass("flex-col", "md:flex-row");
       })
   );
@@ -534,7 +535,13 @@ const renderInteractiveDashboard = (
 ): ReturnType<typeof render> =>
   render(
     <DashboardViewComponent
-      editor={Option.some({ catalog, error, onGesture, submitting: false })}
+      editor={Option.some({
+        catalog,
+        error,
+        onGesture,
+        submitting: false,
+        pendingPlacement: Option.none(),
+      })}
       view={makeView(standardOptions)}
     />
   );
@@ -753,6 +760,7 @@ describe("Dashboard multi-Widget resizing", () => {
           error: Option.none(),
           onGesture,
           submitting: false,
+          pendingPlacement: Option.none(),
         })}
         view={{
           ...makeView(standardOptions),

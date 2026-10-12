@@ -1,6 +1,6 @@
 import { PencilIcon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BigDecimal, Option } from "effect";
+import { BigDecimal, Option, Result } from "effect";
 import type { AsyncResult } from "effect/reactivity";
 import {
   type FormEvent,
@@ -24,7 +24,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/component
 import { Input } from "@/ui/components/input";
 import { Progress, ProgressLabel } from "@/ui/components/progress";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
+import { type DashboardEdit, maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
@@ -44,7 +44,11 @@ import {
   moneySeriesGeometry,
 } from "./money-presentation";
 import { DashboardDragHandle, DashboardDragProvider, DashboardDropZone } from "./drag-adapter";
-import type { DashboardCatalogEntry, DashboardGesture } from "./editor-model";
+import {
+  type DashboardCatalogEntry,
+  type DashboardGesture,
+  compileDashboardGesture,
+} from "./editor-model";
 import {
   type DashboardLayout,
   type DashboardView,
@@ -53,6 +57,8 @@ import {
   responsiveSplitClass,
   weightedChildStyle,
 } from "./presentation";
+
+import { type PlacementLayout, previewDashboardPlacement } from "./placement-preview";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
 type SpendingCurrency = SpendingResult["buckets"][number]["moneyGroups"][number]["currency"];
@@ -824,6 +830,7 @@ export type DashboardEditor = Readonly<{
   error: Option.Option<DashboardEditorError>;
   onGesture: (gesture: DashboardGesture) => void;
   submitting: boolean;
+  pendingPlacement: Option.Option<DashboardEdit>;
 }>;
 
 const CatalogDragSources = ({
@@ -860,11 +867,45 @@ const DashboardCatalogTray = ({ editor }: Readonly<{ editor: DashboardEditor }>)
   </section>
 );
 
+const PlacementPreview = ({
+  layout,
+  context,
+}: Readonly<{ layout: PlacementLayout; context: DashboardView["context"] }>): JSX.Element => {
+  if (layout.kind === "leaf") {
+    return "kind" in layout.widget ? (
+      <WidgetFrame editing title={titleFor(layout.widget.widget)} titleEditor={Option.none()}>
+        <p className="text-muted-foreground">Los datos se calculan al guardar.</p>
+      </WidgetFrame>
+    ) : (
+      <RenderWidget editing view={layout.widget} context={context} titleEditor={Option.none()} />
+    );
+  }
+  return (
+    <div className={`flex min-h-0 min-w-0 flex-1 gap-4 ${responsiveSplitClass(layout.axis)}`}>
+      {layout.children.map(({ node, weight }) => (
+        <div
+          key={placementKey(node)}
+          className="relative flex min-h-0 min-w-0 flex-none flex-col md:[flex:var(--dashboard-weight)_1_0%]"
+          style={weightedChildStyle(weight)}
+        >
+          <PlacementPreview layout={node} context={context} />
+        </div>
+      ))}
+    </div>
+  );
+};
+const placementKey = (layout: PlacementLayout): string =>
+  layout.kind === "leaf"
+    ? layout.widget.widget.id
+    : layout.children.map(({ node }) => placementKey(node)).join(":");
+
 const DashboardCanvas = ({
   editor,
+  preview,
   view,
 }: Readonly<{
   editor: Option.Option<DashboardEditor>;
+  preview: Option.Option<DashboardEdit>;
   view: DashboardView;
 }>): JSX.Element => (
   <section
@@ -879,7 +920,22 @@ const DashboardCanvas = ({
         target={{ kind: "dashboard-edge", edge: "top" }}
       />
     )}
-    <ResponsiveLayout context={view.context} depth={0} editor={editor} layout={view.layout} />
+    <div className={`flex min-h-0 flex-1 flex-col ${Option.isSome(preview) ? "opacity-20" : ""}`}>
+      <ResponsiveLayout context={view.context} depth={0} editor={editor} layout={view.layout} />
+    </div>
+    {Option.isSome(preview) ? (
+      <div
+        aria-hidden="true"
+        inert
+        aria-label="Vista previa de la distribución"
+        className="pointer-events-none absolute inset-x-0 top-0 flex min-h-full flex-col"
+      >
+        <PlacementPreview
+          context={view.context}
+          layout={previewDashboardPlacement({ layout: view.layout, edit: preview.value })}
+        />
+      </div>
+    ) : null}
     {Option.isNone(editor) ? null : (
       <DashboardDropZone
         depth={0}
@@ -910,6 +966,17 @@ const DashboardEditorNotice = ({
   </Alert>
 );
 
+const compilePlacementPreview = (
+  gesture: Option.Option<DashboardGesture>,
+  view: DashboardView
+): Option.Option<Readonly<{ edit: DashboardEdit; view: DashboardView }>> =>
+  Option.flatMap(gesture, (candidate) => {
+    const compiled = compileDashboardGesture(candidate);
+    return Result.isSuccess(compiled)
+      ? Option.some({ edit: compiled.success, view })
+      : Option.none();
+  });
+
 /** Responsive projection of one schema-decoded canonical Dashboard view. */
 export const DashboardViewComponent = ({
   editor,
@@ -920,6 +987,19 @@ export const DashboardViewComponent = ({
 }>): JSX.Element => {
   const [editing, setEditing] = useState(false);
   const activeEditor = Option.filter(editor, () => editing);
+  const [hover, setHover] = useState(() =>
+    Option.none<Readonly<{ edit: DashboardEdit; view: DashboardView }>>()
+  );
+  const pending = Option.flatMap(activeEditor, (current) => current.pendingPlacement);
+  const preview = Option.orElse(pending, () =>
+    Option.map(
+      Option.filter(hover, (candidate) => candidate.view === view && editing),
+      (candidate) => candidate.edit
+    )
+  );
+  const onPreview = (gesture: Option.Option<DashboardGesture>): void =>
+    setHover(compilePlacementPreview(gesture, view));
+  const editorError = Option.flatMap(editor, (current) => current.error);
   const content = (
     <main className="flex w-full flex-col gap-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -929,6 +1009,7 @@ export const DashboardViewComponent = ({
         </div>
         {Option.isNone(editor) ? null : (
           <Button
+            disabled={editor.value.submitting}
             onClick={() => setEditing((current) => !current)}
             type="button"
             variant={editing ? "outline" : "default"}
@@ -937,17 +1018,18 @@ export const DashboardViewComponent = ({
           </Button>
         )}
       </header>
-      {Option.isNone(editor) || Option.isNone(editor.value.error) ? null : (
-        <DashboardEditorNotice error={editor.value.error.value} />
-      )}
+      {Option.isNone(editorError) ? null : <DashboardEditorNotice error={editorError.value} />}
       {Option.isNone(activeEditor) ? null : <DashboardCatalogTray editor={activeEditor.value} />}
-      <DashboardCanvas editor={activeEditor} view={view} />
+      {Option.exists(editor, (current) => current.submitting) ? (
+        <output>Guardando cambio…</output>
+      ) : null}
+      <DashboardCanvas editor={activeEditor} preview={preview} view={view} />
     </main>
   );
   return Option.isNone(activeEditor) ? (
     content
   ) : (
-    <DashboardDragProvider onGesture={activeEditor.value.onGesture}>
+    <DashboardDragProvider onGesture={activeEditor.value.onGesture} onPreview={onPreview}>
       {content}
     </DashboardDragProvider>
   );

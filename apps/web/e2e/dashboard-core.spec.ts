@@ -144,8 +144,46 @@ const dragWidget = Effect.fnUntraced(function* ({
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("status").filter({ hasText: announcement })).toBeVisible()
   );
+  const preview = page.getByLabel("Vista previa de la distribución", { exact: true });
+  yield* Effect.tryPromise(() => expect(preview).toBeVisible());
+  const expectedGeometry = yield* Effect.tryPromise(() => preview.evaluate(widgetGeometry));
   yield* Effect.tryPromise(() => page.mouse.up());
+  yield* Effect.tryPromise(() => expect(preview).toHaveCount(0));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: /^Arrastrar /u }).last()).toBeEnabled()
+  );
+  const canvas = page.getByLabel("Diseño responsivo del tablero", { exact: true });
+  const actualGeometry = yield* Effect.tryPromise(() => canvas.evaluate(widgetGeometry));
+  expect(actualGeometry.map(({ title }) => title)).toEqual(
+    expectedGeometry.map(({ title }) => title)
+  );
+  for (const [index, actual] of actualGeometry.entries()) {
+    const expected = expectedGeometry[index];
+    if (expected === undefined) throw new Error("Missing preview Widget");
+    expect(actual.x).toBeCloseTo(expected.x, 0);
+    expect(actual.y).toBeCloseTo(expected.y, 0);
+    expect(actual.width).toBeCloseTo(expected.width, 0);
+    expect(actual.height).toBeCloseTo(expected.height, 0);
+  }
 });
+
+const widgetGeometry = (
+  element: Element
+): ReadonlyArray<
+  Readonly<{ title: string; x: number; y: number; width: number; height: number }>
+> => {
+  const origin = element.getBoundingClientRect();
+  return Array.from(element.querySelectorAll("h2"), (heading) => {
+    const bounds = heading.getBoundingClientRect();
+    return {
+      title: heading.textContent,
+      x: bounds.x - origin.x,
+      y: bounds.y - origin.y,
+      width: bounds.width,
+      height: bounds.height,
+    };
+  });
+};
 
 test("Dashboard keyboard resize survives a real Core reload", ({ page, request }) =>
   Effect.runPromise(
@@ -181,7 +219,9 @@ test("Dashboard keyboard cancellation preserves the document and catalog drag ad
       yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
       yield* Effect.tryPromise(() => handle.press("ArrowRight"));
       yield* Effect.tryPromise(() => handle.press("Escape"));
-      yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "false"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Vista previa de la distribución", { exact: true })).toHaveCount(0)
+      );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
       expect(edits).toEqual([]);

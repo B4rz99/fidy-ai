@@ -84,13 +84,40 @@ const canonicalEditEffect = Effect.fn("dashboard.applyCanonicalEdit")(function* 
   }
 });
 
+const editOutcomeError = (
+  outcome: Exit.Exit<unknown, unknown>,
+  onRefresh: () => void
+): Option.Option<DashboardEditorError> => {
+  if (Exit.isSuccess(outcome)) return Option.none();
+  const refused =
+    !Cause.hasDies(outcome.cause) &&
+    !Cause.hasInterrupts(outcome.cause) &&
+    Option.exists(
+      Cause.findErrorOption(outcome.cause),
+      (failure) =>
+        Predicate.isTagged(failure, "NotFound") || Predicate.isTagged(failure, "ValidationFailed")
+    );
+  return Option.some(
+    refused ? rejectedEditError : { ...uncertainEditError, onRefresh: Option.some(onRefresh) }
+  );
+};
+
+const awaitingCanonicalRead = (
+  dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>, unknown>,
+  baseline: DashboardView
+): boolean =>
+  dashboard._tag !== "Ready" ||
+  (dashboard.value.data === baseline && Option.isNone(dashboard.refreshFailure));
+
 const useQueuedDashboardEdits = (
   apiClient: FidyClient,
-  onRefresh: () => void
+  onRefresh: () => void,
+  dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>, unknown>
 ): Readonly<{
   editError: Option.Option<DashboardEditorError>;
   onGesture: (gesture: DashboardGesture) => void;
   submitting: boolean;
+  pendingPlacement: Option.Option<DashboardEdit>;
 }> => {
   const [editAtom] = useState(() =>
     apiClient.runtime.fn<CanonicalDashboardEdit>()((edit) => canonicalEditEffect(apiClient, edit), {
@@ -101,6 +128,9 @@ const useQueuedDashboardEdits = (
   const applyEdit = useAtomSet(editAtom, { mode: "promiseExit" });
   const [pendingEdits, setPendingEdits] = useState(0);
   const [editError, setEditError] = useState(() => Option.none<DashboardEditorError>());
+  const [pendingPlacement, setPendingPlacement] = useState(() =>
+    Option.none<Readonly<{ edit: DashboardEdit; baseline: DashboardView }>>()
+  );
   const editQueue = useRef<Promise<void>>(settledEditQueue);
   const onGesture = (gesture: DashboardGesture): void => {
     const compiled = compileDashboardGesture(gesture);
@@ -108,30 +138,14 @@ const useQueuedDashboardEdits = (
       setEditError(Option.some(rejectedEditError));
       return;
     }
+    if (dashboard._tag === "Ready") {
+      setPendingPlacement(Option.some({ edit: compiled.success, baseline: dashboard.value.data }));
+    }
     setPendingEdits((pending) => pending + 1);
     const applyQueuedEdit = (): Promise<void> => {
       setEditError(Option.none());
       return applyEdit(compiled.success).then(
-        (outcome) => {
-          if (Exit.isFailure(outcome) && !Cause.hasInterruptsOnly(outcome.cause)) {
-            const refused =
-              !Cause.hasDies(outcome.cause) &&
-              !Cause.hasInterrupts(outcome.cause) &&
-              Option.exists(
-                Cause.findErrorOption(outcome.cause),
-                (failure) =>
-                  Predicate.isTagged(failure, "NotFound") ||
-                  Predicate.isTagged(failure, "ValidationFailed")
-              );
-            setEditError(
-              Option.some(
-                refused
-                  ? rejectedEditError
-                  : { ...uncertainEditError, onRefresh: Option.some(onRefresh) }
-              )
-            );
-          }
-        },
+        (outcome) => setEditError(editOutcomeError(outcome, onRefresh)),
         () =>
           setEditError(Option.some({ ...uncertainEditError, onRefresh: Option.some(onRefresh) }))
       );
@@ -140,7 +154,16 @@ const useQueuedDashboardEdits = (
       .then(applyQueuedEdit)
       .finally(() => setPendingEdits((pending) => pending - 1));
   };
-  return { editError, onGesture, submitting: pendingEdits > 0 };
+  const pending = Option.filter(
+    pendingPlacement,
+    ({ baseline }) => Option.isNone(editError) && awaitingCanonicalRead(dashboard, baseline)
+  );
+  return {
+    editError,
+    onGesture,
+    submitting: pendingEdits > 0 || Option.isSome(pending),
+    pendingPlacement: Option.map(pending, ({ edit }) => edit),
+  };
 };
 
 const resolveEditorError = (
@@ -274,8 +297,12 @@ export const DashboardRouteContent = ({
   const [catalogAtom] = useState(() => apiClient.query("dashboard", "listDashboardCatalog", {}));
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
-  const { editError, onGesture, submitting } = useQueuedDashboardEdits(apiClient, onRefresh);
   const dashboardState = presentCanonicalQuery(result);
+  const { editError, onGesture, submitting, pendingPlacement } = useQueuedDashboardEdits(
+    apiClient,
+    onRefresh,
+    dashboardState
+  );
   if (dashboardState._tag !== "Ready") {
     return (
       <>
@@ -307,6 +334,7 @@ export const DashboardRouteContent = ({
           error,
           onGesture,
           submitting,
+          pendingPlacement,
         })}
         view={dashboardState.value.data}
       />

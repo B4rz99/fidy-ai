@@ -654,6 +654,34 @@ const placementCases: ReadonlyArray<
   },
 ];
 
+describe("Dashboard retained placement feedback", () => {
+  it("keeps the confirmed arrangement when the moved Widget is absent", () => {
+    const preview = renderPlacement({
+      op: "move-widget",
+      widgetId: Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000706"),
+      at: "bottom",
+    });
+    expect(
+      headingTexts(within(preview).getAllByRole("heading", { level: 2, hidden: true }))
+    ).toEqual(["Transacciones", "Presupuesto", "Transacciones recientes", "Promedio mensual"]);
+  });
+  it("keeps confirmed placement while a boundary resize awaits its canonical reread", () => {
+    const preview = renderPlacement({
+      op: "resize-region",
+      widgetIds: [ids.chart, ids.budget],
+      size: { kind: "weight", weight: Schema.decodeSync(TestSplitWeight)(3) },
+    });
+    expect(
+      headingTexts(within(preview).getAllByRole("heading", { level: 2, hidden: true }))
+    ).toEqual(["Transacciones", "Presupuesto", "Transacciones recientes", "Promedio mensual"]);
+    expect(
+      [...preview.querySelectorAll<HTMLElement>("[style]")]
+        .map((element) => element.style.getPropertyValue("--dashboard-weight"))
+        .filter(Boolean)
+    ).toEqual(["2", "1", "1", "1", "1", "1"]);
+  });
+});
+
 describe("Dashboard placement feedback", () => {
   it("retains the sole Widget while previewing a move to the Dashboard edge", () => {
     const fixture = leftLayout(standardOptions);

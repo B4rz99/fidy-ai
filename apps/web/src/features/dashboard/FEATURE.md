@@ -32,7 +32,7 @@ Dropping shows the placement immediately and announces “Guardando cambio…”
 
 `dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment, and keyboard cancellation through the built browser. `dashboard-core.spec.ts` checks preview geometry against the persisted result through public Ingress, private Core, and local D1. Production verification of this placement change is pending deployment.
 
-The React follow-up on 2026-10-12 passed **440 web checks**, including **57 Dashboard checks**. Global coverage met the repository thresholds: statements 94.30%, branches 90.03%, functions 92.44%, lines 95.26%.
+The React follow-up on 2026-10-12 passed **448 web checks**, including **59 Dashboard checks**. Global coverage met the repository thresholds: statements 94.25%, branches 90.12%, functions 92.44%, lines 95.17%.
 All **9 placement browser checks** passed: five real local Core/D1 journeys and four response-fixture journeys.
 
 ## Verification

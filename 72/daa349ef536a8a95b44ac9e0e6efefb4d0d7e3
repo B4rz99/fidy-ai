@@ -1,0 +1,55 @@
+apps/web/e2e/dashboard-editing.spec.ts
+  s_6d017cc65783af::t_c472087e715911 1-271
+apps/web/src/transport/client.ts
+  s_6d017cc65783af::t_d60d3701026ec5 25
+apps/web/src/features/dashboard/feature.test.tsx
+  s_6d017cc65783af::t_a797e41ea8ab5a 490
+  s_6d017cc65783af::t_400e98a6ec1441 538
+  s_6d017cc65783af::t_5f2aef43328810 539-544,763
+apps/web/src/features/dashboard/FEATURE.md
+  s_6d017cc65783af::t_c3e1c41a65c73b 27-34
+apps/web/src/features/dashboard/drag-adapter.tsx
+  s_6d017cc65783af::t_6dda4f4c4cc17c 6,31,35,39-69,154,156,162,164
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_6d017cc65783af::t_2859cbff33bf15 120,131,135,141-149
+apps/web/src/features/dashboard/feature.tsx
+  s_6d017cc65783af::t_e5bdfb0222214e 87-111,114-115,120,131-133,141-143,148,157-166,301-305,337
+apps/web/src/features/dashboard/view.tsx
+  s_6d017cc65783af::t_afce95765f98f9 3,27,47-51,61-62,833,870-901,904,908,923-938,969-979,990-1002,1012,1021,1023-1026,1032
+apps/web/e2e/dashboard-core.spec.ts
+  s_71e18c09dc0768::t_7c1d82049bc81d 147-149,151-167,170-187,222-224
+apps/web/src/features/dashboard/placement-preview.ts
+  s_b75995d26622a8::t_640e4e129d384c 1-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "72daa349ef536a8a95b44ac9e0e6efefb4d0d7e3",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_71e18c09dc0768": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12211-fdc6-7bc2-adfd-036f70a7254f",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

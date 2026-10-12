@@ -89,6 +89,20 @@ const editOutcomeError = (
   onRefresh: () => void
 ): Option.Option<DashboardEditorError> => {
   if (Exit.isSuccess(outcome)) return Option.none();
+  const missing =
+    !Cause.hasDies(outcome.cause) &&
+    !Cause.hasInterrupts(outcome.cause) &&
+    Option.exists(Cause.findErrorOption(outcome.cause), (failure) =>
+      Predicate.isTagged(failure, "NotFound")
+    );
+  if (missing) {
+    return Option.some({
+      title: "Actualiza el tablero",
+      message:
+        "Este Widget ya no está disponible en tu tablero actual. Actualiza antes de intentar otro cambio.",
+      onRefresh: Option.some(onRefresh),
+    });
+  }
   const refused =
     !Cause.hasDies(outcome.cause) &&
     !Cause.hasInterrupts(outcome.cause) &&

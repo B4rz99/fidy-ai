@@ -26,16 +26,18 @@ Capability and verification map for `/app/dashboard`. This records implementatio
 
 ## Placement feedback
 
-Dragging previews the resulting Widget arrangement using the last canonical financial results. The drag destinations remain fixed during the preview. A catalog Widget shows a placeholder until Core calculates its results.
+Dragging keeps the confirmed layout still and highlights the chosen destination in green with its placement label. Mouse/pen drags require eight pixels of movement; touch retains its hold-to-drag constraint. The resulting arrangement appears only after dropping. A catalog Widget shows a placeholder until Core calculates its results.
 
 Dropping shows the placement immediately and announces “Guardando cambio…”. Editing stays disabled until the canonical reread completes. Refused or uncertain edits and failed rereads restore the last confirmed arrangement; an uncertain edit is never automatically replayed. The preview is transient presentation state, not another persisted Dashboard document.
 
-`dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment, and keyboard cancellation through the built browser. `dashboard-core.spec.ts` checks preview geometry against the persisted result through public Ingress, private Core, and local D1.
+`dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment, and keyboard cancellation through the built browser. `dashboard-core.spec.ts` checks stable hover geometry and persisted edits through public Ingress, private Core, and local D1. Missing Widgets offer an explicit canonical refresh rather than a generic validation error.
 
-Production revision `03d94db6b3546c995be65b72c75515ae27707235` ([PR #1229](https://github.com/B4rz99/fidy-ai/pull/1229)) passed live pointer verification on 2026-10-12: hover rendered the proposed full Widget arrangement, Escape removed the preview, and a dropped swap displayed the new placement immediately before its canonical reread. The swap survived reload. Reversing it and reloading restored the original four titles and desktop positions. Deployment metadata matched the tested revision. Delayed saves and failure recovery were exercised locally, not induced in Production.
+Historical Production revision `03d94db6b3546c995be65b72c75515ae27707235` ([PR #1229](https://github.com/B4rz99/fidy-ai/pull/1229)) passed live pointer verification on 2026-10-12: hover rendered the proposed full Widget arrangement, Escape removed the preview, and a dropped swap displayed the new placement immediately before its canonical reread. The swap survived reload. Reversing it and reloading restored the original four titles and desktop positions. Deployment metadata matched the tested revision. Delayed saves and failure recovery were exercised locally, not induced in Production.
 
 The React follow-up on 2026-10-12 passed **448 web checks**, including **59 Dashboard checks**. Global coverage met the repository thresholds: statements 94.25%, branches 90.12%, functions 92.44%, lines 95.17%.
 All **9 placement browser checks** passed: five real local Core/D1 journeys and four response-fixture journeys.
+
+The stable-feedback follow-up passed **60 Dashboard checks** and **10 placement browser checks**. It reproduces tiny-motion activation and verifies that hovering leaves Widget geometry unchanged, while dropped placement still appears before acknowledgment. Production verification of this follow-up remains pending deployment.
 
 ## Verification
 

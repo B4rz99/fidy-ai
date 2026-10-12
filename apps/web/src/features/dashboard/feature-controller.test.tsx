@@ -127,6 +127,26 @@ const renderEditableDashboard = (): ReturnType<typeof render> =>
     />
   );
 
+describe("Dashboard stale edits", () => {
+  effectIt.effect("offers a canonical refresh when an edited Widget is no longer available", () =>
+    Effect.gen(function* () {
+      atomHarness.applyEdit.mockResolvedValueOnce(
+        Exit.fail({
+          _tag: "NotFound",
+          error: { code: "not_found", message: "Unavailable" },
+          next: [],
+        })
+      );
+      renderEditableDashboard();
+      triggerGesture({ kind: "remove-widget", widgetId });
+      yield* waitForAssertion(expectEditSettled);
+      const error = Option.getOrThrow(currentError());
+      expect(error.message).toContain("ya no está disponible");
+      expect(Option.isSome(error.onRefresh)).toBe(true);
+    })
+  );
+});
+
 describe("Dashboard route edits", () => {
   effectIt.effect("keeps a successful edit pending until the canonical reread", () =>
     Effect.gen(function* () {

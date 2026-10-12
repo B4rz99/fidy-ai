@@ -128,8 +128,9 @@ const dragWidget = Effect.fnUntraced(function* ({
   yield* Effect.tryPromise(() =>
     page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
   );
+  const canvas = page.getByLabel("Diseño responsivo del tablero", { exact: true });
+  const originalGeometry = yield* Effect.tryPromise(() => canvas.evaluate(widgetGeometry));
   yield* Effect.tryPromise(() => page.mouse.down());
-  yield* Effect.tryPromise(() => expect(source).toHaveAttribute("aria-pressed", "true"));
   yield* Effect.tryPromise(() => destination.scrollIntoViewIfNeeded());
   const destinationBox = yield* Effect.fromOption(
     Option.fromNullOr(yield* Effect.tryPromise(() => destination.boundingBox()))
@@ -145,26 +146,14 @@ const dragWidget = Effect.fnUntraced(function* ({
     expect(page.getByRole("status").filter({ hasText: announcement })).toBeVisible()
   );
   const preview = page.getByLabel("Vista previa de la distribución", { exact: true });
-  yield* Effect.tryPromise(() => expect(preview).toBeVisible());
-  const expectedGeometry = yield* Effect.tryPromise(() => preview.evaluate(widgetGeometry));
+  yield* Effect.tryPromise(() => expect(preview).toHaveCount(0));
+  const hoverGeometry = yield* Effect.tryPromise(() => canvas.evaluate(widgetGeometry));
+  expect(hoverGeometry).toEqual(originalGeometry);
   yield* Effect.tryPromise(() => page.mouse.up());
   yield* Effect.tryPromise(() => expect(preview).toHaveCount(0));
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("button", { name: /^Arrastrar /u }).last()).toBeEnabled()
   );
-  const canvas = page.getByLabel("Diseño responsivo del tablero", { exact: true });
-  const actualGeometry = yield* Effect.tryPromise(() => canvas.evaluate(widgetGeometry));
-  expect(actualGeometry.map(({ title }) => title)).toEqual(
-    expectedGeometry.map(({ title }) => title)
-  );
-  for (const [index, actual] of actualGeometry.entries()) {
-    const expected = expectedGeometry[index];
-    if (expected === undefined) throw new Error("Missing preview Widget");
-    expect(actual.x).toBeCloseTo(expected.x, 0);
-    expect(actual.y).toBeCloseTo(expected.y, 0);
-    expect(actual.width).toBeCloseTo(expected.width, 0);
-    expect(actual.height).toBeCloseTo(expected.height, 0);
-  }
 });
 
 const widgetGeometry = (

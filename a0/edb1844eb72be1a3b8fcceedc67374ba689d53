@@ -1,0 +1,41 @@
+apps/web/src/features/dashboard/foldkit-view.test.ts
+  s_6d017cc65783af::t_5b32d29b5fe442 1,6,52-103,128,151
+  s_6d017cc65783af::t_9154266c7dbde4 104-106,125-127
+  s_6d017cc65783af::t_f5f51217d68f89 129-131,148-150
+  s_6d017cc65783af::t_3326e50859cbbe 152
+  s_dba8cd4832f840::t_053d5f279b3300 107-124,132-147
+apps/web/src/features/dashboard/native-drag.test.ts
+  s_6d017cc65783af::t_e307b3c185ba89 1,148
+  s_6d017cc65783af::t_9274e951ebb14a 5,132,142,147
+  s_6d017cc65783af::t_73c2f50202b9f9 130-131,133-141,143-146,149-158
+  s_dba8cd4832f840::t_641bab3268728f 128-129
+apps/web/src/features/dashboard/workspace-update.ts
+  s_6d017cc65783af::t_9afd4dcbdf91a9 1,3,57,62
+apps/web/src/features/dashboard/workspace-update.test.ts
+  s_6d017cc65783af::t_9afd4dcbdf91a9 41-44,48,51-53,55-60
+  s_6d017cc65783af::t_73c2f50202b9f9 37-40,45-47,49-50,54,61-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a0edb1844eb72be1a3b8fcceedc67374ba689d53",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_dba8cd4832f840": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12c7c-6101-7843-92e4-dbfcda0ab148",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+apps/web/e2e/dashboard-editing.spec.ts
+  s_6d017cc65783af::t_ea6e28493a87f6 97-126,131-133,135-162,165,167-172,176-177,180-184,187-199,201
+  s_6d017cc65783af::t_8dbff56966cf2d 42-44,173-174,178-179
+  s_6d017cc65783af::t_1cc9bce5e2fa7a 45,47,202-204,219-222
+apps/web/src/features/dashboard/program.ts
+  s_6d017cc65783af::t_ea6e28493a87f6 147-157,168,171-174
+.patterns/dnd-kit.md
+  s_6d017cc65783af::t_13bcf1b10b5f9c 41-44
+apps/web/ARCHITECTURE.md
+  s_6d017cc65783af::t_c23d6c75c169cb 100-104
+apps/web/e2e/dashboard-core.spec.ts
+  s_6d017cc65783af::t_edd8610429d760 147-149,151-167,170-187,222-224
+apps/web/src/features/dashboard/FEATURE.md
+  s_6d017cc65783af::t_63c78cb610e1eb 43-50
+apps/web/src/features/dashboard/foldkit-view.ts
+  s_6d017cc65783af::t_fbc82b5e849370 10,12,108,169-182,185,187,199,214,234,238,242,246,305-315,512-575,586-588,590
+apps/web/src/features/dashboard/model.ts
+  s_6d017cc65783af::t_785db5dcd18582 35-36,46-47,53
+apps/web/src/features/dashboard/native-drag.test.ts
+  s_6d017cc65783af::t_4b2fc0133c8740 93,117,136-140,162
+apps/web/src/features/dashboard/native-drag.ts
+  s_6d017cc65783af::t_c4883b9927dc07 11,61-104,109,121-125,131
+apps/web/src/features/dashboard/placement-preview.ts
+  s_6d017cc65783af::t_3a6f7ec68e0dc1 1-154
+apps/web/src/features/dashboard/workspace-update.ts
+  s_6d017cc65783af::t_055f18332a8a9b 37-38,57-61,68-74,79-85,88-90,116-124,130-136,148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3dee2cc3aca963763de33dde4bce6419c794170",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

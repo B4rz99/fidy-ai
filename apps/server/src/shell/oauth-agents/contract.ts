@@ -187,7 +187,7 @@ const managementErrors = [
   OAuthRateLimited,
   OAuthUnavailable,
 ];
-/** Fresh first-party browser management is deliberately outside the external agent catalog. */
+/** First-party browser management is outside the agent catalog; reads need a live session and revocation needs freshness. */
 export const OAuthConnectionsGroup = HttpApiGroup.make("oauthConnections")
   .add(
     HttpApiEndpoint.get("list", oauthPaths.connections, {

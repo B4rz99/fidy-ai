@@ -15,9 +15,9 @@ import {
 } from "../../../src/shell/oauth-agents/contract";
 import type { AuditUnavailable } from "../../../src/shell/audit/contract";
 import { readOAuthActivity } from "../../../src/shell/audit/operations";
-import { freshSessionConditions } from "../../../src/shell/web-session/operations";
+import { liveSessionConditions } from "../../../src/shell/web-session/operations";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
-import { freshBrowserSession } from "../../web-session/operations";
+import { browserSession } from "../../web-session/operations";
 import { type BootstrapInvalid, BootstrapUnavailable, dbWork, decodePayload } from "./bootstrap";
 import { oauthResponse } from "./response";
 
@@ -60,7 +60,7 @@ const projectConnection = (
       db: input.db,
       userId: input.session.user_id,
       connectionId: row.id,
-      guard: freshSessionConditions(input),
+      guard: liveSessionConditions(input),
     });
     return yield* Schema.decodeUnknownEffect(Schema.toType(OAuthConnectionMetadata))({
       connectionId: row.id,
@@ -83,7 +83,7 @@ const listConnections = (
     const decoded = yield* Schema.decodeEffect(OAuthConnectionListQuery, {
       onExcessProperty: "error",
     })(Object.fromEntries(query));
-    const guard = freshSessionConditions(input);
+    const guard = liveSessionConditions(input);
     const results = yield* dbWork(() =>
       input.db.batch([
         input.db.prepare(`SELECT 1 AS live WHERE ${guard.sql}`).bind(...guard.params),
@@ -163,12 +163,20 @@ export const manageConnections = (
     if (input.request.headers.get("origin") !== input.browserOrigin) {
       return oauthResponse({ body: { error: "forbidden_origin" }, status: 403 });
     }
-    const session = yield* dbWork(() => freshBrowserSession(input));
+    const listing =
+      input.request.method === "GET" &&
+      new URL(input.request.url).pathname === oauthPaths.connections;
+    const session = yield* dbWork(() =>
+      browserSession({
+        ...input,
+        input: { current: input.current, fresh: !listing },
+      })
+    );
     if (Option.isNone(session)) {
       return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
     }
     yield* input.admitUser(session.value.user_id);
-    if (new URL(input.request.url).pathname !== oauthPaths.connections) {
+    if (!listing) {
       return yield* requestRevocation({ ...input, session: session.value }).pipe(
         Effect.catchTag("BootstrapInvalid", () =>
           Effect.succeed(oauthResponse({ body: { error: "invalid_request" }, status: 400 }))

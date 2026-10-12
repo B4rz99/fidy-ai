@@ -22,6 +22,7 @@ const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 export const pairingUserId = "24000000-0000-4000-8000-000000000321";
 export const dashboardUserId = "24000000-0000-4000-8000-000000000351";
+export const accessUserId = "24000000-0000-4000-8000-000000000361";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
@@ -98,6 +99,37 @@ await seedIdentity({
   email: "paginacion@example.com",
   consentId: "24000000-0000-4000-8000-000000000342",
 });
+// Metadata-only connections exercise listing continuation; no usable OAuth authority is minted.
+await seedIdentity({
+  userId: accessUserId,
+  bsuid: "CO.Access",
+  email: "accesos@example.com",
+  consentId: "24000000-0000-4000-8000-000000000362",
+});
+const connectionPageSize = 25;
+const connectionSuffixWidth = 12;
+await db.batch(
+  Array.from({ length: connectionPageSize + 1 }, (_, index) => {
+    const suffix = String(index + 1).padStart(connectionSuffixWidth, "0");
+    return db
+      .prepare(`INSERT INTO oauth_connections
+      (id, request_id, user_id, client_id, claimed_client_name, redirect_uri, resource,
+       scopes_json, approved_at_ms, expires_at_ms)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .bind(
+        `26000000-0000-4000-8000-${suffix}`,
+        `27000000-0000-4000-8000-${suffix}`,
+        accessUserId,
+        "synthetic-metadata-client",
+        `Agente paginado ${index + 1}`,
+        "https://client.test/callback",
+        "https://api.fidyapp.com/mcp",
+        '["read"]',
+        now,
+        now + trialDurationMs
+      );
+  })
+);
 const historyPageSize = 100;
 const continuationRecords = 5;
 const millisecondsPerDay = 86_400_000;

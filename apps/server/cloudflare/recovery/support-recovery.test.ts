@@ -373,11 +373,9 @@ it.each(["owning Effect", "native Request"])(
         const exit = yield* wait(() => pending);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
-          // Retain fn stack annotations in the expected whole Exit, not just its interruption tag.
-          deepStrictEqual(
-            exit,
-            Exit.failCause(Cause.annotate(Cause.interrupt(), Cause.annotations(exit.cause)))
-          );
+          // Owner and body cancellation can contribute separate interruption reasons.
+          // Every reason must still be an interruption, without a failure or defect.
+          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
         }
         expect(cancelStarted).toBe(true);
         expect(request.body?.locked).toBe(false);

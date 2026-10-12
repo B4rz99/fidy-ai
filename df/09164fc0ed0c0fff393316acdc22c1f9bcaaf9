@@ -1,0 +1,21 @@
+apps/web/src/features/dashboard/foldkit-view.test.ts
+  s_6d017cc65783af::t_963bbbd8f161c9 167-169,193
+  s_6d017cc65783af::t_0cc93ad3926c20 6-11,137-166,170-192
+  s_6d017cc65783af::t_c40252d6b2f51f 194-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df09164fc0ed0c0fff393316acdc22c1f9bcaaf9",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

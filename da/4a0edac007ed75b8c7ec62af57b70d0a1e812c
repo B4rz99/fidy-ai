@@ -1,0 +1,21 @@
+apps/web/src/features/dashboard/FEATURE.md
+  s_b75995d26622a8::t_3d309e13144888 64
+apps/web/src/features/agent/FEATURE.md
+  s_b75995d26622a8::t_ed20e3f7bb3296 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da4a0edac007ed75b8c7ec62af57b70d0a1e812c",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

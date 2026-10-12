@@ -76,7 +76,7 @@ layer(LocalEmulationServices, {
           next: [],
         });
 
-        const browserModule = yield* fetchWhenReady(`${webOrigin}/src/main.ts`);
+        const browserModule = yield* fetchWhenReady(`${webOrigin}/src/app/application.tsx`);
         expect(yield* browserModule.text).toContain(ingressOrigin);
       }),
     30_000

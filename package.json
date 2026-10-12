@@ -21,6 +21,7 @@
     "build": "bun run --cwd apps/web build && bun run --cwd apps/cli build",
     "cli": "bun apps/cli/src/main.ts",
     "agent:repl": "bun run --cwd apps/server agent:repl",
+    "shadcn": "bun run --cwd apps/web shadcn",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "typecheck": "rm -rf .tsbuild && tsc --build --force",
@@ -39,11 +40,11 @@
     "test:mutation": "bun run --cwd apps/server test:mutation",
     "check:browser-client": "bun run --cwd apps/server check:browser-client && bun run --cwd apps/web check:bundle",
     "check:policy": "bun run --cwd apps/web check:policy",
+    "check:shadcn": "bun run --cwd apps/web check:shadcn",
     "check:credential-evidence": "bun scripts/check-credential-evidence.ts",
     "verify": "bun scripts/verify.ts",
     "postinstall": "effect-tsgo patch",
-    "prepare": "lefthook install",
-    "check:foldkit": "bun run --cwd apps/web check:foldkit"
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@babel/parser": "8.0.6",
@@ -52,6 +53,7 @@
     "@effect/platform-bun": "4.0.1",
     "@effect/tsgo": "0.46.1",
     "@playwright/test": "1.63.0",
+    "@shadcn/lint": "0.2.0",
     "@types/istanbul-lib-coverage": "2.0.6",
     "bun-types": "1.4.2",
     "effect": "4.0.1",

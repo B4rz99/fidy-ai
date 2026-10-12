@@ -210,10 +210,14 @@ test("narrow Accesos permits keyboard grant review and restores the draft for ed
       yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
       yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
       yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
-      const duration = page.getByLabel("Duración del token", { exact: true });
+      const duration = page.getByRole("button", { name: "Duración del token", exact: true });
       yield* Effect.tryPromise(() => expect(duration).toBeFocused());
-      yield* Effect.tryPromise(() => duration.press("7"));
-      yield* Effect.tryPromise(() => expect(duration).toHaveValue("7"));
+      yield* Effect.tryPromise(() => duration.press("Enter"));
+      const sevenDays = page.getByRole("menuitemradio", { name: "7 días", exact: true });
+      yield* Effect.tryPromise(() => sevenDays.press("Home"));
+      yield* Effect.tryPromise(() => expect(sevenDays).toBeFocused());
+      yield* Effect.tryPromise(() => sevenDays.press("Enter"));
+      yield* Effect.tryPromise(() => expect(duration).toHaveText("7 días"));
       yield* Effect.tryPromise(() => duration.press("Tab"));
       const create = page.getByRole("button", { name: "Crear token", exact: true });
       yield* Effect.tryPromise(() => expect(create).toBeFocused());
@@ -225,6 +229,6 @@ test("narrow Accesos permits keyboard grant review and restores the draft for ed
       yield* Effect.tryPromise(() => edit.press("Enter"));
       yield* Effect.tryPromise(() => expect(name).toHaveValue("Agente teclado"));
       yield* Effect.tryPromise(() => expect(read).toBeChecked());
-      yield* Effect.tryPromise(() => expect(duration).toHaveValue("7"));
+      yield* Effect.tryPromise(() => expect(duration).toHaveText("7 días"));
     })
   ));

@@ -1,2 +1,0 @@
-Claude Code: /foldkit-skills:audit-program
-Codex: $audit-program

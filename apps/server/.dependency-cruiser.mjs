@@ -1614,7 +1614,7 @@ export default {
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "node", "default", "types"],
-      extensions: [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"],
+      extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
       mainFields: ["module", "main", "types", "typings"],
     },
   },

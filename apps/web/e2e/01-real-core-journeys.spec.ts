@@ -42,10 +42,16 @@ const fetchWithBearer = ({
 }: {
   url: string;
   token: string;
-}): Promise<{ status: number; body: string }> =>
+}): Promise<typeof SessionProbeWire.Encoded> =>
   window
     .fetch(url, { credentials: "omit", headers: { authorization: `Bearer ${token}` } })
-    .then((response) => response.text().then((body) => ({ status: response.status, body })));
+    .then((response) =>
+      response.text().then((body) => ({
+        status: response.status,
+        body,
+        retryAfter: response.headers.get("retry-after"),
+      }))
+    );
 
 const SessionProbeWire = Schema.Struct({
   status: Schema.Int,
@@ -63,7 +69,8 @@ const fetchWithSession = (url: string): Promise<typeof SessionProbeWire.Encoded>
   );
 const inspectBrowserSnapshot = (
   page: Page,
-  url: string
+  url: string,
+  bearer: Option.Option<string> = Option.none()
 ): Effect.Effect<
   Readonly<{ status: number; body: string }>,
   Cause.UnknownError | Cause.TimeoutError
@@ -71,8 +78,13 @@ const inspectBrowserSnapshot = (
   Effect.gen(function* () {
     const limited = 429;
     const millisecondsPerSecond = 1_000;
+    const send = (): Promise<typeof SessionProbeWire.Encoded> =>
+      Option.match(bearer, {
+        onNone: () => page.evaluate(fetchWithSession, url),
+        onSome: (token) => page.evaluate(fetchWithBearer, { url, token }),
+      });
     for (let retry = 0; retry < resourceProbeRetries; retry++) {
-      const received = yield* fromPlaywright(page.evaluate(fetchWithSession, url));
+      const received = yield* fromPlaywright(send());
       const wire = yield* Schema.decodeEffect(SessionProbeWire)(received).pipe(Effect.orDie);
       const seconds = Option.flatMap(wire.retryAfter, Schema.decodeOption(RetrySeconds));
       const refusal = Schema.decodeOption(
@@ -83,7 +95,7 @@ const inspectBrowserSnapshot = (
       }
       yield* Effect.sleep(seconds.value * millisecondsPerSecond);
     }
-    const wire = yield* fromPlaywright(page.evaluate(fetchWithSession, url));
+    const wire = yield* fromPlaywright(send());
     return { status: wire.status, body: wire.body };
   }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
 // Direct test probes do not use the app's policy-bearing client. Pace only declared
@@ -128,7 +140,7 @@ const assertUnderScopedBrowser = (
   Effect.runPromise(
     Effect.gen(function* () {
       // A PAT does not authenticate the browser shell; its refusal is forwarded as-is to the UI.
-      const refused = yield* fromPlaywright(
+      const refused = yield* probeCanonicalRequest(() =>
         request.get(`${api}/transactions`, {
           headers: {
             authorization: `Bearer ${bearer}`,
@@ -136,26 +148,31 @@ const assertUnderScopedBrowser = (
         })
       );
       expect(refused.status()).toBe(forbidden);
-      const browserRefusal = yield* fromPlaywright(
-        page.evaluate(fetchWithBearer, { url: `${api}/transactions`, token: bearer })
+      const browserRefusal = yield* inspectBrowserSnapshot(
+        page,
+        `${api}/transactions`,
+        Option.some(bearer)
       );
       expect(browserRefusal.status).toBe(forbidden);
       expect(browserRefusal.body).not.toContain("OTHER-USER-PRIVATE");
+      const runProbe = Effect.runPromiseWith(yield* Effect.context<never>());
       yield* fromPlaywright(
         page.route(`${api}/transactions?*`, (route) =>
           // Replay this UI query with only the CLI bearer: browser WebSessions have no reduced scope.
-          request
-            .get(route.request().url(), {
-              headers: {
-                authorization: `Bearer ${bearer}`,
-              },
-            })
-            .then((coreResponse) => {
-              expect(coreResponse.status()).toBe(forbidden);
-              return route.fulfill({
-                response: coreResponse,
-              });
-            })
+          runProbe(
+            probeCanonicalRequest(() =>
+              request.get(route.request().url(), {
+                headers: {
+                  authorization: `Bearer ${bearer}`,
+                },
+              })
+            )
+          ).then((coreResponse) => {
+            expect(coreResponse.status()).toBe(forbidden);
+            return route.fulfill({
+              response: coreResponse,
+            });
+          })
         )
       );
       yield* fromPlaywright(page.goto("/app/transactions"));
@@ -342,9 +359,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
       yield* fromPlaywright(page.goto("/app/transactions"));
       yield* fromPlaywright(expect(page.getByText("La Cocina real").first()).toBeVisible());
       yield* fromPlaywright(
-        expect(
-          page.getByRole("combobox", { name: "Cambiar categoría de La Cocina real" })
-        ).toHaveValue("10000000-0000-4000-8000-000000000001")
+        expect(page.getByText("Restaurantes").filter({ visible: true }).first()).toBeVisible()
       );
     })
   ));
@@ -887,7 +902,14 @@ const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRe
       })
       .check()
   );
-  yield* fromPlaywright(page.getByLabel("Duración del token").selectOption("30"));
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Duración del token",
+      })
+      .click()
+  );
+  yield* fromPlaywright(page.getByRole("menuitemradio", { name: "30 días" }).click());
   yield* fromPlaywright(
     page
       .getByRole("button", {

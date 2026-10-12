@@ -39,13 +39,13 @@ The rule catalog with precise values lives in [AUDIT.md](AUDIT.md). The plan for
 
 Map the motion surface before judging it:
 
-- **Stack**: Foldkit runtimes and mounts, CSS transitions, WAAPI or GSAP, and the shared native UI builders.
+- **Stack**: framework, motion libraries (Framer Motion / Motion, React Spring, GSAP, plain CSS, WAAPI), component libraries (Radix, Base UI, shadcn/ui).
 - **Where motion lives**: global CSS/tokens (`--ease-*`, `--duration-*`), Tailwind config, keyframe definitions, `transition`/`animate` props, gesture handlers.
 - **Conventions**: existing easing tokens, duration scales, spring configs — plans must extend these, not invent parallel ones.
 - **Personality**: is this a playful consumer app or a crisp dashboard? Cohesion findings depend on it.
 - **Frequency map**: which animated elements are hit 100+ times/day (command palette, keyboard shortcuts, list hover) vs. occasionally (modals, toasts) vs. rarely (onboarding). This drives severity.
 
-Useful sweeps: grep for `transition`, `animation`, `@keyframes`, `element.animate`, `Mount.define`, `ease-in`, `transition: all`, `scale(0)`, `prefers-reduced-motion`, `transform-origin`.
+Useful sweeps: grep for `transition`, `animation`, `@keyframes`, `motion.`, `animate={`, `useSpring`, `ease-in`, `transition: all`, `scale(0)`, `prefers-reduced-motion`, `transform-origin`.
 
 ### Phase 2 — Audit (parallel)
 

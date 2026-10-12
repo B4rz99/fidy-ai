@@ -157,9 +157,20 @@ Springs feel more natural than duration-based animations because they simulate r
 
 ### Spring-based mouse interactions
 
-Tying visual changes directly to mouse position feels artificial because it lacks motion. Use a scoped spring animation to interpolate value changes with spring-like behavior instead of updating immediately.
+Tying visual changes directly to mouse position feels artificial because it lacks motion. Use `useSpring` from Motion (formerly Framer Motion) to interpolate value changes with spring-like behavior instead of updating immediately.
 
-Use a spring animation with private values owned by a Foldkit Mount. Stop the animation on scope release.
+```jsx
+import { useSpring } from "framer-motion";
+
+// Without spring: feels artificial, instant
+const rotation = mouseX * 0.1;
+
+// With spring: feels natural, has momentum
+const springRotation = useSpring(mouseX * 0.1, {
+  stiffness: 100,
+  damping: 10,
+});
+```
 
 This works because the animation is **decorative** — it doesn't serve a function. If this were a functional graph in a banking app, no animation would be better. Know when decoration helps and when it hinders.
 
@@ -225,7 +236,7 @@ Start from `scale(0.9)` or higher, combined with opacity. Even a barely-visible 
 Popovers should scale in from their trigger, not from center. The default `transform-origin: center` is wrong for almost every popover. **Exception: modals.** Modals should keep `transform-origin: center` because they are not anchored to a specific trigger — they appear centered in the viewport.
 
 ```css
-/* Native mount attributes */
+/* Base UI */
 .popover {
   transform-origin: var(--transform-origin);
 }
@@ -328,9 +339,15 @@ The modern CSS way to animate element entry without JavaScript:
 }
 ```
 
-Use `@starting-style` for native Foldkit element entry when browser support allows. Otherwise, set a `data-mounted` attribute from a scoped Mount after the first frame, and cancel pending work when the mount releases.
+This replaces the common React pattern of using `useEffect` to set `mounted: true` after initial render. Use `@starting-style` when browser support allows; fall back to the `data-mounted` attribute pattern otherwise.
 
-Set `data-mounted` from a scoped Foldkit Mount after the first frame; cancel the pending frame when its scope closes.
+```jsx
+// Legacy pattern (still works everywhere)
+useEffect(() => {
+  setMounted(true);
+}, []);
+// <div data-mounted={mounted}>
+```
 
 ## CSS Transform Mastery
 
@@ -485,10 +502,12 @@ element.style.transform = `translateY(${distance}px)`;
 
 Framer Motion's shorthand properties (`x`, `y`, `scale`) are NOT hardware-accelerated. They use `requestAnimationFrame` on the main thread. For hardware acceleration, use the full `transform` string:
 
-```js
-element.animate([{ transform: "translateX(0)" }, { transform: "translateX(100px)" }], {
-  duration: 200,
-});
+```jsx
+// NOT hardware accelerated (convenient but drops frames under load)
+<motion.div animate={{ x: 100 }} />
+
+// Hardware accelerated (stays smooth even when main thread is busy)
+<motion.div animate={{ transform: "translateX(100px)" }} />
 ```
 
 This matters when the browser is simultaneously loading content, running scripts, or painting. At Vercel, the dashboard tab animation used Shared Layout Animations and dropped frames during page loads. Switching to CSS animations (off main thread) fixed it.
@@ -524,9 +543,9 @@ Animations can cause motion sickness. Reduced motion means fewer and gentler ani
 }
 ```
 
-```js
-const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const closedX = reduce ? 0 : "-100%";
+```jsx
+const shouldReduceMotion = useReducedMotion();
+const closedX = shouldReduceMotion ? 0 : "-100%";
 ```
 
 ### Touch device hover states
@@ -549,7 +568,7 @@ These principles come from building Sonner (13M+ weekly npm downloads) and apply
 
 2. **Good defaults matter more than options.** Ship beautiful out of the box. Most users never customize. The default easing, timing, and visual design should be excellent.
 
-3. **Naming creates identity.** "Sonner" (French for "to ring") feels more elegant than a generic toast name. Sacrifice discoverability for memorability when appropriate.
+3. **Naming creates identity.** "Sonner" (French for "to ring") feels more elegant than "react-toast". Sacrifice discoverability for memorability when appropriate.
 
 4. **Handle edge cases invisibly.** Pause toast timers when the tab is hidden. Fill gaps between stacked toasts with pseudo-elements to maintain hover state. Capture pointer events during drag. Users never notice these, and that is exactly right.
 
@@ -646,16 +665,16 @@ For touch interactions (drawers, swipe gestures), test on physical devices. Conn
 
 When reviewing UI code, check for:
 
-| Issue                                  | Fix                                                                                                                    |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `transition: all`                      | Specify exact properties: `transition: transform 200ms ease-out`                                                       |
-| `scale(0)` entry animation             | Start from `scale(0.95)` with `opacity: 0`                                                                             |
-| `ease-in` on UI element                | Switch to `ease-out` or custom curve                                                                                   |
-| `transform-origin: center` on popover  | Set to trigger location or use a native trigger-relative `var(--transform-origin)` (modals are exempt — keep centered) |
-| Animation on keyboard action           | Remove animation entirely                                                                                              |
-| Duration > 300ms on UI element         | Reduce to 150-250ms                                                                                                    |
-| Hover animation without media query    | Add `@media (hover: hover) and (pointer: fine)`                                                                        |
-| Keyframes on rapidly-triggered element | Use CSS transitions for interruptibility                                                                               |
-| Framer Motion `x`/`y` props under load | Use `transform: "translateX()"` for hardware acceleration                                                              |
-| Same enter/exit transition speed       | Make exit faster than enter (e.g., enter 2s, exit 200ms)                                                               |
-| Elements all appear at once            | Add stagger delay (30-80ms between items)                                                                              |
+| Issue                                  | Fix                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `transition: all`                      | Specify exact properties: `transition: transform 200ms ease-out`                                       |
+| `scale(0)` entry animation             | Start from `scale(0.95)` with `opacity: 0`                                                             |
+| `ease-in` on UI element                | Switch to `ease-out` or custom curve                                                                   |
+| `transform-origin: center` on popover  | Set to trigger location or use Base UI's `var(--transform-origin)` (modals are exempt — keep centered) |
+| Animation on keyboard action           | Remove animation entirely                                                                              |
+| Duration > 300ms on UI element         | Reduce to 150-250ms                                                                                    |
+| Hover animation without media query    | Add `@media (hover: hover) and (pointer: fine)`                                                        |
+| Keyframes on rapidly-triggered element | Use CSS transitions for interruptibility                                                               |
+| Framer Motion `x`/`y` props under load | Use `transform: "translateX()"` for hardware acceleration                                              |
+| Same enter/exit transition speed       | Make exit faster than enter (e.g., enter 2s, exit 200ms)                                               |
+| Elements all appear at once            | Add stagger delay (30-80ms between items)                                                              |

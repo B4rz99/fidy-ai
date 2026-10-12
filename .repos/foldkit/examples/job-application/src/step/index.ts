@@ -1,6 +1,0 @@
-export * as Attachments from './attachments'
-export * as CoverLetter from './coverLetter'
-export * as Education from './education'
-export * as PersonalInfo from './personalInfo'
-export * as Skills from './skills'
-export * as WorkHistory from './workHistory'

@@ -1,8 +1,5 @@
 # Effect Atom for the Fidy SPA
 
-> Historical research snapshot. The current frontend uses native Foldkit; implementation guidance
-> is in [web architecture](../../apps/web/ARCHITECTURE.md) and [Foldkit patterns](../../.patterns/foldkit.md).
-
 _Research snapshot: 2026-08-13. Primary sources: the exact Effect 4.0.0-beta.98 and React bindings in `.repos/effect`, including implementation, tests, and package manifests._
 
 ## Decision

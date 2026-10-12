@@ -20,7 +20,9 @@ test("real Core/D1 MCP continuation stays within Accesos without duplicate conne
       const rows = page.locator("tr[data-connection-id]");
       yield* Effect.tryPromise(() => expect(rows).toHaveCount(pageSize));
       const firstIds = yield* Effect.tryPromise(() => rows.evaluateAll(connectionIds));
-      yield* Effect.tryPromise(() => page.getByRole("link", { name: "Siguiente página" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Siguiente página" }).click()
+      );
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/access\?after=/u));
       yield* Effect.tryPromise(() => expect(rows).toHaveCount(1));
       const lastId = yield* Effect.tryPromise(() =>
@@ -29,7 +31,7 @@ test("real Core/D1 MCP continuation stays within Accesos without duplicate conne
       expect(firstIds).not.toContain(lastId);
       expect(new Set([...firstIds, lastId]).size).toBe(pageSize + 1);
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("link", { name: "Siguiente página" })).toHaveCount(0)
+        expect(page.getByRole("button", { name: "Siguiente página" })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() => page.getByRole("link", { name: "Primera página" }).click());
       yield* Effect.tryPromise(() => expect(rows).toHaveCount(pageSize));

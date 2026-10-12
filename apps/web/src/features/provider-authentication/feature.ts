@@ -1,1 +1,0 @@
-export { mountProviderAuthentication } from "./program";

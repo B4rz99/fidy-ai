@@ -7,12 +7,16 @@ version: "2"
 pre-commit:
   commands:
     oxlint:
-      glob: "*.{js,ts}"
+      glob: "*.{js,jsx,ts,tsx}"
+      exclude:
+        - ".repos/**"
       run: bunx oxlint --fix {staged_files}
       stage_fixed: true
       skip_output: errors
     format:
-      glob: "*.{js,ts,json}"
+      glob: "*.{js,jsx,ts,tsx,json}"
+      exclude:
+        - ".repos/**"
       run: bunx oxfmt --write {staged_files}
       stage_fixed: true
       skip_output: errors

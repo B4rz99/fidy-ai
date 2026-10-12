@@ -19,6 +19,8 @@
     "apps/server/contracts",
     "apps/server/evaluation-results",
     ".claude",
-    ".repos"
+    ".repos",
+    ".pi/skills/shadcn",
+    ".agents/skills/shadcn"
   ]
 }

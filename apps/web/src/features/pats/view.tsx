@@ -1,0 +1,499 @@
+import { browserCrypto } from "@/browser/crypto";
+import {
+  type IssuedPAT,
+  type ManualPATGrantInput,
+  ManualPATRequestId,
+  type ManualPATRequestId as ManualPATRequestIdType,
+  type PATLifetimeDays,
+  PATRecipientLabel,
+  PATScope,
+  PATScopes,
+  type TokenBearer,
+  countPATLabelCharacters,
+  defaultPATLifetimeDays,
+  patLifetimeDayOptions,
+  patScopeCopy,
+  recipientLabelLimit,
+} from "@/transport/client";
+import { DateTime, Duration, Effect, Option, Redacted } from "effect";
+import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
+import {
+  type Dispatch,
+  type FormEvent,
+  type JSX,
+  type RefCallback,
+  type SetStateAction,
+  useCallback,
+  useState,
+} from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
+import { Badge } from "@/ui/components/badge";
+import { Button } from "@/ui/components/button";
+import { Checkbox } from "@/ui/components/checkbox";
+import { Label } from "@/ui/components/label";
+import { Input } from "@/ui/components/input";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
+
+type PATScopeValue = PATScope;
+type ReviewedManualPATGrant = ManualPATGrantInput & Readonly<{ reviewExpiresAt: DateTime.Utc }>;
+
+/**
+ * One-time disclosure bearer. It stays redacted in state and props, materializing only where the
+ * User must see or copy it.
+ */
+export type RedactedTokenBearer = Redacted.Redacted<TokenBearer>;
+
+/** One confirmed manual PAT request plus callbacks for its terminal server outcome. */
+export type IssueManualPATCommand = Readonly<{
+  grant: ManualPATGrantInput;
+  requestId: ManualPATRequestIdType;
+  onIssued: (issued: IssuedPAT) => void;
+  onFailed: () => void;
+}>;
+
+/** Closed UI lifecycle that prevents issuance before exact grant review. */
+export type ManualPATCreationState =
+  | Readonly<{
+      _tag: "Editing";
+      recipientLabel: string;
+      scopes: ReadonlyArray<PATScopeValue>;
+      lifetimeDays: PATLifetimeDays;
+    }>
+  | Readonly<{
+      _tag: "Reviewing";
+      grant: ReviewedManualPATGrant;
+      requestId: ManualPATRequestIdType;
+    }>
+  | Readonly<{
+      _tag: "Issuing";
+      grant: ReviewedManualPATGrant;
+      requestId: ManualPATRequestIdType;
+    }>
+  | Readonly<{
+      _tag: "IssueFailed";
+      grant: ReviewedManualPATGrant;
+      requestId: ManualPATRequestIdType;
+    }>
+  | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
+
+const makeManualPATRequestId = (): ManualPATRequestIdType =>
+  ManualPATRequestId.make(Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)));
+
+const initialState: ManualPATCreationState = {
+  _tag: "Editing",
+  recipientLabel: "",
+  scopes: [],
+  lifetimeDays: defaultPATLifetimeDays,
+};
+
+const lifetimeOptions = patLifetimeDayOptions.map((lifetimeDays) => ({
+  lifetimeDays,
+  value: String(lifetimeDays),
+  label: `${lifetimeDays} días`,
+}));
+
+const patExpirationFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "long",
+  timeStyle: "short",
+  timeZone: "America/Bogota",
+});
+
+const scopeDescriptions = {
+  read: "Consultar tus datos financieros.",
+  write: "Crear y modificar tus datos financieros.",
+  dashboard: "Consultar y modificar tu tablero financiero.",
+} as const;
+
+const scopeOptions = (["read", "write", "dashboard"] as const).map((scope) => ({
+  scope: PATScope.make(scope),
+  ...patScopeCopy[scope],
+  description: scopeDescriptions[scope],
+}));
+
+const toggleScope = (
+  scopes: ReadonlyArray<PATScopeValue>,
+  scope: PATScopeValue,
+  checked: boolean
+): ReadonlyArray<PATScope> =>
+  checked ? [...scopes, scope] : scopes.filter((candidate) => candidate !== scope);
+
+const LifetimeSelector = ({
+  state,
+  update,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "Editing" }>;
+  update: (state: Extract<ManualPATCreationState, { _tag: "Editing" }>) => void;
+}>): JSX.Element => (
+  <fieldset className="flex flex-col gap-3">
+    <legend className="font-medium">Duración</legend>
+    <ChoiceDropdown
+      id="pat-lifetime"
+      label="Duración del token"
+      width="full"
+      disabled={false}
+      leading={null}
+      triggerLabel={Option.none()}
+      options={lifetimeOptions}
+      value={String(state.lifetimeDays)}
+      onChange={(value) => {
+        const selected = lifetimeOptions.find((option) => option.value === value);
+        if (selected !== undefined) update({ ...state, lifetimeDays: selected.lifetimeDays });
+      }}
+    />
+  </fieldset>
+);
+
+const ScopeSelector = ({
+  state,
+  update,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "Editing" }>;
+  update: (state: Extract<ManualPATCreationState, { _tag: "Editing" }>) => void;
+}>): JSX.Element => {
+  const selectedScopes = new Set(state.scopes);
+  return (
+    <fieldset className="flex flex-col">
+      <legend className="mb-2 font-medium">Permisos</legend>
+      {scopeOptions.map((option) => (
+        <label
+          className="flex cursor-pointer items-start gap-3 border-b py-3 transition-colors hover:bg-muted/50 has-[[data-checked]]:bg-muted/50"
+          htmlFor={`pat-scope-${option.scope}`}
+          key={option.scope}
+        >
+          <Checkbox
+            aria-label={`${option.label}: ${option.description}`}
+            id={`pat-scope-${option.scope}`}
+            checked={selectedScopes.has(option.scope)}
+            onCheckedChange={(checked) =>
+              update({ ...state, scopes: toggleScope(state.scopes, option.scope, checked) })
+            }
+          />
+          <span>
+            <span className="block font-medium">{option.label}</span>
+            <span className="text-sm text-muted-foreground">{option.description}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+};
+
+const GrantEditor = ({
+  state,
+  update,
+  review,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "Editing" }>;
+  update: (state: Extract<ManualPATCreationState, { _tag: "Editing" }>) => void;
+  review: () => void;
+}>): JSX.Element => {
+  const normalizedLabel = state.recipientLabel.trim();
+  const normalizedLabelLength = countPATLabelCharacters(normalizedLabel);
+  const valid =
+    normalizedLabelLength >= 1 &&
+    normalizedLabelLength <= recipientLabelLimit &&
+    state.scopes.length > 0;
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    if (valid) review();
+  };
+
+  return (
+    <form className="flex flex-col gap-6" onSubmit={submit}>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pat-recipient">Nombre</Label>
+        <Input
+          id="pat-recipient"
+          onChange={(event) => update({ ...state, recipientLabel: event.target.value })}
+          aria-describedby="pat-recipient-hint"
+          autoComplete="off"
+          placeholder="Ej. Mi agente personal"
+          value={state.recipientLabel}
+        />
+        <p id="pat-recipient-hint" className="text-sm text-muted-foreground">
+          Un nombre visible de 1 a 80 caracteres.
+        </p>
+      </div>
+      <ScopeSelector state={state} update={update} />
+      <LifetimeSelector state={state} update={update} />
+      <Button disabled={!valid} type="submit">
+        Crear token
+      </Button>
+    </form>
+  );
+};
+
+const GrantReview = ({
+  grant,
+  issuing,
+  confirm,
+  edit,
+}: Readonly<{
+  grant: ReviewedManualPATGrant;
+  issuing: boolean;
+  confirm: () => void;
+  edit: () => void;
+}>): JSX.Element => (
+  <section className="flex min-w-0 flex-col gap-5" aria-label="Revisión del token">
+    <h3 className="text-lg font-semibold">Revisa el acceso</h3>
+    <div className="flex min-w-0 flex-col gap-5">
+      <dl className="grid gap-2 sm:grid-cols-[10rem_1fr]">
+        <dt className="text-muted-foreground">Nombre</dt>
+        <dd className="font-medium">{grant.recipientLabel}</dd>
+        <dt className="text-muted-foreground">Permisos</dt>
+        <dd className="flex flex-wrap gap-2">
+          {grant.scopes.map((scope) => (
+            <Badge key={scope} variant="secondary">
+              {scopeOptions.find((option) => option.scope === scope)?.label}
+            </Badge>
+          ))}
+        </dd>
+        <dt className="text-muted-foreground">Duración</dt>
+        <dd className="font-medium">{grant.lifetimeDays} días</dd>
+        <dt className="text-muted-foreground">Vencimiento estimado</dt>
+        <dd className="font-medium">
+          <time dateTime={DateTime.formatIso(grant.reviewExpiresAt)}>
+            {patExpirationFormatter.format(DateTime.toDate(grant.reviewExpiresAt))}
+          </time>
+          <span className="block text-sm text-muted-foreground">
+            El vencimiento exacto se calculará al crear el token, {grant.lifetimeDays} días después.
+          </span>
+        </dd>
+      </dl>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button disabled={issuing} onClick={edit} type="button" variant="outline">
+          Editar
+        </Button>
+        <Button disabled={issuing} onClick={confirm} type="button">
+          {issuing ? "Creando token…" : "Confirmar y crear token"}
+        </Button>
+      </div>
+    </div>
+  </section>
+);
+
+const IssuedGrant = ({
+  issued,
+  copyToClipboard,
+  reset,
+}: Readonly<{
+  issued: IssuedPAT;
+  copyToClipboard: (bearer: RedactedTokenBearer, onCopied: () => void) => void;
+  reset: () => void;
+}>): JSX.Element => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex min-w-0 flex-col gap-5">
+      <Alert>
+        <AlertTitle>Token creado</AlertTitle>
+        <AlertDescription>
+          Guárdalo ahora en tu agente. Al salir de esta vista no podrás volver a consultar el token
+          completo.
+        </AlertDescription>
+      </Alert>
+      <code className="break-all rounded-lg border bg-muted p-4 text-sm">
+        {Redacted.value(issued.bearer)}
+      </code>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button
+          aria-live="polite"
+          onClick={() => copyToClipboard(issued.bearer, () => setCopied(true))}
+          type="button"
+        >
+          {copied ? "Copiado" : "Copiar token"}
+        </Button>
+        <Button onClick={reset} type="button" variant="outline">
+          Crear otro token
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+type SetCreationState = Dispatch<SetStateAction<ManualPATCreationState>>;
+
+const expireIssuedPAT = (issued: IssuedPAT, setState: SetCreationState): void => {
+  setState((current) =>
+    current._tag === "Issued" && current.issued.pat.id === issued.pat.id ? initialState : current
+  );
+};
+
+const revealIssuedPAT = (
+  issued: IssuedPAT,
+  setState: SetCreationState,
+  clipboard: SensitiveClipboard
+): void => {
+  setState({ _tag: "Issued", issued });
+  clipboard.reveal(() => expireIssuedPAT(issued, setState));
+};
+
+const beginReview = (
+  state: Extract<ManualPATCreationState, { _tag: "Editing" }>
+): Extract<ManualPATCreationState, { _tag: "Reviewing" }> => {
+  const reviewExpiresAt = DateTime.addDuration(
+    Effect.runSync(DateTime.now),
+    Duration.days(state.lifetimeDays)
+  );
+  return {
+    _tag: "Reviewing",
+    grant: {
+      recipientLabel: PATRecipientLabel.make(state.recipientLabel.trim()),
+      scopes: PATScopes.make(state.scopes),
+      lifetimeDays: state.lifetimeDays,
+      reviewExpiresAt,
+    },
+    requestId: makeManualPATRequestId(),
+  };
+};
+
+const EditingState = ({
+  state,
+  setState,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "Editing" }>;
+  setState: SetCreationState;
+}>): JSX.Element => (
+  <GrantEditor review={() => setState(beginReview(state))} state={state} update={setState} />
+);
+
+const ReviewState = ({
+  state,
+  setState,
+  issue,
+  clipboard,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "Reviewing" | "Issuing" }>;
+  setState: SetCreationState;
+  issue: (command: IssueManualPATCommand) => void;
+  clipboard: SensitiveClipboard;
+}>): JSX.Element => (
+  <GrantReview
+    confirm={() => {
+      const { grant, requestId } = state;
+      setState({ _tag: "Issuing", grant, requestId });
+      issue({
+        grant,
+        requestId,
+        onIssued: (issued) => revealIssuedPAT(issued, setState, clipboard),
+        onFailed: () => setState({ _tag: "IssueFailed", grant, requestId }),
+      });
+    }}
+    edit={() =>
+      setState({
+        _tag: "Editing",
+        recipientLabel: state.grant.recipientLabel,
+        scopes: state.grant.scopes,
+        lifetimeDays: state.grant.lifetimeDays,
+      })
+    }
+    grant={state.grant}
+    issuing={state._tag === "Issuing"}
+  />
+);
+
+const FailedState = ({
+  state,
+  setState,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "IssueFailed" }>;
+  setState: SetCreationState;
+}>): JSX.Element => (
+  <div className="flex flex-col gap-4">
+    <Alert variant="destructive">
+      <AlertTitle>No pudimos crear el token</AlertTitle>
+      <AlertDescription>
+        Vuelve a emparejar el navegador si pasaron diez minutos y luego intenta de nuevo.
+      </AlertDescription>
+    </Alert>
+    <Button
+      onClick={() =>
+        setState({
+          _tag: "Reviewing",
+          grant: state.grant,
+          requestId: state.requestId,
+        })
+      }
+      type="button"
+      variant="outline"
+    >
+      Volver a la revisión
+    </Button>
+  </div>
+);
+
+const CreationContent = ({
+  state,
+  setState,
+  issue,
+  clipboard,
+}: Readonly<{
+  state: ManualPATCreationState;
+  setState: SetCreationState;
+  issue: (command: IssueManualPATCommand) => void;
+  clipboard: SensitiveClipboard;
+}>): JSX.Element => {
+  if (state._tag === "Editing") return <EditingState setState={setState} state={state} />;
+  if (state._tag === "Reviewing" || state._tag === "Issuing") {
+    return <ReviewState clipboard={clipboard} issue={issue} setState={setState} state={state} />;
+  }
+  if (state._tag === "IssueFailed") return <FailedState setState={setState} state={state} />;
+  return (
+    <IssuedGrant
+      copyToClipboard={(bearer, onCopied) => clipboard.copy(Redacted.value(bearer), onCopied)}
+      issued={state.issued}
+      reset={() => {
+        clipboard.clear(Redacted.value(state.issued.bearer));
+        setState(initialState);
+      }}
+    />
+  );
+};
+
+const onPageHide = (listener: () => void): (() => void) => {
+  window.addEventListener("pagehide", listener);
+  return () => window.removeEventListener("pagehide", listener);
+};
+
+/** Guides one exact PAT grant from editing through review and one-time disclosure. */
+export const ManualPATView = ({
+  issue,
+  clipboard,
+}: Readonly<{
+  issue: (command: IssueManualPATCommand) => void;
+  clipboard: SensitiveClipboard;
+}>): JSX.Element => {
+  const [state, setState] = useState<ManualPATCreationState>(initialState);
+  const lifecycleRef: RefCallback<HTMLElement> = useCallback(
+    (node) => {
+      if (node === null || state._tag !== "Issued") return;
+      const clearBearer = (): void => {
+        clipboard.clear(Redacted.value(state.issued.bearer));
+        setState(initialState);
+      };
+      const stopListening = onPageHide(clearBearer);
+      return (): void => {
+        stopListening();
+        clearBearer();
+      };
+    },
+    [clipboard, state]
+  );
+  return (
+    <section
+      id="create-pat"
+      ref={lifecycleRef}
+      className="flex min-w-0 flex-col gap-6"
+      aria-labelledby="create-pat-title"
+    >
+      <header className="flex flex-col gap-1">
+        <h2 id="create-pat-title" className="text-xl font-semibold tracking-tight">
+          Crear token
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Dale un nombre y elige solo los permisos que necesita tu agente.
+        </p>
+      </header>
+      <CreationContent clipboard={clipboard} issue={issue} setState={setState} state={state} />
+    </section>
+  );
+};

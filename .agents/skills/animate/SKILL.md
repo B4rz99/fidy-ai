@@ -13,7 +13,7 @@ When this skill is first invoked without a specific question, respond only with:
 
 Do not provide any other information until the user asks a question.
 
-A construction skill. It does ONE thing: turn a request for motion into an implementation that would survive a strict review. It does not audit a codebase (that's `improve-animations`), critique a diff (that's `review-animations`), hunt for places that could animate (that's `find-animation-opportunities`).
+A construction skill. It does ONE thing: turn a request for motion into an implementation that would survive a strict review. It does not audit a codebase (that's `improve-animations`), critique a diff (that's `review-animations`), hunt for places that could animate (that's `find-animation-opportunities`), or build for React Native (that's `animate-expo`).
 
 ## Operating Posture
 
@@ -84,14 +84,13 @@ If the task needs a _component_ rather than an animation — a toast, a drawer, 
 
 - **`transform` and `opacity` only.** They skip layout and paint and run on the GPU. `width`/`height`/`margin`/`padding`/`top`/`left` trigger all three. (`clip-path` is the sanctioned fourth — see RECIPES.md. `height` is tolerated only for accordions, where there's no transform equivalent.)
 - **Never `scale(0)`.** Start from `scale(0.9–0.97)` + `opacity: 0`. Nothing in the real world appears from nothing.
-- **`transform-origin` at the trigger** for popovers, dropdowns, menus, tooltips — a trigger-relative CSS variable owned by the native popover. **Modals are exempt**; they're not anchored to a trigger, so they stay centered.
+- **`transform-origin` at the trigger** for popovers, dropdowns, menus, tooltips — `var(--transform-origin)` in Base UI. **Modals are exempt**; they're not anchored to a trigger, so they stay centered.
 - **Percentages in `translate()`** are relative to the element's own size — `translateY(100%)` moves by its own height whatever the content. Prefer over hardcoded pixels.
 - **In Motion, use the full transform string.** `x`/`y`/`scale` shorthands are not hardware-accelerated and drop frames under load:
 
-```js
-element.animate([{ transform: "translateX(0)" }, { transform: "translateX(100px)" }], {
-  duration: 200,
-});
+```jsx
+<motion.div animate={{ x: 100 }} />                          // drops frames under load
+<motion.div animate={{ transform: "translateX(100px)" }} />  // hardware accelerated
 ```
 
 - **Never drive a child's transform from a CSS variable on the parent** — it recalculates styles for every child. Set `transform` on the element directly.
@@ -166,8 +165,8 @@ Ships with the animation, every time.
 }
 ```
 
-```js
-const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+```jsx
+const reduce = useReducedMotion();
 const closedX = reduce ? 0 : "-100%";
 ```
 

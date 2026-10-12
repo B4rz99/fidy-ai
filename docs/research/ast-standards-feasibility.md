@@ -1,8 +1,5 @@
 # Which modelling rules are enforceable?
 
-> Historical research snapshot. The current frontend uses native Foldkit; implementation guidance
-> is in [web architecture](../../apps/web/ARCHITECTURE.md) and [Foldkit patterns](../../.patterns/foldkit.md).
-
 Research at `1bbd8d3103` (branch `research/ast-standards-feasibility`). Scope: the previously proposed first-party-interface, first-party-class-inheritance, and readonly-array-return checks, plus the proposed `Record<string, unknown>` change and [`dmmulroy/anti-slop`](https://github.com/dmmulroy/anti-slop/tree/c44ef22ca116d0ba62a3ff663a0bd13a3f3fa40b). This is an assessment, not a new gate. **Enforceable** below means a precisely stated _syntactic or symbol-resolvable subset_, not proof that the design is sound.
 
 ## Short answer: `Record<string>` is not a TypeScript type

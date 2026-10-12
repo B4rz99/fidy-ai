@@ -1,8 +1,5 @@
 # Browser request and local D1 budget (#1156)
 
-> Historical research snapshot. The current frontend uses native Foldkit; implementation guidance
-> is in [web architecture](../../apps/web/ARCHITECTURE.md) and [Foldkit patterns](../../.patterns/foldkit.md).
-
 ## Decision
 
 Keep the current payment and ordinary Browser Login pacing. Their observations are bounded,

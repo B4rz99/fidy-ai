@@ -1,1 +1,0 @@
-export { mountEmailReplacement } from "./program";

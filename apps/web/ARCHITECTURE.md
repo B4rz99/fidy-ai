@@ -167,8 +167,8 @@ Sensitive-operation confirmation under #988 uses a server-owned native MCP form 
 Codex only**, not a web feature or browser handoff. The server owns the exact effect disclosure,
 intent binding and atomic single-use consumption; it trusts the authorized client's response
 without independently attesting human presence, as explicitly accepted in ADR 0033. Unsupported
-native interaction fails closed with no browser/chat fallback. The web continues to own fresh-session
-initial OAuth connection approval and connection settings/revocation; their origin/CSRF protection
+native interaction fails closed with no browser/chat fallback. The web owns live-session connection
+listing and fresh-session initial OAuth connection approval and revocation; their origin/CSRF protection
 is unchanged. Browser-safe contracts derive from the server declaration seam, not a copied
 OAuth/domain model. Loopback ingress/Core/D1 host evidence does not authorize production
 onboarding, deployment or launch.

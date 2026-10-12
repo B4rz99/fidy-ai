@@ -1,3 +1,4 @@
+import { UserId } from "~/core/identity/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { PATActivityHistory } from "~/core/audit/contract";
 import {
@@ -40,6 +41,25 @@ import {
   webSessionOnly,
 } from "~/shell/canonical-policy/contract";
 import { type AuditCredentialOperation } from "~/shell/audit/contract";
+
+/** A live browser may read metadata while needing renewed proof for credential issuance. */
+export class ManualPATReauthenticationRequired
+  extends Schema.Error<ManualPATReauthenticationRequired>("ManualPATReauthenticationRequired")(
+    {
+      _tag: Schema.tagDefaultOmit("ManualPATReauthenticationRequired"),
+      error: Schema.Struct({
+        code: Schema.Literal("user_action_required"),
+        reason: Schema.Literal("reauthentication_required"),
+        userId: UserId,
+      }),
+      next: NextOperations,
+    },
+    { httpApiStatus: 403 }
+  )
+  implements CanonicalRejectedFailure
+{
+  readonly canonicalOutcome = "rejected" as const;
+}
 
 export const issuanceConsumedMessage =
   "This manual PAT issuance request was already consumed. Start a new reviewed request.";
@@ -211,7 +231,12 @@ const revokeAllPATs = HttpApiEndpoint.delete("revokeAllPATs", "/pats", {
 const createManualPAT = HttpApiEndpoint.post("createManualPAT", "/pats", {
   payload: CreateManualPATPayload,
   success: OperationResponse(IssuedManualPATResponse),
-  error: [ManualPATIssuanceConsumed, ManualPATIssuanceRateLimited, ManualPATReviewExpired],
+  error: [
+    ManualPATReauthenticationRequired,
+    ManualPATIssuanceConsumed,
+    ManualPATIssuanceRateLimited,
+    ManualPATReviewExpired,
+  ],
 })
   .annotate(
     OpenApi.Description,

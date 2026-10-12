@@ -453,6 +453,7 @@ export const signupJourney = ({
         yield* providerRecoveryJourney({ page, context, request, backupRecoveryCode });
       }
       yield* staleRecoverySessionJourney(configuration, { page, request });
+      yield* reauthenticatePATJourney(configuration, { page, request });
       yield* returningSessionPolicies(configuration, { page, context, request });
     })
   );
@@ -915,3 +916,93 @@ const verifyHandoffEntry = ({
       )
     ).toContain(`handoff=${handoffReference}`);
   });
+
+/** Native Core/D1 freshness refusal, provider completion, draft restoration and issuance. */
+const reauthenticatePATJourney = Effect.fn(function* (
+  configuration: ProviderJourneyConfiguration,
+  { page, request }: Pick<ProviderJourney, "page" | "request">
+) {
+  yield* Effect.tryPromise(() =>
+    request.post(
+      `http://127.0.0.1:4175/${configuration.provider}/stale?subject=browser-${configuration.provider}-signup`
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  const tokenName = `Identity confirmation ${configuration.provider}`;
+  yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill(tokenName));
+  yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Duración del token", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("menuitemradio", { name: "7 días", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear token", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Confirmar y crear token" }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Confirma tu identidad", { exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Sesión vencida", { exact: true })).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("heading", { name: "Tokens activos", exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Confirmar mi identidad" }).click()
+  );
+  yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/auth\/google\?resume=pat$/u));
+  if (configuration.provider === "microsoft") {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("link", { name: "Microsoft", exact: true }).click()
+    );
+  }
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("heading", { name: "Confirma tu identidad" })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
+  );
+  yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/access\?resume=pat$/u));
+  yield* completePATReviewJourney({ page, tokenName });
+});
+
+const completePATReviewJourney = Effect.fn(function* ({
+  page,
+  tokenName,
+}: Readonly<{ page: Page; tokenName: string }>) {
+  const review = page.getByRole("region", { name: "Revisión del token" });
+  yield* Effect.tryPromise(() =>
+    expect(review.getByText(tokenName, { exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() => expect(review.getByText("7 días", { exact: true })).toBeVisible());
+  expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Token creado", { exact: true })).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    review.getByRole("button", { name: "Confirmar y crear token" }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Token creado", { exact: true })).toBeVisible()
+  );
+  const row = page
+    .getByRole("table", { name: "Tokens activos" })
+    .getByRole("row")
+    .filter({ hasText: tokenName });
+  yield* Effect.tryPromise(() =>
+    row.getByRole("button", { name: "Desactivar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    row.getByRole("button", { name: "Sí, desactivar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => expect(row).toHaveCount(0));
+  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+});

@@ -172,3 +172,5 @@ export { Transaction, TransactionId, TransactionQueryValues } from "~/core/trans
 
 export { Category } from "~/core/categories/contract";
 export { User } from "~/core/identity/contract";
+
+export { ManualPATReauthenticationRequired } from "~/shell/tokens/contract";

@@ -1,13 +1,15 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
-import { type JSX, type ReactNode, useState } from "react";
+import { type JSX, type ReactNode, type RefCallback, useCallback, useRef, useState } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { type FidyClient } from "@/transport/client";
+import { type FidyClient, ManualPATReauthenticationRequired } from "@/transport/client";
 import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
+import { Button } from "@/ui/components/button";
+import { type PATDraft, resumePATDraft } from "./reauthentication-draft";
 import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
   type ActivePATManagementState,
@@ -49,7 +51,7 @@ const PATManagementContent = ({
             revokeOne={revoke}
           />
         ),
-        creation: <ManualPATView clipboard={clipboard} issue={issue} />,
+        creation: <PATCreation initialDraft={Option.none()} clipboard={clipboard} issue={issue} />,
       })
     }
   </SensitiveClipboardBoundary>
@@ -100,7 +102,15 @@ const makeIssueCommand = (
           [activePATReactivityKey]
         );
         yield* Effect.sync(() => command.onIssued(response.data));
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            Schema.is(ManualPATReauthenticationRequired)(error)
+              ? command.onReauthenticationRequired(error.error.userId)
+              : command.onFailed()
+          )
+        )
+      ),
     { concurrent: false }
   );
 
@@ -164,3 +174,42 @@ export const PATManagementFeature = ({
 };
 
 export { CLIConnectionFeature } from "./cli-feature";
+
+const PATCreation = (props: Parameters<typeof ManualPATView>[0]): JSX.Element => {
+  const router = useRouter();
+  const [resuming] = useState(() => router.state.location.search.resume === "pat");
+  return resuming ? <ResumedPATCreation {...props} /> : <ManualPATView {...props} />;
+};
+const ResumedPATCreation = (props: Parameters<typeof ManualPATView>[0]): JSX.Element => {
+  const router = useRouter();
+  const [userQuery] = useState(() =>
+    router.options.context.apiClient.query("identity", "getCurrentUser", {})
+  );
+  const result = useAtomValue(userQuery);
+  const retry = useAtomRefresh(userQuery);
+  const consumed = useRef(false);
+  const user = presentCanonicalQuery(result);
+  const [draft, setDraft] = useState<Option.Option<Option.Option<PATDraft>>>(() => Option.none());
+  const userId = user._tag === "Ready" ? user.value.data.id : undefined;
+  const mounted = useCallback<RefCallback<HTMLElement>>(
+    (node) => {
+      if (node !== null && userId !== undefined && !consumed.current) {
+        consumed.current = true;
+        setDraft(Option.some(resumePATDraft(userId)));
+      }
+    },
+    [userId]
+  );
+  if (user._tag === "Failure") {
+    return (
+      <div role="alert">
+        <p>No pudimos comprobar tu identidad. El formulario sigue guardado en esta pestaña.</p>
+        <Button type="button" onClick={retry}>
+          Volver a intentar
+        </Button>
+      </div>
+    );
+  }
+  if (Option.isNone(draft)) return <output ref={mounted}>Comprobando tu identidad…</output>;
+  return <ManualPATView {...props} initialDraft={draft.value} />;
+};

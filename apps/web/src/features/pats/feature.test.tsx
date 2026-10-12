@@ -77,7 +77,14 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
     command.onIssued(issued);
   });
   const clipboard = makeSensitiveClipboardSpy();
-  render(<ManualPATView key="signed-in" clipboard={clipboard} issue={issue} />);
+  render(
+    <ManualPATView
+      initialDraft={Option.none()}
+      key="signed-in"
+      clipboard={clipboard}
+      issue={issue}
+    />
+  );
 
   expect(screen.getByRole("button", { name: "Duración del token" })).toHaveTextContent("90 días");
   prepareGrantReview();
@@ -114,7 +121,7 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
 it("hides an issued bearer when its owned reveal expires", () => {
   const clipboard = makeSensitiveClipboardSpy();
   const issue = vi.fn((command: IssueManualPATCommand) => command.onIssued(issued));
-  render(<ManualPATView clipboard={clipboard} issue={issue} />);
+  render(<ManualPATView initialDraft={Option.none()} clipboard={clipboard} issue={issue} />);
 
   issueReviewedPAT();
   expect(screen.getByText(bearer)).toBeVisible();
@@ -133,13 +140,25 @@ it("hides an issued bearer and clears the clipboard when its disclosure unmounts
   });
   const clipboard = makeSensitiveClipboardSpy();
   const { rerender } = render(
-    <ManualPATView key="signed-in" clipboard={clipboard} issue={issue} />
+    <ManualPATView
+      initialDraft={Option.none()}
+      key="signed-in"
+      clipboard={clipboard}
+      issue={issue}
+    />
   );
 
   issueReviewedPAT();
   expect(screen.getByText(bearer)).toBeVisible();
 
-  rerender(<ManualPATView key="navigated" clipboard={clipboard} issue={issue} />);
+  rerender(
+    <ManualPATView
+      initialDraft={Option.none()}
+      key="navigated"
+      clipboard={clipboard}
+      issue={issue}
+    />
+  );
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
   expect(clipboard.clear).toHaveBeenCalledWith(bearer);
   vi.useRealTimers();
@@ -148,7 +167,13 @@ it("hides an issued bearer and clears the clipboard when its disclosure unmounts
 it("offers every fixed lifetime preset and preserves a changed selection through editing", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      render(<ManualPATView clipboard={makeSensitiveClipboardSpy()} issue={vi.fn()} />);
+      render(
+        <ManualPATView
+          initialDraft={Option.none()}
+          clipboard={makeSensitiveClipboardSpy()}
+          issue={vi.fn()}
+        />
+      );
 
       fireEvent.click(screen.getByRole("button", { name: "Duración del token" }));
       const queries = patLifetimeDayOptions.map((days) =>
@@ -168,7 +193,13 @@ it("offers every fixed lifetime preset and preserves a changed selection through
 
 it("edits a reviewed grant and preserves one request identity across a failed retry", () => {
   const issue = vi.fn<(command: IssueManualPATCommand) => void>();
-  render(<ManualPATView clipboard={makeSensitiveClipboardSpy()} issue={issue} />);
+  render(
+    <ManualPATView
+      initialDraft={Option.none()}
+      clipboard={makeSensitiveClipboardSpy()}
+      issue={issue}
+    />
+  );
 
   expect(screen.getByRole("button", { name: "Crear token" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Nombre"), {
@@ -387,7 +418,7 @@ it("serializes revocation, allows cancellation, and reports failures and plural 
 it("clears an issued bearer on reset and page hide", () => {
   const clipboard = makeSensitiveClipboardSpy();
   const issue = vi.fn((command: IssueManualPATCommand) => command.onIssued(issued));
-  render(<ManualPATView clipboard={clipboard} issue={issue} />);
+  render(<ManualPATView initialDraft={Option.none()} clipboard={clipboard} issue={issue} />);
 
   issueReviewedPAT();
   fireEvent.click(screen.getByRole("button", { name: "Crear otro token" }));
@@ -399,4 +430,27 @@ it("clears an issued bearer on reset and page hide", () => {
   });
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
   expect(clipboard.clear).toHaveBeenLastCalledWith(bearer);
+});
+
+it("keeps the reviewed grant when identity confirmation is required, without issuing or discarding choices", () => {
+  const issue = vi.fn((command: IssueManualPATCommand) =>
+    command.onReauthenticationRequired("10000000-0000-4000-8000-000000000001")
+  );
+  render(
+    <ManualPATView
+      initialDraft={Option.none()}
+      clipboard={makeSensitiveClipboardSpy()}
+      issue={issue}
+    />
+  );
+  issueReviewedPAT();
+  expect(screen.getByText("Confirma tu identidad")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Confirmar mi identidad" })).toBeVisible();
+  expect(screen.queryByText("Sesión vencida")).not.toBeInTheDocument();
+  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Volver al formulario" }));
+  expect(screen.getByLabelText("Nombre")).toHaveValue("Automatización casa");
+  expect(screen.getByRole("checkbox", { name: /Lectura/iu })).toBeChecked();
+  expect(screen.getByRole("checkbox", { name: /Tablero/iu })).toBeChecked();
+  expect(issue).toHaveBeenCalledTimes(1);
 });

@@ -4413,3 +4413,46 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
       ).toEqual({ total: 2 });
     })
   ));
+
+it("keeps a live stale session while requesting identity confirmation for manual issuance", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(clock() + 600_001);
+      const denied = yield* awaitPromise(
+        send({
+          path: "/pats",
+          method: "POST",
+          session: sessions[0],
+          payload: {
+            requestId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeef",
+            grant: {
+              recipientLabel: "Reauthentication QA",
+              scopes: ["read"],
+              lifetimeDays: 7,
+              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
+            },
+          },
+        })
+      );
+      expect(denied.status).toBe(403);
+      expect(yield* awaitPromise(denied.json())).toMatchObject({
+        error: { code: "user_action_required", reason: "reauthentication_required", userId: userA },
+      });
+      expect(
+        (yield* awaitPromise(send({ path: "/pats", method: "GET", session: sessions[0] }))).status
+      ).toBe(200);
+      expect(yield* awaitPromise(db.prepare("SELECT count(*) AS total FROM pats").first())).toEqual(
+        { total: 0 }
+      );
+      yield* awaitPromise(
+        db.prepare("UPDATE web_sessions SET revoked_at_ms = ?").bind(clock()).run()
+      );
+      expect(
+        (yield* awaitPromise(
+          send({ path: "/pats", method: "POST", session: sessions[0], payload: {} })
+        )).status
+      ).toBe(401);
+    })
+  ));

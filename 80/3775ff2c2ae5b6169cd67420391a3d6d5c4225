@@ -1,0 +1,31 @@
+apps/web/e2e/dashboard-editing.spec.ts
+  s_6d017cc65783af::t_fecffc9e128896 10-15
+  s_6d017cc65783af::t_2c9b78d793dfbc 16-39,89
+apps/web/src/features/dashboard/feature.test.tsx
+  s_6d017cc65783af::t_19ad3870890987 129,663,709-749
+  s_6d017cc65783af::t_6a750d1fca5243 7
+  s_6d017cc65783af::t_a8b53bbfd39ba4 615-618,655-657,690-691,750
+  s_6d017cc65783af::t_64af0c89bfb6fb 658-662,664-677
+  s_6d017cc65783af::t_d9c13c828654b1 599-614,619-654,678-689
+  s_6d017cc65783af::t_95bc6d81b63a3f 692-696,751-754
+apps/web/src/features/dashboard/FEATURE.md
+  s_6d017cc65783af::t_eeb4bf710922f2 53,57-59
+  s_6d017cc65783af::t_48da441083e72f 36
+  s_6d017cc65783af::t_f02afabacbcb02 35,37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "803775ff2c2ae5b6169cd67420391a3d6d5c4225",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

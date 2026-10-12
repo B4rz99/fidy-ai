@@ -54,11 +54,15 @@ A separate `dashboard-live-title.spec.ts` check signed in through real Core, edi
 
 The real built-browser customization check also passed (**1 check**, 12.5 seconds): rename through the visible Widget editor, verify the name after reload, remove that Widget, and verify removal after another reload. Its first assertion stopped at a temporary 429 resource refusal; the corrected test waits for the client's admitted retry and then checks persisted UI state. Application code and admission policy were unchanged.
 
-The seven initial-load built-browser scenarios intercept API responses. They verify the built UI and request sequence, not production financial results. The separate Worker/D1 suite exercises actual local persistence and admitted execution. This document is an audit artifact in the development checkout, not evidence that this checkout has been deployed.
+The seven initial-load built-browser scenarios intercept API responses. They verify the built UI and request sequence, not production financial results. The separate Worker/D1 suite exercises actual local persistence and admitted execution.
+
+The remaining-check rerun on 2026-10-12 passed **70 Core checks**, **71 local Worker/D1 checks**, and **9 loading/title/customization browser checks**. All **6 editing browser checks** also passed, including a new mobile touch-input check: a brief touch leaves dragging inactive, holding activates it, and cancellation sends no edit. This uses emulated Chromium touch input against the built UI with HTTP response fixtures, not a physical phone or live persistence.
+
+Production revision `52f83b8d096eb86d79769ea47370f68c1148d1c8` (the same runtime as PR #1237) passed Widget rename and keyboard resize followed by reload. The original name and shares were restored and verified after another reload. Keyboard drag/Escape canceled visibly. At a 390 × 844 viewport, all four Widgets stacked in canonical order with no horizontal document overflow; mobile navigation to Transactions and back retained the Dashboard. No browser console warnings or errors were observed. Deployment metadata matched the tested revision.
 
 ## Historical Production evidence and remaining checks
 
-- [Issue #1214](https://github.com/B4rz99/fidy-ai/issues/1214): canonical title was ignored by the web heading. The focused regression reproduced it, then all **45 web feature checks** and **24 application checks** passed after rendering `view.title`. The real local browser edit/reload check also passed. The fix merged in [PR #1216](https://github.com/B4rz99/fidy-ai/pull/1216); the historical deployment failure from live Workers AI preflight was resolved by the later quota-aware pipeline. Canonical-title edit/read-after-reload remains unverified in production.
+- [Issue #1214](https://github.com/B4rz99/fidy-ai/issues/1214): canonical title was ignored by the web heading. The focused regression reproduced it, then all **45 web feature checks** and **24 application checks** passed after rendering `view.title`. The real local browser edit/reload check also passed. The fix merged in [PR #1216](https://github.com/B4rz99/fidy-ai/pull/1216) and is present in the current Production runtime. A live canonical title edit/reload remains pending: the UI has no Dashboard-title edit control, and the saved CLI credential requires the OS credential store to be unlocked.
 - Real admitted Dashboard initialization/edit/read, ownership refusals, and retained Audit evidence passed the local Worker/D1 suite; repeat production behaviour separately.
 - Earlier Production checks on 2026-10-11, before the React restoration in PR #1233, verified the original four Widgets, ten recent Transactions, separate Money directions, and explicit missing Budget. Rename, keyboard resize, pointer swap/edge movement, keyboard cancellation, catalog insertion and approved removal survived reload; original identities, order and weights were restored. These are historical release observations, not verification of the current React placement fix.
 - Production revision `72ddd85d9a73487a7f0f0e457700225012d718f4` verified disposable funded Budget fixtures: `1600` COP spent against caps `2000`, `1600` and `1500`. A `12.34` USD Transaction appeared separately from COP in the list, chart and metric. Fixtures were removed through canonical operations; the Dashboard matched its baseline except calculation time, and browser reload confirmed cleanup.
@@ -69,6 +73,7 @@ The seven initial-load built-browser scenarios intercept API responses. They ver
 bun run --cwd apps/web test src/features/dashboard
 bun run --cwd apps/server test:core src/core/dashboard --coverage.enabled=false
 bun run --cwd apps/web test:browser dashboard-queries.spec.ts --workers=1
+bun run --cwd apps/web test:browser dashboard-editing.spec.ts --workers=1
 BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser dashboard-live-customization.spec.ts --workers=1 --timeout=120000
 bun run --cwd apps/server test:cloudflare cloudflare/dashboard --maxWorkers=1
 ```

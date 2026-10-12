@@ -1,4 +1,4 @@
-import type { Page, Route } from "@playwright/test";
+import type { BrowserContext, Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -154,6 +154,49 @@ const heldFailure =
     edits.push(route.request().postDataJSON());
     return acknowledgment.then(() => route.abort("failed"));
   };
+
+const checkTouchCancellation = Effect.fnUntraced(function* (page: Page, context: BrowserContext) {
+  const edits: Array<unknown> = [];
+  yield* install(page, edits);
+  const handle = page.getByRole("button", {
+    name: "Arrastrar Gastos visibles",
+    exact: true,
+  });
+  yield* Effect.tryPromise(() => handle.scrollIntoViewIfNeeded());
+  const bounds = yield* Effect.tryPromise(() => handle.boundingBox());
+  if (bounds === null) throw new Error("Missing touch drag handle");
+  const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const input = yield* Effect.tryPromise(() => context.newCDPSession(page));
+  try {
+    yield* Effect.tryPromise(() =>
+      input.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] })
+    );
+    yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "false"));
+    yield* Effect.tryPromise(() =>
+      input.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+    );
+    yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "false"));
+    yield* Effect.tryPromise(() =>
+      input.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] })
+    );
+    yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
+    yield* Effect.tryPromise(() =>
+      input.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] })
+    );
+    yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "false"));
+    expect(edits).toHaveLength(0);
+  } finally {
+    yield* Effect.tryPromise(() => input.detach());
+  }
+});
+test.describe("Dashboard touch editing", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test("a brief touch does not drag, while a held touch activates and can be canceled without saving", ({
+    page,
+    context,
+  }) => Effect.runPromise(checkTouchCancellation(page, context)));
+});
+
 test("Dashboard drop updates its visible layout before the server acknowledges it", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

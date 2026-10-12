@@ -1,4 +1,9 @@
-import { Accessibility, type DragEndEvent } from "@dnd-kit/dom";
+import {
+  Accessibility,
+  type DragEndEvent,
+  PointerActivationConstraints,
+  PointerSensor,
+} from "@dnd-kit/dom";
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
 import { GripVerticalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -13,6 +18,12 @@ import { dashboardTargetAcceptsSource, resolveDashboardDrop } from "./drag-model
 
 type DashboardDragData = DashboardDragSource | DashboardDropTarget;
 const emptyCandidateId = Option.none<ReturnType<typeof freshWidgetId>>();
+const deliberatePointer = PointerSensor.configure({
+  activationConstraints: (event) =>
+    event.pointerType === "touch"
+      ? [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
+      : [new PointerActivationConstraints.Distance({ value: 8 })],
+});
 
 const { decodeSource: decodeDashboardDragSource, decodeTarget: decodeDashboardDropTarget } =
   dashboardDragData;
@@ -29,15 +40,13 @@ const resolvedTarget = (
   event: Pick<DragEndEvent, "operation">
 ): Option.Option<DashboardDropTarget> => decodeDashboardDropTarget(event.operation.target?.data);
 
-/** Emits candidate placement during dragging and one closed gesture at completion. */
+/** Keeps hover feedback local and emits one closed gesture at completion. */
 export const DashboardDragProvider = ({
   children,
   onGesture,
-  onPreview,
 }: Readonly<{
   children: ReactNode;
   onGesture: (gesture: DashboardGesture) => void;
-  onPreview: (gesture: Option.Option<DashboardGesture>) => void;
 }>): JSX.Element => {
   const candidateId = useRef(emptyCandidateId);
   const resolve = (
@@ -55,14 +64,16 @@ export const DashboardDragProvider = ({
       onDragStart={() => {
         candidateId.current = Option.some(freshWidgetId());
       }}
-      onDragOver={(event) => onPreview(resolve(event, false))}
       onDragEnd={(event) => {
         const gesture = resolve(event, event.canceled);
-        onPreview(Option.none());
         candidateId.current = Option.none();
         if (Option.isSome(gesture)) onGesture(gesture.value);
       }}
       plugins={(defaults) => [...defaults, dashboardAccessibility]}
+      sensors={(defaults) => [
+        ...defaults.filter((sensor) => sensor !== PointerSensor),
+        deliberatePointer,
+      ]}
     >
       {children}
     </DragDropProvider>
@@ -154,7 +165,9 @@ export const DashboardDropZone = ({
         aria-label={label}
         className={`dashboard-drop-zone pointer-events-none absolute z-20 h-16 ${position} ${active ? "dashboard-drop-active" : ""}`}
         ref={ref}
-      ></section>
+      >
+        {active ? <span className="dashboard-placement-label">{label}</span> : null}
+      </section>
     );
   }
   return (
@@ -162,6 +175,8 @@ export const DashboardDropZone = ({
       aria-label={label}
       className={`dashboard-drop-zone pointer-events-none absolute z-20 ${widgetTargetClass[target.edge]} ${active ? "dashboard-drop-active" : ""}`}
       ref={ref}
-    ></section>
+    >
+      {active ? <span className="dashboard-placement-label">{label}</span> : null}
+    </section>
   );
 };

@@ -400,3 +400,20 @@
     display: none;
   }
 }
+
+.dashboard-drop-active {
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.dashboard-placement-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.5rem;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}

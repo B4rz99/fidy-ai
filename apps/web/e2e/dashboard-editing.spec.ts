@@ -165,11 +165,9 @@ test("Dashboard drop updates its visible layout before the server acknowledges i
       );
       yield* startSwapDrag(page);
       const preview = page.getByLabel("Vista previa de la distribución", { exact: true });
+      yield* Effect.tryPromise(() => expect(preview).toHaveCount(0));
       yield* Effect.tryPromise(() =>
-        expect(preview.locator("h2")).toHaveText(["Otro Widget", "Gastos visibles"])
-      );
-      const previewBounds = yield* Effect.tryPromise(() =>
-        preview.locator("h2").last().boundingBox()
+        expect(page.getByRole("heading", { level: 2 }).last()).toHaveText("Otro Widget")
       );
       expect(edits).toHaveLength(0);
       yield* Effect.tryPromise(() => page.mouse.up());
@@ -179,10 +177,6 @@ test("Dashboard drop updates its visible layout before the server acknowledges i
             timeout: 500,
           })
         );
-        const pendingBounds = yield* Effect.tryPromise(() =>
-          preview.locator("h2").last().boundingBox()
-        );
-        expect(pendingBounds?.x).toBeCloseTo(previewBounds?.x ?? -1, 0);
         yield* Effect.tryPromise(() => expectSwap(edits));
       } finally {
         acknowledgment.resolve();
@@ -195,6 +189,28 @@ test("Dashboard drop updates its visible layout before the server acknowledges i
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { level: 2 }).last()).toHaveText("Otro Widget")
       );
+    })
+  ));
+
+test("Dashboard ignores small handle movements without starting a drag or saving", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const edits: Array<unknown> = [];
+      yield* install(page, edits);
+      const handle = page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true });
+      const bounds = yield* Effect.tryPromise(() => handle.boundingBox());
+      if (bounds === null) throw new Error("Missing drag handle");
+      const centerX = bounds.x + bounds.width / 2;
+      const centerY = bounds.y + bounds.height / 2;
+      const accidentalMovement = 2;
+      yield* Effect.tryPromise(() => page.mouse.move(centerX, centerY));
+      yield* Effect.tryPromise(() => page.mouse.down());
+      yield* Effect.tryPromise(() =>
+        page.mouse.move(centerX + accidentalMovement, centerY + accidentalMovement)
+      );
+      yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "false"));
+      yield* Effect.tryPromise(() => page.mouse.up());
+      expect(edits).toHaveLength(0);
     })
   ));
 test("Dashboard successful drop stays pending until the canonical reread", ({ page }) =>

@@ -10,7 +10,7 @@ channel, integration, or workflow is available to real users.
 ## One financial model, multiple interfaces
 
 WhatsApp is the conversational channel: users describe financial activity and interact with Fidy's
-hosted agent. The Foldkit web application provides structured views and controls for financial data,
+hosted agent. The React web application provides structured views and controls for financial data,
 dashboards, account security, and subscriptions. A canonical API gives user-owned agents access to
 the same operations, with explicit permissions rather than unrestricted database access.
 
@@ -47,7 +47,7 @@ provider and platform adapters. Canonical operation declarations supply typed cl
 access policy, and hosted-agent tool descriptions, keeping interfaces aligned without parallel
 hand-maintained contracts.
 
-The web application uses Foldkit, Vite, and Effect reactivity. The Bun CLI provides a user-owned-agent
+The web application uses React, Vite, and Effect Atom. The Bun CLI provides a user-owned-agent
 credential entrypoint through browser-approved pairing and native OS credential storage; it is not
 a separate authorization authority.
 

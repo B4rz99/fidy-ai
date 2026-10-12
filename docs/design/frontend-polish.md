@@ -32,7 +32,7 @@ border stays subtle. Financial formatting continues to use the existing exact-de
 
 ## Transaction journey audit
 
-Sources: `apps/web/src/features/transactions/capture-program.ts`, `program.ts`,
+Sources: `apps/web/src/features/transactions/manual-capture.tsx`, `feature.tsx`,
 `presentation.ts`, their behavior tests, and `apps/web/e2e/financial-journeys.spec.ts`.
 
 | Existing behavior                                                                                            | Recommended next change                                                                                                     | Why                                                                                                                                                              |
@@ -60,21 +60,27 @@ Sources: `apps/web/src/features/transactions/capture-program.ts`, `program.ts`,
 
 ## Enforcement
 
-The native Foldkit semantic-color rule runs through `bun run lint` and
-`bun run lint:type-aware`. Use shared `buttonVariants` and the declared theme tokens in HTML
-builders. The rule rejects raw palette colors and literal hex, RGB, HSL, and OKLCH colors.
+`@shadcn/lint` runs inside the existing root Oxlint config through `bun run lint` and
+`bun run lint:type-aware`; CI's static verification already invokes the latter.
 
-`check:foldkit` verifies the frontend framework, source extensions and direct dependencies.
-The module graph checks feature interfaces; the browser bundle guard checks initial and lazy
-chunks. Browser accessibility checks cover semantics and interaction. Review actual contrast,
-copy and responsive layout through computer use; lint cannot establish those properties.
+- `no-raw-colors` encourages declared theme colors, including inside shared primitives.
+- `no-arbitrary-values` checks application appearance while allowing layout values; primitives
+  own their structural styling.
+- `no-restyle` requires approved component variants and sizes. Content containers may control
+  spacing; table cells, Card titles/actions may control typography; Empty may have a border.
+- The old custom design-system script is removed. Blanket `dark:` and `space-*` restrictions
+  are no longer lint errors. Black/white follow the upstream rule's accepted defaults.
+- `check:shadcn` still checks component-output aliases. Accessibility lint and browser checks
+  remain separate. Lint cannot assess clarity of copy or actual foreground/background contrast.
 
-## Historical verification evidence
+The existing Oxlint integration suite includes positive and negative probes for this policy.
+See the upstream [rules](https://github.com/shadcn-ui/lint/blob/main/docs/rules.md) and
+[component contracts](https://github.com/shadcn-ui/lint/blob/main/docs/design-systems.md).
 
-The following evidence describes the original polish change before the Foldkit migration.
+## Verification evidence
 
 - Root project-reference typecheck, type-aware Oxlint, real-config design-policy probes,
-  formatting, web module graph, framework integrity, and browser bundle boundary passed.
+  formatting, web module graph, shadcn aliases, and browser bundle boundary passed.
 - Ten repository-tool tests passed. With the pinned Bun 1.4.3 runtime, all 361 web tests passed
   and Istanbul coverage passed the unchanged thresholds (90.14% branches). The older local
   Bun 1.4.1 launcher had failed two topology discovery tests by executing Bun-dependent code

@@ -342,9 +342,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
       yield* fromPlaywright(page.goto("/app/transactions"));
       yield* fromPlaywright(expect(page.getByText("La Cocina real").first()).toBeVisible());
       yield* fromPlaywright(
-        expect(
-          page.getByRole("combobox", { name: "Cambiar categoría de La Cocina real" })
-        ).toHaveValue("10000000-0000-4000-8000-000000000001")
+        expect(page.getByText("Restaurantes").filter({ visible: true }).first()).toBeVisible()
       );
     })
   ));
@@ -887,7 +885,14 @@ const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRe
       })
       .check()
   );
-  yield* fromPlaywright(page.getByLabel("Duración del token").selectOption("30"));
+  yield* fromPlaywright(
+    page
+      .getByRole("button", {
+        name: "Duración del token",
+      })
+      .click()
+  );
+  yield* fromPlaywright(page.getByRole("menuitemradio", { name: "30 días" }).click());
   yield* fromPlaywright(
     page
       .getByRole("button", {

@@ -14,7 +14,7 @@ Every plan written by `improve-animations` follows this structure. The executor 
 ## Problem
 
 What is wrong, where, and why it matters to how the product feels. Cite every
-location as `path/to/file.ts:123` and include the current code verbatim:
+location as `path/to/file.tsx:123` and include the current code verbatim:
 
 ​`css
 /* src/components/dropdown.css:14 — current */

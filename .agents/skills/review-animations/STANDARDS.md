@@ -56,7 +56,7 @@ Find curves at [easing.dev](https://easing.dev/) or [easings.co](https://easings
   ```css
   .popover {
     transform-origin: var(--transform-origin);
-  } /* Native mount attributes */
+  } /* Base UI */
   ```
   **Modals are exempt** — they appear centered in the viewport, keep `transform-origin: center`.
 - **Button press feedback.** `transform: scale(0.97)` on `:active`, `transition: transform 160ms ease-out`. Subtle (0.95–0.98). Applies to any pressable element.
@@ -75,7 +75,7 @@ Feel natural because they simulate physics; no fixed duration — they settle on
 
 Keep bounce subtle (0.1–0.3); avoid bounce in most UI — reserve for drag-to-dismiss and playful interactions. Springs maintain velocity when interrupted (keyframes restart from zero), so they're ideal for gestures users may reverse mid-motion.
 
-Mouse interactions: interpolate with a scoped spring animation rather than tying value directly to mouse position (direct = artificial, no momentum). Only do this when the motion is decorative.
+Mouse interactions: interpolate with `useSpring` rather than tying value directly to mouse position (direct = artificial, no momentum). Only do this when the motion is decorative.
 
 ## Interruptibility
 
@@ -114,7 +114,7 @@ Use `@starting-style` for entry without JS:
 }
 ```
 
-Fallback: set `data-mounted` from a scoped Foldkit Mount after the first frame and cancel pending work on scope release.
+Legacy fallback: `useEffect(() => setMounted(true), [])` + `data-mounted` attribute.
 
 ## Asymmetric timing
 
@@ -138,13 +138,10 @@ Slow where the user is deciding, fast where the system responds.
   element.style.transform = `translateY(${d}px)`; // good: only this element
   ```
 - **Framer Motion shorthands are NOT hardware-accelerated.** `x`/`y`/`scale` run on the main thread via rAF and drop frames under load. Use the full transform string:
-  ```js
-
+  ```jsx
+  <motion.div animate={{ x: 100 }} />                          // drops frames under load
+  <motion.div animate={{ transform: "translateX(100px)" }} />  // hardware accelerated
   ```
-
-element.animate([{ transform: "translateX(0)" }, { transform: "translateX(100px)" }], { duration: 200 });
-
-````
 - **CSS animations beat JS under load** — they run off the main thread; rAF-based animations stutter while the browser loads/scripts/paints. Use CSS for predetermined motion, JS for dynamic/interruptible.
 - **WAAPI** gives JS control with CSS performance (hardware-accelerated, interruptible, no library):
   ```js
@@ -153,7 +150,7 @@ element.animate([{ transform: "translateX(0)" }, { transform: "translateX(100px)
     fill: "forwards",
     easing: "cubic-bezier(0.77, 0, 0.175, 1)",
   });
-````
+  ```
 
 ## Transforms & clip-path
 
@@ -213,8 +210,8 @@ Stagger group entrances; 30–80ms between items. Longer delays feel slow. Stagg
 }
 ```
 
-```js
-const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+```jsx
+const reduce = useReducedMotion();
 const closedX = reduce ? 0 : "-100%";
 ```
 

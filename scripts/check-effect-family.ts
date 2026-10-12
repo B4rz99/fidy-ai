@@ -47,7 +47,8 @@ const isCoordinatedEffectPackage = (name: string): boolean =>
   isPackageFamily(name, "@effect/platform") ||
   isPackageFamily(name, "@effect/ai") ||
   isPackageFamily(name, "@effect/sql") ||
-  name === "@effect/vitest";
+  name === "@effect/vitest" ||
+  name === "@effect/atom-react";
 
 const readJson = <A>(schema: Schema.Codec<A, unknown>, path: string): Effect.Effect<A> =>
   Effect.map(

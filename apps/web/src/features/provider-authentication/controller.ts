@@ -1,6 +1,11 @@
-import { Cause, type Context, Effect, Option, Redacted } from "effect";
+import { PATPairingPublicCode } from "@/transport/client";
+import { useAtomSet } from "@effect/atom-react";
+import { useRouter } from "@tanstack/react-router";
+import { Cause, type Context, Effect, Option, Redacted, Schema } from "effect";
+import { Atom } from "effect/reactivity";
+import { type RefCallback, useCallback, useState } from "react";
+import { useSession } from "@/session/session-context";
 import type { AuthenticationProvider, WebAuthClient } from "@/transport/client";
-import type { ProviderViewState } from "./model";
 
 type Client = Context.Service.Shape<WebAuthClient>;
 type Pairing = Effect.Success<ReturnType<Client["browserLogin"]["startPairing"]>>;
@@ -9,7 +14,16 @@ type CommandError =
   | Effect.Error<ReturnType<Client["providerAuthentication"]["start"]>>
   | "rejected"
   | "cancelled";
+export type ProviderViewState =
+  | Readonly<{ status: "editing" }>
+  | Readonly<{ status: "waiting" }>
+  | Readonly<{ status: "confirming"; code: string }>
+  | Readonly<{ status: "recovery"; code: string }>
+  | Readonly<{ status: "uncertain" }>
+  | Readonly<{ status: "refused" }>
+  | Readonly<{ status: "cancelled" }>;
 type Submission = Readonly<{ intent: "signup" | "login"; revision: string; popup: Window }>;
+type RetryInput = Pick<Submission, "intent" | "revision">;
 const providerClient = (
   client: Client,
   provider: AuthenticationProvider
@@ -69,6 +83,13 @@ const redeem = (
     )
   );
 
+type ProviderController = Readonly<{
+  start: Atom.AtomResultFn<void, void>;
+  acknowledge: Atom.AtomResultFn<void, void>;
+  clear: () => void;
+  cancellation: () => ProviderViewState;
+  stage: (submission: Submission) => void;
+}>;
 type ControllerInput = Readonly<{
   webAuthClient: WebAuthClient;
   setState: (state: ProviderViewState) => void;
@@ -82,12 +103,9 @@ type ActiveAttempt = {
   popup: Option.Option<Window>;
   generation: number;
   completionRequested: boolean;
-  recovery: Option.Option<Redacted.Redacted<string>>;
-  recoveryElement: Option.Option<Element>;
 };
 const clearAttempt = (active: ActiveAttempt): void => {
   active.generation += 1;
-  eraseRecovery(active);
   active.submission = Option.none();
   active.pairing = Option.none();
   Option.map(active.popup, (value) => value.close());
@@ -156,8 +174,7 @@ const executeStart = (
       return;
     }
     if (result.status === "created") {
-      active.recovery = Option.some(result.backupRecoveryCode);
-      input.setState({ status: "recovery" });
+      input.setState({ status: "recovery", code: Redacted.value(result.backupRecoveryCode) });
     } else {
       yield* redeem({ client, pairing: started, authenticated: input.authenticated });
       clearAttempt(active);
@@ -172,7 +189,6 @@ const executeAcknowledgement = (
     if (Option.isNone(pairing)) {
       return;
     }
-    eraseRecovery(active);
     input.setState({ status: "waiting" });
     yield* redeem({
       client: yield* input.webAuthClient,
@@ -181,102 +197,149 @@ const executeAcknowledgement = (
     });
     clearAttempt(active);
   });
-const eraseRecovery = (active: ActiveAttempt): void => {
-  Option.map(active.recoveryElement, (element) => {
-    element.textContent = "";
-  });
-  active.recoveryElement = Option.none();
-  active.recovery = Option.none();
-};
-
-const guardedCommand =
-  (input: Omit<ControllerInput, "setState">, active: ActiveAttempt) =>
-  (
-    notify: ControllerInput["setState"],
-    work: (configured: ControllerInput) => Effect.Effect<void, CommandError>
-  ): Effect.Effect<void> =>
-    Effect.suspend(() => {
+const guardedCommand = (
+  input: ControllerInput,
+  active: ActiveAttempt,
+  command: () => Effect.Effect<void, CommandError>
+): Atom.AtomResultFn<void, void> =>
+  input.webAuthClient.runtime.fn<void>()(
+    () => {
       const current = active.generation;
-      const setState: ControllerInput["setState"] = (state) => {
-        if (current === active.generation) notify(state);
-      };
-      return work({ ...input, setState }).pipe(
-        Effect.catchCause((cause) => {
-          if (Cause.hasInterruptsOnly(cause) || current !== active.generation) return Effect.void;
-          return Effect.sync(() => {
-            const state = failureState(active, cause);
-            clearAttempt(active);
-            notify(state);
-          });
-        })
+      return command().pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause) || active.generation !== current
+            ? Effect.void
+            : Effect.sync(() => {
+                const state = failureState(active, cause);
+                clearAttempt(active);
+                input.setState(state);
+              })
+        )
       );
-    });
-
-/** Owns the private proof, popup and one-time recovery for one mounted authentication flow. */
-export const makeProviderController = (
-  input: Omit<ControllerInput, "setState">
-): ProviderController => {
+    },
+    { concurrent: false }
+  );
+const makeProviderController = (input: ControllerInput): ProviderController => {
   const active: ActiveAttempt = {
     submission: Option.none(),
     pairing: Option.none(),
     popup: Option.none(),
     generation: 0,
     completionRequested: false,
-    recovery: Option.none(),
-    recoveryElement: Option.none(),
   };
   return {
-    reservePopup: (): void => {
-      if (Option.isSome(active.popup)) return;
-      const popup = window.open("about:blank", "_blank", "popup,width=500,height=700");
-      if (popup !== null) {
-        popup.opener = null;
-        active.popup = Option.some(popup);
-      }
-    },
-    start: (submission, notify) =>
-      Effect.suspend(() => {
-        if (Option.isNone(active.popup)) return Effect.sync(() => notify({ status: "refused" }));
-        active.completionRequested = false;
-        active.submission = Option.some({ ...submission, popup: active.popup.value });
-        return guardedCommand(input, active)(notify, (configured) =>
-          executeStart(configured, active)
-        );
-      }),
-    acknowledge: (notify) =>
-      guardedCommand(input, active)(notify, (configured) =>
-        executeAcknowledgement(configured, active)
-      ),
+    start: guardedCommand(input, active, () => executeStart(input, active)),
+    acknowledge: guardedCommand(input, active, () => executeAcknowledgement(input, active)),
     clear: () => clearAttempt(active),
-    cancel: (): ProviderViewState => {
-      const state: ProviderViewState = {
-        status: active.completionRequested ? "uncertain" : "cancelled",
-      };
+    cancellation: () => ({ status: active.completionRequested ? "uncertain" : "cancelled" }),
+    stage: (value: Submission): void => {
       clearAttempt(active);
-      return state;
-    },
-    revealRecovery: (element): void => {
-      active.recoveryElement = Option.some(element);
-      element.textContent = Option.match(active.recovery, {
-        onNone: () => "",
-        onSome: Redacted.value,
-      });
-    },
-    concealRecovery: (element): void => {
-      element.textContent = "";
+      active.completionRequested = false;
+      active.submission = Option.some(value);
+      active.popup = Option.some(value.popup);
     },
   };
 };
 
-export type ProviderController = Readonly<{
-  reservePopup: () => void;
-  start: (
-    submission: Pick<Submission, "intent" | "revision">,
-    notify: ControllerInput["setState"]
-  ) => Effect.Effect<void>;
-  acknowledge: (notify: ControllerInput["setState"]) => Effect.Effect<void>;
-  cancel: () => ProviderViewState;
-  clear: () => void;
-  revealRecovery: (element: Element) => void;
-  concealRecovery: (element: Element) => void;
+/** Owns one mounted Provider attempt; proofs and recovery are discarded on navigation or restart. */
+type ProviderAuthentication = Readonly<{
+  state: ProviderViewState;
+  mounted: RefCallback<HTMLElement>;
+  start: (intent: "signup" | "login", revision: string) => void;
+  retry: () => void;
+  restart: () => void;
+  cancel: () => void;
+  acknowledge: () => void;
 }>;
+const startProvider = ({
+  controller,
+  runStart,
+  setState,
+  intent,
+  revision,
+}: Readonly<{
+  controller: ProviderController;
+  runStart: (value: void) => void;
+  setState: ControllerInput["setState"];
+}> &
+  Pick<Submission, "intent" | "revision">): void => {
+  const popup = window.open("about:blank", "_blank", "popup,width=500,height=700");
+  if (popup === null) {
+    setState({ status: "refused" });
+    return;
+  }
+  popup.opener = null;
+  controller.stage({ intent, revision, popup });
+  runStart(undefined);
+};
+export const useProviderAuthentication = ({
+  provider,
+  handoffReference,
+}: Readonly<{
+  provider: AuthenticationProvider;
+  handoffReference: Option.Option<string>;
+}>): ProviderAuthentication => {
+  const router = useRouter();
+  const session = useSession();
+  const [state, setState] = useState<ProviderViewState>({ status: "editing" });
+  const [retryInput, setRetryInput] = useState<Option.Option<RetryInput>>(() => Option.none());
+  const [controller] = useState(() =>
+    makeProviderController({
+      webAuthClient: router.options.context.webAuthClient,
+      setState,
+      provider,
+      handoffReference,
+      authenticated: () => {
+        session.completeLogin();
+        window.location.assign(destinationAfterProviderLogin(router.state.location.search.cliCode));
+      },
+    })
+  );
+  const runStart = useAtomSet(controller.start);
+  const runAcknowledgement = useAtomSet(controller.acknowledge);
+  const clear = useCallback(() => {
+    controller.clear();
+    runStart(Atom.Interrupt);
+    runAcknowledgement(Atom.Interrupt);
+  }, [controller, runStart, runAcknowledgement]);
+  const mounted = useCallback(
+    (node: Parameters<RefCallback<HTMLElement>>[0]) => (node !== null ? clear : undefined),
+    [clear]
+  );
+  const start = (intent: "signup" | "login", revision: string): void => {
+    setRetryInput(Option.some({ intent, revision }));
+    startProvider({ controller, runStart, setState, intent, revision });
+  };
+  return {
+    state,
+    mounted,
+    start,
+    retry: (): void => {
+      if (state.status !== "refused" && state.status !== "cancelled") return;
+      Option.map(retryInput, ({ intent, revision }) => start(intent, revision));
+    },
+    cancel: (): void => {
+      const cancellation = controller.cancellation();
+      clear();
+      setState(cancellation);
+    },
+    restart: (): void => {
+      clear();
+      setRetryInput(Option.none());
+      setState({ status: "editing" });
+    },
+    acknowledge: (): void => runAcknowledgement(undefined),
+  };
+};
+
+/** Closes the provider popup from the clean first-party return URL. */
+export const closeProviderReturn = (node: Parameters<RefCallback<HTMLElement>>[0]): void => {
+  if (node === null) return;
+  window.close();
+};
+
+const destinationAfterProviderLogin = (input: unknown): string =>
+  Option.match(Schema.decodeUnknownOption(PATPairingPublicCode)(input), {
+    onNone: () => "/app/transactions",
+    onSome: (code) => `/connect/cli?cliCode=${encodeURIComponent(code)}`,
+  });

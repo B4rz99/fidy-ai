@@ -18,8 +18,8 @@
 
 ## Owners
 
-- `program.ts` and `history.ts` project the authenticated canonical query lifetime and declared continuations.
-- `foldkit-view.ts` owns filters, the scroll sentinel and panel interaction; `scroll-continuation.ts` owns observer setup and cleanup through a scoped Foldkit Mount. Capture, detail, inline Category, bulk correction and summary stay in this directory.
+- `feature.tsx` and `history.ts` project the authenticated canonical query lifetime and declared continuations.
+- `workspace.tsx` owns filters, the scroll sentinel and panel interaction; `scroll-continuation.ts` owns observer setup and cleanup through the callback ref. Capture, detail, inline Category, bulk correction and summary stay in this directory.
 - Server Transactions owns capture/correction/history/search and persistence. Public Ingress reaches private Core/D1; browser fixtures do not prove deployed infrastructure.
 - This view has no Reconciliation, deletion or SourceAttestation history controls. Those canonical capabilities require a separate map and checks.
 
@@ -54,3 +54,5 @@ bun run --cwd apps/web test:browser transaction-native-pagination.spec.ts --work
 ```
 
 For live reruns, use a logged-in approved test User and only labelled synthetic records. Check summary arithmetic, save/reload individual and bulk corrections, reject a stale edit from another tab, then verify page one loads before scrolling and the next page appears at the end. Record the matching web/API revision and distinguish safe live checks from failures only simulated locally.
+
+The React restoration on 2026-10-11 returns history continuation to the React feature and its original browser adapter. The Foldkit verification above is historical evidence.

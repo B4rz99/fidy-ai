@@ -30,6 +30,7 @@ type EffectFixture = {
   readonly aiVersion: string;
   readonly sqlVersion: string;
   readonly vitestVersion: string;
+  readonly atomReactVersion: string;
   readonly qualifiedEffectVersion: string;
   readonly includeOverride: boolean;
   readonly extraOverrides: Readonly<Record<string, string>>;
@@ -67,6 +68,10 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
   const aiVersion = versionOr(Option.fromUndefinedOr(overrides.aiVersion), effectVersion);
   const sqlVersion = versionOr(Option.fromUndefinedOr(overrides.sqlVersion), effectVersion);
   const vitestVersion = versionOr(Option.fromUndefinedOr(overrides.vitestVersion), effectVersion);
+  const atomReactVersion = versionOr(
+    Option.fromUndefinedOr(overrides.atomReactVersion),
+    effectVersion
+  );
   const includeOverride = Option.getOrElse(
     Option.fromUndefinedOr(overrides.includeOverride),
     () => true
@@ -80,6 +85,7 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
       "@effect/ai": aiVersion,
       "@effect/platform-cloudflare": platformVersion,
       "@effect/sql-d1": sqlVersion,
+      "@effect/atom-react": atomReactVersion,
     },
     devDependencies: { "@effect/vitest": vitestVersion },
     overrides: {
@@ -108,6 +114,7 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
       "@effect/platform-shared": [`@effect/platform-shared@${transitiveVersion}`, ""],
       "@effect/sql-d1": [`@effect/sql-d1@${sqlVersion}`, ""],
       "@effect/vitest": [`@effect/vitest@${vitestVersion}`, ""],
+      "@effect/atom-react": [`@effect/atom-react@${atomReactVersion}`, ""],
       ...qualifiedPackage(Option.fromUndefinedOr(overrides.qualifiedEffectVersion)),
     },
   };

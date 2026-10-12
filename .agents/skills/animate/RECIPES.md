@@ -32,7 +32,7 @@ Scales out of its trigger, not out of thin air.
 
 ```css
 .popover {
-  transform-origin: var(--transform-origin); /* the native popover Mount sets this */
+  transform-origin: var(--transform-origin); /* Base UI supplies this */
   transition:
     opacity 200ms var(--ease-out),
     transform 200ms var(--ease-out);
@@ -143,7 +143,12 @@ Add drag and it becomes a gesture problem — see **Drag to dismiss** below.
 - `ease` rather than `ease-out`, slightly slower than typical UI: Sonner reads as elegant partly because its motion is tuned to the component's personality rather than to the generic UI budget.
 - If `@starting-style` isn't available, fall back to the mount flag:
 
-Set `data-mounted` from a scoped Foldkit Mount after the first frame; cancel the pending frame when its scope closes.
+```jsx
+useEffect(() => {
+  setMounted(true);
+}, []);
+// <div data-mounted={mounted}>
+```
 
 When toasts stack and the list reflows, the opacity change has to work against the height change. There's no formula for that pair — adjust until it feels right, then check it again the next day.
 

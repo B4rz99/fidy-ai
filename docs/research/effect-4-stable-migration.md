@@ -1,8 +1,5 @@
 # Coordinated stable Effect migration baseline (#978)
 
-> Historical research snapshot. The current frontend uses native Foldkit; implementation guidance
-> is in [web architecture](../../apps/web/ARCHITECTURE.md) and [Foldkit patterns](../../.patterns/foldkit.md).
-
 **Historical preparation checkpoint (2026-10-03), not current implementation instructions.**
 The complete migration subsequently merged and released through [PR #992](https://github.com/B4rz99/fidy-ai/pull/992).
 See [the integration report's final outcome](effect-4-stable-integration.md#final-outcome) for review,

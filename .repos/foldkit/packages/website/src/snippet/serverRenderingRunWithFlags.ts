@@ -1,1 +1,0 @@
-Runtime.run(application, { flags })

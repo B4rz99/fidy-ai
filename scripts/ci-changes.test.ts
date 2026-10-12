@@ -36,7 +36,7 @@ describe("PR check selection", () => {
   });
 
   it("checks web changes without starting unrelated server adapters or dependency scans", () => {
-    expect(selectedJobs(["apps/web/src/main.ts"])).toEqual([
+    expect(selectedJobs(["apps/web/src/main.tsx"])).toEqual([
       "builds",
       "unit",
       "cloudflare-infra",

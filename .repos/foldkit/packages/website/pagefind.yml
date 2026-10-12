@@ -1,4 +1,0 @@
-site: dist
-exclude_selectors:
-  - pre
-  - '[data-pagefind-ignore]'

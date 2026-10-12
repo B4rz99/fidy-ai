@@ -1,8 +1,5 @@
 # Foldkit migration feasibility
 
-> Historical research snapshot. The current frontend uses native Foldkit; implementation guidance
-> is in [web architecture](../../apps/web/ARCHITECTURE.md) and [Foldkit patterns](../../.patterns/foldkit.md).
-
 _Research snapshot: 2026-10-10. Assessment only; no migration or dependency installation._
 
 ## Assessment

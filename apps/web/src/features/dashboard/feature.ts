@@ -1,1 +1,0 @@
-export { mountDashboard } from "./program";

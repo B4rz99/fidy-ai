@@ -17,6 +17,7 @@
 /** @typedef {import("./ast-types.js").ImportDeclaration} ImportDeclaration */
 /** @typedef {import("./ast-types.js").ImportSpecifier} ImportSpecifier */
 
+import { fileURLToPath } from "node:url";
 import {
   classifyUnsafeDictionary,
   classifyUnsafeDictionaryValue,
@@ -24,22 +25,109 @@ import {
   declarationName,
 } from "./dictionary-types.js";
 
-/** First-party object shapes stay closed under declaration merging. */
+const routerRegistrationFile = fileURLToPath(
+  new URL("../../apps/web/src/app/routes.ts", import.meta.url)
+);
+const publicSiteRouteFile = fileURLToPath(
+  new URL("../../apps/web/src/features/public-site/feature.tsx", import.meta.url)
+);
+const routeFactories = new Map([
+  [routerRegistrationFile, "createWebRouter"],
+  [publicSiteRouteFile, "createPublicSiteRoute"],
+]);
+
+/** @param {TSInterfaceDeclaration} node - Interface to inspect. */
+const isRouterRegistration = (node) => {
+  const block = node.parent;
+  const module = block.type === "TSModuleBlock" ? block.parent : undefined;
+  return (
+    node.id.name === "Register" &&
+    module?.type === "TSModuleDeclaration" &&
+    module.declare &&
+    module.id.type === "Literal" &&
+    module.id.value === "@tanstack/react-router"
+  );
+};
+
+/** Keep first-party object shapes closed except for TanStack Router's required module augmentation. */
 /** @satisfies {OxlintRule} */
 const noOrdinaryInterface = {
   meta: {
     type: "problem",
-    docs: { description: "Use type aliases for first-party shapes" },
+    docs: { description: "Use type aliases except for the reviewed Router registration" },
     messages: {
       ordinaryInterface:
-        "Use a type alias for first-party shapes; aliases cannot be reopened by declaration merging and express unions, tuples and mapped types.",
+        "Use a type alias for first-party shapes: unlike interfaces, aliases cannot be reopened by declaration merging, and they also express unions, tuples, mapped types, and conditional types. Only TanStack Router's reviewed Register module augmentation needs an interface here; any new integration requiring merging needs its own reviewed exception.",
     },
     schema: [],
   },
   create(context) {
+    let registrations = 0;
     return {
       TSInterfaceDeclaration(node) {
+        if (
+          context.filename === routerRegistrationFile &&
+          registrations === 0 &&
+          isRouterRegistration(node)
+        ) {
+          registrations += 1;
+          return;
+        }
         context.report({ node, messageId: "ordinaryInterface" });
+      },
+    };
+  },
+};
+
+/**
+ * Keep route-factory inference without exempting other named functions in their files.
+ * The built-in rule remains active everywhere else; route callbacks are not named declarations.
+ */
+/** @satisfies {OxlintRule} */
+const requireRouteReturnType = {
+  meta: {
+    type: "problem",
+    docs: { description: "Require return annotations except on the two reviewed route factories" },
+    messages: {
+      routeReturnType:
+        "Named functions need an explicit return type; only the reviewed TanStack Router factories require inferred returns.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const factoryName = routeFactories.get(context.filename);
+    let factorySeen = false;
+    /** @param {import("./ast-types.js").VariableDeclarator} owner - Named function binding. */
+    const isExportedFactory = (owner) => {
+      const declaration = owner.parent;
+      return (
+        owner.id.type === "Identifier" &&
+        owner.id.name === factoryName &&
+        declaration.type === "VariableDeclaration" &&
+        declaration.parent.type === "ExportNamedDeclaration" &&
+        declaration.parent.parent.type === "Program"
+      );
+    };
+    /**
+     * @param {import("./ast-types.js").ArrowFunctionExpression | import("./ast-types.js").FunctionExpression} node - Function expression to inspect.
+     */
+    const checkInitializer = (node) => {
+      if (node.returnType !== null) return;
+      const owner = node.parent;
+      if (owner.type !== "VariableDeclarator") return;
+      if (!factorySeen && isExportedFactory(owner)) {
+        factorySeen = true;
+        return;
+      }
+      context.report({ node, messageId: "routeReturnType" });
+    };
+    return {
+      ArrowFunctionExpression: checkInitializer,
+      FunctionExpression: checkInitializer,
+      FunctionDeclaration(node) {
+        if (node.returnType === null) {
+          context.report({ node, messageId: "routeReturnType" });
+        }
       },
     };
   },
@@ -390,6 +478,54 @@ const requireInterfaceComment = {
             report(statement);
           }
         }
+      },
+    };
+  },
+};
+
+/**
+ * Ban direct use of React's useEffect. UI work is caused by an event, derived
+ * during render, or owned by a dedicated query/router/external-store API; a
+ * state transition must never be used as an indirect command. If a concrete
+ * imperative integration eventually requires synchronization, it belongs in
+ * one narrow adapter with an explicit file-scoped lint exception.
+ */
+/** @satisfies {OxlintRule} */
+const noReactUseEffect = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow direct use of React useEffect" },
+    messages: {
+      noReactUseEffect:
+        "Do not use React useEffect. Derive presentation during render, perform user-triggered commands in event handlers, and let the owning query, router, or external-store API synchronize. If a concrete imperative integration needs an effect, isolate it in a narrow adapter and request an explicit file-scoped exception; do not add a speculative one.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const reactNamespaces = new Set();
+
+    return {
+      ImportDeclaration(node) {
+        if (node.source.value !== "react") return;
+        for (const specifier of node.specifiers) {
+          if (
+            specifier.type === "ImportSpecifier" &&
+            importedName(specifier.imported) === "useEffect"
+          ) {
+            context.report({ node: specifier, messageId: "noReactUseEffect" });
+          }
+          if (
+            specifier.type === "ImportDefaultSpecifier" ||
+            specifier.type === "ImportNamespaceSpecifier"
+          ) {
+            reactNamespaces.add(specifier.local.name);
+          }
+        }
+      },
+      MemberExpression(node) {
+        if (node.object.type !== "Identifier" || !reactNamespaces.has(node.object.name)) return;
+        if (staticMemberName(node) !== "useEffect") return;
+        context.report({ node, messageId: "noReactUseEffect" });
       },
     };
   },
@@ -817,6 +953,8 @@ const plugin = {
     "no-unknown-parameters": noUnknownParameters,
     "no-unsafe-dictionary-type": noUnsafeDictionaryType,
     "no-ordinary-interface": noOrdinaryInterface,
+    "require-route-return-type": requireRouteReturnType,
+    "no-react-use-effect": noReactUseEffect,
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,
     "no-escape-hatch": noEscapeHatch,

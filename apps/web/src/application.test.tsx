@@ -1,0 +1,1235 @@
+import { StrictMode } from "react";
+import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
+import { Data, DateTime, Deferred, Effect, Layer, Option } from "effect";
+import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createWebRouter } from "@/app/routes";
+import { SessionRegistryProvider } from "@/session/session";
+import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
+import {
+  BackupRecoveryCode,
+  type FidyClient,
+  type HostedTurnClient,
+  type WebAuthClient,
+  makeFidyClient,
+  makeHostedTurnClient,
+  makeSubscriptionEnrollmentClient,
+  makeWebAuthClient,
+} from "@/transport/client";
+
+const responseJson = (
+  request: HttpClientRequest.HttpClientRequest,
+  body: unknown,
+  status = 200
+): HttpClientResponse.HttpClientResponse => {
+  const encoded = new TextEncoder().encode(JSON.stringify(body));
+  const realmBytes = new window.Uint8Array(encoded.length);
+  realmBytes.set(encoded);
+  const response = new Response(encoded, {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+  Object.defineProperty(response, "arrayBuffer", {
+    value: () => Promise.resolve(realmBytes.buffer),
+  });
+  return HttpClientResponse.fromWeb(request, response);
+};
+
+const responseNoContent = (
+  request: HttpClientRequest.HttpClientRequest
+): HttpClientResponse.HttpClientResponse => {
+  const response = new Response(null, { status: 204 });
+  Object.defineProperty(response, "arrayBuffer", {
+    value: () => Promise.resolve(new window.Uint8Array().buffer),
+  });
+  return HttpClientResponse.fromWeb(request, response);
+};
+
+const makeHttpClient = (
+  handler: (
+    request: HttpClientRequest.HttpClientRequest
+  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
+): HttpClient.HttpClient =>
+  HttpClient.makeWith<
+    HttpClientError.HttpClientError,
+    never,
+    HttpClientError.HttpClientError,
+    never
+  >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
+
+class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
+
+const fromPromise = <A,>(promise: Promise<A>): Effect.Effect<A, TestPromiseFailure> =>
+  Effect.tryPromise({
+    try: () => promise,
+    catch: (cause) => new TestPromiseFailure({ cause }),
+  });
+
+const renderRoute = (
+  path: string,
+  apiClient = makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+  webAuthClient: WebAuthClient = makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" })
+): Promise<ReturnType<typeof createWebRouter>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const router = createWebRouter({
+        apiClient,
+        webAuthClient,
+        hostedTurnClient: makeHostedTurnClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+        history: Option.some(createMemoryHistory({ initialEntries: [path] })),
+      });
+      render(
+        <SessionRegistryProvider>
+          <SubscriptionEnrollmentLifetime
+            makeClient={() =>
+              makeSubscriptionEnrollmentClient({ apiOrigin: "https://api.test.fidyapp.com" })
+            }
+          >
+            <RouterProvider router={router} />
+          </SubscriptionEnrollmentLifetime>
+        </SessionRegistryProvider>
+      );
+      yield* fromPromise(router.load());
+      return router;
+    })
+  );
+
+const renderHostedRoute = (
+  hostedTurnClient: HostedTurnClient,
+  webAuthClient: WebAuthClient = makeWebAuthClient({ apiOrigin: "https://api.test.fidyapp.com" })
+): Promise<ReturnType<typeof createWebRouter>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const router = createWebRouter({
+        apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" }),
+        webAuthClient,
+        hostedTurnClient,
+        history: Option.some(createMemoryHistory({ initialEntries: ["/settings/email"] })),
+      });
+      render(
+        <SessionRegistryProvider>
+          <StrictMode>
+            <RouterProvider router={router} />
+          </StrictMode>
+        </SessionRegistryProvider>
+      );
+      yield* fromPromise(router.load());
+      fireEvent.click(
+        yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
+      );
+      return router;
+    })
+  );
+
+const resetApplicationTest = (): void => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+};
+
+type StubResponse = Readonly<{ status: number; body: unknown }>;
+
+const successfulReplacementRequest: StubResponse = {
+  status: 200,
+  body: { data: { status: "pending" }, next: [] },
+};
+const successfulReplacementCompletion: StubResponse = {
+  status: 200,
+  body: { data: { status: "replaced" }, next: [] },
+};
+
+const emailReplacementClients = (
+  requests: Array<string>,
+  requestResponse = successfulReplacementRequest,
+  completionResponse = successfulReplacementCompletion
+): Readonly<{ apiClient: FidyClient; webAuthClient: WebAuthClient }> => {
+  const httpClient = makeHttpClient((request) => {
+    requests.push(new URL(request.url).pathname);
+    const response = request.url.endsWith("/web/email/replacement/verify")
+      ? completionResponse
+      : requestResponse;
+    return Effect.succeed(responseJson(request, response.body, response.status));
+  });
+  const layer = Layer.succeed(HttpClient.HttpClient, httpClient);
+  return {
+    apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com", httpClient: layer }),
+    webAuthClient: makeWebAuthClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: layer,
+    }),
+  };
+};
+
+const recoveryClients = (): Readonly<{
+  apiClient: FidyClient;
+  webAuthClient: WebAuthClient;
+  requests: Array<string>;
+}> => {
+  const requests: Array<string> = [];
+  const httpClient = makeHttpClient((request) => {
+    requests.push(new URL(request.url).pathname);
+    if (request.url.endsWith("/web/session/logout")) {
+      return Effect.succeed(responseNoContent(request));
+    }
+    return Effect.succeed(
+      responseJson(request, {
+        data: {
+          status: "rotated",
+          backupRecoveryCode: "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2",
+          rotatedAt: "2026-08-28T03:00:00Z",
+        },
+        next: [],
+      })
+    );
+  });
+  const layer = Layer.succeed(HttpClient.HttpClient, httpClient);
+  return {
+    apiClient: makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com", httpClient: layer }),
+    webAuthClient: makeWebAuthClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: layer,
+    }),
+    requests,
+  };
+};
+
+const beginRenderedEmailReplacement = (candidateEmail: string): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
+        target: { value: candidateEmail },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+      expect(
+        yield* fromPromise(screen.findByText(`Enviamos un código a ${candidateEmail}.`))
+      ).toBeVisible();
+    })
+  );
+
+const enterReplacementCode = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Código de verificación")), {
+        target: { value: "BCDF-GHJK-MNPQ-RSTW-XY23-4567" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+    })
+  );
+
+const submitRenderedEmailReplacement = (requests: Array<string>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPromise(beginRenderedEmailReplacement("new.mailbox@example.com"));
+      fireEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
+      yield* fromPromise(waitFor(() => expect(requests).toHaveLength(2)));
+      yield* fromPromise(enterReplacementCode());
+      expect(
+        yield* fromPromise(screen.findByText("Tu nuevo correo verificado ya está activo."))
+      ).toBeVisible();
+    })
+  );
+
+const malformedFidyClient = (): FidyClient => {
+  const httpClient = makeHttpClient((request) =>
+    Effect.succeed(responseJson(request, { unexpected: true }))
+  );
+  return makeFidyClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+};
+
+describe("public web application routes", () => {
+  afterEach(resetApplicationTest);
+  it("renders the authoritative policy at its stable route", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/politica"));
+
+        expect(
+          yield* fromPromise(
+            screen.findByRole("heading", {
+              level: 1,
+              name: "Política de tratamiento de datos personales",
+            })
+          )
+        ).toBeVisible();
+        expect(screen.getByText("policy-2026-10-09-browser-agents")).toBeVisible();
+        expect(screen.getByText(/Fidy usa a Kapso y Meta/iu)).toBeVisible();
+        expect(screen.getByText(/sin un plazo de eliminación automática/iu)).toBeVisible();
+        expect(screen.getByText(/fuera de Colombia/iu)).toBeVisible();
+        expect(
+          screen.queryByText(/conectamos automáticamente tus bancos/iu)
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("link", { name: /términos de servicio/iu })
+        ).not.toBeInTheDocument();
+      })
+    ));
+});
+
+describe("public legal draft and storage routes", () => {
+  afterEach(resetApplicationTest);
+  it("explains sign-in, session and payment storage at the public cookies route", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/cookies"));
+        expect(
+          yield* fromPromise(
+            screen.findByRole("heading", { level: 1, name: "Cookies y almacenamiento" })
+          )
+        ).toBeVisible();
+        expect(screen.getByText("__Host-fidy_session")).toBeVisible();
+        expect(screen.getByText("__Host-fidy_google")).toBeVisible();
+        expect(screen.getByText("__Host-fidy_microsoft")).toBeVisible();
+        expect(screen.getByText(/Caducan en 10 minutos/u)).toBeVisible();
+        expect(screen.getByText("fidy.billing-email.*")).toBeVisible();
+        expect(screen.getByText(/30 días desde su emisión/u)).toBeVisible();
+      })
+    ));
+
+  it("labels the proposed terms as not yet in force", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/terminos"));
+        expect(
+          yield* fromPromise(
+            screen.findByRole("heading", { level: 1, name: "Términos de servicio de Fidy" })
+          )
+        ).toBeVisible();
+        expect(screen.getByText(/No está vigente/u)).toBeVisible();
+        expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute(
+          "content",
+          "noindex"
+        );
+      })
+    ));
+});
+
+describe("public pairing route", () => {
+  afterEach(resetApplicationTest);
+  it("does not start browser pairing merely by opening its route", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/auth/pair"));
+
+        expect(
+          yield* fromPromise(screen.findByRole("heading", { name: "Inicia sesión en Fidy" }))
+        ).toBeVisible();
+        expect(
+          screen.getByRole("button", { name: "Iniciar sesión en el navegador" })
+        ).toBeVisible();
+        expect(screen.queryByText(/pairing code/iu)).not.toBeInTheDocument();
+      })
+    ));
+});
+
+const transactionCaptureInstant = (request: HttpClientRequest.HttpClientRequest): string => {
+  if (request.body._tag !== "Uint8Array") throw new Error("Expected canonical JSON body");
+  const body: unknown = JSON.parse(new TextDecoder().decode(request.body.body));
+  if (typeof body !== "object" || body === null || !("occurredAt" in body)) {
+    throw new Error("Missing occurredAt");
+  }
+  return String(body.occurredAt);
+};
+
+const httpCreated = 201;
+const httpUnavailable = 503;
+// TZDate must inherit the native Date before this fixture replaces the global constructor.
+// Lazy routes otherwise import the date subclass under fake timers and corrupt calendar instants.
+// Preload the Dashboard's date-dependent graph under the same native clock as well.
+beforeAll(() =>
+  Promise.all([import("@/ui/components/calendar"), import("@/features/dashboard/feature")])
+);
+
+const stubTransactionScreen = (): void => {
+  vi.stubGlobal("matchMedia", () => ({
+    matches: true,
+    addEventListener: (): void => undefined,
+    removeEventListener: (): void => undefined,
+  }));
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(DateTime.makeUnsafe("2025-01-12T14:00:00Z").epochMilliseconds);
+};
+const transactionCaptureClient = (
+  requests: Array<string>,
+  capturedInstants: Array<string>
+): FidyClient => {
+  const categoryId = "24000000-0000-4000-8000-000000000001";
+  const httpClient = makeHttpClient((request) => {
+    const path = new URL(request.url).pathname;
+    requests.push(`${request.method} ${path}`);
+    if (path === "/user") {
+      return Effect.succeed(
+        responseJson(request, {
+          data: {
+            id: "24000000-0000-4000-8000-000000000003",
+            serviceMarket: "CO",
+            locale: "es-CO",
+            timeZone: "America/Bogota",
+            trialPeriod: { startedAt: "2025-01-01T00:00:00Z", endsAt: "2025-01-08T00:00:00Z" },
+            createdAt: "2025-01-01T00:00:00Z",
+          },
+          next: [],
+        })
+      );
+    }
+    if (path === "/categories") {
+      return Effect.succeed(
+        responseJson(request, { data: [{ id: categoryId, label: "Restaurantes" }], next: [] })
+      );
+    }
+    if (path === "/transactions" && request.method === "POST") {
+      capturedInstants.push(transactionCaptureInstant(request));
+      return Effect.succeed(
+        responseJson(
+          request,
+          {
+            data: {
+              id: "24000000-0000-4000-8000-000000000002",
+              revision: 0,
+              money: { amount: "25000", currency: "COP" },
+              direction: "outflow",
+              counterparty: "El Corral",
+              categoryId,
+              occurredAt: "2025-01-10T05:00:00.000Z",
+              createdAt: "2026-09-08T12:00:00.000Z",
+            },
+            next: [],
+          },
+          httpCreated
+        )
+      );
+    }
+    if (path === "/transactions") {
+      return Effect.succeed(responseJson(request, { data: [], next: [] }));
+    }
+    return Effect.succeed(responseJson(request, { status: "unavailable" }, httpUnavailable));
+  });
+  return makeFidyClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+};
+
+const requestCount = (requests: ReadonlyArray<string>, target: string): number =>
+  requests.filter((request) => request === target).length;
+
+describe("signed-in web application routes", () => {
+  beforeEach(stubTransactionScreen);
+  afterEach(resetApplicationTest);
+
+  it("owns Transactions at /app/transactions and safely presents malformed canonical data", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/app/transactions", malformedFidyClient()));
+
+        expect(
+          yield* fromPromise(screen.findByText("No pudimos comunicarnos con Fidy"))
+        ).toBeVisible();
+      })
+    ));
+
+  it("captures through the generated HTTP client and presents the returned Transaction even outside the first history page", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const capturedInstants: Array<string> = [];
+        yield* fromPromise(
+          renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants))
+        );
+        expect(
+          yield* fromPromise(screen.findByText("No hay transacciones para mostrar"))
+        ).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
+        fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "25000" } });
+        fireEvent.click(screen.getByRole("button", { name: "Fecha del movimiento" }));
+        fireEvent.click(screen.getByRole("button", { name: "viernes, 10 de enero de 2025" }));
+        fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+        expect(yield* fromPromise(screen.findByText("El Corral · 10-01-2025"))).toHaveTextContent(
+          "El Corral"
+        );
+        expect(screen.getByText("El Corral · 10-01-2025")).toHaveTextContent("10-01-2025");
+        const assertRefetched = (): void => {
+          expect(requestCount(requests, "GET /transactions")).toBe(2);
+        };
+        yield* fromPromise(waitFor(assertRefetched));
+        expect(requests).toContain("POST /transactions");
+        expect(capturedInstants).toEqual(["2025-01-10T05:00:00.000Z"]);
+      })
+    ));
+});
+
+describe("signed-in web application routes — invalid Money", () => {
+  beforeEach(stubTransactionScreen);
+  afterEach(resetApplicationTest);
+
+  it("refuses malformed Money before sending a canonical create request", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const capturedInstants: Array<string> = [];
+        yield* fromPromise(
+          renderRoute("/app/transactions", transactionCaptureClient(requests, capturedInstants))
+        );
+        expect(
+          yield* fromPromise(screen.findByText("No hay transacciones para mostrar"))
+        ).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "+ Registrar" }));
+        fireEvent.change(screen.getByLabelText("Monto ($)"), {
+          target: { value: "not-a-number" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
+        expect(yield* fromPromise(screen.findByRole("alert"))).toHaveTextContent(
+          "No se pudo guardar la transacción"
+        );
+        expect(requests).not.toContain("POST /transactions");
+        expect(capturedInstants).toEqual([]);
+      })
+    ));
+});
+
+describe("backup recovery route", () => {
+  afterEach(resetApplicationTest);
+
+  it("drops one-time disclosure through navigation, logout, and a fresh application mount", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const code = BackupRecoveryCode.make("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
+        const clients = recoveryClients();
+        const router = yield* fromPromise(
+          renderRoute("/settings/recovery", clients.apiClient, clients.webAuthClient)
+        );
+
+        fireEvent.click(
+          yield* fromPromise(screen.findByRole("button", { name: "Crear un código nuevo" }))
+        );
+        expect(yield* fromPromise(screen.findByText(code))).toBeVisible();
+
+        const navigateToEmail = (): ReturnType<typeof router.navigate> =>
+          router.navigate({ to: "/settings/email" });
+        yield* fromPromise(act(navigateToEmail));
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
+        const navigateToRecovery = (): ReturnType<typeof router.navigate> =>
+          router.navigate({ to: "/settings/recovery" });
+        yield* fromPromise(act(navigateToRecovery));
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
+
+        fireEvent.click(
+          yield* fromPromise(screen.findByRole("button", { name: "Crear un código nuevo" }))
+        );
+        expect(yield* fromPromise(screen.findByText(code))).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+        const assertLoggedOut = (): void => {
+          expect(clients.requests).toContain("/web/session/logout");
+        };
+        yield* fromPromise(waitFor(assertLoggedOut));
+        expect(
+          yield* fromPromise(screen.findByRole("heading", { name: "Inicia sesión en Fidy" }))
+        ).toBeVisible();
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
+
+        cleanup();
+        yield* fromPromise(
+          renderRoute("/settings/recovery", clients.apiClient, clients.webAuthClient)
+        );
+        expect(
+          yield* fromPromise(screen.findByRole("button", { name: "Crear un código nuevo" }))
+        ).toBeVisible();
+        expect(screen.queryByText(code)).not.toBeInTheDocument();
+      })
+    ));
+});
+
+describe("verified-email replacement request route", () => {
+  afterEach(resetApplicationTest);
+
+  it("runs verified-email replacement through the rendered route and typed clients", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        localStorage.clear();
+        sessionStorage.clear();
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests);
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
+        yield* fromPromise(submitRenderedEmailReplacement(requests));
+        expect(requests).toEqual([
+          "/email/replacement",
+          "/email/replacement",
+          "/web/email/replacement/verify",
+        ]);
+        expect(window.location.search).toBe("");
+        expect(localStorage.length).toBe(0);
+        expect(sessionStorage.length).toBe(0);
+      })
+    ));
+
+  it("requires fresh pairing when replacement initiation is refused", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests, {
+          status: 401,
+          body: {
+            error: { code: "unauthenticated", message: "Authenticate before continuing." },
+            next: [],
+          },
+        });
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
+
+        fireEvent.change(yield* fromPromise(screen.findByLabelText("Nuevo correo")), {
+          target: { value: "new.mailbox@example.com" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+
+        expect(
+          yield* fromPromise(screen.findByText("Vincula el navegador de nuevo"))
+        ).toBeVisible();
+        expect(requests).toEqual(["/email/replacement"]);
+      })
+    ));
+});
+
+describe("verified-email replacement completion failures", () => {
+  afterEach(resetApplicationTest);
+
+  it("distinguishes stale authority from an invalid replacement proof", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const freshPairingResponse: StubResponse = {
+          status: 401,
+          body: {
+            error: {
+              code: "fresh_pairing_required",
+              message: "Vincula el navegador de nuevo antes de cambiar tu correo.",
+            },
+          },
+        };
+        const freshRequests: Array<string> = [];
+        const freshClients = emailReplacementClients(
+          freshRequests,
+          successfulReplacementRequest,
+          freshPairingResponse
+        );
+        yield* fromPromise(
+          renderRoute("/settings/email", freshClients.apiClient, freshClients.webAuthClient)
+        );
+        yield* fromPromise(beginRenderedEmailReplacement("fresh@example.com"));
+        yield* fromPromise(enterReplacementCode());
+        expect(
+          yield* fromPromise(screen.findByText("Vincula el navegador de nuevo"))
+        ).toBeVisible();
+
+        cleanup();
+        const invalidRequests: Array<string> = [];
+        const invalidClients = emailReplacementClients(
+          invalidRequests,
+          successfulReplacementRequest,
+          {
+            status: 400,
+            body: {
+              error: {
+                code: "verification_invalid",
+                message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
+              },
+            },
+          }
+        );
+        yield* fromPromise(
+          renderRoute("/settings/email", invalidClients.apiClient, invalidClients.webAuthClient)
+        );
+        yield* fromPromise(beginRenderedEmailReplacement("invalid@example.com"));
+        yield* fromPromise(enterReplacementCode());
+        expect(yield* fromPromise(screen.findByText("El código no es válido"))).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "Usar otro correo" }));
+        expect(yield* fromPromise(screen.findByLabelText("Nuevo correo"))).toBeVisible();
+      })
+    ));
+});
+
+describe("verified-email replacement malformed candidate", () => {
+  afterEach(resetApplicationTest);
+
+  it("keeps malformed candidate email local to the editing state", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests);
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
+        const input = yield* fromPromise(screen.findByLabelText("Nuevo correo"));
+        fireEvent.change(input, { target: { value: "not-an-email" } });
+        const form = input.closest("form");
+        if (form === null) throw new Error("replacement form missing");
+        fireEvent.submit(form);
+        const assertNoRequests = (): void => {
+          expect(requests).toHaveLength(0);
+        };
+        yield* fromPromise(waitFor(assertNoRequests));
+        expect(screen.getByLabelText("Nuevo correo")).toBeVisible();
+      })
+    ));
+});
+
+describe("verified-email replacement malformed proof", () => {
+  afterEach(resetApplicationTest);
+
+  it("rejects malformed proof locally without sending it to the API", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Array<string> = [];
+        const clients = emailReplacementClients(requests);
+        yield* fromPromise(
+          renderRoute("/settings/email", clients.apiClient, clients.webAuthClient)
+        );
+        yield* fromPromise(beginRenderedEmailReplacement("new.mailbox@example.com"));
+        const input = yield* fromPromise(screen.findByLabelText("Código de verificación"));
+        fireEvent.change(input, { target: { value: "not-a-code" } });
+        fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+        expect(yield* fromPromise(screen.findByText("El código no es válido"))).toBeVisible();
+        expect(requests).toEqual(["/email/replacement"]);
+      })
+    ));
+});
+
+const hostedReceiptLength = 64;
+const proposedStatus = 202;
+const acknowledgedStatus = 200;
+const rejectedStatus = 401;
+
+const automaticReplyClient = (paths: Array<string>): HttpClient.HttpClient => {
+  const reply = (
+    request: HttpClientRequest.HttpClientRequest
+  ): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
+    const path = new URL(request.url).pathname;
+    paths.push(path);
+    return Effect.succeed(
+      responseJson(
+        request,
+        path.endsWith("/delivery")
+          ? { status: "completed" }
+          : {
+              text: paths.length === 1 ? "Respuesta exacta" : "Segunda respuesta",
+              turnId:
+                paths.length === 1
+                  ? "10000000-0000-4000-8000-000000000097"
+                  : "10000000-0000-4000-8000-000000000098",
+              receipt: "a".repeat(hostedReceiptLength),
+            },
+        path.endsWith("/delivery") ? acknowledgedStatus : proposedStatus
+      )
+    );
+  };
+  return makeHttpClient(reply);
+};
+
+const automaticReplyTest = Effect.fnUntraced(function* () {
+  const paths: Array<string> = [];
+  const httpClient = automaticReplyClient(paths);
+  const channel = makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+  const route = renderHostedRoute(channel);
+  yield* fromPromise(route);
+  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+    target: { value: "Hola" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
+  yield* fromPromise(
+    waitFor(() => expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]))
+  );
+  const assertComposerEnabled = (): void => {
+    expect(screen.getByLabelText("Mensaje")).toBeEnabled();
+  };
+  yield* fromPromise(waitFor(assertComposerEnabled));
+  expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Confirma que la recibiste/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Mensaje"), { target: { value: "Otra pregunta" } });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  expect(yield* fromPromise(screen.findByText("Segunda respuesta"))).toBeVisible();
+  yield* fromPromise(waitFor(assertComposerEnabled));
+  expect(screen.getByText("Respuesta exacta")).toBeVisible();
+  expect(paths).toEqual([
+    "/web/hosted-turns",
+    "/web/hosted-turns/delivery",
+    "/web/hosted-turns",
+    "/web/hosted-turns/delivery",
+  ]);
+});
+
+describe("hosted Agent reply delivery", () => {
+  afterEach(resetApplicationTest);
+  it("automatically delivers a rendered reply and permits the next message without confirmation", () =>
+    Effect.runPromise(automaticReplyTest()));
+});
+
+const rejectedSubmissionTest = Effect.fnUntraced(function* (
+  failure: Readonly<{ status: number; body: string; copy: string }>
+) {
+  const paths: Array<string> = [];
+  const successful = automaticReplyClient(paths);
+  let rejected = false;
+  const httpClient = makeHttpClient((request) => {
+    if (!rejected) {
+      rejected = true;
+      return Effect.succeed(responseJson(request, { status: failure.body }, failure.status));
+    }
+    return successful.execute(request);
+  });
+  const client = makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+  const route = renderHostedRoute(client);
+  yield* fromPromise(route);
+  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+    target: { value: "Hola" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  yield* fromPromise(screen.findByText(new RegExp(failure.copy, "u")));
+  expect(screen.getByLabelText("Mensaje")).toHaveValue("Hola");
+  expect(screen.queryByText("Hola", { selector: "div" })).not.toBeInTheDocument();
+  expect(paths).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  yield* fromPromise(screen.findByText("Respuesta exacta"));
+  const assertComposerEnabled = (): void => {
+    expect(screen.getByLabelText("Mensaje")).toBeEnabled();
+  };
+  yield* fromPromise(waitFor(assertComposerEnabled));
+  expect(screen.getAllByText("Hola", { selector: "div" })).toHaveLength(1);
+  expect(screen.getAllByText("Respuesta exacta")).toHaveLength(1);
+  expect(screen.getByLabelText("Mensaje")).toHaveValue("");
+  expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]);
+});
+
+describe("failed hosted Agent submission", () => {
+  afterEach(resetApplicationTest);
+  it.each([
+    { status: 503, body: "unavailable", copy: "No se pudo completar el turno." },
+    { status: 429, body: "provider_quota_exceeded", copy: "El agente alcanzó su límite diario." },
+  ])("retains the draft after $body and retries without duplicate messages", (failure) =>
+    Effect.runPromise(rejectedSubmissionTest(failure))
+  );
+});
+
+const progressTestClient = (progress: {
+  paths: Array<string>;
+  polls: number;
+}): HttpClient.HttpClient =>
+  makeHttpClient((request) => {
+    const path = new URL(request.url).pathname;
+    progress.paths.push(path);
+    if (path.endsWith("/delivery")) {
+      return Effect.succeed(responseJson(request, { status: "completed" }, acknowledgedStatus));
+    }
+    if (path.endsWith("/progress")) progress.polls += 1;
+    if (path.endsWith("/progress") && progress.polls === 2) {
+      return Effect.succeed(responseJson(request, { status: "unauthenticated" }, rejectedStatus));
+    }
+    const body =
+      path.endsWith("/progress") && progress.polls > 2
+        ? {
+            text: "Respuesta recuperada",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "b".repeat(hostedReceiptLength),
+          }
+        : { status: "processing", turnId: "10000000-0000-4000-8000-000000000097" };
+    return Effect.succeed(responseJson(request, body, proposedStatus));
+  });
+
+const waitForProgressPoll = (progress: { polls: number }): Promise<void> =>
+  waitFor(() => {
+    expect(progress.polls).toBe(1);
+  });
+
+describe("hosted Agent progress", () => {
+  afterEach(resetApplicationTest);
+
+  it("recovers a processing Turn after a failed status lookup and delivers its visible reply", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const progress: { paths: Array<string>; polls: number } = { paths: [], polls: 0 };
+        const channel = makeHostedTurnClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(HttpClient.HttpClient, progressTestClient(progress)),
+        });
+        const route = renderHostedRoute(channel);
+        yield* fromPromise(route);
+        fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+          target: { value: "Consulta" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+        fireEvent.click(
+          yield* fromPromise(screen.findByRole("button", { name: "Consultar estado" }))
+        );
+        yield* fromPromise(waitForProgressPoll(progress));
+        fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
+        expect(
+          yield* fromPromise(screen.findByText(/No se pudo recuperar el turno/u))
+        ).toBeVisible();
+        expect(screen.getByLabelText("Mensaje")).toBeDisabled();
+        expect(screen.getByText("Consulta")).toBeVisible();
+        fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
+        expect(yield* fromPromise(screen.findByText("Respuesta recuperada"))).toBeVisible();
+        const assertComposerEnabled = (): void => {
+          expect(screen.getByLabelText("Mensaje")).toBeEnabled();
+        };
+        yield* fromPromise(waitFor(assertComposerEnabled));
+        expect(progress.paths).toEqual([
+          "/web/hosted-turns",
+          "/web/hosted-turns/progress",
+          "/web/hosted-turns/progress",
+          "/web/hosted-turns/progress",
+          "/web/hosted-turns/delivery",
+        ]);
+        expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+      })
+    ));
+});
+
+const receiptRetryClient = (receipts: Array<unknown>): HttpClient.HttpClient =>
+  makeHttpClient((request) => {
+    if (!request.url.endsWith("/delivery")) {
+      return Effect.succeed(
+        responseJson(
+          request,
+          {
+            text: "Respuesta sin confirmar",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "a".repeat(hostedReceiptLength),
+          },
+          proposedStatus
+        )
+      );
+    }
+    if (request.body._tag !== "Uint8Array") throw new Error("Expected receipt JSON body");
+    const receipt: unknown = JSON.parse(new TextDecoder().decode(request.body.body));
+    receipts.push(receipt);
+    return Effect.succeed(
+      responseJson(
+        request,
+        receipts.length === 1 ? { status: "unauthenticated" } : { status: "completed" },
+        receipts.length === 1 ? rejectedStatus : acknowledgedStatus
+      )
+    );
+  });
+
+const receiptRetryTest = Effect.fnUntraced(function* () {
+  const receipts: Array<unknown> = [];
+  const channel = makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, receiptRetryClient(receipts)),
+  });
+  yield* channel.pipe(renderHostedRoute, fromPromise);
+  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+    target: { value: "Hola" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  expect(yield* fromPromise(screen.findByText(/No pudimos guardar la respuesta/u))).toBeVisible();
+  expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reintentar conexión" })).toBeEnabled();
+  // Reopening a retained reply must not turn visibility into an automatic receipt retry.
+  fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+  fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
+  expect(yield* fromPromise(screen.findByText("Respuesta sin confirmar"))).toBeVisible();
+  expect(receipts).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Reintentar conexión" }));
+  yield* fromPromise(waitFor(() => expect(screen.getByLabelText("Mensaje")).toBeEnabled()));
+  expect(receipts).toEqual([
+    { turnId: "10000000-0000-4000-8000-000000000097", receipt: "a".repeat(hostedReceiptLength) },
+    { turnId: "10000000-0000-4000-8000-000000000097", receipt: "a".repeat(hostedReceiptLength) },
+  ]);
+  expect(screen.getByText("Respuesta sin confirmar")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Reintentar conexión" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+});
+
+describe("rejected hosted Agent receipt", () => {
+  afterEach(resetApplicationTest);
+  it("blocks submission until an explicit retry delivers the exact retained receipt", () =>
+    Effect.runPromise(receiptRetryTest()));
+});
+
+const dashboardUninitializedStatus = 404;
+const initializedDashboard = {
+  data: {
+    title: "Mi tablero",
+    layout: {
+      kind: "leaf",
+      widget: {
+        id: "f1d1a000-0000-4000-8000-000000000901",
+        type: "transaction-list",
+        limit: 10,
+      },
+    },
+  },
+  next: [],
+};
+
+const firstUseClient = (
+  requests: Array<string>,
+  initialize: Effect.Effect<unknown>,
+  readBack: Effect.Effect<unknown>
+): FidyClient => {
+  const httpClient = makeHttpClient((request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/dashboard/catalog") {
+      return Effect.succeed(responseJson(request, { data: [], next: [] }));
+    }
+    requests.push(path);
+    if (requests.length === 1) {
+      return Effect.succeed(
+        responseJson(
+          request,
+          {
+            error: { code: "dashboard_uninitialized", message: "Initialize explicitly." },
+            next: [],
+          },
+          dashboardUninitializedStatus
+        )
+      );
+    }
+    const response = path === "/dashboard/initialize" ? initialize : readBack;
+    return response.pipe(Effect.map((body) => responseJson(request, body)));
+  });
+  return makeFidyClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+};
+
+const verifyDashboardReadbackFailure = Effect.fnUntraced(function* () {
+  const initialized = Deferred.makeUnsafe<void>();
+  const readBack = Deferred.makeUnsafe<void>();
+  const requests: Array<string> = [];
+  const client = firstUseClient(
+    requests,
+    Deferred.await(initialized).pipe(Effect.as(initializedDashboard)),
+    Deferred.await(readBack).pipe(Effect.as({ unexpected: true }))
+  );
+  yield* fromPromise(renderRoute("/app/dashboard", client));
+  expect(yield* fromPromise(screen.findByText("Inicializando tablero…"))).toBeVisible();
+  yield* Deferred.succeed(initialized, undefined);
+  expect(yield* fromPromise(screen.findByText("Leyendo el tablero inicializado…"))).toBeVisible();
+  yield* Deferred.succeed(readBack, undefined);
+  expect(
+    yield* fromPromise(screen.findByText("El tablero se inicializó, pero no pudimos leerlo."))
+  ).toBeVisible();
+  expect(yield* fromPromise(screen.findByText("No pudimos comunicarnos con Fidy"))).toBeVisible();
+  expect(requests).toEqual(["/dashboard/view", "/dashboard/initialize", "/dashboard/view"]);
+});
+
+const verifyDashboardInitializationFailure = Effect.fnUntraced(function* () {
+  const requests: Array<string> = [];
+  const client = firstUseClient(
+    requests,
+    Effect.succeed({ unexpected: true }),
+    Effect.succeed({ unexpected: true })
+  );
+  yield* fromPromise(renderRoute("/app/dashboard", client));
+  expect(yield* fromPromise(screen.findByText("No pudimos inicializar el tablero."))).toBeVisible();
+  expect(requests).toEqual(["/dashboard/view", "/dashboard/initialize"]);
+});
+
+describe("signed-in web application data routes", () => {
+  afterEach(resetApplicationTest);
+
+  it("owns the authenticated Subscription offer page at /upgrade", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/upgrade", malformedFidyClient()));
+
+        expect(
+          yield* fromPromise(screen.findByRole("heading", { name: "Mejora tu suscripción" }))
+        ).toBeVisible();
+        expect(
+          yield* fromPromise(screen.findByText("No pudimos comunicarnos con Fidy"))
+        ).toBeVisible();
+      })
+    ));
+
+  it("owns the Dashboard at /app/dashboard and safely presents malformed canonical data", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/app/dashboard", malformedFidyClient()));
+
+        expect(
+          yield* fromPromise(
+            screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
+          )
+        ).toBeVisible();
+      })
+    ));
+
+  it("shows explicit initialization progress and never retries a failed second read", () =>
+    Effect.runPromise(verifyDashboardReadbackFailure()));
+
+  it("reports initialization failure without issuing another Dashboard read", () =>
+    Effect.runPromise(verifyDashboardInitializationFailure()));
+
+  it("redirects the authenticated /app index to the Dashboard", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/app", malformedFidyClient()));
+
+        expect(
+          yield* fromPromise(
+            screen.findByText("No pudimos comunicarnos con Fidy", undefined, { timeout: 3_000 })
+          )
+        ).toBeVisible();
+      })
+    ));
+});
+
+type ClosedReplyFixture = {
+  paths: Array<string>;
+  deferred: ReturnType<typeof Promise.withResolvers<HttpClientResponse.HttpClientResponse>>;
+  request: Option.Option<HttpClientRequest.HttpClientRequest>;
+};
+const closedReplyClient = (fixture: ClosedReplyFixture): HostedTurnClient =>
+  makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(
+      HttpClient.HttpClient,
+      makeHttpClient((request) => {
+        fixture.paths.push(new URL(request.url).pathname);
+        if (request.url.endsWith("/delivery")) {
+          return Effect.succeed(responseJson(request, { status: "completed" }, acknowledgedStatus));
+        }
+        fixture.request = Option.some(request);
+        return fromPromise(fixture.deferred.promise).pipe(Effect.orDie);
+      })
+    ),
+  });
+
+const draftLifetimeTest = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = {
+        paths: [],
+        deferred: Promise.withResolvers<HttpClientResponse.HttpClientResponse>(),
+        request: Option.none<HttpClientRequest.HttpClientRequest>(),
+      };
+      yield* closedReplyClient(fixture).pipe(renderHostedRoute, fromPromise);
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+        target: { value: "Mi borrador" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+      fireEvent.click(screen.getByRole("link", { name: "Transacciones" }));
+      fireEvent.click(
+        yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
+      );
+      expect(yield* fromPromise(screen.findByLabelText("Mensaje"))).toHaveValue("Mi borrador");
+      expect(fixture.paths).toEqual([]);
+      expect(screen.queryByRole("link", { name: /^Agente$/ })).not.toBeInTheDocument();
+    })
+  );
+
+const closedReplyTest = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = {
+        paths: [],
+        deferred: Promise.withResolvers<HttpClientResponse.HttpClientResponse>(),
+        request: Option.none<HttpClientRequest.HttpClientRequest>(),
+      };
+      yield* closedReplyClient(fixture).pipe(renderHostedRoute, fromPromise);
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+        target: { value: "Hola" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+      yield* fromPromise(waitFor(() => expect(fixture.paths).toEqual(["/web/hosted-turns"])));
+      fixture.deferred.resolve(
+        responseJson(
+          Option.getOrThrow(fixture.request),
+          {
+            text: "Respuesta en segundo plano",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "a".repeat(hostedReceiptLength),
+          },
+          proposedStatus
+        )
+      );
+      yield* fromPromise(act(() => fixture.deferred.promise.then(() => undefined)));
+      expect(fixture.paths).toEqual(["/web/hosted-turns"]);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
+      expect(yield* fromPromise(screen.findByText("Respuesta en segundo plano"))).toBeVisible();
+      yield* fromPromise(
+        waitFor(() =>
+          expect(fixture.paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"])
+        )
+      );
+      expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();
+    })
+  );
+
+const signedOutChatTest = (): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture: ClosedReplyFixture = {
+        paths: [],
+        deferred: Promise.withResolvers<HttpClientResponse.HttpClientResponse>(),
+        request: Option.none<HttpClientRequest.HttpClientRequest>(),
+      };
+      const clients = recoveryClients();
+      const router = yield* fromPromise(
+        renderHostedRoute(closedReplyClient(fixture), clients.webAuthClient)
+      );
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+        target: { value: "Mensaje privado anterior" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+      yield* fromPromise(waitFor(() => expect(fixture.paths).toHaveLength(1)));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+      expect(
+        yield* fromPromise(screen.findByRole("heading", { name: "Inicia sesión en Fidy" }))
+      ).toBeVisible();
+      expect(clients.requests).toContain("/web/session/logout");
+      yield* fromPromise(act(() => router.navigate({ to: "/settings/email" })));
+      fireEvent.click(
+        yield* fromPromise(screen.findByRole("button", { name: "Abrir agente Fidy" }))
+      );
+      fixture.deferred.resolve(
+        responseJson(
+          Option.getOrThrow(fixture.request),
+          {
+            text: "Respuesta privada anterior",
+            turnId: "10000000-0000-4000-8000-000000000097",
+            receipt: "a".repeat(hostedReceiptLength),
+          },
+          proposedStatus
+        )
+      );
+      yield* fromPromise(act(() => fixture.deferred.promise.then(() => undefined)));
+      expect(screen.getByLabelText("Mensaje")).toHaveValue("");
+      expect(screen.queryByText("Mensaje privado anterior")).not.toBeInTheDocument();
+      expect(screen.queryByText("Respuesta privada anterior")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+      expect(fixture.paths).toEqual(["/web/hosted-turns"]);
+    })
+  );
+
+describe("floating Agent chat lifetime", () => {
+  afterEach(resetApplicationTest);
+  it("keeps the draft across dismissal and navigation without sending it", draftLifetimeTest);
+  it("does not acknowledge a response received while the chat is closed", closedReplyTest);
+  it(
+    "discards prior history and late responses after logout replaces authentication",
+    signedOutChatTest
+  );
+});

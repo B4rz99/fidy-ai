@@ -190,7 +190,7 @@ for (const sameUser of [true, false]) {
         const userId = "10000000-0000-4000-8000-000000000001";
         window.sessionStorage.setItem(
           "fidy:pat-identity-confirmation",
-          Schema.encodeSync(Schema.UnknownFromJsonString)({
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
             version: 1,
             userId,
             expiresAt:

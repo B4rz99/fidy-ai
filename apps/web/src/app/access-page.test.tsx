@@ -213,6 +213,13 @@ for (const sameUser of [true, false]) {
           ).toBeVisible();
           expect(screen.getByText("Preserved grant", { exact: true })).toBeVisible();
           expect(screen.getByText("7 días", { selector: "dd" })).toBeVisible();
+          fireEvent.click(screen.getByRole("button", { name: "Siguiente página" }));
+          yield* wait(screen.findByRole("link", { name: "Primera página" }));
+          expect(screen.getByRole("region", { name: "Revisión del token" })).toBeVisible();
+          expect(screen.getByText("Preserved grant", { exact: true })).toBeVisible();
+          fireEvent.click(screen.getByRole("link", { name: "Primera página" }));
+          yield* wait(screen.findByRole("button", { name: "Siguiente página" }));
+          expect(screen.getByRole("region", { name: "Revisión del token" })).toBeVisible();
         } else {
           expect(yield* wait(screen.findByLabelText("Nombre"))).toHaveValue("");
           expect(

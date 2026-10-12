@@ -1,5 +1,5 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { useRouter } from "@tanstack/react-router";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
 import { type JSX, type ReactNode, type RefCallback, useCallback, useRef, useState } from "react";
@@ -176,8 +176,7 @@ export const PATManagementFeature = ({
 export { CLIConnectionFeature } from "./cli-feature";
 
 const PATCreation = (props: Parameters<typeof ManualPATView>[0]): JSX.Element => {
-  const router = useRouter();
-  const [resuming] = useState(() => router.state.location.search.resume === "pat");
+  const resuming = useRouterState({ select: (state) => state.location.search.resume === "pat" });
   return resuming ? <ResumedPATCreation {...props} /> : <ManualPATView {...props} />;
 };
 const ResumedPATCreation = (props: Parameters<typeof ManualPATView>[0]): JSX.Element => {
@@ -190,15 +189,15 @@ const ResumedPATCreation = (props: Parameters<typeof ManualPATView>[0]): JSX.Ele
   const consumed = useRef(false);
   const user = presentCanonicalQuery(result);
   const [draft, setDraft] = useState<Option.Option<Option.Option<PATDraft>>>(() => Option.none());
-  const userId = user._tag === "Ready" ? user.value.data.id : undefined;
+  const userId = user._tag === "Ready" ? Option.some(user.value.data.id) : Option.none();
   const mounted = useCallback<RefCallback<HTMLElement>>(
     (node) => {
-      if (node !== null && userId !== undefined && !consumed.current) {
+      if (node !== null && Option.isSome(userId) && !consumed.current) {
         consumed.current = true;
-        setDraft(Option.some(resumePATDraft(userId)));
+        setDraft(Option.some(resumePATDraft(userId.value)));
       }
     },
-    [userId]
+    [userId, setDraft]
   );
   if (user._tag === "Failure") {
     return (

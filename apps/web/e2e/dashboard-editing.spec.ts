@@ -162,9 +162,11 @@ const checkTouchCancellation = Effect.fnUntraced(function* (page: Page, context:
     name: "Arrastrar Gastos visibles",
     exact: true,
   });
-  yield* Effect.tryPromise(() => handle.scrollIntoViewIfNeeded());
+  const destination = page.getByRole("region", { name: "Colocar sobre Otro Widget", exact: true });
+  yield* Effect.tryPromise(() => destination.scrollIntoViewIfNeeded());
   const bounds = yield* Effect.tryPromise(() => handle.boundingBox());
-  if (bounds === null) throw new Error("Missing touch drag handle");
+  const target = yield* Effect.tryPromise(() => destination.boundingBox());
+  if (bounds === null || target === null) throw new Error("Missing touch drag geometry");
   const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
   const input = yield* Effect.tryPromise(() => context.newCDPSession(page));
   try {
@@ -180,6 +182,13 @@ const checkTouchCancellation = Effect.fnUntraced(function* (page: Page, context:
       input.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] })
     );
     yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
+    yield* Effect.tryPromise(() =>
+      input.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: target.x + target.width / 2, y: target.y + target.height / 2 }],
+      })
+    );
+    yield* Effect.tryPromise(() => expect(destination).toHaveClass(/dashboard-drop-active/u));
     yield* Effect.tryPromise(() =>
       input.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] })
     );

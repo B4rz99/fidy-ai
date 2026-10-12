@@ -1,0 +1,19 @@
+apps/server/cloudflare/recovery/support-recovery.test.ts
+  s_dba8cd4832f840::t_405c740131cc93 376-378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2d8208a46ffea7a0f9c59b6b54af3cb805e67d2",
+  "prompts": {},
+  "sessions": {
+    "s_dba8cd4832f840": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12c7c-6101-7843-92e4-dbfcda0ab148",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

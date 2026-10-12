@@ -12,6 +12,7 @@ import type { DashboardGesture } from "./editor-model";
 import { dashboardTargetAcceptsSource, resolveDashboardDrop } from "./drag-model";
 
 type DashboardDragData = DashboardDragSource | DashboardDropTarget;
+const emptyCandidateId = Option.none<ReturnType<typeof freshWidgetId>>();
 
 const { decodeSource: decodeDashboardDragSource, decodeTarget: decodeDashboardDropTarget } =
   dashboardDragData;
@@ -38,7 +39,7 @@ export const DashboardDragProvider = ({
   onGesture: (gesture: DashboardGesture) => void;
   onPreview: (gesture: Option.Option<DashboardGesture>) => void;
 }>): JSX.Element => {
-  const candidateId = useRef(Option.none<ReturnType<typeof freshWidgetId>>());
+  const candidateId = useRef(emptyCandidateId);
   const resolve = (
     event: Pick<DragEndEvent, "operation">,
     canceled: boolean

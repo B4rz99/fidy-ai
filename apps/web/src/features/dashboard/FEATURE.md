@@ -63,7 +63,7 @@ The seven initial-load built-browser scenarios intercept API responses. They ver
 - Earlier Production checks on 2026-10-11, before the React restoration in PR #1233, verified the original four Widgets, ten recent Transactions, separate Money directions, and explicit missing Budget. Rename, keyboard resize, pointer swap/edge movement, keyboard cancellation, catalog insertion and approved removal survived reload; original identities, order and weights were restored. These are historical release observations, not verification of the current React placement fix.
 - Production revision `72ddd85d9a73487a7f0f0e457700225012d718f4` verified disposable funded Budget fixtures: `1600` COP spent against caps `2000`, `1600` and `1500`. A `12.34` USD Transaction appeared separately from COP in the list, chart and metric. Fixtures were removed through canonical operations; the Dashboard matched its baseline except calculation time, and browser reload confirmed cleanup.
 - First use with a fresh approved Production User and physical touch gestures remain unverified live. Local negative tests cover ownership, withdrawal of Consent and failure recovery; failures were not induced in Production.
-- Production monthly totals have been observed against the complete retained Transaction history; read-after-delete remains pending fixture cleanup. Use only this chat's labelled fixtures.
+- Production monthly totals matched the complete retained Transaction history before and after the approved three-fixture cleanup below. Direct production Audit/SourceAttestation retention remains unverified.
 
 ```sh
 bun run --cwd apps/web test src/features/dashboard

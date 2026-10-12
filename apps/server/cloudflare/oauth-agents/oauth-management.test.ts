@@ -77,6 +77,54 @@ it("lists distinct owned agent connections with canonical activity and no creden
     })
   ));
 
+it("lists connections after freshness expires while refusing both access mutations", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const now = yield* Clock.currentTimeMillis;
+      const sessionAgeMs = 600001;
+      const hardLifetimeMs = 7776000000;
+      yield* wait(
+        fixture.db
+          .prepare(
+            "UPDATE web_sessions SET created_at_ms = ?, fresh_until_ms = ?, hard_expires_at_ms = ?"
+          )
+          .bind(now - sessionAgeMs, now - 1, now - sessionAgeMs + hardLifetimeMs)
+          .run()
+      );
+      const listed = yield* wait(
+        fixture.send("/web/oauth/connections", { headers: fixture.headers })
+      );
+      expect(listed.status).toBe(200);
+      expect(yield* wait(listed.json())).toMatchObject({
+        connections: [{ connectionId: fixture.connectionId, state: "active" }],
+      });
+      for (const path of ["/web/oauth/revoke", "/web/oauth/revoke-all"]) {
+        const response = yield* wait(
+          fixture.send(path, {
+            method: "POST",
+            headers: fixture.headers,
+            body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(
+              path.endsWith("revoke-all") ? {} : { connectionId: fixture.connectionId }
+            ),
+          })
+        );
+        expect(response.status).toBe(401);
+      }
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM oauth_connections WHERE revoked_at_ms IS NOT NULL")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+      yield* wait(fixture.db.prepare("UPDATE web_sessions SET revoked_at_ms = ?").bind(now).run());
+      expect(
+        (yield* wait(fixture.send("/web/oauth/connections", { headers: fixture.headers }))).status
+      ).toBe(401);
+    })
+  ));
+
 it("revokes one agent atomically across restart without revoking another connection", () =>
   Effect.runPromise(
     Effect.gen(function* () {

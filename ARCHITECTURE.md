@@ -101,13 +101,13 @@ credentials. Installed eligible canonical queries, ordinary mutations and author
 account-security operations remain unavailable, and canonical confirmation metadata requires exact OAuth-native confirmation for sensitive mutations (including batch children). Refresh executes through the same User coordinator with finite, scope-preserving
 credentials, atomic digest rotation and metadata-only lifecycle evidence. Recognized replay revokes
 the whole connection family, including a concurrent winner; lost delivery requires fresh browser
-approval, with no grace window or recoverable replacement cache. Fresh first-party settings list separately identifiable connections with bounded canonical activity and can atomically revoke one or all owned grants under the original User coordinator. Activity is metadata-only Audit evidence, never credential material or financial content. Browser logout, PAT revocation and OAuth revocation remain independent. Discovery is scope-private and catalog-derived; OAuth callers never become PATs, WebSessions or Hosted Agent Sessions.
+approval, with no grace window or recoverable replacement cache. Live first-party browser sessions list separately identifiable connections with bounded canonical activity. Fresh sessions can atomically revoke one or all owned grants under the original User coordinator. Activity is metadata-only Audit evidence, never credential material or financial content. Browser logout, PAT revocation and OAuth revocation remain independent. Discovery is scope-private and catalog-derived; OAuth callers never become PATs, WebSessions or Hosted Agent Sessions.
 
 The installed #988 implementation trusts OAuth-authorized client-native confirmation for an exact
 server-owned sensitive intent, with atomic single-use consumption; it does not attest human
 presence. Current supported hosts are **Claude Code and Codex only**;
 there is no browser confirmation fallback or adapter extension. Initial browser OAuth approval
-and fresh-session connection management are unchanged. See ADR 0033 for the explicitly accepted
+and fresh-session connection revocation are unchanged. See ADR 0033 for the explicitly accepted
 client-automation risk and bounded ingress/Core/D1 implementation evidence.
 
 The [compatibility report](docs/research/hosted-mcp-interoperability-977.md) records historical passing

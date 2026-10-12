@@ -1,0 +1,39 @@
+apps/server/.dependency-cruiser.mjs
+  s_dba8cd4832f840::t_dacfbbb04deee6 1617
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_dba8cd4832f840::t_dacfbbb04deee6 158,162
+infra/cloudflare/package.json
+  s_dba8cd4832f840::t_8fb2bca7bf2b38 17,20-22
+apps/web/package.json
+  s_dba8cd4832f840::t_8fb2bca7bf2b38 26-27,36,49,56
+apps/server/package.json
+  s_dba8cd4832f840::t_8fb2bca7bf2b38 289,291,301-304
+apps/cli/package.json
+  s_dba8cd4832f840::t_8fb2bca7bf2b38 18,20,23
+package.json
+  s_dba8cd4832f840::t_8fb2bca7bf2b38 53,59,61-63,68-69
+.agents/skills/cloudflare/references/cron-triggers/api.md
+  s_dba8cd4832f840::t_282e1dbff0b49a 132
+.agents/skills/cloudflare/references/cron-triggers/patterns.md
+  s_dba8cd4832f840::t_3c92e5d96785ea 222
+.agents/skills/cloudflare/references/smart-placement/api.md
+  s_dba8cd4832f840::t_20df92eeaecee3 150-153
+bun.lock
+  s_dba8cd4832f840::t_0900a8bed3b5d0 11,17,19-21,33,35,38,46,48,58-61,79-80,89,102,109,126,129-131,144-145,267,333,335,337,339,341,343,345,363,627,629,631,633,635,637,639,641,643,645,647,649,651,653,655,657,659,661,663,677,679,681,683,685,687,689,691,693,695,697,699,701,703,705,707,709,711,713,937,1133,1355,1357,1359,1361,1363,1365,1367,1369,1371,1373,1375,1491,1493
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1079f778dff12d95a786dd9a9c8e102d305e9ebf",
+  "prompts": {},
+  "sessions": {
+    "s_dba8cd4832f840": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12c7c-6101-7843-92e4-dbfcda0ab148",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

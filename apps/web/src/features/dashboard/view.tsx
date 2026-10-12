@@ -1,6 +1,6 @@
 import { PencilIcon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BigDecimal, Option, Result } from "effect";
+import { BigDecimal, Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
 import {
   type FormEvent,
@@ -44,11 +44,7 @@ import {
   moneySeriesGeometry,
 } from "./money-presentation";
 import { DashboardDragHandle, DashboardDragProvider, DashboardDropZone } from "./drag-adapter";
-import {
-  type DashboardCatalogEntry,
-  type DashboardGesture,
-  compileDashboardGesture,
-} from "./editor-model";
+import { type DashboardCatalogEntry, type DashboardGesture } from "./editor-model";
 import {
   type DashboardLayout,
   type DashboardView,
@@ -966,17 +962,6 @@ const DashboardEditorNotice = ({
   </Alert>
 );
 
-const compilePlacementPreview = (
-  gesture: Option.Option<DashboardGesture>,
-  view: DashboardView
-): Option.Option<Readonly<{ edit: DashboardEdit; view: DashboardView }>> =>
-  Option.flatMap(gesture, (candidate) => {
-    const compiled = compileDashboardGesture(candidate);
-    return Result.isSuccess(compiled)
-      ? Option.some({ edit: compiled.success, view })
-      : Option.none();
-  });
-
 /** Responsive projection of one schema-decoded canonical Dashboard view. */
 export const DashboardViewComponent = ({
   editor,
@@ -987,18 +972,7 @@ export const DashboardViewComponent = ({
 }>): JSX.Element => {
   const [editing, setEditing] = useState(false);
   const activeEditor = Option.filter(editor, () => editing);
-  const [hover, setHover] = useState(() =>
-    Option.none<Readonly<{ edit: DashboardEdit; view: DashboardView }>>()
-  );
   const pending = Option.flatMap(activeEditor, (current) => current.pendingPlacement);
-  const preview = Option.orElse(pending, () =>
-    Option.map(
-      Option.filter(hover, (candidate) => candidate.view === view && editing),
-      (candidate) => candidate.edit
-    )
-  );
-  const onPreview = (gesture: Option.Option<DashboardGesture>): void =>
-    setHover(compilePlacementPreview(gesture, view));
   const editorError = Option.flatMap(editor, (current) => current.error);
   const content = (
     <main className="flex w-full flex-col gap-5 p-4 sm:p-6">
@@ -1023,13 +997,13 @@ export const DashboardViewComponent = ({
       {Option.exists(editor, (current) => current.submitting) ? (
         <output>Guardando cambio…</output>
       ) : null}
-      <DashboardCanvas editor={activeEditor} preview={preview} view={view} />
+      <DashboardCanvas editor={activeEditor} preview={pending} view={view} />
     </main>
   );
   return Option.isNone(activeEditor) ? (
     content
   ) : (
-    <DashboardDragProvider onGesture={activeEditor.value.onGesture} onPreview={onPreview}>
+    <DashboardDragProvider onGesture={activeEditor.value.onGesture}>
       {content}
     </DashboardDragProvider>
   );

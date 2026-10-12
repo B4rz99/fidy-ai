@@ -37,7 +37,9 @@ Historical Production revision `03d94db6b3546c995be65b72c75515ae27707235` ([PR #
 The React follow-up on 2026-10-12 passed **448 web checks**, including **59 Dashboard checks**. Global coverage met the repository thresholds: statements 94.25%, branches 90.12%, functions 92.44%, lines 95.17%.
 All **9 placement browser checks** passed: five real local Core/D1 journeys and four response-fixture journeys.
 
-The stable-feedback follow-up passed **60 Dashboard checks** and **10 placement browser checks**. It reproduces tiny-motion activation and verifies that hovering leaves Widget geometry unchanged, while dropped placement still appears before acknowledgment. Production verification of this follow-up remains pending deployment.
+The stable-feedback follow-up passed **449 web checks**, including **60 Dashboard checks**, and **10 placement browser checks**. It reproduces tiny-motion activation and verifies that hovering leaves Widget geometry unchanged, while dropped placement still appears before acknowledgment.
+
+Production revision `f47063479d21c1753efa49be3e5cbe273086b423` ([PR #1237](https://github.com/B4rz99/fidy-ai/pull/1237)) passed live pointer verification on 2026-10-12. A two-pixel handle movement did not activate dragging. A deliberate drag showed the labeled green destination while all four Widget positions and dimensions stayed unchanged, allowing for scroll offset. Escape canceled without an edit. Dropping a swap returned HTTP 200, refreshed the canonical view, and survived reload. Reversing the swap and reloading restored the original four titles and order. No browser console warnings or errors were observed. Deployment metadata matched this revision, and the Production deployment workflow passed. The prior HTTP 404 was a stale Widget reference; its explicit refresh message is covered locally rather than induced again in Production.
 
 ## Verification
 

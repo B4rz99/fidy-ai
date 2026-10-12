@@ -1,3 +1,4 @@
+import { type PATDraft, preservePATDraft } from "./reauthentication-draft";
 import { browserCrypto } from "@/browser/crypto";
 import {
   type IssuedPAT,
@@ -49,6 +50,7 @@ export type IssueManualPATCommand = Readonly<{
   requestId: ManualPATRequestIdType;
   onIssued: (issued: IssuedPAT) => void;
   onFailed: () => void;
+  onReauthenticationRequired: (userId: string) => void;
 }>;
 
 /** Closed UI lifecycle that prevents issuance before exact grant review. */
@@ -73,6 +75,12 @@ export type ManualPATCreationState =
       _tag: "IssueFailed";
       grant: ReviewedManualPATGrant;
       requestId: ManualPATRequestIdType;
+    }>
+  | Readonly<{
+      _tag: "IdentityConfirmation";
+      userId: string;
+      draft: PATDraft;
+      preservationFailed: boolean;
     }>
   | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
 
@@ -376,6 +384,17 @@ const ReviewState = ({
         requestId,
         onIssued: (issued) => revealIssuedPAT(issued, setState, clipboard),
         onFailed: () => setState({ _tag: "IssueFailed", grant, requestId }),
+        onReauthenticationRequired: (userId) =>
+          setState({
+            _tag: "IdentityConfirmation",
+            userId,
+            draft: {
+              recipientLabel: grant.recipientLabel,
+              scopes: grant.scopes,
+              lifetimeDays: grant.lifetimeDays,
+            },
+            preservationFailed: false,
+          }),
       });
     }}
     edit={() =>
@@ -402,7 +421,7 @@ const FailedState = ({
     <Alert variant="destructive">
       <AlertTitle>No pudimos crear el token</AlertTitle>
       <AlertDescription>
-        Vuelve a emparejar el navegador si pasaron diez minutos y luego intenta de nuevo.
+        No se pudo confirmar la creación. Vuelve a la revisión para intentarlo de nuevo.
       </AlertDescription>
     </Alert>
     <Button
@@ -421,6 +440,49 @@ const FailedState = ({
   </div>
 );
 
+const IdentityConfirmationState = ({
+  state,
+  setState,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "IdentityConfirmation" }>;
+  setState: SetCreationState;
+}>): JSX.Element => (
+  <div className="flex flex-col gap-4">
+    <Alert>
+      <AlertTitle>Confirma tu identidad</AlertTitle>
+      <AlertDescription>
+        Para crear este token, confirma tu identidad con la misma cuenta. Conservaremos el nombre,
+        los permisos y la duración para volver a la revisión.
+      </AlertDescription>
+    </Alert>
+    {state.preservationFailed && (
+      <p role="alert">
+        No pudimos conservar el formulario. Permite el almacenamiento de esta pestaña e intenta de
+        nuevo.
+      </p>
+    )}
+    <Button
+      type="button"
+      onClick={() => {
+        if (preservePATDraft({ userId: state.userId, draft: state.draft })) {
+          window.location.assign("/auth/google?resume=pat");
+        } else {
+          setState({ ...state, preservationFailed: true });
+        }
+      }}
+    >
+      Confirmar mi identidad
+    </Button>
+    <Button
+      type="button"
+      variant="outline"
+      onClick={() => setState({ _tag: "Editing", ...state.draft })}
+    >
+      Volver al formulario
+    </Button>
+  </div>
+);
+
 const CreationContent = ({
   state,
   setState,
@@ -432,6 +494,9 @@ const CreationContent = ({
   issue: (command: IssueManualPATCommand) => void;
   clipboard: SensitiveClipboard;
 }>): JSX.Element => {
+  if (state._tag === "IdentityConfirmation") {
+    return <IdentityConfirmationState state={state} setState={setState} />;
+  }
   if (state._tag === "Editing") return <EditingState setState={setState} state={state} />;
   if (state._tag === "Reviewing" || state._tag === "Issuing") {
     return <ReviewState clipboard={clipboard} issue={issue} setState={setState} state={state} />;
@@ -458,11 +523,18 @@ const onPageHide = (listener: () => void): (() => void) => {
 export const ManualPATView = ({
   issue,
   clipboard,
+  initialDraft,
 }: Readonly<{
   issue: (command: IssueManualPATCommand) => void;
   clipboard: SensitiveClipboard;
+  initialDraft: Option.Option<PATDraft>;
 }>): JSX.Element => {
-  const [state, setState] = useState<ManualPATCreationState>(initialState);
+  const [state, setState] = useState<ManualPATCreationState>(() =>
+    Option.match(initialDraft, {
+      onNone: () => initialState,
+      onSome: (draft) => beginReview({ _tag: "Editing", ...draft }),
+    })
+  );
   const lifecycleRef: RefCallback<HTMLElement> = useCallback(
     (node) => {
       if (node === null || state._tag !== "Issued") return;

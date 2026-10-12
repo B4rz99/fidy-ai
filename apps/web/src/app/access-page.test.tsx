@@ -6,15 +6,18 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { type Cause, Effect, Layer } from "effect";
+import { type Cause, Clock, Duration, Effect, Layer, Option, Schema } from "effect";
 import { HttpClient, type HttpClientError, HttpClientResponse } from "effect/http";
 import { afterEach, expect, it } from "vitest";
+import { StrictMode } from "react";
 import { SessionRegistryProvider } from "@/session/session";
 import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { AccessManagementPage } from "./access-page";
 
 const unauthorizedStatus = 401;
 const successStatus = 200;
+const testLifetimeDays = 7;
+const handoffMinutes = 20;
 const connectionId = "10000000-0000-4000-8000-000000000001";
 const pat = {
   shortId: "sample01",
@@ -33,8 +36,37 @@ const connection = {
   state: "active",
   recentActivity: [],
 };
+const responseBody = (url: string, method: string, userId: string): unknown => {
+  const tokens = url.includes("/pats");
+  let body: unknown = { revoked: true };
+  if (url.includes("/user")) {
+    body = {
+      data: {
+        id: userId,
+        serviceMarket: "CO",
+        locale: "es-CO",
+        timeZone: "America/Bogota",
+        trialPeriod: { startedAt: "2026-10-01T14:00:00Z", endsAt: "2026-10-08T14:00:00Z" },
+        createdAt: "2026-10-01T14:00:00Z",
+      },
+      next: [],
+    };
+  } else if (tokens) {
+    body = { data: { pats: [pat] }, next: [] };
+  } else if (method === "GET") {
+    body = {
+      connections: [connection],
+      nextCursor: url.includes("after=") ? null : connectionId,
+    };
+  }
+  return body;
+};
 type FailedList = "tokens" | "connections" | "neither";
-const testClient = (failed: FailedList, requests: string[]): HttpClient.HttpClient =>
+const testClient = (
+  failed: FailedList,
+  requests: string[],
+  userId: string
+): HttpClient.HttpClient =>
   HttpClient.makeWith<
     HttpClientError.HttpClientError,
     never,
@@ -46,15 +78,7 @@ const testClient = (failed: FailedList, requests: string[]): HttpClient.HttpClie
         requests.push(`${request.method} ${request.url}`);
         const tokens = request.url.includes("/pats");
         const unavailable = failed === (tokens ? "tokens" : "connections");
-        let body: unknown = { revoked: true };
-        if (tokens) {
-          body = { data: { pats: [pat] }, next: [] };
-        } else if (request.method === "GET") {
-          body = {
-            connections: [connection],
-            nextCursor: request.url.includes("after=") ? null : connectionId,
-          };
-        }
+        let body = responseBody(request.url, request.method, userId);
         if (unavailable) {
           body = tokens
             ? { error: { code: "unauthenticated", message: "Inicia sesión" }, next: [] }
@@ -70,11 +94,21 @@ const testClient = (failed: FailedList, requests: string[]): HttpClient.HttpClie
       }),
     Effect.succeed
   );
-const mount = (failed: FailedList): ReadonlyArray<string> => {
+const mount = (
+  failed: FailedList,
+  resumedUser: Option.Option<string> = Option.none()
+): ReadonlyArray<string> => {
   const requests: string[] = [];
   const options = {
     apiOrigin: "https://api.fidyapp.com",
-    httpClient: Layer.succeed(HttpClient.HttpClient, testClient(failed, requests)),
+    httpClient: Layer.succeed(
+      HttpClient.HttpClient,
+      testClient(
+        failed,
+        requests,
+        Option.getOrElse(resumedUser, () => "10000000-0000-4000-8000-000000000001")
+      )
+    ),
   };
   const context = { apiClient: makeFidyClient(options), webAuthClient: makeWebAuthClient(options) };
   const root = createRootRouteWithContext<typeof context>()();
@@ -86,16 +120,25 @@ const mount = (failed: FailedList): ReadonlyArray<string> => {
   const router = createRouter({
     context,
     routeTree: root.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/settings/access"] }),
+    history: createMemoryHistory({
+      initialEntries: [
+        Option.isSome(resumedUser) ? "/settings/access?resume=pat" : "/settings/access",
+      ],
+    }),
   });
   render(
-    <SessionRegistryProvider>
-      <RouterProvider router={router} />
-    </SessionRegistryProvider>
+    <StrictMode>
+      <SessionRegistryProvider>
+        <RouterProvider router={router} />
+      </SessionRegistryProvider>
+    </StrictMode>
   );
   return requests;
 };
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.sessionStorage.clear();
+});
 
 const wait = <A,>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
@@ -139,3 +182,54 @@ it.each(["tokens", "connections"] as const)(
       })
     )
 );
+
+for (const sameUser of [true, false]) {
+  it(`restores the draft only for the matching authenticated User (same=${sameUser})`, () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const userId = "10000000-0000-4000-8000-000000000001";
+        window.sessionStorage.setItem(
+          "fidy:pat-identity-confirmation",
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+            version: 1,
+            userId,
+            expiresAt:
+              (yield* Clock.currentTimeMillis) +
+              Duration.toMillis(Duration.minutes(handoffMinutes)),
+            draft: {
+              recipientLabel: "Preserved grant",
+              scopes: ["read"],
+              lifetimeDays: testLifetimeDays,
+            },
+          })
+        );
+        const requests = mount(
+          "neither",
+          Option.some(sameUser ? userId : "10000000-0000-4000-8000-000000000002")
+        );
+        if (sameUser) {
+          expect(
+            yield* wait(screen.findByRole("region", { name: "Revisión del token" }))
+          ).toBeVisible();
+          expect(screen.getByText("Preserved grant", { exact: true })).toBeVisible();
+          expect(screen.getByText("7 días", { selector: "dd" })).toBeVisible();
+          fireEvent.click(screen.getByRole("button", { name: "Siguiente página" }));
+          yield* wait(screen.findByRole("link", { name: "Primera página" }));
+          expect(screen.getByRole("region", { name: "Revisión del token" })).toBeVisible();
+          expect(screen.getByText("Preserved grant", { exact: true })).toBeVisible();
+          fireEvent.click(screen.getByRole("link", { name: "Primera página" }));
+          yield* wait(screen.findByRole("button", { name: "Siguiente página" }));
+          expect(screen.getByRole("region", { name: "Revisión del token" })).toBeVisible();
+        } else {
+          expect(yield* wait(screen.findByLabelText("Nombre"))).toHaveValue("");
+          expect(
+            screen.queryByRole("region", { name: "Revisión del token" })
+          ).not.toBeInTheDocument();
+        }
+        expect(
+          requests.some((request) => request.startsWith("POST") && request.includes("/pats"))
+        ).toBe(false);
+        expect(window.sessionStorage.length).toBe(0);
+      })
+    ));
+}

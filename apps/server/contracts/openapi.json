@@ -3461,6 +3461,51 @@
         ],
         "type": "object"
       },
+      "ManualPATReauthenticationRequiredEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "ManualPATReauthenticationRequired"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "user_action_required"
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "enum": [
+                  "reauthentication_required"
+                ],
+                "type": "string"
+              },
+              "userId": {
+                "$ref": "#/components/schemas/UserId"
+              }
+            },
+            "required": [
+              "code",
+              "reason",
+              "userId"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
       "ManualPATRequestId": {
         "format": "uuid",
         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
@@ -18373,6 +18418,9 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "$ref": "#/components/schemas/ManualPATReauthenticationRequiredEncoded"
+                    },
+                    {
                       "$ref": "#/components/schemas/ConsentRequiredEncoded"
                     },
                     {
@@ -18385,7 +18433,7 @@
                 }
               }
             },
-            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+            "description": "ManualPATReauthenticationRequired | ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "409": {
             "content": {

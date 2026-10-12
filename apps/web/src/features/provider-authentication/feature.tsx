@@ -26,6 +26,7 @@ const ProviderChoice = ({
   const search = new URLSearchParams();
   if (Option.isSome(handoffReference)) search.set("handoff", handoffReference.value);
   if (Option.isSome(cliCode)) search.set("cliCode", cliCode.value);
+  if (router.state.location.search.resume === "pat") search.set("resume", "pat");
   const query = search.toString();
   return (
     <a
@@ -123,7 +124,7 @@ const EditingForm = ({
         Continuar con {provider === "google" ? "Google" : "Microsoft"}
       </Button>
       <ProviderChoice provider={provider} handoffReference={handoffReference} />
-      {Option.isNone(handoffReference) && (
+      {Option.isNone(handoffReference) && router.state.location.search.resume !== "pat" && (
         <Button
           variant="ghost"
           onClick={() => {
@@ -235,17 +236,29 @@ export const ProviderAuthenticationFeature = ({
   provider: AuthenticationProvider;
   handoffReference: Option.Option<string>;
 }>): JSX.Element => {
-  const [intent, setIntent] = useState<"signup" | "login">("signup");
+  const router = useRouter();
+  const confirmingIdentity = router.state.location.search.resume === "pat";
+  const [intent, setIntent] = useState<"signup" | "login">(confirmingIdentity ? "login" : "signup");
   const { mounted, ...authentication } = useProviderAuthentication({ provider, handoffReference });
   return (
     <main ref={mounted} className="flex min-h-svh items-center justify-center px-4 py-12">
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>
-            <h1>{intent === "signup" ? "Crea tu cuenta" : "Inicia sesión"}</h1>
+            <h1>{confirmingIdentity ? "Confirma tu identidad" : headingForIntent(intent)}</h1>
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {confirmingIdentity && (
+            <p>
+              Usa la misma cuenta para volver a crear el token con el formulario que ya completaste.
+            </p>
+          )}
+          {confirmingIdentity && (
+            <a href="/settings/access?resume=pat" className="underline">
+              Volver al token
+            </a>
+          )}
           {authentication.state.status === "editing" ? (
             <EditingForm
               provider={provider}
@@ -276,3 +289,6 @@ export const ProviderReturnFeature = ({
     <a href={`/auth/${provider}`}>Iniciar sesión</a>
   </main>
 );
+
+const headingForIntent = (intent: "signup" | "login"): string =>
+  intent === "signup" ? "Crea tu cuenta" : "Inicia sesión";

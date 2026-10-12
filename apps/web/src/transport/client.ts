@@ -284,3 +284,5 @@ export const makeSubscriptionEnrollmentClient = (
 export { RecurringDigestReport, RecurringDigestReportParams } from "@fidy/server/client";
 
 export { ProviderHandoffSearch } from "@fidy/server/client";
+
+export { ManualPATReauthenticationRequired, User } from "@fidy/server/client";

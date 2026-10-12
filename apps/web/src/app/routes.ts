@@ -151,7 +151,12 @@ const accessManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/access",
   validateSearch: (search) =>
-    Schema.decodeSync(Schema.Struct({ after: OAuthConnectionListQuery.fields.after.from }))(search),
+    Schema.decodeSync(
+      Schema.Struct({
+        resume: Schema.optionalKey(Schema.Literal("pat")),
+        after: OAuthConnectionListQuery.fields.after.from,
+      })
+    )(search),
   component: AccessManagementPage,
 });
 const emailReplacementRoute = createRoute({
@@ -213,6 +218,7 @@ const googleRoute = createRoute({
     Schema.decodeSync(
       Schema.Struct({
         ...ProviderHandoffSearch.fields,
+        resume: Schema.optionalKey(Schema.Literal("pat")),
         cliCode: Schema.optionalKey(PATPairingPublicCode),
       })
     )(search),
@@ -230,6 +236,7 @@ const microsoftRoute = createRoute({
     Schema.decodeSync(
       Schema.Struct({
         ...ProviderHandoffSearch.fields,
+        resume: Schema.optionalKey(Schema.Literal("pat")),
         cliCode: Schema.optionalKey(PATPairingPublicCode),
       })
     )(search),

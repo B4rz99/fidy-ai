@@ -106,7 +106,9 @@ export const ManagementPage = ({
     refreshQuery();
   };
   const next = (id: OAuthConnectionId): void => {
-    router.navigate({ to: "/settings/access", search: { after: id } }).catch(() => undefined);
+    router
+      .navigate({ to: "/settings/access", search: (previous) => ({ ...previous, after: id }) })
+      .catch(() => undefined);
   };
   return (
     <section className="flex min-w-0 flex-col gap-4">
@@ -128,11 +130,18 @@ export const ManagementPage = ({
           Actualizar lista
         </Button>
       ) : null}
-      {Option.isSome(after) ? (
-        <Button variant="outline" render={<Link to="/settings/access" search={{}} />}>
-          Primera página
-        </Button>
-      ) : null}
+      {Option.isSome(after) ? <FirstConnectionsPage /> : null}
     </section>
   );
 };
+
+const FirstConnectionsPage = (): JSX.Element => (
+  <Button
+    variant="outline"
+    render={
+      <Link to="/settings/access" search={(previous) => ({ ...previous, after: undefined })} />
+    }
+  >
+    Primera página
+  </Button>
+);

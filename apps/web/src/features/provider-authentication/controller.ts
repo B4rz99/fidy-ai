@@ -291,7 +291,7 @@ export const useProviderAuthentication = ({
       handoffReference,
       authenticated: () => {
         session.completeLogin();
-        window.location.assign(destinationAfterProviderLogin(router.state.location.search.cliCode));
+        window.location.assign(destinationAfterProviderLogin(router.state.location.search));
       },
     })
   );
@@ -338,8 +338,17 @@ export const closeProviderReturn = (node: Parameters<RefCallback<HTMLElement>>[0
   window.close();
 };
 
-const destinationAfterProviderLogin = (input: unknown): string =>
-  Option.match(Schema.decodeUnknownOption(PATPairingPublicCode)(input), {
+const destinationAfterProviderLogin = (input: unknown): string => {
+  const search = Schema.decodeUnknownOption(
+    Schema.Struct({
+      resume: Schema.optionalKey(Schema.Literal("pat")),
+      cliCode: Schema.optionalKey(PATPairingPublicCode),
+    })
+  )(input);
+  if (Option.isNone(search)) return "/app/transactions";
+  if (search.value.resume === "pat") return "/settings/access?resume=pat";
+  return Option.match(Option.fromUndefinedOr(search.value.cliCode), {
     onNone: () => "/app/transactions",
     onSome: (code) => `/connect/cli?cliCode=${encodeURIComponent(code)}`,
   });
+};

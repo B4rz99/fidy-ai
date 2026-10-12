@@ -225,7 +225,22 @@ export const createManualPAT = ({
 > =>
   Effect.gen(function* () {
     const session = yield* webSession({ request, db, fresh: true });
-    if (Option.isNone(session)) return unauthorized();
+    if (Option.isNone(session)) {
+      const live = yield* webSession({ request, db, fresh: false });
+      return Option.isNone(live)
+        ? unauthorized()
+        : response({
+            status: httpForbidden,
+            body: {
+              error: {
+                code: "user_action_required",
+                reason: "reauthentication_required",
+                userId: live.value.user_id,
+              },
+              next: [],
+            },
+          });
+    }
     const input = yield* decodeBody({
       request,
       schema: Schema.toCodecJson(CreateManualPATPayload),

@@ -15,9 +15,9 @@
 
 ## Owners
 
-- `app/native-access.ts` composes the page and owns child mount admission/disposal; `app/native-routes.ts` and `native-view.ts` own routing and navigation.
-- `pats/management-program.ts` owns canonical token reads and revocation, while `manual-program.ts` and `manual-disclosure.ts` own reviewed issuance and private one-time disclosure.
-- `oauth-connections/management-program.ts` owns MCP listing and revocation. Combining the presentation does not combine PAT and OAuth authority.
+- `app/access-page.tsx` composes the combined React page; `app/routes.ts` owns routing.
+- `pats/feature.tsx` owns canonical token reads and mutation commands; `view.tsx` owns reviewed issuance and private one-time disclosure. `reauthentication-draft.ts` bounds the non-secret same-User handoff.
+- `oauth-connections/feature.tsx` owns MCP listing and revocation. Combining the presentation does not combine PAT and OAuth authority.
 - The server's Tokens and OAuth Agents publications remain the sole API contracts. `/connect/cli` is the separate PATPairing authorization surface; Accesos has no generic code-entry flow.
 
 ## Evidence and remaining checks
@@ -28,7 +28,7 @@ Audit resumed on 2026-10-11 from Foldkit trunk revision `8ce7fd176d98968250b080c
 
 Additional local audit on 2026-10-11: the real public Ingress/Core/D1 browser journey returned 25 MCP connections, then the final connection without duplicate identities, and returned to page one within Accesos. The independent fixture seeds metadata only, with no usable OAuth grant or bearer; it proves listing continuation, while native OAuth approval/revocation journeys establish authority separately. A 390px keyboard journey verified name entry, scope toggling, duration selection, review activation and restoration of the edited draft.
 
-Production release `d1a1151efb38776ea3c11b257a9db989e3592d5c` deployed successfully on 2026-10-11. The signed-in browser displayed the combined Accesos page and actual PAT metadata with date-only formatting. MCP listing correctly refused the older WebSession and offered fresh sign-in; this is not evidence of a successful MCP read. The release deferred Workers AI conformance for exhausted quota without blocking deployment.
+Production release `d1a1151efb38776ea3c11b257a9db989e3592d5c` deployed successfully on 2026-10-11. The signed-in browser displayed the combined Accesos page and actual PAT metadata with date-only formatting. MCP listing unnecessarily refused the older live WebSession and offered fresh sign-in. This read-only freshness bug was fixed in PR #1232. The earlier release deferred Workers AI conformance for exhausted quota without blocking deployment.
 
 Remaining live checks: deployed combined-page PAT issuance/revocation on an approved test User and current-artifact account replacement. Production continuation past 25 connections requires suitable existing data; local fixture evidence does not establish it. Workers AI availability is not required for these operations. Do not mark them as passed from fixtures, older deployments, or provider quota reset.
 
@@ -39,4 +39,12 @@ bun run --cwd apps/web test src/features/pats src/features/oauth-connections src
 bun run --cwd apps/web test:browser access-management.spec.ts access-native-pagination.spec.ts oauth-review.spec.ts --workers=1
 ```
 
-On 2026-10-12 the MCP read boundary was changed to require a live session, while individual and aggregate revocation retain fresh-session admission and commit-time guards. Worker/D1 regression coverage checks the freshness-expired read, both mutation refusals, and revoked-session read refusal. Deployment and live verification of this change remain pending.
+On 2026-10-12 the MCP read boundary was changed to require a live session, while individual and aggregate revocation retain fresh-session admission and commit-time guards. All 15 Worker/D1 management tests passed, including the freshness-expired read, both mutation refusals, and revoked-session read refusal. All four combined-access browser checks and five native OAuth browser journeys passed with the updated dependency pins.
+
+PR #1232 merged as `429722121aa03f05ff6550cf58833c463a96ff92`, and [production deployment 38265874719](https://github.com/B4rz99/fidy-ai/actions/runs/38265874719) passed. The public deployment metadata reported that revision. Reloading the same existing production browser session, without signing in again, displayed actual PAT metadata and a successful empty MCP result (“No hay conexiones en esta página.”), with no error alert or sign-in prompt. Before deployment the same session displayed a MCP read failure. This proves the live read-only freshness fix; it does not establish production grant creation, revocation, account replacement or multi-page MCP continuation.
+
+The User approved a seven-day, Lectura-only production token named `Accesos QA 20261012`. Submission using the older session was refused and the frontend displayed “Sesión vencida”. Returning to Accesos with the same cookie still loaded the existing two PATs and successful MCP evidence; no test token was listed. This establishes live refusal of creation without recent authentication, while confirming ordinary read authority remains valid. The expired-session copy and disposal were misleading for a freshness-only refusal. Issue #1234 implements a distinct identity-confirmation handoff; deployment verification remains pending. Existing-account Google reauthentication reported “Cancelaste el acceso”; successful issuance/revocation therefore awaits the User's fresh sign-in, with grant approval already recorded.
+
+Identity-confirmation audit, 2026-10-12: manual issuance now distinguishes a live session requiring recent authentication (403 `reauthentication_required`) from an expired or revoked session (401). The former retains the mounted form and offers “Confirmar mi identidad”. An explicit click stores only the selected name, permissions and duration in tab-scoped session storage for at most 20 minutes. Google or Microsoft existing-account sign-in returns to Accesos. The authenticated User must match the saved User; invalid, expired or changed-account drafts are discarded. Restoration returns to review with a newly calculated expiry and request identity; it never creates a token automatically. No bearer or pairing proof enters storage.
+
+The native Core/D1 Google and Microsoft browser journeys cover refusal, identity confirmation, restored seven-day review, explicit issuance and revocation. Rendered combined-page checks include same-User and changed-User restoration under React Strict Mode. These establish local integration behaviour, not successful production provider sign-in. The approved production test token remains pending that live verification.

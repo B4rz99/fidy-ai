@@ -155,10 +155,11 @@ const assertUnderScopedBrowser = (
       );
       expect(browserRefusal.status).toBe(forbidden);
       expect(browserRefusal.body).not.toContain("OTHER-USER-PRIVATE");
+      const runProbe = Effect.runPromiseWith(yield* Effect.context<never>());
       yield* fromPlaywright(
         page.route(`${api}/transactions?*`, (route) =>
           // Replay this UI query with only the CLI bearer: browser WebSessions have no reduced scope.
-          Effect.runPromise(
+          runProbe(
             probeCanonicalRequest(() =>
               request.get(route.request().url(), {
                 headers: {

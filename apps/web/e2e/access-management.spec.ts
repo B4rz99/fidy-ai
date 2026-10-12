@@ -191,3 +191,40 @@ test("Accesos refreshes issued metadata and erases its one-time disclosure on na
       );
     })
   ));
+
+test("narrow Accesos permits keyboard grant review and restores the draft for editing", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+      yield* Effect.tryPromise(() => installAccess(page));
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
+      const name = page.getByLabel("Nombre", { exact: true });
+      yield* Effect.tryPromise(() => name.fill("Agente teclado"));
+      yield* Effect.tryPromise(() => name.press("Tab"));
+      const read = page.getByRole("checkbox", { name: /^Lectura:/u });
+      yield* Effect.tryPromise(() => expect(read).toBeFocused());
+      yield* Effect.tryPromise(() => read.press("Space"));
+      yield* Effect.tryPromise(() => expect(read).toBeChecked());
+      yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+      yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+      yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+      const duration = page.getByLabel("Duración del token", { exact: true });
+      yield* Effect.tryPromise(() => expect(duration).toBeFocused());
+      yield* Effect.tryPromise(() => duration.press("7"));
+      yield* Effect.tryPromise(() => expect(duration).toHaveValue("7"));
+      yield* Effect.tryPromise(() => duration.press("Tab"));
+      const create = page.getByRole("button", { name: "Crear token", exact: true });
+      yield* Effect.tryPromise(() => expect(create).toBeFocused());
+      yield* Effect.tryPromise(() => create.press("Enter"));
+      const review = page.getByRole("region", { name: "Revisión del token" });
+      yield* Effect.tryPromise(() => expect(review).toBeVisible());
+      const edit = review.getByRole("button", { name: "Editar", exact: true });
+      yield* Effect.tryPromise(() => edit.focus());
+      yield* Effect.tryPromise(() => edit.press("Enter"));
+      yield* Effect.tryPromise(() => expect(name).toHaveValue("Agente teclado"));
+      yield* Effect.tryPromise(() => expect(read).toBeChecked());
+      yield* Effect.tryPromise(() => expect(duration).toHaveValue("7"));
+    })
+  ));

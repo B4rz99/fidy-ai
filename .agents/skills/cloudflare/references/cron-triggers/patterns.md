@@ -219,7 +219,7 @@ class Default(WorkerEntrypoint):
 
 ## Testing Patterns
 
-**Local testing with /\__scheduled:**
+**Local testing with /\_\_scheduled:**
 
 ```bash
 # Start dev server

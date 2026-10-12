@@ -16,6 +16,8 @@ On 2026-10-11, **10 rendered checks** passed across the feature and controller s
 
 The real built-browser replacement journey first timed out at the success assertion while displaying “Procesando…”. An isolated rerun with a 30-second assertion deadline passed in **8.2 seconds**, without application changes. It signed in through real Core, requested replacement through public operations, delivered a synthetic proof at the external-provider fixture, completed replacement, and verified the success display and absence of proof/browser storage. This proves the local workflow, not real provider delivery or production behaviour.
 
+A further isolated rerun on 2026-10-11 from the merged Foldkit revision passed in **8.1 seconds** with the ordinary browser assertion deadlines and no application changes. This closes a missing ordinary-deadline repeat; representative-load and Production evidence remain separate.
+
 Two actual Worker/D1 checks also passed for malformed replacement work, revoked/foreign sessions, and bounded proof delivery across rejected attempts.
 
 Production replacement remains untested. Do not rotate the User's real mailbox as an audit fixture. Repeat timing checks under representative load before treating the earlier timeout as resolved performance evidence.

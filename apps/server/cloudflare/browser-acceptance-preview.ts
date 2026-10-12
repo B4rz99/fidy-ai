@@ -9,6 +9,7 @@ import {
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import {
+  accessUserId,
   dashboardUserId,
   db,
   firstCardUserId,
@@ -391,6 +392,7 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
 const approvedFixtureUser = (parameters: URLSearchParams): string => {
+  if (parameters.get("access") === "true") return accessUserId;
   if (parameters.get("dashboard") === "true") return dashboardUserId;
   if (parameters.get("pagination") === "true") return paginationUserId;
   if (parameters.get("firstCard") === "true") return firstCardUserId;

@@ -3,7 +3,7 @@
 Read the pattern for the area you are changing, then use its cited source in the matching checkout to verify API behavior and idiomatic usage. Add an entry when researching an area not yet covered.
 
 For Effect/Alchemy, first read [the selected stable source map](effect-4-stable.md). Current
-API authority is the integrity-locked published TypeScript source in the installed 4.0.0 / beta.80
+API authority is the integrity-locked published TypeScript source in the installed 4.0.1 / beta.80
 packages, including Fidy's Alchemy patch. `.repos/effect` is a refreshed upstream-main reference;
 it is not byte-identical to the pinned release. `.repos/alchemy` remains an older snapshot.
 Foldkit → `.repos/foldkit`; verify its upstream implementation and examples against the installed,

@@ -25,7 +25,7 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 const signInWithIdentity = (
   { page, request }: SignInFixture,
-  identity: "primary" | "firstCard" | "dashboard" | "pagination"
+  identity: "primary" | "firstCard" | "dashboard" | "pagination" | "access"
 ): Promise<void> =>
   page.clock
     .install()
@@ -109,3 +109,7 @@ export const signInDashboardThroughCore = (input: SignInFixture): Promise<void> 
 /** Independent retained history spanning more than one canonical page. */
 export const signInPaginationThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, "pagination");
+
+/** Independent metadata-only MCP continuation User; no usable OAuth grant is seeded. */
+export const signInAccessThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, "access");

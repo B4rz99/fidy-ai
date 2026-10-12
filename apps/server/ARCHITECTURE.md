@@ -175,9 +175,9 @@ risk. Missing capability, unsupported interaction or invalid acceptance refuses 
 accept/cancel/headless evidence exercises the public ingress, coordinator, Core and native D1;
 it does not authorize deployment or onboarding.
 
-Fresh first-party browser settings list bounded connection metadata and at most three attributable
-canonical activity entries, then revoke one or all owned connections atomically with append-only
-Consent evidence. Safety controls remain reachable after processing Consent withdrawal. Revocation
+Live first-party browser sessions list bounded connection metadata and at most three attributable
+canonical activity entries. Revoking one or all owned connections requires a fresh session and commits
+atomically with append-only Consent evidence. Safety controls remain reachable after processing Consent withdrawal. Revocation
 stops later calls and refresh without undoing committed work or affecting PATs, browser logout or
 Hosted Agent Sessions. Malformed or unavailable metadata fails closed, never as an empty list.
 

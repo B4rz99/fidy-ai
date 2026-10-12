@@ -30,7 +30,9 @@ Dragging previews the resulting Widget arrangement using the last canonical fina
 
 Dropping shows the placement immediately and announces “Guardando cambio…”. Editing stays disabled until the canonical reread completes. Refused or uncertain edits and failed rereads restore the last confirmed arrangement; an uncertain edit is never automatically replayed. The preview is transient presentation state, not another persisted Dashboard document.
 
-`dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment, and keyboard cancellation through the built browser. `dashboard-core.spec.ts` checks preview geometry against the persisted result through public Ingress, private Core, and local D1. Production verification of this placement change is pending deployment.
+`dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment, and keyboard cancellation through the built browser. `dashboard-core.spec.ts` checks preview geometry against the persisted result through public Ingress, private Core, and local D1.
+
+Production revision `03d94db6b3546c995be65b72c75515ae27707235` ([PR #1229](https://github.com/B4rz99/fidy-ai/pull/1229)) passed live pointer verification on 2026-10-12: hover rendered the proposed full Widget arrangement, Escape removed the preview, and a dropped swap displayed the new placement immediately before its canonical reread. The swap survived reload. Reversing it and reloading restored the original four titles and desktop positions. Deployment metadata matched the tested revision. Delayed saves and failure recovery were exercised locally, not induced in Production.
 
 The React follow-up on 2026-10-12 passed **448 web checks**, including **59 Dashboard checks**. Global coverage met the repository thresholds: statements 94.25%, branches 90.12%, functions 92.44%, lines 95.17%.
 All **9 placement browser checks** passed: five real local Core/D1 journeys and four response-fixture journeys.

@@ -32,6 +32,9 @@ Dropping shows the placement immediately and announces “Guardando cambio…”
 
 `dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment, and keyboard cancellation through the built browser. `dashboard-core.spec.ts` checks preview geometry against the persisted result through public Ingress, private Core, and local D1. Production verification of this placement change is pending deployment.
 
+The React follow-up on 2026-10-12 passed **440 web checks**, including **57 Dashboard checks**. Global coverage met the repository thresholds: statements 94.30%, branches 90.03%, functions 92.44%, lines 95.26%.
+All **9 placement browser checks** passed: five real local Core/D1 journeys and four response-fixture journeys.
+
 ## Verification
 
 On 2026-10-11, audited release checkout based on `a2483f5dd1939fc3c3a37887c4e93c8081893666` passed:
@@ -47,12 +50,13 @@ The real built-browser customization check also passed (**1 check**, 12.5 second
 
 The seven initial-load built-browser scenarios intercept API responses. They verify the built UI and request sequence, not production financial results. The separate Worker/D1 suite exercises actual local persistence and admitted execution. This document is an audit artifact in the development checkout, not evidence that this checkout has been deployed.
 
-## Open audit findings and remaining checks
+## Historical Production evidence and remaining checks
 
 - [Issue #1214](https://github.com/B4rz99/fidy-ai/issues/1214): canonical title was ignored by the web heading. The focused regression reproduced it, then all **45 web feature checks** and **24 application checks** passed after rendering `view.title`. The real local browser edit/reload check also passed. The fix merged in [PR #1216](https://github.com/B4rz99/fidy-ai/pull/1216); production verification remains pending because deployment failed its live Workers AI preflight.
 - Real admitted Dashboard initialization/edit/read, ownership refusals, and retained Audit evidence passed the local Worker/D1 suite; repeat production behaviour separately.
-- Widget rename/remove and read-after-save passed against the real local server. Keyboard add/move/resize and rejected/uncertain edits still need real browser verification.
-- Production totals and read-after-delete remain pending the chat release and provider availability. Use only this chat's labelled fixtures.
+- Earlier Production checks on 2026-10-11, before the React restoration in PR #1233, verified the original four Widgets, ten recent Transactions, separate Money directions, and explicit missing Budget. Rename, keyboard resize, pointer swap/edge movement, keyboard cancellation, catalog insertion and approved removal survived reload; original identities, order and weights were restored. These are historical release observations, not verification of the current React placement fix.
+- Production revision `72ddd85d9a73487a7f0f0e457700225012d718f4` verified disposable funded Budget fixtures: `1600` COP spent against caps `2000`, `1600` and `1500`. A `12.34` USD Transaction appeared separately from COP in the list, chart and metric. Fixtures were removed through canonical operations; the Dashboard matched its baseline except calculation time, and browser reload confirmed cleanup.
+- First use with a fresh approved Production User and physical touch gestures remain unverified live. Local negative tests cover ownership, withdrawal of Consent and failure recovery; failures were not induced in Production.
 
 ```sh
 bun run --cwd apps/web test src/features/dashboard

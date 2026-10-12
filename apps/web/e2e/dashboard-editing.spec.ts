@@ -7,6 +7,36 @@ const { test, expect } = playwright;
 const failView = (route: Route): Promise<void> => route.abort("failed");
 const firstId = "24000000-0000-4000-8000-000000000255";
 const secondId = "24000000-0000-4000-8000-000000000256";
+const catalog = [
+  {
+    id: "monthly-spending",
+    name: "Gastos del mes",
+    description: "Gastos por categoría.",
+    widget: { type: "spending-chart", groupBy: "category", period: "this-month" },
+  },
+  {
+    id: "restaurant-budget-cop",
+    name: "Presupuesto",
+    description: "Presupuesto COP.",
+    widget: {
+      type: "budget-bar",
+      categoryId: "24000000-0000-4000-8000-000000000257",
+      currency: "COP",
+    },
+  },
+  {
+    id: "recent-transactions",
+    name: "Transacciones",
+    description: "Últimas transacciones.",
+    widget: { type: "transaction-list", limit: 10 },
+  },
+  {
+    id: "monthly-outflows",
+    name: "Salidas",
+    description: "Salidas del mes.",
+    widget: { type: "custom-metric", label: "Salidas", aggregation: "sum", period: "this-month" },
+  },
+];
 const leaf = (id: string, title: string): Readonly<Record<string, unknown>> => ({
   kind: "leaf",
   widget: {
@@ -56,7 +86,7 @@ const install = Effect.fnUntraced(function* (page: Page, edits: Array<unknown>) 
   );
   yield* Effect.tryPromise(() =>
     page.route(`${apiOrigin}/dashboard/catalog`, (route) =>
-      route.fulfill({ contentType: "application/json", body: response([]) })
+      route.fulfill({ contentType: "application/json", body: response(catalog) })
     )
   );
   yield* Effect.tryPromise(() =>

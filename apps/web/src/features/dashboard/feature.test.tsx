@@ -4,7 +4,7 @@ import { it as effectIt } from "@effect/vitest";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, createContext, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeFidyClient } from "@/transport/client";
+import { type DashboardEdit, makeFidyClient } from "@/transport/client";
 import type { DashboardCatalogEntry, DashboardGesture } from "./editor-model";
 import { DashboardRouteContent as DashboardFeatureContent } from "./feature";
 import type { DashboardLayout, DashboardView, DashboardWidgetView } from "./presentation";
@@ -126,6 +126,7 @@ type FixtureOptions = Readonly<{
   transactionInflow: boolean;
 }>;
 const transactionListLimit = 5;
+const widgetCountWithAddition = 5;
 
 const standardOptions: FixtureOptions = {
   budgetState: "under",
@@ -595,6 +596,104 @@ const dragBoundaryContinuously = (boundary: HTMLElement): void => {
   expect(resizedRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
 };
 
+const renderPlacement = (
+  edit: DashboardEdit,
+  view: DashboardView = makeView(standardOptions)
+): HTMLElement => {
+  render(
+    <DashboardViewComponent
+      view={view}
+      editor={Option.some({
+        catalog: [],
+        error: Option.none(),
+        onGesture: () => undefined,
+        submitting: false,
+        pendingPlacement: Option.some(edit),
+      })}
+    />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+  return screen.getByLabelText("Vista previa de la distribución");
+};
+
+const placementCases: ReadonlyArray<
+  Readonly<{ name: string; edit: DashboardEdit; titles: ReadonlyArray<string> }>
+> = [
+  {
+    name: "swap",
+    edit: { op: "swap-widgets", widgetId: ids.chart, withWidgetId: ids.metric },
+    titles: ["Promedio mensual", "Presupuesto", "Transacciones recientes", "Transacciones"],
+  },
+  {
+    name: "move before another Widget",
+    edit: {
+      op: "move-widget",
+      widgetId: ids.metric,
+      at: { besideWidget: ids.chart, axis: "column", side: "before" },
+    },
+    titles: ["Promedio mensual", "Transacciones", "Presupuesto", "Transacciones recientes"],
+  },
+  {
+    name: "move after another Widget",
+    edit: {
+      op: "move-widget",
+      widgetId: ids.chart,
+      at: { besideWidget: ids.metric, axis: "row", side: "after" },
+    },
+    titles: ["Presupuesto", "Transacciones recientes", "Promedio mensual", "Transacciones"],
+  },
+  {
+    name: "move to top",
+    edit: { op: "move-widget", widgetId: ids.metric, at: "top" },
+    titles: ["Promedio mensual", "Transacciones", "Presupuesto", "Transacciones recientes"],
+  },
+  {
+    name: "move to bottom",
+    edit: { op: "move-widget", widgetId: ids.chart, at: "bottom" },
+    titles: ["Presupuesto", "Transacciones recientes", "Promedio mensual", "Transacciones"],
+  },
+];
+
+describe("Dashboard placement feedback", () => {
+  it("retains the sole Widget while previewing a move to the Dashboard edge", () => {
+    const fixture = leftLayout(standardOptions);
+    if (fixture.kind !== "split") throw new Error("Expected split fixture");
+    const preview = renderPlacement(
+      { op: "move-widget", widgetId: ids.chart, at: "bottom" },
+      { ...makeView(standardOptions), layout: fixture.children[0].node }
+    );
+    expect(
+      headingTexts(within(preview).getAllByRole("heading", { level: 2, hidden: true }))
+    ).toEqual(["Transacciones"]);
+  });
+  it.each([true, false])(
+    "keeps confirmed Widgets when a swap participant no longer exists (source missing: %s)",
+    (sourceMissing) => {
+      const missing = Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000706");
+      const preview = renderPlacement({
+        op: "swap-widgets",
+        widgetId: sourceMissing ? missing : ids.chart,
+        withWidgetId: sourceMissing ? ids.metric : missing,
+      });
+      expect(
+        headingTexts(within(preview).getAllByRole("heading", { level: 2, hidden: true }))
+      ).toEqual(["Transacciones", "Presupuesto", "Transacciones recientes", "Promedio mensual"]);
+    }
+  );
+  it.each(placementCases)(
+    "shows $name before acknowledgment with confirmed financial results",
+    ({ edit, titles }) => {
+      const preview = renderPlacement(edit);
+      expect(
+        headingTexts(within(preview).getAllByRole("heading", { level: 2, hidden: true }))
+      ).toEqual(titles);
+      expect(within(preview).getAllByText("COP").length).toBeGreaterThan(1);
+      expect(preview).toHaveAttribute("aria-hidden", "true");
+      expect(preview).toHaveAttribute("inert");
+    }
+  );
+});
+
 describe("Dashboard edit mode", () => {
   it("offers only draggable catalog additions and labels the exit action Guardar", () => {
     const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
@@ -607,6 +706,52 @@ describe("Dashboard edit mode", () => {
     expect(screen.queryByRole("button", { name: "Añadir Widget" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Arrastrar Más transacciones" })).toBeVisible();
   });
+  it.each(["top", "bottom"] as const)(
+    "previews catalog insertion at %s without inventing financial results",
+    (at) => {
+      const preview = renderPlacement({
+        op: "add-widget",
+        widget: {
+          id: Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000706"),
+          type: "transaction-list",
+          title: "Nueva lista",
+          limit: Schema.decodeSync(TestTransactionListLimit)(transactionListLimit),
+        },
+        at,
+      });
+      const titles = headingTexts(
+        within(preview).getAllByRole("heading", { level: 2, hidden: true })
+      );
+      expect(at === "top" ? titles[0] : titles.at(-1)).toBe("Nueva lista");
+      expect(within(preview).getByText("Los datos se calculan al guardar.")).toBeInTheDocument();
+      expect(titles).toHaveLength(widgetCountWithAddition);
+    }
+  );
+  it.each(["top", "bottom"] as const)(
+    "inserts at %s in an existing column without changing the remaining reading order",
+    (at) => {
+      const preview = renderPlacement(
+        {
+          op: "add-widget",
+          widget: {
+            id: Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000706"),
+            type: "transaction-list",
+            title: "Nueva lista",
+            limit: Schema.decodeSync(TestTransactionListLimit)(transactionListLimit),
+          },
+          at,
+        },
+        { ...makeView(standardOptions), layout: leftLayout(standardOptions) }
+      );
+      expect(
+        headingTexts(within(preview).getAllByRole("heading", { level: 2, hidden: true }))
+      ).toEqual(
+        at === "top"
+          ? ["Nueva lista", "Transacciones", "Presupuesto"]
+          : ["Transacciones", "Presupuesto", "Nueva lista"]
+      );
+    }
+  );
 });
 
 describe("Dashboard Widget retitling and placement", () => {

@@ -51,20 +51,45 @@ const mcpSetup = (
 
 const cliSetup = (
   <details>
-    <summary>CLI · para quienes tienen acceso al repositorio</summary>
-    <p>
-      La CLI se ejecuta desde el repositorio de Fidy con su versión fijada de Bun. No hay un paquete
-      público de instalación documentado: estos comandos requieren una copia del proyecto y sus
-      dependencias instaladas.
-    </p>
+    <summary>CLI · instala y conecta</summary>
+    <p>Instala Fidy y conecta tu agente con acceso de solo lectura por 7 días.</p>
+    <h3>macOS Apple Silicon o Linux x64 con glibc</h3>
     <pre>
-      <code>{`bash scripts/install-bun.sh\n# Agrega a PATH el directorio que muestra el instalador.\nbash scripts/install-workspace.sh\nbun run cli login --recipient 'Mi agente' --scopes read --lifetime 7\nbun run cli status --json\nbun run cli commands --json\nbun run cli transactions listTransactions --help`}</code>
+      <code>curl -fsSL https://fidyapp.com/install.sh | bash</code>
     </pre>
     <p>
-      Aprueba la vinculación en Fidy. La CLI guarda su acceso en el almacén de credenciales del
-      sistema, no en archivos de texto. Nunca pegues tokens en el chat. Consulta la lista de
-      operaciones y su ayuda antes de usarlas.
+      En Linux necesitas AVX2 y un almacén de credenciales activo, como GNOME Keyring o KWallet.
     </p>
+    <h3>Windows x64 · PowerShell</h3>
+    <pre>
+      <code>
+        {
+          "& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://fidyapp.com/install.ps1).Content))"
+        }
+      </code>
+    </pre>
+    <p>Abre una terminal nueva y conecta tu agente:</p>
+    <pre>
+      <code>{"fidy login --recipient 'Mi agente' --scopes read --lifetime 7"}</code>
+    </pre>
+    <p>Aprueba el acceso en Fidy.</p>
+    <details>
+      <summary>Requisitos y ayuda</summary>
+      <p>
+        No necesitas clonar el repositorio ni instalar Bun o Node. Repite el instalador para
+        actualizar.
+      </p>
+      <p>
+        La CLI guarda su acceso en el almacén de credenciales del sistema, no en archivos de texto.
+        Nunca pegues tokens en el chat. Consulta la lista de operaciones y su ayuda antes de
+        usarlas.
+      </p>
+      <pre>
+        <code>
+          {"fidy status --json\nfidy commands --json\nfidy transactions listTransactions --help"}
+        </code>
+      </pre>
+    </details>
   </details>
 );
 
@@ -98,35 +123,46 @@ const apiSetup = (
 const permissions = (
   <div className="steps connection-permissions">
     <article className="step">
-      <h3>Empieza por lectura.</h3>
-      <p>
-        <code>read</code> permite consultar; <code>write</code>, crear y modificar;{" "}
-        <code>dashboard</code>, trabajar con tu tablero. Para más permisos, revisa una nueva
-        autorización.
-      </p>
+      <h3>Empieza con solo lectura.</h3>
+      <p>Concede permisos de escritura solo si los necesitas.</p>
+      <details>
+        <summary>Ver permisos</summary>
+        <p>
+          <code>read</code> permite consultar; <code>write</code>, crear y modificar;{" "}
+          <code>dashboard</code>, trabajar con tu tablero. Para más permisos, revisa una nueva
+          autorización.
+        </p>
+      </details>
     </article>
     <article className="step">
       <h3>Revisa los cambios.</h3>
-      <p>
-        En MCP, las acciones sensibles requieren confirmación nativa en un cliente compatible. Un sí
-        en el chat no la reemplaza. Fidy confía en la respuesta del cliente autorizado; no certifica
-        la presencia de una persona.
-      </p>
+      <p>Las acciones sensibles requieren confirmación en clientes MCP compatibles.</p>
+      <details>
+        <summary>Sobre la confirmación</summary>
+        <p>
+          En MCP, las acciones sensibles requieren confirmación nativa en un cliente compatible. Un
+          sí en el chat no la reemplaza. Fidy confía en la respuesta del cliente autorizado; no
+          certifica la presencia de una persona.
+        </p>
+      </details>
     </article>
     <article className="step">
       <h3>Desconecta cuando quieras.</h3>
       <p>
-        Revoca MCP en{" "}
+        Gestiona el acceso en{" "}
         <a className="textlink" href="/settings/agents">
           Agentes conectados
         </a>{" "}
-        y los PAT en{" "}
+        o{" "}
         <a className="textlink" href="/settings/pats">
           Tokens personales
         </a>
-        . Cerrar sesión no revoca esos accesos. Revocar detiene nuevas acciones, pero no deshace
-        cambios completados.
+        . Cerrar sesión no revoca accesos.
       </p>
+      <details>
+        <summary>Qué implica revocar</summary>
+        <p>Revocar detiene nuevas acciones, pero no deshace cambios completados.</p>
+      </details>
     </article>
   </div>
 );

@@ -286,9 +286,116 @@ it("offers least-privilege setup and keeps each revocation destination explicit"
     "href",
     "/settings/agents"
   );
+});
+
+it("keeps native CLI installation concise and reveals credential guidance and help on demand", () => {
+  render(
+    <StrictMode>
+      <FeatureDetail index={5} />
+    </StrictMode>
+  );
+  const guide = screen.getByRole("region", {
+    name: "Conecta con contexto.",
+  });
+  const cli = within(guide).getByText("CLI · instala y conecta");
+  fireEvent.click(cli);
   expect(
-    within(guide).getByText(/No hay un paquete público de instalación documentado/u)
-  ).toBeInTheDocument();
+    within(guide).getByRole("heading", { name: "macOS Apple Silicon o Linux x64 con glibc" })
+  ).toBeVisible();
+  expect(within(guide).getByText("curl -fsSL https://fidyapp.com/install.sh | bash")).toBeVisible();
+  expect(within(guide).getByText(/En Linux necesitas AVX2/u)).toBeVisible();
+  expect(within(guide).getByRole("heading", { name: "Windows x64 · PowerShell" })).toBeVisible();
+  expect(
+    within(guide).getByText(
+      "& ([scriptblock]::Create((Invoke-WebRequest -UseBasicParsing https://fidyapp.com/install.ps1).Content))"
+    )
+  ).toBeVisible();
+  expect(within(guide).getByText(/fidy login --recipient/u).textContent).toBe(
+    "fidy login --recipient 'Mi agente' --scopes read --lifetime 7"
+  );
+  expect(within(guide).getByText("Aprueba el acceso en Fidy.")).toBeVisible();
+  expect(guide).not.toHaveTextContent(/bun run cli|scripts\/install-|No hay un paquete público/u);
+  const help = within(guide).getByText("Requisitos y ayuda");
+  const credentials = within(guide).getByText(/La CLI guarda su acceso/u);
+  const commands = within(guide).getByText(/fidy status --json/u);
+  const updating = within(guide).getByText(/Repite el instalador para actualizar/u);
+  expect(credentials).not.toBeVisible();
+  expect(commands).not.toBeVisible();
+  expect(updating).not.toBeVisible();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    fireEvent.click(help);
+    expect(credentials).toBeVisible();
+    expect(credentials).toHaveTextContent(
+      "La CLI guarda su acceso en el almacén de credenciales del sistema, no en archivos de texto. Nunca pegues tokens en el chat. Consulta la lista de operaciones y su ayuda antes de usarlas."
+    );
+    expect(commands).toBeVisible();
+    expect(commands.textContent).toBe(
+      "fidy status --json\nfidy commands --json\nfidy transactions listTransactions --help"
+    );
+    expect(updating).toBeVisible();
+    fireEvent.click(help);
+    expect(credentials).not.toBeVisible();
+    expect(commands).not.toBeVisible();
+    fireEvent.click(cli);
+    expect(within(guide).getByText(/curl -fsSL/u)).not.toBeVisible();
+    fireEvent.click(cli);
+    expect(within(guide).getByText(/curl -fsSL/u)).toBeVisible();
+    expect(credentials).not.toBeVisible();
+  }
+});
+
+it("keeps access cards brief while retaining permission, confirmation and revocation details", () => {
+  render(
+    <StrictMode>
+      <FeatureDetail index={5} />
+    </StrictMode>
+  );
+  const guide = screen.getByRole("region", {
+    name: "Conecta con contexto.",
+  });
+  expect(within(guide).getByRole("heading", { name: "Empieza con solo lectura." })).toBeVisible();
+  expect(
+    within(guide).getByText("Concede permisos de escritura solo si los necesitas.")
+  ).toBeVisible();
+  expect(
+    within(guide).getByText(
+      "Las acciones sensibles requieren confirmación en clientes MCP compatibles."
+    )
+  ).toBeVisible();
+  const revocation = within(guide).getByText(/Cerrar sesión no revoca accesos/u);
+  expect(revocation).toBeVisible();
+  expect(within(revocation).getByRole("link", { name: "Tokens personales" })).toHaveAttribute(
+    "href",
+    "/settings/pats"
+  );
+  for (const { label, detail, text } of [
+    {
+      label: "Ver permisos",
+      detail: /Para más permisos, revisa una nueva autorización/u,
+      text: "read permite consultar; write, crear y modificar; dashboard, trabajar con tu tablero. Para más permisos, revisa una nueva autorización.",
+    },
+    {
+      label: "Sobre la confirmación",
+      detail: /En MCP, las acciones sensibles/u,
+      text: "En MCP, las acciones sensibles requieren confirmación nativa en un cliente compatible. Un sí en el chat no la reemplaza. Fidy confía en la respuesta del cliente autorizado; no certifica la presencia de una persona.",
+    },
+    {
+      label: "Qué implica revocar",
+      detail: /Revocar detiene nuevas acciones/u,
+      text: "Revocar detiene nuevas acciones, pero no deshace cambios completados.",
+    },
+  ]) {
+    const disclosure = within(guide).getByText(label);
+    const content = within(guide).getByText(detail);
+    expect(content).not.toBeVisible();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      fireEvent.click(disclosure);
+      expect(content).toBeVisible();
+      expect(content).toHaveTextContent(text);
+      fireEvent.click(disclosure);
+      expect(content).not.toBeVisible();
+    }
+  }
 });
 
 it("updates canonical and share metadata without retaining the previous public page description", () => {

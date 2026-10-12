@@ -1,0 +1,51 @@
+apps/web/src/features/dashboard/foldkit-view.test.ts
+  s_6d017cc65783af::t_963bbbd8f161c9 167-169,193
+  s_6d017cc65783af::t_0cc93ad3926c20 6-11,137-166,170-192
+  s_6d017cc65783af::t_c40252d6b2f51f 194-197
+.agents/skills/cloudflare/references/cron-triggers/api.md
+  s_6d017cc65783af::t_4f930e56f19f4a 132
+.agents/skills/cloudflare/references/cron-triggers/patterns.md
+  s_6d017cc65783af::t_f33b3a17b4280a 222
+.agents/skills/cloudflare/references/smart-placement/api.md
+  s_6d017cc65783af::t_099b181c436ba4 150-153
+.patterns/effect-4-stable.md
+  s_6d017cc65783af::t_aa7bf7ba66d14c 3-4,18
+.patterns/foldkit.md
+  s_6d017cc65783af::t_24164d3e18100e 3-4
+apps/cli/package.json
+  s_6d017cc65783af::t_17b97140173cc3 18,20,23
+apps/server/package.json
+  s_6d017cc65783af::t_660d31bf1b3bd0 289,291,301-304
+apps/web/package.json
+  s_6d017cc65783af::t_f06bcd46f1da5f 23,28-29,35
+bun.lock
+  s_dba8cd4832f840::t_583680465200ed 11,16,18-20,32,34,37,45,47,57-60,76,81-82,88,108,111-113,126-128,219,277,279,281,283,285,287,305,511,513,515,517,519,521,523,525,527,529,531,533,535,537,539,541,543,545,547,561,563,565,567,569,571,573,575,577,579,581,583,585,587,589,591,593,595,597,843,873,929,931,933,935,937,939,941,943,945,947,949,1011,1013
+infra/cloudflare/package.json
+  s_6d017cc65783af::t_102b0e0ac53d3b 17,20-22
+package.json
+  s_6d017cc65783af::t_818e23ce608bef 52,57,59-61,66-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b17d429010f24cfbcb7d36d2f66d9a941d74267c",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_dba8cd4832f840": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12c7c-6101-7843-92e4-dbfcda0ab148",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

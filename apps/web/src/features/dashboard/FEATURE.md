@@ -58,11 +58,12 @@ The seven initial-load built-browser scenarios intercept API responses. They ver
 
 ## Historical Production evidence and remaining checks
 
-- [Issue #1214](https://github.com/B4rz99/fidy-ai/issues/1214): canonical title was ignored by the web heading. The focused regression reproduced it, then all **45 web feature checks** and **24 application checks** passed after rendering `view.title`. The real local browser edit/reload check also passed. The fix merged in [PR #1216](https://github.com/B4rz99/fidy-ai/pull/1216); production verification remains pending because deployment failed its live Workers AI preflight.
+- [Issue #1214](https://github.com/B4rz99/fidy-ai/issues/1214): canonical title was ignored by the web heading. The focused regression reproduced it, then all **45 web feature checks** and **24 application checks** passed after rendering `view.title`. The real local browser edit/reload check also passed. The fix merged in [PR #1216](https://github.com/B4rz99/fidy-ai/pull/1216); the historical deployment failure from live Workers AI preflight was resolved by the later quota-aware pipeline. Canonical-title edit/read-after-reload remains unverified in production.
 - Real admitted Dashboard initialization/edit/read, ownership refusals, and retained Audit evidence passed the local Worker/D1 suite; repeat production behaviour separately.
 - Earlier Production checks on 2026-10-11, before the React restoration in PR #1233, verified the original four Widgets, ten recent Transactions, separate Money directions, and explicit missing Budget. Rename, keyboard resize, pointer swap/edge movement, keyboard cancellation, catalog insertion and approved removal survived reload; original identities, order and weights were restored. These are historical release observations, not verification of the current React placement fix.
 - Production revision `72ddd85d9a73487a7f0f0e457700225012d718f4` verified disposable funded Budget fixtures: `1600` COP spent against caps `2000`, `1600` and `1500`. A `12.34` USD Transaction appeared separately from COP in the list, chart and metric. Fixtures were removed through canonical operations; the Dashboard matched its baseline except calculation time, and browser reload confirmed cleanup.
 - First use with a fresh approved Production User and physical touch gestures remain unverified live. Local negative tests cover ownership, withdrawal of Consent and failure recovery; failures were not induced in Production.
+- Production monthly totals have been observed against the complete retained Transaction history; read-after-delete remains pending fixture cleanup. Use only this chat's labelled fixtures.
 
 ```sh
 bun run --cwd apps/web test src/features/dashboard
@@ -71,3 +72,5 @@ bun run --cwd apps/web test:browser dashboard-queries.spec.ts --workers=1
 BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser dashboard-live-customization.spec.ts --workers=1 --timeout=120000
 bun run --cwd apps/server test:cloudflare cloudflare/dashboard --maxWorkers=1
 ```
+
+Production aggregation observation, 2026-10-12, React release `274f64ecdb1ff2d2997ecc52202d9e446e361653`: the monthly metric displayed COP 2,500 income and COP 6,387 spending. Transactions showed COP 2,931 spending for the first 100 loaded records, then loaded the remaining COP 3,456 test record. The complete-history sum matches the Dashboard spending metric. This is live aggregation evidence with existing fixtures; it does not establish canonical-title editing, source/Audit retention after deletion, or every Widget variant.

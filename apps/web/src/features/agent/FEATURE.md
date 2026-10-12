@@ -37,7 +37,7 @@ Remaining checks:
 
 - Rejected proposal/draft recovery now has two passing rendered regressions: generic unavailability and daily quota exhaustion. Explicit resubmission produces one User/assistant pair; no automatic replay occurs.
 - Quota classification is implemented for bounded JSON HTTP 429 provider responses with documented code 3036 or production-observed code 4006. Capacity code 3040 remains generic transient unavailability. The adapter suite passed 38 tests and the actual Worker/D1 regression passed: the Turn is retained as failed, with no assistant reply or raw provider detail. Deployment is complete; a live quota-refusal UI rerun remains unverified.
-- Greeting, follow-up and owned Transaction query passed live on 2026-10-12. Still run date-only capture/correction and exact deletion confirmation, verifying one User/assistant pair for each successful exchange.
+- Greeting, follow-up and owned Transaction query passed live on 2026-10-12. Date-only correction also passed on the React artifact described below. New date-only capture also passed below. Still run exact deletion confirmation, verifying one User/assistant pair for each successful exchange.
 - Verify read-after-delete, Transaction history and Dashboard totals exclude the deleted record while retained source and Audit evidence remain intact.
 - Clean up only this chat's labelled production fixtures. The original `PRUEBA QA CHAT 20261010` has explicit deletion approval. Deletion approval for `PRUEBA QA FECHA CHAT 20261010` remains pending.
 
@@ -51,3 +51,9 @@ bun run --cwd apps/server test:cloudflare cloudflare/agent/hosted-turn.test.ts -
 ```
 
 Local deterministic inference and transport fixtures do not prove live Workers AI availability or production model behaviour. Record deployment revision and observed outcomes separately when resuming the production checklist.
+
+Production React audit, 2026-10-12, release `274f64ecdb1ff2d2997ecc52202d9e446e361653`: a read-only turn answered today as 12 October 2026 in America/Bogota, and the follow-up answered tomorrow as 13 October. Both User/agent pairs remained visible in order with no delivery-confirmation control. This proves inference availability at the observation time, not remaining daily quota.
+
+For the existing synthetic `PRUEBA QA FECHA CHAT 20261010`, the model proposed `occurredAt: 2026-10-11T05:00:00.000Z` for 11 October in Bogotá, changing no amount/category. Exact mutation challenge confirmation returned “Operación confirmada”. A production reload and Transaction detail showed 11 October 2026 and the unchanged COP 1,234 amount. This establishes date-only correction and read-after-save. The fixture remains at that verified date pending cleanup; it does not establish new capture or deletion. Permanent deletion requires action-time confirmation of the exact current fixture details.
+
+New date-only capture also passed live on the same release: the request created synthetic `PRUEBA QA CAPTURA CHAT 20261012`, Gasto, COP 1, category Otros, for 11 October 2026 in America/Bogota. One User message received one “Operación completada” reply. A browser reload and detail read verified the name, COP 1, Otros and 11 October. This new fixture also requires explicit permanent-deletion confirmation before cleanup.

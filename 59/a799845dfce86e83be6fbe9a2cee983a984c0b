@@ -1,0 +1,74 @@
+apps/server/src/client.ts
+  s_b75995d26622a8::t_7c75851c2736ce 175-176
+apps/web/src/features/pats/reauthentication-draft.test.ts
+  s_b75995d26622a8::t_0f0b86361f8a1c 5-15,20,29,33
+  s_b75995d26622a8::t_3aebaf93f37359 1-4,16-19,21-28,30-32
+apps/web/src/features/provider-authentication/feature.tsx
+  s_b75995d26622a8::t_126bd0897e51b7 29,127,239-241
+  s_b75995d26622a8::t_0f0b86361f8a1c 248,252-261,292-294
+apps/web/src/features/pats/feature.test.tsx
+  s_b75995d26622a8::t_0f0b86361f8a1c 80-87,124,143-148,154-161,170-176,196-202,421,434-445
+  s_b75995d26622a8::t_b23c462cd3fe81 446-456
+apps/web/src/features/pats/view.tsx
+  s_b75995d26622a8::t_0f0b86361f8a1c 1,79-84,387-397,443-482,498-499,526,530,532-537
+  s_b75995d26622a8::t_66e1d9067bd999 53,424
+  s_b75995d26622a8::t_c0bc98be99e308 483-485,497
+apps/web/src/app/access-page.test.tsx
+  s_b75995d26622a8::t_4d3c107294c0c1 42-63,65-69,81,97-100,104-111,123-127,130-134,138-141,185-190,199,203,205-227
+  s_b75995d26622a8::t_8437cca0687429 9,12,19-20,39-41,191-198,200-202,204,228
+apps/server/src/shell/tokens/contract.ts
+  s_b75995d26622a8::t_7c75851c2736ce 1,45-53
+  s_b75995d26622a8::t_2d419aa10190a4 54-63,234-239
+apps/web/src/features/pats/feature.tsx
+  s_b75995d26622a8::t_0f0b86361f8a1c 12,54,105-113,181,185-187,196-213
+  s_b75995d26622a8::t_126bd0897e51b7 11,180,189-190
+  s_b75995d26622a8::t_66e1d9067bd999 3,9,177-179,182-184,192,214-215
+  s_b75995d26622a8::t_22c5161b420562 5,188,191,193-195
+apps/web/src/features/pats/reauthentication-draft.ts
+  s_b75995d26622a8::t_66e1d9067bd999 2-13,15-17,20-22,27,37-48,57-60
+  s_b75995d26622a8::t_0f0b86361f8a1c 1,23-26,28-36,50-56
+  s_b75995d26622a8::t_0b300b5c9b3b4a 14,18-19,49
+apps/server/cloudflare/tokens/pats.test.ts
+  s_b75995d26622a8::t_66e1d9067bd999 4420-4421
+  s_b75995d26622a8::t_c5603764bbdf7d 4416-4419,4422-4458
+apps/web/src/transport/client.ts
+  s_b75995d26622a8::t_7c75851c2736ce 287-288
+apps/server/cloudflare/tokens/internal/pat-manual.ts
+  s_b75995d26622a8::t_94a17eb290b0c6 228-243
+apps/server/contracts/openapi.json
+  s_b75995d26622a8::t_0790b2470a987b 3464-3508,18420-18422,18436
+apps/web/e2e/provider-authentication.journeys.ts
+  s_b75995d26622a8::t_56cfe0c7ef655e 456,919-1008
+apps/web/src/app/routes.ts
+  s_b75995d26622a8::t_67ada51e808e56 154-159,221,239
+apps/web/src/features/pats/FEATURE.md
+  s_b75995d26622a8::t_2f7c7403923b6b 18-20,46-50
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_b75995d26622a8::t_0ce31c0ab52bee 6-7
+apps/web/src/features/provider-authentication/controller.ts
+  s_71e18c09dc0768::t_9f269ebd81c6c3 294,341-350,354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "59a799845dfce86e83be6fbe9a2cee983a984c0b",
+  "prompts": {},
+  "sessions": {
+    "s_71e18c09dc0768": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12211-fdc6-7bc2-adfd-036f70a7254f",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

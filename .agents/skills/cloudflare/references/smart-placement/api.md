@@ -147,7 +147,10 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```typescript
 // Placement status returned by API (field may be absent)
 type PlacementStatus =
-  "SUCCESS" | "INSUFFICIENT_INVOCATIONS" | "UNSUPPORTED_APPLICATION" | undefined;
+  | "SUCCESS"
+  | "INSUFFICIENT_INVOCATIONS"
+  | "UNSUPPORTED_APPLICATION"
+  | undefined;
 
 // Placement configuration in wrangler.jsonc
 type PlacementMode = "smart" | "off";

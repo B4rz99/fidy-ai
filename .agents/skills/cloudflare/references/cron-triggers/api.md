@@ -129,7 +129,7 @@ export default {
 
 ## Testing Handler
 
-**Local development (/\__scheduled endpoint):**
+**Local development (/\_\_scheduled endpoint):**
 
 ```bash
 # Start dev server

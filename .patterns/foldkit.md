@@ -1,7 +1,7 @@
 # Foldkit frontend
 
-The installed, integrity-locked `foldkit@0.165.0` package is the application API authority.
-It uses the repository's Effect 4.0.0 and `@effect/platform-browser@4.0.0`. Consult
+The installed, integrity-locked `foldkit@0.166.0` package is the application API authority.
+It uses the repository's Effect 4.0.1 and `@effect/platform-browser@4.0.1`. Consult
 `node_modules/foldkit/dist/` implementation and declarations before extending it; do not assume
 examples for a newer release match this version.
 

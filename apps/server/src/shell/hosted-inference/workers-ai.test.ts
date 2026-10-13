@@ -18,6 +18,7 @@ import {
 } from "./contract";
 import { hostedInitialTextContext } from "./context.test-fixture";
 import { makeWorkersAiHostedInference } from "./runtime";
+import { workersAiProviderSchema } from "~/shell/hosted-inference/internal/provider-schema";
 
 const hostedFailure = (
   reason: HostedInferenceFailureReason,
@@ -218,6 +219,26 @@ it.effect("advertises self-contained schemas for every canonical tool", () =>
     yield* prepared.execute;
     const request = binding.calls[0]?.request;
     assert(request?.tool_choice === "auto");
+    const batch = request.tools.find(
+      ({ function: tool }) => tool.name === "operations__executeAtomicBatch"
+    );
+    const batchSchema = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      batch?.function.parameters
+    );
+    expect(new TextEncoder().encode(batchSchema).byteLength).toBeLessThan(60_000);
+    expect(batch?.function.parameters).toMatchObject({
+      properties: {
+        payload: {
+          properties: {
+            calls: {
+              type: "array",
+              minItems: 1,
+              maxItems: 12,
+            },
+          },
+        },
+      },
+    });
     for (const tool of request.tools) {
       const schema = tool.function.parameters;
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(schema);
@@ -236,6 +257,41 @@ it.effect("advertises self-contained schemas for every canonical tool", () =>
     ]);
   })
 );
+
+it("preserves nonempty homogeneous array bounds in provider schemas", () => {
+  const schema = workersAiProviderSchema(
+    Schema.NonEmptyArray(Schema.String).check(Schema.isMaxLength(12))
+  );
+  expect(schema).toMatchObject({
+    type: "array",
+    minItems: 1,
+    maxItems: 12,
+    items: { type: "string" },
+  });
+  expect(schema).not.toHaveProperty("prefixItems");
+});
+
+it("preserves heterogeneous tuple positions in provider schemas", () => {
+  const schema = workersAiProviderSchema(Schema.Tuple([Schema.String, Schema.Boolean]));
+  expect(schema).toMatchObject({
+    type: "array",
+    minItems: 2,
+    maxItems: 2,
+    prefixItems: [{ type: "string" }, { type: "boolean" }],
+  });
+});
+
+it("preserves schema-shaped annotation data verbatim", () => {
+  const example = { type: "array", prefixItems: [{ type: "string" }], items: { type: "string" } };
+  const schema = workersAiProviderSchema(
+    Schema.Struct({
+      type: Schema.String,
+      prefixItems: Schema.Array(Schema.Struct({ type: Schema.String })),
+      items: Schema.Struct({ type: Schema.String }),
+    }).annotate({ examples: [example] })
+  );
+  expect(schema.examples).toEqual([example]);
+});
 
 it.effect("rejects a truncated tool call before it can be executed", () =>
   Effect.gen(function* () {

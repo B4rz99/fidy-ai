@@ -1,4 +1,4 @@
-import { type Duration, Effect, type JsonSchema, Option, Schema } from "effect";
+import { type Duration, Effect, Option, Schema } from "effect";
 import { type Prompt, Tool } from "effect/ai";
 import { type TranscriptEntry, maximumModelRoundMillis } from "~/core/agent/contract";
 import { operationCatalog } from "~/shell/api";
@@ -25,6 +25,7 @@ import type {
 import { makeHostedInferenceInternal } from "./inference";
 import { hostedOutputTokenReserve } from "./limits";
 import { exactTranscriptPromptInternal } from "./prompt";
+import { workersAiProviderSchema } from "./provider-schema";
 
 type WorkersAiInputItem = WorkersAiRequest["messages"][number];
 type WorkersAiFunctionCall = NonNullable<
@@ -117,18 +118,11 @@ const ProviderResponse = Schema.Struct({
 type ProviderResponse = typeof ProviderResponse.Type;
 type FunctionCallItem = typeof ProviderFunctionCall.Type;
 
-const providerSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
-  const document = Schema.toJsonSchemaDocument(Schema.toEncoded(schema), {
-    referencePolicy: () => undefined,
-  });
-  return { ...document.schema, $defs: document.definitions };
-};
-
 const workersAiOperationBindings = hostedOperationBindings(operationCatalog).map(
   ({ operation, wireName }) => ({
     operation,
     wireName,
-    parameters: providerSchema(operation.input),
+    parameters: workersAiProviderSchema(operation.input),
   })
 );
 
@@ -535,7 +529,7 @@ const makeStructuredAdapter = (
         Option.none()
       );
       const schema = yield* Effect.try({
-        try: () => providerSchema(input.outputSchema),
+        try: () => workersAiProviderSchema(input.outputSchema),
         catch: () => invalidProviderOutput("Hosted structured schema was invalid"),
       });
       const request: WorkersAiRequest = {

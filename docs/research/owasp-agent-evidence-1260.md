@@ -90,9 +90,12 @@ from the test names.
 
 ## Repeatable live evaluation prerequisite — #1263
 
-Tracking: [#1263](https://github.com/B4rz99/fidy-ai/issues/1263). No live inference or
-provider effects were performed for this assessment. Local model stubs verify host behavior;
-they cannot measure the deployed model's jailbreak rate or factual accuracy.
+Tracking: [#1263](https://github.com/B4rz99/fidy-ai/issues/1263). This native assessment used
+local model stubs to verify host behavior; they cannot measure the deployed model's jailbreak
+rate or factual accuracy. The subsequent [bounded live evaluation](hosted-adversarial-evaluation-1263.md)
+captured and reviewed 65 observations on 2026-10-13: 55 passed their original criteria, five
+failed and five were inconclusive. Grounding mitigations remain unverified live and no accepted
+baseline exists. Its single-round fixture does not exercise native effects or full ingestion.
 
 1. Use the existing controlled Production proof procedure with an isolated synthetic namespace
    and two synthetic Users, fake financial facts,

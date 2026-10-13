@@ -6,6 +6,7 @@ import { playwright } from "./playwright-runtime";
 import {
   boundSessionRequests,
   browserSessionHeaders,
+  probeCanonicalRequest,
   signInFirstCardThroughCore,
   signInFirstDaviplataThroughCore,
   signInThroughCore,
@@ -107,27 +108,6 @@ const inspectBrowserSnapshot = (
     }
     const wire = yield* fromPlaywright(send());
     return { status: wire.status, body: wire.body };
-  }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
-// Direct test probes do not use the app's policy-bearing client. Pace only declared
-// resource refusals, preserving real Core limits and all state/status assertions.
-const probeCanonicalRequest = (
-  send: () => Promise<APIResponse>
-): Effect.Effect<APIResponse, Cause.UnknownError | Cause.TimeoutError> =>
-  Effect.gen(function* () {
-    const limited = 429;
-    const millisecondsPerSecond = 1_000;
-    for (let retry = 0; retry < resourceProbeRetries; retry++) {
-      const response = yield* fromPlaywright(send());
-      if (response.status() !== limited) return response;
-      const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers()["retry-after"]);
-      if (Option.isNone(seconds)) return response;
-      const body: unknown = yield* fromPlaywright(response.json());
-      if (Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))) {
-        return response;
-      }
-      yield* Effect.sleep(seconds.value * millisecondsPerSecond);
-    }
-    return yield* fromPlaywright(send());
   }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
 const inspectCanonicalSnapshot = (
   page: Page,

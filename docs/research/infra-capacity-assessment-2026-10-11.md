@@ -1,5 +1,11 @@
 # Infrastructure performance and capacity assessment — 2026-10-11
 
+> **Update, 2026-10-13:** [Final live validation](infra-live-validation-2026-10-13.md) records successful
+> history/concurrency cohorts and the deployed schema optimization. The 20k-token/seven-Turn AI
+> scenario below is superseded by the [48k-token/three-Turn model](infra-capacity-model-2026-10-13.json).
+> PR #1226 deployed the PAT-write and permanent-refusal changes at `9e9bd72d756b91a3bda3ed9f235f9754e4bf80ca`;
+> subsequent deployed revision `4f4995f7a87537c47ee4e4a875a98c9aeb005550` includes them.
+
 ## Verdict and evidence status
 
 This reconciles the earlier optimization reports with expanded workload measurements. Source base:

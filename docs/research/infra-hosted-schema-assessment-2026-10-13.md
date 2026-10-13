@@ -1,5 +1,10 @@
 # Hosted inference cost follow-up — 2026-10-13
 
+> **Later validation:** inference recovered before the daily reset. [Final live validation](infra-live-validation-2026-10-13.md)
+> records the successful compact batch check, full native conformance, completed growth/concurrency
+> cohort, matched provider token measurement and refreshed production observations. The quota refusal
+> described below is historical evidence, not the current blocker.
+
 ## Outcome and boundary
 
 The new account token successfully authenticated the native Wrangler remote AI session, model catalog,

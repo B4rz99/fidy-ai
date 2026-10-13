@@ -1,0 +1,4087 @@
+{
+  "collectedAtUtc": "2026-10-13T18:53:33.700717+00:00",
+  "deployment": {
+    "collectedAtUtc": "2026-10-13T18:39:29.508422+00:00",
+    "worker": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+    "deploymentId": "640f3908-c7e6-49dc-aecb-73644a90c6f8",
+    "versions": [
+      {
+        "versionId": "88101235-cac9-423b-87ab-6ad7eb40d063",
+        "percentage": 100,
+        "releaseRevision": "4f4995f7a87537c47ee4e4a875a98c9aeb005550",
+        "scriptMetricKeys": ["etag", "handlers", "named_handlers", "last_deployed_from"],
+        "startupTimeMs": null
+      }
+    ]
+  },
+  "liveCohort": {
+    "collectedAtUtc": "2026-10-13T18:47:28.187Z",
+    "revision": "4f4995f7a87537c47ee4e4a875a98c9aeb005550",
+    "boundary": "Actual UserTransactionCoordinator and native local D1 with live Workers AI REST; synthetic greeting fixtures; not production edge CPU or latency; revised seed text prevents strict matched latency comparison",
+    "observations": [
+      {
+        "kind": "history",
+        "seededHistoryTurns": 0,
+        "sample": 0,
+        "status": 202,
+        "proposalMs": 4716.648292,
+        "completionMs": 4738.304208,
+        "providerCalls": 1,
+        "rowsRead": 86,
+        "rowsWritten": 54
+      },
+      {
+        "kind": "history",
+        "seededHistoryTurns": 0,
+        "sample": 1,
+        "status": 202,
+        "proposalMs": 5213.55675,
+        "completionMs": 5236.1630000000005,
+        "providerCalls": 1,
+        "rowsRead": 99,
+        "rowsWritten": 51
+      },
+      {
+        "kind": "history",
+        "seededHistoryTurns": 8,
+        "sample": 0,
+        "status": 202,
+        "proposalMs": 8997.293416999999,
+        "completionMs": 9019.498542,
+        "providerCalls": 1,
+        "rowsRead": 176,
+        "rowsWritten": 51
+      },
+      {
+        "kind": "history",
+        "seededHistoryTurns": 8,
+        "sample": 1,
+        "status": 202,
+        "proposalMs": 3353.618542,
+        "completionMs": 3375.987250000002,
+        "providerCalls": 1,
+        "rowsRead": 187,
+        "rowsWritten": 51
+      },
+      {
+        "kind": "history",
+        "seededHistoryTurns": 32,
+        "sample": 0,
+        "status": 202,
+        "proposalMs": 1726.9422079999968,
+        "completionMs": 1746.1265829999975,
+        "providerCalls": 1,
+        "rowsRead": 440,
+        "rowsWritten": 51
+      },
+      {
+        "kind": "history",
+        "seededHistoryTurns": 32,
+        "sample": 1,
+        "status": 202,
+        "proposalMs": 1743.8811659999992,
+        "completionMs": 1764.4597499999982,
+        "providerCalls": 1,
+        "rowsRead": 451,
+        "rowsWritten": 51
+      },
+      {
+        "kind": "concurrency",
+        "concurrency": 2,
+        "sameUser": false,
+        "outcomes": [
+          {
+            "status": 202,
+            "proposalMs": 4514.652041999998,
+            "completionMs": 4533.588916999997
+          },
+          {
+            "status": 202,
+            "proposalMs": 1891.3327080000017,
+            "completionMs": 1909.6377500000017
+          }
+        ],
+        "providerCalls": 2,
+        "rowsRead": 176,
+        "rowsWritten": 108,
+        "pending": {
+          "count": 0
+        }
+      },
+      {
+        "kind": "concurrency",
+        "concurrency": 2,
+        "sameUser": true,
+        "outcomes": [
+          {
+            "status": 202,
+            "proposalMs": 1634.5541250000024,
+            "completionMs": 1661.1975420000017
+          },
+          {
+            "status": 202,
+            "proposalMs": 4141.481874999998,
+            "completionMs": 4161.702375000001
+          }
+        ],
+        "providerCalls": 2,
+        "rowsRead": 185,
+        "rowsWritten": 105,
+        "pending": {
+          "count": 0
+        }
+      }
+    ],
+    "provider": [
+      {
+        "status": 200,
+        "latencyMs": 4605.998125,
+        "requestBytes": 124111,
+        "usage": {
+          "prompt_tokens": 41643,
+          "completion_tokens": 11,
+          "total_tokens": 41654,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "neurons": 378.8727111816406
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 5076.459958,
+        "requestBytes": 124402,
+        "usage": {
+          "prompt_tokens": 41724,
+          "completion_tokens": 11,
+          "total_tokens": 41735,
+          "prompt_tokens_details": {
+            "cached_tokens": 8192
+          },
+          "neurons": 342.3726806640625
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 8923.476667,
+        "requestBytes": 126111,
+        "usage": {
+          "prompt_tokens": 42211,
+          "completion_tokens": 11,
+          "total_tokens": 42222,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "neurons": 384.0363464355469
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 3225.8652079999993,
+        "requestBytes": 126402,
+        "usage": {
+          "prompt_tokens": 42292,
+          "completion_tokens": 11,
+          "total_tokens": 42303,
+          "prompt_tokens_details": {
+            "cached_tokens": 24576
+          },
+          "neurons": 273.06353759765625
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 1647.6089999999967,
+        "requestBytes": 132111,
+        "usage": {
+          "prompt_tokens": 43914,
+          "completion_tokens": 11,
+          "total_tokens": 43925,
+          "prompt_tokens_details": {
+            "cached_tokens": 41472
+          },
+          "neurons": 211.0089111328125
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 1672.6377500000017,
+        "requestBytes": 132402,
+        "usage": {
+          "prompt_tokens": 43996,
+          "completion_tokens": 11,
+          "total_tokens": 44007,
+          "prompt_tokens_details": {
+            "cached_tokens": 41472
+          },
+          "neurons": 211.75436401367188
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 1690.435583999999,
+        "requestBytes": 124111,
+        "usage": {
+          "prompt_tokens": 41642,
+          "completion_tokens": 11,
+          "total_tokens": 41653,
+          "prompt_tokens_details": {
+            "cached_tokens": 41472
+          },
+          "neurons": 190.3543701171875
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 4311.005916999999,
+        "requestBytes": 124111,
+        "usage": {
+          "prompt_tokens": 41643,
+          "completion_tokens": 11,
+          "total_tokens": 41654,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "neurons": 378.8727111816406
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 1541.0085420000032,
+        "requestBytes": 124111,
+        "usage": {
+          "prompt_tokens": 41642,
+          "completion_tokens": 11,
+          "total_tokens": 41653,
+          "prompt_tokens_details": {
+            "cached_tokens": 41472
+          },
+          "neurons": 190.3543701171875
+        },
+        "requestId": null,
+        "errors": []
+      },
+      {
+        "status": 200,
+        "latencyMs": 2397.277915999999,
+        "requestBytes": 124402,
+        "usage": {
+          "prompt_tokens": 41725,
+          "completion_tokens": 11,
+          "total_tokens": 41736,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "neurons": 379.6181640625
+        },
+        "requestId": null,
+        "errors": []
+      }
+    ],
+    "totalNeurons": 2940.3081665039062,
+    "stopped": false
+  },
+  "matchedProviderCost": {
+    "revision": "4f4995f7a87537c47ee4e4a875a98c9aeb005550",
+    "boundary": "Same catalog, fixed context, same messages and tools; original inline parameters reconstructed via pinned Effect Schema compiler; compact inline candidate; sequential live REST pair, cache differs, no representative latency distribution; provider cost evidence only. The temporary harness omitted mandatory maximumToolCalls, so adapter continuation construction failed after both successful provider responses; this is excluded from correctness evidence.",
+    "records": [
+      {
+        "variant": "original",
+        "status": 200,
+        "latencyMs": 5755.215458,
+        "requestBytes": 184567,
+        "usage": {
+          "prompt_tokens": 43523,
+          "completion_tokens": 11,
+          "total_tokens": 43534,
+          "prompt_tokens_details": {
+            "cached_tokens": 1088
+          },
+          "neurons": 391.01812744140625
+        },
+        "errors": [],
+        "adapterOutcome": "Failure: missing required tool-call limit in temporary harness; provider HTTP 200"
+      },
+      {
+        "variant": "compact",
+        "status": 200,
+        "latencyMs": 5928.329416,
+        "requestBytes": 128874,
+        "usage": {
+          "prompt_tokens": 42375,
+          "completion_tokens": 11,
+          "total_tokens": 42386,
+          "prompt_tokens_details": {
+            "cached_tokens": 20928
+          },
+          "neurons": 290.39990234375
+        },
+        "errors": [],
+        "adapterOutcome": "Failure: missing required tool-call limit in temporary harness; provider HTTP 200"
+      }
+    ]
+  },
+  "modelChecks": {
+    "revision": "4f4995f7a87537c47ee4e4a875a98c9aeb005550",
+    "atomicBatch": "Success",
+    "atomicBatchChildren": 2,
+    "batchBoundary": "Live Workers AI REST through actual adapter; synthetic batch decoded only, no transactions executed",
+    "earlierDateOnly": "Failure: model returned 2026-09-21T04:00:00Z; expected 2026-09-21T05:00:00Z",
+    "nativeConformance": {
+      "outcome": "passed",
+      "command": "bun run --cwd infra/cloudflare test:workers-ai-conformance",
+      "deterministicTests": 42,
+      "liveChecks": 9,
+      "observedAtUtc": "2026-10-13T18:50:00Z",
+      "timePrecision": "approximate, inferred from run timeline"
+    },
+    "boundary": "Focused batch codec proof and subsequent native conformance pass do not erase earlier date-only semantic failures; no model-backed financial mutations executed"
+  },
+  "production": {
+    "collectedAtUtc": "2026-10-13T18:51:13.373740+00:00",
+    "windowStartUtc": "2026-10-12T00:00:00Z",
+    "windowEndUtc": "2026-10-13T18:51:13Z",
+    "response": {
+      "data": {
+        "viewer": {
+          "accounts": [
+            {
+              "d1QueriesAdaptiveGroups": [
+                {
+                  "count": 150031,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "servedByRegion": "ENAM"
+                  },
+                  "quantiles": {
+                    "queryDurationMsP50": 0.2,
+                    "queryDurationMsP95": 0.51,
+                    "queryDurationMsP99": 0.79
+                  },
+                  "sum": {
+                    "queryDurationMs": 33552.3335,
+                    "rowsRead": 528857,
+                    "rowsReturned": 11074,
+                    "rowsWritten": 29769
+                  }
+                },
+                {
+                  "count": 199572,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "servedByRegion": "ENAM"
+                  },
+                  "quantiles": {
+                    "queryDurationMsP50": 0.2,
+                    "queryDurationMsP95": 0.5,
+                    "queryDurationMsP99": 0.79
+                  },
+                  "sum": {
+                    "queryDurationMs": 44010.81369999999,
+                    "rowsRead": 607003,
+                    "rowsReturned": 19858,
+                    "rowsWritten": 45542
+                  }
+                }
+              ],
+              "durableObjectsInvocationsAdaptiveGroups": [
+                {
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64",
+                    "scriptName": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+                    "status": "clientDisconnected",
+                    "type": "http"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 33620,
+                    "cpuTimeP95": 40127,
+                    "cpuTimeP99": 40127,
+                    "wallTimeP50": 10201805,
+                    "wallTimeP95": 13889481,
+                    "wallTimeP99": 13889481
+                  },
+                  "sum": {
+                    "errors": 2,
+                    "requests": 2,
+                    "wallTime": 24091286
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64",
+                    "scriptName": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+                    "status": "success",
+                    "type": "http"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 2230,
+                    "cpuTimeP95": 79313,
+                    "cpuTimeP99": 114800,
+                    "wallTimeP50": 303966,
+                    "wallTimeP95": 19995428,
+                    "wallTimeP99": 20574028
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 2293,
+                    "wallTime": 21616337060
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64",
+                    "scriptName": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+                    "status": "success",
+                    "type": "http"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 5958,
+                    "cpuTimeP95": 72407,
+                    "cpuTimeP99": 100444,
+                    "wallTimeP50": 280971,
+                    "wallTimeP95": 19318964,
+                    "wallTimeP99": 21343632
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 3277,
+                    "wallTime": 27555197015
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64",
+                    "scriptName": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+                    "status": "success",
+                    "type": "alarm"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 7016,
+                    "cpuTimeP95": 13473,
+                    "cpuTimeP99": 13473,
+                    "wallTimeP50": 446174,
+                    "wallTimeP95": 831272,
+                    "wallTimeP99": 831272
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 19,
+                    "wallTime": 9592438
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "namespaceId": "832b57e975dd4db38affd98b6953d005",
+                    "scriptName": "alchemy-state-store",
+                    "status": "success",
+                    "type": "jsrpc"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 1135,
+                    "cpuTimeP95": 3148,
+                    "cpuTimeP99": 5703,
+                    "wallTimeP50": 27977,
+                    "wallTimeP95": 88081,
+                    "wallTimeP99": 104756
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 7629,
+                    "wallTime": 281351593
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64",
+                    "scriptName": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+                    "status": "scriptThrewException",
+                    "type": "alarm"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 2899,
+                    "cpuTimeP95": 6218,
+                    "cpuTimeP99": 6218,
+                    "wallTimeP50": 90085,
+                    "wallTimeP95": 154097,
+                    "wallTimeP99": 154097
+                  },
+                  "sum": {
+                    "errors": 9,
+                    "requests": 9,
+                    "wallTime": 785226
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64",
+                    "scriptName": "fidycloudflare-core-production-hdv5cspnk7fai6vg",
+                    "status": "clientDisconnected",
+                    "type": "http"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 56337,
+                    "cpuTimeP95": 56337,
+                    "cpuTimeP99": 56337,
+                    "wallTimeP50": 18340148,
+                    "wallTimeP95": 18340148,
+                    "wallTimeP99": 18340148
+                  },
+                  "sum": {
+                    "errors": 1,
+                    "requests": 1,
+                    "wallTime": 18340149
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "namespaceId": "832b57e975dd4db38affd98b6953d005",
+                    "scriptName": "alchemy-state-store",
+                    "status": "success",
+                    "type": "jsrpc"
+                  },
+                  "quantiles": {
+                    "cpuTimeP50": 1178,
+                    "cpuTimeP95": 3580,
+                    "cpuTimeP99": 6558,
+                    "wallTimeP50": 44523,
+                    "wallTimeP95": 93777,
+                    "wallTimeP99": 122478
+                  },
+                  "sum": {
+                    "errors": 0,
+                    "requests": 8667,
+                    "wallTime": 468493405
+                  }
+                }
+              ],
+              "durableObjectsPeriodicGroups": [
+                {
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "namespaceId": "832b57e975dd4db38affd98b6953d005"
+                  },
+                  "max": {
+                    "memoryUsageBytes": 16028364
+                  },
+                  "quantiles": {
+                    "memoryUsageBytesP99": 16024804
+                  },
+                  "sum": {
+                    "activeTime": 212205001,
+                    "cpuTime": 13516551,
+                    "duration": 27.162240128,
+                    "exceededCpuErrors": 0,
+                    "exceededMemoryErrors": 0,
+                    "fatalInternalErrors": 0,
+                    "rowsRead": 16430,
+                    "rowsWritten": 312
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64"
+                  },
+                  "max": {
+                    "memoryUsageBytes": 25150848
+                  },
+                  "quantiles": {
+                    "memoryUsageBytesP99": 20270526
+                  },
+                  "sum": {
+                    "activeTime": 27305191720,
+                    "cpuTime": 97257916,
+                    "duration": 3495.06454016,
+                    "exceededCpuErrors": 0,
+                    "exceededMemoryErrors": 0,
+                    "fatalInternalErrors": 0,
+                    "rowsRead": 0,
+                    "rowsWritten": 0
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "namespaceId": "713e8e0dd77648bcb94ecea8fcc22f64"
+                  },
+                  "max": {
+                    "memoryUsageBytes": 20770894
+                  },
+                  "quantiles": {
+                    "memoryUsageBytesP99": 20237444
+                  },
+                  "sum": {
+                    "activeTime": 21775641572,
+                    "cpuTime": 79005618,
+                    "duration": 2787.2821212159997,
+                    "exceededCpuErrors": 0,
+                    "exceededMemoryErrors": 0,
+                    "fatalInternalErrors": 0,
+                    "rowsRead": 0,
+                    "rowsWritten": 0
+                  }
+                },
+                {
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "namespaceId": "832b57e975dd4db38affd98b6953d005"
+                  },
+                  "max": {
+                    "memoryUsageBytes": 15452600
+                  },
+                  "quantiles": {
+                    "memoryUsageBytesP99": 15404460
+                  },
+                  "sum": {
+                    "activeTime": 125121625,
+                    "cpuTime": 10662708,
+                    "duration": 16.015567999999995,
+                    "exceededCpuErrors": 0,
+                    "exceededMemoryErrors": 0,
+                    "fatalInternalErrors": 0,
+                    "rowsRead": 14331,
+                    "rowsWritten": 256
+                  }
+                }
+              ],
+              "workflowsAdaptiveGroups": [
+                {
+                  "count": 53,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "eventType": "WORKFLOW_SUCCESS",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-release-afbb5e9e"
+                  },
+                  "sum": {
+                    "allStepCount": 53,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 53,
+                    "storageRate": 0,
+                    "wallTime": 46
+                  }
+                },
+                {
+                  "count": 288,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "eventType": "WORKFLOW_SUCCESS",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df"
+                  },
+                  "sum": {
+                    "allStepCount": 288,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 288,
+                    "storageRate": 0,
+                    "wallTime": 279
+                  }
+                },
+                {
+                  "count": 43,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "eventType": "WORKFLOW_SUCCESS",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-release-afbb5e9e"
+                  },
+                  "sum": {
+                    "allStepCount": 43,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 43,
+                    "storageRate": 0,
+                    "wallTime": 36
+                  }
+                },
+                {
+                  "count": 53,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "eventType": "WORKFLOW_START",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-release-afbb5e9e"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 3473408,
+                    "wallTime": 0
+                  }
+                },
+                {
+                  "count": 288,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "eventType": "WORKFLOW_START",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 18874368,
+                    "wallTime": 0
+                  }
+                },
+                {
+                  "count": 53,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "eventType": "WORKFLOW_RUNNING",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-release-afbb5e9e"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 460,
+                    "executionDuration": 1,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 0,
+                    "wallTime": 0
+                  }
+                },
+                {
+                  "count": 43,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "eventType": "WORKFLOW_START",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-release-afbb5e9e"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 2818048,
+                    "wallTime": 0
+                  }
+                },
+                {
+                  "count": 288,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "eventType": "WORKFLOW_RUNNING",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 2268,
+                    "executionDuration": 198,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 0,
+                    "wallTime": 0
+                  }
+                },
+                {
+                  "count": 43,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "eventType": "WORKFLOW_RUNNING",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-release-afbb5e9e"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 308,
+                    "executionDuration": 10,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 0,
+                    "wallTime": 0
+                  }
+                },
+                {
+                  "count": 225,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "eventType": "WORKFLOW_SUCCESS",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df"
+                  },
+                  "sum": {
+                    "allStepCount": 225,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 225,
+                    "storageRate": 0,
+                    "wallTime": 214
+                  }
+                },
+                {
+                  "count": 225,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "eventType": "WORKFLOW_RUNNING",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 1981,
+                    "executionDuration": 119,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 0,
+                    "wallTime": 0
+                  }
+                },
+                {
+                  "count": 225,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "eventType": "WORKFLOW_START",
+                    "workflowName": "fidycloudflare-core-production-hdv5cspnk7fai6vg-operati-a29777df"
+                  },
+                  "sum": {
+                    "allStepCount": 0,
+                    "cpuTime": 0,
+                    "executionDuration": 0,
+                    "retryCount": 0,
+                    "stepCount": 0,
+                    "storageRate": 14745600,
+                    "wallTime": 0
+                  }
+                }
+              ],
+              "workflowsQueueWaitAdaptiveGroups": [
+                {
+                  "count": 18,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "workflowId": "b23ca2e9-b329-4d7a-8166-7ac66c406e26"
+                  },
+                  "quantiles": {
+                    "waitMsP50": 1465.076171875,
+                    "waitMsP95": 1834.98046875,
+                    "waitMsP99": 1834.98046875
+                  }
+                },
+                {
+                  "count": 17,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "workflowId": "b23ca2e9-b329-4d7a-8166-7ac66c406e26"
+                  },
+                  "quantiles": {
+                    "waitMsP50": 1732.57421875,
+                    "waitMsP95": 1823.5859375,
+                    "waitMsP99": 1823.5859375
+                  }
+                },
+                {
+                  "count": 26,
+                  "dimensions": {
+                    "date": "2026-10-12",
+                    "workflowId": "941a1e07-614c-47f4-9dff-e9b9bc4bf687"
+                  },
+                  "quantiles": {
+                    "waitMsP50": 1537.9208984375,
+                    "waitMsP95": 1778.650390625,
+                    "waitMsP99": 1794.37646484375
+                  }
+                },
+                {
+                  "count": 17,
+                  "dimensions": {
+                    "date": "2026-10-13",
+                    "workflowId": "941a1e07-614c-47f4-9dff-e9b9bc4bf687"
+                  },
+                  "quantiles": {
+                    "waitMsP50": 1573.81298828125,
+                    "waitMsP95": 1866.88818359375,
+                    "waitMsP99": 1866.88818359375
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "errors": null
+    }
+  },
+  "providers": {
+    "collectedAtUtc": "2026-10-13T18:51:13.373740+00:00",
+    "request": {
+      "queryId": "a7bde3aa-cc05-413b-9e81-a090511a3a89",
+      "view": "calculations",
+      "chart": false,
+      "chartType": "aggregate",
+      "timeframe": {
+        "from": 1791831074010,
+        "to": 1791917474010
+      },
+      "parameters": {
+        "calculations": [
+          {
+            "operator": "count",
+            "alias": "samples"
+          },
+          {
+            "operator": "median",
+            "key": "latencyMilliseconds",
+            "keyType": "number",
+            "alias": "p50ms"
+          },
+          {
+            "operator": "p95",
+            "key": "latencyMilliseconds",
+            "keyType": "number",
+            "alias": "p95ms"
+          },
+          {
+            "operator": "p99",
+            "key": "latencyMilliseconds",
+            "keyType": "number",
+            "alias": "p99ms"
+          }
+        ],
+        "filters": [
+          {
+            "key": "latencyMilliseconds",
+            "type": "number",
+            "operation": "gte",
+            "value": 0
+          }
+        ],
+        "groupBys": [
+          {
+            "type": "string",
+            "value": "operation"
+          },
+          {
+            "type": "string",
+            "value": "provider"
+          },
+          {
+            "type": "string",
+            "value": "outcome"
+          }
+        ],
+        "limit": 200
+      }
+    },
+    "response": {
+      "success": true,
+      "errors": [],
+      "messages": [
+        {
+          "message": "Successful request"
+        }
+      ],
+      "result": {
+        "run": {
+          "id": "202bqcwlo64ak61f1dc4z91v",
+          "query": {
+            "id": "a7bde3aa-cc05-413b-9e81-a090511a3a89",
+            "description": "",
+            "name": "",
+            "generated": false,
+            "parameters": {
+              "filters": [
+                {
+                  "key": "latencyMilliseconds",
+                  "operation": "gte",
+                  "value": 0,
+                  "type": "number"
+                }
+              ],
+              "calculations": [
+                {
+                  "alias": "samples",
+                  "operator": "count"
+                },
+                {
+                  "keyType": "number",
+                  "alias": "p50ms",
+                  "key": "latencyMilliseconds",
+                  "operator": "median"
+                },
+                {
+                  "keyType": "number",
+                  "alias": "p95ms",
+                  "key": "latencyMilliseconds",
+                  "operator": "p95"
+                },
+                {
+                  "keyType": "number",
+                  "alias": "p99ms",
+                  "key": "latencyMilliseconds",
+                  "operator": "p99"
+                }
+              ],
+              "groupBys": [
+                {
+                  "type": "string",
+                  "value": "operation"
+                },
+                {
+                  "type": "string",
+                  "value": "provider"
+                },
+                {
+                  "type": "string",
+                  "value": "outcome"
+                }
+              ],
+              "limit": 200
+            },
+            "workspaceId": "a32350b6918ad7e78bc589b6630af1c2",
+            "environmentId": "cloudflare",
+            "userId": "a32350b6918ad7e78bc589b6630af1c2",
+            "created": "2026-10-13T18:51:14.416Z",
+            "updated": "2026-10-13T18:51:14.416Z"
+          },
+          "accountId": "a32350b6918ad7e78bc589b6630af1c2",
+          "timeframe": {
+            "from": 1791831074010,
+            "to": 1791917474010
+          },
+          "userId": "a32350b6918ad7e78bc589b6630af1c2",
+          "status": "COMPLETED",
+          "granularity": 1440000,
+          "dry": false,
+          "statistics": {
+            "elapsed": 2.824890582,
+            "rows_read": 12508754,
+            "bytes_read": 15537111927,
+            "abr_level": 1
+          }
+        },
+        "calculations": [
+          {
+            "alias": "samples",
+            "calculation": "count",
+            "aggregates": [
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 4,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 221,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 221
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 1429,
+                "interval": 1.032514450867052,
+                "sampleInterval": 1.032514450867052,
+                "count": 1429
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 1,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 11,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 11
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 succeeded",
+                "value": 15,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 15
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 1506,
+                "interval": 1.0502092050209204,
+                "sampleInterval": 1.0502092050209204,
+                "count": 1506
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 rejected",
+                "value": 4,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.email.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.email.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 301,
+                "interval": 1.0985401459854014,
+                "sampleInterval": 1.0985401459854014,
+                "count": 301
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 2025,
+                "interval": 1.0368663594470047,
+                "sampleInterval": 1.0368663594470047,
+                "count": 2025
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 404,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 404
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 8,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 8
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 2410,
+                "interval": 1.0190274841437632,
+                "sampleInterval": 1.0190274841437632,
+                "count": 2410
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.operationalCanary"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.operationalCanary \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 287,
+                "interval": 1.0323741007194245,
+                "sampleInterval": 1.0323741007194245,
+                "count": 287
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "provider.request"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "resend"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "provider.request \u2b24 resend \u2b24 succeeded",
+                "value": 66,
+                "interval": 1.1578947368421053,
+                "sampleInterval": 1.1578947368421053,
+                "count": 66
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 1,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 822,
+                "interval": 1.0223880597014925,
+                "sampleInterval": 1.0223880597014925,
+                "count": 822
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 139,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 139
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 5,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 5
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 4,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 1382,
+                "interval": 1.0065549890750183,
+                "sampleInterval": 1.0065549890750183,
+                "count": 1382
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.releaseSmoke"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.releaseSmoke \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 68,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 68
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 853,
+                "interval": 1.0556930693069306,
+                "sampleInterval": 1.0556930693069306,
+                "count": 853
+              }
+            ],
+            "series": [
+              {
+                "time": "2026-10-12 19:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:48:00",
+                "data": []
+              }
+            ]
+          },
+          {
+            "alias": "p50ms",
+            "calculation": "median(latencyMilliseconds)",
+            "aggregates": [
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 6848,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 109,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 221
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 19056,
+                "interval": 1.032514450867052,
+                "sampleInterval": 1.032514450867052,
+                "count": 1429
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 20443,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 644,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 11
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 succeeded",
+                "value": 2966,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 15
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 569,
+                "interval": 1.0502092050209204,
+                "sampleInterval": 1.0502092050209204,
+                "count": 1506
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 rejected",
+                "value": 12,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.email.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.email.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 311,
+                "interval": 1.0985401459854014,
+                "sampleInterval": 1.0985401459854014,
+                "count": 301
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 14,
+                "interval": 1.0368663594470047,
+                "sampleInterval": 1.0368663594470047,
+                "count": 2025
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 5,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 404
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 389,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 8
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 19,
+                "interval": 1.0190274841437632,
+                "sampleInterval": 1.0190274841437632,
+                "count": 2410
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.operationalCanary"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.operationalCanary \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 291,
+                "interval": 1.0323741007194245,
+                "sampleInterval": 1.0323741007194245,
+                "count": 287
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "provider.request"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "resend"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "provider.request \u2b24 resend \u2b24 succeeded",
+                "value": 332,
+                "interval": 1.1578947368421053,
+                "sampleInterval": 1.1578947368421053,
+                "count": 66
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 21037,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 8,
+                "interval": 1.0223880597014925,
+                "sampleInterval": 1.0223880597014925,
+                "count": 822
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 221,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 139
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 86,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 5
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 129,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 18832,
+                "interval": 1.0065549890750183,
+                "sampleInterval": 1.0065549890750183,
+                "count": 1382
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.releaseSmoke"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.releaseSmoke \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 221,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 68
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 0,
+                "interval": 1.0556930693069306,
+                "sampleInterval": 1.0556930693069306,
+                "count": 853
+              }
+            ],
+            "series": [
+              {
+                "time": "2026-10-12 19:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:48:00",
+                "data": []
+              }
+            ]
+          },
+          {
+            "alias": "p95ms",
+            "calculation": "p95(latencyMilliseconds)",
+            "aggregates": [
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 11251,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 384,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 221
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 20492,
+                "interval": 1.032514450867052,
+                "sampleInterval": 1.032514450867052,
+                "count": 1429
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 20443,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 731,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 11
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 succeeded",
+                "value": 7593,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 15
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 889,
+                "interval": 1.0502092050209204,
+                "sampleInterval": 1.0502092050209204,
+                "count": 1506
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 rejected",
+                "value": 91,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.email.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.email.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 770,
+                "interval": 1.0985401459854014,
+                "sampleInterval": 1.0985401459854014,
+                "count": 301
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 815,
+                "interval": 1.0368663594470047,
+                "sampleInterval": 1.0368663594470047,
+                "count": 2025
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 420,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 404
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 1200,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 8
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 965,
+                "interval": 1.0190274841437632,
+                "sampleInterval": 1.0190274841437632,
+                "count": 2410
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.operationalCanary"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.operationalCanary \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 427,
+                "interval": 1.0323741007194245,
+                "sampleInterval": 1.0323741007194245,
+                "count": 287
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "provider.request"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "resend"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "provider.request \u2b24 resend \u2b24 succeeded",
+                "value": 459,
+                "interval": 1.1578947368421053,
+                "sampleInterval": 1.1578947368421053,
+                "count": 66
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 21037,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 801,
+                "interval": 1.0223880597014925,
+                "sampleInterval": 1.0223880597014925,
+                "count": 822
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 4385,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 139
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 100,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 5
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 12539,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 20161,
+                "interval": 1.0065549890750183,
+                "sampleInterval": 1.0065549890750183,
+                "count": 1382
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.releaseSmoke"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.releaseSmoke \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 411,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 68
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 0,
+                "interval": 1.0556930693069306,
+                "sampleInterval": 1.0556930693069306,
+                "count": 853
+              }
+            ],
+            "series": [
+              {
+                "time": "2026-10-12 19:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:48:00",
+                "data": []
+              }
+            ]
+          },
+          {
+            "alias": "p99ms",
+            "calculation": "p99(latencyMilliseconds)",
+            "aggregates": [
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 11251,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 1217,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 221
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 21073,
+                "interval": 1.032514450867052,
+                "sampleInterval": 1.032514450867052,
+                "count": 1429
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 20443,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 731,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 11
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 succeeded",
+                "value": 7593,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 15
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 1226,
+                "interval": 1.0502092050209204,
+                "sampleInterval": 1.0502092050209204,
+                "count": 1506
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "model.workersAi"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers-ai"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "model.workersAi \u2b24 cloudflare-workers-ai \u2b24 rejected",
+                "value": 91,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.email.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.email.scheduled \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 805,
+                "interval": 1.0985401459854014,
+                "sampleInterval": 1.0985401459854014,
+                "count": 301
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 2239,
+                "interval": 1.0368663594470047,
+                "sampleInterval": 1.0368663594470047,
+                "count": 2025
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 1094,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 404
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "rejected"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 rejected",
+                "value": 1200,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 8
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 2087,
+                "interval": 1.0190274841437632,
+                "sampleInterval": 1.0190274841437632,
+                "count": 2410
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.operationalCanary"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.operationalCanary \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 629,
+                "interval": 1.0323741007194245,
+                "sampleInterval": 1.0323741007194245,
+                "count": 287
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "provider.request"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "resend"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "provider.request \u2b24 resend \u2b24 succeeded",
+                "value": 2516,
+                "interval": 1.1578947368421053,
+                "sampleInterval": 1.1578947368421053,
+                "count": 66
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.scheduled"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.scheduled \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 21037,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 1
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.public.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.public.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 1188,
+                "interval": 1.0223880597014925,
+                "sampleInterval": 1.0223880597014925,
+                "count": 822
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.coordinator"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.coordinator \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 8074,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 139
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.alarm"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.alarm \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 100,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 5
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.queue"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.queue \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 12539,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 4
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.maintenance"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "worker.core.maintenance \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 20788,
+                "interval": 1.0065549890750183,
+                "sampleInterval": 1.0065549890750183,
+                "count": 1382
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "workflow.releaseSmoke"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "succeeded"
+                  }
+                ],
+                "groupKey": "workflow.releaseSmoke \u2b24 cloudflare-workers \u2b24 succeeded",
+                "value": 593,
+                "interval": 1,
+                "sampleInterval": 1,
+                "count": 68
+              },
+              {
+                "groups": [
+                  {
+                    "key": "operation",
+                    "value": "worker.core.fetch"
+                  },
+                  {
+                    "key": "provider",
+                    "value": "cloudflare-workers"
+                  },
+                  {
+                    "key": "outcome",
+                    "value": "failed"
+                  }
+                ],
+                "groupKey": "worker.core.fetch \u2b24 cloudflare-workers \u2b24 failed",
+                "value": 12,
+                "interval": 1.0556930693069306,
+                "sampleInterval": 1.0556930693069306,
+                "count": 853
+              }
+            ],
+            "series": [
+              {
+                "time": "2026-10-12 19:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 20:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 21:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 22:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-12 23:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 00:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 01:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 02:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 03:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 04:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 05:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 06:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 07:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 08:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 09:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 10:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 11:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 12:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 13:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 14:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 15:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 16:48:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:12:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 17:36:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:00:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:24:00",
+                "data": []
+              },
+              {
+                "time": "2026-10-13 18:48:00",
+                "data": []
+              }
+            ]
+          }
+        ],
+        "statistics": {
+          "elapsed": 2.824890582,
+          "rows_read": 12508754,
+          "bytes_read": 15537111927,
+          "abr_level": 1
+        }
+      }
+    }
+  },
+  "dailyAiUsage": {
+    "collectedAtUtc": "2026-10-13T18:50:27.186353+00:00",
+    "boundary": "All retrieved account AI models and request sources; adaptive analytics may lag and do not expose the enforcement counter",
+    "groups": [
+      {
+        "count": 3,
+        "dimensions": {
+          "date": "2026-10-13",
+          "errorCode": 4006,
+          "modelId": "@cf/google/gemma-4-26b-a4b-it",
+          "requestSource": "unknown"
+        },
+        "sum": {
+          "totalInputTokens": 0,
+          "totalNeurons": 0,
+          "totalOutputTokens": 0
+        }
+      },
+      {
+        "count": 46,
+        "dimensions": {
+          "date": "2026-10-13",
+          "errorCode": 0,
+          "modelId": "@cf/google/gemma-4-26b-a4b-it",
+          "requestSource": "rest api"
+        },
+        "sum": {
+          "totalInputTokens": 1140685,
+          "totalNeurons": 7686.406272739172,
+          "totalOutputTokens": 2300
+        }
+      },
+      {
+        "count": 6,
+        "dimensions": {
+          "date": "2026-10-13",
+          "errorCode": 4006,
+          "modelId": "@cf/google/gemma-4-26b-a4b-it",
+          "requestSource": "rest api"
+        },
+        "sum": {
+          "totalInputTokens": 0,
+          "totalNeurons": 0,
+          "totalOutputTokens": 0
+        }
+      },
+      {
+        "count": 21,
+        "dimensions": {
+          "date": "2026-10-13",
+          "errorCode": 0,
+          "modelId": "@cf/google/gemma-4-26b-a4b-it",
+          "requestSource": "unknown"
+        },
+        "sum": {
+          "totalInputTokens": 38088,
+          "totalNeurons": 270.9635269641876,
+          "totalOutputTokens": 1122
+        }
+      }
+    ],
+    "reportedTotalNeurons": 7957.36979970336
+  },
+  "limits": [
+    "Local coordinator and D1 are not production edge latency/CPU measurements",
+    "History fixtures changed since baseline; no matched before/after latency claim",
+    "Only two samples per history size; no population p95/p99 or saturation throughput claim",
+    "Provider HTTP response timing is not confirmed delivery time",
+    "Sampled DO memory is not per-Turn peak heap; no attributed cold-start sample",
+    "Runtime refusal around 3986 reported neurons recovered before daily reset without changing billing; exact cause unknown"
+  ],
+  "ciRunnerProvisioning": {
+    "runId": 38453532801,
+    "attempt": 2,
+    "headRevision": "e5bd15b71648797992b71cd2fd70839fd8fc7dbb",
+    "jobId": 115497442189,
+    "scheduledAtUtc": "2026-10-13T19:32:16Z",
+    "completedAtUtc": "2026-10-13T19:47:17Z",
+    "conclusion": "cancelled",
+    "executedSteps": 0,
+    "annotations": [
+      "The job was not acquired by Runner of type hosted even after multiple attempts",
+      "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times."
+    ],
+    "change": "Native store conformance uses macos-15-intel; ARM release packaging remains macos-latest; no assertion or timeout change."
+  }
+}

@@ -336,7 +336,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        # Keep ARM release packaging in cli-release-build.yml; avoid its constrained
+        # hosted pool for this platform-neutral native store conformance bundle.
+        os: [macos-15-intel, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-runtime

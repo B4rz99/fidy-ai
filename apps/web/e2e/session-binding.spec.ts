@@ -91,3 +91,28 @@ test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =
       yield* expectSessionUnchanged(other, second.binding);
     })
   ));
+
+test("keeps the signing-in tab live while a broadcast retires the other tab", ({
+  page,
+  context,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      );
+      const other = yield* Effect.tryPromise(() => context.newPage());
+      yield* Effect.tryPromise(() => signInDashboardThroughCore({ page: other, request }));
+      yield* Effect.tryPromise(() =>
+        expect(other.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Tu sesión venció. Inicia sesión de nuevo.")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(other.getByText("Tu sesión venció. Inicia sesión de nuevo.")).not.toBeVisible()
+      );
+    })
+  ));

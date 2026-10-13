@@ -1,5 +1,5 @@
 import { playwright } from "./playwright-runtime";
-import { visiblePairingCode } from "./real-core-fixture";
+import { boundSessionRequests, visiblePairingCode } from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
@@ -27,7 +27,7 @@ export const isolateProviderSource = (context: BrowserContext): Promise<void> =>
 const redirectStatus = 302;
 const pendingStatus = 202;
 const noContentStatus = 204;
-const forbiddenStatus = 403;
+const unauthorizedStatus = 401;
 const successStatus = 200;
 const unavailableStatus = 503;
 const advancePastRequestDeadline = 10_001;
@@ -320,9 +320,13 @@ const returningSessionPolicies = (
     );
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
     const blocked = yield* Effect.tryPromise(() =>
-      context.request.get("https://127.0.0.1:4174/transactions")
+      boundSessionRequests(context.request).get("https://127.0.0.1:4174/transactions")
     );
-    expect(blocked.status()).toBe(forbiddenStatus);
+    // The probe now supplies Origin and session binding, so it reaches Core Consent admission.
+    expect(blocked.status()).toBe(unauthorizedStatus);
+    expect(yield* Effect.tryPromise(() => blocked.json())).toMatchObject({
+      error: { code: "unauthenticated" },
+    });
   });
 const signupHistoryJourney = Effect.fn(function* (
   configuration: ProviderJourneyConfiguration,
@@ -831,7 +835,7 @@ const providerRecoveryJourney = Effect.fn(function* ({
   backupRecoveryCode,
 }: ProviderJourney & Readonly<{ backupRecoveryCode: string }>) {
   const identity = yield* Effect.tryPromise(() =>
-    context.request.get("https://127.0.0.1:4174/user")
+    boundSessionRequests(context.request).get("https://127.0.0.1:4174/user")
   );
   const before: unknown = yield* Effect.tryPromise(() => identity.json());
   yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
@@ -859,7 +863,7 @@ const providerRecoveryJourney = Effect.fn(function* ({
     expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 })
   );
   const recovered = yield* Effect.tryPromise(() =>
-    context.request.get("https://127.0.0.1:4174/user")
+    boundSessionRequests(context.request).get("https://127.0.0.1:4174/user")
   );
   expect(yield* Effect.tryPromise(() => recovered.json())).toEqual(before);
   yield* Effect.tryPromise(() => page.goto("/settings/recovery"));

@@ -4,6 +4,8 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import type { Cause } from "effect";
 import { playwright } from "./playwright-runtime";
 import {
+  boundSessionRequests,
+  browserSessionHeaders,
   signInFirstCardThroughCore,
   signInFirstDaviplataThroughCore,
   signInThroughCore,
@@ -59,8 +61,13 @@ const SessionProbeWire = Schema.Struct({
   retryAfter: Schema.OptionFromNullOr(Schema.String),
 });
 // Headers.get is raw browser wire input; the driver decodes absence into Option before pacing.
-const fetchWithSession = (url: string): Promise<typeof SessionProbeWire.Encoded> =>
-  window.fetch(url, { credentials: "include" }).then((response) =>
+const fetchWithSession = ({
+  url,
+  headers,
+}: Readonly<{ url: string; headers: Record<string, string> }>): Promise<
+  typeof SessionProbeWire.Encoded
+> =>
+  window.fetch(url, { credentials: "include", headers }).then((response) =>
     response.text().then((body) => ({
       status: response.status,
       body,
@@ -80,7 +87,10 @@ const inspectBrowserSnapshot = (
     const millisecondsPerSecond = 1_000;
     const send = (): Promise<typeof SessionProbeWire.Encoded> =>
       Option.match(bearer, {
-        onNone: () => page.evaluate(fetchWithSession, url),
+        onNone: () =>
+          browserSessionHeaders(page.request).then((headers) =>
+            page.evaluate(fetchWithSession, { url, headers })
+          ),
         onSome: (token) => page.evaluate(fetchWithBearer, { url, token }),
       });
     for (let retry = 0; retry < resourceProbeRetries; retry++) {
@@ -128,7 +138,7 @@ const inspectCanonicalSnapshot = (
 > =>
   Effect.gen(function* () {
     const response = yield* probeCanonicalRequest(() =>
-      page.context().request.get(path, { headers: { origin: appOrigin } })
+      boundSessionRequests(page.context().request).get(path, { headers: { origin: appOrigin } })
     );
     return { status: response.status(), body: yield* fromPlaywright(response.text()) };
   });
@@ -322,7 +332,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
         })
       );
       const categories = yield* probeCanonicalRequest(() =>
-        page.request.get(`${api}/categories`, {
+        boundSessionRequests(page.request).get(`${api}/categories`, {
           headers: {
             origin: "https://127.0.0.1:4173",
           },
@@ -339,7 +349,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
       });
       const occurredAt = DateTime.formatIso(yield* DateTime.now);
       const captured = yield* probeCanonicalRequest(() =>
-        page.request.post(`${api}/transactions`, {
+        boundSessionRequests(page.request).post(`${api}/transactions`, {
           headers: {
             origin: "https://127.0.0.1:4173",
           },
@@ -545,18 +555,21 @@ test("submits reused-source Subscription enrollment through real public and Core
         (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()
       ).toBe(noContent);
       const settled = yield* fromPlaywright(
-        page.request.get(`${api}/web/subscription/billing-attempts/${billingAttemptId}`, {
-          headers: {
-            origin: "https://127.0.0.1:4173",
-          },
-        })
+        boundSessionRequests(page.request).get(
+          `${api}/web/subscription/billing-attempts/${billingAttemptId}`,
+          {
+            headers: {
+              origin: "https://127.0.0.1:4173",
+            },
+          }
+        )
       );
       expect(settled.status()).toBe(ok);
       expect(yield* fromPlaywright(settled.json())).toMatchObject({
         status: "succeeded",
       });
       const standing = yield* fromPlaywright(
-        page.request.get(`${api}/subscription/status`, {
+        boundSessionRequests(page.request).get(`${api}/subscription/status`, {
           headers: {
             origin: "https://127.0.0.1:4173",
           },
@@ -812,9 +825,12 @@ const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
   )(submitted.request().postData());
   // Navigation can release the browser response body; this authenticated read owns its response.
   const enrollment = yield* fromPlaywright(
-    page.request.get(`${api}/web/subscription/payment-enrollments/${enrollmentId}`, {
-      headers: { origin: appOrigin },
-    })
+    boundSessionRequests(page.request).get(
+      `${api}/web/subscription/payment-enrollments/${enrollmentId}`,
+      {
+        headers: { origin: appOrigin },
+      }
+    )
   );
   expect(enrollment.status()).toBe(ok);
   expect(yield* fromPlaywright(enrollment.json())).toMatchObject({
@@ -838,7 +854,7 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
       yield* fromPlaywright(installDaviplataProviderRoutes(page, providerCalls));
       yield* submitFirstDaviplata(page);
       const beforeCollection = yield* fromPlaywright(
-        page.request.get(`${api}/subscription/status`, { headers: { origin: appOrigin } })
+        boundSessionRequests(page.request).get(`${api}/subscription/status`)
       );
       expect(beforeCollection.status()).toBe(ok);
       expect(yield* fromPlaywright(beforeCollection.json())).toMatchObject({
@@ -863,9 +879,7 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
         })
       );
       const afterCollection = yield* fromPlaywright(
-        page.request.get(`${api}/subscription/status`, {
-          headers: { origin: "https://127.0.0.1:4173" },
-        })
+        boundSessionRequests(page.request).get(`${api}/subscription/status`)
       );
       expect(afterCollection.status()).toBe(ok);
       expect(yield* fromPlaywright(afterCollection.json())).toMatchObject({

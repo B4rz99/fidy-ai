@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { makeUser, response } from "./http-fixtures";
-import { visiblePairingCode } from "./real-core-fixture";
+import { boundSessionRequests, visiblePairingCode } from "./real-core-fixture";
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
@@ -84,6 +84,11 @@ const installStartAndLogoutRoutes = (page: Page, fixture: PairingApiFixture): Pr
         )
       );
       yield* wait(installCanonicalProductRoutes(page));
+      yield* wait(
+        page.route("**/web/session/binding", (route) =>
+          route.fulfill({ contentType: "application/json", body: json({ binding: pairingId }) })
+        )
+      );
       yield* wait(
         page.route("**/web/session/logout", (route) =>
           runFixture(
@@ -476,7 +481,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       expect(Option.getOrUndefined(session)?.httpOnly).toBe(true);
       expect(Option.getOrUndefined(session)?.secure).toBe(true);
       const current = yield* wait(
-        page.request.get("https://127.0.0.1:4174/user", {
+        boundSessionRequests(page.request).get("https://127.0.0.1:4174/user", {
           headers: { origin: "https://127.0.0.1:4173" },
         })
       );
@@ -485,12 +490,15 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
         data: { id: "24000000-0000-4000-8000-000000000321" },
       });
       const otherTransaction = yield* wait(
-        request.get("https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262", {
-          headers: {
-            origin: "https://127.0.0.1:4173",
-            cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
-          },
-        })
+        boundSessionRequests(page.request).get(
+          "https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262",
+          {
+            headers: {
+              origin: "https://127.0.0.1:4173",
+              cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
+            },
+          }
+        )
       );
       expect(otherTransaction.status()).toBe(notFoundStatus);
       expect(yield* wait(otherTransaction.text())).not.toContain("OTHER-USER-PRIVATE");
@@ -522,7 +530,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       expect((yield* wait(decision())).status()).toBe(invalidStatus);
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       const recovered = yield* wait(
-        page.request.get("https://127.0.0.1:4174/user", {
+        boundSessionRequests(page.request).get("https://127.0.0.1:4174/user", {
           headers: { origin: "https://127.0.0.1:4173" },
         })
       );

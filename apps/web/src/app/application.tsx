@@ -28,7 +28,7 @@ const AuthenticationRouter = ({
         session,
         observer: {
           onAuthenticationExpired: () => {
-            if (session.binding !== "none") expireAuthentication();
+            expireAuthentication();
           },
         },
       }),

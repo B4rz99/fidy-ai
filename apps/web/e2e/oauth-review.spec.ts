@@ -3,7 +3,11 @@ import { Effect, Schema } from "effect";
 import type { Cause } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import { signInFirstCardThroughCore, visiblePairingCode } from "./real-core-fixture";
+import {
+  boundSessionRequests,
+  signInFirstCardThroughCore,
+  visiblePairingCode,
+} from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const { api, app, operator } = browserAcceptanceTopology();
@@ -281,7 +285,7 @@ const inspectAndRevoke = (
     );
     yield* refuseOtherBrowser({ page, request, connectionId });
     const csrf = yield* Effect.tryPromise(() =>
-      page.context().request.post(`${api}/web/oauth/revoke-all`, {
+      boundSessionRequests(page.context().request).post(`${api}/web/oauth/revoke-all`, {
         headers: { origin: "https://evil.example" },
         data: {},
       })
@@ -343,7 +347,9 @@ const inspectManagementPage = (
       expect(page.getByText("categories.listCategories", { exact: true })).toHaveCount(0)
     );
     const listed = yield* Effect.tryPromise(() =>
-      page.context().request.get(`${api}/web/oauth/connections`, { headers: { origin: app } })
+      boundSessionRequests(page.context().request).get(`${api}/web/oauth/connections`, {
+        headers: { origin: app },
+      })
     );
     const metadata = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ connections: Schema.Array(Schema.Struct({ connectionId: Schema.String })) })
@@ -452,7 +458,7 @@ const refuseOtherIdentity = (
       expect(page.getByText("No hay conexiones en esta página.")).toBeVisible()
     );
     const refused = yield* Effect.tryPromise(() =>
-      input.context.request.post(`${api}/web/oauth/revoke`, {
+      boundSessionRequests(input.context.request).post(`${api}/web/oauth/revoke`, {
         headers: { origin: app },
         data: { connectionId: input.connectionId },
       })

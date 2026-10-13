@@ -323,7 +323,14 @@ it.each(queryGroups)(
             })
           )).status
         ).toBe(200);
-        const peer = yield* approveAgain({ ...fixture, headers: { ...fixture.headers, cookie } });
+        const peer = yield* approveAgain({
+          ...fixture,
+          headers: {
+            ...fixture.headers,
+            cookie,
+            "Fidy-Session-Binding": "20000000-0000-4000-8000-000000000003",
+          },
+        });
         const examples: ReadonlyArray<Schema.Json> = [
           {},
           { query: {} },

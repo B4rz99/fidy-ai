@@ -65,7 +65,12 @@ describe("browser defect diagnostics", () => {
       const observed = yield* Effect.exit(observeBrowserDecode(Effect.failCause(expected.cause)));
       expect(Exit.isFailure(observed)).toBe(true);
       if (!Exit.isFailure(observed)) return;
-      expect(Cause.findErrorOption(observed.cause)).toEqual(Cause.findErrorOption(expected.cause));
+      const originalError = Cause.findErrorOption(expected.cause);
+      const observedError = Cause.findErrorOption(observed.cause);
+      expect(originalError._tag).toBe("Some");
+      expect(observedError._tag).toBe("Some");
+      if (originalError._tag !== "Some" || observedError._tag !== "Some") return;
+      expect(observedError.value).toBe(originalError.value);
       expect(diagnosticConsole.info).toHaveBeenCalledExactlyOnceWith("fidy.browser.defect", {
         component: "browser",
         operation: "browser.defect",

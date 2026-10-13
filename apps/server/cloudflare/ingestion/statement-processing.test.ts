@@ -2639,7 +2639,8 @@ effectIt.effect("refuses forged progress and preserves captures after a lost row
   })
 );
 
-// Batch synthetic fixture receipts independently of the processor's 32-row activity.
+// Insert synthetic fixture receipts in native SQL chunks, independently of the processor's
+// 32-row activity. Every row still runs the installed triggers; avoid a proxy crossing per row.
 const receiptBatchSize = 96;
 
 const seedReceipts = ({
@@ -2662,15 +2663,12 @@ const seedReceipts = ({
     ),
     (offset) =>
       fromTestPromise(() =>
-        db.batch(
-          Array.from({ length: Math.min(receiptBatchSize, rows - offset) }, (_, index) =>
-            db
-              .prepare(
-                "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,?,'needs-review')"
-              )
-              .bind(owner, submission, offset + index + 1)
+        db
+          .prepare(
+            "WITH RECURSIVE fixture_records(record_number) AS (SELECT ? UNION ALL SELECT record_number+1 FROM fixture_records WHERE record_number<?) INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) SELECT ?,?,record_number,'needs-review' FROM fixture_records"
           )
-        )
+          .bind(offset + 1, Math.min(rows, offset + receiptBatchSize), owner, submission)
+          .run()
       ),
     { discard: true }
   );

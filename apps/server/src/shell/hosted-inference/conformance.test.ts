@@ -144,15 +144,17 @@ it.effect("fails closed when Spanish invalid-output evidence is absent", () =>
   })
 );
 
-it.effect("rejects UTC midnight for a date requested without a time in Bogotá", () =>
+it.effect("rejects UTC midnight and an invented daylight-saving offset for a date in Bogotá", () =>
   Effect.gen(function* () {
-    const inference = yield* conformanceStub("inválido", representativeAmount, {
-      occurredAt: "2026-09-22T12:00:00Z",
-      dateOnly: "2026-09-21T00:00:00Z",
-    });
-    assert.deepStrictEqual(
-      yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
-      Exit.fail({ check: "canonical_date_only", category: "InvalidOutput" })
-    );
+    for (const dateOnly of ["2026-09-21T00:00:00Z", "2026-09-21T04:00:00Z"]) {
+      const inference = yield* conformanceStub("inválido", representativeAmount, {
+        occurredAt: "2026-09-22T12:00:00Z",
+        dateOnly,
+      });
+      assert.deepStrictEqual(
+        yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+        Exit.fail({ check: "canonical_date_only", category: "InvalidOutput" })
+      );
+    }
   })
 );

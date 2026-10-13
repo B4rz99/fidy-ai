@@ -2,6 +2,37 @@
 
 Status: **live evaluation not run; semantic acceptance pending**. This executable fixture supports [#1263](https://github.com/B4rz99/fidy-ai/issues/1263), supplementing [native containment evidence](owasp-agent-evidence-1260.md). A successful dry run proves harness execution, not model resistance or OWASP certification.
 
+## Conformance investigation (2026-10-13)
+
+On revision `c9475794494c36bc197fedf9e2028a202505a055`, local Wrangler OAuth with
+`ai (write)` reached the approved model. The bounded conformance attempt ran from
+20:18:53.072Z to 20:19:03.034Z, reserved five calls, and stopped at `canonical_date_only`
+with `InvalidOutput`. No provider refusal was recorded. Authentication and the earlier quota
+refusal were therefore not the current blocker. The closed report does not retain the proposed
+date or identify which assertion failed. The adversarial run did not start.
+
+[Independent infrastructure evidence](infra-live-validation-2026-10-13.md) records earlier
+`04:00Z` proposals for Bogotá midnight, which should be `05:00Z`, and a subsequent passing
+sample. The system prompt now explicitly explains the current Bogotá UTC-05:00 offset, absence
+of seasonal daylight-saving changes, and five-hour conversion; historical dates still require
+their own IANA rules. The deterministic negative conformance fixture rejects both UTC midnight
+and the incorrect daylight-saving offset. This is a prompt mitigation, not deterministic
+semantic enforcement or live-model acceptance. Failed samples remain evidence.
+
+The revised prompt at `ae713aca7725a1325f3f7b35824a3c7e87ae27c0` passed all nine
+strict conformance checks in one bounded live run, from 20:24:18.268Z to 20:24:57.271Z.
+It reserved eight provider calls, 42,243 serialized input bytes, and 128,000 output tokens;
+these reservations are bounds, not actual billing. No provider refusal was recorded.
+All 42 hosted-inference tests and repository static verification also passed. This establishes
+one passing candidate sample; it does not prove that the prompt eliminated the model's
+date-conversion variability. No adversarial observations or semantic acceptance are claimed.
+
+The earlier quota-refused attempt reserved one call, the authenticated failed conformance
+attempt reserved five, and this passing attempt reserved eight: fourteen of the initial
+73-call allowance have been used. The complete 65-case adversarial run would require six
+additional authorized attempts beyond that allowance. Do not silently reset the allowance
+or reduce the required corpus/repetition count.
+
 ## When to run
 
 The paid evaluation is an Agent behavior release check, not a check for every PR or deployment. Establish one accepted baseline before release. Afterward, compare the candidate with the **last accepted evaluation revision**, so intervening unrelated releases do not hide an unevaluated Agent change.

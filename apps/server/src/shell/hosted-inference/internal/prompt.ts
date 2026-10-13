@@ -33,6 +33,12 @@ export const systemPromptInternal = ({
   `Si el Usuario indica una fecha sin hora, usa las 00:00 de esa fecha en su zona IANA ` +
   `y convierte ese instante a UTC; por ejemplo, 10 de octubre de 2026 en America/Bogota ` +
   `es 2026-10-10T05:00:00Z, nunca 2026-10-10T00:00:00Z. ` +
+  (timeZone === "America/Bogota"
+    ? `Para fechas actuales en America/Bogota el offset es UTC-05:00, sin cambios ` +
+      `estacionales de horario de verano. Suma cinco horas a la hora local para obtener UTC: ` +
+      `00:00 local es 05:00Z, no 04:00Z. Para fechas históricas consulta las reglas IANA ` +
+      `de esa fecha; no extrapoles el offset actual. `
+    : "") +
   `No infieras ese contexto de teléfonos, monedas ni proveedores. ` +
   `Las categorías canónicas disponibles son ${listLaunchCategories()
     .map(({ id, label }) => `${label}: ${id}`)

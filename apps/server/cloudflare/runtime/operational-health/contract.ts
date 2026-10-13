@@ -94,7 +94,12 @@ export type OperationalHealthEnvironment = Readonly<{
   workQueues: Partial<Record<QueueKind, Pick<Queue, "metrics">>>;
 }>;
 
-export type AlertSignal = OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe;
+export type AlertSignal =
+  | OperationalSignal
+  | EventMetricSignal
+  | CanaryHealth
+  | CapabilityProbe
+  | CoreRejectionSignal;
 
 /** Alert coordinates are finite kind/owner pairs; invalid cross-products cannot be delivered. */
 const anyOwner = Schema.Literals([
@@ -118,6 +123,7 @@ const anyOwner = Schema.Literals([
   "resourceLimits",
   "callbackRejections",
   "workflowFailures",
+  "coreRejectionBursts",
   "queueExecution",
   "workflowExecution",
   "d1",
@@ -153,6 +159,11 @@ const queueOwner = Schema.Literals([
   "proactivityQueue",
 ]);
 export const OperationalAlert = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("core_rejection_burst"),
+    owner: Schema.Literal("coreRejectionBursts"),
+    severity: Schema.Literal("warning"),
+  }),
   Schema.Struct({
     kind: Schema.Literal("pending_work"),
     owner: Schema.Union([workOwner, Schema.Literal("whatsapp")]),
@@ -239,4 +250,11 @@ export type CapabilityProbe = Readonly<{
   component: "capability";
   operation: "d1" | "requiredBindings" | "coordination" | "providerConfig";
   state: "healthy" | "unavailable";
+}>;
+
+/** Recorded concentrated bursts only; healthy does not establish complete attack detection. */
+export type CoreRejectionSignal = Readonly<{
+  component: "core-rejections";
+  operation: "coreRejectionBursts";
+  state: "healthy" | "attention" | "unavailable";
 }>;

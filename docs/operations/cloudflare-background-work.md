@@ -27,6 +27,26 @@ Queue→Workflow canary distinguishes real consumer execution from a successful 
 Workflow instance creation. A delayed/missing canary completion is critical; an unavailable inspection
 is a warning, never proof of execution. These probes do not change any application Work outcome.
 
+Core additionally records a **lossy concentrated-refusal signal**: 100 completed 401/403 responses
+within one UTC minute in one Core isolate admit one best-effort D1 presence write. Later refusals
+in that minute do not write, failed writes are not retried, and at most one native write remains
+outstanding per isolate even after the 250 ms wait expires. The count saturates at 100. A new minute
+can admit another attempt only after 100 new refusals; a backward clock cannot reopen an old minute.
+This is telemetry, never authorization or request admission.
+
+The single `operational_core_rejection_burst` row stores only `id = 1` and the most recent
+minute timestamp; monotonic writes cannot replace it with older evidence. The scheduled health sweep
+emits `core_rejection_burst / coreRejectionBursts` as a warning while that minute is less than five
+minutes old. Missing evidence means no recorded burst, not absence of attacks. Failed reads or a
+future timestamp are unavailable, not healthy. The ordinary warning delivery/acknowledgement policy
+applies. Retention deletes the row at 24 hours; it remains at most one row even if cleanup stops.
+
+Restarts, low-rate or distributed traffic, stalled writes and scheduling outages can lose this signal.
+It includes callback refusals only when they reach Core and return 401/403. It excludes edge refusals,
+400/422 callback validation failures, most MCP protocol errors carried in HTTP 200, and other status
+codes. A warning is evidence of refusals, not proof of malicious activity. No request path, IP, User,
+credential, body, or error detail is retained. Live receipt and response evidence remains #1262.
+
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `state=attention`, `oldestPendingAgeMilliseconds >= 120000` | Accepted work has waited at least two minutes.                                          | Check the owner Queue and Workflow alongside authoritative D1 state.              |

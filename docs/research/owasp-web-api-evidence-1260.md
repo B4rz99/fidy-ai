@@ -49,7 +49,7 @@ in the category tables to avoid pretending every category needs a different test
 | A06 Insecure Design                       | Stable-User budgets, live authority at effects, atomic changes and explicit scope separation; E1/E4/E5.                                                                                                                                                                                                                                | **Verified scoped**. External OAuth client-asserted confirmation is a separately accepted trust limit, not human-presence proof.                                                 |
 | A07 Authentication Failures               | Nontransferable private pairing proof, exact expiration, revocation and per-mount binding; E1/E11.                                                                                                                                                                                                                                     | **Verified scoped**; omitted authentication variants retain the prior #1259 scoped review provenance, not an invented new test result.                                           |
 | A08 Software or Data Integrity Failures   | Signed provider hints, schema projections, atomic owner/Audit records and declared catalogs; E4/E8/E9/E13.                                                                                                                                                                                                                             | **Verified scoped** for these boundaries; supply-chain limitations in A03 still apply.                                                                                           |
-| A09 Security Logging & Alerting Failures  | Append-only, owner-scoped, metadata-only Audit and safe telemetry; E9. Async-work alerts also exist in `runtime/operational-health`.                                                                                                                                                                                                   | **Partial**: safe recording and work-failure alerts do not establish security attack detection, live alert receipt or incident response. Concrete gaps below.                    |
+| A09 Security Logging & Alerting Failures  | Append-only, owner-scoped, metadata-only Audit and safe telemetry; E9. Async-work alerts and a lossy Core 401/403 concentrated-burst warning exist in `runtime/operational-health`.                                                                                                                                                    | **Partial**: safe recording and work-failure alerts do not establish security attack detection, live alert receipt or incident response. Concrete gaps below.                    |
 | A10 Mishandling of Exceptional Conditions | Fail-closed dependency errors, bounded body cleanup, rollback and truthful transport failures; E4/E6/E9/E11.                                                                                                                                                                                                                           | **Verified scoped**: no partial canonical work or released partial body; failed telemetry does not alter work outcomes.                                                          |
 
 ## API Security Top 10: 2023
@@ -97,17 +97,18 @@ credential change was performed during this review.
 Outstanding A09/live operational evidence and the accepted supply-chain exception are
 tracked in [#1262](https://github.com/B4rz99/fidy-ai/issues/1262).
 
-- **A09 security alerting is partial, not absent logging.** Audit tests prove bounded,
-  private records; operational health owns D1 failure, Workflow/Queue and durable-work
-  alerts. `docs/operations/cloudflare-background-work.md` explicitly records that
-  Worker exception/CPU-memory-limit and callback-rejection counters no longer have
-  automatic email after Tail removal. Neither a safe telemetry record nor a Queue
-  backlog alert establishes detection of an authentication attack or callback-rejection
-  spike. The repository's launch checklist already requires an explicit implementation
-  or launch decision for this gap. Owner: runtime operational-health and production
-  operator. Completion needs fixed-cardinality signal/threshold policy, failure-safe
-  delivery and tests, then actual configured-channel receipt evidence. Reintroducing
-  unrestricted request/Tail logging would conflict with the privacy boundary.
+- **A09 security alerting remains partial.** Audit tests prove bounded private records.
+  Operational Health now adds a lossy 100-Core-401/403-per-isolate-minute burst warning
+  with one metadata row, one attempt per qualifying minute, one outstanding native write,
+  monotonic timestamps and 24-hour expiry. `core-http/runtime.test.ts` exercises actual Core callback refusal preservation and
+  content-free native D1 persistence. `operational-health/core-rejection.test.ts` covers burst/failure bounds,
+  stalled writes, restart loss, backward/future clocks, freshness and retention cutoffs,
+  and closed warning/unavailable classification. This is not complete attack detection:
+  distributed/low-rate traffic, restarts, edge refusals, callback 400/422s and protocol
+  errors in HTTP 200 remain outside its guarantee. Worker exception/CPU-memory-limit
+  monitoring still needs the recorded launch decision. Owner: runtime operational-health
+  and production operator. #1262 retains broader detection, configured-channel receipt,
+  acknowledgement and incident exercise evidence; local tests do not prove these.
 - **A03 accepted braces risk.** `dependency-policy.json` records
   `GHSA-vfj7-8cjw-p6xm` in the required shadcn development chain with an exclusive
   `2026-10-17T00:00:00Z` expiry; `docs/operations/security-hardening-1250.md` documents

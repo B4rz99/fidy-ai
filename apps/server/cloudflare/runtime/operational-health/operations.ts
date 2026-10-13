@@ -4,6 +4,7 @@ import {
   type CanaryHealth,
   CanaryPayload,
   type CapabilityProbe,
+  type CoreRejectionSignal,
   type EventMetricSignal,
   type OperationalAlert,
   type OperationalAlertDelivery,
@@ -230,6 +231,11 @@ export const decideOperationalAlerts = (
     if (signal.state === "unavailable") {
       return [{ kind: "inspection_unavailable", owner: signal.operation, severity: "warning" }];
     }
+    if (signal.component === "core-rejections") {
+      return signal.state === "attention"
+        ? [{ kind: "core_rejection_burst", owner: signal.operation, severity: "warning" }]
+        : [];
+    }
     if (signal.component === "workflow-execution") {
       return signal.recentCount > 0
         ? [{ kind: "workflow_failure", owner: signal.operation, severity: "critical" }]
@@ -440,4 +446,57 @@ export const captureWorkflowFailure = <A>({
         );
       })
     ).then(() => Promise.reject(original))
+  );
+
+const Observation = Schema.Struct({
+  observedAtMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
+/** Lossy telemetry only: a quiet result means no recorded burst, never absence of an attack. */
+export const observeCoreRejections = ({
+  db,
+  now,
+}: Readonly<{ db: D1Database; now: number }>): Effect.Effect<CoreRejectionSignal> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(
+        "SELECT observed_at_ms AS observedAtMs FROM operational_core_rejection_burst WHERE id = 1"
+      )
+      .all()
+  ).pipe(
+    Effect.timeout("2 seconds"),
+    Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Observation))(rows.results)),
+    Effect.map((rows): CoreRejectionSignal => {
+      const state = (): CoreRejectionSignal["state"] => {
+        if (rows.some((row) => row.observedAtMs > now)) return "unavailable";
+        return rows.some((row) => row.observedAtMs > now - fiveMinuteWindowMs)
+          ? "attention"
+          : "healthy";
+      };
+      return { component: "core-rejections", operation: "coreRejectionBursts", state: state() };
+    }),
+    Effect.orElseSucceed((): CoreRejectionSignal => ({
+      component: "core-rejections",
+      operation: "coreRejectionBursts",
+      state: "unavailable",
+    }))
+  );
+
+/** Expire the single metadata-only presence row; storage remains bounded if maintenance stops. */
+export const sweepCoreRejections = ({
+  db,
+  now,
+}: Readonly<{
+  db: D1Database;
+  now: number;
+}>): Effect.Effect<void, void> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare("DELETE FROM operational_core_rejection_burst WHERE observed_at_ms <= ?")
+      .bind(now - bucketRetentionMs)
+      .run()
+  ).pipe(
+    Effect.timeout("2 seconds"),
+    Effect.asVoid,
+    Effect.mapError(() => undefined)
   );

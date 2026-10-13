@@ -1,6 +1,15 @@
-import { Clock, Effect } from "effect";
+import { Clock, Context, Effect, Layer } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { OutboundHttpLive } from "./outbound-http/runtime";
 import type { TelemetryService } from "../src/shell/observability/contract";
 import coreWorker, { UserTransactionCoordinator, makeCoreWorker } from "./core-worker";
+/** Direct owner integration retains Core's native reader policy under the test's owning Scope. */
+export const fixtureNativeHttpClient = Effect.gen(function* () {
+  const clients = yield* Layer.build(OutboundHttpLive).pipe(
+    Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
+  );
+  return Context.get(clients, HttpClient.HttpClient);
+});
 
 /** Owner integration tests retain real D1; native object routing is covered by core-schedule.test.ts. */
 const withMaintenanceExecutor = (worker: typeof coreWorker): typeof coreWorker => ({

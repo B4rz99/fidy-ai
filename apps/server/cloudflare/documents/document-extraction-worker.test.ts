@@ -36,6 +36,32 @@ const ConvertedResponse = Schema.Struct({
 
 describe("Document extraction Worker proof", () => {
   it.effect.each([
+    { label: "null result", result: null },
+    { label: "non-array result", result: { data: "text", format: "markdown" } },
+    { label: "non-string markdown", result: [{ data: 42, format: "markdown" }] },
+    { label: "missing markdown", result: [{ format: "markdown" }] },
+    { label: "empty result", result: [] },
+    { label: "unexpected format", result: [{ data: "text", format: "html" }] },
+    {
+      label: "multiple results for one document",
+      result: [
+        { data: "one", format: "markdown" },
+        { data: "two", format: "markdown" },
+      ],
+    },
+  ])("rejects malformed provider output: $label", ({ result }) =>
+    Effect.gen(function* () {
+      const response = yield* Effect.tryPromise(() =>
+        extract("%PDF-1.4\n%%EOF", { AI: { toMarkdown: () => Promise.resolve(result) } })
+      );
+      expect(response.status).toBe(422);
+      expect(yield* Effect.tryPromise(() => responseBody(response))).toEqual({
+        outcome: "rejected",
+        reason: "conversion-failed",
+      });
+    })
+  );
+  it.effect.each([
     { expectedName: "statement.pdf", fixture: "valid-document.pdf" },
     { expectedName: "statement.png", fixture: "valid-image.png" },
   ])(

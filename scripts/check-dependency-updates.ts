@@ -496,10 +496,10 @@ const readYaml = <A>(
  */
 const readBunfig = (directory: string): Effect.Effect<Option.Option<typeof Bunfig.Type>> =>
   Effect.tryPromise(() => Bun.file(`${REPO_ROOT}${directory}bunfig.toml`).text()).pipe(
-    Effect.map((text) => Bun.TOML.parse(text)),
+    Effect.flatMap((text) => Effect.try(() => Bun.TOML.parse(text))),
     Effect.flatMap(Schema.decodeUnknownEffect(Bunfig)),
     Effect.asSome,
-    Effect.catchCause(() => Effect.succeed(Option.none<typeof Bunfig.Type>()))
+    Effect.orElseSucceed(() => Option.none<typeof Bunfig.Type>())
   );
 
 /** Every manifest the repo owns, nearest first. `node_modules` is excluded by name and dotted directories by the scanner. */

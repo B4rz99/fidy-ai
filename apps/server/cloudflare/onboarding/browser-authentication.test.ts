@@ -1,3 +1,5 @@
+import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
+import { HttpClient } from "effect/http";
 import { newId } from "../secret-material/operations";
 import { UserId } from "../../src/core/identity/contract";
 import {
@@ -1526,7 +1528,9 @@ it("keeps unexpected recovery defects out of operational failures and observes o
       };
       failure = "defect";
       const exit = yield* Effect.exit(
-        handleSupportRecovery({ request: request(), db: database(db), config })
+        handleSupportRecovery({ request: request(), db: database(db), config }).pipe(
+          Effect.provideService(HttpClient.HttpClient, yield* fixtureNativeHttpClient)
+        )
       );
       expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
       failure = "defect";
@@ -1552,7 +1556,7 @@ it("keeps unexpected recovery defects out of operational failures and observes o
             .first<{ count: number }>()
         ))?.count
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped)
   ));
 
 it("does not impose a shared login lockout after concurrent pairing starts", () =>

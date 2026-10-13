@@ -3,6 +3,7 @@
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { Effect, Option, Schema } from "effect";
 import * as XLSX from "xlsx/xlsx.mjs";
+import { stopProofProcess } from "./proof-command";
 import { runExtractionProof } from "./extraction-proof";
 import { closeWorkerdHttp, requestWorkerd } from "./local-workerd-http";
 import { runProtectedDocumentProof } from "./protected-document-proof";
@@ -91,6 +92,9 @@ const runWranglerCommand = (command: Array<string>): string => {
     cwd: infrastructureRoot,
     stderr: "inherit",
     stdout: "pipe",
+    timeout: 120_000,
+    maxBuffer: 1_048_576,
+    killSignal: "SIGKILL",
   });
   if (result.exitCode !== 0) {
     throw new Error(`Document parsing proof command failed: ${command[1]}`);
@@ -438,8 +442,7 @@ try {
     )}\n`
   );
 } finally {
-  worker.kill();
-  await worker.exited;
+  await Effect.runPromise(stopProofProcess(worker));
   await closeWorkerdHttp();
   await rm(temporaryDirectory, { force: true, recursive: true });
 }

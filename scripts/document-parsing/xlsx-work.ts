@@ -4,10 +4,15 @@ import { Crypto, Effect, FileSystem, Option, Schema } from "effect";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { WorkBook, WorkSheet } from "xlsx";
-import { closeWorkerdHttp, requestHostedProof, requestWorkerd } from "./local-workerd-http";
+import {
+  ProofHttpLive,
+  closeWorkerdHttp,
+  requestHostedProof,
+  requestWorkerd,
+} from "./local-workerd-http";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
 import { type HostedWorkerProof, hostedWorkerProof } from "./hosted-worker";
-import { FetchHttpClient } from "effect/http";
+import { stopProofProcess } from "./proof-command";
 
 const baseline = process.argv.includes("--baseline");
 const remote = process.argv.includes("--remote");
@@ -341,7 +346,7 @@ const previousParser = baseline
         "show",
         "6ecbe8efbd33f0fc462f629823bddc641bad2e74:apps/server/src/shell/ingestion/internal/parser.ts",
       ],
-      { cwd: root }
+      { cwd: root, timeout: 120_000, maxBuffer: 1_048_576, killSignal: "SIGKILL" }
     ).stdout.toString()
   : "";
 const proofConfig = (name: string, retiring = false): string =>
@@ -408,7 +413,7 @@ const startWorker = (): ReturnType<typeof Bun.spawn> =>
       "--persist-to",
       `${directory}/state`,
     ],
-    { stdout: Bun.file("/tmp/fidy-1159-worker.log"), stderr: "inherit" }
+    { stdout: "ignore", stderr: "inherit" }
   );
 
 const overlapRequests = Effect.fn(function* (
@@ -438,10 +443,8 @@ const overlapRequests = Effect.fn(function* (
   });
   process.stdout.write(output + "\n");
 });
-const releaseWorker = Effect.fn(function* (worker: ReturnType<typeof Bun.spawn>) {
-  worker.kill();
-  yield* Effect.tryPromise(() => worker.exited);
-}, Effect.orDie);
+const releaseWorker = (worker: Bun.Subprocess): Effect.Effect<void> =>
+  stopProofProcess(worker).pipe(Effect.orDie);
 const measureParserOnly = Effect.fn(function* (
   debuggerUrl: string,
   target: Option.Option<HostedWorkerProof>
@@ -512,8 +515,5 @@ const program = Effect.gen(function* () {
   });
 });
 await Effect.runPromise(
-  program.pipe(
-    Effect.scoped,
-    Effect.provide([BunFileSystem.layer, BunCrypto.layer, FetchHttpClient.layer])
-  )
+  program.pipe(Effect.scoped, Effect.provide([BunFileSystem.layer, BunCrypto.layer, ProofHttpLive]))
 );

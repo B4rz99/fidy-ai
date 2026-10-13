@@ -1,3 +1,4 @@
+import { OutboundHttpLive } from "../../../outbound-http/runtime";
 import { makeResendOutboundHttp } from "../../../../src/shell/outbound-http/operations";
 import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../telemetry/operations";
 import type { OperationalAlert } from "../contract";
@@ -38,7 +39,7 @@ export const makeOperatorEmailClient = (
   input: Readonly<{ apiKey: string; release: string }>
 ): Effect.Effect<ReturnType<typeof makeResendOutboundHttp>, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
+    const clients = yield* Layer.build(OutboundHttpLive).pipe(
       Effect.provideService(
         FetchHttpClient.Fetch,
         observeProviderFetch(globalThis.fetch, {

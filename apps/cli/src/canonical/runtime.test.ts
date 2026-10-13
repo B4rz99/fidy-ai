@@ -11,6 +11,74 @@ import {
 
 layer(BunFileSystem.layer)((it) => {
   it.effect(
+    "keeps rejected input cancellation out of the public failure and releases ownership",
+    () =>
+      Effect.gen(function* () {
+        const body = new ReadableStream<unknown>({
+          start(controller): void {
+            controller.enqueue(new Uint8Array(65_537));
+          },
+          cancel(): Promise<void> {
+            return Promise.reject(new Error("private adapter details"));
+          },
+        });
+        expect(yield* Effect.result(makeInputReader(() => body)("-"))).toMatchObject({
+          failure: { reason: "InputTooLarge" },
+        });
+        expect(body.locked).toBe(false);
+      })
+  );
+  for (const completion of [
+    "overflow",
+    "deadline",
+    "interruption",
+    "success",
+    "read failure",
+    "invalid chunk",
+  ] as const) {
+    it.effect(`releases input ownership on ${completion} even if cancellation never settles`, () =>
+      Effect.gen(function* () {
+        let cancelled = false;
+        const body = new ReadableStream<unknown>({
+          start(controller): void {
+            if (completion === "overflow") controller.enqueue(new Uint8Array(65_537));
+            if (completion === "success") {
+              controller.enqueue(new Uint8Array());
+              controller.enqueue(new TextEncoder().encode("{}"));
+              controller.close();
+            }
+            if (completion === "read failure") controller.error(new Error("source unavailable"));
+            if (completion === "invalid chunk") controller.enqueue("private invalid bytes");
+          },
+          cancel(): Promise<void> {
+            cancelled = true;
+            return Promise.withResolvers<void>().promise;
+          },
+        });
+        const input = makeInputReader(() => body)("-");
+        if (completion === "interruption") {
+          const fiber = yield* input.pipe(Effect.forkChild);
+          yield* TestClock.adjust("1 second");
+          yield* Fiber.interrupt(fiber);
+        } else if (completion === "deadline") {
+          const fiber = yield* input.pipe(Effect.result, Effect.forkChild);
+          yield* TestClock.adjust("16 seconds");
+          expect(yield* Fiber.join(fiber)).toMatchObject({ failure: { reason: "InvalidInput" } });
+        } else {
+          const result = yield* Effect.result(input);
+          if (completion === "success") expect(result).toMatchObject({ success: "{}" });
+          else {
+            expect(result).toMatchObject({
+              failure: { reason: completion === "overflow" ? "InputTooLarge" : "InvalidInput" },
+            });
+          }
+        }
+        expect(body.locked).toBe(false);
+        expect(cancelled).toBe(completion !== "success" && completion !== "read failure");
+      })
+    );
+  }
+  it.effect(
     "rejects invalid path, query and payload fields before sending an authenticated request",
     () =>
       Effect.gen(function* () {
@@ -77,7 +145,7 @@ layer(BunFileSystem.layer)((it) => {
         const overflowBytes = 65_537;
         const overflow = makeInputReader((path) => {
           expect(path).toBe("-");
-          return new ReadableStream<Uint8Array>({
+          return new ReadableStream<unknown>({
             start: (controller): void => {
               controller.enqueue(new Uint8Array(overflowBytes));
             },
@@ -93,7 +161,7 @@ layer(BunFileSystem.layer)((it) => {
         cancelled = false;
         const pending = makeInputReader(
           () =>
-            new ReadableStream<Uint8Array>({
+            new ReadableStream<unknown>({
               cancel: (): void => {
                 cancelled = true;
               },

@@ -1,6 +1,31 @@
 import { Effect, Exit, Redacted } from "effect";
 import { expect, it, vi } from "vitest";
-import { authorizeNequiWithWompi } from "./wompi-nequi";
+import { NequiAuthorizationFailed, authorizeNequiWithWompi } from "./wompi-nequi";
+
+it("refuses rejected authorization without waiting for provider cancellation", () => {
+  let cancellations = 0;
+  const body = new ReadableStream<Uint8Array>({
+    cancel(): Promise<void> {
+      cancellations++;
+      return Promise.withResolvers<void>().promise;
+    },
+  });
+  return expect(
+    Effect.runPromise(
+      authorizeNequiWithWompi({
+        publicKey: "pub_test_example",
+        phoneNumber: Redacted.make("3991111111"),
+        fetchImplementation: () => Promise.resolve(new Response(body, { status: 422 })),
+        onAwaiting: () => undefined,
+      })
+    )
+  )
+    .rejects.toBeInstanceOf(NequiAuthorizationFailed)
+    .then(() => {
+      expect(cancellations).toBe(1);
+      expect(body.locked).toBe(false);
+    });
+});
 
 it("waits for Nequi approval and returns only the token without retaining account evidence", () => {
   const provider = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {

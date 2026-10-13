@@ -1412,6 +1412,83 @@ describe("native2025 residency integration", () => {
       )
   );
 
+  it("keeps the resident expiry timer after request closure and joins it on explicit disposal", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const harness = yield* fixture(["read"], 30000);
+        const started = yield* Deferred.make<void>();
+        const stopped = yield* Deferred.make<void>();
+        const deadline = yield* Deferred.make<void>();
+        const live = yield* Clock.Clock;
+        const clock: Clock.Clock = {
+          currentTimeMillisUnsafe: () => harness.current,
+          currentTimeMillis: Effect.succeed(harness.current),
+          currentTimeNanosUnsafe: () => live.currentTimeNanosUnsafe(),
+          currentTimeNanos: live.currentTimeNanos,
+          monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+          monotonicTimeNanos: live.monotonicTimeNanos,
+          sleep: (duration) =>
+            Duration.toMillis(duration) === 30000
+              ? Deferred.succeed(started, undefined).pipe(
+                  Effect.andThen(Deferred.await(deadline)),
+                  Effect.ensuring(Deferred.succeed(stopped, undefined))
+                )
+              : live.sleep(duration),
+        };
+        const module = makeMcpResidency({
+          db: harness.db,
+          userId,
+          enqueueCanonicalWork: () => Effect.die("Listing cannot execute canonical work."),
+        });
+        try {
+          const response = yield* module
+            .handle({
+              signal: yield* Effect.abortSignal,
+              admission: yield* Schema.decodeEffect(OAuthMcpAdmission)({
+                userId,
+                connectionId,
+                credentialId,
+                clientId,
+                resource,
+                digest: Array.from(harness.digest),
+                deadlineMilliseconds: harness.current + 3000,
+                method: "POST",
+                headers: {
+                  "content-type": "application/json",
+                  accept: "application/json, text/event-stream",
+                  "mcp-protocol-version": "2026-07-28",
+                  "mcp-method": "tools/list",
+                },
+                body: Array.from(
+                  new TextEncoder().encode(
+                    json({
+                      jsonrpc: "2.0",
+                      id: "resident-timer",
+                      method: "tools/list",
+                      params: {
+                        _meta: {
+                          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                          "io.modelcontextprotocol/clientCapabilities": {},
+                        },
+                      },
+                    })
+                  )
+                ),
+              }),
+            })
+            .pipe(Effect.provideService(Clock.Clock, clock), Effect.scoped);
+          expect(response.status).toBe(200);
+          yield* wait(() => response.text());
+          yield* Deferred.await(started);
+          expect(yield* Deferred.isDone(stopped)).toBe(false);
+          yield* module.dispose();
+          expect(yield* Deferred.isDone(stopped)).toBe(true);
+        } finally {
+          yield* module.dispose();
+        }
+      }).pipe(Effect.scoped, Effect.timeout("5 seconds"))
+    ));
+
   it("native residency essential actual SDK disposal waits for public Scope cleanup before replacement capacity", () =>
     Effect.runPromise(
       Effect.gen(function* () {

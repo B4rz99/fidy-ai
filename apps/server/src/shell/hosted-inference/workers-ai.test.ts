@@ -863,3 +863,33 @@ it.effect("aborts the Workers AI call when execution is interrupted", () =>
     expect(Option.getOrThrow(observed).aborted).toBe(true);
   })
 );
+
+it.effect("decodes heavily fragmented model output with empty chunks", () =>
+  Effect.gen(function* () {
+    const bytes = new Uint8Array(yield* Effect.tryPromise(() => completed().arrayBuffer()));
+    let index = 0;
+    let empty = true;
+    const providerResponse = new Response(
+      new ReadableStream<Uint8Array>({
+        pull: (controller): void => {
+          if (index === bytes.byteLength) {
+            controller.close();
+            return;
+          }
+          if (empty) controller.enqueue(new Uint8Array(0));
+          else controller.enqueue(bytes.slice(index, ++index));
+          empty = !empty;
+        },
+      })
+    );
+    const inference = yield* makeConfiguredInference(() => Promise.resolve(providerResponse));
+    const prepared = yield* inference.prepareText({
+      context: initialContext(),
+      availableOperations: [],
+      toolChoice: "none",
+    });
+    const result = yield* prepared.execute;
+    expect(result).toBeDefined();
+    expect(providerResponse.body?.locked).toBe(false);
+  })
+);

@@ -99,7 +99,13 @@ const exercise = Effect.fn(function* (
   const source = yield* fs.readFileString(
     new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname
   );
-  yield* fs.writeFileString(`${directory}/check.sh`, source);
+  yield* fs.makeDirectory(`${directory}/infra/cloudflare/scripts`, { recursive: true });
+  yield* fs.makeDirectory(`${directory}/scripts/cli-release`, { recursive: true });
+  yield* fs.copyFile(
+    new URL("../../scripts/cli-release/command.py", import.meta.url).pathname,
+    `${directory}/scripts/cli-release/command.py`
+  );
+  yield* fs.writeFileString(`${directory}/infra/cloudflare/scripts/check.sh`, source);
   // Only the prerequisite and launcher are fixtures. curl, jq and deadline enforcement stay real.
   yield* fs.writeFileString(
     `${directory}/bin/bun`,
@@ -181,7 +187,7 @@ const exercise = Effect.fn(function* (
       const child = Bun.spawn(
         [
           "bash",
-          `${directory}/check.sh`,
+          `${directory}/infra/cloudflare/scripts/check.sh`,
           ...(report.allowQuotaDeferral ? ["--allow-quota-deferral"] : []),
         ],
         {

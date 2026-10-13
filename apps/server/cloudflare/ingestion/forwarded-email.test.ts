@@ -1083,6 +1083,51 @@ it("bounds retained email arrivals even after processing frees outstanding capac
     })
   ));
 
+it("refuses oversized native email and releases its reader despite pending cancellation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      const input = delivery();
+      let cancelled = false;
+      input.message.raw = new ReadableStream<Uint8Array>({
+        pull: (controller): void => controller.enqueue(new Uint8Array(1_048_577)),
+        cancel: (): Promise<void> => {
+          cancelled = true;
+          return Promise.withResolvers<void>().promise;
+        },
+      });
+      yield* wait(() => emailWorker.email(input.message, env));
+      expect(input.rejected).toHaveLength(1);
+      expect(cancelled).toBe(true);
+      expect(input.message.raw.locked).toBe(false);
+      expect(
+        (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
+      ).toHaveLength(0);
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+    })
+  ));
+
+it("releases the native email reader after accepting fragmented and empty chunks", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, bucket } = yield* setup();
+      const input = delivery();
+      input.message.raw = new ReadableStream<Uint8Array>({
+        start(controller): void {
+          for (const byte of raw) {
+            controller.enqueue(new Uint8Array());
+            controller.enqueue(Uint8Array.of(byte));
+          }
+          controller.close();
+        },
+      });
+      yield* wait(() => emailWorker.email(input.message, env));
+      expect(input.rejected).toHaveLength(0);
+      expect(input.message.raw.locked).toBe(false);
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
+    })
+  ));
+
 it("does not permanently reject transient stream failure as malformed email", () =>
   Effect.runPromise(
     Effect.gen(function* () {

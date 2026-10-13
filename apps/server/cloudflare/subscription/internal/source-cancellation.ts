@@ -10,7 +10,7 @@ import {
   type SubscriptionCancellationWork,
 } from "../contract";
 import { WompiSourceId } from "./wompi-model";
-import { wompiOutboundHttp } from "./wompi-runtime";
+import { type WompiTransportFactory } from "./wompi-runtime";
 
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A, BillingCollectionFailure> =>
   Effect.tryPromise({
@@ -97,8 +97,14 @@ export const receiveCancellation = (
     );
   });
 
+type SourceCancellationInput = Readonly<{
+  environment: BillingRuntime;
+  work: typeof SubscriptionCancellationWork.Type;
+  wompiHttp: WompiTransportFactory;
+}>;
+
 export const cancelSource = (
-  input: Readonly<{ environment: BillingRuntime; work: typeof SubscriptionCancellationWork.Type }>
+  input: SourceCancellationInput
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const { DB: db } = input.environment;
@@ -116,7 +122,7 @@ export const cancelSource = (
     if (source.wompi_environment !== input.environment.WOMPI_ENVIRONMENT) {
       return yield* new BillingCollectionFailure({ cause: Option.none() });
     }
-    const http = yield* wompiOutboundHttp({
+    const http = yield* input.wompiHttp({
       ...input.environment,
       WOMPI_ENVIRONMENT: source.wompi_environment,
     });
@@ -161,7 +167,7 @@ const submitVoid = (
     db: D1Database;
     userId: string;
     source: typeof Snapshot.Type;
-    http: Awaited<Effect.Success<ReturnType<typeof wompiOutboundHttp>>>;
+    http: Effect.Success<ReturnType<WompiTransportFactory>>;
     now: number;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> =>

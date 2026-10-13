@@ -1,3 +1,4 @@
+import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
 import { Cause, Context, Data, Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
@@ -194,7 +195,7 @@ const boundedJson = Effect.fn(function* (response: HttpClientResponse.HttpClient
     Effect.sync(() => {
       size += value.byteLength;
       if (size > responseLimit) return false;
-      chunks.push(value);
+      if (value.byteLength > 0) chunks.push(value);
       return true;
     })
   ).pipe(Effect.mapError(() => Error("Provider response could not be read within limit")));
@@ -218,7 +219,9 @@ const providerJson = Effect.fn(
     return yield* boundedJson(response);
   },
   Effect.scoped,
-  Effect.timeout("10 seconds")
+  Effect.timeout("10 seconds"),
+  Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+  Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
 );
 
 type RecoveryAccessConfig = Pick<Config, "account" | "token"> &
@@ -476,8 +479,68 @@ const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Opti
     });
 };
 
+const releaseCommandShutdownGrace = 2000;
+const stopReadOnlyCommand = Effect.fn(function* (child: Bun.Subprocess) {
+  if (child.exitCode !== null) return;
+  yield* Effect.try({
+    try: () => child.kill("SIGTERM"),
+    catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
+  });
+  const exited = yield* Effect.tryPromise({
+    try: () => child.exited,
+    catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
+  }).pipe(Effect.timeoutOption(releaseCommandShutdownGrace));
+  if (Option.isNone(exited)) {
+    yield* Effect.try({
+      try: () => child.kill("SIGKILL"),
+      catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
+    });
+    yield* Effect.tryPromise({
+      try: () => child.exited,
+      catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
+    });
+  }
+});
+
+// Keep draining a started write even after output overflow: losing output cannot roll back its effect.
+const releaseOutput = (
+  stream: ReadableStream<Uint8Array>,
+  overflow: () => Effect.Effect<void, ReleaseFailure>
+): Promise<string> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const limit = 1_048_576;
+      const decoder = new TextDecoder();
+      let size = 0;
+      let retained = "";
+      const outputState = { exceeded: false };
+      yield* Stream.fromReadableStream({
+        evaluate: () => stream,
+        onError: () => new ReleaseFailure({ message: "Release tooling output could not be read" }),
+        releaseLockOnEnd: true,
+      }).pipe(
+        Stream.runForEach((chunk) => {
+          if (outputState.exceeded) return Effect.void;
+          size += chunk.byteLength;
+          if (size > limit) {
+            outputState.exceeded = true;
+            retained = "";
+            return overflow();
+          }
+          retained += decoder.decode(chunk, { stream: true });
+          return Effect.void;
+        })
+      );
+      if (outputState.exceeded) {
+        return yield* new ReleaseFailure({ message: "Release tooling output exceeded limit" });
+      }
+      return retained + decoder.decode();
+    })
+  );
+
 const startReleaseCommand = (
-  args: ReadonlyArray<string>
+  args: ReadonlyArray<string>,
+  lifetime: "read-only" | "started-write"
 ): {
   child: Bun.Subprocess<"ignore", "pipe", "pipe">;
   settlement: Promise<
@@ -495,7 +558,9 @@ const startReleaseCommand = (
     env: process.env,
   });
   const settlement = Promise.allSettled([
-    new Response(child.stdout).text(),
+    releaseOutput(child.stdout, () =>
+      lifetime === "read-only" ? stopReadOnlyCommand(child) : Effect.void
+    ),
     child.exited,
     toolingRefusal(child.stderr),
   ]);
@@ -512,7 +577,7 @@ export const releaseCommand = ({
 }>): Effect.Effect<string, ReleaseFailure> =>
   Effect.acquireUseRelease(
     Effect.try({
-      try: () => startReleaseCommand(args),
+      try: () => startReleaseCommand(args, lifetime),
       catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
     }),
     ({ settlement }) =>
@@ -537,10 +602,7 @@ export const releaseCommand = ({
       Effect.gen(function* () {
         const cancellation = yield* Effect.exit(
           lifetime === "read-only" && exit._tag === "Failure" && child.exitCode === null
-            ? Effect.try({
-                try: () => child.kill("SIGTERM"),
-                catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
-              })
+            ? stopReadOnlyCommand(child)
             : Effect.void
         );
         const results = yield* Effect.tryPromise({
@@ -554,6 +616,15 @@ export const releaseCommand = ({
           });
         }
       })
+  ).pipe(
+    lifetime === "read-only" ? Effect.timeout("60 seconds") : (effect) => effect,
+    Effect.mapError((error) =>
+      Cause.isTimeoutError(error)
+        ? new ReleaseFailure({
+            message: "Release tooling exceeded deadline; inspect traffic state",
+          })
+        : error
+    )
   );
 const shell = (args: ReadonlyArray<string>): Effect.Effect<string, ReleaseFailure> =>
   releaseCommand({ args, lifetime: "read-only" });
@@ -1485,7 +1556,7 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(Commands)(process.argv[2]);
     const environment = config();
-    const services = yield* Layer.build(FetchHttpClient.layer);
+    const services = yield* Layer.build(ReleaseHttpLive);
     const client = Context.get(services, HttpClient.HttpClient);
     const port = releasePort({ env: environment, client });
     if (command === "verify-retirement") {

@@ -1,6 +1,6 @@
 import { TranscriptTurnId } from "../../../src/core/agent/contract";
 import { UserId } from "../../../src/core/identity/contract";
-import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { hostedChannelTurnObservation } from "../../agent/operations";
 import { WhatsAppWork } from "../contract";
 
@@ -22,6 +22,7 @@ export const dispatchWhatsAppWork = ({
 }>): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError | void> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+    const selectedUser = Option.getOrNull(userId);
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT o.user_id, o.turn_id
@@ -29,12 +30,7 @@ export const dispatchWhatsAppWork = ({
       WHERE t.status = 'pending' AND (o.offered_at_ms IS NULL OR o.offered_at_ms < ?)
         AND (? IS NULL OR o.user_id = ?)
       ORDER BY o.created_at_ms LIMIT ?`)
-        .bind(
-          now - offerCooldownMs,
-          Option.getOrNull(userId),
-          Option.getOrNull(userId),
-          outboxLimit
-        )
+        .bind(now - offerCooldownMs, selectedUser, selectedUser, outboxLimit)
         .all()
     );
     const work = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxEntry))(raw.results);
@@ -51,6 +47,7 @@ export const dispatchWhatsAppWork = ({
         )
       );
       if (Exit.isFailure(claim)) {
+        if (Cause.hasInterrupts(claim.cause)) return yield* Effect.failCause(claim.cause);
         failed = true;
         continue;
       }
@@ -64,7 +61,10 @@ export const dispatchWhatsAppWork = ({
           } satisfies WhatsAppWork)
         )
       );
-      if (Exit.isFailure(offered)) failed = true;
+      if (Exit.isFailure(offered)) {
+        if (Cause.hasInterrupts(offered.cause)) return yield* Effect.failCause(offered.cause);
+        failed = true;
+      }
     }
     if (failed) return yield* Effect.fail(undefined);
   });
@@ -93,6 +93,9 @@ const receiveOwnedWork = (
         )
       )
     );
+    if (Exit.isFailure(response) && Cause.hasInterrupts(response.cause)) {
+      return yield* Effect.failCause(response.cause);
+    }
     if (Exit.isFailure(response) || response.value.status >= serverFailureStatus) {
       message.retry();
       return;

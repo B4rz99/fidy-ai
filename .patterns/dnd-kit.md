@@ -53,6 +53,45 @@ or invokes the supplied predicate (`packages/abstract/src/core/entities/droppabl
 Still validate the source/target discriminants in the adapter's completed-event translator: dnd kit
 entity data is not a substitute for canonical schema decoding.
 
+## Observing a drag and choosing sortable
+
+The following hooks are public exports of `@dnd-kit/react`
+(`packages/react/src/core/index.ts`). Call them beneath the owning `DragDropProvider`:
+
+| Need                                           | Hook and ownership                                                                                                                                                                                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Render feedback from the current source/target | `useDragOperation()` returns reactive `source` and `target` getters. Read them during render instead of copying entities into component state. This is source/target awareness, not a pointer-coordinate stream.                         |
+| React to lifecycle events from a descendant    | `useDragDropMonitor({ onDragStart, onDragMove, onDragOver, onDragEnd })` subscribes to the provider manager. Keep command emission at exactly one completion owner; adding a monitor must not duplicate the provider's mutation gesture. |
+| Advanced adapter integration with the manager  | `useDragDropManager()` returns the existing manager or `null` outside a provider. Keep access inside the feature adapter; do not construct a competing manager or mutate canonical Dashboard state through it.                           |
+
+Minimal feedback recipe inside the adapter (the Accessibility plugin still owns announcements):
+
+```tsx
+import { useDragOperation } from "@dnd-kit/react";
+
+function DragFeedback() {
+  const { source, target } = useDragOperation();
+  if (!source) return null;
+  return <span aria-hidden="true">{target ? "Destino seleccionado" : "Elige un destino"}</span>;
+}
+```
+
+`useDragDropMonitor` removes subscriptions when its effect cleans up and subscribes again when the
+manager or handlers object changes. Keep handler identity stable only where subscription churn
+matters; correctness must survive resubscription. Its internal library effect does not require an
+application effect wrapper. Sources: `packages/react/src/core/hooks/useDragOperation.ts`
+(`useComputed`), `useDragDropMonitor.ts` (effect cleanup), and `useDragDropManager.ts` (context).
+Test descendant feedback, cancellation and unmount, including exactly one completion gesture when
+both provider callbacks and observers are present.
+
+Use `useSortable` from **`@dnd-kit/react/sortable`** for an ordered collection whose interaction is
+represented by stable entity `id`, current `index`, and optional `group`. The hook provides combined
+source/target registration, refs, status and sortable transition behavior
+(`packages/react/src/sortable/useSortable.ts`, `UseSortableInput` / `useSortable`). Keep the index
+as position and the ID as identity; translate completion into the collection owner's command.
+Fidy's recursive Dashboard has directional insertion and center-swap semantics, so retain its
+explicit draggable/droppable edge adapter rather than forcing those gestures into list indices.
+
 ## Pointer and touch behavior
 
 The default PointerSensor covers mouse, touch, and pen

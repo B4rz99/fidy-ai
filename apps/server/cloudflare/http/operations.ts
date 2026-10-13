@@ -96,7 +96,7 @@ const collectBody = Effect.fn(function* (
     if (byteLength + next.value.byteLength > maximumBytes) {
       return yield* new RequestBodyCapacityExceeded();
     }
-    chunks.push(next.value);
+    if (next.value.byteLength > 0) chunks.push(next.value);
     byteLength += next.value.byteLength;
     next = yield* readNextChunk(reader);
   }

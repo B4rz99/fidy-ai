@@ -51,7 +51,7 @@ import { ResourceAdmissionRefused } from "../../resource-admission/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 import { browserOrigins } from "../../runtime/contract";
-import { wompiOutboundHttp, workerCrypto } from "./wompi-runtime";
+import { type WompiTransportFactory, workerCrypto } from "./wompi-runtime";
 import { type EnrollmentEnvironment } from "../contract";
 
 const Origin = Schema.Literals([
@@ -213,7 +213,8 @@ const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A>
 const decodeRow = <A, E>(schema: Schema.Codec<A, E>, row: unknown): Option.Option<A> =>
   Schema.decodeUnknownOption(schema)(row);
 
-type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & EnrollmentEnvironment;
+type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type &
+  EnrollmentEnvironment & { readonly wompiHttp: WompiTransportFactory };
 
 const daviplataPolicy = (
   environment: EnrollmentEnvironment & { readonly WOMPI_ENVIRONMENT: string }
@@ -241,7 +242,7 @@ const daviplataPolicy = (
 const makeWompi = (
   environment: ConfiguredEnrollmentEnvironment
 ): Effect.Effect<WompiEnrollmentClientService> =>
-  wompiOutboundHttp(environment).pipe(
+  environment.wompiHttp(environment).pipe(
     Effect.map((outboundHttp) =>
       makeWompiEnrollmentClient({
         outboundHttp,
@@ -1122,9 +1123,11 @@ const submit = ({
 export const paymentEnrollmentWork = ({
   request,
   environment,
+  wompiHttp,
 }: {
   request: Request;
   environment: EnrollmentEnvironment;
+  wompiHttp: WompiTransportFactory;
 }): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
   Effect.suspend(() => {
     const config = decodeRow(WompiConfiguration, environment);
@@ -1140,7 +1143,7 @@ export const paymentEnrollmentWork = ({
     ) {
       return Effect.succeed(unavailable());
     }
-    const configured = { ...environment, ...config.value };
+    const configured = { ...environment, ...config.value, wompiHttp };
     if (request.headers.get("origin") !== configured.BROWSER_ORIGIN) {
       return Effect.succeed(invalid(forbiddenStatus));
     }
@@ -1195,8 +1198,12 @@ export const paymentEnrollmentWork = ({
 
 /** Exact-origin fresh-session direct browser boundary; provider identity never leaves Core. */
 export const handlePaymentEnrollment = (
-  input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
+  input: Readonly<{
+    request: Request;
+    environment: EnrollmentEnvironment;
+    wompiHttp: WompiTransportFactory;
+  }>
 ): Promise<Response> =>
-  Effect.runPromise(paymentEnrollmentWork(input), { signal: input.request.signal }).catch(() =>
-    unavailable()
-  );
+  Effect.runPromise(paymentEnrollmentWork(input), {
+    signal: input.request.signal,
+  }).catch(() => unavailable());

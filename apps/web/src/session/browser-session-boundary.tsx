@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import { type ReactNode, useCallback, useState } from "react";
 import {
   type BrowserSessionLifetime,
@@ -27,7 +27,7 @@ const observeBinding = ({ apiOrigin, expired, update, failed }: BindingObserver)
     }
     checking = true;
     Option.map(session, (value) => update({ session: value, checking: true }));
-    loadBrowserSessionBinding({ apiOrigin, signal: lifetime.signal }).then(
+    Effect.runPromise(loadBrowserSessionBinding({ apiOrigin }), { signal: lifetime.signal }).then(
       (current) => {
         if (lifetime.signal.aborted) {
           return;

@@ -11,7 +11,10 @@ const awaitFile = (path: string): Effect.Effect<void, FixtureFailure> =>
     while (!(yield* wait(() => Bun.file(path).exists()))) yield* Effect.sleep("10 millis");
   });
 
-const exercise = Effect.fn(function* (lifetime: "read-only" | "started-write") {
+const exercise = Effect.fn(function* (
+  lifetime: "read-only" | "started-write",
+  ignoreTermination: boolean = false
+) {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectory({ prefix: "release-command-" });
   const release = `${directory}/release`;
@@ -21,7 +24,7 @@ const exercise = Effect.fn(function* (lifetime: "read-only" | "started-write") {
   const script = `
       const directory = process.argv[1];
       process.on("SIGTERM", () => {
-        Bun.write(directory + "/terminated", "terminated").then(() => process.exit(0));
+        if (!${ignoreTermination}) Bun.write(directory + "/terminated", "terminated").then(() => process.exit(0));
       });
       await Bun.write(directory + "/started", String(process.pid));
       while (!(await Bun.file(directory + "/release").exists())) await Bun.sleep(10);
@@ -39,7 +42,7 @@ const exercise = Effect.fn(function* (lifetime: "read-only" | "started-write") {
     );
     if (lifetime === "read-only") {
       yield* Fiber.join(interruption);
-      expect(yield* wait(() => Bun.file(terminated).exists())).toBe(true);
+      expect(yield* wait(() => Bun.file(terminated).exists())).toBe(!ignoreTermination);
       expect(yield* wait(() => Bun.file(finished).exists())).toBe(false);
     } else {
       yield* Effect.sleep("30 millis");
@@ -58,7 +61,28 @@ const exercise = Effect.fn(function* (lifetime: "read-only" | "started-write") {
 }, Effect.timeout("10 seconds"));
 
 layer(BunFileSystem.layer, { excludeTestServices: true })((it) => {
+  it.effect("escalates a read-only child that ignores SIGTERM", () => exercise("read-only", true));
   for (const lifetime of ["read-only", "started-write"] as const) {
     it.effect(`owns actual child exit during ${lifetime} interruption`, () => exercise(lifetime));
   }
 });
+
+for (const lifetime of ["read-only", "started-write"] as const) {
+  layer(BunFileSystem.layer, { excludeTestServices: true })((it) => {
+    it.effect(`rejects oversized output while respecting ${lifetime} settlement`, () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = yield* fs.makeTempDirectoryScoped({ prefix: "release-output-" });
+        const finished = `${directory}/finished`;
+        const script = `process.stdout.write("foreign-output".repeat(100000)); ${lifetime === "read-only" ? "await Bun.sleep(60000)" : 'await Bun.write(process.argv[1], "finished")'}`;
+        const result = yield* releaseCommand({
+          args: [process.execPath, "-e", script, finished],
+          lifetime,
+        }).pipe(Effect.flip);
+        expect(result.message).toBe("Release tooling failed; inspect traffic state");
+        expect(result.message).not.toContain("foreign-output");
+        expect(yield* fs.exists(finished)).toBe(lifetime === "started-write");
+      }).pipe(Effect.scoped, Effect.timeout("10 seconds"))
+    );
+  });
+}

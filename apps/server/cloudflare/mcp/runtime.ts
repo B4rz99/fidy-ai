@@ -1,4 +1,15 @@
-import { type Cause, Clock, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import {
+  type Cause,
+  Clock,
+  Context,
+  DateTime,
+  Deferred,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  type Scope,
+} from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter } from "effect/http";
 import { operationCatalog } from "../../src/shell/api";
@@ -12,6 +23,7 @@ import {
   projectMcpSchemas,
 } from "../../src/shell/mcp/contract";
 import { readNativeConfirmation, requestNativeConfirmation } from "./native-confirmation";
+import { leaseNativeReader } from "./internal/native-reader";
 import { OAuthMcpAdmission, maximumMcpRequestBytes } from "./contract";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
@@ -367,7 +379,6 @@ type ResidentOwner = {
   readonly expiresAtMilliseconds: number;
   sessionId: Option.Option<string>;
   retiring: boolean;
-  cancelLifetime: () => void;
   leases: number;
   drained: ReturnType<typeof Promise.withResolvers<void>>;
   disposal: Option.Option<Promise<void>>;
@@ -395,34 +406,24 @@ const leaseOwner = (owner: ResidentOwner): (() => void) => {
   };
 };
 /** Concurrent caller/disposer cancellation joins the same locked SDK reader settlement. */
-const leaseNativeReader = (
+const leaseResponseReader = (
   owner: ResidentOwner,
   ticket: ResidentTicket,
-  reader: Pick<ReadableStreamDefaultReader<unknown>, "cancel">
-): Readonly<{ finish: () => void; cancel: () => Promise<void> }> => {
+  reader: Pick<ReadableStreamDefaultReader<unknown>, "cancel" | "releaseLock">
+): Readonly<{ finish: () => void; cancel: () => Promise<void>; isReleased: () => boolean }> => {
   const { release } = ticket;
-  let cancelling = false;
-  let cancellation: Option.Option<Promise<void>> = Option.none();
-  const finish = (): void => {
-    if (cancelling) return;
-    owner.bodies.delete(cancel);
-    release();
-  };
-  const cancel = (): Promise<void> => {
-    if (Option.isSome(cancellation)) return cancellation.value;
-    cancelling = true;
-    const pending = Promise.resolve()
-      .then(() => reader.cancel())
-      .finally(() => {
-        cancelling = false;
-        finish();
-      });
-    cancellation = Option.some(pending);
-    return pending;
-  };
+  let released = false;
+  const { finish, cancel } = leaseNativeReader({
+    reader,
+    releaseLease: () => {
+      released = true;
+      owner.bodies.delete(cancel);
+      release();
+    },
+  });
   ticket.cancelBody = Option.some(cancel);
   owner.bodies.add(cancel);
-  return { finish, cancel };
+  return { finish, cancel, isReleased: () => released };
 };
 /** A Response lease lasts through native streaming, not merely response-header completion. */
 const leasedResponse = (
@@ -437,10 +438,14 @@ const leasedResponse = (
     return new Response(null, { status: response.status, headers });
   }
   const reader = response.body.getReader();
-  const { finish, cancel } = leaseNativeReader(owner, ticket, reader);
+  const { finish, cancel, isReleased } = leaseResponseReader(owner, ticket, reader);
   return new Response(
     new ReadableStream<Uint8Array>({
       pull(controller) {
+        if (isReleased()) {
+          controller.close();
+          return Promise.resolve();
+        }
         return reader
           .read()
           .then((chunk) => {
@@ -577,7 +582,6 @@ const completeOwnerDisposal = (registry: ResidentRegistry, owner: ResidentOwner)
 const disposeOwner = (registry: ResidentRegistry, owner: ResidentOwner): Promise<void> => {
   if (Option.isSome(owner.disposal)) return owner.disposal.value;
   owner.retiring = true;
-  owner.cancelLifetime();
   const disposal = Promise.resolve().then(() => completeOwnerDisposal(registry, owner));
   owner.disposal = Option.some(disposal);
   return disposal;
@@ -647,6 +651,28 @@ const residentRegistration = (
       });
     }
   });
+const residentLifetime = (
+  registry: ResidentRegistry,
+  owner: Effect.Effect<ResidentOwner>,
+  clock: Clock.Clock
+): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const resident = yield* owner;
+    yield* Effect.forkScoped(
+      Effect.sleep(
+        Math.max(0, resident.expiresAtMilliseconds - clock.currentTimeMillisUnsafe())
+      ).pipe(
+        Effect.provideService(Clock.Clock, clock),
+        Effect.andThen(
+          Effect.sync(() => {
+            // Start native disposal after this callback returns; joining its own Scope here
+            // would deadlock the lifetime fiber against handler disposal.
+            disposeOwner(registry, resident).catch(() => undefined);
+          })
+        )
+      )
+    );
+  });
 const createOwner = (
   registry: ResidentRegistry,
   catalog: ResidentCatalog,
@@ -659,7 +685,10 @@ const createOwner = (
     protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25],
     allowedOrigins: [],
   });
-  const registered = residentRegistration(registry, () => owner, catalog.tools);
+  const ready = Deferred.makeUnsafe<ResidentOwner>();
+  const registered = residentRegistration(registry, () => owner, catalog.tools).pipe(
+    Effect.andThen(residentLifetime(registry, Deferred.await(ready), clock))
+  );
   const handler = HttpRouter.toWebHandler(
     Layer.merge(server, Layer.effectDiscard(registered).pipe(Layer.provide(server))),
     { disableLogger: true }
@@ -676,7 +705,6 @@ const createOwner = (
     expiresAtMilliseconds: catalog.expiresAtMilliseconds,
     sessionId: Option.none(),
     retiring: false,
-    cancelLifetime: (): void => {},
     leases: 0,
     drained,
     disposal: Option.none(),
@@ -684,20 +712,7 @@ const createOwner = (
     pendingTransfers: new Set(),
   };
   registry.owners.add(owner);
-  // Native subscriptions and unread replies cannot retain a resident after its authority or
-  // bounded protocol lifetime. Disposal interrupts transport and still joins canonical settlement.
-  const lifetime = Effect.runFork(
-    Effect.sleep(Math.max(0, owner.expiresAtMilliseconds - clock.currentTimeMillisUnsafe())).pipe(
-      Effect.provideService(Clock.Clock, clock),
-      Effect.andThen(
-        Effect.sync(() => {
-          owner.cancelLifetime = (): void => {};
-          disposeOwner(registry, owner).catch(() => undefined);
-        })
-      )
-    )
-  );
-  owner.cancelLifetime = (): void => lifetime.interruptUnsafe();
+  Deferred.doneUnsafe(ready, Effect.succeed(owner));
   return owner;
 };
 const admissionSubject = (admission: OAuthMcpAdmission): OAuthCaller => ({

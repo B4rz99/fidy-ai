@@ -6,7 +6,7 @@ import {
   type RefundWorkflowExecution,
 } from "../contract";
 import { WompiTransactionId } from "./wompi-model";
-import { wompiOutboundHttp } from "./wompi-runtime";
+import { type WompiTransportFactory } from "./wompi-runtime";
 import {
   type RefundEvidence,
   type RefundSubmission,
@@ -127,7 +127,8 @@ const submissionClaim = (
   );
 };
 const execute = (
-  input: RefundWorkflowExecution
+  input: RefundWorkflowExecution,
+  wompiHttp: WompiTransportFactory
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const { environment } = input;
@@ -152,7 +153,7 @@ const execute = (
     const captured = submission(yield* Schema.decodeUnknownEffect(Snapshot)(raw));
     const claimed = yield* submissionClaim(environment.DB, work);
     if (claimed === "absent") return;
-    const http = yield* wompiOutboundHttp({ ...environment, WOMPI_ENVIRONMENT: "sandbox" });
+    const http = yield* wompiHttp({ ...environment, WOMPI_ENVIRONMENT: "sandbox" });
     if (claimed === "claimed") {
       yield* settle(
         environment.DB,
@@ -166,9 +167,11 @@ const execute = (
       yield* settle(environment.DB, captured.id, Option.none());
     }
   });
-export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void> =>
+export const runRefundWorkflow = (
+  input: RefundWorkflowExecution & Readonly<{ wompiHttp: WompiTransportFactory }>
+): Promise<void> =>
   input.activity("submit-or-verify-correction-v1", noRetry, () =>
-    Effect.runPromise(execute(input))
+    Effect.runPromise(execute(input, input.wompiHttp))
   );
 
 /** A missed or duplicated publication is recoverable; the durable claim, not Workflow history, prevents another POST. */

@@ -24,7 +24,7 @@ import { verifiedWompiEventHint } from "./wompi-event";
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
-import { wompiOutboundHttp } from "./wompi-runtime";
+import { type WompiTransportFactory } from "./wompi-runtime";
 import {
   type BillingCollectionEnvironment,
   BillingCollectionFailure,
@@ -112,11 +112,12 @@ const decode = <A, E>(
   );
 
 const billingClient = (
-  environment: BillingRuntime
+  environment: BillingRuntime,
+  wompiHttp: WompiTransportFactory
 ): Effect.Effect<WompiBillingClientService, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const configured = yield* decode(WompiEnvironment, environment.WOMPI_ENVIRONMENT);
-    const outboundHttp = yield* wompiOutboundHttp({
+    const outboundHttp = yield* wompiHttp({
       ...environment,
       WOMPI_ENVIRONMENT: configured,
     });
@@ -400,10 +401,11 @@ export const reconcileBillingTransaction = (
 
 const reconcileEventCandidate = (
   environment: BillingRuntime,
-  transactionId: WompiTransactionId
+  transactionId: WompiTransactionId,
+  wompiHttp: WompiTransportFactory
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
-    const client = yield* billingClient(environment);
+    const client = yield* billingClient(environment, wompiHttp);
     yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId });
     const now = yield* Clock.currentTimeMillis;
     yield* attempt(() =>
@@ -512,12 +514,13 @@ const claimCollection = (
 
 const collect = (
   environment: BillingRuntime,
-  attemptId: BillingAttemptId
+  attemptId: BillingAttemptId,
+  wompiHttp: WompiTransportFactory
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const captured = yield* snapshot(environment.DB, attemptId);
     if (captured.wompi_environment !== environment.WOMPI_ENVIRONMENT) return yield* failure();
-    const client = yield* billingClient(environment);
+    const client = yield* billingClient(environment, wompiHttp);
     const amount = yield* billingAmount(captured);
     // Claim BEFORE outbound I/O: a crash between this write and POST is ambiguous, never retried blindly.
     const now = yield* Clock.currentTimeMillis;
@@ -566,8 +569,14 @@ type CollectionActivity = (
 
 /** Only a versioned identity enters Workflow state. The named Activity owns the one armed POST. */
 export const runBillingCollectionWorkflow = (
-  input: Readonly<{ environment: BillingRuntime; payload: unknown; activity: CollectionActivity }>
+  input: Readonly<{
+    environment: BillingRuntime;
+    payload: unknown;
+    activity: CollectionActivity;
+    wompiHttp: WompiTransportFactory;
+  }>
 ): Promise<void> => {
+  const { wompiHttp } = input;
   const work = Schema.decodeUnknownOption(
     Schema.Union([
       CollectionMessage,
@@ -587,18 +596,20 @@ export const runBillingCollectionWorkflow = (
   if ("kind" in work.value && work.value.kind === "source-cancellation") {
     const cancellation = work.value;
     return input.activity("cancel-wompi-source-v1", options, () =>
-      Effect.runPromise(cancelSource({ environment: input.environment, work: cancellation }))
+      Effect.runPromise(
+        cancelSource({ environment: input.environment, work: cancellation, wompiHttp })
+      )
     );
   }
   if ("kind" in work.value) {
     const transactionId = work.value.transactionId;
     return input.activity("lookup-wompi-billing-v1", options, () =>
-      Effect.runPromise(reconcileEventCandidate(input.environment, transactionId))
+      Effect.runPromise(reconcileEventCandidate(input.environment, transactionId, wompiHttp))
     );
   }
   const attemptId = work.value.attemptId;
   return input.activity("collect-wompi-billing-v1", options, () =>
-    Effect.runPromise(collect(input.environment, attemptId))
+    Effect.runPromise(collect(input.environment, attemptId, wompiHttp))
   );
 };
 

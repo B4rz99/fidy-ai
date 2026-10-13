@@ -1,5 +1,5 @@
 import { WebAuthApi, browserSessionBindingHeader } from "@fidy/server/client";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, type Schema } from "effect";
 import {
   FetchHttpClient,
   HttpClient,
@@ -17,11 +17,13 @@ export type BrowserSessionLifetime = Readonly<{
   expired: () => void;
 }>;
 
-/** Read public session identity without loading any User data or renewing/replacing a cookie. */
+/** Read public session identity without loading User data or renewing/replacing a cookie. */
 export const loadBrowserSessionBinding = ({
   apiOrigin,
-  signal,
-}: Readonly<{ apiOrigin: string; signal: AbortSignal }>): Promise<string> =>
+}: Readonly<{ apiOrigin: string }>): Effect.Effect<
+  string,
+  HttpClientError.HttpClientError | Schema.SchemaError
+> =>
   Effect.gen(function* () {
     const context = yield* Layer.build(
       FetchHttpClient.layer.pipe(browserHttpClientLayer("web-auth", apiOrigin))
@@ -32,7 +34,7 @@ export const loadBrowserSessionBinding = ({
     });
     const result = yield* client.browserSession.binding();
     return result.binding ?? "none";
-  }).pipe(Effect.scoped, (work) => Effect.runPromise(work, { signal }));
+  }).pipe(Effect.scoped);
 
 const closedFailure = (): HttpClientError.HttpClientError =>
   new HttpClientError.HttpClientError({

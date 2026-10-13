@@ -1,9 +1,19 @@
 #!/usr/bin/env bun
+import { VerificationHttpLive } from "./verification-http";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { Data, Effect, FileSystem, Layer, Option, type PlatformError, Schema } from "effect";
+import {
+  Data,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  type PlatformError,
+  Schema,
+  Stream,
+} from "effect";
 import {
   type NativeHost,
   type NativeMode,
@@ -23,6 +33,7 @@ const privateFileMode = 0o600;
 const bridgeUrl = "http://127.0.0.1:19488";
 const httpOk = 200;
 const requestTimeout = 10_000;
+const bridgeResponseLimit = 65_536;
 const Cases = Schema.Literals([
   "claude-accept",
   "claude-cancel",
@@ -72,18 +83,42 @@ const requireCheck = (
   message: string
 ): Effect.Effect<void, never, never> | Effect.Effect<never, LocalProofFailure, never> =>
   passed ? Effect.void : Effect.fail(new LocalProofFailure({ message }));
-const bridge = <A>(
-  path: string,
-  codec: Schema.Codec<A>
-): Effect.Effect<A, LocalProofFailure, HttpClient.HttpClient> =>
+/** Reads one local confirmation fixture response within its byte and complete-request deadlines. */
+export const requestLocalConfirmationBridge = <A>({
+  path,
+  codec,
+}: Readonly<{
+  path: "/reset" | "/status" | "/finish";
+  codec: Schema.Codec<A>;
+}>): Effect.Effect<A, LocalProofFailure, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const response = yield* HttpClient.get(bridgeUrl + path).pipe(Effect.timeout(requestTimeout));
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* HttpClient.withScope(client).get(bridgeUrl + path);
     yield* requireCheck(response.status === httpOk, "Local fixture bridge refused");
-    return yield* Schema.decodeUnknownEffect(codec)(yield* response.json);
+    yield* requireCheck(
+      Number(response.headers["content-length"] ?? 0) <= bridgeResponseLimit,
+      "Local fixture bridge response exceeded limit"
+    );
+    const decoder = new TextDecoder();
+    let size = 0;
+    let text = "";
+    yield* Stream.runForEach(response.stream, (chunk) => {
+      size += chunk.byteLength;
+      if (size > bridgeResponseLimit) {
+        return Effect.fail(
+          new LocalProofFailure({ message: "Local fixture bridge response exceeded limit" })
+        );
+      }
+      text += decoder.decode(chunk, { stream: true });
+      return Effect.void;
+    });
+    return yield* Schema.decodeEffect(Schema.fromJsonString(codec))(text + decoder.decode());
   }).pipe(
-    Effect.catchCause(() =>
-      Effect.fail(new LocalProofFailure({ message: "Local fixture bridge unavailable" }))
-    )
+    Effect.scoped,
+    Effect.timeout(requestTimeout),
+    Effect.mapError(() => new LocalProofFailure({ message: "Local fixture bridge unavailable" })),
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+    Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
   );
 const writeJson = (
   path: string,
@@ -190,7 +225,7 @@ const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
   const host: NativeHost = name.startsWith("claude-") ? "claude" : "codex";
   const decision = decisionFor(name);
   const root = join(args.output, name);
-  const reset = yield* bridge("/reset", Reset);
+  const reset = yield* requestLocalConfirmationBridge({ path: "/reset", codec: Reset });
   yield* prepareCase({
     host,
     root,
@@ -204,7 +239,7 @@ const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
     namespace: "local-native-confirmation",
     mcpUrl: Option.some(`${bridgeUrl}/mcp`),
   });
-  const observed = yield* bridge("/status", Status);
+  const observed = yield* requestLocalConfirmationBridge({ path: "/status", codec: Status });
   const accepted = decision === "accept";
   const actualToolCalled = observed.trace.some(
     (event) => event.method === "tools/call" && event.tool === "budgets.deleteBudget"
@@ -263,12 +298,12 @@ const execute = Effect.gen(function* () {
     fs.makeDirectory(args.output, { recursive: true, mode: privateDirectoryMode })
   );
   yield* Effect.addFinalizer(() =>
-    bridge(
-      "/finish",
-      Schema.Struct({
+    requestLocalConfirmationBridge({
+      path: "/finish",
+      codec: Schema.Struct({
         finished: Schema.Literal(true),
-      })
-    ).pipe(Effect.orDie)
+      }),
+    }).pipe(Effect.orDie)
   );
   const results: CaseResult[] = [];
   for (const name of args.cases) {
@@ -289,7 +324,7 @@ const execute = Effect.gen(function* () {
 if (import.meta.main) {
   Effect.runPromise(
     Effect.scoped(execute).pipe(
-      Effect.provide(Layer.mergeAll(BunFileSystem.layer, BunCrypto.layer, FetchHttpClient.layer))
+      Effect.provide(Layer.mergeAll(BunFileSystem.layer, BunCrypto.layer, VerificationHttpLive))
     )
   ).catch((error: unknown) => {
     if (error instanceof LocalProofFailure) process.stderr.write(error.message + "\n");

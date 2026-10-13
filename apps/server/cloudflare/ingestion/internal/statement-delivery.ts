@@ -1,5 +1,5 @@
 import type { WorkflowStepConfig } from "cloudflare:workers";
-import { Clock, Data, Effect, Exit, Option, Result, Schema } from "effect";
+import { Cause, Clock, Data, Effect, Exit, Option, Result, Schema } from "effect";
 import { StatementCoordinatorActivity, StatementWork } from "../contract";
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
@@ -108,7 +108,10 @@ export const dispatchStatementExtraction = (
           })
         )
       );
-      if (Exit.isFailure(offered)) failed = true;
+      if (Exit.isFailure(offered)) {
+        if (Cause.hasInterrupts(offered.cause)) return yield* Effect.failCause(offered.cause);
+        failed = true;
+      }
     }
     if (failed) return yield* new StatementDeliveryUnavailable({ cause: "queue_unavailable" });
   }).pipe(Effect.withSpan("ingestion.statementDispatch"));
@@ -155,6 +158,7 @@ export const receiveStatementExtraction = (
         )
       );
       if (Exit.isFailure(started)) {
+        if (Cause.hasInterrupts(started.cause)) return yield* Effect.failCause(started.cause);
         // A lost create response can still mean a running instance. Confirm before acknowledging.
         yield* attempt(() =>
           input.environment.STATEMENT_EXTRACTION_WORKFLOW.get(work.value.submissionId)
@@ -306,7 +310,10 @@ export const runStatementExtractionWorkflow = (
             catch: (cause) => new StatementDeliveryUnavailable({ cause }),
           })
         );
-        if (Exit.isFailure(outcome)) break;
+        if (Exit.isFailure(outcome)) {
+          if (Cause.hasInterrupts(outcome.cause)) return yield* Effect.failCause(outcome.cause);
+          break;
+        }
         if (!outcome.value) {
           finished = true;
           break;

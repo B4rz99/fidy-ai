@@ -24,6 +24,24 @@ pull control for boundaries that genuinely require it.
 `fromReadableStream` and `toReadableStream*` bridge Web streams. Map foreign failures to the owning
 closed error set and verify cancellation releases the reader/body.
 
+The selected 4.0.1 `Channel.readableStreamToPullUnsafe` finalizer has two distinct branches: the
+default awaits `reader.cancel().catch(...)` without releasing its lock; `releaseLockOnEnd: true`
+releases only the lock and does not cancel underlying work. An unsettled native cancellation can
+stall scope closure even after a byte cap or deadline fires. Inspect
+`node_modules/effect/src/Channel.ts` alongside `Stream.fromReadableStream` before selecting a
+bridge policy; a timeout is not proof that its finalizer settles.
+
+For hostile native Fetch bodies, Fidy's composition owner acquires the reader eagerly and uses an
+abort-driven wrapper with `highWaterMark: 0`. Cleanup starts cancellation, handles rejection and
+releases the raw lock without awaiting that cancellation; successful end releases too. Keep byte
+bounds and unknown-chunk decoding in the owning boundary, and test pending cancellation plus
+read/decoder failures. See [HTTP lifetime policy](http-client.md) and the
+[Cloudflare owner](../apps/server/cloudflare/outbound-http/runtime.ts).
+
+This policy does not replace a deliberate settlement guarantee. The
+[MCP SDK reader owner](../apps/server/cloudflare/mcp/internal/native-reader.ts) awaits SDK
+cancellation before releasing its resident lease, so disposal still occupies admission capacity.
+
 `mapEffect` is sequential by default, supports finite `concurrency`, and preserves input order unless
 `unordered: true`. It has no `bufferSize` option. Each queue, buffer, grouping, and concurrent mapper
 needs its own capacity decision. `groupByKey` can organize process-local work but cannot provide

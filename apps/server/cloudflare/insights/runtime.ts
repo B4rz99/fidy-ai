@@ -1,7 +1,8 @@
+import { OutboundHttpLive } from "../outbound-http/runtime";
 import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Context, DateTime, Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { HttpClient } from "effect/http";
 import { type UserId } from "../../src/core/identity/contract";
 import {
   InsightTemplateConfiguration,
@@ -59,7 +60,7 @@ const nativeOutbound = (
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
       return yield* new InsightUnavailable();
     }
-    const services = yield* Layer.build(FetchHttpClient.layer);
+    const services = yield* Layer.build(OutboundHttpLive);
     return makeKapsoOutboundHttp({
       apiKey: Redacted.make(environment.KAPSO_API_KEY),
       httpClient: Context.get(services, HttpClient.HttpClient),

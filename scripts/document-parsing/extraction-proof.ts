@@ -1,3 +1,4 @@
+import { stopProofProcess } from "./proof-command";
 import { readFile, stat } from "node:fs/promises";
 import { type Cause, Data, Effect, Option, Schema } from "effect";
 import { requestWorkerd } from "./local-workerd-http";
@@ -77,7 +78,14 @@ const fromPromise = <A>(run: (signal: AbortSignal) => Promise<A>): Effect.Effect
   Effect.tryPromise({ try: run, catch: (cause) => new ProofIoError({ cause }) });
 
 const runWrangler = (command: Array<string>, cwd: string): string => {
-  const result = Bun.spawnSync(command, { cwd, stderr: "inherit", stdout: "pipe" });
+  const result = Bun.spawnSync(command, {
+    cwd,
+    stderr: "inherit",
+    stdout: "pipe",
+    timeout: 120_000,
+    maxBuffer: 1_048_576,
+    killSignal: "SIGKILL",
+  });
   if (result.exitCode !== 0) throw new Error(`Extraction proof command failed: ${command[1]}`);
   return new TextDecoder().decode(result.stdout);
 };
@@ -273,11 +281,7 @@ const proveHostileInputs = (
   });
 
 const stopWorker = (process: Bun.Subprocess): Effect.Effect<void> =>
-  Effect.sync(() => process.kill()).pipe(
-    Effect.flatMap(() => fromPromise(() => process.exited)),
-    Effect.asVoid,
-    Effect.orDie
-  );
+  stopProofProcess(process).pipe(Effect.orDie);
 
 const runtimeProof = (options: ProofOptions): Effect.Effect<RuntimeProof, ProofError> =>
   Effect.scoped(

@@ -66,6 +66,11 @@ elif args[:2]==['release','edit'] and '--latest=true' in args:
         self.state.write_text(json.dumps([{'tag_name':'cli-v' + plan['version'], 'draft':False,
                                           'prerelease':False, 'immutable':True}]))
 
+    def test_native_command_ownership_policy(self):
+        result = subprocess.run(['python3', 'scripts/cli-release/test-command.py'],
+                                cwd=ROOT, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_initial_release_gets_initial_version(self):
         plan = self.plan()
         self.assertTrue(plan['changed'])

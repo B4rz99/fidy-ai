@@ -2,7 +2,7 @@ import { WorkersAiAdmissionUnavailable, type WorkersAiEnvironment } from "./cont
 import { makeAdmittedWorkersAiRun } from "./internal/admitted-run";
 import { HostedInference } from "../../src/shell/hosted-inference/operations";
 import { makeWorkersAiHostedInference } from "../../src/shell/hosted-inference/runtime";
-import { Context, Effect, Exit, Layer, Option, type Scope } from "effect";
+import { Context, Effect, Layer, Option, type Scope } from "effect";
 import type { TranscriptTurnId } from "../../src/core/agent/contract";
 import { cloudflareWorkerTelemetry, observeModelRun } from "../runtime/telemetry/operations";
 import { sweepExpiredWorkersAiAdmission as expireAdmission } from "./internal/admission-retention";
@@ -83,12 +83,10 @@ export const cloudflareHostedInferenceLive = ({
 export const optionalHostedInference = (
   input: Parameters<typeof cloudflareHostedInferenceLive>[0]
 ): Effect.Effect<Option.Option<HostedInferenceService>, never, Scope.Scope> =>
-  Effect.gen(function* () {
-    const built = yield* Effect.exit(Layer.build(cloudflareHostedInferenceLive(input)));
-    return Exit.isFailure(built)
-      ? Option.none()
-      : Option.some(Context.get(built.value, HostedInference));
-  });
+  Layer.build(cloudflareHostedInferenceLive(input)).pipe(
+    Effect.option,
+    Effect.map(Option.map((services) => Context.get(services, HostedInference)))
+  );
 
 /** Reclaim fixed-policy expired AI admission evidence without exposing spend or inference authority. */
 export const sweepExpiredWorkersAiAdmission = (

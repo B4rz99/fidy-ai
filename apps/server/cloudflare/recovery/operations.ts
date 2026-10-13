@@ -1,5 +1,5 @@
-import { Context, Effect, Layer } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { Effect } from "effect";
+import { HttpClient } from "effect/http";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { BackupRecoveryCode } from "../../src/core/recovery/contract";
 import type {
@@ -45,19 +45,16 @@ export const rotateBackupRecoveryCode = (input: RecoveryRequest): Promise<Respon
  * decision. The code's existing User cannot be substituted; approval never creates a User,
  * changes WhatsAppIdentity or creates a session without the browser's independent verifier.
  */
-export const handleSupportRecovery = (input: SupportRecoveryRequest): Effect.Effect<Response> =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
-        Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
-      );
-      const http = makeAccessSigningKeysOutboundHttp({
-        issuer: input.config.CLOUDFLARE_ACCESS_ISSUER,
-        httpClient: Context.get(clients, HttpClient.HttpClient),
-      });
-      return yield* handleSupport({ ...input, http });
-    })
-  );
+export const handleSupportRecovery = (
+  input: SupportRecoveryRequest
+): Effect.Effect<Response, never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const http = makeAccessSigningKeysOutboundHttp({
+      issuer: input.config.CLOUDFLARE_ACCESS_ISSUER,
+      httpClient: yield* HttpClient.HttpClient,
+    });
+    return yield* handleSupport({ ...input, http });
+  });
 
 /** Retained case evidence keeps its referenced pairing even when the browser never redeems it. */
 export const retainedRecoveryPairingsQuery = (): OwnedStatement => ({

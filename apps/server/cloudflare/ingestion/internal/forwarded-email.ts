@@ -3,7 +3,7 @@ import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { prepareConsentWithdrawalProjection } from "../../consent/operations";
-import { Clock, Crypto, Data, Effect, Option, PlatformError, Result, Schema, Stream } from "effect";
+import { Clock, Crypto, Data, Effect, Option, PlatformError, Result, Schema } from "effect";
 import PostalMime from "postal-mime";
 import {
   maximumEmailAddressCharacters,
@@ -98,24 +98,32 @@ export const emailCrypto = Crypto.make({
 const reject = (message: ForwardedEmailMessage): void => {
   message.setReject("Mailbox unavailable");
 };
+const releaseEmailReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
+  Effect.sync(() => {
+    // SMTP input cannot make local cleanup wait for its own cancellation promise.
+    reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  });
 
 const readBounded = Effect.fn(function* (raw: ReadableStream) {
   const chunks: Uint8Array[] = [];
   let size = 0;
-  yield* Stream.fromReadableStream<Uint8Array, Error>({
-    evaluate: () => raw,
-    onError: authorityUnavailable,
-  }).pipe(
-    Stream.runForEachWhile((chunk) =>
-      Effect.sync(() => {
+  yield* Effect.acquireUseRelease(
+    Effect.try({ try: () => raw.getReader(), catch: authorityUnavailable }),
+    Effect.fnUntraced(function* (reader) {
+      let next = yield* io(() => reader.read());
+      while (!next.done) {
+        const chunk = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(next.value).pipe(
+          Effect.mapError(authorityUnavailable)
+        );
         size += chunk.byteLength;
-        if (size > maximumRawBytes) return false;
-        chunks.push(chunk);
-        return true;
-      })
-    )
+        if (size > maximumRawBytes) return yield* new EmailUnavailable({ reason: "size" });
+        if (chunk.byteLength > 0) chunks.push(chunk);
+        next = yield* io(() => reader.read());
+      }
+    }),
+    releaseEmailReader
   );
-  if (size > maximumRawBytes) return yield* new EmailUnavailable({ reason: "size" });
   const result = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) {

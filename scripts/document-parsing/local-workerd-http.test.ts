@@ -1,10 +1,82 @@
 import { it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Data, Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { afterEach, expect, vi } from "vitest";
-import { requestWorkerd } from "./local-workerd-http";
+import { ProofHttpLive, requestWorkerd } from "./local-workerd-http";
 import { inspectorTarget } from "./workerd-inspector";
 
 const stops: Array<() => Promise<void>> = [];
+class ProofFixtureFailure extends Data.TaggedError("ProofFixtureFailure") {}
+const drainFirstChunk = Effect.gen(function* () {
+  const client = yield* HttpClient.HttpClient;
+  const response = yield* HttpClient.withScope(client).get("https://proof.example/statement");
+  yield* Stream.runDrain(response.stream.pipe(Stream.take(1)));
+}).pipe(Effect.scoped, Effect.timeout("1 second"));
+
+it.live("refuses proof redirects before sending the proof key to another destination", () =>
+  Effect.gen(function* () {
+    let received = false;
+    const destination = serve(() => {
+      received = true;
+      return new Response("unexpected");
+    });
+    const port = serve(() => Response.redirect(`http://127.0.0.1:${destination}/target`));
+    const response = yield* Effect.tryPromise(() =>
+      requestWorkerd({
+        method: "POST",
+        port,
+        path: "/statement",
+        body: "synthetic",
+        headers: { "x-proof-key": "synthetic-proof" },
+        signal: new AbortController().signal,
+      })
+    );
+    expect(response.status).toBe(302);
+    expect(received).toBe(false);
+  })
+);
+
+it.live(
+  "owns the request's native proof reader despite a Fetch override and pending cancellation",
+  () =>
+    Effect.gen(function* () {
+      const cancelled = vi.fn(() => Promise.withResolvers<void>().promise);
+      const raw = new ReadableStream<Uint8Array>({
+        start(controller): void {
+          controller.enqueue(new Uint8Array([1]));
+        },
+        cancel: cancelled,
+      });
+      const native: typeof fetch = Object.assign(() => Promise.resolve(new Response(raw)), {
+        preconnect: fetch.preconnect,
+      });
+      const stale = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+      const assembled: typeof fetch = Object.assign(stale, { preconnect: fetch.preconnect });
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() =>
+          ManagedRuntime.make(
+            ProofHttpLive.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, assembled)))
+          )
+        ),
+        (runtime) =>
+          Effect.tryPromise({
+            try: () =>
+              runtime.runPromise(
+                drainFirstChunk.pipe(Effect.provideService(FetchHttpClient.Fetch, native))
+              ),
+            catch: () => new ProofFixtureFailure(),
+          }),
+        (runtime) =>
+          Effect.tryPromise({
+            try: () => runtime.dispose(),
+            catch: () => new ProofFixtureFailure(),
+          }).pipe(Effect.orDie)
+      );
+      expect(cancelled).toHaveBeenCalledOnce();
+      expect(stale).not.toHaveBeenCalled();
+      expect(raw.locked).toBe(false);
+    })
+);
 
 const serve = (handle: (request: Request) => Response | Promise<Response>): number => {
   const server = Bun.serve({ port: 0, fetch: handle });

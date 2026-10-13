@@ -16,6 +16,9 @@ export const runMigrationCommand = (
   const result = spawnSync(executable, arguments_, {
     cwd: options.cwd,
     encoding: "utf8",
+    timeout: 60_000,
+    killSignal: "SIGKILL",
+    maxBuffer: 1_048_576,
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.status !== 0) throw new Error("External migration command failed");

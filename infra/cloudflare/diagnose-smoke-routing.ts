@@ -1,3 +1,4 @@
+import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
 import { Context, Data, Effect, Exit, Layer, Option, Schema } from "effect";
@@ -161,7 +162,7 @@ if (import.meta.main) {
   const result = await Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
-        const services = yield* Layer.build(FetchHttpClient.layer);
+        const services = yield* Layer.build(ReleaseHttpLive);
         return yield* diagnoseSmokeRouting(process.env).pipe(
           Effect.provideService(
             HttpClient.HttpClient,

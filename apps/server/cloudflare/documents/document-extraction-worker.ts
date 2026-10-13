@@ -1,4 +1,4 @@
-import { Data, Effect } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { type BoundedBodyReadFailed } from "../http/contract";
 import { awaitRequestAbort, collectBoundedRequestBody } from "../http/operations";
 
@@ -23,15 +23,18 @@ export const documentExtractionLimits = {
   maximumOutputBytes,
 } as const;
 
-type ConversionResult =
-  | { readonly data: string; readonly format: "markdown" }
-  | { readonly error: string; readonly format: "error" };
+const ConversionResults = Schema.Tuple([
+  Schema.Union([
+    Schema.Struct({ data: Schema.String, format: Schema.Literal("markdown") }),
+    Schema.Struct({ error: Schema.String, format: Schema.Literal("error") }),
+  ]),
+]);
 
 type DocumentExtractionBindings = {
   readonly AI: {
     readonly toMarkdown: (
       documents: ReadonlyArray<{ readonly blob: Blob; readonly name: string }>
-    ) => Promise<ReadonlyArray<ConversionResult>>;
+    ) => Promise<unknown>;
   };
 };
 
@@ -123,7 +126,7 @@ const convertRequest = Effect.fn(function* (
   const bytes = yield* collectBoundedRequestBody(request, maximumInputBytes);
   const input = yield* detectInput(bytes);
   const blobBytes = new Uint8Array(bytes).buffer;
-  const results = yield* Effect.raceFirst(
+  const conversion = yield* Effect.raceFirst(
     Effect.tryPromise({
       catch: () => new ExtractionRejected({ reason: "conversion-failed" }),
       try: () =>
@@ -133,9 +136,14 @@ const convertRequest = Effect.fn(function* (
     }),
     awaitRequestAbort(request)
   );
-  const result = results[0];
-  if (result?.format !== "markdown") {
+  const [result] = yield* Schema.decodeUnknownEffect(ConversionResults)(conversion).pipe(
+    Effect.mapError(() => new ExtractionRejected({ reason: "conversion-failed" }))
+  );
+  if (result.format !== "markdown") {
     return yield* new ExtractionRejected({ reason: "conversion-failed" });
+  }
+  if (result.data.length > maximumOutputBytes) {
+    return yield* new ExtractionRejected({ reason: "resource-limit" });
   }
   const outputBytes = new TextEncoder().encode(result.data).byteLength;
   if (outputBytes > maximumOutputBytes) {

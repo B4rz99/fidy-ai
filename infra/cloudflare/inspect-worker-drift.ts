@@ -1,3 +1,4 @@
+import { ReleaseHttpLive } from "./release-http";
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import * as Drift from "alchemy/Alchemist/routes/drift";
 import * as CliKit from "alchemy/Cli/CliKit";
@@ -8,7 +9,6 @@ import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Data from "effect/Data";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { workerDriftReport } from "./worker-drift";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 
@@ -17,7 +17,7 @@ const services = Layer.mergeAll(
   CredentialsStoreLive,
   ProfileStoreLive,
   Layer.succeed(ArtifactStore, createArtifactStore()),
-  FetchHttpClient.layer,
+  ReleaseHttpLive,
   Layer.provideMerge(CliKit.CliKitInteraction, CliKit.layer())
 ).pipe(Layer.provideMerge(PlatformServices));
 

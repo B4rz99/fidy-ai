@@ -1,7 +1,7 @@
 # Effect v4 HttpApi and Cloudflare adapter boundaries
 
-Import HttpApi modules from `effect/http-api`. Selected source:
-`node_modules/effect/src/http-api/{HttpApi,HttpApiBuilder,HttpApiClient,HttpApiSchema,OpenApi}.ts`.
+Import HttpApi modules from `effect/http-api`. Selected Effect 4.0.1 source:
+`node_modules/effect/src/http-api/{HttpApi,HttpApiBuilder,HttpApiClient,HttpApiMiddleware,HttpApiSchema,OpenApi}.ts`.
 
 Use HttpApi as the define-once public contract. The canonical operation declaration derives typed
 server/client artifacts, OpenAPI, reflected access metadata, and browser/tool policy. Cloudflare
@@ -30,6 +30,24 @@ Custom routes, raw bodies, multipart, static files, and response headers need ex
 reflection evidence. Provider callbacks verify authenticity before parsing or changing state. Email
 Worker admission is outside the public API and hands off only the bounded provider-neutral contract.
 
+## Middleware recipe
+
+1. Declare `HttpApiMiddleware.Service` at the contract seam, including its serializable error schemas.
+   `provides` describes services installed for downstream handlers; `requires` describes middleware
+   dependencies supplied by assembly. Follow `TokenAuthorization` and `ResolvedCaller` in the
+   [authorization contract](../apps/server/src/shell/authorization/contract.ts).
+2. Supply the server implementation as a Layer at request assembly. Keep caller services request-scoped;
+   declaration of a security scheme alone does not authenticate a caller.
+3. With `requiredForClient: true`, typed clients require the corresponding
+   `HttpApiMiddleware.ForClient` service. Use `HttpApiMiddleware.layerClient` as in the
+   [authorization runtime](../apps/server/src/shell/authorization/runtime.ts). Its anonymous pass-through
+   implementation deliberately receives declared authentication failures; it does not grant access.
+4. When adding schema-error middleware, use `HttpApiMiddleware.layerSchemaErrorTransform` with a
+   declared safe error schema and return `Effect.fail(safeError)` (or an intentional safe response).
+   Project the wrapper's decoding category into a closed failure; never serialize its full issue tree
+   or input values. Install it where endpoint decoding errors can reach it and test malformed input
+   through the real router. This API is marked unstable in the selected release.
+
 ## Client and generated artifacts
 
 The browser imports only the generated/client declaration seam. It must not import shell
@@ -39,6 +57,18 @@ checks validate the browser graph and static artifact separately from API contra
 OpenAPI and operation-policy files are generated review artifacts. Run freshness and compatibility
 checks after every operation/schema/annotation change. A generated artifact never becomes a second
 source of truth.
+
+For a policy-bearing derived client, follow `makePairingClient` in the
+[CLI transport](../apps/cli/src/direct-client/runtime.ts): pass the protected `HttpClient` to
+`HttpApiClient.makeWith(Api, { httpClient, baseUrl })`. The generated client supplies codecs and
+endpoint shapes; the protected transport supplies origin, redirect, size, deadline and telemetry
+policy. Keep the transport lifetime open through response consumption.
+
+`OpenApi.fromApi` derives the document from the declaration. Follow the
+[contract generator](../apps/server/tools/contracts/generate.ts) for reference policy and persisted
+artifacts; do not manually maintain a second endpoint schema. Test both the middleware's projected
+failure and the declared OpenAPI response, since a successful document build does not exercise
+runtime authentication or safe decoding errors.
 
 ## Testing
 

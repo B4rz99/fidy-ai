@@ -1,5 +1,5 @@
 import { newId } from "../secret-material/operations";
-import { wompiOutboundHttp } from "./internal/wompi-runtime";
+
 import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -15,6 +15,7 @@ import {
   reconcileBillingCandidates,
   runBillingCollectionWorkflow,
   sweepExpiredEnrollmentAdmission,
+  wompiOutboundHttp,
 } from "./runtime";
 import { browserOrigins, localCanonicalReadBearer } from "../runtime/contract";
 import { makePublicWorker } from "../public-worker";
@@ -2301,6 +2302,7 @@ it("inherits the workflow Clock through source authorization and live settlement
       );
       vi.stubGlobal("fetch", provider);
       const prepared = yield* paymentEnrollmentWork({
+        wompiHttp: wompiOutboundHttp,
         environment,
         request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
       }).pipe(Effect.provideService(Clock.Clock, clock));
@@ -2309,6 +2311,7 @@ it("inherits the workflow Clock through source authorization and live settlement
         yield* fromTestPromise(() => prepared.json())
       );
       const submitted = yield* paymentEnrollmentWork({
+        wompiHttp: wompiOutboundHttp,
         environment,
         request: request("/web/subscription/payment-enrollments/submit", "POST", {
           enrollmentId: data.enrollmentId,

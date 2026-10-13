@@ -1,5 +1,5 @@
 import { FidyApi, type FidyApiGroups, makeTokenAuthorizationClientLive } from "@fidy/server/client";
-import { Effect, Layer, Redacted, type Schema, Stream } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
 import { HttpApi, HttpApiClient, type HttpApiEndpoint, type HttpApiGroup } from "effect/http-api";
 import { makeProtectedClient } from "../direct-client/runtime";
 import { CliFailure, apiOrigin } from "../credential/contract";
@@ -52,9 +52,21 @@ export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (
 
 const maximumInputBytes = 65_536;
 
+const releaseInputReader = (
+  reader: Pick<ReadableStreamDefaultReader<Uint8Array>, "cancel" | "releaseLock">
+): Effect.Effect<void> =>
+  Effect.sync(() => {
+    try {
+      // Input cancellation may never settle; local ownership must still end.
+      reader.cancel().catch(() => undefined);
+    } finally {
+      reader.releaseLock();
+    }
+  });
+
 /** Owns input acquisition, byte/deadline budgets and reader cleanup over an OS input adapter. */
 export const makeInputReader = (
-  open: (path: string) => ReadableStream<Uint8Array>
+  open: (path: string) => ReadableStream<unknown>
 ): ((path: string) => Effect.Effect<string, CliFailure>) =>
   Effect.fn(function* (path: string) {
     const stream = yield* Effect.try({
@@ -63,21 +75,28 @@ export const makeInputReader = (
     });
     const chunks: Array<Uint8Array> = [];
     let size = 0;
-    yield* Stream.fromReadableStream({
-      evaluate: () => stream,
-      onError: () => new CliFailure({ reason: "InvalidInput" }),
+    yield* Effect.gen(function* () {
+      const reader = yield* Effect.acquireRelease(
+        Effect.try({
+          try: () => stream.getReader(),
+          catch: () => new CliFailure({ reason: "InvalidInput" }),
+        }),
+        releaseInputReader
+      );
+      while (size <= maximumInputBytes) {
+        const next = yield* Effect.tryPromise({
+          try: () => reader.read(),
+          catch: () => new CliFailure({ reason: "InvalidInput" }),
+        });
+        if (next.done) break;
+        const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(next.value).pipe(
+          Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
+        );
+        size += bytes.byteLength;
+        if (size <= maximumInputBytes && bytes.byteLength > 0) chunks.push(bytes);
+      }
     }).pipe(
-      Stream.runForEachWhile((chunk) =>
-        Effect.sync(() => {
-          size += chunk.byteLength;
-          if (size > maximumInputBytes) return false;
-          chunks.push(chunk);
-          return true;
-        })
-      ),
-      // Bun can throw synchronously while getReader opens a missing file; treat that foreign
-      // acquisition rejection exactly like a streamed read failure, not an application defect.
-      Effect.catchDefect(() => Effect.fail(new CliFailure({ reason: "InvalidInput" }))),
+      Effect.scoped,
       Effect.timeoutOrElse({
         duration: "15 seconds",
         orElse: () => Effect.fail(new CliFailure({ reason: "InvalidInput" })),

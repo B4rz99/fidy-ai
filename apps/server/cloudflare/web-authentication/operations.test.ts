@@ -1,3 +1,4 @@
+import { HttpClient } from "effect/http";
 import { deepStrictEqual } from "node:assert";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Exit, Option } from "effect";
@@ -53,7 +54,12 @@ it("refuses wrong-method authentication and unknown paths before any owner can c
           db.prepare("SELECT COUNT(*) AS count FROM web_sessions").first()
         )
       ).toEqual({ count: 0 });
-    })
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    )
   ));
 
 it("never turns a foreign or duplicate cookie into another User's logout authority", () =>
@@ -148,7 +154,12 @@ it("never turns a foreign or duplicate cookie into another User's logout authori
           user.token === tokenA ? Option.none() : Option.some(user.user)
         );
       }
-    })
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    )
   ));
 
 effectIt.effect("retains the composing caller's Clock when revoking the presented session", () =>
@@ -196,5 +207,10 @@ effectIt.effect("retains the composing caller's Clock when revoking the presente
     expect(
       yield* Effect.tryPromise(() => db.prepare("SELECT revoked_at_ms FROM web_sessions").first())
     ).toEqual({ revoked_at_ms: 4102444800000 });
-  })
+  }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+    )
+  )
 );

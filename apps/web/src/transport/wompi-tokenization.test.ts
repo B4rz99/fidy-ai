@@ -21,6 +21,23 @@ const card = {
 };
 
 describe("Wompi browser tokenization", () => {
+  it("refuses a provider rejection promptly and cancels its unread body", () => {
+    let cancellations = 0;
+    const body = new ReadableStream<Uint8Array>({
+      cancel(): Promise<void> {
+        cancellations++;
+        return neverCancellation;
+      },
+    });
+    const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(new Response(body, { status: 422 }));
+    return expect(Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub)))
+      .rejects.toBeInstanceOf(CardTokenizationFailed)
+      .then(() => {
+        expect(cancellations).toBe(1);
+        expect(body.locked).toBe(false);
+      });
+  });
+
   it("sends card details straight to Sandbox and retains only the returned token", () => {
     const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
       new Response(JSON.stringify({ data: { id: "tok_test_browser_only", brand: "VISA" } }), {

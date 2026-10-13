@@ -1,3 +1,4 @@
+import { HttpClient } from "effect/http";
 import { deepStrictEqual } from "node:assert";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
@@ -62,7 +63,12 @@ it.effect.each([
           db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()
         )
       ).toEqual({ count: 0 });
-    })
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    )
 );
 
 it.effect.each([
@@ -140,5 +146,10 @@ it.effect.each([
           db.prepare("SELECT user_id, session_id, occurred_at_ms FROM canonical_user_reads").all()
         )).results
       ).toEqual([{ user_id: sessionUser, session_id: sessionId, occurred_at_ms: current }]);
-    })
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    )
 );

@@ -1,11 +1,16 @@
-import { Config, Crypto, Data, Effect, FileSystem, Option, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/http";
+import { Config, Crypto, Data, Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { requestHostedProof } from "./local-workerd-http";
+import { runProofCommand } from "./proof-command";
 
 const proofRequestTimeout = 5000;
 const hiddenProofStatus = 404;
 const successfulStatusStart = 200;
 const successfulStatusEnd = 300;
+const deletionResponseLimit = 65_536;
+const DeletionFailure = Schema.Struct({
+  errors: Schema.Array(Schema.Struct({ code: Schema.Finite })),
+});
 class HostedProofCommandFailed extends Data.TaggedError("HostedProofCommandFailed")<{
   readonly operation: string;
   readonly exitCode: number;
@@ -14,34 +19,65 @@ class HostedProofCommandFailed extends Data.TaggedError("HostedProofCommandFaile
 export type HostedWorkerProof = Readonly<{ origin: string; token: string }>;
 
 // Wrangler delete also lists legacy Sites KV namespaces, which this proof never creates.
-const deleteProofWorker = Effect.fn(function* (name: string) {
-  if (!/^xlsx-proof-[a-f0-9]{8}$/u.test(name)) throw new Error("Invalid proof Worker name");
-  const account = yield* Config.NonEmptyString("CLOUDFLARE_ACCOUNT_ID");
-  const token = yield* Config.Redacted("CLOUDFLARE_API_TOKEN");
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* HttpClient.withScope(client).execute(
-    HttpClientRequest.make("DELETE")(
-      `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/workers/scripts/${name}`
-    ).pipe(HttpClientRequest.bearerToken(token))
-  );
-  if (response.status >= successfulStatusStart && response.status < successfulStatusEnd) return;
-  const body = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({ errors: Schema.Array(Schema.Struct({ code: Schema.Finite })) })
-  )(yield* response.json);
-  const codes = body.errors.map((error) => String(error.code));
-  if (codes.includes("10090") || codes.includes("10007")) return;
-  return yield* new HostedProofCommandFailed({ operation: "delete", exitCode: 1, codes });
-});
+/** Deletes only an isolated XLSX proof Worker; provider refusals contain numeric codes only. */
+export const deleteProofWorker = Effect.fn(
+  function* (name: string) {
+    if (!/^xlsx-proof-[a-f0-9]{8}$/u.test(name)) throw new Error("Invalid proof Worker name");
+    const account = yield* Config.NonEmptyString("CLOUDFLARE_ACCOUNT_ID");
+    const token = yield* Config.Redacted("CLOUDFLARE_API_TOKEN");
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* HttpClient.withScope(client).execute(
+      HttpClientRequest.make("DELETE")(
+        `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/workers/scripts/${name}`
+      ).pipe(HttpClientRequest.bearerToken(token))
+    );
+    if (response.status >= successfulStatusStart && response.status < successfulStatusEnd) return;
+    const declared = Number(response.headers["content-length"] ?? 0);
+    if (declared > deletionResponseLimit) {
+      return yield* new HostedProofCommandFailed({ operation: "delete", exitCode: 1, codes: [] });
+    }
+    const decoder = new TextDecoder();
+    let size = 0;
+    let text = "";
+    yield* Stream.runForEach(response.stream, (chunk) => {
+      size += chunk.byteLength;
+      if (size > deletionResponseLimit) {
+        return Effect.fail(
+          new HostedProofCommandFailed({ operation: "delete", exitCode: 1, codes: [] })
+        );
+      }
+      text += decoder.decode(chunk, { stream: true });
+      return Effect.void;
+    });
+    const body = yield* Schema.decodeEffect(Schema.fromJsonString(DeletionFailure))(
+      text + decoder.decode()
+    );
+    const codes = body.errors.map((error) => String(error.code));
+    if (codes.includes("10090") || codes.includes("10007")) return;
+    return yield* new HostedProofCommandFailed({ operation: "delete", exitCode: 1, codes });
+  },
+  Effect.scoped,
+  Effect.timeout("10 seconds"),
+  Effect.mapError((error) =>
+    error instanceof HostedProofCommandFailed
+      ? error
+      : new HostedProofCommandFailed({ operation: "delete", exitCode: 1, codes: [] })
+  ),
+  Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+  Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
+);
 
 const runWrangler = Effect.fn(function* (directory: string, args: ReadonlyArray<string>) {
-  const command = Bun.spawn(
-    ["node_modules/.bin/wrangler", ...args, "--config", `${directory}/wrangler.json`],
-    { stdout: "pipe", stderr: "pipe" }
-  );
-  const [output, diagnostics] = yield* Effect.tryPromise(() =>
-    Promise.all([new Response(command.stdout).text(), new Response(command.stderr).text()])
-  );
-  const exitCode = yield* Effect.tryPromise(() => command.exited);
+  const {
+    stdout: output,
+    stderr: diagnostics,
+    exitCode,
+  } = yield* runProofCommand([
+    "node_modules/.bin/wrangler",
+    ...args,
+    "--config",
+    `${directory}/wrangler.json`,
+  ]);
   if (exitCode !== 0) {
     const codes = Array.from(
       `${output}\n${diagnostics}`.matchAll(/(?:code[:\s]*|"code"\s*:)\s*(\d+)/gu),

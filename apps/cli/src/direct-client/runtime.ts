@@ -20,6 +20,83 @@ import { CliFailure, apiOrigin } from "../credential/contract";
 import { type PairingClient, PollingDelayed } from "../login/contract";
 
 const maximumResponseBytes = 16_384;
+
+const noContentStatus = 204;
+const resetContentStatus = 205;
+const notModifiedStatus = 304;
+const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
+
+const responseMetadata = (response: Response): ResponseInit => ({
+  status: response.status,
+  statusText: response.statusText,
+  headers: response.headers,
+});
+
+// Own the native reader before Effect's Web-stream adapter. Native cancellation may
+// never settle; starting it must still release the lock and finish our finalizer.
+const ownedResponse = (response: Response, init: Pick<RequestInit, "signal"> = {}): Response => {
+  const signal = init.signal;
+  const source = response.body;
+  if (source === null) return response;
+  const reader = source.getReader();
+  let released = false;
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    signal?.removeEventListener("abort", cancel);
+    reader.releaseLock();
+  };
+  const cancel = (): void => {
+    if (released) return;
+    try {
+      reader.cancel().catch(() => undefined);
+    } finally {
+      release();
+    }
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (noBodyStatuses.has(response.status)) {
+    cancel();
+    return new Response(null, responseMetadata(response));
+  }
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller): Promise<void> {
+        return reader
+          .read()
+          .then((next) => {
+            if (released) return;
+            if (next.done) {
+              release();
+              controller.close();
+            } else {
+              controller.enqueue(Schema.decodeUnknownSync(Schema.Uint8Array)(next.value));
+            }
+          })
+          .catch((error: unknown) => {
+            if (released) return;
+            try {
+              reader.cancel().catch(() => undefined);
+            } finally {
+              release();
+            }
+            controller.error(error);
+          });
+      },
+      cancel,
+    },
+    { highWaterMark: 0 }
+  );
+  if (signal?.aborted === true) cancel();
+  return new Response(body, responseMetadata(response));
+};
+const ownFetch = (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
+  Object.assign(
+    (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
+      fetch(input, init).then((response) => ownedResponse(response, init)),
+    { preconnect: fetch.preconnect }
+  );
+
 const maximumRequestBytes = 16_384;
 const requestDeadline = "15 seconds";
 const maximumRetrySeconds = 86_400;
@@ -56,14 +133,16 @@ const collectResponse = Effect.fn(function* (
 ) {
   const chunks: Array<Uint8Array> = [];
   let size = 0;
-  yield* Stream.runForEachWhile(response.stream, (chunk) =>
-    Effect.sync(() => {
-      size += chunk.byteLength;
-      if (size > byteLimit) return false;
-      chunks.push(chunk);
-      return true;
-    })
-  );
+  if (!noBodyStatuses.has(response.status)) {
+    yield* Stream.runForEachWhile(response.stream, (chunk) =>
+      Effect.sync(() => {
+        size += chunk.byteLength;
+        if (size > byteLimit) return false;
+        if (chunk.byteLength > 0) chunks.push(chunk);
+        return true;
+      })
+    );
+  }
   if (
     size > byteLimit ||
     (response.status >= redirectStatusMinimum && response.status < clientFailureMinimum)
@@ -78,7 +157,7 @@ const collectResponse = Effect.fn(function* (
   }
   return HttpClientResponse.fromWeb(
     response.request,
-    new Response(bytes, {
+    new Response(noBodyStatuses.has(response.status) ? null : bytes, {
       status: response.status,
       headers: { "content-type": response.headers["content-type"] ?? "application/octet-stream" },
     })
@@ -135,31 +214,37 @@ export const makeProtectedClient = (
     ) {
       return Effect.fail(new CliFailure({ reason: "TransportUnavailable" }));
     }
-    return execute.pipe(
-      Effect.tap((response) =>
-        Clock.currentTimeMillis.pipe(
-          Effect.map((now) => {
-            options.captureAllowance(projectAllowance(response.headers));
-            const retry = retryDelay(response.headers["retry-after"], now);
-            if (Option.isSome(retry)) options.captureRetry(retry.value);
-            return undefined;
-          })
-        )
-      ),
-      Effect.flatMap((response) => collectResponse(response, options.maximumResponseBytes)),
-      Effect.mapError(() => new CliFailure({ reason: "TransportUnavailable" })),
-      Effect.timeoutOrElse({
-        duration: requestDeadline,
-        orElse: () => Effect.fail(new CliFailure({ reason: "TransportUnavailable" })),
-      }),
-      Effect.provideService(FetchHttpClient.RequestInit, {
-        redirect: "manual",
-        credentials: "omit",
-      }),
-      Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-      Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-      Effect.scoped
-    );
+    const captureMetadata = (
+      response: HttpClientResponse.HttpClientResponse
+    ): Effect.Effect<void> =>
+      Clock.currentTimeMillis.pipe(
+        Effect.map((now) => {
+          options.captureAllowance(projectAllowance(response.headers));
+          const retry = retryDelay(response.headers["retry-after"], now);
+          if (Option.isSome(retry)) options.captureRetry(retry.value);
+          return undefined;
+        })
+      );
+    return Effect.gen(function* () {
+      const fetch = yield* FetchHttpClient.Fetch;
+      return yield* execute.pipe(
+        Effect.tap(captureMetadata),
+        Effect.flatMap((response) => collectResponse(response, options.maximumResponseBytes)),
+        Effect.mapError(() => new CliFailure({ reason: "TransportUnavailable" })),
+        Effect.timeoutOrElse({
+          duration: requestDeadline,
+          orElse: () => Effect.fail(new CliFailure({ reason: "TransportUnavailable" })),
+        }),
+        Effect.provideService(FetchHttpClient.RequestInit, {
+          redirect: "manual",
+          credentials: "omit",
+        }),
+        Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+        Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+        Effect.provideService(FetchHttpClient.Fetch, ownFetch(fetch)),
+        Effect.scoped
+      );
+    });
   });
 
 /** Bootstrap policy disallows query coordinates as well as foreign origins. */

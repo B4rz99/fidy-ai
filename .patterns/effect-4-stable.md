@@ -5,6 +5,10 @@ The application uses exact **effect@4.0.1**, coordinated platform/SQL/Atom packa
 packages. Verify against the installed release before adopting an upstream example; matching
 package version strings alone do not establish identical source.
 
+The [four-repository source manifest](sources.json) records snapshot provenance, selected application
+pins and patch digests. Run `bun run check:pattern-sources` when changing these inputs; a passing
+metadata check still requires source-symbol and behavior verification for the pattern being edited.
+
 The npm artifacts include upstream TypeScript source. The frozen lock records integrity;
 #978 compared every new resolved identity with its registry integrity. Current primary
 sources are `node_modules/effect/src`, `node_modules/@effect/atom-react/src` and

@@ -1,3 +1,4 @@
+import { type WompiEnvironment } from "../../src/shell/secret-material/contract";
 import { UserId } from "../../src/core/identity/contract";
 import {
   BillingAttemptId,
@@ -189,3 +190,17 @@ export type SubscriptionCancellationDispatchInput = Readonly<{
     send: (work: typeof SubscriptionCancellationWork.Type) => Promise<unknown>;
   }>;
 }>;
+
+/** Validated provider settings consumed only by the Subscription runtime constructor. */
+export type WompiBindings = Readonly<{
+  WOMPI_ENVIRONMENT: WompiEnvironment;
+  WOMPI_PUBLIC_KEY: string;
+  WOMPI_PRIVATE_KEY: string;
+  WOMPI_INTEGRITY_SECRET: string;
+}> &
+  Partial<
+    Readonly<{
+      WOMPI_DAVIPLATA_OTP_SEND_URL: string;
+      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
+    }>
+  >;

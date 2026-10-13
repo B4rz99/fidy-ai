@@ -139,6 +139,11 @@ const provisionEdgeSecurity = Effect.gen(function* () {
   const zone = yield* Cloudflare.Zone.Zone("ProductionZone", {
     name: "fidyapp.com",
   }).pipe(Alchemy.AdoptPolicy.adopt(true));
+  yield* Cloudflare.Zone.Setting("StrictTransportSecurity", {
+    zoneId: zone.zoneId,
+    settingId: "security_header",
+    value: edgeSecurityPolicy.hsts,
+  });
   const { customFirewall, httpDdos, managedFirewall, rateLimits } = edgeSecurityPolicy.rulesets;
 
   yield* Cloudflare.Ruleset.Ruleset(customFirewall.logicalId, {

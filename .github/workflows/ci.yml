@@ -272,7 +272,7 @@ jobs:
           extra_args: --only-verified --exclude-paths=.trufflehog-exclude-paths.txt
       - name: Fluid Attacks secret scan
         run: >-
-          docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/fluidattacks/ss:latest
+          docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9
           ss scan --strict --config /src/.fluidattacks/secrets.yaml
 
   security-sast:
@@ -290,7 +290,7 @@ jobs:
             p/typescript
             p/secrets
       - name: Fluid Attacks SAST
-        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast:latest sast --strict scan /src/.fluidattacks/sast.yaml
+        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /src/.fluidattacks/sast.yaml
 
   security-sca:
     needs: changes
@@ -300,7 +300,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Fluid Attacks SCA
-        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca:latest sca --strict scan /src/.fluidattacks/sca.yaml
+        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca@sha256:b5c6d30c03cba30ffbb404c22be288857bf0a57bd30867514a8a29b7dcd9079f sca --strict scan /src/.fluidattacks/sca.yaml
 
   cli-native-package:
     needs: changes

@@ -1,3 +1,4 @@
+import { admitProviderPoll } from "./admission";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import {
   type AuthenticationProvider,
@@ -71,6 +72,11 @@ export const providerStatus = ({
     if (Option.isNone(proof)) {
       return providerJson({ body: { status: "invalid" }, status: invalidStatus });
     }
+    const refusal = yield* admitProviderPoll({
+      db: environment.DB,
+      privateVerifier: proof.value.privateVerifier,
+    });
+    if (Option.isSome(refusal)) return refusal.value;
     const pending = yield* provePendingBrowserPairing({ db: environment.DB, ...proof.value });
     if (Option.isNone(pending)) {
       return providerJson({ body: { status: "invalid" }, status: invalidStatus });

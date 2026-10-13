@@ -482,9 +482,14 @@ const server = Bun.serve({
   port: publicPort,
   tls: { cert: Bun.file(certificate), key: Bun.file(key) },
   fetch: (request) => {
-    // Cloudflare supplies this header at the edge; never accept a client-provided value.
+    // This loopback-only fixture represents independent browser sources within one test runner.
+    // Production ingress receives this evidence exclusively from Cloudflare.
     const ingress = new Request(request);
-    ingress.headers.set("cf-connecting-ip", "127.0.0.1");
+    ingress.headers.set(
+      "cf-connecting-ip",
+      request.headers.get("x-acceptance-source") ?? "127.0.0.1"
+    );
+    ingress.headers.delete("x-acceptance-source");
     if (acceptanceMode !== "shared" && ingress.headers.get("origin") === isolatedBrowserOrigin) {
       ingress.headers.set("origin", browserOrigin);
     }

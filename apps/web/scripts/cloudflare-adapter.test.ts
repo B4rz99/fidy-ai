@@ -6,6 +6,7 @@ const matchingLines = (text: string, value: string): ReadonlyArray<string> =>
   text.split("\n").filter((line) => line.trim() === value);
 
 const expectStaticSecurityHeaders = (headers: string): void => {
+  expect(matchingLines(headers, "Strict-Transport-Security: max-age=31536000")).toHaveLength(1);
   expect(matchingLines(headers, "Cross-Origin-Opener-Policy: same-origin")).toHaveLength(1);
   expect(matchingLines(headers, "Cross-Origin-Resource-Policy: same-origin")).toHaveLength(1);
   expect(matchingLines(headers, "Referrer-Policy: no-referrer")).toHaveLength(1);

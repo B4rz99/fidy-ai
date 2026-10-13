@@ -136,6 +136,7 @@ const isExpectedResponse = (response: EdgeResponse, status: number): boolean =>
     "x-frame-options": "DENY",
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
+    "strict-transport-security": "max-age=31536000",
   }).every(([name, expected]) => response.headers.get(name) === expected);
 
 export const productionProbe = ({

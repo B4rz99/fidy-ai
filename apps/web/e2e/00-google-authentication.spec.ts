@@ -3,6 +3,7 @@ import {
   blockedPopupJourney,
   denialAndCancellationJourney,
   disclosureRetryJourney,
+  isolateProviderSource,
   lostCompletionJourney,
   pendingRedemptionJourney,
   signupJourney,
@@ -10,6 +11,8 @@ import {
   unavailablePairingJourney,
   whatsappAssociationJourney,
 } from "./provider-authentication.journeys";
+
+playwright.test.beforeEach(({ context }) => isolateProviderSource(context));
 
 const configuration = {
   provider: "google",

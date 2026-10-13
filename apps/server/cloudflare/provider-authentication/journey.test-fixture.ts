@@ -112,6 +112,7 @@ const setupJourney = (
                   .sort()
                   .map((name) => new URL(`../migrations/${name}`, import.meta.url))
               : [
+                  "0002_resource_admission",
                   "0003_pending_consent",
                   "0004_onboarding_email",
                   "0005_verified_onboarding",

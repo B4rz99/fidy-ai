@@ -46,6 +46,7 @@ const securityHeaders = {
   "cache-control": "no-store",
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=31536000",
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
 };

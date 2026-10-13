@@ -17,6 +17,13 @@ type ProviderJourney = Readonly<{
   request: APIRequestContext;
 }>;
 const { expect } = playwright;
+/** Keep each journey's source stable while isolating independent tests sharing loopback ingress. */
+export const isolateProviderSource = (context: BrowserContext): Promise<void> => {
+  const info = playwright.test.info();
+  return context.setExtraHTTPHeaders({
+    "x-acceptance-source": `${info.testId}-${info.repeatEachIndex}`,
+  });
+};
 const redirectStatus = 302;
 const pendingStatus = 202;
 const noContentStatus = 204;

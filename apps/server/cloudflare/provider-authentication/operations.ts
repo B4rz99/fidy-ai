@@ -3,7 +3,8 @@ import { completeProvider } from "./internal/completion";
 import { providerCallback } from "./internal/callback";
 import type { HttpClient } from "effect/http";
 
-import { Effect } from "effect";
+import { admitProviderRequest } from "./internal/admission";
+import { Effect, Option } from "effect";
 import {
   microsoftProviderPaths,
   providerPaths,
@@ -41,7 +42,7 @@ const providerGet = ({
     : Effect.succeed(providerJson({ body: { status: "invalid" }, status: invalidStatus }));
 };
 /** Execute the owner-validated browser-bound provider flow; this owner never issues a WebSession. */
-export const handleProviderAuthentication = ({
+const dispatchProviderAuthentication = ({
   request,
   environment,
 }: Readonly<{ request: Request; environment: ProviderEnvironment }>): Effect.Effect<
@@ -73,3 +74,15 @@ export const handleProviderAuthentication = ({
 export const completeProviderAuthentication = (
   input: ProviderCompletionRequest
 ): Promise<Response> => completeProvider(input);
+
+/** Apply durable anonymous admission before proof reads, provider calls or mutations. */
+export const handleProviderAuthentication = (
+  input: Readonly<{ request: Request; environment: ProviderEnvironment }>
+): Effect.Effect<Response, never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const refusal = yield* admitProviderRequest({
+      request: input.request,
+      db: input.environment.DB,
+    });
+    return Option.isSome(refusal) ? refusal.value : yield* dispatchProviderAuthentication(input);
+  });

@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, Layer, Option } from "effect";
+import { Context, Deferred, Effect, Exit, Layer, Option } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
@@ -42,6 +42,71 @@ const expectedStatuses = new Map([
 ]);
 const expectedStatus = (path: string, headers: Readonly<Record<string, string>>): number =>
   headers.origin === undefined ? (expectedStatuses.get(path) ?? 404) : 403;
+
+it.effect("overlaps independent edge probes with at most four requests in flight", () =>
+  Effect.gen(function* () {
+    const firstGroupStarted = yield* Deferred.make<void>();
+    let active = 0;
+    let maximumActive = 0;
+    let completed = 0;
+    yield* verifyEdgeSmoke({
+      candidate: Option.none(),
+      probe: ({ path, headers }) =>
+        Effect.gen(function* () {
+          active += 1;
+          maximumActive = Math.max(maximumActive, active);
+          if (active === 4) yield* Deferred.succeed(firstGroupStarted, undefined);
+          yield* Deferred.await(firstGroupStarted);
+          yield* Effect.yieldNow;
+          completed += 1;
+          return respond(expectedStatus(path, headers));
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              active -= 1;
+            })
+          )
+        ),
+    });
+    expect(completed).toBe(14);
+    expect(maximumActive).toBe(4);
+    expect(active).toBe(0);
+  })
+);
+
+it.effect(
+  "interrupts outstanding probes and skips candidate health when a concurrent check fails",
+  () =>
+    Effect.gen(function* () {
+      const firstGroupStarted = yield* Deferred.make<void>();
+      let started = 0;
+      let closed = 0;
+      const outcome = yield* verifyEdgeSmoke({
+        candidate: Option.some({
+          proof: "reserved-proof",
+          override: "candidate",
+          publicVersionId: "candidate",
+        }),
+        probe: ({ path }) =>
+          Effect.gen(function* () {
+            started += 1;
+            if (started === 4) yield* Deferred.succeed(firstGroupStarted, undefined);
+            yield* Deferred.await(firstGroupStarted);
+            if (path === "/health") return respond(503);
+            return yield* Effect.never;
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                closed += 1;
+              })
+            )
+          ),
+      }).pipe(Effect.exit);
+      expect(Exit.isFailure(outcome)).toBe(true);
+      expect(started).toBe(4);
+      expect(closed).toBe(4);
+    })
+);
 
 it.effect("refuses missing OAuth discovery and unsafe MCP exposure before promotion", () =>
   Effect.gen(function* () {
@@ -142,7 +207,12 @@ it.effect("aborts every unconsumed native edge response on success and mismatch"
         Effect.exit
       );
       expect(Exit.isSuccess(outcome)).toBe(!mismatch);
-      expect(signals).toHaveLength(mismatch ? 1 : 14);
+      if (mismatch) {
+        expect(signals.length).toBeGreaterThan(0);
+        expect(signals.length).toBeLessThanOrEqual(4);
+      } else {
+        expect(signals).toHaveLength(14);
+      }
       expect(signals.every((signal) => signal.aborted)).toBe(true);
       expect(pulled).toBe(0);
     }

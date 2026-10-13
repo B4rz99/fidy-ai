@@ -119,7 +119,10 @@ export const decodeBody = <Decoded, Encoded>({
   schema: Schema.Codec<Decoded, Encoded>;
 }>): Effect.Effect<Option.Option<Decoded>> =>
   Effect.gen(function* () {
-    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+    if (
+      request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+      "application/json"
+    ) {
       return Option.none<Decoded>();
     }
     const bytes = yield* readBoundedRequestBody(request, policy);

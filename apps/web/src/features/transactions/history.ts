@@ -71,7 +71,8 @@ const stopBrowsing = (index: number, navigation: HistoryNavigation, first: Ready
 const browse = ({ first, navigation, period, read }: Browse): HistoryState => {
   const base = { generation: navigation.generation, retryPage: Option.none<PageAtom>() };
   let page = first.value;
-  let data = page.data;
+  const data = [...page.data];
+  const ids = new Set(data.map((transaction) => transaction.id));
   const cursors = new Set<string>();
   const result = (continuation: HistoryState["continuation"]): HistoryState => ({
     ...base,
@@ -91,11 +92,11 @@ const browse = ({ first, navigation, period, read }: Browse): HistoryState => {
         return { ...result(continuation), retryPage: Option.some(current.atom) };
       }
       if (current.query._tag !== "Ready") throw new Error("Missing Transaction page");
-      const ids = new Set(data.map((transaction) => transaction.id));
-      data = [
-        ...data,
-        ...current.query.value.data.filter((transaction) => !ids.has(transaction.id)),
-      ];
+      current.query.value.data.forEach((transaction) => {
+        if (ids.has(transaction.id)) return;
+        ids.add(transaction.id);
+        data.push(transaction);
+      });
       page = current.query.value;
     }
   } catch {

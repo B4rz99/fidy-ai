@@ -167,6 +167,42 @@ it.effect.each([
   })
 );
 
+it.effect.each([
+  { contentType: "Application/JSON \t; charset=utf-8", accepted: true },
+  { contentType: "text/plain", accepted: false },
+  { contentType: "application/json-invalid", accepted: false },
+  { contentType: "application/problem+json", accepted: false },
+  { contentType: undefined, accepted: false },
+])(
+  "recognizes only the JSON media type regardless of casing ($contentType)",
+  ({ contentType, accepted }) =>
+    Effect.gen(function* () {
+      let pulls = 0;
+      const request = new Request("https://api.fidyapp.com/canonical", {
+        method: "POST",
+        headers: contentType === undefined ? {} : { "content-type": contentType },
+        body: new ReadableStream<Uint8Array>(
+          {
+            pull(controller): void {
+              pulls += 1;
+              controller.enqueue(new Uint8Array([49]));
+              controller.close();
+            },
+          },
+          { highWaterMark: 0 }
+        ),
+      });
+      const result = yield* boundedJsonBody({
+        request,
+        policy: requestBodyPolicy,
+        schema: Schema.Finite,
+      });
+      deepStrictEqual(result, accepted ? Option.some(1) : Option.none());
+      expect(pulls).toBe(accepted ? 1 : 0);
+      expect(request.body?.locked).toBe(false);
+    })
+);
+
 const neverSettlingCancellation = Effect.runPromise(Effect.never);
 const decodeRequestBodyPolicy = Schema.decodeSync(RequestBodyPolicy);
 const requestBodyPolicy = decodeRequestBodyPolicy({

@@ -10,7 +10,7 @@ type MigrationCommandOptions = Readonly<{ readonly cwd: string }>;
  */
 export const runMigrationCommand = (
   command: MigrationCommand,
-  options: MigrationCommandOptions = {}
+  options: MigrationCommandOptions
 ): string => {
   const [executable, ...arguments_] = command;
   const result = spawnSync(executable, arguments_, {

@@ -86,7 +86,9 @@ const readProof = <A, Encoded>(
   request: Request,
   schema: Schema.Codec<A, Encoded>
 ): Promise<Option.Option<A>> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+  if (
+    request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json"
+  ) {
     return Promise.resolve(Option.none());
   }
   return Effect.runPromise(

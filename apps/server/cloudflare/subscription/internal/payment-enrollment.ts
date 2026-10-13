@@ -390,7 +390,10 @@ const readBody = <A, E>(
   schema: Schema.Codec<A, E>
 ): Effect.Effect<Option.Option<A>> =>
   Effect.gen(function* () {
-    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+    if (
+      request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+      "application/json"
+    ) {
       return Option.none();
     }
     const result = yield* Effect.exit(readBoundedRequestBody(request, jsonPolicy));

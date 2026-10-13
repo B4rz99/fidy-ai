@@ -191,7 +191,7 @@ export const exchangeToken = (
 ): Effect.Effect<Response, BootstrapInvalid | BootstrapUnavailable | PlatformError.PlatformError> =>
   Effect.gen(function* () {
     if (
-      input.request.headers.get("content-type")?.split(";")[0] !==
+      input.request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
       "application/x-www-form-urlencoded"
     ) {
       return invalidGrant();

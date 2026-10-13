@@ -1,9 +1,13 @@
 import { expect, it } from "vitest";
 import { Predicate, Record } from "effect";
 
-const listTests = (config: string, mode: "shared" | "cli"): string => {
+const listTests = (
+  config: string,
+  mode: "shared" | "cli",
+  args: ReadonlyArray<string> = []
+): string => {
   const result = Bun.spawnSync(
-    [process.execPath, "--bun", "playwright", "test", "--config", config, "--list"],
+    [process.execPath, "--bun", "playwright", "test", "--config", config, "--list", ...args],
     {
       env: Record.filter(
         { PATH: Bun.env.PATH, HOME: Bun.env.HOME, CLI_ACCEPTANCE_MODE: mode },
@@ -19,6 +23,18 @@ it("keeps the native CLI mutation journey out of the shared User's browser suite
   const shared = listTests("playwright.config.ts", "shared");
   expect(shared).toContain("real-core-journeys.spec.ts:");
   expect(shared).not.toContain("cli-login.spec.ts:");
+});
+
+it("partitions the complete browser suite across both runners without dropping or repeating tests", () => {
+  const cases = (output: string): ReadonlyArray<string> =>
+    output.split("\n").filter((line) => line.includes(".spec.ts:"));
+  const complete = cases(listTests("playwright.config.ts", "shared"));
+  const shards = ["1/2", "2/2"].map((shard) =>
+    cases(listTests("playwright.config.ts", "shared", [`--shard=${shard}`]))
+  );
+  for (const shard of shards) expect(shard.length).toBeGreaterThan(0);
+  expect(shards.flat().sort()).toEqual([...complete].sort());
+  expect(new Set(shards.flat()).size).toBe(complete.length);
 });
 
 it("selects only the native CLI journey for its isolated public/Core and Audit fixture", () => {

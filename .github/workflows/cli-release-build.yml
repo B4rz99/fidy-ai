@@ -23,7 +23,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/bun-install
         with:
-          save-cache: "false"
+          # Linux has workspace cache writers; native package jobs own the other OS caches.
+          save-cache: ${{ runner.os != 'Linux' }}
       - name: Build native standalone release candidate
         shell: bash
         run: bash scripts/cli-release/build.sh

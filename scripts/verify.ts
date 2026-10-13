@@ -211,6 +211,7 @@ const checks: Array<Check> = [
     "--cwd",
     "apps/web",
     "test:browser",
+    ...(Bun.env.BROWSER_TEST_SHARD !== undefined ? [`--shard=${Bun.env.BROWSER_TEST_SHARD}`] : []),
   ]),
   {
     ...rootCheck("browser", "Isolated native CLI browser journey", [
@@ -247,7 +248,14 @@ if (
   );
 }
 
-const selectedChecks = checks.filter(({ group }) => groupIsSelected(group));
+const selectedChecks = checks.filter(
+  ({ group, env }) =>
+    groupIsSelected(group) &&
+    // The CLI journey has one test and its own topology; run it only on the first runner.
+    (env.CLI_ACCEPTANCE_MODE !== "cli" ||
+      Bun.env.BROWSER_TEST_SHARD === undefined ||
+      Bun.env.BROWSER_TEST_SHARD.startsWith("1/"))
+);
 if (Option.isSome(requestedGroup)) {
   process.stdout.write(`Verification group: ${requestedGroup.value}\n`);
 }
@@ -302,7 +310,7 @@ if (Bun.env.VERIFY_TIMING_REPORT !== undefined) {
         runId: Bun.env.GITHUB_RUN_ID,
         attempt: Bun.env.GITHUB_RUN_ATTEMPT,
         group: Option.getOrElse(requestedGroup, () => "all"),
-        shard: Bun.env.CLOUDFLARE_TEST_SHARD,
+        shard: Bun.env.CLOUDFLARE_TEST_SHARD ?? Bun.env.BROWSER_TEST_SHARD,
         elapsedMilliseconds,
         checks: timings,
       },

@@ -46,6 +46,7 @@ if [[ "\${FAIL_JOURNEY:-}" == "$journey_mode" ]]; then exit 1; fi
         env: {
           ...Bun.env,
           CLI_ACCEPTANCE_MODE: undefined,
+          BROWSER_TEST_SHARD: undefined,
           JOURNEY_RENDEZVOUS: directory,
           PATH: `${directory}:${Bun.env.PATH}`,
         },
@@ -75,6 +76,7 @@ if [[ "\${FAIL_JOURNEY:-}" == "$journey_mode" ]]; then exit 1; fi
           env: {
             ...Bun.env,
             CLI_ACCEPTANCE_MODE: undefined,
+            BROWSER_TEST_SHARD: undefined,
             FAIL_JOURNEY: journey,
             JOURNEY_RENDEZVOUS: directory,
             PATH: `${directory}:${Bun.env.PATH}`,
@@ -89,4 +91,58 @@ if [[ "\${FAIL_JOURNEY:-}" == "$journey_mode" ]]; then exit 1; fi
       );
     }
   })
+);
+
+it.effect(
+  "runs every browser shard but the isolated CLI journey only once, and propagates failures",
+  () =>
+    Effect.gen(function* () {
+      const temporary = Bun.spawnSync(["mktemp", "-d"]);
+      expect(temporary.exitCode).toBe(0);
+      const directory = new TextDecoder().decode(temporary.stdout).trim();
+      fixtures.push(directory);
+      yield* Effect.tryPromise({
+        try: () =>
+          Bun.write(
+            `${directory}/bun`,
+            `#!/usr/bin/env bash
+printf 'CHECK %s\\n' "$*"
+exit "\${CHECK_EXIT_CODE:-0}"
+`
+          ),
+        catch: () => new FixtureUnavailable(),
+      });
+      expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
+      for (const shard of ["1/2", "2/2"]) {
+        for (const exitCode of [0, 1]) {
+          const result = Bun.spawnSync(
+            [
+              process.execPath,
+              Bun.fileURLToPath(new URL("./verify.ts", import.meta.url)),
+              "--group",
+              "browser",
+            ],
+            {
+              env: {
+                ...Bun.env,
+                CLI_ACCEPTANCE_MODE: undefined,
+                BROWSER_TEST_SHARD: shard,
+                CHECK_EXIT_CODE: String(exitCode),
+                PATH: `${directory}:${Bun.env.PATH}`,
+              },
+            }
+          );
+          expect(result.exitCode).toBe(exitCode);
+          const commands = new TextDecoder()
+            .decode(result.stdout)
+            .split("\n")
+            .filter((line) => line.startsWith("CHECK "));
+          expect(commands).toContain(`CHECK run --cwd apps/web test:browser --shard=${shard}`);
+          expect(commands.includes("CHECK run --cwd apps/web test:browser:cli")).toBe(
+            shard === "1/2"
+          );
+          expect(commands).toHaveLength(shard === "1/2" ? 2 : 1);
+        }
+      }
+    })
 );

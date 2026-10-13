@@ -197,8 +197,12 @@ jobs:
   browser:
     needs: changes
     if: ${{ needs.changes.outputs.browser == 'true' }}
-    name: Web browser and accessibility checks
+    name: Web browser and accessibility checks (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
@@ -229,20 +233,21 @@ jobs:
           time bunx --bun playwright install --only-shell chromium
       - name: Static-shell browser validation
         env:
+          BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
           # Playwright install-deps already refreshed the package index.
           sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
           dbus-run-session -- bash -euc '
             printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
-            bun run --cwd apps/cli test:native
+            if [[ "$BROWSER_TEST_SHARD" == 1/* ]]; then bun run --cwd apps/cli test:native; fi
             bun run verify -- --group browser
           '
       - name: Preserve browser timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: browser-timings
+          name: browser-timings-${{ matrix.shard }}
           path: |
             apps/web/test-results/browser-timings.json
             apps/web/test-results/cli-browser-timings.json

@@ -33,3 +33,22 @@ retrieval. These security controls also apply to Uncapped commercial standing.
 
 [Commercial Free allowances from #35](commercial-allowances.md) are documented separately; they
 never replace the resource and spend controls above.
+
+## Provider authentication (#1250)
+
+All Google/Microsoft paths derive from both provider declarations into the edge's existing
+60 requests / 10 seconds / source-IP rule. Public ingress replaces any caller-supplied
+`x-provider-source` with its keyed Cloudflare source identity; missing trusted source/key fails
+closed. Core claims rolling D1 admission before body/proof reads or provider work: 120 requests
+per source and 1,200 globally per minute, including disclosure and invalid requests. Start,
+callback and completion additionally share 30/source and 300/global per minute. Status reads
+claim 5 polls per 5 seconds against a purpose-qualified digest of the private browser verifier,
+so switching providers or IPs cannot reset the same proof's polling budget. The original ten-minute
+pairing lifetime still bounds the flow. Admission does not confer authentication authority.
+
+Refusal returns 429 with a conservative 60-second Retry-After; store failure returns 503. Neither
+can consume a provider proof, create a User, or call a provider. Existing public/Core request
+telemetry observes only closed outcome/status/latency, including these refusals; no source key,
+proof, query, or body is added to telemetry. Provider maintenance deletes at most 3,000 expired
+standalone grants per tick using the owner-prefix index, exceeding the maximum 2,400 admitted
+request/poll grants per minute. It preserves active and foreign-owner accounting.

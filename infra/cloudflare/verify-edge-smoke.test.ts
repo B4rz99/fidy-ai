@@ -8,6 +8,7 @@ const safeHeaders = {
   "cache-control": "no-store",
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=31536000",
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "www-authenticate":
@@ -351,3 +352,21 @@ describe("production edge smoke", () => {
       })
   );
 });
+
+it.effect(
+  "blocks promotion when an otherwise valid API response lacks persistent HTTPS protection",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(
+        verifyEdgeSmoke({
+          candidate: Option.none(),
+          probe: ({ path, headers }) => {
+            const response = respond(expectedStatus(path, headers));
+            response.headers.delete("strict-transport-security");
+            return Effect.succeed(response);
+          },
+        })
+      );
+      expect(result._tag).toBe("Failure");
+    })
+);

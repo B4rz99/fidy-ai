@@ -1,3 +1,4 @@
+import { admitProviderRequest } from "./admission";
 import { PendingConsentExchangeId } from "../../../src/shell/consent/contract";
 import { prepareOnboardingWhatsAppAssociation } from "../../identity/operations";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
@@ -159,6 +160,8 @@ const confirmedExchange = ({
 export const completeProvider = (input: ProviderCompletionRequest): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const refusal = yield* admitProviderRequest({ request: input.request, db: input.db });
+      if (Option.isSome(refusal)) return refusal.value;
       const path = new URL(input.request.url).pathname;
       if (path !== providerPaths.complete && path !== microsoftProviderPaths.complete) {
         return providerJson({ body: { status: "invalid" }, status: invalidStatus });

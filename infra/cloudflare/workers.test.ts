@@ -1,3 +1,7 @@
+import {
+  microsoftProviderPaths,
+  providerPaths,
+} from "../../apps/server/src/shell/provider-authentication/contract";
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
 import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry-contract";
@@ -452,6 +456,8 @@ describe("Production topology contract", () => {
     expect(rateLimits).toHaveLength(1);
     const expression = rateLimits[0]?.expression ?? "";
     for (const path of [
+      ...Object.values(providerPaths),
+      ...Object.values(microsoftProviderPaths),
       "/providers/kapso/callback",
       "/providers/wompi/billing-events",
       "/web/hosted-turns",
@@ -958,6 +964,7 @@ describe("Cloudflare Worker topology (continued)", () => {
       expect(response.headers.get("access-control-allow-origin")).toBe("https://app.fidyapp.com");
       expect(response.headers.get("access-control-allow-credentials")).toBe("true");
       expect(response.headers.get("vary")).toContain("Origin");
+      expect(response.headers.get("strict-transport-security")).toBe("max-age=31536000");
     })
   );
 

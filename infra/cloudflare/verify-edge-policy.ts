@@ -27,7 +27,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // #1168 reuses the existing private namespace for maintenance, restoring the original reviewed topology.
 // Includes #1182's public installer GET/HEAD routes and bounded public CLI version metadata.
 // Includes #1247's exact MCP API authority and native-only Origin checks before Core admission.
-const expectedEdgePolicyDigest = "846bae8cd07370a086aedd8ea853a4ec6aa88dce439a313ce2c541eb345bd80b";
+// Includes #1250 provider edge/source admission and persistent HTTPS on the zone, app and API.
+const expectedEdgePolicyDigest = "19f53757d9f09475b7eaf2274bbd8d72fe7ec6509f7103df459348e7bcf82f6b";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

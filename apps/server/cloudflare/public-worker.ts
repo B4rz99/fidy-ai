@@ -65,6 +65,7 @@ const apiSecurityHeaders = {
   "cross-origin-resource-policy": "same-site",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
+  "strict-transport-security": "max-age=31536000",
   "x-frame-options": "DENY",
 } as const;
 
@@ -506,6 +507,21 @@ const coreRequest = (
     const headers = forwardedHeaders(request, path);
     forwardSmokeVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
+    headers.delete("x-provider-source");
+    if (
+      [...Object.values(providerPaths), ...Object.values(microsoftProviderPaths)].some(
+        (owned) => owned === path
+      )
+    ) {
+      headers.set(
+        "x-provider-source",
+        yield* deriveAnonymousSource({
+          request,
+          browserOrigin: environment.BROWSER_ORIGIN,
+          admissionKey: environment.PAT_ADMISSION_KEY,
+        })
+      );
+    }
     if (path === "/pat-pairings" || oauthPath(path)) {
       headers.set(
         oauthPath(path) ? "x-oauth-source" : "x-pat-source",

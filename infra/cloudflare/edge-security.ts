@@ -1,3 +1,7 @@
+import {
+  microsoftProviderPaths,
+  providerPaths,
+} from "../../apps/server/src/shell/provider-authentication/contract";
 import { connectionBrowserPaths } from "../../apps/server/src/shell/connections/contract";
 import { oauthPaths } from "../../apps/server/src/shell/oauth-agents/contract";
 import { operationCatalog } from "@fidy/server/canonical-catalog";
@@ -110,6 +114,8 @@ const reservedRateLimitPaths = [
   "/cli/latest.txt",
   "/health",
   ...Object.values(oauthPaths),
+  ...Object.values(providerPaths),
+  ...Object.values(microsoftProviderPaths),
   ...Object.values(connectionBrowserPaths),
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
@@ -173,6 +179,15 @@ const rateLimitRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
  */
 export const edgeSecurityPolicy = {
   browserOrigin: browserOrigins.production,
+  hsts: {
+    strict_transport_security: {
+      enabled: true,
+      max_age: 31536000,
+      include_subdomains: false,
+      preload: false,
+      nosniff: true,
+    },
+  },
   reservedIngress,
   rulesets: {
     customFirewall: {

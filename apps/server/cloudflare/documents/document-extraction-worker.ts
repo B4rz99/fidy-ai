@@ -23,12 +23,12 @@ export const documentExtractionLimits = {
   maximumOutputBytes,
 } as const;
 
-const ConversionResults = Schema.Array(
+const ConversionResults = Schema.Tuple([
   Schema.Union([
     Schema.Struct({ data: Schema.String, format: Schema.Literal("markdown") }),
     Schema.Struct({ error: Schema.String, format: Schema.Literal("error") }),
-  ])
-).check(Schema.isMinLength(1), Schema.isMaxLength(1));
+  ]),
+]);
 
 type DocumentExtractionBindings = {
   readonly AI: {
@@ -136,11 +136,10 @@ const convertRequest = Effect.fn(function* (
     }),
     awaitRequestAbort(request)
   );
-  const results = yield* Schema.decodeUnknownEffect(ConversionResults)(conversion).pipe(
+  const [result] = yield* Schema.decodeUnknownEffect(ConversionResults)(conversion).pipe(
     Effect.mapError(() => new ExtractionRejected({ reason: "conversion-failed" }))
   );
-  const result = results[0];
-  if (result?.format !== "markdown") {
+  if (result.format !== "markdown") {
     return yield* new ExtractionRejected({ reason: "conversion-failed" });
   }
   if (result.data.length > maximumOutputBytes) {

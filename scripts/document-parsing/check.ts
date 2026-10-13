@@ -442,7 +442,7 @@ try {
     )}\n`
   );
 } finally {
-  await stopProofProcess(worker);
+  await Effect.runPromise(stopProofProcess(worker));
   await closeWorkerdHttp();
   await rm(temporaryDirectory, { force: true, recursive: true });
 }

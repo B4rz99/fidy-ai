@@ -444,7 +444,7 @@ const overlapRequests = Effect.fn(function* (
   process.stdout.write(output + "\n");
 });
 const releaseWorker = (worker: Bun.Subprocess): Effect.Effect<void> =>
-  Effect.tryPromise(() => stopProofProcess(worker)).pipe(Effect.orDie);
+  stopProofProcess(worker).pipe(Effect.orDie);
 const measureParserOnly = Effect.fn(function* (
   debuggerUrl: string,
   target: Option.Option<HostedWorkerProof>

@@ -281,7 +281,7 @@ const proveHostileInputs = (
   });
 
 const stopWorker = (process: Bun.Subprocess): Effect.Effect<void> =>
-  Effect.tryPromise(() => stopProofProcess(process)).pipe(Effect.orDie);
+  stopProofProcess(process).pipe(Effect.orDie);
 
 const runtimeProof = (options: ProofOptions): Effect.Effect<RuntimeProof, ProofError> =>
   Effect.scoped(

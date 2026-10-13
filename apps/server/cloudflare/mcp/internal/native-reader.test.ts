@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import assert from "node:assert/strict";
 import { Data, Effect, Exit } from "effect";
 import { leaseNativeReader } from "./native-reader";
 
@@ -72,9 +73,12 @@ it.effect("releases the reader when SDK cancellation rejects, preserving the ref
     });
     const result = yield* Effect.tryPromise({
       try: () => lifetime.cancel(),
-      catch: (error) => (error instanceof FixtureRefusal ? error : refusal),
+      catch: (error) => {
+        assert.strictEqual(error, refusal);
+        return refusal;
+      },
     }).pipe(Effect.exit);
-    expect(result).toEqual(Exit.fail(refusal));
+    assert.deepStrictEqual(result, Exit.fail(refusal));
     expect(body.locked).toBe(false);
     expect(leasesReleased).toBe(1);
   })

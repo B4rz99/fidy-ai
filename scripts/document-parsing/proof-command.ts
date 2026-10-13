@@ -7,7 +7,8 @@ class ProofCommandFailed extends Data.TaggedError("ProofCommandFailed")<{
   readonly reason: "execution" | "output" | "cleanup";
 }> {}
 
-const stopProcess = Effect.fn(function* (child: Bun.Subprocess) {
+/** Stops an owned proof process, escalating after two seconds if graceful shutdown stalls. */
+export const stopProofProcess = Effect.fn(function* (child: Bun.Subprocess) {
   if (child.exitCode !== null) return;
   yield* Effect.try({
     try: () => child.kill("SIGTERM"),
@@ -28,10 +29,6 @@ const stopProcess = Effect.fn(function* (child: Bun.Subprocess) {
     });
   }
 });
-
-/** Stops an owned proof process, escalating after two seconds if graceful shutdown stalls. */
-export const stopProofProcess = (child: Bun.Subprocess): Promise<void> =>
-  Effect.runPromise(stopProcess(child));
 
 /** Reads at most 1 MiB from a proof output pipe; the process owner closes the pipe on refusal. */
 export const readProofOutput = Effect.fn(function* (stream: ReadableStream<Uint8Array>) {
@@ -77,5 +74,5 @@ export const runProofCommand = (
         },
         { concurrency: "unbounded" }
       ),
-    (child) => stopProcess(child).pipe(Effect.orDie)
+    (child) => stopProofProcess(child).pipe(Effect.orDie)
   ).pipe(Effect.timeout("2 minutes"));

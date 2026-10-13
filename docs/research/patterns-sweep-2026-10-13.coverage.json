@@ -5966,7 +5966,7 @@
       "Statement committedSubmission initially rethrew a cause with a typed staging failure despite never typed-error signature; owner changed branch to Effect.interrupt before final review, resolving channel mismatch"
     ]
   },
-  "validation_status": "Static, builds, unit and isolated browser verification passed locally. Serial aggregate adapter/infrastructure verification and GitHub CI remain pending; failed aggregates are not counted as passing gates.",
+  "validation_status": "All six standard local verification groups passed. First formal review reported three Standards findings (fixed and verified), no Security/Spec findings. Fresh three-axis review and GitHub CI remain prerequisites for publication/merge.",
   "supplemental_validation": {
     "command_policy": "5 tests passed, including actual descendant work cessation",
     "cli_release": "13 tests passed; normal CI release entrypoint includes native policy subprocess suite",
@@ -5992,11 +5992,12 @@
     "focused_lint": "runtime/resources and renamed native paths clean"
   },
   "final_local_verification": {
-    "static": "passed",
-    "builds": "passed",
-    "unit": "passed; CLI95/web214/CItools115",
+    "static": "passed again after reviewer fixes",
+    "builds": "passed again after reviewer fixes; document parsing proof included",
+    "unit": "passed; CLI95/web214/CItools115; changed proof-command tests3 passed again",
     "browser": "passed; shared100+CLI1; shared3skipped",
-    "adapter": "137 files/1817tests passed; OAuth cluster failed native proxy teardown; unchanged isolated32 passed; serial rerun pending",
-    "infra": "270passed + stale digest failure; refreshed digest fixture passed; serial rerun pending"
+    "adapter": "138 files/1828tests passed; 2 files/17tests skipped in full single-worker rerun; reviewer-changed document/MCP23 tests passed again",
+    "infra": "32 files/271tests passed in complete rerun",
+    "updated_trunk_tests": "verifier2/browser-topology3 passed"
   }
 }

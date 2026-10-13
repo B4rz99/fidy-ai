@@ -27,6 +27,10 @@ const ownedPaths: ReadonlyArray<{
   { prefix: "apps/server/", jobs: runtimeJobs },
   { prefix: "apps/cli/", jobs: runtimeJobs },
   { prefix: "infra/cloudflare/", jobs: runtimeJobs },
+  {
+    prefix: "apps/site/",
+    jobs: ["builds", "unit", "cloudflare-infra", "browser", "security-sast"],
+  },
   { prefix: "apps/web/", jobs: ["builds", "unit", "cloudflare-infra", "browser", "security-sast"] },
 ];
 const scannerPaths = {

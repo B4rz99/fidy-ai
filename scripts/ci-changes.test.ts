@@ -36,13 +36,15 @@ describe("PR check selection", () => {
   });
 
   it("checks web changes without starting unrelated server adapters or dependency scans", () => {
-    expect(selectedJobs(["apps/web/src/main.tsx"])).toEqual([
-      "builds",
-      "unit",
-      "cloudflare-infra",
-      "browser",
-      "security-sast",
-    ]);
+    for (const path of ["apps/web/src/main.tsx", "apps/site/src/pages/index.astro"]) {
+      expect(selectedJobs([path])).toEqual([
+        "builds",
+        "unit",
+        "cloudflare-infra",
+        "browser",
+        "security-sast",
+      ]);
+    }
   });
 
   it("checks real Worker browser journeys and infrastructure when server behavior changes", () => {

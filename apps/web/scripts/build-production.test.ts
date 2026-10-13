@@ -79,11 +79,11 @@ describe("production static release identity", () => {
   );
 
   it.effect(
-    "accepts only the named public discovery files without allowing arbitrary text dumps",
+    "accepts only the named product routing files without allowing arbitrary text dumps",
     () =>
       Effect.gen(function* () {
         const directory = yield* productionOutput();
-        for (const file of ["robots.txt", "sitemap.xml", "llms.txt"]) {
+        for (const file of ["robots.txt", "_redirects"]) {
           yield* Effect.tryPromise(() => Bun.write(join(directory, file), "public discovery"));
         }
         yield* Effect.tryPromise(() => expect(validate(directory)).resolves.toBeUndefined());

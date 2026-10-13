@@ -32,6 +32,7 @@ digests and verification dates. A matching version alone does not prove byte-ide
 | Effect Atom, React atoms, auth-lifetime isolation                  | [effect-atom.md](effect-atom.md)           |
 | Alchemy resources, bindings, Cloudflare deployment topology        | [alchemy.md](alchemy.md)                   |
 | dnd-kit drag and drop                                              | [dnd-kit.md](dnd-kit.md)                   |
+| Astro static documents, metadata and React islands                 | [astro.md](astro.md)                       |
 | React component behavior and runtime                               | [react.md](react.md)                       |
 
 ## Maintaining a pattern

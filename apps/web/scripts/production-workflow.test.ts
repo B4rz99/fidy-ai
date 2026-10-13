@@ -248,7 +248,9 @@ describe("Production release workflow policy", () => {
     expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(1);
     expect(preflight.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(1);
     expect(workflow).not.toContain("alchemy drift --stage production --no-input");
-    expect(workflow).toContain("https://fidyapp.com/health-check");
+    expect(workflow).toContain("https://fidyapp.com/");
+    expect(workflow).toContain("https://fidyapp.com/deployment-metadata.json");
+    expect(preflight).toContain("bun run --cwd apps/site build:production");
     expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");
     expect(workflow).toContain("https://api.fidyapp.com/health");
     expect(workflow).toContain("$RELEASE_GIT_SHA");

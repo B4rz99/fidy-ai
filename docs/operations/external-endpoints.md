@@ -7,7 +7,8 @@ Cloudflare-owned endpoint boundary.
 ## Ownership and routing
 
 - `app.fidyapp.com` is the canonical Cloudflare custom domain for the assets-only web Worker.
-- `fidyapp.com` permanently redirects to `app.fidyapp.com` while preserving path and query.
+- `fidyapp.com` is the custom domain for the assets-only Astro marketing and legal site.
+  App-host marketing and legal routes redirect to the site; signup and settings stay on the app.
 - `api.fidyapp.com` reaches the public ingress Worker. Its `/health` route delegates to the private
   Core Worker through the `CORE` service binding; Core has no public hostname.
 - Google Workspace remains authoritative for mail at `@fidyapp.com`.

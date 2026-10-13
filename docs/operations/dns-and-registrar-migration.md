@@ -21,7 +21,7 @@ provider account details and do not belong in the repository.
 2. Recreate and compare the complete record inventory. Preserve approved root mail records and their
    SPF, DKIM, and verification records.
 3. Deploy the Alchemy Production stack. It creates `app.fidyapp.com` for the assets-only web Worker,
-   `api.fidyapp.com` for public ingress, and the apex redirect to the application host. The private
+   `api.fidyapp.com` for public ingress, and `fidyapp.com` for the assets-only Astro site. The private
    Core Worker receives no DNS name. Do not create these records or Worker attachments by hand.
 4. Provision Email Worker MX routes through Cloudflare when inbound email is enabled. Do not create a
    legacy inbound-provider webhook or MX route.

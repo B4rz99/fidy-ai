@@ -19,13 +19,13 @@
     "dev": "bun run --cwd infra/cloudflare dev",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:cloudflare": "bun run --cwd infra/cloudflare dev",
-    "build": "bun run --cwd apps/web build && bun run --cwd apps/cli build",
+    "build": "bun run --cwd apps/site build && bun run --cwd apps/web build && bun run --cwd apps/cli build",
     "cli": "bun apps/cli/src/main.ts",
     "agent:repl": "bun run --cwd apps/server agent:repl",
     "shadcn": "bun run --cwd apps/web shadcn",
-    "format": "oxfmt --write .",
-    "format:check": "oxfmt --check .",
-    "typecheck": "rm -rf .tsbuild && tsc --build --force",
+    "format": "oxfmt --write . && bun install --cwd tools/astro --frozen-lockfile && bun tools/astro/node_modules/prettier/bin/prettier.cjs --plugin ./tools/astro/node_modules/prettier-plugin-astro/dist/index.js --print-width 100 --trailing-comma es5 --write \"apps/site/src/**/*.astro\"",
+    "format:check": "oxfmt --check . && bun install --cwd tools/astro --frozen-lockfile && bun tools/astro/node_modules/prettier/bin/prettier.cjs --plugin ./tools/astro/node_modules/prettier-plugin-astro/dist/index.js --print-width 100 --trailing-comma es5 --check \"apps/site/src/**/*.astro\"",
+    "typecheck": "rm -rf .tsbuild && tsc --build --force && bun run --cwd apps/site typecheck && bun tools/astro/node_modules/typescript/bin/tsc --project tools/astro/tsconfig.json",
     "typecheck:oxlint": "node tools/depcruise/node_modules/typescript/bin/tsc --project scripts/oxlint/tsconfig.json --noEmit",
     "typecheck:depcruise": "node tools/depcruise/node_modules/typescript/bin/tsc --project tools/depcruise/tsconfig.json --noEmit",
     "contracts:generate": "bun run --cwd apps/server contracts:generate",
@@ -45,7 +45,8 @@
     "check:credential-evidence": "bun scripts/check-credential-evidence.ts",
     "verify": "bun scripts/verify.ts",
     "postinstall": "effect-tsgo patch",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "dev:site": "bun run --cwd apps/site dev"
   },
   "devDependencies": {
     "@babel/parser": "8.0.6",

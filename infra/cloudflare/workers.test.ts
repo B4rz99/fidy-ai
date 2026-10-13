@@ -391,13 +391,19 @@ describe("Deployment configuration", () => {
 });
 
 describe("Production topology contract", () => {
-  it("assigns only the agreed public hostnames and apex redirect", () => {
+  it("assigns separate static site and product hostnames with private Core", () => {
     expect(productionTopology.web).toEqual({
       adoptExistingWorker: true,
       hostname: "app.fidyapp.com",
       localPort: 5173,
-      redirects: ["fidyapp.com"],
+      redirects: [],
       workerName: "fidy-web",
+      workersDev: false,
+    });
+    expect(productionTopology.site).toEqual({
+      hostname: "fidyapp.com",
+      localPort: 4321,
+      workerName: "fidy-site",
       workersDev: false,
     });
     expect(productionTopology.ingress.hostname).toBe("api.fidyapp.com");
@@ -442,7 +448,7 @@ describe("Production topology contract", () => {
       action: "skip",
       actionParameters: { products: ["bic", "uaBlock"] },
       expression:
-        '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/robots.txt" "/llms.txt" "/sitemap.xml" "/install.sh" "/install.ps1" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes"})',
+        '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/robots.txt" "/llms.txt" "/sitemap-index.xml" "/sitemap-0.xml" "/install.sh" "/install.ps1" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes"})',
     });
     expect(rule).not.toHaveProperty("actionParameters.phases");
     expect(rule?.expression).not.toMatch(/auth|settings|transactions|api\.fidyapp/u);

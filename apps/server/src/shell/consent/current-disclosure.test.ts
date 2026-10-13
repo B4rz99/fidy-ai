@@ -25,9 +25,7 @@ it.effect("pins the exact chat disclosure and web-owned policy metadata", () =>
     expect(sha256(disclosure.text)).toBe(disclosure.contentSha256);
     const policy = yield* Effect.tryPromise({
       try: () =>
-        Bun.file(
-          new URL("../../../../web/src/features/public-site/legal/policy.html", import.meta.url)
-        ).bytes(),
+        Bun.file(new URL("../../../../site/src/assets/policy.html", import.meta.url)).bytes(),
       catch: () => new PolicyFixtureUnavailable(),
     });
     expect(sha256(policy)).toBe(disclosure.policy.contentSha256);

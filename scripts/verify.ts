@@ -206,6 +206,13 @@ const checks: Array<Check> = [
   ]),
   rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
+  rootCheck("browser", "Public site browser checks", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/site",
+    "test:browser",
+  ]),
   rootCheck("browser", "Web static-shell browser checks", [
     "bun",
     "run",

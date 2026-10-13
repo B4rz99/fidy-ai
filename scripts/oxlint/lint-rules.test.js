@@ -17,9 +17,6 @@ import effectGuards from "./effect-guards.js";
 import testGuards from "./test-guards.js";
 
 const routeFile = fileURLToPath(new URL("../../apps/web/src/app/routes.ts", import.meta.url));
-const publicSiteFile = fileURLToPath(
-  new URL("../../apps/web/src/features/public-site/feature.tsx", import.meta.url)
-);
 const otherFile = fileURLToPath(new URL("../../apps/web/src/app/other.ts", import.meta.url));
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
 
@@ -185,9 +182,8 @@ tester.run(
   {
     valid: [
       { code: "export const createWebRouter = () => 1;", filename: routeFile },
-      { code: "export const createPublicSiteRoute = () => 1;", filename: publicSiteFile },
       { code: "const local = (): number => 1;", filename: routeFile },
-      { code: "const values = [1].map((value) => value + 1);", filename: publicSiteFile },
+      { code: "const values = [1].map((value) => value + 1);", filename: routeFile },
     ],
     invalid: [
       {
@@ -197,7 +193,7 @@ tester.run(
       },
       {
         code: "const helper = () => 1;",
-        filename: publicSiteFile,
+        filename: routeFile,
         errors: [{ messageId: "routeReturnType" }],
       },
       {
@@ -217,7 +213,7 @@ tester.run(
       },
       {
         code: "const helper = function () { return 1; };",
-        filename: publicSiteFile,
+        filename: routeFile,
         errors: [{ messageId: "routeReturnType" }],
       },
       {

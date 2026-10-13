@@ -1,0 +1,132 @@
+---
+import type { GetStaticPaths } from "astro";
+import SiteLayout from "../../layouts/site-layout.astro";
+import { Footer } from "../../islands/footer";
+import { LaunchButton } from "../../islands/registration";
+import ThemeToggle from "../../components/theme-toggle.astro";
+import Transactions from "../../components/feature-details/transactions.astro";
+import Budgets from "../../components/feature-details/budgets.astro";
+import Assistant from "../../components/feature-details/assistant.astro";
+import Dashboard from "../../components/feature-details/dashboard.astro";
+import Insights from "../../components/feature-details/insights.astro";
+import Agents from "../../components/feature-details/agents.astro";
+
+type FeaturePage = {
+  params: { section: string; slug: string };
+  props: { title: string; description: string; feature: string; Detail: typeof Transactions };
+};
+
+export const getStaticPaths = ((): FeaturePage[] => [
+  {
+    params: { section: "funciones", slug: "transacciones" },
+    props: {
+      title: "Transacciones — Fidy",
+      description:
+        "Registra y corrige transacciones con contexto desde WhatsApp, la web o tu agente. Organiza tus finanzas personales en Colombia.",
+      feature: "transactions",
+      Detail: Transactions,
+    },
+  },
+  {
+    params: { section: "funciones", slug: "presupuestos" },
+    props: {
+      title: "Presupuestos — Fidy",
+      description:
+        "Organiza presupuestos por categoría y moneda, y revisa tu consumo mensual con Fidy.",
+      feature: "budgets",
+      Detail: Budgets,
+    },
+  },
+  {
+    params: { section: "funciones", slug: "asistente" },
+    props: {
+      title: "Asistente — Fidy",
+      description:
+        "Conversa con Fidy en WhatsApp para registrar transacciones y consultar tus finanzas con contexto.",
+      feature: "assistant",
+      Detail: Assistant,
+    },
+  },
+  {
+    params: { section: "funciones", slug: "tablero" },
+    props: {
+      title: "Tablero — Fidy",
+      description:
+        "Organiza un tablero personal para explorar tus transacciones y presupuestos en Fidy.",
+      feature: "dashboard",
+      Detail: Dashboard,
+    },
+  },
+  {
+    params: { section: "funciones", slug: "insights" },
+    props: {
+      title: "Hallazgos — Fidy",
+      description:
+        "Explora señales y patrones basados en las transacciones que has incorporado a Fidy.",
+      feature: "insights",
+      Detail: Insights,
+    },
+  },
+  {
+    params: { section: "funciones", slug: "agentes" },
+    props: {
+      title: "Agentes — Fidy",
+      description:
+        "Consulta las opciones y disponibilidad para conectar tus agentes autorizados a Fidy, con permisos y vencimiento.",
+      feature: "agents",
+      Detail: Agents,
+    },
+  },
+]) satisfies GetStaticPaths;
+const { title, description, feature, Detail } = Astro.props;
+const { slug } = Astro.params;
+const features = [
+  ["transacciones", "Transacciones"],
+  ["presupuestos", "Presupuestos"],
+  ["asistente", "Asistente"],
+  ["tablero", "Tablero"],
+  ["insights", "Hallazgos"],
+  ["agentes", "Tus agentes"],
+];
+---
+
+<SiteLayout variant="detail" title={title} description={description}>
+  <header class="wrap nav">
+    <a class="logo" href="/" aria-label="Fidy, inicio">
+      <img src="/fidy-logo.png" alt="fidy" />
+    </a>
+    <a class="textlink" href="/#funciones">
+      ← Todas las funciones
+    </a>
+    <div class="navend">
+      <LaunchButton dark={false} arrow={false} />
+      <ThemeToggle />
+    </div>
+  </header>
+  <main class={`detail-page detail-${feature}`}>
+    <Detail />
+    <section class="detail-explore wrap">
+      <h2>Sigue explorando.</h2>
+      <div>
+        {features
+          .filter(([id]) => id !== slug)
+          .map(([id, label]) => (
+            <a href={`/funciones/${id}`}>
+              <span>{label}</span>
+              <span aria-hidden="true">↗</span>
+            </a>
+          ))}
+      </div>
+    </section>
+    <section class="closing">
+      <h2>
+        Tu plata, más clara.
+        <br />
+        Con la ayuda que tú eliges.
+      </h2>
+      <p>Conversa con Fidy, explora la web o trabaja con tu propio agente.</p>
+      <LaunchButton dark arrow />
+    </section>
+    <Footer />
+  </main>
+</SiteLayout>

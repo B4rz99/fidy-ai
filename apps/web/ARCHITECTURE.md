@@ -9,7 +9,8 @@ production topology, and browser-to-server ownership.
 ## 1. Application shape
 
 `apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
-It owns browser routing, providers, styles, and public policy copy. Its only server import is the
+It owns product browser routing, providers and styles. Public marketing and policy copy belong to
+`apps/site`, which renders the public website with Astro. Its only server import is the
 browser-safe `@fidy/server/client` declaration seam; it never imports server implementations. The API
 Workers do not serve web routes or static assets.
 
@@ -40,10 +41,9 @@ session recording or automatic reproduction of User content.
 
 ## 2. Behavioral ownership
 
-The web application is organized by behavioral ownership rather than route visibility. Marketing,
-audience, company, and legal pages form one public website surface because they share presentation
-and lifecycle. Publicly accessible flows with independent product behavior, such as login, pairing,
-or onboarding, remain separate features.
+The web application is organized by behavioral ownership rather than route visibility. Publicly
+accessible product flows such as login, pairing and onboarding remain separate features. Marketing
+and legal documents belong to `apps/site`; links from the site enter these app-owned flows.
 
 Presentation shapes derive from the canonical server declaration, the dedicated server-declared
 hosted Turn browser API, or web-owned view state. The authenticated layout composes a persistent floating Agent chat;
@@ -172,8 +172,10 @@ onboarding, deployment or launch.
 
 ## 4. Static production artifact
 
-Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`, with
-`fidyapp.com` permanently redirected to that canonical host. There is no application Worker
+Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`.
+`fidyapp.com` serves the separate Astro site. App-host legal and feature URLs redirect to the
+site, preserving immutable Consent disclosure links. The app root enters the product; its
+documents are excluded from indexing. There is no application Worker
 entrypoint. The browser Content Security Policy permits connections only to the stable API origin and
 Wompi's fixed sandbox/production tokenization origins. Card fields, Nequi numbers, and DaviPlata
 CC document/product and OTP material never pass through Fidy. An OTP policy must match those

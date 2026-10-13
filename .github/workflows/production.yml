@@ -264,9 +264,11 @@ jobs:
         run: |
           verified=false
           for attempt in {1..20}; do
-            redirect=$(curl --silent --show-error --max-time 10 --output /dev/null \
-              --dump-header /tmp/fidy-apex-headers --write-out '%{http_code} %{redirect_url}' \
-              'https://fidyapp.com/health-check?probe=1' || true)
+            site_status=$(curl --silent --show-error --max-time 10 --output /dev/null \
+              --dump-header /tmp/fidy-apex-headers --write-out '%{http_code}' \
+              'https://fidyapp.com/' || true)
+            site_metadata=$(curl --silent --show-error --max-time 10 \
+              'https://fidyapp.com/deployment-metadata.json' || true)
             metadata=$(curl --silent --show-error --max-time 10 \
               --dump-header /tmp/fidy-web-headers 'https://app.fidyapp.com/deployment-metadata.json' || true)
             health=$(curl --silent --show-error --max-time 10 \
@@ -278,7 +280,9 @@ jobs:
                 hsts=false
               fi
             done
-            if [[ "$hsts" == true ]] && [[ "$redirect" == "301 https://app.fidyapp.com/health-check?probe=1" ]] && \
+            if [[ "$hsts" == true ]] && [[ "$site_status" == "200" ]] && \
+              jq --exit-status --arg revision "$RELEASE_GIT_SHA" \
+                '. == {gitRevision: $revision}' <<<"$site_metadata" >/dev/null && \
               jq --exit-status --arg revision "$RELEASE_GIT_SHA" --arg digest "$CONTRACT_DIGEST" \
                 '. == {contractDigest: $digest, gitRevision: $revision}' <<<"$metadata" >/dev/null && \
               jq --exit-status --arg revision "$RELEASE_GIT_SHA" --arg digest "$CONTRACT_DIGEST" \

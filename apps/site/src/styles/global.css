@@ -1,0 +1,67 @@
+@import "tailwindcss";
+@font-face {
+  font-family: Poppins;
+  src: url("../assets/fonts/Poppins-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Poppins;
+  src: url("../assets/fonts/Poppins-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Poppins;
+  src: url("../assets/fonts/Poppins-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Poppins;
+  src: url("../assets/fonts/Poppins-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Poppins;
+  src: url("../assets/fonts/Poppins-ExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-heading: Poppins, Arial, sans-serif;
+}
+body {
+  margin: 0;
+}
+.legal-document {
+  max-width: 48rem;
+  padding: 3rem 1.5rem;
+  margin: auto;
+}
+.legal-navigation {
+  border-bottom: 1px solid #ddd;
+}
+.legal-navigation nav {
+  display: flex;
+  justify-content: space-between;
+  max-width: 48rem;
+  padding: 1.25rem 1.5rem;
+  margin: auto;
+}
+.legal-document a {
+  text-decoration: underline;
+}
+.legal-document h1 {
+  font-size: 2rem;
+}
+.legal-document h2 {
+  font-size: 1.25rem;
+}

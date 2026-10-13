@@ -28,13 +28,7 @@ import {
 const routerRegistrationFile = fileURLToPath(
   new URL("../../apps/web/src/app/routes.ts", import.meta.url)
 );
-const publicSiteRouteFile = fileURLToPath(
-  new URL("../../apps/web/src/features/public-site/feature.tsx", import.meta.url)
-);
-const routeFactories = new Map([
-  [routerRegistrationFile, "createWebRouter"],
-  [publicSiteRouteFile, "createPublicSiteRoute"],
-]);
+const routeFactories = new Map([[routerRegistrationFile, "createWebRouter"]]);
 
 /** @param {TSInterfaceDeclaration} node - Interface to inspect. */
 const isRouterRegistration = (node) => {

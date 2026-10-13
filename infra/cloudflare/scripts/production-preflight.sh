@@ -32,7 +32,7 @@ trap 'exit 143' TERM
 commands=(
   'bun run --cwd infra/cloudflare test -- workers.test.ts'
   'bun run --cwd apps/server test:hosted-inference'
-  'bun run --cwd apps/web build:production'
+  'bun run --cwd apps/site build:production && bun run --cwd apps/web build:production'
   'cd infra/cloudflare
    bun scripts/check-applied-migration-drift.ts
    bun ../../node_modules/alchemy/bin/alchemy.js provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input

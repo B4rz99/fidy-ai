@@ -1,0 +1,90 @@
+---
+import { LaunchButton } from "../../islands/registration";
+---
+
+<section class="detail-hero wrap">
+  <h1>
+    De tus transacciones,
+    <br />a lo que importa.
+  </h1>
+  <p>
+    Los hallazgos de Fidy ponen tus cifras en contexto: cómo fue tu semana, cuánto llevas de un
+    presupuesto y qué patrones aparecen en tus transacciones.
+  </p>
+  <div class="actions">
+    <LaunchButton dark={false} arrow />
+    <a class="textlink" href="#vista">
+      Ver el ejemplo ↓
+    </a>
+  </div>
+</section>
+<section class="detail-showcase" id="vista" aria-label="Vista ilustrativa de Hallazgos">
+  <div class="wrap">
+    <div class="insight-stream">
+      <article>
+        <span>Presupuesto · Restaurantes</span>
+        <h3>Llegaste al 80% de tu presupuesto.</h3>
+        <p>Has registrado $480.000 de $600.000 este mes. Quedan $120.000.</p>
+        <div class="feature-track">
+          <i class="chart-width-80"></i>
+        </div>
+      </article>
+      <article>
+        <span>Resumen semanal</span>
+        <h3>Tu semana, con contexto.</h3>
+        <p>
+          $312.000 registrados esta semana frente a $280.000 la anterior. Una diferencia de $32.000.
+        </p>
+        <div class="insight-compare">
+          <div>
+            <i class="chart-width-90"></i>
+            <span>Anterior · $280.000</span>
+          </div>
+          <div>
+            <i class="chart-width-100"></i>
+            <span>Esta semana · $312.000</span>
+          </div>
+        </div>
+      </article>
+      <article>
+        <span>Patrón recurrente</span>
+        <h3>Un cobro que se repite.</h3>
+        <p>
+          Varias transacciones de $24.900 con la misma contraparte muestran un patrón. Es una señal
+          en tu historial, no una confirmación de una suscripción activa.
+        </p>
+      </article>
+    </div>
+    <p class="detail-disclosure">
+      Vista ilustrativa · Datos ficticios en COP · No modifica tu información.
+    </p>
+  </div>
+</section>
+<section class="section wrap">
+  <div class="section-head">
+    <h2>Señales para revisar, con contexto.</h2>
+  </div>
+  <div class="steps">
+    <article class="step">
+      <h3>Sigue tus presupuestos.</h3>
+      <p>
+        Los avisos identifican cuándo lo registrado alcanza el 80% o el 100% del presupuesto mensual
+        de una categoría.
+      </p>
+    </article>
+    <article class="step">
+      <h3>Mira tu semana.</h3>
+      <p>
+        Los resúmenes semanales reúnen información de tus transacciones y permiten comparar
+        períodos. La cobertura depende de los datos disponibles.
+      </p>
+    </article>
+    <article class="step">
+      <h3>Compártelos con tu agente.</h3>
+      <p>
+        Tu agente autorizado puede consultar los hallazgos pendientes y usarlos para ayudarte a
+        revisar tus finanzas.
+      </p>
+    </article>
+  </div>
+</section>

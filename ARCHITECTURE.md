@@ -122,8 +122,10 @@ Exact-host interoperability, real Core/D1 security evidence and operator approva
 ## Production boundary
 
 [`infra/cloudflare/alchemy.run.ts`](infra/cloudflare/alchemy.run.ts) is the sole Production topology
-authority. One stack deploys an assets-only web Worker at `app.fidyapp.com`, redirects `fidyapp.com`
-there, and exposes an ingress Worker at `api.fidyapp.com`. The Core Worker is private behind the
+authority. One stack deploys an assets-only Astro site Worker at `fidyapp.com`, an assets-only
+React web Worker at `app.fidyapp.com`, and an ingress Worker at `api.fidyapp.com`.
+[`apps/site/ARCHITECTURE.md`](apps/site/ARCHITECTURE.md) owns public marketing, legal documents
+and discovery; [`apps/web/ARCHITECTURE.md`](apps/web/ARCHITECTURE.md) owns product behavior. The Core Worker is private behind the
 ingress service binding and owns the primary D1 binding; the unrouted Email Worker has a narrow
 D1 binding for forwarded-mail admission and retention. The ingress has no direct database access.
 The static artifact contains no server implementation or Secrets. Local development uses the same

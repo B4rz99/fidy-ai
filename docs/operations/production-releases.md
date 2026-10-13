@@ -38,7 +38,8 @@ integrations and deployment triggers for those systems; they are not recovery pa
 ## Topology
 
 - `https://app.fidyapp.com` serves the validated assets-only web artifact.
-- `https://fidyapp.com` permanently redirects to the application while preserving path and query.
+- `https://fidyapp.com` serves the validated assets-only Astro marketing and legal site.
+  Its deployment metadata identifies the exact release Git revision.
 - `https://api.fidyapp.com` reaches the public ingress Worker.
 - the Core Worker has no custom domain, route, or `workers.dev` URL and is reachable only through the
   ingress `CORE` service binding.

@@ -73,7 +73,7 @@ const probes: readonly Probe[] = [
     files: [
       {
         path: `${appInterface}/probe.ts`,
-        source: `import { createPublicSiteRoute } from "@/features/public-site/feature";\n\nexport const featureInterfaceProbe = createPublicSiteRoute;\n`,
+        source: `import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";\n\nexport const featureInterfaceProbe = BrowserLoginPairingFeature;\n`,
       },
     ],
   },
@@ -87,8 +87,8 @@ const probes: readonly Probe[] = [
       {
         path: sourceMain,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const mainProbe = createPublicSiteRoute;\n",
+          'import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";\n\n' +
+          "export const mainProbe = BrowserLoginPairingFeature;\n",
       },
     ],
   },
@@ -153,8 +153,8 @@ const probes: readonly Probe[] = [
       {
         path: `${uiApplication}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const uiApplicationProbe = createPublicSiteRoute;\n",
+          'import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";\n\n' +
+          "export const uiApplicationProbe = BrowserLoginPairingFeature;\n",
       },
     ],
   },
@@ -236,8 +236,8 @@ const probes: readonly Probe[] = [
       {
         path: `${sessionFeature}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const sessionFeatureProbe = createPublicSiteRoute;\n",
+          'import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";\n\n' +
+          "export const sessionFeatureProbe = BrowserLoginPairingFeature;\n",
       },
     ],
   },
@@ -280,8 +280,8 @@ const probes: readonly Probe[] = [
       {
         path: `${transportFeature}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
-          "export const transportFeatureProbe = createPublicSiteRoute;\n",
+          'import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";\n\n' +
+          "export const transportFeatureProbe = BrowserLoginPairingFeature;\n",
       },
     ],
   },
@@ -417,8 +417,8 @@ const probes: readonly Probe[] = [
       {
         path: `${sourceRelative}/probe.ts`,
         source:
-          'import { createPublicSiteRoute } from "../../features/public-site/feature";\n\n' +
-          "export const relativeProbe = createPublicSiteRoute;\n",
+          'import { BrowserLoginPairingFeature } from "../../features/browser-login/feature";\n\n' +
+          "export const relativeProbe = BrowserLoginPairingFeature;\n",
       },
     ],
   },

@@ -11,6 +11,7 @@ import { localCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/c
 
 const infrastructureRoot = new URL(".", import.meta.url).pathname;
 const ingressOrigin = "http://127.0.0.1:8787";
+const siteOrigin = "http://127.0.0.1:4321";
 const webOrigin = "http://127.0.0.1:5173";
 const HTTP_OK = 200;
 
@@ -75,6 +76,9 @@ layer(LocalEmulationServices, {
           error: { code: "unauthenticated", message: "Present a valid credential and retry." },
           next: [],
         });
+
+        const site = yield* fetchWhenReady(siteOrigin);
+        expect(yield* site.text).toContain("Tu plata,");
 
         const browserModule = yield* fetchWhenReady(`${webOrigin}/src/app/application.tsx`);
         expect(yield* browserModule.text).toContain(ingressOrigin);

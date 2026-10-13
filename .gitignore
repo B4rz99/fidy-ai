@@ -57,3 +57,8 @@ stryker.log
 
 # Restricted synthetic model evaluation evidence
 .hosted-evaluation.*/
+
+# Astro site
+apps/site/.astro/
+apps/site/test-results/
+apps/site/playwright-report/

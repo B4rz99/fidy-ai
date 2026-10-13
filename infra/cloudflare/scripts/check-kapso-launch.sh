@@ -4,7 +4,7 @@ set -euo pipefail
 # This is an evidence/completeness check, not a remote attestation of Kapso's dashboard.
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 evidence=${1:-"$root/docs/operations/kapso-launch-evidence.json"}
-policy=$(grep -o 'policy-[0-9-]*[a-z-]*' "$root/apps/web/src/features/public-site/legal/policy.html" | head -n 1)
+policy=$(grep -o 'policy-[0-9-]*[a-z-]*' "$root/apps/site/src/assets/policy.html" | head -n 1)
 onboarding=$(bun "$root/infra/cloudflare/print-consent-revision.ts")
 
 if [[ ! -f "$evidence" ]] || ! jq -e --arg policy "$policy" --arg onboarding "$onboarding" '

@@ -82,7 +82,7 @@ export const BrowserSessionBoundary = ({
   children: (session: BrowserSessionLifetime) => ReactNode;
 }>): React.JSX.Element => {
   const { expireAuthentication } = useSession();
-  const [state, setState] = useState<Option.Option<BindingState>>(Option.none());
+  const [state, setState] = useState<Option.Option<BindingState>>(() => Option.none());
   const [failed, setFailed] = useState(false);
   const attach = useCallback(
     (_node: HTMLSpanElement): (() => void) =>
@@ -100,20 +100,17 @@ export const BrowserSessionBoundary = ({
   return (
     <>
       <span hidden ref={attach} />
-      {Option.match(state, {
-        onNone: () => (
-          <p role={failed ? "alert" : "status"}>
-            {failed
-              ? "No pudimos comprobar tu sesión. Recarga para continuar."
-              : "Comprobando sesión…"}
-          </p>
-        ),
-        onSome: ({ session, checking }) => (
-          <div inert={checking} hidden={checking}>
-            {children(session)}
-          </div>
-        ),
-      })}
+      {Option.isNone(state) ? (
+        <p role={failed ? "alert" : "status"}>
+          {failed
+            ? "No pudimos comprobar tu sesión. Recarga para continuar."
+            : "Comprobando sesión…"}
+        </p>
+      ) : (
+        <div inert={state.value.checking} hidden={state.value.checking}>
+          {children(state.value.session)}
+        </div>
+      )}
     </>
   );
 };

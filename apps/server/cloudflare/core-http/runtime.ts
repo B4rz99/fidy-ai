@@ -1,3 +1,4 @@
+import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -9,6 +10,14 @@ import type { CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
 import { recoveryIsolationResponse } from "../release-isolation/operations";
+
+const rejectionBoundary = (request: Request): CoreRejectionBoundary => {
+  const pathname = new URL(request.url).pathname;
+  if (pathname === "/mcp") return "mcp";
+  return pathname === "/providers/kapso/callback" || pathname === "/providers/wompi/billing-events"
+    ? "providerCallback"
+    : "http";
+};
 
 /** Construct private HTTP assembly with one bounded Work span and post-commit publication lifetime. */
 export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
@@ -36,6 +45,7 @@ export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
       );
       yield* observeRejections({
         status: response.status,
+        boundary: rejectionBoundary(request),
         db: environment.DB,
         now: yield* Clock.currentTimeMillis,
       });

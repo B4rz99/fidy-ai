@@ -54,3 +54,6 @@ npm-debug.log*
 .stryker-tmp/
 reports/
 stryker.log
+
+# Restricted synthetic model evaluation evidence
+.hosted-evaluation.*/

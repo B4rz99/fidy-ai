@@ -1,3 +1,4 @@
+import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import {
   type Cause,
@@ -57,6 +58,7 @@ type CanonicalQueue = (
   input: Readonly<{ admission: OAuthCanonicalAdmission; signal: AbortSignal }>
 ) => Effect.Effect<Response>;
 type ToolAdmission = Readonly<{
+  observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
   db: D1Database;
   subject: OAuthCaller;
   scopes: PATScopes;
@@ -160,6 +162,12 @@ const decodeToolResponse = (
       codec: response.ok ? operation.success : operation.failure,
       raw: checkpointResponseSuggestions({ value: raw, catalog: operationCatalog, available }),
       isError: !response.ok,
+    });
+    yield* input.observeRejections({
+      db: input.db,
+      now: yield* Clock.currentTimeMillis,
+      boundary: "mcp",
+      status: response.status,
     });
     const allowedIds = new Set(operationCatalog.operations.filter(available).map(({ id }) => id));
     const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });
@@ -486,6 +494,7 @@ type ResidencyConfig = Readonly<{
   enqueueCanonicalWork: CanonicalQueue;
 }>;
 type ResidentRegistry = {
+  readonly observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
   readonly config: ResidencyConfig;
   readonly owners: Set<ResidentOwner>;
   closed: boolean;
@@ -830,6 +839,7 @@ const invokeResidentHandler = (
     const context = Context.make(Clock.Clock, clock).pipe(
       Context.add(NativeToolAdmissionContext, {
         admission: {
+          observeRejections: registry.observeRejections,
           db: registry.config.db,
           subject: catalog.subject,
           scopes: catalog.scopes,
@@ -964,7 +974,12 @@ const disposeRegistry = (registry: ResidentRegistry): Effect.Effect<void, Cause.
     }
   });
 export const makeMcpResidency = (config: ResidencyConfig): McpResidency => {
-  const registry: ResidentRegistry = { config, owners: new Set(), closed: false };
+  const registry: ResidentRegistry = {
+    config,
+    owners: new Set(),
+    closed: false,
+    observeRejections: makeCoreRejectionObserver(),
+  };
   return {
     handle: (request) => handleResidentRequest(registry, request),
     retireConnections: (connectionId) => retireConnections(registry, connectionId),

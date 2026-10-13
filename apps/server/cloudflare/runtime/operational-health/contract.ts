@@ -258,3 +258,7 @@ export type CoreRejectionSignal = Readonly<{
   operation: "coreRejectionBursts";
   state: "healthy" | "attention" | "unavailable";
 }>;
+
+/** Selected by the owning adapter, never accepted from request headers or tool arguments. */
+export const CoreRejectionBoundary = Schema.Literals(["http", "providerCallback", "mcp"]);
+export type CoreRejectionBoundary = typeof CoreRejectionBoundary.Type;

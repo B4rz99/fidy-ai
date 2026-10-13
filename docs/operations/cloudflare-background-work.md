@@ -27,11 +27,20 @@ Queue→Workflow canary distinguishes real consumer execution from a successful 
 Workflow instance creation. A delayed/missing canary completion is critical; an unavailable inspection
 is a warning, never proof of execution. These probes do not change any application Work outcome.
 
-Core additionally records a **lossy concentrated-refusal signal**: 100 completed 401/403 responses
-within one UTC minute in one Core isolate admit one best-effort D1 presence write. Later refusals
-in that minute do not write, failed writes are not retried, and at most one native write remains
-outstanding per isolate even after the 250 ms wait expires. The count saturates at 100. A new minute
-can admit another attempt only after 100 new refusals; a backward clock cannot reopen an old minute.
+Core additionally records a **lossy concentrated-refusal signal**. Its HTTP assembly counts
+completed 401/403 responses, 400/422 responses from the exact Kapso/Wompi callback paths, and
+4xx transport responses from the exact `/mcp` path. MCP also observes decoded canonical 4xx tool
+results (including rate limiting) before the protocol carries them inside HTTP 200. Discovery,
+successful calls and provider/server 5xx failures do not count. The boundary is selected by the
+owning adapter; headers, callback-like path prefixes and tool arguments cannot supply it.
+
+Each Core HTTP assembly and each User coordinator's MCP residency owns one counter. Creating or
+evicting a protocol session does not reset its coordinator's counter. At 100 refusals within one UTC
+minute, that observer admits one best-effort D1 presence write. Later refusals in that minute do not
+write, failed writes are not retried, and at most one native write remains outstanding per observer
+even after the 250 ms wait expires. The count saturates at 100. A new minute can admit another attempt
+only after 100 new refusals; a backward clock cannot reopen an old minute. The bound is per observer,
+not a deployment-wide write cap: different isolates or User coordinators can each admit a write.
 This is telemetry, never authorization or request admission.
 
 The single `operational_core_rejection_burst` row stores only `id = 1` and the most recent
@@ -42,10 +51,14 @@ future timestamp are unavailable, not healthy. The ordinary warning delivery/ack
 applies. Retention deletes the row at 24 hours; it remains at most one row even if cleanup stops.
 
 Restarts, low-rate or distributed traffic, stalled writes and scheduling outages can lose this signal.
-It includes callback refusals only when they reach Core and return 401/403. It excludes edge refusals,
-400/422 callback validation failures, most MCP protocol errors carried in HTTP 200, and other status
-codes. A warning is evidence of refusals, not proof of malicious activity. No request path, IP, User,
-credential, body, or error detail is retained. Live receipt and response evidence remains #1262.
+It excludes edge refusals, OAuth provider refusals represented by redirects, and MCP SDK protocol
+errors carried in HTTP 200 before canonical dispatch. Native-confirmation failures projected as
+unavailable are not counted as client 4xx refusals. A warning is evidence of refusals, not proof of
+malicious activity; ordinary invalid inputs, absent records and legitimate rate limiting can trigger it.
+No request path, IP, User, credential, body, error detail or caller-supplied dimension is retained.
+The native MCP observation test substitutes canonical dispatch and proves protocol detection;
+existing canonical suites remain the authorization evidence. Live receipt and response evidence
+remains #1262.
 
 | Signal                                                      | Interpretation                                                                          | Action                                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |

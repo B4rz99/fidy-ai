@@ -32,7 +32,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #1260 bounded, lossy Core refusal telemetry after response admission; no routing, edge or authority change.
 // Selective telemetry creates isolated public roots and trusted private trace propagation;
 // credential admission, routing, topology and platform invocation-log policy stay unchanged.
-const expectedEdgePolicyDigest = "ec169de9435bf205278d535c5cc4e282f2d6ab2c66a44e782c55701f01268a5a";
+// #1262 expands refusal observation to exact callback and MCP boundaries; authority and edge rules are unchanged.
+const expectedEdgePolicyDigest = "b07a87cc0196ea3264f1e398d674d076cbeb6f694a168b9550a0bb793d968f24";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

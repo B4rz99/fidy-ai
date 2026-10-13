@@ -453,8 +453,10 @@ activities, while interruption preserves cleanup. Maintenance owns no SQL, reten
 aggregate, provider execution, or authorization.
 
 Operational Health observes bounded owner metadata and dead-letter signals separately from public
-reachability health. One lossy per-Core-isolate counter records concentrated 401/403 bursts without
-request metadata, using at most one outstanding write and one fixed D1 presence row. Its scheduled
+reachability health. Lossy counters in the Core HTTP assembly and each User coordinator MCP residency observe
+authentication, exact provider-callback validation and MCP canonical 4xx refusal bursts without
+request metadata. Each observer permits at most one outstanding write; all share one fixed D1
+presence row. Its scheduled
 warning is not complete attack detection or admission authority; restart and distributed-traffic
 blind spots remain explicit. Unreadable measurements are unavailable, not zero. D1 outage email claims use
 bounded, conditional writes in the existing private R2 staging bucket,

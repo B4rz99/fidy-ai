@@ -21,7 +21,7 @@ import type { TelemetryService } from "../src/shell/observability/contract";
 import { Cause, Effect, Option, Schema } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerRequest } from "./runtime/telemetry/operations";
-import { browserOrigins } from "./runtime/contract";
+import { browserOrigins, productionTopology } from "./runtime/contract";
 import {
   SmokeFailureStage,
   SmokeIdentity,
@@ -596,6 +596,21 @@ const rejectsSmokeIngress = (
   (Option.isSome(origin) ||
     !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }));
 
+/** MCP serves native clients only; validate public coordinates before private forwarding erases them. */
+const rejectsMcpIngress = (request: Request, browserOrigin: string): boolean => {
+  const url = new URL(request.url);
+  if (url.pathname !== oauthPaths.mcp) return false;
+  if (request.headers.has("origin")) return true;
+  let apiOrigin = `https://${productionTopology.ingress.hostname}`;
+  if (browserOrigin === browserOrigins.local) {
+    apiOrigin = `http://127.0.0.1:${productionTopology.ingress.localPort}`;
+  } else if (browserOrigin === browserOrigins.acceptance) {
+    apiOrigin = "https://127.0.0.1:4174";
+  }
+  const host = request.headers.get("host");
+  return url.origin !== apiOrigin || (host !== null && host.toLowerCase() !== url.host);
+};
+
 const gateOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -675,6 +690,15 @@ const routeOwnedRequest = (
   environment: PublicEnvironment,
   origin: Option.Option<string>
 ): Effect.Effect<Response> => {
+  if (rejectsMcpIngress(request, environment.BROWSER_ORIGIN)) {
+    return Effect.succeed(
+      applyApiPolicy(
+        Response.json({ status: "forbidden" }, { status: 403 }),
+        environment.BROWSER_ORIGIN,
+        origin
+      )
+    );
+  }
   const rejection = gateOwnedRequest(request, environment, origin);
   if (Option.isSome(rejection)) {
     return Effect.succeed(rejection.value);

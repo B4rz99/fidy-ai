@@ -181,6 +181,16 @@ The session regression now uses the existing schema-validated, bounded `Retry-Af
 shared with canonical journeys. It explicitly exhausts the burst and still verifies that stale drafts
 and logout cannot alter the current session. Production admission limits are unchanged.
 
+Final CI also exposed a hosted-runner capacity limit: the macOS native store check remained
+unassigned for 901 seconds and GitHub cancelled provisioning before any step ran. Its annotations
+explicitly reported macOS ARM capacity constraints. All four adapter shards and both browser shards
+passed on the same revision. The platform-neutral native store bundle now runs on the supported
+`macos-15-intel` pool, retaining Windows coverage and the separate ARM macOS release-package checks.
+This changes runner placement, not assertions or timeouts. The earlier adapter attempt's three
+OAuth timeouts are retained: the same files passed 80 focused local tests and the CI rerun passed.
+
+Runner source: [GitHub-hosted runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
 Remaining limits are explicitly measured or unavailable: small live sample counts, changed history
 fixtures, no production saturation workload, unresolved early quota enforcement/accounting
 behavior, occasional model date semantics, unobserved product delivery tails and cold-start/per-Turn

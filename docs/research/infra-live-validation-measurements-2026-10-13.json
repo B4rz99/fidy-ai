@@ -4068,5 +4068,20 @@
     "Provider HTTP response timing is not confirmed delivery time",
     "Sampled DO memory is not per-Turn peak heap; no attributed cold-start sample",
     "Runtime refusal around 3986 reported neurons recovered before daily reset without changing billing; exact cause unknown"
-  ]
+  ],
+  "ciRunnerProvisioning": {
+    "runId": 38453532801,
+    "attempt": 2,
+    "headRevision": "e5bd15b71648797992b71cd2fd70839fd8fc7dbb",
+    "jobId": 115497442189,
+    "scheduledAtUtc": "2026-10-13T19:32:16Z",
+    "completedAtUtc": "2026-10-13T19:47:17Z",
+    "conclusion": "cancelled",
+    "executedSteps": 0,
+    "annotations": [
+      "The job was not acquired by Runner of type hosted even after multiple attempts",
+      "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times."
+    ],
+    "change": "Native store conformance uses macos-15-intel; ARM release packaging remains macos-latest; no assertion or timeout change."
+  }
 }

@@ -150,9 +150,10 @@ describe("Production release workflow policy", () => {
     );
   });
 
-  it("runs the deterministic Worker boundary suite before deployment", () => {
+  it("runs deterministic Worker and inference suites without live AI before deployment", () => {
     expect(preflight).toContain("bun run --cwd infra/cloudflare test -- workers.test.ts");
-    expect(preflight).toContain("bun run --cwd infra/cloudflare test:workers-ai-conformance");
+    expect(preflight).toContain("bun run --cwd apps/server test:hosted-inference");
+    expect(preflight).not.toContain("test:workers-ai-conformance");
   });
 
   it("rejects migration and provider drift before planning and approves the non-interactive deploy", () => {

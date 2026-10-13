@@ -158,8 +158,8 @@ public/Core Workers on separate loopback HTTPS origins with isolated Miniflare D
 fixtures simulate external proof/approval delivery and provider responses; focused browser HTTP
 fixtures cover presentation and failure cases without substituting for the real-Core journeys.
 Cloudflare integration tests exercise the relevant Worker and platform boundaries locally; live
-Workers AI behavior has a separate release gate. Application-specific test seams belong in the
-application architecture documents.
+Workers AI behavior is verified separately through an explicit operator-run conformance check, outside
+CI. Application-specific test seams belong in the application architecture documents.
 
 Google and Microsoft web signup/login are implemented under #1089 and #1090. It creates a stable User by canonical issuer/subject,
 atomically retaining web Consent, TrialPeriod and digest-only recovery without a WhatsAppIdentity.

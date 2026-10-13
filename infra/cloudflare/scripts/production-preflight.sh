@@ -6,7 +6,7 @@ set -m
 cd "$(dirname "$0")/../../.."
 log_dir="$(mktemp -d)"
 pids=()
-names=(worker-boundary workers-ai static-artifact cloudflare-state)
+names=(worker-boundary hosted-inference static-artifact cloudflare-state)
 
 cleanup() {
   for pid in "${pids[@]}"; do
@@ -23,7 +23,7 @@ trap 'exit 143' TERM
 
 commands=(
   'bun run --cwd infra/cloudflare test -- workers.test.ts'
-  'bun run --cwd infra/cloudflare test:workers-ai-conformance --allow-quota-deferral'
+  'bun run --cwd apps/server test:hosted-inference'
   'bun run --cwd apps/web build:production'
   'cd infra/cloudflare
    bun scripts/check-applied-migration-drift.ts

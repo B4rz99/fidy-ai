@@ -5,6 +5,7 @@ import {
   type AlertSignal,
   type CanaryHealth,
   type CapabilityProbe,
+  type CoreRejectionSignal,
   type EventMetricSignal,
   type OperationalHealthEnvironment,
   type OperationalSignal,
@@ -13,6 +14,7 @@ import {
 import {
   decideOperationalAlerts,
   inspectOperationalCapabilities,
+  observeCoreRejections,
   observeOperationalEventMetrics,
   observeOperationalHealth,
   readCanaryHealth,
@@ -23,7 +25,9 @@ import { sendOperatorEmail } from "../operational-health/runtime";
 
 const deliverOperationalSignals = (
   environment: PlatformMaintenanceInput,
-  signals: ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe>,
+  signals: ReadonlyArray<
+    OperationalSignal | EventMetricSignal | CoreRejectionSignal | CanaryHealth | CapabilityProbe
+  >,
   now: number
 ): Effect.Effect<void, void> =>
   Effect.tryPromise({
@@ -163,7 +167,8 @@ const d1Inspection = (
       (WorkKind.literals.some((owner) => owner === signal.operation) ||
         signal.operation === "whatsapp" ||
         signal.operation === "retention" ||
-        signal.operation === "workflowFailures")
+        signal.operation === "workflowFailures" ||
+        signal.operation === "coreRejectionBursts")
   );
   return unknown ? "unknown" : "healthy";
 };
@@ -200,20 +205,29 @@ const reportOperationalSignals = (
 const observeAdditionalSignals = (
   environment: PlatformMaintenanceInput,
   signals: ReadonlyArray<OperationalSignal>
-): Effect.Effect<ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth>, void> =>
+): Effect.Effect<
+  ReadonlyArray<OperationalSignal | EventMetricSignal | CoreRejectionSignal | CanaryHealth>,
+  void
+> =>
   Effect.flatMap(Clock.currentTimeMillis, (now) =>
     observeOperationalEventMetrics({ db: environment.DB, now }).pipe(
+      Effect.flatMap((events) =>
+        Effect.map(observeCoreRejections({ db: environment.DB, now }), (rejections) => [
+          ...events,
+          rejections,
+        ])
+      ),
       Effect.flatMap((events) =>
         Effect.tryPromise({
           try: () => readCanaryHealth({ db: environment.DB, now }),
           catch: () => undefined,
         }).pipe(
           Effect.map(
-            (canaries): ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth> => [
-              ...signals,
-              ...events,
-              ...canaries,
-            ]
+            (
+              canaries
+            ): ReadonlyArray<
+              OperationalSignal | EventMetricSignal | CoreRejectionSignal | CanaryHealth
+            > => [...signals, ...events, ...canaries]
           )
         )
       )

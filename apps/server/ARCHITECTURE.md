@@ -429,7 +429,10 @@ activities, while interruption preserves cleanup. Maintenance owns no SQL, reten
 aggregate, provider execution, or authorization.
 
 Operational Health observes bounded owner metadata and dead-letter signals separately from public
-reachability health. Unreadable measurements are unavailable, not zero. D1 outage email claims use
+reachability health. One lossy per-Core-isolate counter records concentrated 401/403 bursts without
+request metadata, using at most one outstanding write and one fixed D1 presence row. Its scheduled
+warning is not complete attack detection or admission authority; restart and distributed-traffic
+blind spots remain explicit. Unreadable measurements are unavailable, not zero. D1 outage email claims use
 bounded, conditional writes in the existing private R2 staging bucket,
 so a failed D1 inspection or metrics read cannot disable outage notification. Claim metadata contains
 no User or financial content. Conditional observations, acknowledgement and the 23-hour safe

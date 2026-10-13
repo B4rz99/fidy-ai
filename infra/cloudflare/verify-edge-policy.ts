@@ -29,7 +29,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #1247 MCP ingress authority and #1250 provider admission and persistent HTTPS.
 // Includes #1257 browser session binding bootstrap and forwarding.
 // Includes #1255 native outbound response ownership; destinations, credentials, routing and edge rules are unchanged.
-const expectedEdgePolicyDigest = "0cdc1fa0a45b5dd8116bba2a2fe9ff632d16970cd9e07a215d82d5abc27fbef4";
+// Includes #1260 bounded, lossy Core refusal telemetry after response admission; no routing, edge or authority change.
+const expectedEdgePolicyDigest = "d8277dfc119cf1c777f7a42bfef5f237ceef6ee5667e309f94aa2fe6b1bac526";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

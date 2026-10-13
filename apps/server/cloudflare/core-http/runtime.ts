@@ -1,6 +1,7 @@
+import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { Context, Effect, Layer, Option } from "effect";
+import { Clock, Context, Effect, Layer, Option } from "effect";
 import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
@@ -8,9 +9,9 @@ import { observeWorkerRequest } from "../runtime/telemetry/operations";
 import { recoveryIsolationResponse } from "../release-isolation/operations";
 
 /** Construct private HTTP assembly with one bounded Work span and post-commit publication lifetime. */
-export const makeCoreHttp =
-  (telemetry: TelemetryService): CoreHttpHandler =>
-  (request, environment, context) =>
+export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
+  const observeRejections = makeCoreRejectionObserver();
+  return (request, environment, context) =>
     Effect.gen(function* () {
       const isolated = recoveryIsolationResponse({
         request,
@@ -23,7 +24,7 @@ export const makeCoreHttp =
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
-      return yield* executeCoreHttp({
+      const response = yield* executeCoreHttp({
         request,
         environment,
         telemetry,
@@ -31,8 +32,15 @@ export const makeCoreHttp =
       }).pipe(
         Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
       );
+      yield* observeRejections({
+        status: response.status,
+        db: environment.DB,
+        now: yield* Clock.currentTimeMillis,
+      });
+      return response;
     }).pipe(
       Effect.scoped,
       observeWorkerRequest({ environment, telemetry, operation: "worker.core.fetch" }),
       Effect.runPromise
     );
+};

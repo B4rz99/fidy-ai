@@ -1,3 +1,7 @@
+import {
+  browserSessionBindingHeader,
+  browserSessionBindingPath,
+} from "../src/shell/web-session/contract";
 import { cliDistributionResponse } from "./cli-distribution/runtime";
 import {
   microsoftProviderPaths,
@@ -153,7 +157,10 @@ const isAllowedPreflightHeaders = (value: Option.Option<string>): boolean =>
     .map((header) => header.trim().toLowerCase())
     .every(
       (header) =>
-        header === "authorization" || header === "content-type" || header === "fidy-retry-key"
+        header === "authorization" ||
+        header === "content-type" ||
+        header === "fidy-retry-key" ||
+        header === browserSessionBindingHeader.toLowerCase()
     );
 
 const preflightResponse = (request: Request, browserOrigin: string): Response => {
@@ -263,14 +270,20 @@ const browserMutationPaths = new Set<string>([
   hostedTurnPath,
   hostedReceiptPath,
 ]);
-const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
+const sessionPaths = new Set<string>([
+  userPath,
+  browserSessionBindingPath,
+  ...browserMutationPaths,
+]);
 const preflightPaths = new Set<string>([
+  browserSessionBindingPath,
   providerPaths.disclosure,
   listCategoriesPath,
   userPath,
   ...browserMutationPaths,
 ]);
 const ownedPaths = new Set<string>([
+  browserSessionBindingPath,
   providerPaths.disclosure,
   microsoftProviderPaths.callback,
   providerPaths.callback,
@@ -359,6 +372,7 @@ const supportHeaders = (request: Request): Headers =>
     "cf-access-jwt-assertion": request.headers.get("cf-access-jwt-assertion") ?? "",
   });
 const forwardsSession = (request: Request, path: string): boolean =>
+  path === browserSessionBindingPath ||
   path === userPath ||
   path === hostedTurnPath ||
   path === hostedReceiptPath ||
@@ -505,6 +519,8 @@ const coreRequest = (
   Effect.gen(function* () {
     const path = new URL(request.url).pathname;
     const headers = forwardedHeaders(request, path);
+    const binding = request.headers.get(browserSessionBindingHeader);
+    if (binding !== null) headers.set(browserSessionBindingHeader, binding);
     forwardSmokeVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");

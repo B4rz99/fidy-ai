@@ -426,6 +426,7 @@ const send = (runtime: Runtime, request: Request): Promise<Response> => {
 
 const sessionHeaders = (index: number): Record<string, string> => ({
   cookie: `__Host-fidy_session=${bearer(index)}`,
+  "Fidy-Session-Binding": index === 0 ? sessionA : sessionB,
   origin: browserOrigin,
 });
 
@@ -2911,7 +2912,7 @@ it(
 
         expect(anonymous.status).toBe(403);
         expect(withBearer.status).toBe(403);
-        expect(unknownSession.status).toBe(403);
+        expect(unknownSession.status).toBe(401);
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_staging_objects"))).toBe(
           0
         );

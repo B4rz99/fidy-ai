@@ -76,6 +76,7 @@ const setup = (
             "0005_verified_onboarding",
             "0006_browser_login",
             "0007_browser_pairing_email",
+            "0087_browser_pairing_email_admission",
             "0008_support_recovery",
             "0009_email_replacement",
             "0069_retire_email_code_signup",
@@ -282,6 +283,7 @@ const replacementRequest =
         method: "POST",
         headers: {
           origin: options.origin,
+          "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
           cookie: `__Host-fidy_session=${options.cookie}`,
           "content-type": "application/json",
         },
@@ -327,14 +329,18 @@ it("renews an active WebSession until its hard deadline and never revives an exp
       const use = (): Promise<Response> =>
         sendRequest(
           new Request("https://api.fidyapp.com/user", {
-            headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
           })
         );
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(started + 29 * 86_400_000);
       const renewed = yield* Effect.tryPromise(() => use());
       expect(renewed.status).toBe(200);
-      expect(renewed.headers.get("set-cookie")).toContain("Max-Age=2592000");
+      expect(renewed.headers.get("set-cookie")).toBeNull();
       vi.setSystemTime(started + 45 * 86_400_000);
       expect((yield* Effect.tryPromise(() => use())).status).toBe(200);
       vi.setSystemTime(started + 90 * 86_400_000);
@@ -354,7 +360,10 @@ it("refuses an idle-expired WebSession without writing a canonical User read", (
       const crossSite = yield* Effect.tryPromise(() =>
         sendRequest(
           new Request("https://api.fidyapp.com/user", {
-            headers: { cookie: `__Host-fidy_session=${token}` },
+            headers: {
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
           })
         )
       );
@@ -364,7 +373,11 @@ it("refuses an idle-expired WebSession without writing a canonical User read", (
       const result = yield* Effect.tryPromise(() =>
         sendRequest(
           new Request("https://api.fidyapp.com/user", {
-            headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
           })
         )
       );
@@ -393,7 +406,11 @@ it("rotates the backup recovery proof under a fresh WebSession", () =>
         sendRequest(
           new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
             method: "POST",
-            headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
           })
         )
       );
@@ -421,7 +438,11 @@ it("refuses recovery rotation after WebSession freshness expires without changin
         sendRequest(
           new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
             method: "POST",
-            headers: { origin, cookie: `__Host-fidy_session=${token}` },
+            headers: {
+              origin,
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
           })
         );
       expect((yield* Effect.tryPromise(() => rotate("https://attacker.example"))).status).toBe(403);
@@ -435,7 +456,11 @@ it("refuses recovery rotation after WebSession freshness expires without changin
       const currentUser = yield* Effect.tryPromise(() =>
         sendRequest(
           new Request("https://api.fidyapp.com/user", {
-            headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
           })
         )
       );
@@ -1696,7 +1721,11 @@ it("rejects a WebSession revoked during renewal without releasing the User or wr
       const response = yield* Effect.tryPromise(() =>
         sendRequest(
           new Request("https://api.fidyapp.com/user", {
-            headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
           })
         )
       );
@@ -1872,5 +1901,190 @@ it("approves a pending pairing through its verified WhatsApp owner", () =>
         },
       });
       expect(response.status).toBe(200);
+    })
+  ));
+
+const emailAdmissionPairing = (
+  sendRequest: (request: Request) => Promise<Response>
+): Effect.Effect<
+  { pairingId: string; privateVerifier: string },
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const response = yield* Effect.tryPromise(() =>
+      sendRequest(
+        new Request("https://api.fidyapp.com/web/pairings", {
+          method: "POST",
+          headers: { origin: "https://app.fidyapp.com" },
+        })
+      )
+    );
+    return yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+    )(yield* Effect.tryPromise(() => response.json()));
+  });
+const emailAdmissionRequest = (
+  sendRequest: (request: Request) => Promise<Response>,
+  pairing: { pairingId: string; privateVerifier: string },
+  email = "person@example.test"
+): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    sendRequest(
+      new Request("https://api.fidyapp.com/web/email/authentication/start", {
+        method: "POST",
+        headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+        body: encodeJson({ ...pairing, email }),
+      })
+    )
+  );
+
+it("bounds concurrent email sends across pairings and preserves admission after pairing deletion", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(seedUser);
+      const pairings = yield* Effect.all(
+        Array.from({ length: 8 }, () => emailAdmissionPairing(sendRequest))
+      );
+      const responses = yield* Effect.forEach(
+        pairings,
+        (pairing) => emailAdmissionRequest(sendRequest, pairing),
+        { concurrency: "unbounded" }
+      );
+      for (const response of responses) {
+        expect(response.status).toBe(202);
+        expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+          status: "pending",
+          retryAfterSeconds: 60,
+        });
+      }
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM browser_pairing_email_outbox").first()
+        )
+      ).toEqual({ count: 5 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+        )
+      ).toEqual({ requests: 5 });
+      yield* Effect.tryPromise(() => db.prepare("DELETE FROM browser_login_pairings").run());
+      const next = yield* emailAdmissionPairing(sendRequest);
+      const throttled = yield* emailAdmissionRequest(sendRequest, next);
+      const unknown = yield* emailAdmissionRequest(sendRequest, next, "unknown@example.test");
+      expect(throttled.status).toBe(unknown.status);
+      expect(yield* Effect.tryPromise(() => throttled.text())).toBe(
+        yield* Effect.tryPromise(() => unknown.text())
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM browser_pairing_email_proofs").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+        )
+      ).toEqual({ requests: 5 });
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare(
+            "UPDATE browser_pairing_email_user_limits SET window_started_at_ms = window_started_at_ms - 3600000"
+          ),
+          db.prepare(
+            "UPDATE browser_pairing_email_global_limit SET window_started_at_ms = window_started_at_ms - 3600000"
+          ),
+        ])
+      );
+      expect((yield* emailAdmissionRequest(sendRequest, next)).status).toBe(202);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+        )
+      ).toEqual({ requests: 1 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+        )
+      ).toEqual({ requests: 1 });
+    })
+  ));
+
+it("does not spend email capacity for same-pairing cooldown or exhausted aggregate budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(seedUser);
+      const pairing = yield* emailAdmissionPairing(sendRequest);
+      yield* emailAdmissionRequest(sendRequest, pairing);
+      yield* emailAdmissionRequest(sendRequest, pairing);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+        )
+      ).toEqual({ requests: 1 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+        )
+      ).toEqual({ requests: 1 });
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE browser_pairing_email_global_limit SET requests = 999").run()
+      );
+      const competing = yield* Effect.all([
+        emailAdmissionPairing(sendRequest),
+        emailAdmissionPairing(sendRequest),
+      ]);
+      const admitted = yield* Effect.all(
+        competing.map((value) => emailAdmissionRequest(sendRequest, value)),
+        { concurrency: "unbounded" }
+      );
+      expect(admitted.map((response) => response.status)).toEqual([202, 202]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_global_limit").first()
+        )
+      ).toEqual({ requests: 1000 });
+      const fresh = yield* emailAdmissionPairing(sendRequest);
+      expect((yield* emailAdmissionRequest(sendRequest, fresh)).status).toBe(202);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+        )
+      ).toEqual({ requests: 2 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM browser_pairing_email_outbox").first()
+        )
+      ).toEqual({ count: 2 });
+    })
+  ));
+
+it("rolls email admission back with a failed outbox insert", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(seedUser);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER reject_pairing_outbox BEFORE INSERT ON browser_pairing_email_outbox BEGIN SELECT RAISE(ABORT, 'test_failure'); END"
+          )
+          .run()
+      );
+      const pairing = yield* emailAdmissionPairing(sendRequest);
+      expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(503);
+      for (const table of [
+        "browser_pairing_email_user_limits",
+        "browser_pairing_email_global_limit",
+        "browser_pairing_email_proofs",
+        "browser_pairing_email_outbox",
+      ]) {
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare(`SELECT count(*) AS count FROM ${table}`).first()
+          )
+        ).toEqual({ count: 0 });
+      }
     })
   ));

@@ -11,7 +11,8 @@ only when the diff newly exposes it, worsens it, or relies on it.
 
 The review asks **what must remain secure**, not how to implement it. Issue #1, root
 [`ARCHITECTURE.md`](ARCHITECTURE.md), and the application architecture documents for
-[`@fidy/server`](apps/server/ARCHITECTURE.md) and [`@fidy/web`](apps/web/ARCHITECTURE.md) own
+[`@fidy/server`](apps/server/ARCHITECTURE.md), [`@fidy/web`](apps/web/ARCHITECTURE.md), and
+[`@fidy/cli`](apps/cli/ARCHITECTURE.md) own
 already-adopted mechanics; this document turns their security consequences into reviewable
 invariants.
 
@@ -86,16 +87,30 @@ Every crossing is untrusted regardless of its TypeScript type or vendor:
 ## Review invariants
 
 Each section states when it applies, what must hold, and the evidence a reviewer should seek. The
-examples are representative, not an exhaustive checklist. These common change areas are a navigation
-aid, not a substitute for each section's `Applies when` clause:
+examples are representative, not an exhaustive checklist.
 
-| change area                                      | commonly applicable sections |
-| ------------------------------------------------ | ---------------------------- |
-| server operations, repositories, and persistence | 1, 3–5, 8–10                 |
-| browser authentication and application delivery  | 1–4, 8–10                    |
-| hosted agents and canonical tools                | 1, 3, 4, 6, 8, 10            |
-| ingestion and uploaded material                  | 3, 4, 6–8, 10                |
-| providers, callbacks, queues, and scheduled work | 1, 3–5, 8–10                 |
+### Surface applicability
+
+This root policy owns shared invariants, accepted exceptions, and required security evidence.
+Application architecture documents own implementation mechanics and test seams. Read every invariant
+whose `Applies when` clause matches the diff; the table is navigation, not an exemption for an
+unlisted surface. Follow a boundary across applications rather than stopping at the changed directory.
+
+| Surface         | Particular concerns                                                                   | Common sections | Mechanics and test seams                                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web             | Browser authority, origin/CSRF, rendering, caches and static delivery                 | 1–4, 8–10       | [Web architecture](apps/web/ARCHITECTURE.md)                                                                                                                     |
+| Server / API    | User isolation, canonical authorization, validation, atomicity and provider trust     | 1–5, 8–10       | [Server architecture](apps/server/ARCHITECTURE.md)                                                                                                               |
+| Hosted agent    | Model context, tool authority, exact-action confirmation and bounded execution        | 1–4, 6, 8, 10   | [Hosted execution](apps/server/ARCHITECTURE.md#6-hosted-execution-and-delivery)                                                                                  |
+| CLI             | Native credential store, fixed origin, file/stdin input, diagnostics and local logout | 1–4, 8–10       | [CLI architecture](apps/cli/ARCHITECTURE.md)                                                                                                                     |
+| MCP             | OAuth grants, scope-private discovery, tool execution, confirmation and replay        | 1–4, 6, 8–10    | [Server architecture](apps/server/ARCHITECTURE.md#hosted-mcp-and-oauth-development-authority) and [ADR 0033](docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) |
+| Ingestion       | Hostile bytes, parser output, retention and model/provider egress                     | 3, 4, 6–8, 10   | [Server architecture](apps/server/ARCHITECTURE.md)                                                                                                               |
+| Background work | Authenticated callbacks, User-bound queues, retries and schedules                     | 1, 3–5, 8–10    | [Background execution](apps/server/ARCHITECTURE.md#7-background-execution-and-availability)                                                                      |
+| Infrastructure  | Public exposure, private bindings, runtime privileges and edge policy                 | 1, 8–10         | [Production boundary](ARCHITECTURE.md#production-boundary) and [stack](infra/cloudflare/alchemy.run.ts)                                                          |
+
+MCP and the hosted agent are server-owned surfaces, not separate applications. Browser approval and
+server execution remain one reviewed authority boundary. Add an application-specific security
+supplement only when substantial unique invariants need their own reference; link it here and keep
+shared requirements authoritative in this file.
 
 ### 1. Authentication, authorization, and User isolation
 
@@ -524,9 +539,69 @@ Update this file when a change alters a protected asset, data class, threat acto
 accepted external risk, or security invariant. Implementing an already-documented invariant does
 not require a policy edit.
 
-OWASP ASVS 5.0.0, OWASP Top 10 (2025), OWASP API Security Top 10 (2023), and OWASP Top 10 for
-LLM Applications (2025) were used as pinned completeness checks for technical and browser controls,
-API isolation and resource abuse, prompt injection, unsafe model output, excessive agency, and
-unbounded consumption. They are not substitute finding sources, and this policy does not claim
-compliance with any of them. A later edition requires a deliberate comparison before this list is
-updated.
+Keep implementation mechanics in the owning architecture document or ADR; retain the invariant,
+accepted exception, and required evidence here. Update the surface table and OWASP mapping when
+those boundaries change.
+
+## OWASP references and coverage
+
+OWASP is a completeness check for this policy, not a substitute finding source or a claim of
+compliance. A review finding still meets the [finding standard](#finding-standard). The mappings
+below identify policy coverage, not verified implementation coverage; each changed boundary still
+requires its negative evidence. They do not import every upstream recommendation as a Fidy rule.
+
+### Pinned references
+
+| Reference                                                                                                                                        | Pinned edition                  | Purpose                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [Application Security Verification Standard](https://github.com/OWASP/ASVS/tree/v5.0.0)                                                          | 5.0.0                           | Detailed technical control reference; no ASVS level or requirement-by-requirement conformance is asserted.                            |
+| [Web Top 10](https://top10.owasp.org/2025/)                                                                                                      | 2025                            | Web, backend and runtime risks.                                                                                                       |
+| [API Security Top 10](https://api-security.owasp.org/editions/2023/en/0x11-t10/)                                                                 | 2023                            | API authority, business-flow abuse and external API consumption.                                                                      |
+| [LLM Applications Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf) | 2025                            | Model input, output, context and agency risks.                                                                                        |
+| [Agentic Applications Top 10](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)                                  | 2026                            | Agent execution and authority risks; applicability compared on 2026-10-12.                                                            |
+| [MCP Top 10](https://owasp.org/projects/mcp-top-10?tab=top10)                                                                                    | 2025 beta, consulted 2026-10-12 | MCP transport, tool and context risks. The upstream roadmap still labels this list beta; same-year revisions also require comparison. |
+
+The LLM reference remains at 2025. The published 2026 edition has not been reconciled into this
+policy. Before replacing an edition, compare changed categories and mitigations, record their
+applicability and disposition, and update affected invariants and evidence together.
+
+### Risk-to-policy mapping
+
+IDs use the editions above. **Covered** means the named invariant addresses the applicable security
+consequence. **Other gate** identifies a separate owner. **Partial** records a coverage limit or
+accepted exception. **Not applicable** names an absent capability and must be revisited if introduced.
+An applicable risk with no invariant or other owner is a **gap**: record the missing requirement and
+track remediation in a GitHub issue rather than marking it covered. This mapping is a policy
+comparison, not a code audit or a complete ASVS assessment.
+
+| Reference / risk IDs                   | Surfaces                                          | Disposition and policy sections                                                                                                                                                                                                         |
+| -------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web A01, A07                           | All caller surfaces                               | Covered: identity, User isolation and credential lifecycle (§§1–2).                                                                                                                                                                     |
+| Web A02                                | Web, server, infrastructure                       | Covered: explicit exposure and fail-closed configuration (§9).                                                                                                                                                                          |
+| Web A03; API supply-chain dependencies | Build and distribution                            | Other gate: dependency/image/action SCA and freeze policy under [Scope](#out-of-scope); see [CI](.github/workflows/ci.yml) and [dependency gate](scripts/check-dependency-updates.ts). Runtime trust remains reviewable under §§4–5, 9. |
+| Web A04                                | All data and credential surfaces                  | Covered: secret lifetime, protected storage and transmission boundaries (§§2–3, 8–9).                                                                                                                                                   |
+| Web A05, A08                           | Server, web, ingestion                            | Covered: interpreter boundaries, authenticated effects and evidence integrity (§§4–5, 7–8).                                                                                                                                             |
+| Web A06, A10                           | All surfaces                                      | Covered for this review scope: threat boundaries, atomic rejection, safe failures and bounded work (§§1–10 and required evidence).                                                                                                      |
+| Web A09                                | Server, clients, infrastructure                   | Partial: security evidence and safe diagnostics (§8); operational incident response is outside this policy.                                                                                                                             |
+| API1, API2, API3, API5                 | API, CLI, MCP, hosted agent                       | Covered: User/object/property/function authority and credential checks (§§1–2, 4).                                                                                                                                                      |
+| API4, API6                             | API and downstream work                           | Covered: authorized business effects, replay controls and stable-User cost bounds (§§1, 5, 10).                                                                                                                                         |
+| API7, API8, API9, API10                | Server, MCP, infrastructure                       | Covered: bounded destinations, hostile provider responses and intentional exposed contracts (§§2, 4–5, 9–10).                                                                                                                           |
+| LLM01, LLM05, LLM06, LLM07             | Hosted agent, ingestion, generated web content    | Covered: untrusted instructions/output, independent tool authority and exclusion of Secrets from prompts (§§1–4, 6–7).                                                                                                                  |
+| LLM02, LLM10                           | Hosted agent and provider egress                  | Covered: purpose-bound data and bounded model/tool spend (§§3, 6, 8, 10).                                                                                                                                                               |
+| LLM03; ASI04; MCP04                    | Agent/MCP dependencies and runtime tools          | Other gate for dependency compromise: SCA/freeze policy above. Covered for runtime authority and tool/context trust: §§1, 4, 6, 9. Total provider compromise remains out of scope.                                                      |
+| LLM04, LLM08                           | Model training, retrieval, hosted context         | Partial: hostile ingested/context data is covered (§§4, 6–7). Fidy-owned model training and vector/embedding stores are not current declared capabilities; reassess their specific controls if introduced.                              |
+| LLM09                                  | Hosted agent and generated financial presentation | Partial: model output cannot establish trusted authority (§§4, 6). Financial correctness and the Asesoría boundary belong to Spec review; this policy does not guarantee factual model output.                                          |
+| ASI01, ASI02, ASI05, ASI06, ASI10      | Hosted agent, tools, Memory and Transcript        | Covered: independently enforced authority, inert output, isolated context and bounded execution (§§1–4, 6–8, 10).                                                                                                                       |
+| ASI03                                  | Hosted and User-owned agents                      | Covered: caller-specific authority and credential lifecycle (§§1–2, 6).                                                                                                                                                                 |
+| ASI07                                  | Agent communication                               | Partial: external agent calls cross authenticated API/MCP boundaries (§§1–2, 4–6). Autonomous peer-agent delegation is not a current declared capability; reassess if introduced.                                                       |
+| ASI08                                  | Hosted agent and background work                  | Covered: atomic effects, failure containment and bounded retries/work (§§5–6, 8, 10).                                                                                                                                                   |
+| ASI09                                  | Confirmation and generated presentation           | Partial: exact-action confirmation and safe presentation (§§2, 4, 6). OAuth client-asserted confirmation retains §2's accepted risk; it does not attest human presence.                                                                 |
+| MCP01, MCP02, MCP07                    | MCP and browser OAuth approval                    | Covered: token lifetime, immutable grants, audience/scope and current authority (§§1–2, 8).                                                                                                                                             |
+| MCP03, MCP05, MCP06, MCP10             | MCP tools and context                             | Covered: canonical tool declarations, hostile inputs/output and User-isolated context (§§1, 3–4, 6).                                                                                                                                    |
+| MCP08                                  | MCP activity and diagnostics                      | Partial: metadata-only security evidence (§8); operational monitoring/incident procedures remain outside this diff-review policy.                                                                                                       |
+| MCP09                                  | Server deployment and external hosts              | Partial: intended Fidy exposure and private authority (§§1–2, 9). Inventory/governance of servers outside Fidy's deployment is outside this policy.                                                                                     |
+
+CLI and backend coverage follows their actual boundaries in the surface table; a separate CLI or
+generic server Top 10 is not required. Supply-chain gate ownership does not establish protection
+against every malicious dependency, and a mapping never expands an accepted exception into a
+stronger guarantee.

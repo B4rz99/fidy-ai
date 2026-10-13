@@ -216,6 +216,7 @@ const request = (
     method,
     headers: {
       origin: "https://app.fidyapp.com",
+      "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
@@ -464,7 +465,7 @@ it("refuses hostile browser input and origins without consuming a live attempt",
       expect(owner.status).toBe(200);
     })
   ));
-it("forwards Connection browser transports with only cookie, content type and origin headers", () =>
+it("forwards Connection browser transports with only cookie, session binding, content type and origin headers", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       for (const candidate of [
@@ -488,9 +489,13 @@ it("forwards Connection browser transports with only cookie, content type and or
                 expect(Array.from(forwarded.headers.keys()).sort()).toEqual([
                   "content-type",
                   "cookie",
+                  "fidy-session-binding",
                   "origin",
                 ]);
                 expect(forwarded.headers.get("cookie")).toBe(candidate.headers.get("cookie"));
+                expect(forwarded.headers.get("fidy-session-binding")).toBe(
+                  candidate.headers.get("fidy-session-binding")
+                );
                 expect(forwarded.headers.get("origin")).toBe(candidate.headers.get("origin"));
                 expect(forwarded.headers.get("content-type")).toBe(
                   candidate.headers.get("content-type") ?? ""

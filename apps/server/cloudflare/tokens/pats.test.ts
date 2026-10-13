@@ -36,6 +36,9 @@ import { UserTransactionCoordinator } from "../transactions/runtime";
 import { sweepExpiredPATPairings } from "./runtime";
 import { handlePATRequest } from "./operations";
 
+const sessionBinding = (session: string): string =>
+  `40000000-0000-4000-8000-00000000000${session.split("=")[1]?.[0] ?? "0"}`;
+
 const databases = isolatedTestDatabases();
 const userA = "10000000-0000-4000-8000-000000000001";
 const userB = "20000000-0000-4000-8000-000000000002";
@@ -404,7 +407,10 @@ const setup = (
           "cf-connecting-ip": source,
         });
         if (payload !== undefined) headers.set("content-type", "application/json");
-        if (session !== undefined) headers.set("cookie", session);
+        if (session !== undefined) {
+          headers.set("cookie", session);
+          headers.set("Fidy-Session-Binding", sessionBinding(session));
+        }
         if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
         const request = new Request(`https://api.fidyapp.com${path}`, {
           method,

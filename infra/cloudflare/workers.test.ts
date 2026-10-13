@@ -1,3 +1,4 @@
+import { browserSessionBindingPath } from "../../apps/server/src/shell/web-session/contract";
 import {
   microsoftProviderPaths,
   providerPaths,
@@ -456,6 +457,7 @@ describe("Production topology contract", () => {
     expect(rateLimits).toHaveLength(1);
     const expression = rateLimits[0]?.expression ?? "";
     for (const path of [
+      browserSessionBindingPath,
       ...Object.values(providerPaths),
       ...Object.values(microsoftProviderPaths),
       "/providers/kapso/callback",

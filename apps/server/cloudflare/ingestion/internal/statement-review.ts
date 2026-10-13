@@ -1,11 +1,9 @@
 import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import {
-  CapturedFieldIssue,
   EmailNeedsReviewItem,
   NeedsReviewItem,
   NeedsReviewStatus,
   StatementNeedsReviewItem,
-  StatementRowEvidence,
 } from "../../../src/core/ingestion/contract";
 import { loadMediaItems } from "./media-review";
 import type { QueryCaller } from "../../canonical-work/operations";
@@ -15,8 +13,6 @@ import { commitReadAudit, unavailableStatement, validationFailed } from "./state
 class ReviewReadUnavailable extends Data.TaggedError("ReviewReadUnavailable")<{}> {}
 
 const noStore = { "cache-control": "no-store" };
-const evidenceJson = Schema.fromJsonString(Schema.toEncoded(StatementRowEvidence));
-const issuesJson = Schema.fromJsonString(Schema.Array(CapturedFieldIssue));
 const output = Schema.toCodecJson(Schema.Array(NeedsReviewItem));
 export const pageSize = 50;
 const maximumOffset = 10_000;
@@ -36,8 +32,6 @@ const reviewRow = Schema.Struct({
   submission_id: Schema.String,
   record_number: Schema.Int,
   reason: Schema.String,
-  original_evidence: Schema.NullOr(Schema.String),
-  issues: Schema.String,
   status: Schema.String,
   transaction_id: Schema.OptionFromNullOr(Schema.String),
   decided_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
@@ -76,19 +70,8 @@ const resolutionMetadata = (
   });
 };
 
-const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewItem> => {
-  const issues = Option.getOrUndefined(Schema.decodeOption(issuesJson)(row.issues));
-  const evidence =
-    typeof row.original_evidence !== "string"
-      ? undefined
-      : Option.getOrUndefined(Schema.decodeOption(evidenceJson)(row.original_evidence));
-  if (
-    issues === undefined ||
-    (typeof row.original_evidence === "string" && evidence === undefined)
-  ) {
-    return Option.none();
-  }
-  return Schema.decodeUnknownOption(StatementNeedsReviewItem)({
+const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewItem> =>
+  Schema.decodeUnknownOption(StatementNeedsReviewItem)({
     id: row.id,
     submissionId: row.submission_id,
     recordNumber: row.record_number,
@@ -100,13 +83,11 @@ const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewIte
     sourceChannel: "statement-upload",
     parserRevision: row.parser_revision,
     extractorRevision: row.extractor_revision,
-    issues,
+    issues: [],
     createdAt: DateTime.formatIso(row.created_at_ms),
     status: row.status,
     ...Option.getOrElse(resolutionMetadata(row), () => ({})),
-    ...(evidence === undefined ? {} : { originalEvidence: evidence }),
   });
-};
 
 const projectEmailRow = (
   row: EmailReviewRow,
@@ -139,18 +120,22 @@ const projectEmailRow = (
   });
 };
 
-export const loadStatementItems = ({
+// Never transfer or decode purpose-bound evidence for this metadata-only read. A review row
+// can hold nearly 2 MB; applying the page limit after loading it would amplify a small query.
+const loadStatementItems = ({
   database,
   userId,
   asOf,
   scope,
   status,
+  limit,
 }: Readonly<{
   database: D1Database;
   userId: string;
   asOf: number;
   scope: Option.Option<OwnedStatement>;
   status: Option.Option<typeof NeedsReviewStatus.Type>;
+  limit: number;
 }>): Effect.Effect<Option.Option<ReadonlyArray<StatementNeedsReviewItem>>, ReviewReadUnavailable> =>
   Effect.gen(function* () {
     const guard = Option.getOrElse(scope, () => ({ sql: "1 = 1", params: [] }));
@@ -158,8 +143,7 @@ export const loadStatementItems = ({
       try: () =>
         database
           .prepare(`SELECT * FROM (SELECT r.id, r.submission_id, r.record_number, r.reason,
-    CASE WHEN r.evidence_expires_at_ms > ? AND c.state = 'awaiting' AND c.expires_at_ms > ? THEN r.original_evidence ELSE NULL END AS original_evidence,
-    r.issues, coalesce(d.decision, CASE WHEN c.state = 'abandoned' OR c.expires_at_ms <= ? THEN 'abandoned'
+    coalesce(d.decision, CASE WHEN c.state = 'abandoned' OR c.expires_at_ms <= ? THEN 'abandoned'
       WHEN r.evidence_expires_at_ms > ? THEN r.status ELSE 'expired' END) AS status,
     d.transaction_id, d.decided_at_ms, r.created_at_ms, r.service_market, r.locale, r.time_zone,
     r.source_format, r.parser_revision, r.extractor_revision
@@ -171,13 +155,11 @@ export const loadStatementItems = ({
           .bind(
             asOf,
             asOf,
-            asOf,
-            asOf,
             userId,
             ...guard.params,
             Option.getOrNull(status),
             Option.getOrNull(status),
-            maximumOffset + pageSize
+            limit
           )
           .all(),
       catch: () => new ReviewReadUnavailable(),
@@ -267,14 +249,6 @@ export const listNeedsReviewItems = (
     });
   });
 
-// Tool results can outlive settlement; row evidence remains solely in its purpose-bound owner.
-const statementReviewMetadata = (item: StatementNeedsReviewItem): StatementNeedsReviewItem => ({
-  ...item,
-  knownMoney: Option.none(),
-  issues: [],
-  ...(item.status === "pending" ? { originalEvidence: Option.none() } : {}),
-});
-
 /** One canonical review query; transport adapters supply already checked authority and paging. */
 export const readCanonicalReviewPage = (
   input: Readonly<{
@@ -297,6 +271,7 @@ export const readCanonicalReviewPage = (
             asOf,
             scope: input.scope,
             status: input.page.status,
+            limit: input.page.offset + input.page.limit,
           }),
           input.includeEmail
             ? loadEmailItems(input.database, input.userId, asOf)
@@ -318,8 +293,7 @@ export const readCanonicalReviewPage = (
     if (Option.isNone(statement) || Option.isNone(email) || Option.isNone(media)) {
       return unavailableStatement();
     }
-    const statements = statement.value.map(statementReviewMetadata);
-    const items = [...statements, ...email.value, ...media.value];
+    const items = [...statement.value, ...email.value, ...media.value];
     items.sort(
       (left, right) =>
         DateTime.toEpochMillis(right.createdAt) - DateTime.toEpochMillis(left.createdAt)

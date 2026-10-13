@@ -1,3 +1,5 @@
+import { BrowserSessionBoundary } from "@/session/browser-session-boundary";
+import type { BrowserSessionLifetime } from "@/transport/session-binding";
 import { RouterProvider } from "@tanstack/react-router";
 import { Option } from "effect";
 import { useCallback, useState } from "react";
@@ -14,32 +16,50 @@ import {
 import { parseApiOrigin } from "@/transport/origin";
 import { createWebRouter } from "./routes";
 
-const AuthenticationRouter = ({ apiOrigin }: Readonly<{ apiOrigin: string }>): JSX.Element => {
+const AuthenticationRouter = ({
+  apiOrigin,
+  session,
+}: Readonly<{ apiOrigin: string; session: BrowserSessionLifetime }>): JSX.Element => {
   const { expireAuthentication } = useSession();
   const [router] = useState(() =>
     createWebRouter({
       apiClient: makeFidyClient({
         apiOrigin,
-        observer: { onAuthenticationExpired: expireAuthentication },
+        session,
+        observer: {
+          onAuthenticationExpired: () => {
+            if (session.binding !== "none") expireAuthentication();
+          },
+        },
       }),
-      webAuthClient: makeWebAuthClient({ apiOrigin }),
-      hostedTurnClient: makeHostedTurnClient({ apiOrigin }),
+      webAuthClient: makeWebAuthClient({ apiOrigin, session }),
+      hostedTurnClient: makeHostedTurnClient({ apiOrigin, session }),
       history: Option.none(),
     })
   );
   return <RouterProvider router={router} />;
 };
 
-const RoutedApplication = (): JSX.Element => {
-  const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
+const BoundApplication = ({
+  apiOrigin,
+  session,
+}: Readonly<{ apiOrigin: string; session: BrowserSessionLifetime }>): JSX.Element => {
   const makeEnrollmentClient = useCallback(
-    () => makeSubscriptionEnrollmentClient({ apiOrigin }),
-    [apiOrigin]
+    () => makeSubscriptionEnrollmentClient({ apiOrigin, session }),
+    [apiOrigin, session]
   );
   return (
     <SubscriptionEnrollmentLifetime makeClient={makeEnrollmentClient}>
-      <AuthenticationRouter apiOrigin={apiOrigin} />
+      <AuthenticationRouter apiOrigin={apiOrigin} session={session} />
     </SubscriptionEnrollmentLifetime>
+  );
+};
+const RoutedApplication = (): JSX.Element => {
+  const apiOrigin = parseApiOrigin(import.meta.env.VITE_API_ORIGIN);
+  return (
+    <BrowserSessionBoundary apiOrigin={apiOrigin}>
+      {(session) => <BoundApplication apiOrigin={apiOrigin} session={session} />}
+    </BrowserSessionBoundary>
   );
 };
 

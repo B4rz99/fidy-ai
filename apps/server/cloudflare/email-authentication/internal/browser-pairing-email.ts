@@ -46,6 +46,10 @@ const workerCrypto = Crypto.make({
 const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
 const digestLength = 32;
 const emailCooldownMilliseconds = 60_000;
+// Conservative launch send budgets follow the verified User across disposable pairings.
+const emailAdmissionWindowMilliseconds = 3_600_000;
+const emailUserRequestsPerWindow = 5;
+const emailGlobalRequestsPerWindow = 1_000;
 const publicCodeLength = 9;
 const secretOffset = 10;
 const invalid = (): Response =>
@@ -103,19 +107,54 @@ const readProof = <A, Encoded>(
   );
 };
 
+// Charge only a proof admitted by this batch; no-op retries consume neither budget.
+const prepareEmailAdmission = (
+  db: D1Database,
+  current: number,
+  workId: string
+): ReadonlyArray<D1PreparedStatement> => [
+  db
+    .prepare(`INSERT INTO browser_pairing_email_user_limits
+            (user_id, window_started_at_ms, requests)
+            SELECT user_id, ?, 1 FROM browser_pairing_email_proofs WHERE work_id = ?
+            ON CONFLICT(user_id) DO UPDATE SET
+              requests = CASE WHEN window_started_at_ms <= ? THEN 1 ELSE requests + 1 END,
+              window_started_at_ms = CASE WHEN window_started_at_ms <= ? THEN excluded.window_started_at_ms ELSE window_started_at_ms END`)
+    .bind(
+      current,
+      workId,
+      current - emailAdmissionWindowMilliseconds,
+      current - emailAdmissionWindowMilliseconds
+    ),
+  db
+    .prepare(`INSERT INTO browser_pairing_email_global_limit
+            (id, window_started_at_ms, requests)
+            SELECT 1, ?, 1 FROM browser_pairing_email_proofs WHERE work_id = ?
+            ON CONFLICT(id) DO UPDATE SET
+              requests = CASE WHEN window_started_at_ms <= ? THEN 1 ELSE requests + 1 END,
+              window_started_at_ms = CASE WHEN window_started_at_ms <= ? THEN excluded.window_started_at_ms ELSE window_started_at_ms END`)
+    .bind(
+      current,
+      workId,
+      current - emailAdmissionWindowMilliseconds,
+      current - emailAdmissionWindowMilliseconds
+    ),
+];
+
+type PairingEmailIntent = Readonly<{
+  db: D1Database;
+  proof: typeof Start.Type;
+  expiresAt: number;
+  current: number;
+  workId: string;
+}>;
 const startPairingEmailIntent = ({
   db,
   proof,
   expiresAt,
   current,
   workId,
-}: Readonly<{
-  db: D1Database;
-  proof: typeof Start.Type;
-  expiresAt: number;
-  current: number;
-  workId: string;
-}>): Effect.Effect<void, void> =>
+}: PairingEmailIntent): Effect.Effect<void, void> =>
   Effect.gen(function* () {
     const pairing = pendingBrowserPairingQuery({
       subject: { sql: "SELECT ? AS pairingId", params: [proof.pairingId] },
@@ -132,6 +171,10 @@ const startPairingEmailIntent = ({
           'awaiting_delivery', p.expiresAt, 1, ?
         FROM (${pairing.sql}) AS p JOIN verified_email_credentials AS v ON v.email_address = ?
         WHERE p.expiresAt = ?
+          AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_user_limits AS l
+            WHERE l.user_id = v.user_id AND l.window_started_at_ms > ? AND l.requests >= ?)
+          AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_global_limit AS l
+            WHERE l.window_started_at_ms > ? AND l.requests >= ?)
         ON CONFLICT(pairing_id) DO UPDATE SET work_id = excluded.work_id,
           email_address = excluded.email_address,
           user_id = excluded.user_id,
@@ -149,8 +192,13 @@ const startPairingEmailIntent = ({
             ...pairing.params,
             proof.email,
             expiresAt,
+            current - emailAdmissionWindowMilliseconds,
+            emailUserRequestsPerWindow,
+            current - emailAdmissionWindowMilliseconds,
+            emailGlobalRequestsPerWindow,
             current - emailCooldownMilliseconds
           ),
+        ...prepareEmailAdmission(db, current, workId),
         db
           .prepare(`INSERT INTO browser_pairing_email_outbox (id, created_at_ms)
         SELECT work_id, ? FROM browser_pairing_email_proofs

@@ -164,6 +164,7 @@ const setup = (): Promise<{
           method,
           headers: {
             origin: browserOrigins.local,
+            "Fidy-Session-Binding": "20000000-0000-4000-8000-000000000001",
             cookie: `__Host-fidy_session=${token}`,
             "content-type": "application/json",
           },

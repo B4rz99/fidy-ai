@@ -199,7 +199,11 @@ it.effect("serves the same canonical result through public HTTP and hosted query
       sendPublic({
         db,
         request: new Request("https://api.fidyapp.com/recurring-series", {
-          headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${bearer}` },
+          headers: {
+            origin: "https://app.fidyapp.com",
+            "Fidy-Session-Binding": sessionId,
+            cookie: `__Host-fidy_session=${bearer}`,
+          },
         }),
       })
     );
@@ -746,6 +750,7 @@ it.effect(
           request: new Request(`https://api.fidyapp.com${path}`, {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessionId,
               cookie: `__Host-fidy_session=${browserBearer}`,
             },
           }),
@@ -865,6 +870,7 @@ it.effect(
           request: new Request("https://api.fidyapp.com/recurring-series", {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": otherSession,
               cookie: `__Host-fidy_session=${otherBearer}`,
             },
           }),

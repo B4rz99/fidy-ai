@@ -127,6 +127,7 @@ for (const path of [
             method: "POST",
             headers: {
               cookie: `__Host-fidy_session=${token}`,
+              "Fidy-Session-Binding": sessionId,
               origin: environment.BROWSER_ORIGIN,
               "content-type": "application/json",
             },

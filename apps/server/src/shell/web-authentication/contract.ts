@@ -1,3 +1,4 @@
+import { BrowserSessionGroup } from "~/shell/web-session/contract";
 import { ProviderAuthenticationGroup } from "~/shell/provider-authentication/contract";
 import { OAuthConnectionsGroup, OAuthReviewGroup } from "~/shell/oauth-agents/contract";
 import { HttpApi, OpenApi } from "effect/http-api";
@@ -54,6 +55,7 @@ export { BrowserPairingEmailAuthenticationWebAuthGroup } from "~/shell/email-aut
 /** Direct browser authentication API. Secret-bearing responses never enter the canonical API. */
 export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserLoginWebAuthGroup)
+  .add(BrowserSessionGroup)
   .add(ProviderAuthenticationGroup)
   .add(OAuthReviewGroup)
   .add(OAuthConnectionsGroup)
@@ -77,3 +79,9 @@ export const webAuthenticationEndpoints = {
   rotateRecovery: RecoveryGroup.endpoints.rotateBackupRecoveryCode,
   currentUser: IdentityGroup.endpoints.getCurrentUser,
 } as const;
+
+export {
+  BrowserSessionBinding,
+  browserSessionBindingHeader,
+  browserSessionBindingPath,
+} from "~/shell/web-session/contract";

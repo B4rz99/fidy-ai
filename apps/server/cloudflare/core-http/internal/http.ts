@@ -1,3 +1,4 @@
+import { browserSessionBindingResponse } from "../../web-session/operations";
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
 import { handleConnectionBrowserRequest } from "../../connections/runtime";
@@ -1531,7 +1532,7 @@ const reservedCoreResponse = (
   return Option.none();
 };
 
-export const executeCoreHttp = ({
+const dispatchCoreHttp = ({
   request,
   environment,
   telemetry,
@@ -1583,3 +1584,11 @@ export const executeCoreHttp = ({
   }
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
+
+/** Validate the mounted browser session identity before any cookie-authorized dispatch. */
+export const executeCoreHttp = (
+  input: RequestExecution
+): Effect.Effect<Response, never, HttpClient.HttpClient> =>
+  browserSessionBindingResponse({ request: input.request, db: input.environment.DB }).pipe(
+    Effect.flatMap(Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed }))
+  );

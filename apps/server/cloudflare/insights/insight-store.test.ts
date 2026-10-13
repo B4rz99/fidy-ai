@@ -172,7 +172,10 @@ const send = (
         "cf-connecting-ip": "192.0.2.35",
         ...("pat" in input
           ? { authorization: `Bearer ${input.pat}` }
-          : { cookie: `__Host-fidy_session=${String(input.index + 1).repeat(43)}` }),
+          : {
+              "Fidy-Session-Binding": sessions[input.index] ?? "invalid",
+              cookie: `__Host-fidy_session=${String(input.index + 1).repeat(43)}`,
+            }),
         ...(Option.isNone(body) ? {} : { "content-type": "application/json" }),
       },
       ...(Option.isNone(body) ? {} : { body: JSON.stringify(body.value) }),

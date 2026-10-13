@@ -400,18 +400,20 @@ const leaseResponseReader = (
   owner: ResidentOwner,
   ticket: ResidentTicket,
   reader: Pick<ReadableStreamDefaultReader<unknown>, "cancel" | "releaseLock">
-): Readonly<{ finish: () => void; cancel: () => Promise<void> }> => {
+): Readonly<{ finish: () => void; cancel: () => Promise<void>; isReleased: () => boolean }> => {
   const { release } = ticket;
+  let released = false;
   const { finish, cancel } = leaseNativeReader({
     reader,
     releaseLease: () => {
+      released = true;
       owner.bodies.delete(cancel);
       release();
     },
   });
   ticket.cancelBody = Option.some(cancel);
   owner.bodies.add(cancel);
-  return { finish, cancel };
+  return { finish, cancel, isReleased: () => released };
 };
 /** A Response lease lasts through native streaming, not merely response-header completion. */
 const leasedResponse = (
@@ -426,10 +428,14 @@ const leasedResponse = (
     return new Response(null, { status: response.status, headers });
   }
   const reader = response.body.getReader();
-  const { finish, cancel } = leaseResponseReader(owner, ticket, reader);
+  const { finish, cancel, isReleased } = leaseResponseReader(owner, ticket, reader);
   return new Response(
     new ReadableStream<Uint8Array>({
       pull(controller) {
+        if (isReleased()) {
+          controller.close();
+          return Promise.resolve();
+        }
         return reader
           .read()
           .then((chunk) => {
@@ -636,11 +642,11 @@ const residentRegistration = (
       });
     }
   });
-const createOwner = (
+const createOwner = Effect.fnUntraced(function* (
   registry: ResidentRegistry,
   catalog: ResidentCatalog,
   clock: Clock.Clock
-): ResidentOwner => {
+) {
   const server = McpServer.layerHttp({
     name: "fidy",
     version: "0.0.0",
@@ -675,7 +681,7 @@ const createOwner = (
   registry.owners.add(owner);
   // Native subscriptions and unread replies cannot retain a resident after its authority or
   // bounded protocol lifetime. Disposal interrupts transport and still joins canonical settlement.
-  const lifetime = Effect.runFork(
+  const lifetime = yield* Effect.forkDetach(
     Effect.sleep(Math.max(0, owner.expiresAtMilliseconds - clock.currentTimeMillisUnsafe())).pipe(
       Effect.provideService(Clock.Clock, clock),
       Effect.andThen(
@@ -688,7 +694,7 @@ const createOwner = (
   );
   owner.cancelLifetime = (): void => lifetime.interruptUnsafe();
   return owner;
-};
+});
 const admissionSubject = (admission: OAuthMcpAdmission): OAuthCaller => ({
   userId: admission.userId,
   oauthConnectionId: admission.connectionId,
@@ -766,7 +772,7 @@ const reserveResidentOwner = (
     ) {
       return Option.none();
     }
-    return Option.some(createOwner(registry, catalog, yield* Clock.Clock));
+    return Option.some(yield* createOwner(registry, catalog, yield* Clock.Clock));
   });
 const ensureResidentOwner = (
   registry: ResidentRegistry,

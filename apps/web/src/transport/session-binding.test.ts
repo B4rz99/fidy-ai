@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
-import { HttpClient, type HttpClientError, HttpClientResponse } from "effect/http";
+import { FetchHttpClient, HttpClient, type HttpClientError, HttpClientResponse } from "effect/http";
 import { expect, it } from "@effect/vitest";
 import { vi } from "vitest";
 import { bindBrowserSession, loadBrowserSessionBinding } from "./session-binding";
@@ -101,33 +101,22 @@ for (const scenario of [
 
 it.effect("bootstraps a session identity and signed-out identity through credentialed HTTP", () => {
   const fetch = vi
-    .spyOn(globalThis, "fetch")
+    .fn<typeof globalThis.fetch>()
     .mockResolvedValueOnce(Response.json({ binding: "20000000-0000-4000-8000-000000000003" }))
     .mockResolvedValueOnce(Response.json({ binding: null }));
-  const lifetime = new AbortController();
   return Effect.gen(function* () {
-    expect(
-      yield* Effect.tryPromise(() =>
-        loadBrowserSessionBinding({
-          apiOrigin: "https://api.test.fidyapp.com",
-          signal: lifetime.signal,
-        })
-      )
-    ).toBe("20000000-0000-4000-8000-000000000003");
-    expect(
-      yield* Effect.tryPromise(() =>
-        loadBrowserSessionBinding({
-          apiOrigin: "https://api.test.fidyapp.com",
-          signal: lifetime.signal,
-        })
-      )
-    ).toBe("none");
+    expect(yield* loadBrowserSessionBinding({ apiOrigin: "https://api.test.fidyapp.com" })).toBe(
+      "20000000-0000-4000-8000-000000000003"
+    );
+    expect(yield* loadBrowserSessionBinding({ apiOrigin: "https://api.test.fidyapp.com" })).toBe(
+      "none"
+    );
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch).toHaveBeenCalledWith(
       new URL("https://api.test.fidyapp.com/web/session/binding"),
       expect.objectContaining({ credentials: "include" })
     );
-  }).pipe(Effect.ensuring(Effect.sync(() => fetch.mockRestore())));
+  }).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch));
 });
 
 it.effect("rejects a response completed synchronously as its session is retired", () => {

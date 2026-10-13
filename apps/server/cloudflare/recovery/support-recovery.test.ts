@@ -1,5 +1,7 @@
+import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
+import { HttpClient } from "effect/http";
 import { deepStrictEqual } from "node:assert";
-import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Schema, type Scope } from "effect";
 import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { UserId } from "../../src/core/identity/contract";
@@ -55,8 +57,9 @@ type Fixture = Readonly<{
   request: (assertion: string) => Request;
   assertion: (times: AssertionTimes) => Effect.Effect<string, TestFailure>;
   jwk: JWK;
+  httpClient: HttpClient.HttpClient;
 }>;
-const setup = (current: number): Effect.Effect<Fixture, TestFailure> =>
+const setup = (current: number): Effect.Effect<Fixture, TestFailure, Scope.Scope> =>
   Effect.gen(function* () {
     const db = yield* wait(() => databases.acquire());
     yield* wait(() =>
@@ -119,6 +122,7 @@ const setup = (current: number): Effect.Effect<Fixture, TestFailure> =>
       pairingId: pairing.pairingId,
       config,
       jwk,
+      httpClient: yield* fixtureNativeHttpClient,
       request: (assertion): Request =>
         new Request("https://api.fidyapp.com/internal/support-recovery", {
           method: "POST",
@@ -155,7 +159,10 @@ it("admits only five concurrent operator commands per rolling minute before body
           request: new Request(fixture.request(assertion), { method: "POST", body: "{}" }),
           db: fixture.db,
           config: fixture.config,
-        }).pipe(Effect.provideService(Clock.Clock, clock));
+        }).pipe(
+          Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+          Effect.provideService(Clock.Clock, clock)
+        );
       const results = yield* Effect.all(Array.from({ length: 6 }, invoke), {
         concurrency: "unbounded",
       });
@@ -164,7 +171,7 @@ it("admits only five concurrent operator commands per rolling minute before body
       ).toEqual([400, 400, 400, 400, 400, 429]);
       current += 60_000;
       expect((yield* invoke()).status).toBe(400);
-    })
+    }).pipe(Effect.scoped)
   ));
 
 const malformedCommand = (
@@ -176,7 +183,10 @@ const malformedCommand = (
     request: new Request(fixture.request(assertion), { method: "POST", body: "{}" }),
     db: fixture.db,
     config: fixture.config,
-  }).pipe(Effect.provideService(Clock.Clock, clock));
+  }).pipe(
+    Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+    Effect.provideService(Clock.Clock, clock)
+  );
 
 it("enforces an operator rolling-hour limit independently of minute refills", () =>
   Effect.runPromise(
@@ -206,7 +216,7 @@ it("enforces an operator rolling-hour limit independently of minute refills", ()
         expiresAt: current / 1000 + 300,
       });
       expect((yield* malformedCommand(fixture, renewed, clock)).status).toBe(400);
-    })
+    }).pipe(Effect.scoped)
   ));
 
 it("bounds verified recovery commands globally across operators and releases expired hourly admission", () =>
@@ -247,7 +257,7 @@ it("bounds verified recovery commands globally across operators and releases exp
         subject: Option.some("outsider"),
       });
       expect((yield* malformedCommand(fixture, renewed, clock)).status).toBe(400);
-    })
+    }).pipe(Effect.scoped)
   ));
 
 it("approves a valid assertion on the supplied Clock even when native JWT time considers it expired", () =>
@@ -265,7 +275,10 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
         request: fixture.request(assertion),
         db: fixture.db,
         config: fixture.config,
-      }).pipe(Effect.provideService(Clock.Clock, clock));
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+        Effect.provideService(Clock.Clock, clock)
+      );
       expect(response.status).toBe(200);
       expect(yield* wait(() => response.json())).toEqual({ status: "approved" });
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -310,13 +323,12 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
       expect(
         yield* wait(() => fixture.db.prepare("SELECT count(*) AS count FROM web_sessions").first())
       ).toEqual({ count: 0 });
-    })
+    }).pipe(Effect.scoped)
   ));
 
 it.each(["owning Effect", "native Request"])(
   "initiates held support body cleanup on %s cancellation without a later recovery decision",
   (source) => {
-    const ownerAbort = new AbortController();
     const requestAbort = new AbortController();
     const ready = Promise.withResolvers<void>();
     const released = Promise.withResolvers<void>();
@@ -359,18 +371,18 @@ it.each(["owning Effect", "native Request"])(
           ),
         });
         const credential = yield* credentialSnapshot(fixture);
-        const run = Effect.runPromiseExitWith(yield* Effect.context<never>());
-        const pending = run(
-          handleSupportRecovery({ request, db: fixture.db, config: fixture.config }),
-          { signal: ownerAbort.signal }
-        );
+        const pending = yield* handleSupportRecovery({
+          request,
+          db: fixture.db,
+          config: fixture.config,
+        }).pipe(Effect.provideService(HttpClient.HttpClient, fixture.httpClient), Effect.forkChild);
         yield* wait(() => ready.promise);
-        if (source === "owning Effect") ownerAbort.abort();
+        if (source === "owning Effect") yield* Fiber.interrupt(pending);
         else {
           requestAbort.abort();
           yield* wait(() => cancelled.promise).pipe(Effect.timeout("250 millis"));
         }
-        const exit = yield* wait(() => pending);
+        const exit = yield* Fiber.await(pending);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
           // Owner and body cancellation can contribute separate interruption reasons.
@@ -404,12 +416,12 @@ it.each(["owning Effect", "native Request"])(
       }).pipe(
         Effect.ensuring(
           Effect.sync(() => {
-            ownerAbort.abort();
             requestAbort.abort();
             released.resolve();
             cancelSettled.resolve();
           })
-        )
+        ),
+        Effect.scoped
       )
     );
   }
@@ -467,7 +479,11 @@ it.each([
           request,
           db: fixture.db,
           config: fixture.config,
-        }).pipe(Effect.provideService(Clock.Clock, clock), Effect.forkChild);
+        }).pipe(
+          Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+          Effect.provideService(Clock.Clock, clock),
+          Effect.forkChild
+        );
         yield* wait(() => reading.promise);
         current += elapsedMs;
         released.resolve();
@@ -479,7 +495,7 @@ it.each([
             fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
           )
         ).toEqual({ count: 0 });
-      })
+      }).pipe(Effect.scoped)
     )
 );
 
@@ -498,7 +514,10 @@ it("starts a new browser pairing after an approved recovery expires without brow
         request: fixture.request(assertion),
         db: fixture.db,
         config: fixture.config,
-      }).pipe(Effect.provideService(Clock.Clock, clock));
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+        Effect.provideService(Clock.Clock, clock)
+      );
       expect(approved.status).toBe(200);
       current += 600_000;
       const next = yield* startBrowserPairing({
@@ -516,7 +535,7 @@ it("starts a new browser pairing after an approved recovery expires without brow
           fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_events").first()
         )
       ).toEqual({ count: 2 });
-    })
+    }).pipe(Effect.scoped)
   ));
 
 it("retains recovery evidence until its calendar deadline then removes it without restoring consumed proof", () =>
@@ -534,7 +553,10 @@ it("retains recovery evidence until its calendar deadline then removes it withou
         request: fixture.request(assertion),
         db: fixture.db,
         config: fixture.config,
-      }).pipe(Effect.provideService(Clock.Clock, clock));
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+        Effect.provideService(Clock.Clock, clock)
+      );
       expect(approved.status).toBe(200);
       const credential = yield* credentialSnapshot(fixture);
       yield* sweepRecoveryEvidence({ db: fixture.db, nowEpochMs: Date.UTC(2026, 1, 28, 12) - 1 });
@@ -554,7 +576,7 @@ it("retains recovery evidence until its calendar deadline then removes it withou
         ).toEqual({ count: 0 });
       }
       expect(yield* credentialSnapshot(fixture)).toEqual(credential);
-    })
+    }).pipe(Effect.scoped)
   ));
 it("rolls back recovery event deletion when its terminal case cannot be removed", () =>
   Effect.runPromise(
@@ -571,7 +593,10 @@ it("rolls back recovery event deletion when its terminal case cannot be removed"
         request: fixture.request(assertion),
         db: fixture.db,
         config: fixture.config,
-      }).pipe(Effect.provideService(Clock.Clock, clock));
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+        Effect.provideService(Clock.Clock, clock)
+      );
       expect(approved.status).toBe(200);
       const credential = yield* credentialSnapshot(fixture);
       yield* wait(() =>
@@ -599,7 +624,7 @@ it("rolls back recovery event deletion when its terminal case cannot be removed"
         )
       ).toEqual({ count: 1 });
       expect(yield* credentialSnapshot(fixture)).toEqual(credential);
-    })
+    }).pipe(Effect.scoped)
   ));
 
 const expectUnchanged = ({
@@ -657,12 +682,15 @@ it.each([
         request: fixture.request(assertion),
         db: fixture.db,
         config: fixture.config,
-      }).pipe(Effect.provideService(Clock.Clock, clock));
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+        Effect.provideService(Clock.Clock, clock)
+      );
       expect(response.status).toBe(401);
       expect(yield* wait(() => response.json())).toEqual({ status: "unauthorized" });
       expect(response.headers.get("cache-control")).toBe("no-store");
       yield* expectUnchanged({ fixture, credential });
-    })
+    }).pipe(Effect.scoped)
   )
 );
 
@@ -692,7 +720,11 @@ it("refuses an assertion that expires on the supplied Clock while foreign key ve
         request: fixture.request(assertion),
         db: fixture.db,
         config: fixture.config,
-      }).pipe(Effect.provideService(Clock.Clock, clock), Effect.forkChild);
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+        Effect.provideService(Clock.Clock, clock),
+        Effect.forkChild
+      );
       yield* wait(() => requested.promise);
       current = expiresAt * 1000;
       keys.resolve(Response.json({ keys: [fixture.jwk] }));
@@ -700,49 +732,57 @@ it("refuses an assertion that expires on the supplied Clock while foreign key ve
       expect(response.status).toBe(401);
       expect(yield* wait(() => response.json())).toEqual({ status: "unauthorized" });
       yield* expectUnchanged({ fixture, credential });
-    })
+    }).pipe(Effect.scoped)
   ));
 
-it("rejects oversized streamed signing keys before reading or consuming recovery proof", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
-      const fixture = yield* setup(current);
-      const credential = yield* credentialSnapshot(fixture);
-      const assertion = yield* fixture.assertion({
-        subject: Option.none(),
-        issuedAt: current / 1000,
-        expiresAt: current / 1000 + 300,
-      });
-      let cancelled = false;
-      vi.spyOn(globalThis, "fetch").mockImplementation(() =>
-        Promise.resolve(
-          new Response(
-            new ReadableStream<Uint8Array>({
-              pull(controller): void {
-                controller.enqueue(new Uint8Array(64 * 1024));
-              },
-              cancel(): void {
-                cancelled = true;
-              },
-            })
-          )
-        )
-      );
-      const request = fixture.request(assertion);
-      if (request.body === null) throw new Error("Expected request body");
-      const reader = vi.spyOn(request.body, "getReader");
-      const response = yield* handleSupportRecovery({
-        request,
-        db: fixture.db,
-        config: fixture.config,
-      });
-      expect(response.status).toBe(401);
-      expect(cancelled).toBe(true);
-      expect(reader).not.toHaveBeenCalled();
-      yield* expectUnchanged({ fixture, credential });
-    })
-  ));
+it.each(["settled", "pending"] as const)(
+  "rejects oversized streamed signing keys with %s cancellation before consuming recovery proof",
+  (cancellation) => {
+    const cancelSettled = Promise.withResolvers<void>();
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const current = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+        const fixture = yield* setup(current);
+        const credential = yield* credentialSnapshot(fixture);
+        const assertion = yield* fixture.assertion({
+          subject: Option.none(),
+          issuedAt: current / 1000,
+          expiresAt: current / 1000 + 300,
+        });
+        let cancelled = false;
+        const body = new ReadableStream<Uint8Array>(
+          {
+            pull(controller): void {
+              controller.enqueue(new Uint8Array(64 * 1024));
+            },
+            cancel(): Promise<void> {
+              cancelled = true;
+              return cancellation === "pending" ? cancelSettled.promise : Promise.resolve();
+            },
+          },
+          { highWaterMark: 0 }
+        );
+        vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(new Response(body)));
+        const request = fixture.request(assertion);
+        if (request.body === null) throw new Error("Expected request body");
+        const reader = vi.spyOn(request.body, "getReader");
+        const response = yield* handleSupportRecovery({
+          request,
+          db: fixture.db,
+          config: fixture.config,
+        }).pipe(
+          Effect.provideService(HttpClient.HttpClient, fixture.httpClient),
+          Effect.timeout("1 second")
+        );
+        expect(response.status).toBe(401);
+        expect(cancelled).toBe(true);
+        expect(body.locked).toBe(false);
+        expect(reader).not.toHaveBeenCalled();
+        yield* expectUnchanged({ fixture, credential });
+      }).pipe(Effect.ensuring(Effect.sync(() => cancelSettled.resolve())), Effect.scoped)
+    );
+  }
+);
 
 it.each(["request", "fiber"] as const)(
   "cancels pending signing-key retrieval with its owning %s",
@@ -780,7 +820,7 @@ it.each(["request", "fiber"] as const)(
           request,
           db: fixture.db,
           config: fixture.config,
-        }).pipe(Effect.forkChild);
+        }).pipe(Effect.provideService(HttpClient.HttpClient, fixture.httpClient), Effect.forkChild);
         yield* wait(() => started.promise);
         if (owner === "request") {
           controller.abort();
@@ -791,7 +831,7 @@ it.each(["request", "fiber"] as const)(
         expect(cancelled).toBe(true);
         expect(reader).not.toHaveBeenCalled();
         yield* expectUnchanged({ fixture, credential });
-      })
+      }).pipe(Effect.scoped)
     );
   }
 );

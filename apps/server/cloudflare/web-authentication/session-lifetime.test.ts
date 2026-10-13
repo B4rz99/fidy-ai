@@ -1,3 +1,4 @@
+import { HttpClient } from "effect/http";
 import { deepStrictEqual } from "node:assert";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
@@ -108,7 +109,12 @@ it.effect.each([
           })
         )
       );
-    });
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    );
   }
 );
 
@@ -159,6 +165,11 @@ it.effect(
           })
         )
       );
-    });
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    );
   }
 );

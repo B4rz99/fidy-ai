@@ -1,3 +1,4 @@
+import { HttpClient } from "effect/http";
 import { Deferred, Effect, Fiber, Schema } from "effect";
 import { afterAll, expect, it, vi } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
@@ -48,7 +49,12 @@ it("cancels a stalled browser redemption body when authentication is interrupted
       yield* Fiber.interrupt(fiber);
       expect(body.locked).toBe(false);
       expect(cancel).toHaveBeenCalledOnce();
-    })
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    )
   ));
 
 it("reports corrupt retained pairing expiry as unavailable without consuming the pairing or creating a session", () =>
@@ -99,5 +105,10 @@ it("reports corrupt retained pairing expiry as unavailable without consuming the
           db.prepare("SELECT count(*) AS total FROM web_sessions").first()
         )
       ).toEqual({ total: 0 });
-    })
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
+      )
+    )
   ));

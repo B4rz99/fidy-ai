@@ -1,5 +1,6 @@
 import { webAuthenticationEndpoints } from "../../src/shell/web-authentication/contract";
 import { Cause, Effect, Option } from "effect";
+import type { HttpClient } from "effect/http";
 import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";
 import {
   completeBrowserPairingEmail,
@@ -81,7 +82,7 @@ const supportResponse = ({
   db,
   support,
   telemetry,
-}: WebAuthenticationRequest): Effect.Effect<Response> => {
+}: WebAuthenticationRequest): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
   return telemetry.rootSpan(
     {
@@ -115,7 +116,7 @@ const supportResponse = ({
  */
 export const handleWebAuthentication = (
   input: WebAuthenticationRequest
-): Effect.Effect<Response> => {
+): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   const path = new URL(input.request.url).pathname;
   if (path === supportRecoveryPath) return supportResponse(input);
   if (patRoute(path)) {

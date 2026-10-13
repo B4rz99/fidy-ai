@@ -1,7 +1,7 @@
 {
   "date": "2026-10-13",
   "original_audit_baseline": "8c826c92",
-  "updated_trunk": "b9ede142a",
+  "updated_trunk": "01a63f1c414b1877a9abd6c68d8b8de2fb840af6",
   "inventory_definition": "Existing tracked code files under apps, scripts, infra and tools with TS/TSX/JS/JSX/MJS/CJS/shell/PowerShell/Python/SQL/CSS/HTML extensions. Supporting test/spec/e2e/testing/test/declaration/fixture paths and explicitly generated files are separated. Configuration TS and checked-in UI implementation are included. Vendored .repos, node_modules, agent skills, docs, dependency locks, JSON/YAML configs and non-code assets are excluded. This is an inventory, not a claim of semantic review.",
   "tracked_code_paths": [
     "apps/cli/.dependency-cruiser.mjs",
@@ -5966,7 +5966,7 @@
       "Statement committedSubmission initially rethrew a cause with a typed staging failure despite never typed-error signature; owner changed branch to Effect.interrupt before final review, resolving channel mismatch"
     ]
   },
-  "validation_status": "All six standard local verification groups passed. First formal review reported three Standards findings (fixed and verified), no Security/Spec findings. Fresh three-axis review and GitHub CI remain prerequisites for publication/merge.",
+  "validation_status": "Previous-baseline six-group verification passed. Latest security rebase requires repeated compatibility verification and fresh three-axis review before publication; GitHub CI is required before merge.",
   "supplemental_validation": {
     "command_policy": "5 tests passed, including actual descendant work cessation",
     "cli_release": "13 tests passed; normal CI release entrypoint includes native policy subprocess suite",
@@ -5999,5 +5999,45 @@
     "adapter": "138 files/1828tests passed; 2 files/17tests skipped in full single-worker rerun; reviewer-changed document/MCP23 tests passed again",
     "infra": "32 files/271tests passed in complete rerun",
     "updated_trunk_tests": "verifier2/browser-topology3 passed"
+  },
+  "inventory_snapshot_trunk": "b9ede142a",
+  "latest_trunk_reconciliation": {
+    "baseline": "01a63f1c414b1877a9abd6c68d8b8de2fb840af6",
+    "new_implementation_paths": [
+      "apps/server/cloudflare/migrations/0087_browser_pairing_email_admission.sql",
+      "apps/server/cloudflare/web-session/internal/binding.ts",
+      "apps/web/src/session/authentication-events.ts",
+      "apps/web/src/session/browser-session-boundary.tsx",
+      "apps/web/src/transport/session-binding.ts"
+    ],
+    "method": "Independent server/web compatibility tracing plus root SQL and edge-policy review; initial inventory counts are a preserved earlier snapshot, not recalculated coverage percentages.",
+    "root_traces": [
+      "apps/server/cloudflare/migrations/0087_browser_pairing_email_admission.sql",
+      "infra/cloudflare/edge-security.ts",
+      "infra/cloudflare/verify-edge-policy.ts"
+    ],
+    "root_assessment": "SQL bounds retained per User/global admission counters; binding bootstrap is included in edge admission and digest artifact union preserves both changes.",
+    "web_traces": [
+      "apps/web/src/session/authentication-events.ts",
+      "apps/web/src/session/browser-session-boundary.tsx",
+      "apps/web/src/transport/session-binding.ts",
+      "apps/web/src/transport/session-binding.test.ts",
+      "apps/web/src/transport/client.ts",
+      "apps/web/src/session/session.tsx",
+      "apps/web/src/app/application.tsx"
+    ],
+    "server_traces": [
+      "apps/server/cloudflare/web-session/internal/binding.ts",
+      "apps/server/cloudflare/recovery/operations.ts",
+      "apps/server/cloudflare/mcp/runtime.ts",
+      "apps/server/cloudflare/core-http/internal/http.ts",
+      "apps/server/cloudflare/public-worker.ts"
+    ],
+    "findings_addressed": [
+      "Support recovery signing-key transport bypassed native response ownership; the operation now consumes the existing Core-composed HttpClient. Native fixture construction retains the test Scope and explicit Fetch. Pending-cancellation overflow proves refusal and reader release without proof consumption.",
+      "MCP lifetime scheduling now composes in the active Effect runtime and later response pulls close after native SDK reader release.",
+      "Browser binding bootstrap returns its scoped Effect; the native adapter runs it with the mounted AbortSignal, and the test supplies explicit Fetch authority."
+    ],
+    "focused_validation": "104 tests across eight final native/authentication suites passed; server typecheck and module graph passed without exceptions.45 focused web tests and all221 web tests passed with90.72% transport branches. Latest unit,builds,infra and fresh browser(shared102+CLI1;3sharedskips) groups passed. Final static and full adapter rerun and fresh formal review remain required before publication/merge."
   }
 }

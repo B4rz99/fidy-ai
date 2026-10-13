@@ -5,7 +5,11 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "jsdoc", "react", "jsx-a11y"],
-  "jsPlugins": ["./scripts/oxlint/effect-guards.js", "@shadcn/lint"],
+  "jsPlugins": [
+    "./scripts/oxlint/effect-guards.js",
+    "./scripts/oxlint/test-guards.js",
+    "@shadcn/lint"
+  ],
   "settings": {
     "shadcn": {
       "ui": "@/ui/components",
@@ -20,6 +24,9 @@
     "**/.repos/**"
   ],
   "rules": {
+    "test-guards/no-module-mocks": "error",
+    "test-guards/no-tsx-tests": "error",
+    "test-guards/no-react-test-tools": "error",
     "array-callback-return": "error",
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["error", { "allowConstantExport": true }],
@@ -289,8 +296,7 @@
         "apps/web/src/ui/class-names.ts",
         "apps/web/src/ui/components/{alert,badge,button,calendar,checkbox,dropdown-menu,empty,input,popover,progress,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
-        "apps/web/{playwright,vite,vitest}.config.ts",
-        "apps/web/src/testing/setup.ts"
+        "apps/web/{playwright,vite,vitest}.config.ts"
       ],
       "rules": {
         "import/extensions": "off"

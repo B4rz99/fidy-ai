@@ -43,7 +43,7 @@ Remaining live checks: current-artifact account replacement. Deployed combined-p
 ## Rerun
 
 ```sh
-bun run --cwd apps/web test src/features/pats src/features/oauth-connections src/app/access-page.test.tsx
+bun run --cwd apps/web test src/features/pats/reauthentication-draft.test.ts
 bun run --cwd apps/web test:browser access-management.spec.ts access-native-pagination.spec.ts oauth-review.spec.ts --workers=1
 ```
 
@@ -76,7 +76,8 @@ request identities and outcome callbacks do not enter presentation. Canonical co
 remain void so bearer material cannot enter Atom caches. Late completion after page departure,
 page hide or authentication replacement cannot reopen disclosure.
 
-`issuance.test.tsx` exercises the generated transport and mounted module, including Strict Mode
-restoration, explicit retry identity, storage refusal, late completion and disclosure cleanup.
+The removed `issuance.test.tsx` suite supplied historical rendered evidence for restoration,
+explicit retry identity, storage refusal, late completion and disclosure cleanup. Current storage
+decisions are exercised in `reauthentication-draft.test.ts`; mounted workflows use browser journeys.
 Metadata listing/revocation and CLI pairing retain their independent ownership. Existing storage,
 clipboard, combined-page and native provider browser journeys remain applicable.

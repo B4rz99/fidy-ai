@@ -13,7 +13,7 @@ import Agents from "../../components/feature-details/agents.astro";
 
 type FeaturePage = {
   params: { section: string; slug: string };
-  props: { title: string; description: string; feature: string; Detail: typeof Transactions };
+  props: { title: string; description: string; Detail: typeof Transactions };
 };
 
 export const getStaticPaths = ((): FeaturePage[] => [
@@ -23,7 +23,6 @@ export const getStaticPaths = ((): FeaturePage[] => [
       title: "Transacciones — Fidy",
       description:
         "Registra y corrige transacciones con contexto desde WhatsApp, la web o tu agente. Organiza tus finanzas personales en Colombia.",
-      feature: "transactions",
       Detail: Transactions,
     },
   },
@@ -33,7 +32,6 @@ export const getStaticPaths = ((): FeaturePage[] => [
       title: "Presupuestos — Fidy",
       description:
         "Organiza presupuestos por categoría y moneda, y revisa tu consumo mensual con Fidy.",
-      feature: "budgets",
       Detail: Budgets,
     },
   },
@@ -43,7 +41,6 @@ export const getStaticPaths = ((): FeaturePage[] => [
       title: "Asistente — Fidy",
       description:
         "Conversa con Fidy en WhatsApp para registrar transacciones y consultar tus finanzas con contexto.",
-      feature: "assistant",
       Detail: Assistant,
     },
   },
@@ -53,7 +50,6 @@ export const getStaticPaths = ((): FeaturePage[] => [
       title: "Tablero — Fidy",
       description:
         "Organiza un tablero personal para explorar tus transacciones y presupuestos en Fidy.",
-      feature: "dashboard",
       Detail: Dashboard,
     },
   },
@@ -63,7 +59,6 @@ export const getStaticPaths = ((): FeaturePage[] => [
       title: "Hallazgos — Fidy",
       description:
         "Explora señales y patrones basados en las transacciones que has incorporado a Fidy.",
-      feature: "insights",
       Detail: Insights,
     },
   },
@@ -73,13 +68,20 @@ export const getStaticPaths = ((): FeaturePage[] => [
       title: "Agentes — Fidy",
       description:
         "Consulta las opciones y disponibilidad para conectar tus agentes autorizados a Fidy, con permisos y vencimiento.",
-      feature: "agents",
       Detail: Agents,
     },
   },
 ]) satisfies GetStaticPaths;
-const { title, description, feature, Detail } = Astro.props;
+const { title, description, Detail } = Astro.props;
 const { slug } = Astro.params;
+const featureNames: Record<string, string> = {
+  transacciones: "transactions",
+  presupuestos: "budgets",
+  asistente: "assistant",
+  tablero: "dashboard",
+  insights: "insights",
+  agentes: "agents",
+};
 const features = [
   ["transacciones", "Transacciones"],
   ["presupuestos", "Presupuestos"],
@@ -103,7 +105,7 @@ const features = [
       <ThemeToggle />
     </div>
   </header>
-  <main class={`detail-page detail-${feature}`}>
+  <main class={`detail-page detail-${featureNames[slug ?? ""]}`}>
     <Detail />
     <section class="detail-explore wrap">
       <h2>Sigue explorando.</h2>

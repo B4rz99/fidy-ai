@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { workerCrypto } from "./wompi-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
@@ -29,6 +30,7 @@ const Boundary = Schema.Struct({
   billing_period: BillingPeriod,
   calendar_anchor_ms: Schema.Int,
 });
+const renewalAdmissionJson = Schema.fromJsonString(SubscriptionRenewalAdmission);
 
 const unresolvedCollectionSql = (userColumn: "s.user_id" | "sub.user_id"): string => `EXISTS (
   SELECT 1 FROM billing_attempts unresolved WHERE unresolved.user_id=${userColumn}
@@ -199,10 +201,9 @@ export const dispatchSubscriptionRenewals = (
     )(result.results).pipe(
       Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
     );
+    const traceHeaders = yield* captureTraceHeaders;
     for (const entry of entries) {
-      const encoded = yield* Schema.encodeEffect(
-        Schema.fromJsonString(SubscriptionRenewalAdmission)
-      )({
+      const encoded = yield* Schema.encodeEffect(renewalAdmissionJson)({
         _tag: "SubscriptionRenewal",
         userId: entry.user_id,
         previousPaidAttemptId: entry.id,
@@ -213,7 +214,7 @@ export const dispatchSubscriptionRenewals = (
         input.USER_TRANSACTION_COORDINATOR.getByName(entry.user_id).fetch(
           new Request("https://coordinator.internal/subscription-renewal-work", {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: { "content-type": "application/json", ...traceHeaders },
             body: encoded,
             signal,
           })

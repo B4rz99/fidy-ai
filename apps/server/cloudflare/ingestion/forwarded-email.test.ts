@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
-import type { TelemetryWorkRecord } from "../../src/shell/observability/contract";
+import { DurableTraceContext, TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
 import { allowancePeriod } from "../../src/core/quotas/operations";
@@ -93,7 +93,14 @@ it.effect("exports one bounded record for a successful Email schedule", () =>
       "outcome",
       "provider",
       "release",
+      "spanId",
+      "traceId",
     ]);
+    const record = yield* Schema.decodeUnknownEffect(TelemetryWorkRecord, {
+      onExcessProperty: "error",
+    })(records[0]);
+    expect(record.traceId).toBeDefined();
+    expect(record.spanId).toBeDefined();
   })
 );
 
@@ -896,7 +903,17 @@ it("reserves one receipt and private object on replay and publishes only bounded
       expect(receipts.results[0]?.state).toBe("queued");
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
       yield* wait(() => emailWorker.scheduled(undefined, env));
-      expect(jobs).toEqual([{ receiptId: receipts.results[0]?.id, userId: userA }]);
+      expect(jobs).toHaveLength(1);
+      const job = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          receiptId: Schema.String,
+          userId: Schema.String,
+          traceContext: DurableTraceContext,
+        }),
+        { onExcessProperty: "error" }
+      )(jobs[0]);
+      expect(job).toMatchObject({ receiptId: receipts.results[0]?.id, userId: userA });
+      expect(job.traceContext.sampled).toBe(true);
     })
   ));
 

@@ -1,3 +1,4 @@
+import { sanitizeWorkTrace, workTraceHeaders } from "../../runtime/telemetry/operations";
 import { ForwardedEmailWork } from "../contract";
 import { Data, Effect, Exit, Option, Schema } from "effect";
 
@@ -32,15 +33,17 @@ export const receiveForwardedEmailWork = ({
                 message.ack();
                 return;
               }
+              const payload = yield* sanitizeWorkTrace(work.value);
+              const traceHeaders = yield* workTraceHeaders(payload);
               const body = yield* Schema.encodeEffect(Schema.fromJsonString(ForwardedEmailWork))(
-                work.value
+                payload
               );
               const response = yield* Effect.tryPromise({
                 try: (signal) =>
                   coordinator.getByName(work.value.userId).fetch(
                     new Request("https://coordinator.internal/forwarded-email-work", {
                       method: "POST",
-                      headers: { "content-type": "application/json" },
+                      headers: { "content-type": "application/json", ...traceHeaders },
                       body,
                       signal,
                     })

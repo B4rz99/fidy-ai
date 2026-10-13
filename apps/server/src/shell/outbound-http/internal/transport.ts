@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Option, Stream } from "effect";
+import { Cause, Effect, Exit, Option, Schema, Stream } from "effect";
 import {
   Headers,
   HttpClient,
@@ -7,8 +7,15 @@ import {
   type HttpClientResponse,
 } from "effect/http";
 
-import type { TelemetryCode } from "~/shell/observability/contract";
 import {
+  type DeclaredOutcome,
+  TelemetryAttempt,
+  type TelemetryCode,
+  TelemetryHttpStatus,
+  type TelemetryService,
+} from "~/shell/observability/contract";
+import {
+  Telemetry,
   projectExternalHttpOutcome,
   projectExternalHttpRequest,
   projectExternalHttpResponse,
@@ -132,6 +139,91 @@ const transportOutcome = <A, E>(exit: Exit.Exit<A, E>): "response" | "interrupte
 const annotateOutcome = <A, E>(exit: Exit.Exit<A, E>): Effect.Effect<void> =>
   exit.pipe(transportOutcome, projectExternalHttpOutcome, Effect.annotateCurrentSpan);
 
+type TransportExit = Exit.Exit<OutboundHttpResponse, OutboundHttpFailure>;
+const serverFailureStatus = 500;
+const rejectedStatus = 400;
+
+const responseStatus = (exit: TransportExit): Option.Option<TelemetryHttpStatus> => {
+  const status = Exit.isSuccess(exit)
+    ? Option.some(exit.value.status)
+    : Option.flatMap(Cause.findErrorOption(exit.cause), (failure) => failure.responseStatus);
+  return Option.flatMap(status, Schema.decodeUnknownOption(TelemetryHttpStatus));
+};
+
+const providerOutcome = (exit: TransportExit): DeclaredOutcome => {
+  if (Exit.isFailure(exit)) {
+    if (
+      Cause.hasInterrupts(exit.cause) &&
+      !Cause.hasDies(exit.cause) &&
+      !Cause.hasFails(exit.cause)
+    ) {
+      return { outcome: "interrupted", error: Option.none(), retryable: false };
+    }
+    const failure = Cause.findErrorOption(exit.cause);
+    const error = Cause.hasDies(exit.cause)
+      ? "unexpected_defect"
+      : Option.match(failure, {
+          onNone: () => "provider_unavailable" as const,
+          onSome: (value) => {
+            switch (value.reason) {
+              case "response-too-large":
+                return "capacity_exceeded";
+              case "response-body-failed":
+                return "invalid_response";
+              case "transport-failed":
+              case "invalid-destination":
+                return "provider_unavailable";
+            }
+          },
+        });
+    return { outcome: "failed", error: Option.some(error), retryable: false };
+  }
+  if (exit.value.status >= serverFailureStatus) {
+    return { outcome: "failed", error: Option.some("provider_unavailable"), retryable: false };
+  }
+  if (exit.value.status >= rejectedStatus) {
+    return { outcome: "rejected", error: Option.none(), retryable: false };
+  }
+  return { outcome: "succeeded", error: Option.none(), retryable: false };
+};
+
+const recordProviderExit = (
+  telemetry: TelemetryService,
+  exit: TransportExit
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const status = responseStatus(exit);
+    if (Option.isSome(status)) yield* telemetry.recordResponseStatus(status.value);
+    yield* telemetry.recordOutcome(providerOutcome(exit));
+  });
+
+const observeProviderAttempt = (
+  provider: OutboundHttpProvider,
+  work: Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>
+): Effect.Effect<OutboundHttpResponse, OutboundHttpFailure> =>
+  Effect.flatMap(Effect.serviceOption(Telemetry), (service) =>
+    Option.match(service, {
+      onNone: () => work,
+      onSome: (telemetry) =>
+        telemetry.span(
+          {
+            component: "api",
+            operation: "provider.request",
+            trigger: "api",
+            spanOperation: "http.client",
+            workKind: "provider_call",
+            metadata: {
+              _tag: "Provider",
+              provider,
+              attempt: TelemetryAttempt.make(1),
+              status: Option.none(),
+            },
+          },
+          Effect.onExit(work, (exit) => recordProviderExit(telemetry, exit))
+        ),
+    })
+  );
+
 const suppressHeaders = (): boolean => false;
 const suppressAutomaticSpan = (): boolean => true;
 
@@ -183,7 +275,8 @@ export const makeProviderTransport =
               onFailure: Effect.failCause,
               onSuccess: Effect.succeed,
             })
-          )
+          ),
+          (work) => observeProviderAttempt(provider, work)
         ),
     };
   };

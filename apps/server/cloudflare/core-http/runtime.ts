@@ -2,6 +2,8 @@ import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { Clock, Context, Effect, Layer, Option } from "effect";
+import { decodeTraceParent } from "../../src/shell/observability/operations";
+import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
@@ -40,7 +42,20 @@ export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
       return response;
     }).pipe(
       Effect.scoped,
-      observeWorkerRequest({ environment, telemetry, operation: "worker.core.fetch" }),
+      (work) =>
+        Effect.flatMap(Clock.currentTimeMillis, (receivedAtUnixMilliseconds) =>
+          observeWorkerRequest(work, {
+            environment,
+            telemetry,
+            operation: "worker.core.fetch",
+            parent: Option.getOrUndefined(
+              decodeTraceParent({
+                value: Option.fromNullOr(request.headers.get(workerInternalTraceHeader)),
+                receivedAtUnixMilliseconds,
+              })
+            ),
+          })
+        ),
       Effect.runPromise
     );
 };

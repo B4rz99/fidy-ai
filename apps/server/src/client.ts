@@ -46,6 +46,7 @@ export {
   ConnectionContinuationReview,
 } from "~/shell/connections/contract";
 export { isHttpOrigin, ResourceLimited } from "~/shell/public-http/contract";
+export { TelemetryTraceId, telemetryTraceHeader } from "~/shell/observability/contract";
 export {
   ActivePATList,
   ActivePATMetadata,

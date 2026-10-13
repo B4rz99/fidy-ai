@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { Clock, Effect, Option, type PlatformError, Redacted, Schema } from "effect";
 import { OAuthRefreshAdmission } from "../contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
@@ -100,12 +101,13 @@ export const forwardRefresh = (
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthRefreshAdmission))(
       admission
     );
+    const traceHeaders = yield* captureTraceHeaders;
     return yield* Effect.tryPromise({
       try: (signal) =>
         input.coordinator.getByName(admission.userId).fetch(
           new Request("https://coordinator.internal/oauth-refresh", {
             method: "POST",
-            headers: coordinatorHeaders,
+            headers: { ...coordinatorHeaders, ...traceHeaders },
             body,
             signal,
           })

@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { protectCanonicalPressure } from "../canonical-admission/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
@@ -82,10 +83,12 @@ const forwardBegin = (
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(ConnectionBrowserAdmission))(
       admission
     );
+    const traceHeaders = yield* captureTraceHeaders;
     return yield* Effect.tryPromise(() =>
       input.coordinator.getByName(subject.userId).fetch(
         new Request("https://coordinator.internal/connection-begin", {
           method: "POST",
+          headers: traceHeaders,
           body,
           signal: input.request.signal,
         })

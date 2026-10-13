@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
 import { Effect, Option, Schema } from "effect";
 import { StartRefundInput } from "../../../src/core/subscription/contract";
@@ -123,11 +124,12 @@ const submit = (
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(RefundSupportAdmission))(
       admission
     );
+    const traceHeaders = yield* captureTraceHeaders;
     const response = yield* Effect.tryPromise(() =>
       input.environment.USER_TRANSACTION_COORDINATOR.getByName(body.value.userId).fetch(
         new Request("https://coordinator.internal/billing-refund-work", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...traceHeaders },
           body: encoded,
         })
       )

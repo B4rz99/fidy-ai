@@ -181,6 +181,8 @@ export type WhatsAppStatusAdmission = typeof WhatsAppStatusAdmission.Type;
 
 /** Identity only: exact inbound text stays in the User Transcript, never in Queue. */
 export const WhatsAppWork = Schema.TaggedStruct("HostedWhatsAppWork", {
+  // Diagnostic continuation is decoded independently and never grants work authority.
+  traceContext: Schema.optionalKey(Schema.Unknown),
   userId: UserId,
   turnId: TranscriptTurnId,
 });

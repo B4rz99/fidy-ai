@@ -33,6 +33,7 @@ export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (
     maximumRequestBytes: maximumInputBytes,
     captureRetry: options.captureRetry,
     captureAllowance: options.captureAllowance,
+    captureTrace: options.captureTrace,
   });
   const client: Record<string, CanonicalClient[string]> = {};
   for (const group of Object.values(FidyApi.groups)) {

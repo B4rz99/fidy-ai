@@ -5,8 +5,10 @@ import { BillingEmail } from "../../../src/core/subscription/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { makeResendOutboundHttp } from "../../../src/shell/outbound-http/operations";
 import {
+  captureObservedProviderFetch,
+  captureWorkTrace,
   cloudflareWorkerTelemetry,
-  observeProviderFetch,
+  sanitizeWorkTrace,
 } from "../../runtime/telemetry/operations";
 import {
   BillingCollectionFailure,
@@ -43,6 +45,7 @@ export const dispatchPriceNotices = (
   input: BillingPriceNoticeDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const discovery = protectConsentStatement({
       subject: { _tag: "Owner", column: "o.user_id" },
@@ -77,6 +80,7 @@ export const dispatchPriceNotices = (
       if (claimed.meta.changes !== 1) continue;
       yield* fromPromise(() =>
         input.BILLING_COLLECTION_QUEUE.send({
+          ...trace,
           version: 1,
           kind: "price-notice",
           userId: entry.user_id,
@@ -99,7 +103,7 @@ const deliverPriceNotice = (
       const services = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(
           FetchHttpClient.Fetch,
-          observeProviderFetch(globalThis.fetch, {
+          yield* captureObservedProviderFetch(globalThis.fetch, {
             provider: "resend",
             environment,
             telemetry: cloudflareWorkerTelemetry,
@@ -235,11 +239,12 @@ export const receivePriceNotice = (
       Schema.Struct({ last_offered_at_ms: Schema.NullOr(Schema.Int) })
     )(pending).pipe(Effect.mapError(unavailable));
     const id = `price-v1-${work.priceId}-${work.userId}-${offer.last_offered_at_ms ?? 0}`;
+    const params = yield* sanitizeWorkTrace(work);
     const started = yield* Effect.exit(
       fromPromise(() =>
         environment.BILLING_COLLECTION_WORKFLOW.create({
           id,
-          params: work,
+          params,
           retention: { successRetention: "3 days", errorRetention: "3 days" },
         })
       )

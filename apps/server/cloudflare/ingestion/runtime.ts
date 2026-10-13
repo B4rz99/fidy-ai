@@ -4,6 +4,7 @@ import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contrac
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
+  workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
 import { captureWorkflowFailure } from "../runtime/operational-health/operations";
@@ -91,6 +92,7 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
           environment: workerRelease(this.env),
           telemetry: cloudflareWorkerTelemetry,
           operation: "workflow.statementExtraction",
+          parent: workTraceParent(event.payload),
         }
       ),
       db: this.env.DB,

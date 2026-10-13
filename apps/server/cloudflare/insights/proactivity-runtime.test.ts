@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
   activateTestReminder,
   observeTestHostedContext,
@@ -10,6 +10,7 @@ import {
   withdrawTestProcessingConsent,
 } from "../proactivity.test-fixture";
 import {
+  makeExecutingWeeklyFixtureStep,
   makeProactivityCoordinator,
   proactivityWorkflowHarness,
 } from "../weekly-summary.test-fixture";
@@ -44,7 +45,12 @@ import { UserId } from "../../src/core/identity/contract";
 import { findCurrentProactivityOffer, findProactivityConsentGrant } from "../consent/operations";
 import { FetchHttpClient } from "effect/http";
 import type { ConsentUnavailable } from "../consent/contract";
-import { executeProactivityWork } from "./runtime";
+import {
+  ProactivityDeliveryWorkflow,
+  executeProactivityWork,
+  startProactivityWorkflow,
+} from "./runtime";
+import type { WorkflowStep } from "cloudflare:workers";
 import { expireDeliveryWork, recoverDeliveryWork } from "./internal/proactivity-delivery-work";
 import {
   readContextualProactiveReply,
@@ -65,6 +71,147 @@ const workRequest = (work: ProactivityActivity): Request =>
     method: "POST",
     body: Schema.encodeSync(Schema.fromJsonString(ProactivityActivity))(work),
   });
+
+it("strips untrusted diagnostic fields before persisting proactivity Workflow parameters", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const unexpected = (): never => {
+        throw new Error("Unexpected provider operation");
+      };
+      const instance: WorkflowInstance = {
+        id: "diagnostic-fixture",
+        pause: unexpected,
+        resume: unexpected,
+        terminate: unexpected,
+        restart: unexpected,
+        delete: unexpected,
+        sendEvent: unexpected,
+        subscribe: unexpected,
+        status: () => Promise.resolve({ status: "running" }),
+      };
+      const create = vi
+        .fn<Workflow<ProactivityDeliveryWork>["create"]>()
+        .mockResolvedValue(instance);
+      const workflow: Workflow<ProactivityDeliveryWork> = {
+        create,
+        get: unexpected,
+        createBatch: unexpected,
+        deleteBatch: unexpected,
+      };
+      const work = {
+        kind: "weekly-question" as const,
+        version: 1 as const,
+        userId: proactivityTestUsers[0],
+        id: "85000000-0000-4000-8000-000000000099",
+      };
+      const traceContext = {
+        version: 1,
+        traceId: "1".repeat(32),
+        parentSpanId: "2".repeat(16),
+        sampled: true,
+        capturedAtUnixMilliseconds: yield* Clock.currentTimeMillis,
+      };
+      const contexts = [
+        { ...traceContext, credential: "proactivity-private-canary" },
+        { ...traceContext, capturedAtUnixMilliseconds: 0 },
+        {
+          ...traceContext,
+          capturedAtUnixMilliseconds: traceContext.capturedAtUnixMilliseconds + 86400001,
+        },
+        traceContext,
+      ];
+      for (const context of contexts) {
+        yield* startProactivityWorkflow({
+          body: { ...work, traceContext: context },
+          workflow: Option.some(workflow),
+          coordinator: { getByName: () => ({ fetch: unexpected }) },
+        });
+      }
+      expect(create).toHaveBeenCalledTimes(4);
+      expect(create.mock.calls.map(([options]) => options?.params)).toEqual([
+        work,
+        work,
+        work,
+        { ...work, traceContext },
+      ]);
+    })
+  ));
+
+it("strips untrusted diagnostic fields before forwarding proactivity coordinator work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const now = yield* Clock.currentTimeMillis;
+      const services = yield* Effect.context<never>();
+      const run = Effect.runPromiseWith(services);
+      const forwarded: unknown[] = [];
+      const unexpected = (): never => {
+        throw new Error("Unexpected Workflow operation");
+      };
+      const workflow = new ProactivityDeliveryWorkflow(
+        {
+          waitUntil: (_promise: Promise<unknown>): void => undefined,
+          passThroughOnException: (): void => undefined,
+          props: {},
+          exports: {},
+          abort: (): void => undefined,
+          get tracing(): Tracing {
+            return unexpected();
+          },
+        },
+        {
+          DB: db,
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (): Pick<Fetcher, "fetch"> => ({
+              fetch: (input, init): Promise<Response> => {
+                const request = input instanceof Request ? input : new Request(input, init);
+                return run(
+                  Effect.gen(function* () {
+                    forwarded.push(yield* Effect.tryPromise(() => request.json()));
+                    return Response.json({ _tag: "Done" });
+                  })
+                );
+              },
+            }),
+          },
+        }
+      );
+      const work = {
+        kind: "weekly-question" as const,
+        version: 1 as const,
+        userId: proactivityTestUsers[0],
+        id: "85000000-0000-4000-8000-000000000098",
+      };
+      const step: WorkflowStep = {
+        do: makeExecutingWeeklyFixtureStep(),
+        sleep: unexpected,
+        sleepUntil: unexpected,
+        waitForEvent: unexpected,
+      };
+      yield* Effect.tryPromise(() =>
+        workflow.run(
+          {
+            payload: {
+              ...work,
+              traceContext: {
+                version: 1,
+                traceId: "1".repeat(32),
+                parentSpanId: "2".repeat(16),
+                sampled: true,
+                capturedAtUnixMilliseconds: now,
+                rawBody: "proactivity-coordinator-private-canary",
+              },
+            },
+            instanceId: "diagnostic-fixture",
+            workflowName: "diagnostic-fixture",
+            timestamp: DateTime.toDateUtc(DateTime.makeUnsafe(now)),
+          },
+          step
+        )
+      );
+      expect(forwarded).toEqual([work]);
+    })
+  ));
 afterAll(() => proactivityTestDatabases.dispose());
 afterEach(() => {
   vi.restoreAllMocks();

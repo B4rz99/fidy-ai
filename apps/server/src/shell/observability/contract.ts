@@ -267,6 +267,18 @@ export type TelemetryHttpStatus = typeof TelemetryHttpStatus.Type;
 export const TelemetryHttpStatusClass = Schema.Literals(["1xx", "2xx", "3xx", "4xx", "5xx"]);
 export type TelemetryHttpStatusClass = typeof TelemetryHttpStatusClass.Type;
 
+/** A lowercase 32-hex trace identifier; callers obtain it from Telemetry, never application data. */
+export const TelemetryTraceId = Schema.String.check(
+  Schema.isPattern(/^(?!0{32}$)[0-9a-f]{32}$/u)
+).pipe(Schema.brand("TelemetryTraceId"));
+/** A lowercase 16-hex span identifier; callers obtain it from Telemetry, never application data. */
+export const TelemetrySpanId = Schema.String.check(
+  Schema.isPattern(/^(?!0{16}$)[0-9a-f]{16}$/u)
+).pipe(Schema.brand("TelemetrySpanId"));
+
+/** A server-authored receipt used by clients to correlate diagnostics without sending trace authority. */
+export const telemetryTraceHeader = "Fidy-Trace-Id";
+
 /** The exact fields permitted in a completed Work export record. */
 export const TelemetryWorkRecord = Schema.Struct({
   release: TelemetryRelease,
@@ -276,6 +288,8 @@ export const TelemetryWorkRecord = Schema.Struct({
   outcome: TelemetryCodeSchema.outcome,
   attempt: TelemetryAttempt,
   latencyMilliseconds: TelemetryDuration,
+  traceId: Schema.optionalKey(TelemetryTraceId),
+  spanId: Schema.optionalKey(TelemetrySpanId),
 });
 export type TelemetryWorkRecord = typeof TelemetryWorkRecord.Type;
 
@@ -358,6 +372,7 @@ const ScheduleSpanMetadata = Schema.TaggedStruct("Schedule", {
 });
 
 const SpanIdentity = {
+  release: Schema.optionalKey(TelemetryRelease),
   component: TelemetryCodeSchema.component,
   operation: TelemetryCodeSchema.operation,
   trigger: TelemetryCodeSchema.trigger,
@@ -468,15 +483,6 @@ export const TelemetryBreadcrumb = Schema.Struct({
   durationMilliseconds: Schema.Option(TelemetryDuration),
 });
 export type TelemetryBreadcrumb = typeof TelemetryBreadcrumb.Type;
-
-/** A lowercase 32-hex trace identifier; callers obtain it from Telemetry, never application data. */
-export const TelemetryTraceId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/u)).pipe(
-  Schema.brand("TelemetryTraceId")
-);
-/** A lowercase 16-hex span identifier; callers obtain it from Telemetry, never application data. */
-export const TelemetrySpanId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{16}$/u)).pipe(
-  Schema.brand("TelemetrySpanId")
-);
 
 /**
  * Exact propagation data allowed across a trusted Fidy durable boundary. Its millisecond timestamp

@@ -209,6 +209,7 @@ const exportCompletedWork = <A, E>(input: {
   exit: Exit.Exit<A, E>;
   startedAt: number;
   finishedAt: number;
+  span: Option.Option<TelemetrySpan>;
 }): Effect.Effect<void> =>
   Effect.ignoreCause(
     Effect.sync(() => {
@@ -216,6 +217,10 @@ const exportCompletedWork = <A, E>(input: {
         ? input.options.projectSuccess(input.exit.value)
         : { outcome: workOutcome(input.exit.cause), statusClass: Option.none() };
       input.adapter.exportWork({
+        ...Option.match(input.span, {
+          onNone: () => ({}),
+          onSome: (span) => ({ traceId: span.traceId, spanId: span.spanId }),
+        }),
         release: input.options.descriptor.release,
         operation: input.options.descriptor.operation,
         ...Option.match(input.options.descriptor.provider, {
@@ -238,13 +243,15 @@ const observeWork = <A, E, R>(
   options: TelemetryWorkOptions<A>,
   work: Effect.Effect<A, E, R>
 ): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Clock.currentTimeMillis, (startedAt) =>
-    Effect.onExit(work, (exit) =>
+  Effect.gen(function* () {
+    const span = yield* CurrentTelemetrySpan;
+    const startedAt = yield* Clock.currentTimeMillis;
+    return yield* Effect.onExit(work, (exit) =>
       Effect.flatMap(Clock.currentTimeMillis, (finishedAt) =>
-        exportCompletedWork({ adapter, options, exit, startedAt, finishedAt })
+        exportCompletedWork({ adapter, options, exit, startedAt, finishedAt, span })
       )
-    )
-  );
+    );
+  });
 
 const observeWith = <A, E, R>(input: {
   readonly adapter: TelemetryAdapter;
@@ -309,7 +316,9 @@ export const decodeTraceParent = ({
   const match = /^00-([0-9a-f]{32})-([0-9a-f]{16})-(00|01)$/u.exec(
     Option.getOrElse(value, () => "")
   );
-  if (match === null) return Option.none();
+  if (match === null || /^0+$/u.test(match[1] ?? "") || /^0+$/u.test(match[2] ?? "")) {
+    return Option.none();
+  }
   return Schema.decodeUnknownOption(DurableTraceContext)({
     version: 1,
     traceId: match[1],

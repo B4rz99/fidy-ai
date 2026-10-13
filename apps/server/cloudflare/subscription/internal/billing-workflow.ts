@@ -1,3 +1,11 @@
+import {
+  captureWorkTrace,
+  cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  sanitizeWorkTrace,
+  workTraceParent,
+  workerRelease,
+} from "../../runtime/telemetry/operations";
 import { cancelSource, receiveCancellation } from "./source-cancellation";
 import { receivePriceNotice, sendPriceNotice } from "./price-notice";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -35,10 +43,14 @@ import {
 } from "../contract";
 
 const CollectionMessage = Schema.Struct({
+  // Diagnostic continuation is decoded independently and never grants work authority.
+  traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   attemptId: BillingAttemptId,
 });
 const LookupWork = Schema.Struct({
+  // Diagnostic continuation is decoded independently and never grants work authority.
+  traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   kind: Schema.Literal("lookup"),
   transactionId: WompiTransactionId,
@@ -150,6 +162,7 @@ const publishBillingEntry = (
   }>
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const { environment, entry, now } = input;
     const claimed = yield* Effect.exit(
       attempt(() =>
@@ -165,6 +178,7 @@ const publishBillingEntry = (
     const offered = yield* Effect.exit(
       attempt(() =>
         environment.BILLING_COLLECTION_QUEUE.send({
+          ...trace,
           version: entry.version,
           attemptId: entry.attempt_id,
         })
@@ -264,11 +278,12 @@ export const receiveBillingCollection = (
         message.ack();
         continue;
       }
+      const params = yield* sanitizeWorkTrace(collection);
       const started = yield* Effect.exit(
         attempt(() =>
           input.environment.BILLING_COLLECTION_WORKFLOW.create({
             id: collection.attemptId,
-            params: collection,
+            params,
             retention: workflowRetention,
           })
         )
@@ -587,29 +602,37 @@ export const runBillingCollectionWorkflow = (
   )(input.payload);
   if (Option.isNone(work)) return Promise.resolve();
   const options = { retries: { limit: 0, delay: "1 second" } } as const;
+  const runActivity = <E>(activity: Effect.Effect<void, E>): Promise<void> =>
+    activity.pipe(
+      observeWorkerExecution({
+        environment: workerRelease(input.environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.billingCollection",
+        parent: workTraceParent(input.payload),
+      }),
+      Effect.runPromise
+    );
   if ("kind" in work.value && work.value.kind === "price-notice") {
     const notice = work.value;
     return input.activity("send-billing-price-notice-v1", options, () =>
-      Effect.runPromise(sendPriceNotice({ environment: input.environment, work: notice }))
+      runActivity(sendPriceNotice({ environment: input.environment, work: notice }))
     );
   }
   if ("kind" in work.value && work.value.kind === "source-cancellation") {
     const cancellation = work.value;
     return input.activity("cancel-wompi-source-v1", options, () =>
-      Effect.runPromise(
-        cancelSource({ environment: input.environment, work: cancellation, wompiHttp })
-      )
+      runActivity(cancelSource({ environment: input.environment, work: cancellation, wompiHttp }))
     );
   }
   if ("kind" in work.value) {
     const transactionId = work.value.transactionId;
     return input.activity("lookup-wompi-billing-v1", options, () =>
-      Effect.runPromise(reconcileEventCandidate(input.environment, transactionId, wompiHttp))
+      runActivity(reconcileEventCandidate(input.environment, transactionId, wompiHttp))
     );
   }
   const attemptId = work.value.attemptId;
   return input.activity("collect-wompi-billing-v1", options, () =>
-    Effect.runPromise(collect(input.environment, attemptId, wompiHttp))
+    runActivity(collect(input.environment, attemptId, wompiHttp))
   );
 };
 

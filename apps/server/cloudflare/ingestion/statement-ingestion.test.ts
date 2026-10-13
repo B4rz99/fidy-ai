@@ -5,6 +5,8 @@ import {
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { StatementWork } from "./contract";
+import { DurableTraceContext } from "../../src/shell/observability/contract";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it } from "vitest";
@@ -1307,7 +1309,19 @@ it(
         });
         expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
         const created: Array<unknown> = [];
-        const work = offered[0];
+        const work = yield* Schema.decodeUnknownEffect(StatementWork)(offered[0]);
+        const traceContext = {
+          version: 1,
+          traceId: "1".repeat(32),
+          parentSpanId: "2".repeat(16),
+          sampled: true,
+          capturedAtUnixMilliseconds: yield* Clock.currentTimeMillis,
+        };
+        const malformedWork = {
+          ...work,
+          traceContext: { ...traceContext, credential: "statement-private-canary" },
+        };
+        const tracedWork = { ...work, traceContext };
         yield* receiveStatementExtraction({
           environment: {
             DB: runtime.db,
@@ -1321,7 +1335,8 @@ it(
           },
           messages: [
             { body: work, ack: (): void => undefined },
-            { body: work, ack: (): void => undefined },
+            { body: malformedWork, ack: (): void => undefined },
+            { body: tracedWork, ack: (): void => undefined },
           ],
         });
         expect(created).toEqual([
@@ -1333,6 +1348,11 @@ it(
           {
             id: submission.id,
             params: work,
+            retention: { successRetention: "3 days", errorRetention: "3 days" },
+          },
+          {
+            id: submission.id,
+            params: tracedWork,
             retention: { successRetention: "3 days", errorRetention: "3 days" },
           },
         ]);
@@ -1401,7 +1421,22 @@ it.each([false, true])(
           )
         );
         expect(result._tag).toBe(failReviewExpiry ? "Failure" : "Success");
-        expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
+        expect(offered).toHaveLength(1);
+        const envelope = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            version: Schema.Literal(1),
+            userId: UserId,
+            submissionId: StatementSubmissionId,
+            traceContext: DurableTraceContext,
+          }),
+          { onExcessProperty: "error" }
+        )(offered[0]);
+        expect(envelope).toMatchObject({ version: 1, userId: userA, submissionId: submission.id });
+        expect(envelope.traceContext.sampled).toBe(true);
+        expect(envelope.traceContext.capturedAtUnixMilliseconds).toBeGreaterThan(0);
+        expect(envelope.traceContext.capturedAtUnixMilliseconds).toBeLessThanOrEqual(
+          yield* Clock.currentTimeMillis
+        );
       })
     ),
   30_000
@@ -1500,6 +1535,58 @@ it(
     ),
   30_000
 );
+
+it("omits untrusted trace fields before delegating statement Work to the User coordinator", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests: Array<Readonly<{ name: string; body: unknown }>> = [];
+      const coordinator = {
+        getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+          fetch: (request: Request): Promise<Response> =>
+            request.json().then((body) => {
+              requests.push({ name, body });
+              return new Response(null, { status: 200 });
+            }),
+        }),
+      };
+      const names: Array<string> = [];
+      const now = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        executeStatementExtraction({
+          coordinator,
+          payload: {
+            version: 1,
+            userId: userA,
+            submissionId: "50000000-0000-4000-8000-000000000001",
+            traceContext: {
+              version: 1,
+              traceId: "1".repeat(32),
+              parentSpanId: "2".repeat(16),
+              sampled: true,
+              capturedAtUnixMilliseconds: now,
+              rawBody: "coordinator-private-canary",
+            },
+          },
+          activity: (name, _options, run) => {
+            names.push(name);
+            return run();
+          },
+        })
+      );
+      expect(names).toEqual(["finalize-statement-chunk-v1-0"]);
+      expect(requests).toEqual([
+        {
+          name: userA,
+          body: {
+            _tag: "StatementWork",
+            version: 1,
+            userId: userA,
+            submissionId: "50000000-0000-4000-8000-000000000001",
+          },
+        },
+      ]);
+    })
+  ));
 
 const clarifyStatement = (
   runtime: Runtime,

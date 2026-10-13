@@ -1,3 +1,5 @@
+import { decodeTraceParent } from "../../src/shell/observability/operations";
+import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import { executeConnectionBrowserAdmission } from "../connections/operations";
 import {
   executeRefundSupportAdmission,
@@ -39,7 +41,7 @@ import { coordinatorProbeName } from "../runtime/operational-health/contract";
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
-  observeWorkerResponse,
+  observeWorkerRequest,
   workerRelease,
 } from "../runtime/telemetry/operations";
 
@@ -435,11 +437,31 @@ const reservedCoordinatorProbe = ({
   );
 };
 
+/** Restore private correlation inside the Effect fiber that owns the coordinator work. */
+const observeCoordinatorRequest = <E, R>(
+  work: Effect.Effect<Response, E, R>,
+  request: Request,
+  environment: CoordinatorEnvironment
+): Effect.Effect<Response, E, R> =>
+  Effect.flatMap(Clock.currentTimeMillis, (receivedAtUnixMilliseconds) =>
+    observeWorkerRequest(work, {
+      environment: workerRelease(environment),
+      telemetry: cloudflareWorkerTelemetry,
+      operation: "worker.core.coordinator",
+      parent: Option.getOrUndefined(
+        decodeTraceParent({
+          value: Option.fromNullOr(request.headers.get(workerInternalTraceHeader)),
+          receivedAtUnixMilliseconds,
+        })
+      ),
+    })
+  );
+
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 const executeMcpProtocolAdmission = (
   mcp: McpResidency,
   request: Request,
-  userId: string
+  { userId, environment }: Readonly<{ userId: string; environment: CoordinatorEnvironment }>
 ): Promise<Response> =>
   Effect.runPromise(
     Effect.scoped(
@@ -452,7 +474,7 @@ const executeMcpProtocolAdmission = (
         }
         return yield* mcp.handle({ admission: admission.value, signal: request.signal });
       })
-    )
+    ).pipe((work) => observeCoordinatorRequest(work, request, environment))
   );
 const executeResidentOAuthActivity = (
   input: OAuthActivityInput,
@@ -544,11 +566,7 @@ export class UserTransactionCoordinator {
     if (path === "/oauth-mcp") {
       const mcp = this.mcp;
       // Protocol/control never waits behind its target; only canonical callbacks take a ticket.
-      return observeWorkerResponse(() => executeMcpProtocolAdmission(mcp, request, userId), {
-        environment: workerRelease(environment),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "worker.core.coordinator",
-      });
+      return executeMcpProtocolAdmission(mcp, request, { userId, environment });
     }
     const hosted = makeAgentService({
       environment,
@@ -557,21 +575,10 @@ export class UserTransactionCoordinator {
     }).accept({ request, preceding: this.pending });
     if (Option.isSome(hosted)) {
       this.pending = hosted.value.settled;
-      return observeWorkerResponse(() => hosted.value.response, {
-        environment: workerRelease(environment),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "worker.core.coordinator",
-      });
+      return hosted.value.response;
     }
     const prior = this.pending;
-    const response = observeWorkerResponse(
-      () => prior.then(() => this.runCoordinatedRequest({ request, userId })),
-      {
-        environment: workerRelease(environment),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "worker.core.coordinator",
-      }
-    );
+    const response = prior.then(() => this.runCoordinatedRequest({ request, userId }));
     this.pending = response.then(
       () => undefined,
       () => undefined
@@ -623,7 +630,7 @@ export class UserTransactionCoordinator {
           }
           return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
         })
-      )
+      ).pipe((work) => observeCoordinatorRequest(work, request, environment))
     );
   }
 

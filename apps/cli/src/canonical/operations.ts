@@ -1,6 +1,7 @@
 import {
   type CanonicalAllowance,
   type PATScope,
+  type TelemetryTraceId,
   atomicBatchChildOperations,
   atomicBatchOperation,
   decideOperationAccess,
@@ -111,17 +112,17 @@ const decodeInput = Effect.fn(function* (
 });
 
 /** Invokes one eligible operation without retries, returning only canonical encoded data and safe metadata. */
-export const invokeOperation = Effect.fn(function* (
-  options: Readonly<{
-    id: string;
-    input: unknown;
-    credential: Credential;
-    httpClient: CanonicalDependencies["httpClient"];
-    clientFactory: CanonicalDependencies["clientFactory"];
-    stderr: CanonicalDependencies["stderr"];
-    json: boolean;
-  }>
-) {
+type InvocationOptions = Readonly<{
+  id: string;
+  input: unknown;
+  credential: Credential;
+  httpClient: CanonicalDependencies["httpClient"];
+  clientFactory: CanonicalDependencies["clientFactory"];
+  stderr: CanonicalDependencies["stderr"];
+  json: boolean;
+}>;
+
+export const invokeOperation = Effect.fn(function* (options: InvocationOptions) {
   const { id, input, credential } = options;
   const operation = operationCatalog.byId.get(id);
   if (operation === undefined || !eligibleOperation(id, credential.grant.pat.scopes)) {
@@ -130,6 +131,7 @@ export const invokeOperation = Effect.fn(function* (
   const decoded = yield* decodeInput(operation, input, credential.grant.pat.scopes);
   let retryAfterSeconds = Option.none<number>();
   let allowance = Option.none<CanonicalAllowance>();
+  let traceId = Option.none<typeof TelemetryTraceId.Type>();
   const client = yield* options.clientFactory({
     httpClient: options.httpClient,
     credential,
@@ -138,6 +140,9 @@ export const invokeOperation = Effect.fn(function* (
     },
     captureAllowance: (standing) => {
       allowance = standing;
+    },
+    captureTrace: (receipt) => {
+      traceId = receipt;
     },
   });
   const separator = id.indexOf(".");
@@ -159,10 +164,12 @@ export const invokeOperation = Effect.fn(function* (
   const envelope = yield* Schema.encodeUnknownEffect(
     failed ? operation.failure : operation.success
   )(failed ? result.failure : result.success).pipe(
-    Effect.mapError(() => new CliFailure({ reason: uncertainReason }))
+    Effect.mapError(() => new CliFailure({ reason: uncertainReason })),
+    Effect.tapError(() => showTrace(traceId, options.stderr))
   );
-  const output: OperationResult = { envelope, failed, retryAfterSeconds, allowance };
+  const output: OperationResult = { envelope, failed, retryAfterSeconds, allowance, traceId };
   if (unindexedBatchUnavailable(id, output)) {
+    yield* showTrace(traceId, options.stderr);
     return yield* new CliFailure({ reason: "MutationAmbiguous" });
   }
   return output;
@@ -248,10 +255,25 @@ const allowanceFailureGuidance: Readonly<Record<typeof allowanceFailureCode.Type
     "Es una protección de solicitudes o seguridad, no agotamiento del cupo comercial. Respeta Retry-After cuando esté disponible.\n",
   paywall_required: "Esta capacidad requiere Pro; revisa las siguientes operaciones permitidas.\n",
 };
+const showTrace = (
+  traceId: OperationResult["traceId"],
+  stderr: CanonicalDependencies["stderr"]
+): Effect.Effect<void> =>
+  Option.match(traceId, {
+    onNone: () => Effect.void,
+    onSome: (receipt) => stderr(`Referencia de diagnóstico: ${receipt}\n`),
+  });
+const showFailureTrace = (
+  result: OperationResult,
+  dependencies: CanonicalDependencies
+): Effect.Effect<void> =>
+  result.failed ? showTrace(result.traceId, dependencies.stderr) : Effect.void;
+
 const showFailureGuidance = Effect.fn(function* (
   result: OperationResult,
   dependencies: CanonicalDependencies
 ) {
+  yield* showFailureTrace(result, dependencies);
   if (Option.isSome(result.retryAfterSeconds)) {
     yield* dependencies.stderr(
       `El servidor indica esperar ${result.retryAfterSeconds.value} segundos; no se reintenta automáticamente.\n`

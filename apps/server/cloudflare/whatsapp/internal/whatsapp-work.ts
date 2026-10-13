@@ -1,3 +1,8 @@
+import {
+  captureWorkTrace,
+  sanitizeWorkTrace,
+  workTraceHeaders,
+} from "../../runtime/telemetry/operations";
 import { TranscriptTurnId } from "../../../src/core/agent/contract";
 import { UserId } from "../../../src/core/identity/contract";
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
@@ -21,6 +26,7 @@ export const dispatchWhatsAppWork = ({
   userId: Option.Option<UserId>;
 }>): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError | void> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const selectedUser = Option.getOrNull(userId);
     const raw = yield* Effect.tryPromise(() =>
@@ -55,6 +61,7 @@ export const dispatchWhatsAppWork = ({
       const offered = yield* Effect.exit(
         Effect.tryPromise(() =>
           queue.send({
+            ...trace,
             _tag: "HostedWhatsAppWork",
             userId: entry.user_id,
             turnId: entry.turn_id,
@@ -81,13 +88,16 @@ const receiveOwnedWork = (
   coordinator: Coordinator
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    const payload = yield* sanitizeWorkTrace(work);
+    const traceHeaders = yield* workTraceHeaders(payload);
     const owner = coordinator.getByName(work.userId);
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppWork))(work);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppWork))(payload);
     const response = yield* Effect.exit(
       Effect.tryPromise(() =>
         owner.fetch(
           new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
             method: "POST",
+            headers: traceHeaders,
             body,
           })
         )

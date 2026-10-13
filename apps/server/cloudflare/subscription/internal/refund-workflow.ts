@@ -1,3 +1,11 @@
+import {
+  captureWorkTrace,
+  cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  sanitizeWorkTrace,
+  workTraceParent,
+  workerRelease,
+} from "../../runtime/telemetry/operations";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { RefundAttemptId } from "../../../src/core/subscription/contract";
 import {
@@ -17,11 +25,13 @@ import {
 const maximumVerificationAttempts = 8;
 const RefundWork = Schema.Union([
   Schema.Struct({
+    traceContext: Schema.optionalKey(Schema.Unknown),
     version: Schema.Literal(1),
     kind: Schema.Literal("refund"),
     refundAttemptId: RefundAttemptId,
   }),
   Schema.Struct({
+    traceContext: Schema.optionalKey(Schema.Unknown),
     version: Schema.Literal(1),
     kind: Schema.Literal("refund-void-verification"),
     refundAttemptId: RefundAttemptId,
@@ -171,7 +181,15 @@ export const runRefundWorkflow = (
   input: RefundWorkflowExecution & Readonly<{ wompiHttp: WompiTransportFactory }>
 ): Promise<void> =>
   input.activity("submit-or-verify-correction-v1", noRetry, () =>
-    Effect.runPromise(execute(input, input.wompiHttp))
+    execute(input, input.wompiHttp).pipe(
+      observeWorkerExecution({
+        environment: workerRelease(input.environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.billingRefund",
+        parent: workTraceParent(input.payload),
+      }),
+      Effect.runPromise
+    )
   );
 
 /** A missed or duplicated publication is recoverable; the durable claim, not Workflow history, prevents another POST. */
@@ -179,6 +197,7 @@ export const dispatchRefunds = (
   input: RefundDispatchInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
       input.DB.prepare(`SELECT o.refund_id FROM refund_outbox o
@@ -199,6 +218,7 @@ export const dispatchRefunds = (
       );
       yield* Effect.tryPromise(() =>
         input.BILLING_COLLECTION_QUEUE.send({
+          ...trace,
           version: 1,
           kind: "refund",
           refundAttemptId: row.refund_id,
@@ -216,6 +236,7 @@ export const dispatchVoidVerification = (
   input: RefundDispatchInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
       input.DB.prepare(`SELECT r.id FROM refund_attempts r
@@ -242,6 +263,7 @@ export const dispatchVoidVerification = (
       )(advanced);
       yield* Effect.tryPromise(() =>
         input.BILLING_COLLECTION_QUEUE.send({
+          ...trace,
           version: 1,
           kind: "refund-void-verification",
           refundAttemptId: row.id,
@@ -258,10 +280,11 @@ export const receiveRefunds = (
     for (const message of input.batch.messages) {
       const work = yield* Schema.decodeUnknownEffect(RefundWork)(message.body);
       const id = `refund-v1-${work.refundAttemptId}${work.kind === "refund" ? "" : `-verify-${work.verification}`}`;
+      const params = yield* sanitizeWorkTrace(work);
       yield* Effect.tryPromise(() =>
         input.environment.BILLING_REFUND_WORKFLOW.create({
           id,
-          params: work,
+          params,
           retention: { successRetention: "3 days", errorRetention: "3 days" },
         })
       ).pipe(

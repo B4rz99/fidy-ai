@@ -19,8 +19,13 @@ import {
 } from "../../src/shell/outbound-http/operations";
 import { captureWorkflowFailure } from "../runtime/operational-health/operations";
 import {
+  captureTraceHeaders,
+  captureWorkTrace,
   cloudflareWorkerTelemetry,
+  observeWorkerExecution,
   observeWorkerPromise,
+  sanitizeWorkTrace,
+  workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
 import { executeWeeklyActivity, weeklyThresholds } from "./internal/weekly-execution";
@@ -159,11 +164,14 @@ const runActivity = (
   input: Readonly<{ coordinator: Coordinator; work: ProactivityActivity }>
 ): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ProactivityActivity))(input.work);
+    const traceHeaders = yield* captureTraceHeaders;
+    const headers = new Headers({ "content-type": "application/json", ...traceHeaders });
+    const safeWork = yield* sanitizeWorkTrace(input.work);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ProactivityActivity))(safeWork);
     const response = yield* Effect.tryPromise((signal) =>
       input.coordinator.getByName(input.work.userId).fetch("https://coordinator/proactivity-work", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers,
         body,
         signal,
       })
@@ -247,7 +255,10 @@ const publishProactivityItem = (
   }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => input.queue.send(input.item, { contentType: "json" }));
+    const trace = yield* captureWorkTrace;
+    yield* Effect.tryPromise(() =>
+      input.queue.send({ ...input.item, ...trace }, { contentType: "json" })
+    );
     yield* markOffered({ db: input.db, work: input.item, now: input.now.epochMilliseconds });
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 const publishProactivityWork = (
@@ -309,9 +320,8 @@ export const startProactivityWorkflow = (
     const workflow = input.workflow.value;
     const work = yield* Schema.decodeUnknownEffect(ProactivityDeliveryWork)(input.body);
     const id = yield* proactivityWorkflowId(work);
-    const created = yield* Effect.exit(
-      Effect.tryPromise(() => workflow.create({ id, params: work }))
-    );
+    const params = yield* sanitizeWorkTrace(work);
+    const created = yield* Effect.exit(Effect.tryPromise(() => workflow.create({ id, params })));
     if (created._tag === "Failure") {
       const instance = yield* Effect.tryPromise(() => workflow.get(id));
       const status = yield* Effect.tryPromise(() => instance.status());
@@ -358,7 +368,9 @@ const runProactivityWorkflow = ({
   coordinator,
   payload,
   step,
+  environment,
 }: Readonly<{
+  environment: unknown;
   coordinator: Coordinator;
   payload: ProactivityDeliveryWork;
   step: WorkflowStep;
@@ -385,7 +397,14 @@ const runProactivityWorkflow = ({
         );
       }
       return yield* new InsightUnavailable();
-    })
+    }).pipe(
+      observeWorkerExecution({
+        environment: workerRelease(environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "workflow.proactivityDelivery",
+        parent: workTraceParent(payload),
+      })
+    )
   );
 
 /** Native Workflow persists identities and wake-up instants only; every wake rechecks live User authority. */
@@ -402,11 +421,13 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
             coordinator: this.env.USER_TRANSACTION_COORDINATOR,
             payload: event.payload,
             step,
+            environment: this.env,
           }),
         {
           environment: workerRelease(this.env),
           telemetry: cloudflareWorkerTelemetry,
           operation: "workflow.proactivityDelivery",
+          parent: workTraceParent(event.payload),
         }
       ),
     });

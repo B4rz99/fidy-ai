@@ -1,4 +1,8 @@
 import { OutboundHttpLive } from "../../outbound-http/runtime";
+import { TelemetryRelease } from "../../../src/shell/observability/contract";
+import { observeHostedResponse } from "../../runtime/application-observation/operations";
+import { workerInternalTraceHeader } from "../../runtime/telemetry/contract";
+import { Telemetry, decodeTraceParent } from "../../../src/shell/observability/operations";
 import {
   type AgentEnvironment,
   type AgentService,
@@ -62,8 +66,9 @@ import { expireHostedPending, finishHostedTurn } from "./turn-store";
 import { makeUserCloudflareHostedInference, optionalHostedInference } from "../../ai/runtime";
 import { transactionUnavailable } from "../../canonical-work/operations";
 import {
+  captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
-  observeProviderFetch,
+  workerRelease,
 } from "../../runtime/telemetry/operations";
 import {
   WhatsAppStatusAdmission as StatusAdmission,
@@ -79,6 +84,50 @@ import {
   contextualProactiveInsightQuery,
   reconcileWhatsAppStatus,
 } from "../../whatsapp/operations";
+
+type HostedExecutionInput = Readonly<{
+  trigger: "api" | "queue" | "kapso_webhook";
+  environment: AgentEnvironment;
+}>;
+
+const observeHostedRequest = <E, R>(
+  work: Effect.Effect<Response, E, R>,
+  request: Request,
+  input: HostedExecutionInput
+): Effect.Effect<Response, E, R> =>
+  Effect.flatMap(Clock.currentTimeMillis, (receivedAtUnixMilliseconds) => {
+    const parent = decodeTraceParent({
+      value: Option.fromNullishOr(request.headers.get(workerInternalTraceHeader)),
+      receivedAtUnixMilliseconds,
+    });
+    const release = Option.getOrElse(
+      Schema.decodeOption(TelemetryRelease)(workerRelease(input.environment).RELEASE_GIT_SHA),
+      () => "unknown" as const
+    );
+    return observeHostedResponse(work, { trigger: input.trigger, parent, release });
+  });
+
+const observeHostedExecution = <E, R>(
+  work: Effect.Effect<Response, E, R>,
+  request: Request,
+  input: HostedExecutionInput
+): Effect.Effect<Response, E, R> =>
+  observeHostedRequest(work, request, input).pipe(
+    Effect.provideService(Telemetry, cloudflareWorkerTelemetry)
+  );
+
+const provideHostedKapsoFetch = <A, E, R>(
+  work: Effect.Effect<A, E, R>,
+  environment: AgentEnvironment
+): Effect.Effect<A, E, R> =>
+  Effect.flatMap(
+    captureObservedProviderFetch(globalThis.fetch, {
+      provider: "kapso",
+      environment,
+      telemetry: cloudflareWorkerTelemetry,
+    }),
+    (fetcher) => Effect.provideService(work, FetchHttpClient.Fetch, fetcher)
+  );
 
 const digestBytes = 32;
 const HTTP_ACCEPTED = 202;
@@ -503,16 +552,10 @@ const runWhatsAppWork = (
           }),
         });
       }).pipe(
-        Effect.provideService(
-          FetchHttpClient.Fetch,
-          observeProviderFetch(globalThis.fetch, {
-            provider: "kapso",
-            environment: env,
-            telemetry: cloudflareWorkerTelemetry,
-          })
-        ),
+        (effect) => provideHostedKapsoFetch(effect, env),
         Effect.withSpan("agent.whatsappTurn.resume"),
-        Effect.catchCause(() => Effect.succeed(transactionUnavailable()))
+        Effect.catchCause(() => Effect.succeed(transactionUnavailable())),
+        (effect) => observeHostedExecution(effect, request, { trigger: "queue", environment: env })
       )
     )
   );
@@ -568,16 +611,11 @@ const runWhatsAppTurn = (
       onAdmitted: deadline.onAdmitted,
     });
   }).pipe(
-    Effect.provideService(
-      FetchHttpClient.Fetch,
-      observeProviderFetch(globalThis.fetch, {
-        provider: "kapso",
-        environment: env,
-        telemetry: cloudflareWorkerTelemetry,
-      })
-    ),
+    (effect) => provideHostedKapsoFetch(effect, env),
     Effect.withSpan("agent.whatsappTurn.execution"),
     Effect.orElseSucceed(transactionUnavailable),
+    (effect) =>
+      observeHostedExecution(effect, request, { trigger: "kapso_webhook", environment: env }),
     Effect.scoped,
     Effect.runPromise
   );
@@ -590,7 +628,6 @@ const runHostedTurn = (
 ): Promise<Response> => {
   const userId = owner.userId;
   const env = owner.environment;
-  const state = { storage: { setAlarm: owner.scheduleRecovery } };
   const executeMutation = (
     input: Parameters<typeof executeHostedMutation>[1]
   ): ReturnType<typeof executeHostedMutation> => executeHostedMutation(owner, input);
@@ -632,14 +669,16 @@ const runHostedTurn = (
           inference: inference.value,
           deliver: browserHostedDelivery,
           signal: deadline.signal,
-          scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+          scheduleRecovery: (dueAtMs) => owner.scheduleRecovery(dueAtMs),
         },
         onAdmitted: deadline.onAdmitted,
       }).pipe(
         Effect.withSpan("agent.hostedTurn.execution"),
         Effect.orElseSucceed(transactionUnavailable)
       );
-    })
+    }).pipe((effect) =>
+      observeHostedExecution(effect, request, { trigger: "api", environment: env })
+    )
   );
 };
 const acceptHostedRequest = (

@@ -243,7 +243,31 @@ model fallback. Kapso voice transcripts are external channel material, not Fidy-
 Telemetry is allowlisted metadata only. Audit is a separate owner of accountability evidence and
 transaction-composable recording; peers supply subject/credential proofs, not Audit persistence
 shapes. Secrets, personal content, provider bodies, and raw failures stay out of telemetry and public
-error projections.
+error projections. The Cloudflare adapter exports closed span, outcome and failure events to
+structured logs, with bounded trace/span coordinates joining finite Work records. Canonical owner
+execution, hosted Turns and model rounds create application spans; expected refusals remain declared
+outcomes. Model failures distinguish invalid output, unavailable inference, timeout and resource
+admission without exporting prompts, replies or tool arguments. Queue workflow handoffs observe each
+native message attempt, preserving acknowledgment, retry and interruption semantics.
+
+Public ingress starts a server-generated root and discards caller-provided internal correlation.
+A validated diagnostic trace receipt may be returned to browser and CLI callers. Trusted private
+Worker/coordinator boundaries and versioned durable envelopes carry only trace coordinates and an
+age-bounded timestamp; missing, malformed or stale context starts fresh observation and never changes
+domain admission. Provider requests receive no Fidy trace headers. Private Transcript and retained
+domain state remain owner-held evidence for constructing synthetic reproductions, separate from
+metadata-only diagnostic traces.
+When investigating a failure from its trace, follow the
+[trace reproduction guide](../../docs/agents/trace-reproduction.md): locate the deployed release,
+separate observed facts from hypotheses, and reproduce the bounded boundary failure with synthetic
+fixtures instead of requesting retained personal content.
+
+Focused evidence lives in `cloudflare/runtime/application-observation/operations.test.ts`
+(closed application outcomes and nested parentage), `cloudflare/runtime/telemetry.test.ts`
+(adapter projection and trusted continuation), and Queue failure-isolation/hosted-Turn tests
+(authoritative acknowledgment, cancellation and execution semantics). CLI canonical tests check
+failed-call receipts and quiet successful output. These local checks do not establish live log
+retention, collection, or production overhead.
 
 ## 5. State and atomicity
 

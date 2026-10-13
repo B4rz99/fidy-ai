@@ -5,7 +5,9 @@ import {
   PATPairingPollingRateLimitedApi,
   PATPairingRateLimitedApi,
   PATPairingUnavailableApi,
+  TelemetryTraceId,
   canonicalAllowanceHeaders,
+  telemetryTraceHeader,
 } from "@fidy/server/client";
 import { Clock, DateTime, Effect, Option, Redacted, Schema, Stream } from "effect";
 import {
@@ -188,6 +190,11 @@ const projectAllowance = (
   });
 };
 
+const projectTrace = (
+  headers: Readonly<Record<string, string>>
+): Option.Option<typeof TelemetryTraceId.Type> =>
+  Schema.decodeUnknownOption(TelemetryTraceId)(headers[telemetryTraceHeader.toLowerCase()]);
+
 /** Fixed-origin policy for derived clients. No automatic telemetry, redirects or unbounded bytes escape. */
 export const makeProtectedClient = (
   options: Readonly<{
@@ -197,6 +204,7 @@ export const makeProtectedClient = (
     maximumRequestBytes: number;
     captureRetry: (seconds: number) => void;
     captureAllowance: (allowance: Option.Option<CanonicalAllowance>) => void;
+    captureTrace: (traceId: Option.Option<typeof TelemetryTraceId.Type>) => void;
   }>
 ): HttpClient.HttpClient.With<CliFailure | HttpClientError.HttpClientError> =>
   HttpClient.transform(options.client, (execute, request) => {
@@ -220,6 +228,7 @@ export const makeProtectedClient = (
       Clock.currentTimeMillis.pipe(
         Effect.map((now) => {
           options.captureAllowance(projectAllowance(response.headers));
+          options.captureTrace(projectTrace(response.headers));
           const retry = retryDelay(response.headers["retry-after"], now);
           if (Option.isSome(retry)) options.captureRetry(retry.value);
           return undefined;
@@ -258,6 +267,7 @@ export const protectClient = (
     maximumRequestBytes,
     captureRetry: () => {},
     captureAllowance: () => {},
+    captureTrace: () => {},
   });
 
 const safeStartFailure = (failure: unknown): CliFailure => {

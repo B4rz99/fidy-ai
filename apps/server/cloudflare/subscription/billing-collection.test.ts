@@ -933,6 +933,36 @@ it("publishes the armed intent once per cooldown and deduplicates Queue redelive
     })
   ));
 
+it("drops diagnostic garbage before durable Billing handoff without refusing valid work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
+      const get = vi.fn((_id: string) => Promise.resolve({}));
+      const ack = vi.fn();
+      const traceContext = {
+        version: 1,
+        traceId: "1".repeat(32),
+        parentSpanId: "2".repeat(16),
+        sampled: true,
+        capturedAtUnixMilliseconds: yield* Clock.currentTimeMillis,
+        credential: "private-credential-sentinel",
+        financialContent: "private-financial-sentinel",
+      };
+      yield* receiveBillingCollection({
+        environment: { DB: db, BILLING_COLLECTION_WORKFLOW: { create, get } },
+        batch: { messages: [{ body: { version: 1, attemptId, traceContext }, ack }] },
+      });
+      expect(create).toHaveBeenCalledExactlyOnceWith({
+        id: attemptId,
+        params: { version: 1, attemptId },
+        retention: { successRetention: "3 days", errorRetention: "3 days" },
+      });
+      expect(ack).toHaveBeenCalledOnce();
+      expect(get).not.toHaveBeenCalled();
+    })
+  ));
+
 it("coordinates two out-of-order BillingAttempts by stable User in the Subscription D1 unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1011,3 +1041,57 @@ it("refuses a mismatched source even with a valid provider id and reference", ()
       ).toHaveLength(0);
     })
   ));
+
+it.each(["price-notice", "source-cancellation"] as const)(
+  "drops diagnostic garbage before durable %s handoff and acknowledges valid intent",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const retained = yield* Effect.tryPromise(() => fixture());
+        const db: D1Database = {
+          prepare: () =>
+            retained.prepare(
+              kind === "price-notice"
+                ? "SELECT 1 AS last_offered_at_ms WHERE ? IS NOT NULL AND ? IS NOT NULL"
+                : "SELECT 1 AS last_offered_at_ms WHERE ? IS NOT NULL"
+            ),
+          batch: (statements) => retained.batch(statements),
+          exec: (query) => retained.exec(query),
+          dump: () => retained.dump(),
+          withSession: (bookmark) => retained.withSession(bookmark),
+        };
+        const domain = {
+          version: 1,
+          kind,
+          userId,
+          ...(kind === "price-notice" ? { priceId } : {}),
+        };
+        const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
+        const get = vi.fn((_id: string) => Promise.resolve({}));
+        const ack = vi.fn();
+        const traceContext = {
+          version: 1,
+          traceId: "1".repeat(32),
+          parentSpanId: "2".repeat(16),
+          sampled: true,
+          capturedAtUnixMilliseconds: yield* Clock.currentTimeMillis,
+          credential: "private-credential-sentinel",
+          financialContent: "private-financial-sentinel",
+        };
+        yield* receiveBillingCollection({
+          environment: { DB: db, BILLING_COLLECTION_WORKFLOW: { create, get } },
+          batch: { messages: [{ body: { ...domain, traceContext }, ack }] },
+        });
+        expect(create).toHaveBeenCalledExactlyOnceWith({
+          id:
+            kind === "price-notice"
+              ? `price-v1-${priceId}-${userId}-1`
+              : `source-cancel-v1-${userId}-1`,
+          params: domain,
+          retention: { successRetention: "3 days", errorRetention: "3 days" },
+        });
+        expect(ack).toHaveBeenCalledOnce();
+        expect(get).not.toHaveBeenCalled();
+      })
+    )
+);

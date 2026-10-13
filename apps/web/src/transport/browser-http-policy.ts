@@ -1,5 +1,18 @@
-import { ResourceLimited } from "@fidy/server/client";
-import { type Duration, Effect, Function, Layer, Option, Schema, Stream } from "effect";
+import { ResourceLimited, TelemetryTraceId, telemetryTraceHeader } from "@fidy/server/client";
+import {
+  Cause,
+  Clock,
+  Console,
+  type Duration,
+  Effect,
+  Exit,
+  Function,
+  Layer,
+  Option,
+  Schema,
+  type Scope,
+  Stream,
+} from "effect";
 import {
   FetchHttpClient,
   Headers,
@@ -61,6 +74,7 @@ const browserHttpPolicies: Readonly<Record<BrowserHttpBoundary, BrowserHttpPolic
 };
 
 const diagnosticsUrl = "https://browser-api.invalid";
+const traceResponseHeader = telemetryTraceHeader.toLowerCase();
 const disableAutomaticHttpSpan = (): boolean => true;
 const safeResponseHeaders = ["content-type"] as const;
 const resourceLimitedStatus = 429;
@@ -94,6 +108,8 @@ const projectResponseHeaders = (
     if (Option.isSome(value)) values.push([name, value.value]);
   }
   if (Option.isSome(retry)) values.push(["retry-after", String(retry.value)]);
+  const trace = Schema.decodeUnknownOption(TelemetryTraceId)(response.headers[traceResponseHeader]);
+  if (Option.isSome(trace)) values.push([telemetryTraceHeader, trace.value]);
   return Headers.fromInput(values);
 };
 
@@ -291,48 +307,184 @@ const retryResourceRefusals = (
     return yield* attempt;
   });
 
+const maximumDiagnosticMilliseconds = 86_400_000;
+const maximumDiagnosticAttempts = 14;
+type TransportObservation = {
+  attempts: number;
+  traceId: Option.Option<typeof TelemetryTraceId.Type>;
+  statusClass: Option.Option<"2xx" | "3xx" | "4xx" | "5xx">;
+  deadlineExceeded: boolean;
+};
+
+type TransportExit = Exit.Exit<
+  HttpClientResponse.HttpClientResponse,
+  HttpClientError.HttpClientError
+>;
+const firstFailureStatus = 400;
+const firstServerFailureStatus = 500;
+const firstSuccessStatus = 200;
+
+const transportOutcome = (
+  exit: TransportExit
+): "succeeded" | "rejected" | "failed" | "interrupted" => {
+  if (Exit.isFailure(exit)) return Cause.hasInterrupts(exit.cause) ? "interrupted" : "failed";
+  if (exit.value.status >= firstServerFailureStatus) return "failed";
+  return exit.value.status >= firstFailureStatus ? "rejected" : "succeeded";
+};
+
+const responseStatusClass = (status: number): TransportObservation["statusClass"] => {
+  if (status >= firstServerFailureStatus) return Option.some("5xx");
+  if (status >= firstFailureStatus) return Option.some("4xx");
+  if (status >= redirectStatusMinimum) return Option.some("3xx");
+  return status >= firstSuccessStatus ? Option.some("2xx") : Option.none();
+};
+
+const observeResponse = (
+  observation: TransportObservation,
+  response: HttpClientResponse.HttpClientResponse
+): void => {
+  observation.traceId = Schema.decodeUnknownOption(TelemetryTraceId)(
+    response.headers[traceResponseHeader]
+  );
+  observation.statusClass = responseStatusClass(response.status);
+};
+
+const diagnosticError = (
+  observation: TransportObservation,
+  exit: TransportExit
+): Readonly<{ error: string }> | Readonly<Record<never, never>> => {
+  if (observation.deadlineExceeded) return { error: "timeout" };
+  if (Exit.isSuccess(exit) || Cause.hasInterrupts(exit.cause)) return {};
+  const failure = Cause.findErrorOption(exit.cause);
+  return Option.isSome(failure)
+    ? { error: failure.value.reason._tag }
+    : { error: "unexpected_defect" };
+};
+
+const exportTransportDiagnostic = ({
+  boundary,
+  observation,
+  durationMilliseconds,
+  exit,
+}: Readonly<{
+  boundary: BrowserHttpBoundary;
+  observation: TransportObservation;
+  durationMilliseconds: number;
+  exit: TransportExit;
+}>): void => {
+  const record = {
+    component: "browser",
+    operation: "browser.transport",
+    boundary,
+    outcome: transportOutcome(exit),
+    attempts: Math.min(maximumDiagnosticAttempts, observation.attempts),
+    durationMilliseconds: Math.min(
+      maximumDiagnosticMilliseconds,
+      Math.max(0, Math.floor(durationMilliseconds))
+    ),
+    ...(Option.isSome(observation.traceId) ? { traceId: observation.traceId.value } : {}),
+    ...(Option.isSome(observation.statusClass)
+      ? { statusClass: observation.statusClass.value }
+      : {}),
+    ...diagnosticError(observation, exit),
+  };
+  try {
+    Effect.runSync(Console.info("fidy.browser.transport", record));
+  } catch {
+    // Diagnostics are best effort and never change transport completion or cancellation.
+  }
+};
+
+type PolicyExecution = Readonly<{
+  client: HttpClient.HttpClient.With<HttpClientError.HttpClientError, Scope.Scope>;
+  apiOrigin: string;
+  boundary: BrowserHttpBoundary;
+  observation: TransportObservation;
+}>;
+
+const executePolicyRequest = (
+  request: HttpClientRequest.HttpClientRequest,
+  execution: PolicyExecution
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> => {
+  let destination: URL;
+  try {
+    destination = new URL(request.url);
+  } catch {
+    return Effect.fail(requestFailure(request, "request destination invalid"));
+  }
+  if (destination.origin !== execution.apiOrigin) {
+    return Effect.fail(requestFailure(request, "request destination origin refused"));
+  }
+  const policy = browserHttpPolicies[execution.boundary];
+  const attempt = Effect.suspend(() => {
+    execution.observation.attempts++;
+    return execution.client.postprocess(Effect.succeed(request));
+  }).pipe(
+    Effect.tap((response) => Effect.sync(() => observeResponse(execution.observation, response))),
+    Effect.mapError(sanitizeHttpClientError),
+    Effect.flatMap((response) =>
+      materializeResponse(request, response, policy.maximumResponseBytes)
+    ),
+    Effect.scoped
+  );
+  const boundedRetries = isSafeRetryRequest(request)
+    ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
+    : attempt;
+  const admittedResponse =
+    execution.boundary === "canonical" ? retryResourceRefusals(boundedRetries) : boundedRetries;
+  return admittedResponse.pipe(
+    Effect.timeoutOrElse({
+      duration: policy.deadline,
+      orElse: () => {
+        execution.observation.deadlineExceeded = true;
+        return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
+      },
+    }),
+    Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
+    Effect.provideService(HttpClient.TracerPropagationEnabled, false)
+  );
+};
+
+const finishDiagnostic =
+  (
+    options: Readonly<{
+      startedAt: number;
+      boundary: BrowserHttpBoundary;
+      observation: TransportObservation;
+    }>
+  ): ((exit: TransportExit) => Effect.Effect<void>) =>
+  (exit) =>
+    Clock.currentTimeMillis.pipe(
+      Effect.map((finishedAt) =>
+        exportTransportDiagnostic({
+          boundary: options.boundary,
+          observation: options.observation,
+          durationMilliseconds: finishedAt - options.startedAt,
+          exit,
+        })
+      )
+    );
+
 const makePolicyClient = (
   client: HttpClient.HttpClient,
   apiOrigin: string,
   boundary: BrowserHttpBoundary
 ): HttpClient.HttpClient => {
-  const policy = browserHttpPolicies[boundary];
   const scopedClient = HttpClient.withScope(client);
   return HttpClient.makeWith(
     (requestEffect) =>
-      Effect.flatMap(requestEffect, (request) => {
-        let destination: URL;
-        try {
-          destination = new URL(request.url);
-        } catch {
-          return Effect.fail(requestFailure(request, "request destination invalid"));
-        }
-        if (destination.origin !== apiOrigin) {
-          return Effect.fail(requestFailure(request, "request destination origin refused"));
-        }
-
-        const attempt = scopedClient.postprocess(Effect.succeed(request)).pipe(
-          Effect.mapError(sanitizeHttpClientError),
-          Effect.flatMap((response) =>
-            materializeResponse(request, response, policy.maximumResponseBytes)
-          ),
-          Effect.scoped
-        );
-        const boundedRetries = isSafeRetryRequest(request)
-          ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
-          : attempt;
-        const admittedResponse =
-          boundary === "canonical" ? retryResourceRefusals(boundedRetries) : boundedRetries;
-        return admittedResponse.pipe(
-          Effect.timeoutOrElse({
-            duration: policy.deadline,
-            orElse: () => Effect.fail(requestFailure(request, "browser request deadline exceeded")),
-          }),
-          // The browser has no telemetry exporter; AsyncResult owns safe defect presentation. Suppress
-          // Effect's URL/header span instead of creating a second, credential-bearing diagnostic path.
-          Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
-          Effect.provideService(HttpClient.TracerPropagationEnabled, false)
-        );
+      Effect.gen(function* () {
+        const startedAt = yield* Clock.currentTimeMillis;
+        const observation: TransportObservation = {
+          attempts: 0,
+          traceId: Option.none(),
+          statusClass: Option.none(),
+          deadlineExceeded: false,
+        };
+        const execution = { client: scopedClient, apiOrigin, boundary, observation };
+        return yield* Effect.flatMap(requestEffect, (request) =>
+          executePolicyRequest(request, execution)
+        ).pipe(Effect.onExit(finishDiagnostic({ startedAt, boundary, observation })));
       }),
     client.preprocess
   );

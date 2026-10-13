@@ -28,6 +28,8 @@ export type EmailWorkflowInput = Readonly<{
 }>;
 /** The Queue stores bounded intent identities; its publication never establishes subject authority. */
 export const EmailProofWork = Schema.Struct({
+  // Diagnostic continuation is decoded independently and never grants work authority.
+  traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   id: Schema.String.check(Schema.isUUID()),
 });

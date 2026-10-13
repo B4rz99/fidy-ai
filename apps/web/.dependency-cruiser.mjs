@@ -45,7 +45,7 @@ export default {
       from: { path: "^src/main\\.tsx$" },
       to: {
         path: "^src/",
-        pathNot: ["^src/app/application\\.tsx$", "^src/index\\.css$"],
+        pathNot: ["^src/app/mount\\.tsx$", "^src/index\\.css$"],
       },
     },
     {

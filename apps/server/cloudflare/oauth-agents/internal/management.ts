@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { OAuthRevocationAdmission } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
@@ -142,12 +143,13 @@ const requestRevocation = (
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthRevocationAdmission))(
       admission
     );
+    const traceHeaders = yield* captureTraceHeaders;
     return yield* Effect.tryPromise({
       try: (signal) =>
         input.coordinator.getByName(admission.userId).fetch(
           new Request("https://coordinator.internal/oauth-revoke", {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: { "content-type": "application/json", ...traceHeaders },
             body,
             signal,
           })

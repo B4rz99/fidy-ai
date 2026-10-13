@@ -1,5 +1,5 @@
 import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
-import type { APIRequestContext, Page, Route } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { Cause } from "effect";
 import { playwright } from "./playwright-runtime";

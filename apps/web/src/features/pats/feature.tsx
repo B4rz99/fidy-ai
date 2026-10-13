@@ -1,16 +1,15 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
-import { type JSX, type ReactNode, type RefCallback, useCallback, useRef, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { type FidyClient, ManualPATReauthenticationRequired } from "@/transport/client";
+import { type FidyClient } from "@/transport/client";
 import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
-import { Button } from "@/ui/components/button";
-import { type PATDraft, resumePATDraft } from "./reauthentication-draft";
-import { type IssueManualPATCommand, ManualPATView } from "./view";
+import { ManualPATCreation } from "./creation";
+import { activePATReactivityKey } from "./presentation";
 import {
   type ActivePATManagementState,
   ActivePATManagementView,
@@ -18,13 +17,12 @@ import {
   type RevokeAllActivePATsCommand,
 } from "./management-view";
 
-const activePATReactivityKey = ["pats", "active"] as const;
-
 type PATManagementContentProps = Readonly<{
   children: (content: Readonly<{ tokens: ReactNode; creation: ReactNode }>) => ReactNode;
   activePATState: ActivePATManagementState;
   authentication: BrowserAuthentication;
-  issue: (command: IssueManualPATCommand) => void;
+  apiClient: FidyClient;
+  resuming: boolean;
   revoke: (command: RevokeActivePATCommand) => void;
   revokeAll: (command: RevokeAllActivePATsCommand) => void;
 }>;
@@ -33,7 +31,8 @@ const PATManagementContent = ({
   children,
   activePATState,
   authentication,
-  issue,
+  apiClient,
+  resuming,
   revoke,
   revokeAll,
 }: PATManagementContentProps): JSX.Element => (
@@ -51,7 +50,9 @@ const PATManagementContent = ({
             revokeOne={revoke}
           />
         ),
-        creation: <PATCreation initialDraft={Option.none()} clipboard={clipboard} issue={issue} />,
+        creation: (
+          <ManualPATCreation apiClient={apiClient} clipboard={clipboard} resuming={resuming} />
+        ),
       })
     }
   </SensitiveClipboardBoundary>
@@ -85,32 +86,6 @@ const makeRevokeAllActivePATsCommand = (
         ]);
         yield* Effect.sync(() => command.onRevoked(response.data.revokedCount));
       }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
-    { concurrent: false }
-  );
-
-const makeIssueCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<IssueManualPATCommand, void, never> =>
-  apiClient.runtime.fn<IssueManualPATCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        const response = yield* Reactivity.mutation(
-          client.pats.createManualPAT({
-            payload: { requestId: command.requestId, grant: command.grant },
-          }),
-          [activePATReactivityKey]
-        );
-        yield* Effect.sync(() => command.onIssued(response.data));
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.sync(() =>
-            Schema.is(ManualPATReauthenticationRequired)(error)
-              ? command.onReauthenticationRequired(error.error.userId)
-              : command.onFailed()
-          )
-        )
-      ),
     { concurrent: false }
   );
 
@@ -156,15 +131,15 @@ export const PATManagementFeature = ({
   const [revokeAllAtom] = useState(() =>
     makeRevokeAllActivePATsCommand(router.options.context.apiClient)
   );
-  const [issueAtom] = useState(() => makeIssueCommand(router.options.context.apiClient));
   const revoke = useAtomSet(revokeAtom);
   const revokeAll = useAtomSet(revokeAllAtom);
-  const issue = useAtomSet(issueAtom);
+  const resuming = useRouterState({ select: (state) => state.location.search.resume === "pat" });
   return (
     <PATManagementContent
       activePATState={activePATState}
       authentication={authentication}
-      issue={issue}
+      apiClient={router.options.context.apiClient}
+      resuming={resuming}
       revoke={revoke}
       revokeAll={revokeAll}
     >
@@ -174,41 +149,3 @@ export const PATManagementFeature = ({
 };
 
 export { CLIConnectionFeature } from "./cli-feature";
-
-const PATCreation = (props: Parameters<typeof ManualPATView>[0]): JSX.Element => {
-  const resuming = useRouterState({ select: (state) => state.location.search.resume === "pat" });
-  return resuming ? <ResumedPATCreation {...props} /> : <ManualPATView {...props} />;
-};
-const ResumedPATCreation = (props: Parameters<typeof ManualPATView>[0]): JSX.Element => {
-  const router = useRouter();
-  const [userQuery] = useState(() =>
-    router.options.context.apiClient.query("identity", "getCurrentUser", {})
-  );
-  const result = useAtomValue(userQuery);
-  const retry = useAtomRefresh(userQuery);
-  const consumed = useRef(false);
-  const user = presentCanonicalQuery(result);
-  const [draft, setDraft] = useState<Option.Option<Option.Option<PATDraft>>>(() => Option.none());
-  const userId = user._tag === "Ready" ? Option.some(user.value.data.id) : Option.none();
-  const mounted = useCallback<RefCallback<HTMLElement>>(
-    (node) => {
-      if (node !== null && Option.isSome(userId) && !consumed.current) {
-        consumed.current = true;
-        setDraft(Option.some(resumePATDraft(userId.value)));
-      }
-    },
-    [userId, setDraft]
-  );
-  if (user._tag === "Failure") {
-    return (
-      <div role="alert">
-        <p>No pudimos comprobar tu identidad. El formulario sigue guardado en esta pestaña.</p>
-        <Button type="button" onClick={retry}>
-          Volver a intentar
-        </Button>
-      </div>
-    );
-  }
-  if (Option.isNone(draft)) return <output ref={mounted}>Comprobando tu identidad…</output>;
-  return <ManualPATView {...props} initialDraft={draft.value} />;
-};

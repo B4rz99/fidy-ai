@@ -1,16 +1,15 @@
-import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Cause, Effect, Exit, Option, Predicate, Result } from "effect";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
-import { type JSX, useRef, useState } from "react";
+import { type JSX, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
-import type { DashboardEdit, FidyClient } from "@/transport/client";
-import { type DashboardGesture, compileDashboardGesture } from "./editor-model";
+import type { FidyClient } from "@/transport/client";
+import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
 import { type DashboardLoadPhase, dashboardQuery } from "./query";
 import {
-  type DashboardEditorError,
   DashboardRouteContent as DashboardRoutePresentation,
   DashboardViewComponent,
 } from "./view";
@@ -33,19 +32,6 @@ export const DashboardFeature = ({
   );
 };
 
-const settledEditQueue = Promise.resolve();
-
-const rejectedEditError: DashboardEditorError = {
-  title: "No pudimos guardar el cambio",
-  message: "El cambio fue rechazado. Revisa los valores e intenta de nuevo.",
-  onRefresh: Option.none(),
-};
-const uncertainEditError: DashboardEditorError = {
-  title: "No pudimos confirmar el cambio",
-  message:
-    "El cambio podría haberse guardado. Actualiza el tablero y revísalo antes de intentar otro cambio.",
-  onRefresh: Option.none(),
-};
 const unavailableCatalogError: DashboardEditorError = {
   title: "No pudimos cargar el catálogo",
   message: "Los demás controles siguen disponibles.",
@@ -55,129 +41,6 @@ const staleDashboardError: DashboardEditorError = {
   title: "El cambio se guardó, pero no pudimos actualizar el tablero",
   message: "Mostramos el último tablero disponible. Intenta actualizarlo de nuevo.",
   onRefresh: Option.none(),
-};
-
-type CanonicalDashboardEdit = DashboardEdit;
-
-const canonicalEditEffect = Effect.fn("dashboard.applyCanonicalEdit")(function* (
-  apiClient: FidyClient,
-  edit: CanonicalDashboardEdit
-) {
-  const client = yield* apiClient;
-  // The generated client accepts each tagged payload member separately; narrowing here preserves
-  // exhaustive operation coverage without weakening the canonical input type.
-  switch (edit.op) {
-    case "set-title":
-      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
-    case "add-widget":
-      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
-    case "remove-widget":
-      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
-    case "move-widget":
-      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
-    case "swap-widgets":
-      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
-    case "resize-region":
-      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
-    case "update-widget":
-      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
-  }
-});
-
-const editOutcomeError = (
-  outcome: Exit.Exit<unknown, unknown>,
-  onRefresh: () => void
-): Option.Option<DashboardEditorError> => {
-  if (Exit.isSuccess(outcome)) return Option.none();
-  const missing =
-    !Cause.hasDies(outcome.cause) &&
-    !Cause.hasInterrupts(outcome.cause) &&
-    Option.exists(Cause.findErrorOption(outcome.cause), (failure) =>
-      Predicate.isTagged(failure, "NotFound")
-    );
-  if (missing) {
-    return Option.some({
-      title: "Actualiza el tablero",
-      message:
-        "Este Widget ya no está disponible en tu tablero actual. Actualiza antes de intentar otro cambio.",
-      onRefresh: Option.some(onRefresh),
-    });
-  }
-  const refused =
-    !Cause.hasDies(outcome.cause) &&
-    !Cause.hasInterrupts(outcome.cause) &&
-    Option.exists(
-      Cause.findErrorOption(outcome.cause),
-      (failure) =>
-        Predicate.isTagged(failure, "NotFound") || Predicate.isTagged(failure, "ValidationFailed")
-    );
-  return Option.some(
-    refused ? rejectedEditError : { ...uncertainEditError, onRefresh: Option.some(onRefresh) }
-  );
-};
-
-const awaitingCanonicalRead = (
-  dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>, unknown>,
-  baseline: DashboardView
-): boolean =>
-  dashboard._tag !== "Ready" ||
-  (dashboard.value.data === baseline && Option.isNone(dashboard.refreshFailure));
-
-const useQueuedDashboardEdits = (
-  apiClient: FidyClient,
-  onRefresh: () => void,
-  dashboard: CanonicalQueryState<Readonly<{ data: DashboardView }>, unknown>
-): Readonly<{
-  editError: Option.Option<DashboardEditorError>;
-  onGesture: (gesture: DashboardGesture) => void;
-  submitting: boolean;
-  pendingPlacement: Option.Option<DashboardEdit>;
-}> => {
-  const [editAtom] = useState(() =>
-    apiClient.runtime.fn<CanonicalDashboardEdit>()((edit) => canonicalEditEffect(apiClient, edit), {
-      concurrent: false,
-      reactivityKeys: ["dashboard"],
-    })
-  );
-  const applyEdit = useAtomSet(editAtom, { mode: "promiseExit" });
-  const [pendingEdits, setPendingEdits] = useState(0);
-  const [editError, setEditError] = useState(() => Option.none<DashboardEditorError>());
-  const [pendingPlacement, setPendingPlacement] = useState(() =>
-    Option.none<Readonly<{ edit: DashboardEdit; baseline: DashboardView }>>()
-  );
-  const editQueue = useRef<Promise<void>>(settledEditQueue);
-  const onGesture = (gesture: DashboardGesture): void => {
-    const compiled = compileDashboardGesture(gesture);
-    if (Result.isFailure(compiled)) {
-      setEditError(Option.some(rejectedEditError));
-      return;
-    }
-    if (dashboard._tag === "Ready") {
-      setPendingPlacement(Option.some({ edit: compiled.success, baseline: dashboard.value.data }));
-    }
-    setPendingEdits((pending) => pending + 1);
-    const applyQueuedEdit = (): Promise<void> => {
-      setEditError(Option.none());
-      return applyEdit(compiled.success).then(
-        (outcome) => setEditError(editOutcomeError(outcome, onRefresh)),
-        () =>
-          setEditError(Option.some({ ...uncertainEditError, onRefresh: Option.some(onRefresh) }))
-      );
-    };
-    editQueue.current = editQueue.current
-      .then(applyQueuedEdit)
-      .finally(() => setPendingEdits((pending) => pending - 1));
-  };
-  const pending = Option.filter(
-    pendingPlacement,
-    ({ baseline }) => Option.isNone(editError) && awaitingCanonicalRead(dashboard, baseline)
-  );
-  return {
-    editError,
-    onGesture,
-    submitting: pendingEdits > 0 || Option.isSome(pending),
-    pendingPlacement: Option.map(pending, ({ edit }) => edit),
-  };
 };
 
 const resolveEditorError = (
@@ -312,17 +175,14 @@ export const DashboardRouteContent = ({
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
   const dashboardState = presentCanonicalQuery(result);
-  const { editError, onGesture, submitting, pendingPlacement } = useQueuedDashboardEdits(
-    apiClient,
-    onRefresh,
-    dashboardState
-  );
+  const { lifecycleRef, editError, onGesture, submitting, disabled, pendingPlacement } =
+    useDashboardEditing({ apiClient, onRefresh, dashboard: dashboardState });
   if (dashboardState._tag !== "Ready") {
     return (
-      <>
+      <div className="contents" ref={lifecycleRef}>
         <DashboardLoadNotice phase={phase} waiting={dashboardState.waiting} />
         <DashboardRoutePresentation onRefresh={onRefresh} result={result} />
-      </>
+      </div>
     );
   }
 
@@ -335,7 +195,7 @@ export const DashboardRouteContent = ({
   const error = resolveEditorError(editError, catalogFailed, dashboardFailed);
 
   return (
-    <>
+    <div className="contents" ref={lifecycleRef}>
       <DashboardQueryNotices
         catalog={catalogState}
         dashboard={dashboardState}
@@ -348,10 +208,11 @@ export const DashboardRouteContent = ({
           error,
           onGesture,
           submitting,
+          disabled,
           pendingPlacement,
         })}
         view={dashboardState.value.data}
       />
-    </>
+    </div>
   );
 };

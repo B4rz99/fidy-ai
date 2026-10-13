@@ -1,3 +1,4 @@
+import { previewDashboardPlacement } from "./placement-preview";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BigDecimal, Cause, DateTime, Effect, Option, Schema } from "effect";
 import { it as effectIt } from "@effect/vitest";
@@ -8,7 +9,8 @@ import { type DashboardEdit, makeFidyClient } from "@/transport/client";
 import type { DashboardCatalogEntry, DashboardGesture } from "./editor-model";
 import { DashboardRouteContent as DashboardFeatureContent } from "./feature";
 import type { DashboardLayout, DashboardView, DashboardWidgetView } from "./presentation";
-import { type DashboardEditorError, DashboardRouteContent, DashboardViewComponent } from "./view";
+import { DashboardRouteContent, DashboardViewComponent } from "./view";
+import type { DashboardEditorError } from "./editing";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
 type BudgetResult = Extract<DashboardWidgetView["result"], { readonly availability: unknown }>;
@@ -541,6 +543,7 @@ const renderInteractiveDashboard = (
         error,
         onGesture,
         submitting: false,
+        disabled: false,
         pendingPlacement: Option.none(),
       })}
       view={makeView(standardOptions)}
@@ -608,7 +611,8 @@ const renderPlacement = (
         error: Option.none(),
         onGesture: () => undefined,
         submitting: false,
-        pendingPlacement: Option.some(edit),
+        disabled: false,
+        pendingPlacement: Option.some(previewDashboardPlacement({ layout: view.layout, edit })),
       })}
     />
   );
@@ -933,6 +937,7 @@ describe("Dashboard multi-Widget resizing", () => {
           error: Option.none(),
           onGesture,
           submitting: false,
+          disabled: false,
           pendingPlacement: Option.none(),
         })}
         view={{

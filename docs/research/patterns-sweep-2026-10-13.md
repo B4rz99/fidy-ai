@@ -1,6 +1,6 @@
 # Codebase pattern sweep
 
-Review date: 2026-10-13. Original audit baseline: `8c826c92`. Work was subsequently rebased onto updated trunk `6d0127fd9`. This records implementation findings, coverage and validation; it does not certify that every line follows every pattern.
+Review date: 2026-10-13. Original audit baseline: `8c826c92`. Work was subsequently rebased onto updated trunk `b9ede142a` (after `6d0127fd9`). This records implementation findings, coverage and validation; it does not certify that every line follows every pattern.
 
 The earlier [catalog audit](patterns-audit-2026-10-12.md) covered all four upstream repositories. This sweep applies the corrected catalog to first-party code. API authority is the installed, integrity-locked release described by the [source map](../../.patterns/effect-4-stable.md) and [manifest](../../.patterns/sources.json), including Effect 4.0.1. The vendored snapshots are references, not automatic proof of release parity.
 

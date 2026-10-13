@@ -1,7 +1,7 @@
 {
   "date": "2026-10-13",
   "original_audit_baseline": "8c826c92",
-  "updated_trunk": "6d0127fd9",
+  "updated_trunk": "b9ede142a",
   "inventory_definition": "Existing tracked code files under apps, scripts, infra and tools with TS/TSX/JS/JSX/MJS/CJS/shell/PowerShell/Python/SQL/CSS/HTML extensions. Supporting test/spec/e2e/testing/test/declaration/fixture paths and explicitly generated files are separated. Configuration TS and checked-in UI implementation are included. Vendored .repos, node_modules, agent skills, docs, dependency locks, JSON/YAML configs and non-code assets are excluded. This is an inventory, not a claim of semantic review.",
   "tracked_code_paths": [
     "apps/cli/.dependency-cruiser.mjs",

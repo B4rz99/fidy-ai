@@ -77,6 +77,11 @@ minimal diagnostic rather than repeatedly retrying.
 
 ## Validation and unfinished work
 
+CI twice timed out while seeding the existing 4,096-receipt settlement fixture through per-row native
+binding proxies. Fixture seeding now uses recursive SQL inside each existing 96-row chunk; installed
+triggers still execute for every receipt. The focused local test retains identical 757-read results
+for both history sizes. This changes fixture setup only, before read observation begins.
+
 Focused inference regressions cover schema constraints, heterogeneous tuples, annotation preservation,
 all canonical tool schemas, malformed responses and recovery. Native hosted Turn/retention checks
 exercise acknowledgment, contention, isolation and durable replay. CI verifies the merged revision;

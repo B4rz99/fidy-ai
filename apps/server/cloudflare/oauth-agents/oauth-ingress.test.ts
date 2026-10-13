@@ -478,7 +478,7 @@ it("expires access authority without extending the reviewed connection or disclo
     })
   ));
 
-it("approves a separately identified connection with atomic Consent and only a protected authorization-code callback", () =>
+it("approves and exchanges a connection with case-insensitive media types, atomic Consent and a protected callback", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, send } = yield* setup();
@@ -495,7 +495,7 @@ it("approves a separately identified connection with atomic Consent and only a p
       const headers = {
         origin: "https://app.fidyapp.com",
         cookie,
-        "content-type": "application/json",
+        "content-type": "Application/JSON ; charset=utf-8",
       };
       const reviewed = yield* wait(send(`/web/oauth/review?requestId=${requestId}`, { headers }));
       const review = yield* Schema.decodeUnknownEffect(
@@ -541,7 +541,7 @@ it("approves a separately identified connection with atomic Consent and only a p
       const exchange = (): Promise<Response> =>
         send("/oauth/token", {
           method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
+          headers: { "content-type": "Application/X-WWW-Form-Urlencoded ; charset=utf-8" },
           body: tokenBody.toString(),
         });
       expect((yield* wait(exchange())).status).toBe(400);

@@ -856,7 +856,7 @@ const renderPaginationJourney = (fixture: PaginationFixture): void => {
     return fixture.gate.pipe(
       Effect.as(
         wireResponse(request, {
-          data: [storedTransaction, last],
+          data: [storedTransaction, last, last],
           next: fixture.mode === "repeat" ? [paginationSuggestion(request, fixture)] : [],
         })
       )

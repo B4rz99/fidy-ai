@@ -119,7 +119,9 @@ export const keywordRuleInput = ({
 }: Readonly<{ request: Request; update: boolean }>): Promise<
   Option.Option<CreateKeywordRuleInput>
 > => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+  if (
+    request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json"
+  ) {
     return Promise.resolve(Option.none());
   }
   const input = update ? UpdateInput : CreateInput;

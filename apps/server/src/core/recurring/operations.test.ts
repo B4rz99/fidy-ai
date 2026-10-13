@@ -174,3 +174,23 @@ it("rejects two calendar anchors that share one charge inside both drift allowan
     })
   ).toEqual([]);
 });
+
+it("ignores ambiguous later months while extending to the latest unique charge across years", () => {
+  const duplicate = {
+    ...fact(6),
+    id: TransactionId.make("90000000-0000-4000-8000-000000000031"),
+  };
+  const nextYear = {
+    ...fact(1),
+    id: TransactionId.make("90000000-0000-4000-8000-000000000032"),
+    occurredAt: DateTime.makeUnsafe("2027-01-15T12:00:00.000Z"),
+  };
+  const facts = [fact(1), fact(2), fact(3), fact(6), duplicate];
+  const ambiguous = detectMonthlySeries({ facts, timeZone: zone });
+  expect(ambiguous).toHaveLength(1);
+  expect(ambiguous[0]?.latestTransactionId).toBe(fact(3).id);
+  const extended = detectMonthlySeries({ facts: [...facts, nextYear], timeZone: zone });
+  expect(extended).toHaveLength(1);
+  expect(extended[0]?.latestTransactionId).toBe(nextYear.id);
+  expect(extended[0]?.supportingTransactionIds).toEqual([fact(1).id, fact(2).id, fact(3).id]);
+});

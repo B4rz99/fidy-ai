@@ -73,7 +73,10 @@ const rawInput = ({
       fields.headers = Option.some(Object.fromEntries(request.headers));
     }
     if (operation.httpFields.includes("payload")) {
-      if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") {
+      if (
+        request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+        "application/json"
+      ) {
         return Option.none();
       }
       const bytes = yield* readBoundedRequestBody(

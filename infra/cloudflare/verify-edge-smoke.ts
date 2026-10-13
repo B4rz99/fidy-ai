@@ -59,26 +59,32 @@ export const verifyEdgeSmoke = <E, R>({
   candidate: Option.Option<Candidate>;
 }>): Effect.Effect<void, EdgeSmokeFailure, R> =>
   Effect.gen(function* () {
-    for (const entry of probes) {
-      const response = yield* probe({
-        method: entry.method,
-        path: entry.path,
-        headers: Option.isNone(candidate)
-          ? entry.headers
-          : {
-              ...entry.headers,
-              ...(entry.path === "/health" ? {} : { "x-fidy-smoke-proof": candidate.value.proof }),
-              "cloudflare-workers-version-overrides": candidate.value.override,
-            },
-      }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
-      if (
-        !isExpectedResponse(response, entry.expectedStatus) ||
-        !hasExpectedChallenge(response, entry.path, entry.expectedStatus) ||
-        !candidateResponseMatches(response, entry.path, candidate)
-      ) {
-        return yield* new EdgeSmokeFailure({ path: entry.path });
-      }
-    }
+    yield* Effect.forEach(
+      probes,
+      Effect.fn(function* (entry: (typeof probes)[number]) {
+        const response = yield* probe({
+          method: entry.method,
+          path: entry.path,
+          headers: Option.isNone(candidate)
+            ? entry.headers
+            : {
+                ...entry.headers,
+                ...(entry.path === "/health"
+                  ? {}
+                  : { "x-fidy-smoke-proof": candidate.value.proof }),
+                "cloudflare-workers-version-overrides": candidate.value.override,
+              },
+        }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
+        if (
+          !isExpectedResponse(response, entry.expectedStatus) ||
+          !hasExpectedChallenge(response, entry.path, entry.expectedStatus) ||
+          !candidateResponseMatches(response, entry.path, candidate)
+        ) {
+          return yield* new EdgeSmokeFailure({ path: entry.path });
+        }
+      }),
+      { concurrency: 4, discard: true }
+    );
     if (Option.isSome(candidate)) yield* verifyCandidateHealth(probe, candidate.value);
   });
 

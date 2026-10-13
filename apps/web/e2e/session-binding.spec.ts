@@ -1,7 +1,12 @@
+import { ResourceLimited } from "@fidy/server/client";
 import type { Page } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import { apiOrigin } from "./http-fixtures";
-import { signInDashboardThroughCore, signInThroughCore } from "./real-core-fixture";
+import {
+  probeCanonicalRequest,
+  signInDashboardThroughCore,
+  signInThroughCore,
+} from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
@@ -12,6 +17,32 @@ const Binding = Schema.Struct({ binding: Schema.String });
 const disableBroadcastChannel = (): void => {
   Object.defineProperty(window, "BroadcastChannel", { value: undefined });
 };
+const resourceLimitedStatus = 429;
+const exhaustCanonicalBurst = Effect.fn(function* (other: Page, binding: string) {
+  // Exhaust the current User's real admission burst before the direct probe. The
+  // stale-session assertions must remain valid while browser activity is paced.
+  let sawResourceRefusal = false;
+  const maximumBurstProbes = 20;
+  for (let attempt = 0; attempt < maximumBurstProbes; attempt++) {
+    const response = yield* Effect.tryPromise(() =>
+      other.request.get(`${apiOrigin}/transactions`, {
+        headers: {
+          origin: new URL(other.url()).origin,
+          "Fidy-Session-Binding": binding,
+        },
+      })
+    );
+    if (response.status() === resourceLimitedStatus) {
+      yield* Schema.decodeUnknownEffect(Schema.toCodecJson(ResourceLimited))(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      sawResourceRefusal = true;
+      break;
+    }
+    expect(response.status()).toBe(okStatus);
+  }
+  expect(sawResourceRefusal).toBe(true);
+});
 const expectSessionUnchanged = Effect.fn(function* (other: Page, binding: string) {
   const afterLogout = yield* Effect.tryPromise(() =>
     other.request.get(`${apiOrigin}/web/session/binding`, {
@@ -22,7 +53,7 @@ const expectSessionUnchanged = Effect.fn(function* (other: Page, binding: string
     (yield* Schema.decodeUnknownEffect(Binding)(yield* Effect.tryPromise(() => afterLogout.json())))
       .binding
   ).toBe(binding);
-  const transactions = yield* Effect.tryPromise(() =>
+  const transactions = yield* probeCanonicalRequest(() =>
     other.request.get(`${apiOrigin}/transactions`, {
       headers: { origin: new URL(other.url()).origin, "Fidy-Session-Binding": binding },
     })
@@ -88,6 +119,7 @@ test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =
         })
       );
       expect(logout.status()).toBe(unauthorizedStatus);
+      yield* exhaustCanonicalBurst(other, second.binding);
       yield* expectSessionUnchanged(other, second.binding);
     })
   ));

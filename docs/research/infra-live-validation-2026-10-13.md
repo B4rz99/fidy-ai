@@ -174,6 +174,13 @@ retention/isolation/recovery and statement fixture regressions remain recorded w
 the original assessment. Temporary live harnesses were removed; live AI testing remains operator
 invoked rather than added back to CI.
 
+The final evidence PR also exposed a browser acceptance probe that assumed immediate canonical
+admission while mounted pages and other journeys shared the synthetic User. Real Core returned
+`ResourceLimited` (HTTP 429); deliberately exhausting the User's burst reproduced the failure.
+The session regression now uses the existing schema-validated, bounded `Retry-After` pacing helper
+shared with canonical journeys. It explicitly exhausts the burst and still verifies that stale drafts
+and logout cannot alter the current session. Production admission limits are unchanged.
+
 Remaining limits are explicitly measured or unavailable: small live sample counts, changed history
 fixtures, no production saturation workload, unresolved early quota enforcement/accounting
 behavior, occasional model date semantics, unobserved product delivery tails and cold-start/per-Turn

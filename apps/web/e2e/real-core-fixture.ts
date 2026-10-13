@@ -1,4 +1,6 @@
-import type { APIRequestContext, Page } from "@playwright/test";
+import { ResourceLimited } from "@fidy/server/client";
+import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
+import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
@@ -144,3 +146,34 @@ export const boundSessionRequests = (
       request.post(url, { ...options, headers: { ...binding, ...options?.headers } })
     ),
 });
+
+const canonicalRecoveryMilliseconds = 15_000;
+const resourceProbeRetries = 6;
+const maximumProbeDelaySeconds = 5;
+const RetrySeconds = Schema.NumberFromString.check(
+  Schema.isInt(),
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(maximumProbeDelaySeconds)
+);
+
+// Direct test probes do not use the app's policy-bearing client. Pace only declared
+// resource refusals, preserving real Core limits and all state/status assertions.
+export const probeCanonicalRequest = (
+  send: () => Promise<APIResponse>
+): Effect.Effect<APIResponse, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const limited = 429;
+    const millisecondsPerSecond = 1_000;
+    for (let retry = 0; retry < resourceProbeRetries; retry++) {
+      const response = yield* Effect.tryPromise(() => send());
+      if (response.status() !== limited) return response;
+      const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers()["retry-after"]);
+      if (Option.isNone(seconds)) return response;
+      const body: unknown = yield* Effect.tryPromise(() => response.json());
+      if (Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))) {
+        return response;
+      }
+      yield* Effect.sleep(seconds.value * millisecondsPerSecond);
+    }
+    return yield* Effect.tryPromise(() => send());
+  }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));

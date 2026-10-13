@@ -1,8 +1,6 @@
 name: Publish CLI
 on:
-  workflow_run:
-    workflows: [Checks]
-    types: [completed]
+  push:
     branches: [trunk]
 permissions:
   contents: read
@@ -11,10 +9,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   plan:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -23,14 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/bun-install
       - name: Plan from the resolved CLI inputs
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/trunk" --jq .object.sha)
           [[ "$current" == "$SOURCE_SHA" ]] || { echo 'Superseded revision; leaving the default unchanged.' >&2; exit 1; }
@@ -56,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/bun-install
         with:
@@ -103,7 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/bun-install
         with:

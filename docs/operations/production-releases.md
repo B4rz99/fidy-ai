@@ -11,7 +11,7 @@ cleanup, and the explicit operator decision without relaxing applied-migration g
 ## Authority and provider setup
 
 `infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. It declares the static
-application, apex redirect, public ingress Worker, private Core Worker, service binding, and release
+Astro site, React application, public ingress Worker, private Core Worker, service binding, and release
 metadata bindings as one Alchemy stack. Remote stages other than `production` are rejected before
 resource creation. Pull requests validate builds without deploying preview sites. The legacy
 `fidy-web-preview` Worker and its public aliases were created outside Alchemy; removing the preview
@@ -30,6 +30,9 @@ Create the GitHub `production` environment and configure:
 Scope the token to that account and the `fidyapp.com` zone, with only the permissions needed by the
 declared resources, including Worker, D1, DNS, Zone WAF, and HTTP DDoS Managed Ruleset writes. Branch
 protection on `trunk` must require the complete pull-request gate. The deployment workflow is a post-merge consequence, not a replacement for that gate.
+The Checks workflow runs only for pull requests. Protected trunk pushes start Production deployment
+and CLI publication directly, without repeating code validation or comparing merged file trees.
+CLI publication keeps its release packaging, reproducibility and installation checks.
 
 Railway, PostgreSQL, and a Bun process are superseded Production architecture under
 [ADR 0026](../adr/0026-cloudflare-native-production-replatform.md). Remove provider repository
@@ -80,10 +83,10 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 1. Check out the exact `github.sha` revision and install the locked workspace.
 2. Calculate the canonical contract digest and bind it with `RELEASE_GIT_SHA` for later steps.
 3. Create an ephemeral local Alchemy profile.
-4. Run four parallel preflight lanes in the same runner: focused Worker-boundary tests, deterministic
-   hosted-inference tests, Production web build/validation, and Cloudflare state checks. The web artifact
-   retains immutable release metadata, hashed assets, headers, and secret-free validation.
-   CI does not invoke live Workers AI conformance or consume inference quota through this lane.
+4. Run two parallel preflight lanes in the same runner: Production site/web build/validation and
+   Cloudflare state checks. Both static artifacts identify the final release revision and retain
+   hashed assets, headers, and secret-free validation. Ordinary Worker and hosted-inference tests
+   run in the PR gate, without consuming live inference quota.
    Live model verification is an explicit operator action: run `test:workers-ai-conformance` from
    `infra/cloudflare` with the approved `HOSTED_AI_MODEL` and Cloudflare credentials. It consumes
    the account's Workers AI allowance and remains strict by default. Deterministic tests do not

@@ -1,9 +1,7 @@
 name: Checks
 
-# Validate PRs and exact trunk revisions used by automatic CLI releases.
+# Code validation runs before merge; protected trunk triggers releases directly.
 on:
-  push:
-    branches: [trunk]
   pull_request:
     branches:
       - trunk

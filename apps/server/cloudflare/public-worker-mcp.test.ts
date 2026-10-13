@@ -13,7 +13,9 @@ const environment = (
   CORE: { fetch },
 });
 
-it.each([
+const refusedRequests: ReadonlyArray<
+  Readonly<{ url: string; headers: Readonly<Record<string, string>> }>
+> = [
   { url: "https://attacker.example/mcp", headers: {} },
   { url: "https://api.fidyapp.com.attacker.example/mcp", headers: {} },
   { url: "http://api.fidyapp.com/mcp", headers: {} },
@@ -24,9 +26,10 @@ it.each([
   { url: "https://api.fidyapp.com/mcp", headers: { origin: "https://attacker.example" } },
   { url: "https://api.fidyapp.com/mcp", headers: { origin: "null" } },
   { url: "https://api.fidyapp.com/mcp", headers: { origin: "" } },
-])(
+];
+it.each(refusedRequests)(
   "rejects invalid MCP transport coordinates before Core admission: $url $headers",
-  (input: Readonly<{ url: string; headers: Readonly<Record<string, string>> }>) =>
+  (input) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 401 })));

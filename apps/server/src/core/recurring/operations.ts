@@ -58,16 +58,19 @@ const related = (anchor: DatedFact, candidate: DatedFact): boolean =>
   comparableMoney({ candidate: candidate.fact.money, reference: anchor.fact.money }) &&
   dateMatches(anchor, candidate);
 type Triple = readonly [DatedFact, DatedFact, DatedFact];
-const tripleAt = (first: DatedFact, facts: ReadonlyArray<DatedFact>): Option.Option<Triple> => {
-  const near = facts.filter((candidate) => related(first, candidate));
+const tripleAt = (
+  first: DatedFact,
+  factsForMonth: (month: number) => ReadonlyArray<DatedFact>
+): Option.Option<Triple> => {
+  const firstMonth = factsForMonth(first.month);
   const months = [first.month, first.month + 1, first.month + 2].map((month) =>
-    near.filter((candidate) => candidate.month === month)
+    factsForMonth(month).filter((candidate) => related(first, candidate))
   );
   if (months.some((month: ReadonlyArray<DatedFact>) => month.length !== 1)) return Option.none();
   const second = months[1]?.[0];
   const third = months[2]?.[0];
   if (second === undefined || third === undefined) return Option.none();
-  const competing = facts.some(
+  const competing = firstMonth.some(
     (candidate) =>
       candidate.fact.id !== first.fact.id &&
       candidate.month === first.month &&
@@ -77,7 +80,15 @@ const tripleAt = (first: DatedFact, facts: ReadonlyArray<DatedFact>): Option.Opt
   return competing ? Option.none() : Option.some([first, second, third]);
 };
 const unambiguousTriples = (facts: ReadonlyArray<DatedFact>): ReadonlyArray<Triple> => {
-  const triples = facts.flatMap((first) => Option.toArray(tripleAt(first, facts)));
+  const factsByMonth = new Map<number, DatedFact[]>();
+  for (const fact of facts) {
+    const month = factsByMonth.get(fact.month);
+    if (month === undefined) factsByMonth.set(fact.month, [fact]);
+    else month.push(fact);
+  }
+  const triples = facts.flatMap((first) =>
+    Option.toArray(tripleAt(first, (month) => factsByMonth.get(month) ?? []))
+  );
   const ambiguous = new Set<string>();
   for (const [index, left] of triples.entries()) {
     for (const right of triples.slice(index + 1)) {
@@ -179,9 +190,13 @@ const extendProposal = ({
   timeZone: IanaTimeZone;
 }>): RecurringProposal => {
   const candidates = facts.filter((fact) => canExtend(proposal, fact, timeZone));
+  const monthCounts = new Map<number, number>();
+  for (const candidate of candidates) {
+    monthCounts.set(candidate.month, (monthCounts.get(candidate.month) ?? 0) + 1);
+  }
   const unique = candidates.filter(
     (fact) =>
-      candidates.filter((other) => other.month === fact.month).length === 1 &&
+      monthCounts.get(fact.month) === 1 &&
       proposals.filter((other) => canExtend(other, fact, timeZone)).length === 1
   );
   const last = unique.at(-1);

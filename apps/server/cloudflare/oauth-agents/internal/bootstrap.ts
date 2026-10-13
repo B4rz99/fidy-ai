@@ -27,7 +27,10 @@ export const decodePayload = <Shape extends Schema.ConstraintDecoder<unknown>>(
   input: Readonly<{ request: Request; schema: Shape }>
 ): Effect.Effect<Shape["Type"], BootstrapInvalid> =>
   Effect.gen(function* () {
-    if (input.request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+    if (
+      input.request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+      "application/json"
+    ) {
       return yield* Effect.fail(undefined);
     }
     const bytes = yield* readBoundedRequestBody(input.request, policy);

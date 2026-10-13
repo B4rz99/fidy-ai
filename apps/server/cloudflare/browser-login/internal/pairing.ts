@@ -218,7 +218,10 @@ export const redeemBrowserPairing = ({
   db: D1Database;
 }): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+    if (
+      request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+      "application/json"
+    ) {
       return invalid();
     }
     {

@@ -45,6 +45,27 @@ export type TransactionListRow = Readonly<{
   occurredOnText: string;
 }>;
 
+const occurrenceFormatter = (locale: string, timeZone: string): Intl.DateTimeFormat =>
+  new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone,
+    year: "numeric",
+  });
+
+const occurrenceText = (
+  formatter: Intl.DateTimeFormat,
+  occurredAt: Transaction["occurredAt"]
+): string => {
+  const parts = formatter.formatToParts(occurredAt.epochMilliseconds);
+  const valueOf = (type: "day" | "month" | "year"): string =>
+    Option.fromNullishOr(parts.find((part) => part.type === type)).pipe(
+      Option.map((part) => part.value),
+      Option.getOrThrow
+    );
+  return `${valueOf("day")}-${valueOf("month")}-${valueOf("year")}`;
+};
+
 export const formatOccurrence = ({
   locale,
   occurredAt,
@@ -53,20 +74,7 @@ export const formatOccurrence = ({
   locale: string;
   occurredAt: Transaction["occurredAt"];
   timeZone: string;
-}>): string => {
-  const parts = new Intl.DateTimeFormat(locale, {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone,
-    year: "numeric",
-  }).formatToParts(occurredAt.epochMilliseconds);
-  const valueOf = (type: "day" | "month" | "year"): string =>
-    Option.fromNullishOr(parts.find((part) => part.type === type)).pipe(
-      Option.map((part) => part.value),
-      Option.getOrThrow
-    );
-  return `${valueOf("day")}-${valueOf("month")}-${valueOf("year")}`;
-};
+}>): string => occurrenceText(occurrenceFormatter(locale, timeZone), occurredAt);
 
 export type TransactionPresentationCategory = Readonly<{
   id: string;
@@ -103,6 +111,7 @@ export const presentTransactionRows = ({
     year: "numeric",
     timeZone,
   });
+  const occurredOnFormatter = occurrenceFormatter(locale, timeZone);
   return transactions.map((transaction) => ({
     id: transaction.id,
     categoryId: transaction.categoryId,
@@ -113,7 +122,7 @@ export const presentTransactionRows = ({
     money: transaction.money,
     dateLabel: dateFormatter.format(transaction.occurredAt.epochMilliseconds),
     moneyText: formatMoney({ locale, money: transaction.money }),
-    occurredOnText: formatOccurrence({ locale, occurredAt: transaction.occurredAt, timeZone }),
+    occurredOnText: occurrenceText(occurredOnFormatter, transaction.occurredAt),
   }));
 };
 

@@ -163,7 +163,10 @@ export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>({
 > =>
   Effect.gen(function* () {
     if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());
-    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+    if (
+      request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+      "application/json"
+    ) {
       return Option.none();
     }
     return yield* readBoundedRequestBody(request, policy).pipe(

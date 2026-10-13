@@ -1,3 +1,11 @@
+import {
+  captureWorkTrace,
+  cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  sanitizeWorkTrace,
+  workTraceParent,
+  workerRelease,
+} from "../../runtime/telemetry/operations";
 import { type BrowserPairingEmailEnvironment, BrowserPairingEmailWork as Work } from "../contract";
 
 import { pendingBrowserPairingQuery } from "../../browser-login/operations";
@@ -52,6 +60,7 @@ const publishWork = (
   current: number
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const claim = yield* attempt(() =>
       environment.DB.prepare(`UPDATE browser_pairing_email_outbox
     SET last_attempt_at_ms = ? WHERE id = ? AND
@@ -62,6 +71,7 @@ const publishWork = (
     if (claim.meta.changes !== 1) return;
     yield* attempt(() =>
       environment.BROWSER_PAIRING_EMAIL_QUEUE.send({
+        ...trace,
         kind: "browser-pairing-email",
         version: 1,
         id,
@@ -148,11 +158,12 @@ export const receiveBrowserPairingEmail =
           message.ack();
           continue;
         }
+        const params = yield* sanitizeWorkTrace(decoded.value);
         const started = yield* Effect.exit(
           attempt(() =>
             environment.BROWSER_PAIRING_EMAIL_WORKFLOW.create({
               id: decoded.value.id,
-              params: decoded.value,
+              params,
             })
           )
         );
@@ -166,7 +177,7 @@ export const receiveBrowserPairingEmail =
 type Send = (
   to: EmailAddress,
   code: EmailVerificationCode,
-  id: string
+  coordinates: Readonly<{ id: string; parent: unknown }>
 ) => Promise<"succeeded" | "rejected" | "ambiguous">;
 
 const findPendingProof = (
@@ -192,10 +203,28 @@ const findPendingProof = (
     return Schema.decodeUnknownOption(Pending)(raw);
   });
 
+const settlePairingDelivery = (
+  db: D1Database,
+  id: string,
+  nextState: string
+): Effect.Effect<unknown, void> => {
+  const retainProof = nextState === "awaiting_proof" ? nextState : "ambiguous";
+  return attempt(() =>
+    db
+      .prepare(`UPDATE browser_pairing_email_proofs SET state = ?,
+      public_code = CASE WHEN ? = 'awaiting_proof' THEN public_code ELSE NULL END,
+      proof_digest = CASE WHEN ? = 'awaiting_proof' THEN proof_digest ELSE NULL END,
+      proof_expires_at_ms = CASE WHEN ? = 'awaiting_proof' THEN proof_expires_at_ms ELSE NULL END
+      WHERE work_id = ? AND state = 'sending'`)
+      .bind(nextState, retainProof, retainProof, retainProof, id)
+      .run()
+  );
+};
+
 /** Claim one generation before any provider call, never retrying an ambiguous send with a new code. */
 export const deliverBrowserPairingEmail =
-  ({ db, send }: { db: D1Database; send: Send }) =>
-  (id: string): Promise<void> =>
+  ({ db, send, environment }: { db: D1Database; send: Send; environment: unknown }) =>
+  (id: string, parent?: unknown): Promise<void> =>
     Effect.runPromise(
       Effect.gen(function* () {
         const pending = yield* findPendingProof(db, id);
@@ -231,26 +260,27 @@ export const deliverBrowserPairingEmail =
             .run()
         );
         if (claimed.meta.changes !== 1) return;
-        const outcome = yield* attempt(() => send(pending.value.email_address, combinedCode, id));
-        const nextState = outcome === "succeeded" ? "awaiting_proof" : outcome;
-        const retainProof = nextState === "awaiting_proof" ? nextState : "ambiguous";
-        yield* attempt(() =>
-          db
-            .prepare(`UPDATE browser_pairing_email_proofs SET state = ?,
-      public_code = CASE WHEN ? = 'awaiting_proof' THEN public_code ELSE NULL END,
-      proof_digest = CASE WHEN ? = 'awaiting_proof' THEN proof_digest ELSE NULL END,
-      proof_expires_at_ms = CASE WHEN ? = 'awaiting_proof' THEN proof_expires_at_ms ELSE NULL END
-      WHERE work_id = ? AND state = 'sending'`)
-            .bind(nextState, retainProof, retainProof, retainProof, id)
-            .run()
+        const trace = yield* captureWorkTrace;
+        const outcome = yield* attempt(() =>
+          send(pending.value.email_address, combinedCode, { id, parent: workTraceParent(trace) })
         );
-      })
+        const nextState = outcome === "succeeded" ? "awaiting_proof" : outcome;
+        yield* settlePairingDelivery(db, id, nextState);
+      }).pipe(
+        observeWorkerExecution({
+          environment: workerRelease(environment),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.browserPairingEmail",
+          parent,
+        })
+      )
     );
 
 const sendPairingProof =
   (environment: Pick<BrowserPairingEmailEnvironment, "RESEND_API_KEY">): Send =>
-  (to, code, id) =>
+  (to, code, { id, parent }) =>
     sendThroughResend({
+      parent,
       purpose: "browser-pairing-approval",
       environment,
       to,
@@ -283,9 +313,11 @@ export const runBrowserPairingEmailWorkflow = ({
     "send-browser-pairing-email-v1",
     { retries: { limit: 0, delay: "1 second" } },
     () =>
-      deliverBrowserPairingEmail({ db: environment.DB, send: sendPairingProof(environment) })(
-        work.value.id
-      )
+      deliverBrowserPairingEmail({
+        db: environment.DB,
+        send: sendPairingProof(environment),
+        environment,
+      })(work.value.id, workTraceParent(work.value))
   );
 };
 

@@ -21,6 +21,7 @@ import { FetchHttpClient, type HttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { AtomHttpApi } from "effect/reactivity";
 import { type BrowserHttpBoundary, browserHttpClientLayer } from "./browser-http-policy";
+import { observeBrowserDecode } from "./browser-defects";
 
 export type {
   LayoutNodeFor,
@@ -118,7 +119,7 @@ const UnauthenticatedResponse = Schema.Struct({
 const observeAuthenticationExpiration =
   (observer?: CanonicalAuthenticationObserver) =>
   <A, E, R>(response: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.tapError(response, (error) =>
+    Effect.tapError(observeBrowserDecode(response), (error) =>
       observer !== undefined && Schema.is(UnauthenticatedResponse)(error)
         ? Effect.sync(observer.onAuthenticationExpired)
         : Effect.void
@@ -167,6 +168,7 @@ export const makeHostedTurnClient = (options: BrowserClientOptions): HostedTurnC
     api: HostedTurnApi,
     baseUrl: options.apiOrigin,
     httpClient: browserClientLayer(options, "hosted-turn"),
+    transformResponse: observeBrowserDecode,
   });
 
 export type FidyClient = AtomHttpApi.AtomHttpApiClient<
@@ -216,6 +218,7 @@ export const makeWebAuthClient = (options: BrowserClientOptions): WebAuthClient 
     api: WebAuthApi,
     baseUrl: options.apiOrigin,
     httpClient: browserClientLayer(options, "web-auth"),
+    transformResponse: observeBrowserDecode,
   });
 
 type EnrollmentApiClient = HttpApiClient.Client<SubscriptionEnrollmentApiGroups, never, never>;
@@ -254,7 +257,10 @@ export const makeSubscriptionEnrollmentClient = (
 ): SubscriptionEnrollmentClient => {
   const live = Layer.effect(
     EnrollmentClientService,
-    HttpApiClient.make(SubscriptionEnrollmentApi, { baseUrl: options.apiOrigin })
+    HttpApiClient.make(SubscriptionEnrollmentApi, {
+      baseUrl: options.apiOrigin,
+      transformResponse: observeBrowserDecode,
+    })
   ).pipe(Layer.provide(browserClientLayer(options, "enrollment")));
   const runtime = ManagedRuntime.make(live);
   const lifetime = new AbortController();

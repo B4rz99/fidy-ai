@@ -1,3 +1,8 @@
+import {
+  captureWorkTrace,
+  sanitizeWorkTrace,
+  workTraceHeaders,
+} from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { Cause, Clock, Data, Effect, Exit, Option, Result, Schema } from "effect";
 import { StatementCoordinatorActivity, StatementWork } from "../contract";
@@ -75,6 +80,7 @@ export const dispatchStatementExtraction = (
   }>
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
       environment.DB.prepare(`SELECT o.user_id, o.submission_id, o.revision
@@ -102,6 +108,7 @@ export const dispatchStatementExtraction = (
       const offered = yield* Effect.exit(
         attempt(() =>
           environment.STATEMENT_EXTRACTION_QUEUE.send({
+            ...trace,
             version: entry.revision,
             userId: entry.user_id,
             submissionId: entry.submission_id,
@@ -148,11 +155,12 @@ export const receiveStatementExtraction = (
         message.ack();
         continue;
       }
+      const params = yield* sanitizeWorkTrace(work.value);
       const started = yield* Effect.exit(
         attempt(() =>
           input.environment.STATEMENT_EXTRACTION_WORKFLOW.create({
             id: work.value.submissionId,
-            params: work.value,
+            params,
             retention,
           })
         )
@@ -260,16 +268,18 @@ const coordinatedStatementStep = (
 ): Promise<boolean> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const safeWork = yield* sanitizeWorkTrace(work);
+      const traceHeaders = yield* workTraceHeaders(safeWork);
       const body = yield* Schema.encodeEffect(Schema.fromJsonString(CoordinatorWork))({
         _tag: kind,
-        ...work,
+        ...safeWork,
       }).pipe(Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause })));
       const result = yield* Effect.tryPromise({
         try: () =>
           coordinator.getByName(work.userId).fetch(
             new Request("https://coordinator.internal/statement-work", {
               method: "POST",
-              headers: { "content-type": "application/json" },
+              headers: { "content-type": "application/json", ...traceHeaders },
               body,
             })
           ),

@@ -13,6 +13,7 @@ import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import publicWorker from "../public-worker";
 import { ConnectInstitutionResult } from "../../src/core/connections/contract";
 import { handleConnectionBrowserRequest, sweepConnectionAttempts } from "./runtime";
+import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 
 const users = [
   "10000000-0000-4000-8000-000000000051",
@@ -465,7 +466,7 @@ it("refuses hostile browser input and origins without consuming a live attempt",
       expect(owner.status).toBe(200);
     })
   ));
-it("forwards Connection browser transports with only cookie, session binding, content type and origin headers", () =>
+it("forwards Connection browser credentials and a server-authored trace without caller metadata", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       for (const candidate of [
@@ -477,6 +478,9 @@ it("forwards Connection browser transports with only cookie, session binding, co
         candidate.headers.set("authorization", "Bearer must-not-reach-Core");
         candidate.headers.set("x-user-id", users[1]);
         candidate.headers.set("x-canonical-source", "must-not-reach-Core");
+        const hostileParent = `00-${"1".repeat(32)}-${"2".repeat(16)}-01`;
+        candidate.headers.set("traceparent", hostileParent);
+        candidate.headers.set(workerInternalTraceHeader, hostileParent);
         const response = yield* Effect.tryPromise(() =>
           publicWorker.fetch(candidate, {
             BROWSER_ORIGIN: "https://app.fidyapp.com",
@@ -491,7 +495,12 @@ it("forwards Connection browser transports with only cookie, session binding, co
                   "cookie",
                   "fidy-session-binding",
                   "origin",
+                  workerInternalTraceHeader,
                 ]);
+                expect(forwarded.headers.get(workerInternalTraceHeader)).toMatch(
+                  /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/u
+                );
+                expect(forwarded.headers.get(workerInternalTraceHeader)).not.toBe(hostileParent);
                 expect(forwarded.headers.get("cookie")).toBe(candidate.headers.get("cookie"));
                 expect(forwarded.headers.get("fidy-session-binding")).toBe(
                   candidate.headers.get("fidy-session-binding")

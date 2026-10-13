@@ -166,6 +166,8 @@ export type SubscriptionRenewalDispatchInput = Readonly<{
 
 /** Bounded notice identity only; recipient and immutable Price facts are reloaded privately. */
 export const BillingPriceNoticeWork = Schema.Struct({
+  // Diagnostic continuation is decoded independently and never grants work authority.
+  traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   kind: Schema.Literal("price-notice"),
   userId: UserId,
@@ -180,6 +182,8 @@ export type BillingPriceNoticeDispatchInput = Readonly<{
 
 /** Cancellation work contains only the User whose retained intent must be rechecked. */
 export const SubscriptionCancellationWork = Schema.Struct({
+  // Diagnostic continuation is decoded independently and never grants work authority.
+  traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   kind: Schema.Literal("source-cancellation"),
   userId: UserId,

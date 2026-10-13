@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Logger, Schema } from "effect";
 import { expect } from "vitest";
-import type { TelemetryWorkRecord } from "../../src/shell/observability/contract";
+import { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { ScheduledWorkFailed } from "./contract";
 import { executeSchedule } from "./operations";
 import { makeWorkerTelemetry, observeWorkerExecution } from "../runtime/telemetry/operations";
@@ -76,7 +76,13 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
       ],
     ]);
     expect(logCauses.every((cause) => cause.reasons.length === 0)).toBe(true);
-    expect(records).toEqual([
+    expect(records).toHaveLength(1);
+    const record = yield* Schema.decodeUnknownEffect(TelemetryWorkRecord, {
+      onExcessProperty: "error",
+    })(records[0]);
+    expect(record.traceId).toBeDefined();
+    expect(record.spanId).toBeDefined();
+    expect(records).toMatchObject([
       {
         release: "0123456789abcdef0123456789abcdef01234567",
         operation: "worker.core.scheduled",

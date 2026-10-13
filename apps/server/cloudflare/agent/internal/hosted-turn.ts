@@ -1,3 +1,6 @@
+import { observeApplicationOperation } from "../../runtime/application-observation/operations";
+import { Telemetry } from "../../../src/shell/observability/operations";
+import { TelemetryAttempt, boundedTelemetryCount } from "../../../src/shell/observability/contract";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { readReminderPauseNotice, readWeeklyPauseNotice } from "../../insights/operations";
 import type { InsightUnavailable } from "../../insights/contract";
@@ -954,6 +957,21 @@ type AdmittedWork = Readonly<{
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>;
 
+const recordRoundUsage = (
+  usage: HostedTextResult["usage"],
+  iteration: number
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const telemetry = yield* Effect.serviceOption(Telemetry);
+    if (Option.isSome(telemetry)) {
+      yield* telemetry.value.recordModelUsage({
+        attempt: TelemetryAttempt.make(Math.min(100, Math.max(1, iteration))),
+        inputTokens: boundedTelemetryCount(usage.inputTokens),
+        outputTokens: boundedTelemetryCount(usage.outputTokens),
+      });
+    }
+  });
+
 /** The only path allowed to terminalize a Pending Turn. */
 const executeAdmittedTurn = ({
   db,
@@ -1003,7 +1021,20 @@ const executeAdmittedTurn = ({
           return unavailable();
         }
         const generated = yield* exitOnAbort(
-          active.execute.pipe(Effect.timeout(`${remainingMs} millis`)),
+          observeApplicationOperation(
+            active.execute.pipe(
+              Effect.timeout(`${remainingMs} millis`),
+              Effect.tap((result) => recordRoundUsage(result.usage, iteration))
+            ),
+            {
+              component: "agent",
+              operation: "agent.modelRound",
+              trigger: "api",
+              spanOperation: "agent.model",
+              workKind: "model_round",
+              metadata: { _tag: "None" },
+            }
+          ),
           signal
         );
         if (signal.aborted || (Exit.isFailure(generated) && Cause.hasInterrupts(generated.cause))) {

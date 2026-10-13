@@ -1,4 +1,12 @@
 import {
+  captureWorkTrace,
+  cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  sanitizeWorkTrace,
+  workTraceParent,
+  workerRelease,
+} from "../../runtime/telemetry/operations";
+import {
   type EmailReplacementEnvironment,
   type EmailReplacementPublisher,
   type EmailWorkflowInput,
@@ -50,6 +58,7 @@ export const dispatchEmailReplacement = (
   }
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const identity = environment.identity;
     const current = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
@@ -80,6 +89,7 @@ export const dispatchEmailReplacement = (
       if (claimed.meta.changes === 1) {
         yield* attempt(() =>
           environment.EMAIL_REPLACEMENT_QUEUE.send({
+            ...trace,
             kind: "email-replacement",
             version: 1,
             id: entry.id,
@@ -120,9 +130,10 @@ export const receiveEmailReplacement =
           message.ack();
           continue;
         }
+        const params = yield* sanitizeWorkTrace(work.value);
         const started = yield* Effect.exit(
           attempt(() =>
-            environment.EMAIL_REPLACEMENT_WORKFLOW.create({ id: work.value.id, params: work.value })
+            environment.EMAIL_REPLACEMENT_WORKFLOW.create({ id: work.value.id, params })
           )
         );
         if (Exit.isFailure(started)) {
@@ -160,12 +171,28 @@ const findDeliverable = (
 type Send = (
   to: EmailAddress,
   code: EmailVerificationCode,
-  id: string
+  coordinates: Readonly<{ id: string; parent: unknown }>
 ) => Promise<"succeeded" | "rejected" | "ambiguous">;
+const settleReplacementDelivery = (
+  db: D1Database,
+  id: string,
+  state: string
+): Effect.Effect<unknown, void> =>
+  attempt(() =>
+    db
+      .prepare(`UPDATE email_replacements SET state = ?,
+      public_code = CASE WHEN ? = 'awaiting_proof' THEN public_code ELSE NULL END,
+      proof_digest = CASE WHEN ? = 'awaiting_proof' THEN proof_digest ELSE NULL END,
+      proof_expires_at_ms = CASE WHEN ? = 'awaiting_proof' THEN proof_expires_at_ms ELSE NULL END
+      WHERE work_id = ? AND state = 'sending'`)
+      .bind(state, state, state, state, id)
+      .run()
+  );
+
 /** Claim one candidate generation before the provider call; an ambiguous send never retries its proof. */
 export const deliverEmailReplacement =
-  ({ db, send }: { db: D1Database; send: Send }) =>
-  (id: string): Promise<void> =>
+  ({ db, send, environment }: { db: D1Database; send: Send; environment: unknown }) =>
+  (id: string, parent?: unknown): Promise<void> =>
     Effect.runPromise(
       Effect.gen(function* () {
         const current = yield* Clock.currentTimeMillis;
@@ -209,19 +236,20 @@ export const deliverEmailReplacement =
             .run()
         );
         if (claimed.meta.changes !== 1) return;
-        const outcome = yield* attempt(() => send(pending.value.candidate_email, code, id));
-        const state = outcome === "succeeded" ? "awaiting_proof" : outcome;
-        yield* attempt(() =>
-          db
-            .prepare(`UPDATE email_replacements SET state = ?,
-      public_code = CASE WHEN ? = 'awaiting_proof' THEN public_code ELSE NULL END,
-      proof_digest = CASE WHEN ? = 'awaiting_proof' THEN proof_digest ELSE NULL END,
-      proof_expires_at_ms = CASE WHEN ? = 'awaiting_proof' THEN proof_expires_at_ms ELSE NULL END
-      WHERE work_id = ? AND state = 'sending'`)
-            .bind(state, state, state, state, id)
-            .run()
+        const trace = yield* captureWorkTrace;
+        const outcome = yield* attempt(() =>
+          send(pending.value.candidate_email, code, { id, parent: workTraceParent(trace) })
         );
-      })
+        const state = outcome === "succeeded" ? "awaiting_proof" : outcome;
+        yield* settleReplacementDelivery(db, id, state);
+      }).pipe(
+        observeWorkerExecution({
+          environment: workerRelease(environment),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.emailReplacement",
+          parent,
+        })
+      )
     );
 
 /** Validate versioned identity-only work before entering the non-retrying provider Activity. */
@@ -237,9 +265,11 @@ export const runEmailReplacementWorkflow = ({
       try: () =>
         deliverEmailReplacement({
           db: environment.DB,
-          send: (to, code, id) =>
+          environment,
+          send: (to, code, { id, parent }) =>
             sendThroughResend({
               purpose: "credential-replacement",
+              parent,
               environment,
               to,
               combinedCode: code,
@@ -248,7 +278,7 @@ export const runEmailReplacementWorkflow = ({
               const outcome = deliveryState(result);
               return outcome === "awaiting_proof" ? "succeeded" : outcome;
             }),
-        })(work.value.id),
+        })(work.value.id, workTraceParent(work.value)),
       catch: () => undefined,
     }).pipe(Effect.withSpan("emailReplacement.deliver"), Effect.runPromise)
   );

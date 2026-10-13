@@ -12,6 +12,26 @@ import {
   type WorkersAiRun,
 } from "../../src/shell/hosted-inference/contract";
 
+const observedWorkersAiRun =
+  ({
+    environment,
+    ai,
+  }: Readonly<{
+    environment: WorkersAiEnvironment;
+    ai: WorkersAiEnvironment["AI"];
+  }>): WorkersAiRun =>
+  (model, request) =>
+    Effect.gen(function* () {
+      const parent = yield* cloudflareWorkerTelemetry.captureDurableContext;
+      return yield* Effect.tryPromise((signal) =>
+        observeModelRun(() => ai.run(model, request, { returnRawResponse: true, signal }), {
+          environment,
+          telemetry: cloudflareWorkerTelemetry,
+          parent: Option.getOrUndefined(parent),
+        })
+      );
+    });
+
 /**
  * Builds hosted inference from the direct native binding. Missing binding or model configuration
  * fails before authority is returned; the wrapper always requests a bounded raw response and passes
@@ -29,13 +49,7 @@ const constructInference = (
   return makeWorkersAiHostedInference({
     model: Option.fromNullishOr(environment.HOSTED_AI_MODEL),
     run: Option.map(binding, (ai) => {
-      const run: WorkersAiRun = (model, request) =>
-        Effect.tryPromise((signal) =>
-          observeModelRun(() => ai.run(model, request, { returnRawResponse: true, signal }), {
-            environment,
-            telemetry: cloudflareWorkerTelemetry,
-          })
-        );
+      const run = observedWorkersAiRun({ environment, ai });
       return admission === undefined ? run : makeAdmittedWorkersAiRun({ ...admission, run });
     }),
   });

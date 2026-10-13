@@ -156,7 +156,11 @@ eligible operations receive executable next-call guidance; no suggestion bypasse
 Failures exit nonzero without silent login, retries or commercial-allowance inference.
 Existing server metadata-only Work observation suffices for these synchronous canonical workflows;
 no client content tracing is added. Transport captures bounded Retry-After metadata before success/error decoding and
-retains no raw response or cause for diagnostics.
+retains no raw response or cause for diagnostics. The same bounded transport decodes only the
+server-issued `Fidy-Trace-Id` diagnostic receipt. Failed canonical calls and malformed responses
+print a validated opaque receipt on stderr when available; successful calls add no trace output.
+Canonical JSON stdout remains the unchanged server envelope. Client-supplied correlation never
+grants authority, and no trace headers are sent by the CLI.
 
 Canonical allowance display consumes the server-published `CanonicalAllowance` codec and
 `canonicalAllowanceHeaders` names. Transport projects only `Fidy-Canonical-Allowance`,

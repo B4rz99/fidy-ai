@@ -89,6 +89,7 @@ layer(BunFileSystem.layer)((it) => {
           credential,
           captureRetry: () => {},
           captureAllowance: () => {},
+          captureTrace: () => {},
         });
         for (const { name, input } of [
           { name: "getTransaction", input: { params: { id: "invalid-id" } } },

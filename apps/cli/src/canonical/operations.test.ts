@@ -434,6 +434,7 @@ it.effect(
         maximumRequestBytes: 1024,
         captureRetry: () => {},
         captureAllowance: () => {},
+        captureTrace: () => {},
       });
       for (const destination of [
         "https://attacker.example/transactions",
@@ -543,4 +544,55 @@ it.effect(
       expect(fixture.stdout.join("")).toContain('"from":');
       expect(fixture.requests).toEqual([]);
     })
+);
+
+it.effect(
+  "prints only validated server trace receipts for failed calls without changing machine stdout",
+  () =>
+    Effect.gen(function* () {
+      const body =
+        '{"error":{"code":"unavailable","message":"Temporarily unavailable."},"next":[]}';
+      const traceId = "0123456789abcdef0123456789abcdef";
+      for (const receipt of [traceId, "private-content", "f".repeat(33)]) {
+        const fixture = makeQueryFixture({
+          body,
+          status: 503,
+          headers: { "fidy-trace-id": receipt },
+        });
+        expect(yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)).toBe(
+          true
+        );
+        expect(fixture.stdout).toEqual([body + "\n"]);
+        expect(fixture.stderr.join("").includes("Referencia de diagnóstico:")).toBe(
+          receipt === traceId
+        );
+        expect(fixture.stderr.join("")).not.toContain("private-content");
+        expect(fixture.requests).toHaveLength(1);
+      }
+      const success = makeQueryFixture({
+        body: '{"data":[],"next":[]}',
+        status: 200,
+        headers: { "fidy-trace-id": traceId },
+      });
+      expect(yield* runQueryCommand(["categories", "listCategories"], success.dependencies)).toBe(
+        false
+      );
+      expect(success.stderr.join("")).not.toContain(traceId);
+    })
+);
+
+it.effect("preserves a received diagnostic trace when decoding a response fails", () =>
+  Effect.gen(function* () {
+    const traceId = "0123456789abcdef0123456789abcdef";
+    const fixture = makeQueryFixture({
+      body: "not-json",
+      status: 503,
+      headers: { "fidy-trace-id": traceId },
+    });
+    expect(
+      yield* Effect.result(runQueryCommand(["categories", "listCategories"], fixture.dependencies))
+    ).toMatchObject({ failure: { reason: "TransportUnavailable" } });
+    expect(fixture.stderr.join("")).toContain(`Referencia de diagnóstico: ${traceId}`);
+    expect(fixture.stdout).toEqual([]);
+  })
 );

@@ -5,7 +5,12 @@ import {
 } from "../../apps/server/src/shell/provider-authentication/contract";
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
-import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry-contract";
+import {
+  type TelemetryService,
+  TelemetryTraceId,
+  TelemetryWorkRecord,
+  telemetryTraceHeader,
+} from "@fidy/server/telemetry-contract";
 import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
 import { describe, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
@@ -622,7 +627,13 @@ describe("Cloudflare Worker topology", () => {
         "worker.core.fetch",
         "worker.public.fetch",
       ]);
+      const receipt = yield* Schema.decodeUnknownEffect(TelemetryTraceId)(
+        response.headers.get(telemetryTraceHeader)
+      );
+      expect(new Set(records.map((record) => record.spanId)).size).toBe(2);
       for (const record of records) {
+        yield* Schema.decodeEffect(TelemetryWorkRecord, { onExcessProperty: "error" })(record);
+        expect(record.traceId).toBe(receipt);
         expect(record).toMatchObject({
           release: gitRevision,
           provider: "cloudflare-workers",
@@ -637,7 +648,9 @@ describe("Cloudflare Worker topology", () => {
           "outcome",
           "provider",
           "release",
+          "spanId",
           "statusClass",
+          "traceId",
         ]);
       }
     })

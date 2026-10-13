@@ -1,3 +1,4 @@
+import { captureWorkTrace, sanitizeWorkTrace } from "../../runtime/telemetry/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
@@ -45,6 +46,7 @@ export const dispatchCancellations = (
   input: SubscriptionCancellationDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
+    const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const result = yield* wait(() =>
       input.DB.prepare(`SELECT user_id FROM subscription_cancellations WHERE source_cancellation='void-pending'
@@ -63,6 +65,7 @@ export const dispatchCancellations = (
       );
       yield* wait(() =>
         input.BILLING_COLLECTION_QUEUE.send({
+          ...trace,
           version: 1,
           kind: "source-cancellation",
           userId: row.user_id,
@@ -92,7 +95,8 @@ export const receiveCancellation = (
       row
     );
     const id = `source-cancel-v1-${input.work.userId}-${offer.last_offered_at_ms ?? 0}`;
-    yield* wait(() => input.workflow.create({ id, params: input.work, retention })).pipe(
+    const params = yield* sanitizeWorkTrace(input.work);
+    yield* wait(() => input.workflow.create({ id, params, retention })).pipe(
       Effect.catch(() => wait(() => input.workflow.get(id)))
     );
   });

@@ -6,6 +6,67 @@ import { WhatsAppWork } from "./contract";
 import { receiveWhatsAppWork } from "./runtime";
 import { receiveWhatsAppWork as receiveOwnedWhatsAppWork } from "./internal/whatsapp-work";
 
+it("removes raw trace metadata before coordinator persistence without altering WhatsApp work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const valid = {
+        version: 1,
+        traceId: "1".repeat(32),
+        parentSpanId: "2".repeat(16),
+        sampled: true,
+        capturedAtUnixMilliseconds: now,
+      };
+      const contexts = [
+        valid,
+        { ...valid, content: "private-body-sentinel" },
+        { ...valid, traceId: "credential-sentinel" },
+        { ...valid, capturedAtUnixMilliseconds: now - 86_400_001 },
+      ];
+      const identity = {
+        _tag: "HostedWhatsAppWork",
+        userId: "10000000-0000-4000-8000-000000000001",
+        turnId: "20000000-0000-4000-8000-000000000001",
+      };
+      const requests: Request[] = [];
+      let acknowledged = 0;
+      yield* Effect.tryPromise(() =>
+        receiveWhatsAppWork({
+          messages: contexts.map((traceContext) => ({
+            body: { ...identity, traceContext },
+            ack: (): void => {
+              acknowledged++;
+            },
+            retry: (): void => {
+              throw new Error("Domain work should remain deliverable");
+            },
+          })),
+          coordinator: {
+            getByName: (): Pick<Fetcher, "fetch"> => ({
+              fetch: (request): Promise<Response> => {
+                requests.push(new Request(request));
+                return Promise.resolve(new Response(null, { status: 200 }));
+              },
+            }),
+          },
+        })
+      );
+      const bodies = yield* Effect.forEach(requests, (request) =>
+        Effect.tryPromise(() => request.text()).pipe(
+          Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown)))
+        )
+      );
+      expect(acknowledged).toBe(4);
+      expect(bodies).toEqual([{ ...identity, traceContext: valid }, identity, identity, identity]);
+      expect(requests.map((request) => request.headers.has("x-fidy-traceparent"))).toEqual([
+        true,
+        false,
+        false,
+        false,
+      ]);
+    })
+  ));
+
 const queuedMessage = (
   index: number,
   turn = index

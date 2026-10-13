@@ -48,9 +48,10 @@ import {
   type BillingWorkflowStarter,
 } from "./contract";
 import {
+  captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
-  observeProviderFetch,
   observeWorkerPromise,
+  workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
 import { captureWorkflowFailure } from "../runtime/operational-health/operations";
@@ -69,19 +70,20 @@ export const wompiOutboundHttp = (
   environment: WompiBindings
 ): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
   Effect.scoped(
-    Layer.build(OutboundHttpLive).pipe(
-      Effect.provideService(
-        FetchHttpClient.Fetch,
-        observeProviderFetch(globalThis.fetch, {
-          provider: "wompi",
-          environment,
-          telemetry: cloudflareWorkerTelemetry,
-        })
-      ),
-      Effect.map((clients) =>
-        makeWompiTransport({ environment, httpClient: Context.get(clients, HttpClient.HttpClient) })
-      )
-    )
+    Effect.gen(function* () {
+      const fetcher = yield* captureObservedProviderFetch(globalThis.fetch, {
+        provider: "wompi",
+        environment,
+        telemetry: cloudflareWorkerTelemetry,
+      });
+      const clients = yield* Layer.build(OutboundHttpLive).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, fetcher)
+      );
+      return makeWompiTransport({
+        environment,
+        httpClient: Context.get(clients, HttpClient.HttpClient),
+      });
+    })
   );
 
 const refundWorkFailure = (error: unknown): RefundWorkFailure =>
@@ -116,7 +118,7 @@ export const handleRefundSupport = (
         const clients = yield* Layer.build(OutboundHttpLive).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
-            observeProviderFetch(globalThis.fetch, {
+            yield* captureObservedProviderFetch(globalThis.fetch, {
               provider: "cloudflare-access",
               environment: workerRelease(input.environment),
               telemetry: cloudflareWorkerTelemetry,
@@ -157,6 +159,7 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, 
           environment: workerRelease(this.env),
           telemetry: cloudflareWorkerTelemetry,
           operation: "workflow.billingRefund",
+          parent: workTraceParent(event.payload),
         }
       ),
     });
@@ -210,6 +213,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
           environment: workerRelease(this.env),
           telemetry: cloudflareWorkerTelemetry,
           operation: "workflow.billingCollection",
+          parent: workTraceParent(event.payload),
         }
       ),
       db: this.env.DB,

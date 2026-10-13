@@ -203,6 +203,8 @@ export default {
           "^src/core/_shared/money\\.ts$",
           "^src/core/_shared/context\\.ts$",
           "^src/shell/api\\.ts$",
+          // Pure opaque trace receipts are diagnostic metadata; exporter/runtime code stays private.
+          "^src/shell/observability/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/(agent|canonical-operations|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
           // Pure shared access decisions are deliberate CLI/browser discovery authority (#970).
@@ -1501,6 +1503,8 @@ export default {
         path: "^src/shell/",
         pathNot: [
           "^src/shell/api\\.ts$",
+          // Pure opaque trace receipts are diagnostic metadata; exporter/runtime code stays private.
+          "^src/shell/observability/contract\\.ts$",
           "^src/shell/agent/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/canonical-operations/contract\\.ts$",

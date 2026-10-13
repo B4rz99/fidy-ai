@@ -24,6 +24,20 @@ and enrollment refusals never gain automatic replay. Cancellation interrupts pac
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
 
+The browser emits one closed DevTools transport record per logical request: boundary, coarse outcome,
+status class, bounded attempt count and duration, a fixed failure category and, when available, the
+server-issued `Fidy-Trace-Id` receipt. Safe retries share that observation; interruption and deadline
+exhaustion remain distinct. Receipt validation precedes export and survives body-limit refusal.
+Automatic URL/header spans and client trace propagation remain disabled. Generated response decoding,
+React root error callbacks and global runtime failures emit fixed defect categories with a twenty-record
+document-lifetime cap. Export is best effort and cannot change application outcomes. No request, response,
+schema input, error text, stack, navigation location or User state enters these records.
+
+These records are local DevTools diagnostics, not centrally collected browser telemetry. Server traces
+can correlate a transport receipt, but runtime/render failures and schema decoding failures do not carry
+server receipt correlation. Navigation and component interactions are not recorded, and there is no
+session recording or automatic reproduction of User content.
+
 ## 2. Behavioral ownership
 
 The web application is organized by behavioral ownership rather than route visibility. Marketing,

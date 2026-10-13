@@ -12,6 +12,7 @@ import type {
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
+  workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
 import { captureWorkflowFailure } from "../runtime/operational-health/operations";
@@ -65,6 +66,7 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
           environment: workerRelease(this.env),
           telemetry: cloudflareWorkerTelemetry,
           operation: "workflow.browserPairingEmail",
+          parent: workTraceParent(event.payload),
         }
       ),
       db: this.env.DB,
@@ -107,6 +109,7 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
           environment: workerRelease(this.env),
           telemetry: cloudflareWorkerTelemetry,
           operation: "workflow.emailReplacement",
+          parent: workTraceParent(event.payload),
         }
       ),
       db: this.env.DB,

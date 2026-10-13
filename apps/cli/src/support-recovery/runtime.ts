@@ -39,6 +39,7 @@ export const makeRecoveryClient = (
     maximumRequestBytes,
     captureRetry: () => {},
     captureAllowance: () => {},
+    captureTrace: () => {},
   });
   return Effect.fn(
     function* (input, assertion) {

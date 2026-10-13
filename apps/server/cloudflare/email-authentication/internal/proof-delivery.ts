@@ -12,9 +12,12 @@ import {
 } from "../../../src/shell/email-authentication/runtime";
 import { makeResendOutboundHttp } from "../../../src/shell/outbound-http/operations";
 import {
+  captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
-  observeProviderFetch,
+  observeWorkerExecution,
+  workerRelease,
 } from "../../runtime/telemetry/operations";
+import type { WorkerTraceContinuation } from "../../runtime/telemetry/contract";
 import type { EmailDeliveryEnvironment } from "../contract";
 
 /**
@@ -23,13 +26,14 @@ import type { EmailDeliveryEnvironment } from "../contract";
  * an ambiguous outcome never authorizes another send with a fresh proof.
  */
 export const sendThroughResend = (
-  input: Readonly<{
-    purpose: Parameters<EmailDeliveryPortService["send"]>[0]["purpose"];
-    environment: Pick<EmailDeliveryEnvironment, "RESEND_API_KEY">;
-    to: EmailAddress;
-    combinedCode: EmailVerificationCode;
-    id: string;
-  }>
+  input: WorkerTraceContinuation &
+    Readonly<{
+      purpose: Parameters<EmailDeliveryPortService["send"]>[0]["purpose"];
+      environment: Pick<EmailDeliveryEnvironment, "RESEND_API_KEY">;
+      to: EmailAddress;
+      combinedCode: EmailVerificationCode;
+      id: string;
+    }>
 ): Promise<Exit.Exit<void, EmailSendFailed>> =>
   Effect.runPromiseExit(
     Effect.scoped(
@@ -37,7 +41,7 @@ export const sendThroughResend = (
         const clients = yield* Layer.build(OutboundHttpLive).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
-            observeProviderFetch(globalThis.fetch, {
+            yield* captureObservedProviderFetch(globalThis.fetch, {
               provider: "resend",
               environment: input.environment,
               telemetry: cloudflareWorkerTelemetry,
@@ -55,6 +59,13 @@ export const sendThroughResend = (
           combinedCode: input.combinedCode,
           idempotencyKey: input.id,
         });
+      })
+    ).pipe(
+      observeWorkerExecution({
+        environment: workerRelease(input.environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "emailAuthentication.processPairingDelivery",
+        parent: input.parent,
       })
     )
   );

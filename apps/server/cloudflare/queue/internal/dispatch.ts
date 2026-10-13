@@ -1,6 +1,14 @@
+import { workTraceParent } from "../../runtime/telemetry/operations";
+import { Telemetry } from "../../../src/shell/observability/operations";
+import {
+  type SpanDescriptor,
+  TelemetryAttempt,
+  TelemetryRelease,
+  boundedTelemetryCount,
+} from "../../../src/shell/observability/contract";
 import { ProactivityDeliveryWork } from "../../insights/contract";
 import { receiveProactivityWork } from "../../insights/runtime";
-import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { CoreQueueEnvironment } from "../contract";
 import {
   isBrowserPairingEmailWork,
@@ -40,6 +48,80 @@ type QueueInput = Readonly<{ batch: MessageBatch<unknown>; environment: CoreQueu
 const nativeDelivery = (work: () => Promise<void>): Effect.Effect<void, QueueDeliveryUnavailable> =>
   Effect.tryPromise({ try: work, catch: deliveryFailure });
 
+const QueueRelease = Context.Reference<TelemetryRelease>(
+  "@fidy/server/cloudflare/queue/QueueRelease",
+  { defaultValue: () => "unknown" }
+);
+
+const queueAttemptDescriptor = (attempt: number, release: TelemetryRelease): SpanDescriptor => ({
+  release,
+  component: "api",
+  operation: "worker.core.queue",
+  trigger: "queue",
+  spanOperation: "queue.process",
+  workKind: "queue_attempt",
+  metadata: {
+    _tag: "Queue",
+    attempt: TelemetryAttempt.make(Math.min(100, Math.max(1, Math.trunc(attempt)))),
+    inputCount: boundedTelemetryCount(1),
+    delayMilliseconds: Option.none(),
+  },
+});
+
+const observeWorkflowMessage = <E>(
+  batch: MessageBatch<unknown>,
+  message: Message<unknown>,
+  receive: (batch: MessageBatch<unknown>) => Effect.Effect<void, E>
+): Effect.Effect<void, E> =>
+  Effect.gen(function* () {
+    const telemetry = yield* Effect.serviceOption(Telemetry);
+    const release = yield* QueueRelease;
+    let retried = false;
+    const observedMessage: Message<unknown> = {
+      id: message.id,
+      timestamp: message.timestamp,
+      body: message.body,
+      attempts: message.attempts,
+      ack: () => message.ack(),
+      retry: (options) => {
+        retried = true;
+        message.retry(options);
+      },
+    };
+    const work = receive({
+      queue: batch.queue,
+      metadata: batch.metadata,
+      messages: [observedMessage],
+      ackAll: () => observedMessage.ack(),
+      retryAll: (options) => observedMessage.retry(options),
+    }).pipe(
+      Effect.tap(() =>
+        Option.match(telemetry, {
+          onNone: () => Effect.void,
+          onSome: (service) =>
+            service.recordOutcome(
+              retried
+                ? {
+                    outcome: "failed",
+                    error: Option.some("operational_failure"),
+                    retryable: true,
+                  }
+                : { outcome: "succeeded", error: Option.none(), retryable: false }
+            ),
+        })
+      )
+    );
+    return yield* Option.match(telemetry, {
+      onNone: () => work,
+      onSome: (service) =>
+        service.continueSpan(
+          workTraceParent(message.body),
+          queueAttemptDescriptor(message.attempts, release),
+          work
+        ),
+    });
+  });
+
 const receiveWorkflowBatch = <E>(
   batch: MessageBatch<unknown>,
   receive: (message: MessageBatch<unknown>) => Effect.Effect<void, E>
@@ -47,15 +129,7 @@ const receiveWorkflowBatch = <E>(
   Effect.gen(function* () {
     let failure = Option.none<Cause.Cause<E>>();
     for (const message of batch.messages) {
-      const result = yield* Effect.exit(
-        receive({
-          queue: batch.queue,
-          metadata: batch.metadata,
-          messages: [message],
-          ackAll: () => message.ack(),
-          retryAll: (options) => message.retry(options),
-        })
-      );
+      const result = yield* Effect.exit(observeWorkflowMessage(batch, message, receive));
       if (Exit.isFailure(result)) {
         if (Cause.hasInterrupts(result.cause)) return yield* Effect.failCause(result.cause);
         if (Option.isNone(failure)) failure = Option.some(result.cause);
@@ -228,6 +302,15 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
 export const dispatchCoreQueue = (
   input: QueueInput
 ): Effect.Effect<void, QueueDeliveryUnavailable> =>
-  input.batch.queue === input.environment.OPERATIONAL_CANARY_QUEUE_NAME
+  (input.batch.queue === input.environment.OPERATIONAL_CANARY_QUEUE_NAME
     ? receiveCanaryBatch(input)
-    : receiveWorkQueue(input);
+    : receiveWorkQueue(input)
+  ).pipe(
+    Effect.provideService(
+      QueueRelease,
+      Option.getOrElse(
+        Schema.decodeOption(TelemetryRelease)(input.environment.RELEASE_GIT_SHA),
+        () => "unknown" as const
+      )
+    )
+  );

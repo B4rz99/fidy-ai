@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
@@ -234,7 +235,13 @@ const methodNotAllowed = (): Response =>
 const forwardHostedWhatsApp = (
   environment: CoreHttpEnvironment,
   path: "whatsapp" | "whatsapp/status",
-  admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission | WhatsAppStatusAdmission
+  {
+    admission,
+    traceHeaders,
+  }: Readonly<{
+    admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission | WhatsAppStatusAdmission;
+    traceHeaders: Readonly<Record<string, string>>;
+  }>
 ): Promise<Response> =>
   Effect.runPromise(
     Schema.encodeEffect(
@@ -244,7 +251,7 @@ const forwardHostedWhatsApp = (
     environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
       new Request(`https://coordinator.internal/hosted-turn/${path}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...traceHeaders },
         body,
       })
     )
@@ -256,16 +263,20 @@ const callbackEffect = (
   publish: PublishAcceptedWork
 ): Effect.Effect<Response> =>
   request.method === "POST"
-    ? receiveWhatsAppWebhook({
-        ...environment,
-        onHostedText: (admission) =>
-          forwardHostedWhatsApp(environment, "whatsapp", admission).then((response) => {
-            if (response.status === HTTP_ACCEPTED) publish("whatsapp", admission.userId);
-            return response;
-          }),
-        onHostedStatus: (admission) =>
-          forwardHostedWhatsApp(environment, "whatsapp/status", admission),
-      })(request)
+    ? Effect.flatMap(captureTraceHeaders, (traceHeaders) =>
+        receiveWhatsAppWebhook({
+          ...environment,
+          onHostedText: (admission) =>
+            forwardHostedWhatsApp(environment, "whatsapp", { admission, traceHeaders }).then(
+              (response) => {
+                if (response.status === HTTP_ACCEPTED) publish("whatsapp", admission.userId);
+                return response;
+              }
+            ),
+          onHostedStatus: (admission) =>
+            forwardHostedWhatsApp(environment, "whatsapp/status", { admission, traceHeaders }),
+        })(request)
+      )
     : Effect.succeed(methodNotAllowed());
 
 const providerCallbackEffect = (
@@ -365,6 +376,7 @@ const sendToCoordinator = ({
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
     // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
+    const traceHeaders = yield* captureTraceHeaders;
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalWorkAdmission))(
       coordinatorAdmission(subject, work)
@@ -373,7 +385,7 @@ const sendToCoordinator = ({
       stub.fetch(
         new Request(`https://coordinator.internal/${coordinatorRoutes[work._tag]}`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...traceHeaders },
           body,
         })
       )
@@ -950,6 +962,7 @@ const hostedTurnResponse = (
     if (Option.isNone(input)) {
       return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
     }
+    const traceHeaders = yield* captureTraceHeaders;
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(HostedTurnAdmission))({
       userId: UserId.make(subject.value.userId),
@@ -961,7 +974,7 @@ const hostedTurnResponse = (
       stub.fetch(
         new Request("https://coordinator.internal/hosted-turn", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...traceHeaders },
           body,
           signal: request.signal,
         })
@@ -994,12 +1007,13 @@ const hostedProgressResponse = (
       digest: Array.from(subject.value.digest),
       ...input.value,
     });
+    const traceHeaders = yield* captureTraceHeaders;
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
     return yield* Effect.tryPromise(() =>
       stub.fetch(
         new Request("https://coordinator.internal/hosted-turn/progress", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...traceHeaders },
           body,
           signal: request.signal,
         })
@@ -1032,12 +1046,13 @@ const hostedReceiptResponse = (
       digest: Array.from(subject.value.digest),
       ...input.value,
     });
+    const traceHeaders = yield* captureTraceHeaders;
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
     return yield* Effect.tryPromise(() =>
       stub.fetch(
         new Request("https://coordinator.internal/hosted-turn/receipt", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...traceHeaders },
           body,
           signal: request.signal,
         })

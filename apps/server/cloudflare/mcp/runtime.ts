@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import {
   type Cause,
   Clock,
@@ -331,11 +332,12 @@ const forwardMcp = (
       body: Array.from(body),
     });
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthMcpAdmission))(admitted);
+    const traceHeaders = yield* captureTraceHeaders;
     return yield* Effect.tryPromise((signal) =>
       input.coordinator.getByName(admitted.userId).fetch(
         new Request("https://coordinator.internal/oauth-mcp", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...traceHeaders },
           body: encoded,
           signal,
         })

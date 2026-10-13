@@ -1,3 +1,4 @@
+import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { Cause, Effect, Exit, Schema } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import { discoverRecurringWork } from "./operations";
@@ -18,12 +19,13 @@ const advanceUser = ({
   RecurringUnavailable
 > =>
   Effect.gen(function* () {
+    const traceHeaders = yield* captureTraceHeaders;
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(RecurringWork))({ userId });
     return yield* Effect.tryPromise({
       try: (signal) =>
         coordinator.getByName(userId).fetch("https://coordinator/recurring-work", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...traceHeaders },
           body,
           signal,
         }),

@@ -36,8 +36,8 @@ import { recordConsentDelivery } from "../../consent/ingress/operations";
 import { makeConsentIngress } from "../../consent/ingress/runtime";
 import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
 import {
+  captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
-  observeProviderFetch,
 } from "../../runtime/telemetry/operations";
 import {
   type WhatsAppIngressEnvironment as Environment,
@@ -472,20 +472,18 @@ export const receiveIngress =
   (request) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const clients = yield* Layer.build(OutboundHttpLive);
-        return yield* handleWebhook(request, environment).pipe(
-          Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient)),
-          Effect.provideService(Crypto.Crypto, workerCrypto)
-        );
-      })
-    ).pipe(
-      Effect.provideService(
-        FetchHttpClient.Fetch,
-        observeProviderFetch(globalThis.fetch, {
+        const fetcher = yield* captureObservedProviderFetch(globalThis.fetch, {
           provider: "kapso",
           environment,
           telemetry: cloudflareWorkerTelemetry,
-        })
-      ),
-      Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE)))
-    );
+        });
+        const clients = yield* Layer.build(OutboundHttpLive).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, fetcher)
+        );
+        return yield* handleWebhook(request, environment).pipe(
+          Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient)),
+          Effect.provideService(Crypto.Crypto, workerCrypto),
+          Effect.provideService(FetchHttpClient.Fetch, fetcher)
+        );
+      })
+    ).pipe(Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE))));

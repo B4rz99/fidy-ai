@@ -22,8 +22,13 @@ import {
 } from "../src/shell/transactions/runtime";
 import { ownsMemoryPath as memoryPath } from "../src/shell/memory/runtime";
 import type { TelemetryService } from "../src/shell/observability/contract";
+import { telemetryTraceHeader } from "../src/shell/observability/contract";
+import { encodeTraceParent } from "../src/shell/observability/operations";
+import {
+  type WorkerTelemetryEnvironment,
+  workerInternalTraceHeader,
+} from "./runtime/telemetry/contract";
 import { Cause, Effect, Option, Schema } from "effect";
-import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerRequest } from "./runtime/telemetry/operations";
 import { browserOrigins, productionTopology } from "./runtime/contract";
 import {
@@ -99,7 +104,7 @@ const applyApiPolicy = (
   appendVary(headers, "Origin");
   headers.set(
     "access-control-expose-headers",
-    "Fidy-Canonical-Allowance, Fidy-Canonical-Limit, Fidy-Canonical-Remaining, Fidy-Canonical-Reset, Retry-After"
+    `Fidy-Canonical-Allowance, Fidy-Canonical-Limit, Fidy-Canonical-Remaining, Fidy-Canonical-Reset, Retry-After, ${telemetryTraceHeader}`
   );
 
   if (Option.contains(origin, browserOrigin)) {
@@ -717,10 +722,45 @@ const coreSmokeFailure = (
   return unavailableResponse;
 };
 
+const projectCoreSmokeResponse = (
+  response: Response,
+  request: Request,
+  environment: PublicEnvironment
+): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    if (new URL(request.url).pathname !== smokePath) return response;
+    if (response.status === serviceUnavailableStatus) {
+      return coreSmokeFailure(request, environment, response);
+    }
+    if (!response.ok) return response;
+    const version = environment.CF_VERSION_METADATA?.id;
+    if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
+      return smokeUnavailable(request, environment, "configuration");
+    }
+    const decoded = yield* Effect.tryPromise(() =>
+      response.json().then(Schema.decodeUnknownOption(SmokeResponse))
+    );
+    if (Option.isNone(decoded)) {
+      return smokeUnavailable(request, environment, "public_response");
+    }
+    return Response.json(
+      {
+        ...decoded.value,
+        manifest: smokeManifest,
+        public: {
+          workerVersionId: version,
+          gitRevision: environment.RELEASE_GIT_SHA,
+          contractDigest: environment.CONTRACT_DIGEST,
+        },
+      },
+      { status: response.status }
+    );
+  });
+
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
-  origin: Option.Option<string>
+  { origin, telemetry }: Readonly<{ origin: Option.Option<string>; telemetry: TelemetryService }>
 ): Effect.Effect<Response> => {
   if (rejectsMcpIngress(request, environment.BROWSER_ORIGIN)) {
     return Effect.succeed(
@@ -737,38 +777,18 @@ const routeOwnedRequest = (
   }
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
+    // Public correlation claims never cross the private service binding. Only this active span
+    // supplies continuation, independently of credentials and admission decisions.
+    forwarded.headers.delete(workerInternalTraceHeader);
+    const trace = yield* telemetry.captureDurableContext;
+    if (Option.isSome(trace)) {
+      forwarded.headers.set(workerInternalTraceHeader, encodeTraceParent(trace.value));
+    }
     const response = yield* Effect.tryPromise({
       try: (signal) => environment.CORE.fetch(forwarded, { signal }),
       catch: () => undefined,
     });
-    if (new URL(request.url).pathname !== smokePath) return response;
-    if (response.status === serviceUnavailableStatus) {
-      return coreSmokeFailure(request, environment, response);
-    }
-    if (!response.ok) return response;
-    const version = environment.CF_VERSION_METADATA?.id;
-    if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
-      return smokeUnavailable(request, environment, "configuration");
-    }
-    const decoded = yield* Effect.tryPromise({
-      try: () => response.json().then(Schema.decodeUnknownOption(SmokeResponse)),
-      catch: () => undefined,
-    });
-    if (Option.isNone(decoded)) {
-      return smokeUnavailable(request, environment, "public_response");
-    }
-    return Response.json(
-      {
-        ...decoded.value,
-        manifest: smokeManifest,
-        public: {
-          workerVersionId: version,
-          gitRevision: environment.RELEASE_GIT_SHA,
-          contractDigest: environment.CONTRACT_DIGEST,
-        },
-      },
-      { status: response.status }
-    );
+    return yield* projectCoreSmokeResponse(response, request, environment);
   }).pipe(
     Effect.match({
       onFailure: () => smokeUnavailable(request, environment, "public_forwarding"),
@@ -778,7 +798,24 @@ const routeOwnedRequest = (
   );
 };
 
-const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.Effect<Response> =>
+const annotateSmokeVersion = (
+  response: Response,
+  request: Request,
+  environment: PublicEnvironment
+): Response => {
+  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return response;
+  const version = environment.CF_VERSION_METADATA?.id;
+  if (version === undefined) return response;
+  const headers = new Headers(response.headers);
+  headers.set("x-fidy-smoke-worker-version", version);
+  return new Response(response.body, { status: response.status, headers });
+};
+
+const fetchEffect = (
+  request: Request,
+  environment: PublicEnvironment,
+  telemetry: TelemetryService
+): Effect.Effect<Response> =>
   Effect.gen(function* () {
     // The pinned runner evaluates synchronously before registering its external abort signal.
     if (request.signal.aborted) return yield* Effect.interrupt;
@@ -815,7 +852,7 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
     return yield* routeOwnedRequest(
       request,
       { ...environment, BROWSER_ORIGIN: browserOrigin.value },
-      origin
+      { origin, telemetry }
     );
   }).pipe(
     Effect.catchCauseIf(
@@ -829,21 +866,26 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
           )
         )
     ),
-    Effect.map((response) => {
-      if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return response;
-      const version = environment.CF_VERSION_METADATA?.id;
-      if (version === undefined) return response;
-      const headers = new Headers(response.headers);
-      headers.set("x-fidy-smoke-worker-version", version);
-      return new Response(response.body, { status: response.status, headers });
-    })
+    Effect.map((response) => annotateSmokeVersion(response, request, environment))
   );
 
 /** Builds the internet-facing ingress with one telemetry service for each request Work span. */
 export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => ({
   fetch: (request, environment) =>
     Effect.runPromise(
-      fetchEffect(request, environment).pipe(
+      fetchEffect(request, environment, telemetry).pipe(
+        Effect.flatMap((response) =>
+          Effect.map(telemetry.captureDurableContext, (trace) => {
+            const headers = new Headers(response.headers);
+            headers.delete(telemetryTraceHeader);
+            if (Option.isSome(trace)) headers.set(telemetryTraceHeader, trace.value.traceId);
+            return new Response(response.body, {
+              status: response.status,
+              statusText: response.statusText,
+              headers,
+            });
+          })
+        ),
         observeWorkerRequest({
           environment,
           telemetry,

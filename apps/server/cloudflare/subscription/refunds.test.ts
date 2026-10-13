@@ -1256,3 +1256,42 @@ it("preserves an independently active TrialPeriod after a successful full refund
       expect(yield* standing(db)).toMatchObject({ data: { accessTier: "pro" } });
     })
   ));
+
+it.each(["refund", "refund-void-verification"] as const)(
+  "drops diagnostic garbage before durable %s handoff without refusing valid work",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const refundAttemptId = "60000000-0000-4000-8000-000000000001";
+        const domain = {
+          version: 1,
+          kind,
+          refundAttemptId,
+          ...(kind === "refund" ? {} : { verification: 1 }),
+        };
+        const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
+        const get = vi.fn((_id: string) => Promise.resolve({}));
+        const ack = vi.fn();
+        const traceContext = {
+          version: 1,
+          traceId: "1".repeat(32),
+          parentSpanId: "2".repeat(16),
+          sampled: true,
+          capturedAtUnixMilliseconds: yield* Clock.currentTimeMillis,
+          credential: "private-credential-sentinel",
+          financialContent: "private-financial-sentinel",
+        };
+        yield* receiveRefunds({
+          environment: { BILLING_REFUND_WORKFLOW: { create, get } },
+          batch: { messages: [{ body: { ...domain, traceContext }, ack }] },
+        });
+        expect(create).toHaveBeenCalledExactlyOnceWith({
+          id: `refund-v1-${refundAttemptId}${kind === "refund" ? "" : "-verify-1"}`,
+          params: domain,
+          retention: { successRetention: "3 days", errorRetention: "3 days" },
+        });
+        expect(ack).toHaveBeenCalledOnce();
+        expect(get).not.toHaveBeenCalled();
+      })
+    )
+);

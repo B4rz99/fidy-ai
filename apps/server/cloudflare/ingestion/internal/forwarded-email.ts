@@ -1,3 +1,4 @@
+import { captureWorkTrace } from "../../runtime/telemetry/operations";
 import { activateDeferredEmails, prepareEmailProcessingAdmission } from "./email-allowance";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
@@ -377,6 +378,7 @@ export const receiveForwardedEmail = Effect.fn(function* (
 
 /** Publish only an opaque receipt identity and its explicit UserId; redelivery is expected. */
 export const dispatchForwardedEmail = Effect.fn(function* (environment: ForwardedEmailEnvironment) {
+  const trace = yield* captureWorkTrace;
   const now = yield* Clock.currentTimeMillis;
   yield* activateDeferredEmails({ db: environment.DB, current: now }).pipe(
     Effect.mapError(authorityUnavailable)
@@ -411,7 +413,11 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
     );
     if (claimed.meta.changes !== 1) continue;
     yield* io(() =>
-      environment.EMAIL_QUEUE.send({ receiptId: row.receipt_id, userId: row.user_id })
+      environment.EMAIL_QUEUE.send({
+        ...trace,
+        receiptId: row.receipt_id,
+        userId: row.user_id,
+      })
     );
   }
 });

@@ -1,6 +1,9 @@
 import { OutboundHttpLive } from "../../../outbound-http/runtime";
 import { makeResendOutboundHttp } from "../../../../src/shell/outbound-http/operations";
-import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../telemetry/operations";
+import {
+  captureObservedProviderFetch,
+  cloudflareWorkerTelemetry,
+} from "../../telemetry/operations";
 import type { OperationalAlert } from "../contract";
 import { Context, Effect, Layer, Redacted, Schema, type Scope } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -42,7 +45,7 @@ export const makeOperatorEmailClient = (
     const clients = yield* Layer.build(OutboundHttpLive).pipe(
       Effect.provideService(
         FetchHttpClient.Fetch,
-        observeProviderFetch(globalThis.fetch, {
+        yield* captureObservedProviderFetch(globalThis.fetch, {
           provider: "resend",
           environment: { RELEASE_GIT_SHA: input.release },
           telemetry: cloudflareWorkerTelemetry,

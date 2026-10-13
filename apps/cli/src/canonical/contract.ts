@@ -1,4 +1,4 @@
-import type { CanonicalAllowance } from "@fidy/server/client";
+import type { CanonicalAllowance, TelemetryTraceId } from "@fidy/server/client";
 import { type Effect, type Option, Schema, type Scope } from "effect";
 import type { CliFailure, Credential, CredentialStore } from "../credential/contract";
 import type { HttpClient } from "effect/http";
@@ -9,6 +9,7 @@ export type OperationResult = Readonly<{
   failed: boolean;
   retryAfterSeconds: Option.Option<number>;
   allowance: Option.Option<CanonicalAllowance>;
+  traceId: Option.Option<typeof TelemetryTraceId.Type>;
 }>;
 
 /** Request fields decoded by the selected canonical codec before generated-client encoding. */
@@ -37,6 +38,7 @@ export type CanonicalClientFactory = (
     credential: Credential;
     captureRetry: (seconds: number) => void;
     captureAllowance: (allowance: Option.Option<CanonicalAllowance>) => void;
+    captureTrace: (traceId: Option.Option<typeof TelemetryTraceId.Type>) => void;
   }>
 ) => Effect.Effect<CanonicalClient, never, Scope.Scope>;
 

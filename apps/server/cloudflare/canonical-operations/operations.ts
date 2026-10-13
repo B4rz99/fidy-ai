@@ -1,3 +1,4 @@
+import { observeCanonicalResponse } from "../runtime/application-observation/operations";
 import {
   executeHostedStatementCall as heldStatementCall,
   executeHostedStatementQuery as heldStatementQuery,
@@ -54,12 +55,18 @@ import {
 import { transactionNoStore } from "../canonical-work/contract";
 
 /** Read only installed statement queries under Agent's current upload conversation authority. */
-export const executeHostedStatementQuery: typeof heldStatementQuery = (input) =>
-  heldStatementQuery(input);
+export const executeHostedStatementQuery: typeof heldStatementQuery = (input) => {
+  const operation = operationCatalog.byId.get(input.operation);
+  const work = heldStatementQuery(input);
+  return operation === undefined ? work : observeCanonicalResponse(work, operation.id);
+};
 
 /** Execute only installed statement work under Agent's verified live Turn and origin Session. */
-export const executeHostedStatementCall: typeof heldStatementCall = (input) =>
-  heldStatementCall(input);
+export const executeHostedStatementCall: typeof heldStatementCall = (input) => {
+  const operation = operationCatalog.byId.get(input.operation);
+  const work = heldStatementCall(input);
+  return operation === undefined ? work : observeCanonicalResponse(work, operation.id);
+};
 
 const httpServiceUnavailable = 503;
 const unauthenticatedStatus = 401;
@@ -389,7 +396,7 @@ const executeCall = (
       response.status === httpServiceUnavailable
       ? unavailableStatement()
       : response;
-  });
+  }).pipe((effect) => observeCanonicalResponse(effect, work.operation));
 };
 
 /** Dispatch a bounded batch or an individual catalog call within one User coordination turn. */
@@ -549,6 +556,8 @@ export const executeCanonicalWork = (
     return Effect.succeed(transactionUnavailable());
   }
   return executeWork({ ...input, subject: canonicalWorkSubject(input) }).pipe(
+    (effect) =>
+      input.work._tag === "Batch" ? observeCanonicalResponse(effect, atomicBatchOperation) : effect,
     Effect.provideService(
       HostedInference,
       Option.getOrElse(input.inference, () => unreachableHostedInference)
@@ -644,7 +653,7 @@ const invokeQueryOwner = ({
           bucket,
           browserOrigin,
         })
-      )
+      ).pipe((effect) => observeCanonicalResponse(effect, operation.id))
     );
     // Caller deadlines remain interruptions, never owner defects or validation refusals.
     if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {

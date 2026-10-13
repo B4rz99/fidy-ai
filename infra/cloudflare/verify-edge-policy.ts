@@ -30,7 +30,9 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #1257 browser session binding bootstrap and forwarding.
 // Includes #1255 native outbound response ownership; destinations, credentials, routing and edge rules are unchanged.
 // Includes #1260 bounded, lossy Core refusal telemetry after response admission; no routing, edge or authority change.
-const expectedEdgePolicyDigest = "d8277dfc119cf1c777f7a42bfef5f237ceef6ee5667e309f94aa2fe6b1bac526";
+// Selective telemetry creates isolated public roots and trusted private trace propagation;
+// credential admission, routing, topology and platform invocation-log policy stay unchanged.
+const expectedEdgePolicyDigest = "ec169de9435bf205278d535c5cc4e282f2d6ab2c66a44e782c55701f01268a5a";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

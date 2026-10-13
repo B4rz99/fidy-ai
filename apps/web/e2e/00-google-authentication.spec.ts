@@ -19,7 +19,6 @@ const configuration = {
   label: "Google",
   authorizationPattern: "https://accounts.google.com/o/oauth2/v2/auth**",
   recoverWithOperator: true,
-  selectFromPublicSite: false,
 } as const;
 playwright.test(
   "an unavailable pairing response closes the popup and permits explicit signup retry",
@@ -43,7 +42,7 @@ for (const outcome of ["cancel", "timeout"] as const) {
   );
 }
 playwright.test(
-  "creates a User from the public site with Google, saves recovery, and persists the session",
+  "creates a User with Google, saves recovery, and persists the session",
   ({ page, context, request }) => signupJourney({ configuration, page, context, request })
 );
 for (const intent of ["signup", "login"] as const) {

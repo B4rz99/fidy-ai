@@ -13,10 +13,9 @@ const configuration = {
   label: "Microsoft",
   authorizationPattern: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize**",
   recoverWithOperator: false,
-  selectFromPublicSite: true,
 } as const;
 playwright.test(
-  "creates a User from the public site with Microsoft, saves recovery, and persists the session",
+  "creates a User with Microsoft, saves recovery, and persists the session",
   ({ page, context, request }) => signupJourney({ configuration, page, context, request })
 );
 for (const intent of ["signup", "login"] as const) {

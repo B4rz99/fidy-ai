@@ -11,44 +11,27 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    // Isolate rendered-behavior mock history explicitly rather than relying on Vitest 5's default.
+    // Boundary fixtures own their call history; React workflows live in Playwright.
     clearMocks: true,
     // Vitest 5's failure for unawaited asynchronous assertions is deliberate: assertion failures
     // must remain attached to their owning test.
-    include: [
-      "src/**/*.test.ts",
-      "src/**/*.test.tsx",
-      "cloudflare/**/*.test.ts",
-      "scripts/**/*.test.ts",
-    ],
-    setupFiles: ["./src/testing/setup.ts"],
+    include: ["src/**/*.test.ts", "cloudflare/**/*.test.ts", "scripts/**/*.test.ts"],
     coverage: {
       provider: "istanbul",
       reportsDirectory: "coverage",
       reporter: ["text", "json-summary", "html"],
       // Vitest 5 matches these paths from the apps/web project root, not the workspace root.
-      include: [
-        "src/app/**/*.{ts,tsx}",
-        "src/features/**/*.{ts,tsx}",
-        "src/session/**/*.{ts,tsx}",
-        "src/transport/**/*.{ts,tsx}",
-        "src/ui/**/*.{ts,tsx}",
-      ],
-      // Browser orchestration is exercised through its real timers, transport, clipboard, and DOM
-      // in Playwright; Istanbul's jsdom unit runtime cannot represent those acceptance seams.
-      exclude: [
-        "src/testing/**",
-        "src/ui/components/**",
-        "src/features/browser-login/**",
-        "src/features/provider-authentication/**",
-        "src/features/dashboard/drag-adapter.tsx",
-        "src/features/pats/feature.tsx",
-      ],
+      include: ["src/browser/**/*.ts", "src/features/**/*.ts", "src/transport/**/*.ts"],
+      // Keep logic coverage visible; mounted UI orchestration has browser acceptance evidence.
+      exclude: ["src/features/browser-login/**", "src/features/provider-authentication/**"],
+      // Preserve the transport boundary's 90% gate independently of browser workflow coverage.
       thresholds: {
-        branches: 90,
-        functions: 90,
-        lines: 90,
-        statements: 90,
+        "src/transport/**/*.ts": {
+          branches: 90,
+          functions: 90,
+          lines: 90,
+          statements: 90,
+        },
       },
     },
   },

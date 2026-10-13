@@ -1,5 +1,7 @@
 # Hosted Agent chat
 
+Component-suite references below are historical evidence. Current UI verification uses the browser journeys in the rerun commands; component tests have been removed under the repository test policy.
+
 Non-AI regression, 2026-10-12: the full 449-check web suite passed with bounded concurrency, including chat draft retention, consecutive replies, visible-delivery acknowledgment and receipt retry. The selected real Worker/D1 Transaction/Dashboard/HostedTurn run passed 302 checks, including hosted authority and exact confirmation scenarios with deterministic inference. This closes the current local regression rerun, not the unresolved live ordinary-language Dashboard edit or redundant deletion question; those still require Workers AI availability.
 
 Quota-reset retry, 2026-10-12: after the User reported a reset, two explicit production greetings still produced the daily-limit failure with the draft retained and no assistant reply. Network inspection of the second request confirmed HTTP 429 from `/web/hosted-turns` with the closed status `provider_quota_exceeded`. The independent remote-binding conformance script, using the approved `@cf/google/gemma-4-26b-a4b-it` model and synthetic inputs, also refused its first live check with `check=canonical_query category=ProviderQuotaExceeded`. Its prerequisite deterministic suite passed all 38 checks. Ordinary-language Dashboard edits and redundant deletion confirmation therefore remain unverified after reset; no new production fixtures or mutations were created in this retry.

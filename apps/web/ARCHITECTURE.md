@@ -178,8 +178,9 @@ architecture and production runbook.
 
 ## 5. Testing seams
 
-Web tests exercise behavior through rendered application and browser boundaries rather than server
-implementations. Production-policy tests validate the generated static artifact, SPA fallbacks,
+Vitest tests exercise pure decisions and Effect programs through their public interfaces. UI workflows
+are exercised through Playwright browser acceptance. Istanbul reports logic coverage and enforces a
+90% gate at the browser transport boundary. Production-policy tests validate the generated static artifact, SPA fallbacks,
 security headers, cache behavior, and browser bundle boundary.
 
 The repository's cross-application browser acceptance remains owned by root architecture. It runs

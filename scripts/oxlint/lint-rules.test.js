@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RuleTester } from "oxlint/plugins-dev";
 import effectGuards from "./effect-guards.js";
+import testGuards from "./test-guards.js";
 
 const routeFile = fileURLToPath(new URL("../../apps/web/src/app/routes.ts", import.meta.url));
 const publicSiteFile = fileURLToPath(
@@ -21,6 +22,71 @@ const publicSiteFile = fileURLToPath(
 );
 const otherFile = fileURLToPath(new URL("../../apps/web/src/app/other.ts", import.meta.url));
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
+
+tester.run("test-guards/no-tsx-tests", testGuards.rules["no-tsx-tests"], {
+  valid: [
+    { code: "export {};", filename: "policy.test.ts" },
+    { code: "export {};", filename: "feature.tsx" },
+    { code: "export {};", filename: "journey.spec.ts" },
+  ],
+  invalid: [
+    { code: "", filename: "feature.test.tsx", errors: [{ messageId: "tsxTest" }] },
+    {
+      code: "export {};",
+      filename: "/workspace/apps/web/src/nested/feature.test.tsx",
+      errors: [{ messageId: "tsxTest" }],
+    },
+  ],
+});
+
+tester.run("test-guards/no-module-mocks", testGuards.rules["no-module-mocks"], {
+  valid: [
+    'import { vi } from "vitest"; vi.fn(); vi.mocked(callback);',
+    'import { vi } from "vitest"; vi.spyOn(globalThis, "fetch");',
+    'import { mock } from "bun:test"; mock(() => 1);',
+    'import { vi } from "vitest"; function check(vi) { vi.mock("data"); }',
+    'const vi = { mock() {} }; vi.mock("data");',
+    'import { Layer } from "effect"; Layer.succeed(Service, fixture);',
+    'const cycle = cycle; cycle.mock("data");',
+  ],
+  invalid: [
+    'import { vi } from "vitest"; vi.mock("./owner", () => ({}));',
+    'import { vi as replacement } from "vitest"; replacement.doMock("./owner");',
+    'import * as tests from "vitest"; tests.vi["mock"]("./owner");',
+    'import { vi } from "vitest"; const replacement = vi; replacement.mock("./owner");',
+    'import { vi } from "vitest"; const { mock: replace } = vi; replace("./owner");',
+    'import { vi } from "vitest"; const replace = vi.doMock; replace("./owner");',
+    'import { jest as tests } from "@jest/globals"; tests.mock("./owner");',
+    'import { jest } from "@jest/globals"; jest.unstable_mockModule("./owner", () => ({}));',
+    'import { mock as replacement } from "bun:test"; replacement.module("./owner", () => ({}));',
+    'import { mock } from "node:test"; mock.module("./owner", {});',
+    'const { vi } = require("vitest"); vi.mock("./owner");',
+    'const { vi } = await import("vitest"); vi.mock("./owner");',
+    'vi.mock("./owner");',
+    'jest.doMock("./owner");',
+  ].map((code) => ({ code, errors: [{ messageId: "moduleMock" }] })),
+});
+
+tester.run("test-guards/no-react-test-tools", testGuards.rules["no-react-test-tools"], {
+  valid: [
+    'import { test } from "@playwright/test";',
+    'import { createRoot } from "react-dom/client";',
+    'import { it } from "@effect/vitest";',
+    'import { RegistryProvider } from "@effect/atom-react";',
+    'import fixture from "./react-test-renderer-fixture";',
+  ],
+  invalid: [
+    'import { render } from "@testing-library/react";',
+    'import "@testing-library/jest-dom/vitest";',
+    'import renderer from "react-test-renderer";',
+    'import { act } from "react-dom/test-utils";',
+    'export { render } from "@testing-library/react";',
+    'export * from "enzyme";',
+    'const renderer = await import("react-test-renderer/shallow");',
+    'const { render } = require("@testing-library/react");',
+    'import { render } from "@vitest/browser-react";',
+  ].map((code) => ({ code, errors: [{ messageId: "reactTestTool" }] })),
+});
 
 tester.run("effect-guards/no-ordinary-interface", effectGuards.rules["no-ordinary-interface"], {
   valid: [
@@ -166,6 +232,26 @@ tester.run(
 // Exercise the real lint config as well as the isolated rule: a new source file
 // must not escape merely because the old built-in rule was replaced.
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
+const testProbe = join(workspaceRoot, `apps/web/src/.lint-test-probe-${process.pid}.test.tsx`);
+try {
+  writeFileSync(
+    testProbe,
+    'import { vi } from "vitest";\nimport { render } from "@testing-library/react";\nvi.mock("./owner", () => ({}));\n'
+  );
+  const result = spawnSync(
+    "./node_modules/.bin/oxlint",
+    ["--config", ".oxlintrc.json", testProbe],
+    { cwd: workspaceRoot, encoding: "utf8" }
+  );
+  const report = `${result.stdout}\n${result.stderr}`;
+  for (const rule of ["no-tsx-tests", "no-module-mocks", "no-react-test-tools"]) {
+    assert.ok(report.includes(`test-guards(${rule})`), report);
+  }
+  assert.notEqual(result.status, 0);
+} finally {
+  unlinkSync(testProbe);
+}
+
 const probeFile = fileURLToPath(
   new URL(`../../apps/web/src/app/.lint-interface-probe-${process.pid}.ts`, import.meta.url)
 );

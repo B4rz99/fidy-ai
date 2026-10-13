@@ -3,6 +3,7 @@ import type { RuleTester } from "oxlint/plugins-dev";
 // Derive node shapes from Oxlint's public RuleTester visitor API; do not maintain
 // a parallel AST declaration for the JS plugin.
 export type Rule = Parameters<RuleTester["run"]>[1];
+export type RuleContext = Parameters<NonNullable<Rule["create"]>>[0];
 type Visitors = ReturnType<NonNullable<Rule["create"]>>;
 type VisitorNode<Key extends keyof Visitors> = Parameters<NonNullable<Visitors[Key]>>[0];
 

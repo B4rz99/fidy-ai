@@ -225,6 +225,12 @@ providers require a separate interface with explicit per-chunk and aggregate bud
 Every test must protect observable behaviour and catch a plausible defect not already caught by
 another test. Otherwise delete or merge it.
 
+UI tests must protect a Fidy workflow or contract. Do not write tests that merely prove ordinary
+React rendering, prop forwarding, click/input handling, or framework lifecycle. Avoid markup
+snapshots, CSS-class inventories, and assertions tied to component structure. Cover meaningful UI
+behaviour through browser acceptance tests; test independently meaningful pure decisions and Effect
+programs through their public interfaces.
+
 What review looks for:
 
 - **Descriptions are behaviour sentences**, not method names: _"rejects exponent notation before

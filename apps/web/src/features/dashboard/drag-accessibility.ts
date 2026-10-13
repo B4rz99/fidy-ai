@@ -1,9 +1,4 @@
-import {
-  type Accessibility,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
-} from "@dnd-kit/dom";
+import type { Accessibility, DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/dom";
 import { Option } from "effect";
 import { dashboardDragData } from "./drag-data";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";

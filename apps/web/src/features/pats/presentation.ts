@@ -10,3 +10,6 @@ const dateFormatter = new Intl.DateTimeFormat("es-CO", {
 /** Displays the UTC calendar date while retaining the full instant in time element metadata. */
 export const formatPATDate = (value: DateTime.Utc): string =>
   dateFormatter.format(DateTime.toDate(value)).replaceAll("/", "-");
+
+/** Shared invalidation identity for PAT metadata reads and mutations. */
+export const activePATReactivityKey = ["pats", "active"] as const;

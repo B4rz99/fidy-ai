@@ -85,6 +85,10 @@ phase feedback without copying server state into React. Initialization and secon
 presented truthfully; unavailability never triggers creation, and a load makes at most one
 initialization attempt. Concurrent tabs rely on canonical initialization idempotence. Successful
 edits invalidate the same Dashboard resource; queries themselves never create or repair domain state.
+The mounted edit module owns serialized submission, pending placement projection and canonical
+reread recovery. Uncertain or missing-Widget outcomes discard unsent edits and block new edits
+until an explicit successful canonical refresh. Route departure discards unsent edits; an
+already-sent mutation may have committed. Presentation owns local drafts and drag mechanics.
 See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-queries.md).
 
 ## 3. Browser authentication
@@ -140,7 +144,7 @@ state; it immediately navigates to the server-owned registered callback. Fidy ne
 access/refresh credentials. An ambiguous approval failure disables repeat approval and asks the User
 to restart from the agent.
 
-`/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. The previous settings URLs resolve to this combined route. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime.
+`/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. The previous settings URLs resolve to this combined route. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. The mounted manual PAT issuance module encloses review, request identity, command outcomes and same-User draft continuation. Presentation receives display state and User actions. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime; late command completion cannot restore it.
 
 Sensitive-operation confirmation under #988 uses a server-owned native MCP form in **Claude Code and
 Codex only**, not a web feature or browser handoff. The server owns the exact effect disclosure,

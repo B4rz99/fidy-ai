@@ -6,7 +6,7 @@ import { Data, Effect, FileSystem, Path, Schedule } from "effect";
 import { expect } from "vitest";
 
 const sourceDirectory = `${process.cwd()}/scripts`;
-const initialGates = ["worker-boundary", "workers-ai", "static-artifact", "migration"];
+const initialGates = ["worker-boundary", "hosted-inference", "static-artifact", "migration"];
 
 class FixtureIoFailed extends Data.TaggedError("FixtureIoFailed")<{}> {}
 const fixturePromise = <A>(work: () => Promise<A>): Effect.Effect<A, FixtureIoFailed> =>
@@ -34,7 +34,7 @@ type PreflightResult = {
   readonly stdout: string;
   readonly stderr: string;
   readonly calls: ReadonlyArray<string>;
-  readonly aiFinished: boolean;
+  readonly inferenceFinished: boolean;
   readonly buildFinished: boolean;
   readonly stopped: ReadonlyArray<boolean>;
 };
@@ -44,9 +44,7 @@ const fixtureCommand = `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
   *workers.test.ts) gate=worker-boundary ;;
-  *test:workers-ai-conformance*) gate=workers-ai
-    if [[ "$*" != *--allow-quota-deferral ]]; then exit 97; fi
-    ;;
+  *test:hosted-inference) gate=hosted-inference ;;
   *build:production) gate=static-artifact ;;
   *check-applied-migration-drift.ts) gate=migration ;;
   *'provider cloudflare bootstrap'*) gate=bootstrap ;;
@@ -55,12 +53,12 @@ case "$*" in
 esac
 printf '%s\\n' "$gate" >> "$FIXTURE_DIRECTORY/calls"
 case "$gate" in
-  worker-boundary|workers-ai|static-artifact|migration)
+  worker-boundary|hosted-inference|static-artifact|migration)
     touch "$FIXTURE_DIRECTORY/$gate.started"
     concurrent=false
     for attempt in {1..100}; do
       if [[ -f "$FIXTURE_DIRECTORY/worker-boundary.started" &&
-            -f "$FIXTURE_DIRECTORY/workers-ai.started" &&
+            -f "$FIXTURE_DIRECTORY/hosted-inference.started" &&
             -f "$FIXTURE_DIRECTORY/static-artifact.started" &&
             -f "$FIXTURE_DIRECTORY/migration.started" ]]; then
         concurrent=true
@@ -78,7 +76,7 @@ if [[ "$FAILED_GATE" == interrupted ]]; then
   wait "$!"
 fi
 # Slow independent gates must still finish when the infrastructure lane fails.
-if [[ "$gate" == workers-ai || "$gate" == static-artifact ]]; then sleep 0.1; fi
+if [[ "$gate" == hosted-inference || "$gate" == static-artifact ]]; then sleep 0.1; fi
 touch "$FIXTURE_DIRECTORY/$gate.finished"
 if [[ "$gate" == "$FAILED_GATE" ]]; then exit 23; fi
 if [[ "$gate" == drift ]]; then echo 'Plan: no changes'; fi
@@ -137,7 +135,7 @@ const runPreflight = Effect.fn(function* (failedGate: string = "") {
     { concurrency: 3 }
   );
   const calls = (yield* fs.readFileString(paths.join(directory, "calls"))).trim().split("\n");
-  const aiFinished = yield* fs.exists(paths.join(directory, "workers-ai.finished"));
+  const inferenceFinished = yield* fs.exists(paths.join(directory, "hosted-inference.finished"));
   const buildFinished = yield* fs.exists(paths.join(directory, "static-artifact.finished"));
   if (failedGate === "interrupted") yield* waitForMarkers(directory, "stopped");
   const stopped = yield* gateMarkers(directory, "stopped");
@@ -146,7 +144,7 @@ const runPreflight = Effect.fn(function* (failedGate: string = "") {
     stdout,
     stderr,
     calls,
-    aiFinished,
+    inferenceFinished,
     buildFinished,
     stopped,
   } satisfies PreflightResult;
@@ -160,7 +158,7 @@ layer(BunServices.layer, { excludeTestServices: true })("Production preflight ba
       expect(
         result.calls.filter((gate) => ["migration", "bootstrap", "drift"].includes(gate))
       ).toEqual(["migration", "bootstrap", "drift"]);
-      expect(result.aiFinished).toBe(true);
+      expect(result.inferenceFinished).toBe(true);
       expect(result.buildFinished).toBe(true);
       expect(result.stdout).toContain("cloudflare-state (passed)");
     })
@@ -177,7 +175,7 @@ layer(BunServices.layer, { excludeTestServices: true })("Production preflight ba
 
   it.effect.each([
     "worker-boundary",
-    "workers-ai",
+    "hosted-inference",
     "static-artifact",
     "migration",
     "bootstrap",
@@ -187,7 +185,7 @@ layer(BunServices.layer, { excludeTestServices: true })("Production preflight ba
       const result = yield* runPreflight(gate);
       expect(result.exitCode, result.stderr).toBe(1);
       expect(result.stdout).toContain("(failed)");
-      expect(result.aiFinished).toBe(true);
+      expect(result.inferenceFinished).toBe(true);
       expect(result.buildFinished).toBe(true);
       if (gate === "migration") expect(result.calls).not.toContain("bootstrap");
       if (gate === "migration" || gate === "bootstrap") {

@@ -74,14 +74,14 @@ export const getStaticPaths = ((): FeaturePage[] => [
 ]) satisfies GetStaticPaths;
 const { title, description, Detail } = Astro.props;
 const { slug } = Astro.params;
-const featureNames: Record<string, string> = {
-  transacciones: "transactions",
-  presupuestos: "budgets",
-  asistente: "assistant",
-  tablero: "dashboard",
-  insights: "insights",
-  agentes: "agents",
-};
+const featureNames = new Map([
+  ["transacciones", "transactions"],
+  ["presupuestos", "budgets"],
+  ["asistente", "assistant"],
+  ["tablero", "dashboard"],
+  ["insights", "insights"],
+  ["agentes", "agents"],
+]);
 const features = [
   ["transacciones", "Transacciones"],
   ["presupuestos", "Presupuestos"],
@@ -105,7 +105,7 @@ const features = [
       <ThemeToggle />
     </div>
   </header>
-  <main class={`detail-page detail-${featureNames[slug ?? ""]}`}>
+  <main class={`detail-page detail-${featureNames.get(slug ?? "")}`}>
     <Detail />
     <section class="detail-explore wrap">
       <h2>Sigue explorando.</h2>

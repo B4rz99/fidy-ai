@@ -5966,7 +5966,7 @@
       "Statement committedSubmission initially rethrew a cause with a typed staging failure despite never typed-error signature; owner changed branch to Effect.interrupt before final review, resolving channel mismatch"
     ]
   },
-  "validation_status": "Previous-baseline six-group verification passed. Latest security rebase requires repeated compatibility verification and fresh three-axis review before publication; GitHub CI is required before merge.",
+  "validation_status": "All six standard local groups passed after security rebase. The next formal Standards review found detached MCP retention work; native handler-scoped forkScoped and disposal regression address it.52 affected tests passed; final mechanical gates and another fresh three-axis review are required before PR. GitHub CI remains required before merge.",
   "supplemental_validation": {
     "command_policy": "5 tests passed, including actual descendant work cessation",
     "cli_release": "13 tests passed; normal CI release entrypoint includes native policy subprocess suite",
@@ -6038,6 +6038,14 @@
       "MCP lifetime scheduling now composes in the active Effect runtime and later response pulls close after native SDK reader release.",
       "Browser binding bootstrap returns its scoped Effect; the native adapter runs it with the mounted AbortSignal, and the test supplies explicit Fetch authority."
     ],
-    "focused_validation": "104 tests across eight final native/authentication suites passed; server typecheck and module graph passed without exceptions.45 focused web tests and all221 web tests passed with90.72% transport branches. Latest unit,builds,infra and fresh browser(shared102+CLI1;3sharedskips) groups passed. Final static and full adapter rerun and fresh formal review remain required before publication/merge."
+    "focused_validation": "104 tests across eight native/authentication suites passed; all six standard local verification groups passed after compatibility fixes. Clean adapter run:139 files1842 tests passed,2 files17 tests skipped. Web221 tests with90.72% transport branches; CItools116; infra271; browser102+CLI1 with3sharedskips. After final Standards timer fix,52 affected MCP/canonical/reader tests passed; server typecheck/module graph passed. Final mechanical gates and fresh review remain prerequisites.",
+    "final_review_finding": {
+      "axis": "Standards",
+      "severity": "P2",
+      "finding": "Detached MCP expiry timer violated scoped retention rule.",
+      "resolution": "Lifetime construction lives in native handler Layer.effectDiscard; forkScoped survives request closure and native handler.dispose joins cleanup. Readiness bridges eager SDK layer construction to initialized owner.",
+      "regression": "Native timer remains alive after request Scope closure, and explicit disposal joins its finalizer; existing expiry/canonical/reader tests also pass."
+    },
+    "dependency_gate_maintenance": "During final verification shadcn4.21.3 crossed the seven-day eligibility window; required compatible4.21.2\u21924.21.3 CLI update and its pinned registry0.1.2 were applied without changing components."
   }
 }

@@ -1,4 +1,15 @@
-import { type Cause, Clock, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import {
+  type Cause,
+  Clock,
+  Context,
+  DateTime,
+  Deferred,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  type Scope,
+} from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter } from "effect/http";
 import { operationCatalog } from "../../src/shell/api";
@@ -368,7 +379,6 @@ type ResidentOwner = {
   readonly expiresAtMilliseconds: number;
   sessionId: Option.Option<string>;
   retiring: boolean;
-  cancelLifetime: () => void;
   leases: number;
   drained: ReturnType<typeof Promise.withResolvers<void>>;
   disposal: Option.Option<Promise<void>>;
@@ -572,7 +582,6 @@ const completeOwnerDisposal = (registry: ResidentRegistry, owner: ResidentOwner)
 const disposeOwner = (registry: ResidentRegistry, owner: ResidentOwner): Promise<void> => {
   if (Option.isSome(owner.disposal)) return owner.disposal.value;
   owner.retiring = true;
-  owner.cancelLifetime();
   const disposal = Promise.resolve().then(() => completeOwnerDisposal(registry, owner));
   owner.disposal = Option.some(disposal);
   return disposal;
@@ -642,11 +651,33 @@ const residentRegistration = (
       });
     }
   });
-const createOwner = Effect.fnUntraced(function* (
+const residentLifetime = (
+  registry: ResidentRegistry,
+  owner: Effect.Effect<ResidentOwner>,
+  clock: Clock.Clock
+): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const resident = yield* owner;
+    yield* Effect.forkScoped(
+      Effect.sleep(
+        Math.max(0, resident.expiresAtMilliseconds - clock.currentTimeMillisUnsafe())
+      ).pipe(
+        Effect.provideService(Clock.Clock, clock),
+        Effect.andThen(
+          Effect.sync(() => {
+            // Start native disposal after this callback returns; joining its own Scope here
+            // would deadlock the lifetime fiber against handler disposal.
+            disposeOwner(registry, resident).catch(() => undefined);
+          })
+        )
+      )
+    );
+  });
+const createOwner = (
   registry: ResidentRegistry,
   catalog: ResidentCatalog,
   clock: Clock.Clock
-) {
+): ResidentOwner => {
   const server = McpServer.layerHttp({
     name: "fidy",
     version: "0.0.0",
@@ -654,7 +685,10 @@ const createOwner = Effect.fnUntraced(function* (
     protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25],
     allowedOrigins: [],
   });
-  const registered = residentRegistration(registry, () => owner, catalog.tools);
+  const ready = Deferred.makeUnsafe<ResidentOwner>();
+  const registered = residentRegistration(registry, () => owner, catalog.tools).pipe(
+    Effect.andThen(residentLifetime(registry, Deferred.await(ready), clock))
+  );
   const handler = HttpRouter.toWebHandler(
     Layer.merge(server, Layer.effectDiscard(registered).pipe(Layer.provide(server))),
     { disableLogger: true }
@@ -671,7 +705,6 @@ const createOwner = Effect.fnUntraced(function* (
     expiresAtMilliseconds: catalog.expiresAtMilliseconds,
     sessionId: Option.none(),
     retiring: false,
-    cancelLifetime: (): void => {},
     leases: 0,
     drained,
     disposal: Option.none(),
@@ -679,22 +712,9 @@ const createOwner = Effect.fnUntraced(function* (
     pendingTransfers: new Set(),
   };
   registry.owners.add(owner);
-  // Native subscriptions and unread replies cannot retain a resident after its authority or
-  // bounded protocol lifetime. Disposal interrupts transport and still joins canonical settlement.
-  const lifetime = yield* Effect.forkDetach(
-    Effect.sleep(Math.max(0, owner.expiresAtMilliseconds - clock.currentTimeMillisUnsafe())).pipe(
-      Effect.provideService(Clock.Clock, clock),
-      Effect.andThen(
-        Effect.sync(() => {
-          owner.cancelLifetime = (): void => {};
-          disposeOwner(registry, owner).catch(() => undefined);
-        })
-      )
-    )
-  );
-  owner.cancelLifetime = (): void => lifetime.interruptUnsafe();
+  Deferred.doneUnsafe(ready, Effect.succeed(owner));
   return owner;
-});
+};
 const admissionSubject = (admission: OAuthMcpAdmission): OAuthCaller => ({
   userId: admission.userId,
   oauthConnectionId: admission.connectionId,
@@ -772,7 +792,7 @@ const reserveResidentOwner = (
     ) {
       return Option.none();
     }
-    return Option.some(yield* createOwner(registry, catalog, yield* Clock.Clock));
+    return Option.some(createOwner(registry, catalog, yield* Clock.Clock));
   });
 const ensureResidentOwner = (
   registry: ResidentRegistry,

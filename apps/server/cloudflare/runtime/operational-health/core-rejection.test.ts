@@ -24,9 +24,13 @@ const burst = (
   db: D1Database,
   { now, count }: Readonly<{ now: number; count: number }>
 ): Effect.Effect<void> =>
-  Effect.forEach(Array.from({ length: count }), () => observe({ db, now, status: 401 }), {
-    discard: true,
-  });
+  Effect.forEach(
+    Array.from({ length: count }),
+    () => observe({ db, now, boundary: "http", status: 401 }),
+    {
+      discard: true,
+    }
+  );
 
 it.effect(
   "records only concentrated Core refusal bursts and expires their single metadata row",
@@ -37,14 +41,14 @@ it.effect(
       const now = 1_800_000;
       yield* burst(observe, db, { now, count: 99 });
       yield* Effect.forEach([200, 400, 404, 422, 429, 500], (status) =>
-        observe({ db, now, status })
+        observe({ db, now, boundary: "http", status })
       );
       expect(yield* observeCoreRejections({ db, now })).toEqual({
         component: "core-rejections",
         operation: "coreRejectionBursts",
         state: "healthy",
       });
-      yield* observe({ db, now, status: 403 });
+      yield* observe({ db, now, boundary: "http", status: 403 });
       const signal = yield* observeCoreRejections({ db, now });
       expect(decideOperationalAlerts([signal])).toEqual([
         { kind: "core_rejection_burst", owner: "coreRejectionBursts", severity: "warning" },
@@ -155,4 +159,32 @@ it.live(
       yield* burst(observe, db, { now: 1_920_000, count: 100 });
       expect((yield* observeCoreRejections({ db, now: 1_920_000 })).state).toBe("attention");
     })
+);
+
+it.effect("counts only admitted boundary statuses while sharing one bounded presence record", () =>
+  Effect.gen(function* () {
+    const db = yield* database();
+    const now = 1_800_000;
+    const callback = makeCoreRejectionObserver();
+    const mcp = makeCoreRejectionObserver();
+    for (let index = 0; index < 99; index += 1) {
+      yield* callback({ db, now, boundary: "providerCallback", status: 400 });
+      yield* mcp({ db, now, boundary: "mcp", status: 429 });
+    }
+    for (const status of [200, 303, 404, 429, 500]) {
+      yield* callback({ db, now, boundary: "providerCallback", status });
+    }
+    for (const status of [200, 303, 500, 503]) {
+      yield* mcp({ db, now, boundary: "mcp", status });
+    }
+    expect((yield* observeCoreRejections({ db, now })).state).toBe("healthy");
+    yield* callback({ db, now, boundary: "providerCallback", status: 422 });
+    yield* mcp({ db, now, boundary: "mcp", status: 403 });
+    expect((yield* observeCoreRejections({ db, now })).state).toBe("attention");
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+      )).results
+    ).toEqual([{ id: 1, observed_at_ms: now }]);
+  })
 );

@@ -96,3 +96,50 @@ it.live("preserves actual Core callback refusals and never stores attacker reque
     expect(failedWrites).toBe(1);
   })
 );
+
+it.live(
+  "counts malformed provider callbacks without accepting forged boundary labels or path prefixes",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      yield* Effect.acquireRelease(
+        Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
+        (clock) => Effect.sync(() => clock.mockRestore())
+      );
+      const core = makeCoreHttp(cloudflareWorkerTelemetry);
+      const send = (path: string): Promise<Response> =>
+        core(
+          new Request(`https://api.fidyapp.com${path}?private=callback`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-security-boundary": "mcp",
+              "x-webhook-event": "private-unknown-event",
+              "x-mcp-name": "private-forged-tool",
+            },
+            body: '{"boundary":"providerCallback","secret":"private-user-content"}',
+          }),
+          environment(db)
+        );
+      for (let index = 0; index < 100; index += 1) {
+        const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback-extra"));
+        expect(response.status).toBe(404);
+        yield* Effect.tryPromise(() => response.text());
+      }
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+        )).results
+      ).toEqual([]);
+      for (let index = 0; index < 100; index += 1) {
+        const response = yield* Effect.tryPromise(() => send("/providers/kapso/callback"));
+        expect(response.status).toBe(422);
+        yield* Effect.tryPromise(() => response.text());
+      }
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+        )).results
+      ).toEqual([{ id: 1, observed_at_ms: 1_800_000 }]);
+    })
+);

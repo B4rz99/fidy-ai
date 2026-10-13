@@ -1,3 +1,4 @@
+import { UserActionRequired } from "../../src/shell/public-http/contract";
 import { readDiscovery } from "./discovery.test-fixture";
 import { executeOAuthCanonicalWork } from "../canonical-operations/operations";
 import {
@@ -805,6 +806,122 @@ describe("native2025 residency integration", () => {
           for (const response of unread) {
             yield* wait(() => response.body?.cancel() ?? Promise.resolve());
           }
+        }
+      })
+    ));
+
+  it("observes refused canonical tools inside HTTP 200 without counting catalog discovery", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const harness = yield* fixture(["read"]);
+        vi.spyOn(Date, "now").mockReturnValue(harness.current);
+        let calls = 0;
+        const refusal = yield* Schema.encodeEffect(Schema.fromJsonString(UserActionRequired))(
+          UserActionRequired.make({
+            error: { code: "user_action_required", message: "Return to Fidy." },
+            next: [],
+          })
+        );
+        const module = makeMcpResidency({
+          userId,
+          db: harness.db,
+          enqueueCanonicalWork: (): Effect.Effect<Response> =>
+            Effect.sync(() => {
+              calls += 1;
+              return new Response(refusal, {
+                status: 403,
+                headers: { "content-type": "application/json" },
+              });
+            }),
+        });
+        const native = (
+          body: Schema.Json,
+          session: Option.Option<string>
+        ): Effect.Effect<Response> =>
+          module.handle({
+            admission: Schema.decodeSync(OAuthMcpAdmission)({
+              userId,
+              connectionId,
+              credentialId,
+              clientId,
+              resource,
+              digest: Array.from(harness.digest),
+              deadlineMilliseconds: harness.current + 5000,
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                "mcp-protocol-version": "2025-11-25",
+                ...Option.match(session, {
+                  onNone: () => ({}),
+                  onSome: (id) => ({ "mcp-session-id": id }),
+                }),
+              },
+              body: Array.from(new TextEncoder().encode(json(body))),
+            }),
+            signal: new AbortController().signal,
+          });
+        try {
+          const initialized = yield* native(initializeBody, Option.none());
+          const session = Option.fromNullOr(initialized.headers.get("mcp-session-id"));
+          expect(Option.isSome(session)).toBe(true);
+          yield* wait(() => initialized.text());
+          const notification = yield* native(
+            { jsonrpc: "2.0", method: "notifications/initialized" },
+            session
+          );
+          yield* wait(() => notification.text());
+          const RefusedReply = Schema.Struct({
+            result: Schema.Struct({
+              isError: Schema.Literal(true),
+              structuredContent: Schema.Struct({
+                error: Schema.Struct({
+                  code: Schema.Literals(["user_action_required", "rate_limited"]),
+                }),
+              }),
+            }),
+          });
+          const codes = new Set<string>();
+          for (let index = 0; index < 99; index += 1) {
+            const response = yield* native(
+              tool(`refused-${index}`, "budgets.listBudgets"),
+              session
+            );
+            expect(response.status).toBe(200);
+            const reply = yield* wait(() => decodeResponseJson(response));
+            codes.add(
+              (yield* Schema.decodeUnknownEffect(RefusedReply)(reply)).result.structuredContent
+                .error.code
+            );
+          }
+          const listing = yield* native(
+            { jsonrpc: "2.0", id: "catalog", method: "tools/list" },
+            session
+          );
+          expect(listing.status).toBe(200);
+          yield* wait(() => listing.text());
+          expect(
+            (yield* wait(() =>
+              harness.db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+            )).results
+          ).toEqual([]);
+          const final = yield* native(tool("refused-last", "budgets.listBudgets"), session);
+          expect(final.status).toBe(200);
+          const reply = yield* wait(() => decodeResponseJson(final));
+          codes.add(
+            (yield* Schema.decodeUnknownEffect(RefusedReply)(reply)).result.structuredContent.error
+              .code
+          );
+          expect(codes).toEqual(new Set(["user_action_required", "rate_limited"]));
+          expect(calls).toBeGreaterThan(0);
+          expect(calls).toBeLessThan(100);
+          expect(
+            (yield* wait(() =>
+              harness.db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+            )).results
+          ).toEqual([{ id: 1, observed_at_ms: Math.floor(harness.current / 60000) * 60000 }]);
+        } finally {
+          yield* module.dispose();
         }
       })
     ));

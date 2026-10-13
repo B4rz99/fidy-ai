@@ -6,7 +6,7 @@ import {
   successStatus,
 } from "./internal/operator-email";
 import { Effect, Result, Schema } from "effect";
-import type { OperationalAlert } from "./contract";
+import type { CoreRejectionBoundary, OperationalAlert } from "./contract";
 
 /** Sends only closed operator metadata over the existing bounded Resend transport. */
 export const sendOperatorEmail = (
@@ -53,14 +53,26 @@ const minuteMs = 60_000;
 const burstThreshold = 100;
 const unauthorizedStatus = 401;
 const forbiddenStatus = 403;
+const badRequestStatus = 400;
+const unprocessableStatus = 422;
+const serverErrorStatus = 500;
+const observedRefusal = (boundary: CoreRejectionBoundary, status: number): boolean => {
+  if (status === unauthorizedStatus || status === forbiddenStatus) return true;
+  if (boundary === "providerCallback") {
+    return status === badRequestStatus || status === unprocessableStatus;
+  }
+  return boundary === "mcp" && status >= badRequestStatus && status < serverErrorStatus;
+};
 
 /**
  * Records concentrated refusal bursts without retaining request metadata. One observer belongs to
- * one Core Worker isolate. It is deliberately lossy across restarts and distributed traffic.
+ * one Core HTTP assembly or MCP residency. It is deliberately lossy across restarts and
+ * distributed traffic; all observers share one metadata-only presence row.
  */
 export const makeCoreRejectionObserver = (): ((
   input: Readonly<{
     status: number;
+    boundary: CoreRejectionBoundary;
     db: D1Database;
     now: number;
   }>
@@ -68,9 +80,9 @@ export const makeCoreRejectionObserver = (): ((
   let minute = -1;
   let refusals = 0;
   let pending = false;
-  return ({ status, db, now }) =>
+  return ({ status, boundary, db, now }) =>
     Effect.suspend(() => {
-      if (status !== unauthorizedStatus && status !== forbiddenStatus) return Effect.void;
+      if (!observedRefusal(boundary, status)) return Effect.void;
       const observedAtMs = Math.floor(now / minuteMs) * minuteMs;
       // A clock rollback never reopens an already admitted minute.
       if (observedAtMs < minute) return Effect.void;

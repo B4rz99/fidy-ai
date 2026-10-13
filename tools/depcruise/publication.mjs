@@ -17,6 +17,8 @@ const compositionRoots = new Set([
   "cloudflare/operational-canary-workflow.ts",
   "cloudflare/ingestion/email-worker.ts",
   "cloudflare/ai/workers-ai-conformance-worker.ts",
+  // Private synthetic evaluation assembles real inference behind a finite local budget.
+  "cloudflare/ai/workers-ai-evaluation-worker.ts",
   "cloudflare/coordinator-test-harness.ts",
   "cloudflare/browser-acceptance-core-module.ts",
   "cloudflare/browser-acceptance-preview.ts",

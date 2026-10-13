@@ -1,3 +1,4 @@
+import type { DashboardEditorError } from "./editing";
 import { PencilIcon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BigDecimal, Option } from "effect";
@@ -24,7 +25,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/component
 import { Input } from "@/ui/components/input";
 import { Progress, ProgressLabel } from "@/ui/components/progress";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { type DashboardEdit, maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
+import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
@@ -54,7 +55,7 @@ import {
   weightedChildStyle,
 } from "./presentation";
 
-import { type PlacementLayout, previewDashboardPlacement } from "./placement-preview";
+import { type PlacementLayout } from "./placement-preview";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
 type SpendingCurrency = SpendingResult["buckets"][number]["moneyGroups"][number]["currency"];
@@ -404,7 +405,7 @@ const WidgetActions = ({
   <div className="absolute top-3 right-3 z-40 flex">
     <Button
       aria-label={`Renombrar ${label}`}
-      disabled={editor.submitting}
+      disabled={editor.disabled}
       onClick={onRename}
       size="icon"
       type="button"
@@ -414,7 +415,7 @@ const WidgetActions = ({
     </Button>
     <Button
       aria-label={`Eliminar ${label}`}
-      disabled={editor.submitting}
+      disabled={editor.disabled}
       onClick={() => editor.onGesture({ kind: "remove-widget", widgetId })}
       size="icon"
       type="button"
@@ -523,7 +524,7 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="absolute top-3 left-3 z-30">
         <DashboardDragHandle
-          disabled={editor.submitting}
+          disabled={editor.disabled}
           label={`Arrastrar ${label}`}
           source={{ kind: "widget", widgetId: widget.id, label }}
         />
@@ -537,7 +538,7 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
       <div className="relative flex min-h-72 flex-1 flex-col">
         <WidgetDropTargets
           depth={depth + 1}
-          disabled={editor.submitting}
+          disabled={editor.disabled}
           label={label}
           widgetId={widget.id}
         />
@@ -549,7 +550,7 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
             renaming
               ? Option.some(
                   <WidgetTitleEditor
-                    disabled={editor.submitting}
+                    disabled={editor.disabled}
                     initialTitle={label}
                     onCancel={() => setRenaming(false)}
                     onSave={saveTitle}
@@ -797,7 +798,7 @@ const ResponsiveLayout = ({
               axis={layout.axis}
               childIndex={childIndex}
               siblings={layout.children}
-              disabled={editor.value.submitting}
+              disabled={editor.value.disabled}
               label={regionLabel(node)}
               onResize={(nextWeight) =>
                 editor.value.onGesture({
@@ -814,19 +815,14 @@ const ResponsiveLayout = ({
   );
 };
 
-export type DashboardEditorError = Readonly<{
-  message: string;
-  title: string;
-  onRefresh: Option.Option<() => void>;
-}>;
-
 /** Editing capabilities supplied by the route controller to the Dashboard canvas. */
 export type DashboardEditor = Readonly<{
   catalog: ReadonlyArray<DashboardCatalogEntry>;
   error: Option.Option<DashboardEditorError>;
   onGesture: (gesture: DashboardGesture) => void;
   submitting: boolean;
-  pendingPlacement: Option.Option<DashboardEdit>;
+  disabled: boolean;
+  pendingPlacement: Option.Option<PlacementLayout>;
 }>;
 
 const CatalogDragSources = ({
@@ -859,7 +855,7 @@ const CatalogDragSources = ({
 const DashboardCatalogTray = ({ editor }: Readonly<{ editor: DashboardEditor }>): JSX.Element => (
   <section className="grid gap-3 rounded-xl border bg-background p-4">
     <h2 className="font-medium">Widgets disponibles</h2>
-    <CatalogDragSources catalog={editor.catalog} disabled={editor.submitting} />
+    <CatalogDragSources catalog={editor.catalog} disabled={editor.disabled} />
   </section>
 );
 
@@ -901,7 +897,7 @@ const DashboardCanvas = ({
   view,
 }: Readonly<{
   editor: Option.Option<DashboardEditor>;
-  preview: Option.Option<DashboardEdit>;
+  preview: Option.Option<PlacementLayout>;
   view: DashboardView;
 }>): JSX.Element => (
   <section
@@ -911,7 +907,7 @@ const DashboardCanvas = ({
     {Option.isNone(editor) ? null : (
       <DashboardDropZone
         depth={0}
-        disabled={editor.value.submitting}
+        disabled={editor.value.disabled}
         label="Colocar al inicio del tablero"
         target={{ kind: "dashboard-edge", edge: "top" }}
       />
@@ -926,16 +922,13 @@ const DashboardCanvas = ({
         aria-label="Vista previa de la distribución"
         className="pointer-events-none absolute inset-x-0 top-0 flex min-h-full flex-col"
       >
-        <PlacementPreview
-          context={view.context}
-          layout={previewDashboardPlacement({ layout: view.layout, edit: preview.value })}
-        />
+        <PlacementPreview context={view.context} layout={preview.value} />
       </div>
     ) : null}
     {Option.isNone(editor) ? null : (
       <DashboardDropZone
         depth={0}
-        disabled={editor.value.submitting}
+        disabled={editor.value.disabled}
         label="Colocar al final del tablero"
         target={{ kind: "dashboard-edge", edge: "bottom" }}
       />
@@ -983,7 +976,7 @@ export const DashboardViewComponent = ({
         </div>
         {Option.isNone(editor) ? null : (
           <Button
-            disabled={editor.value.submitting}
+            disabled={editor.value.disabled}
             onClick={() => setEditing((current) => !current)}
             type="button"
             variant={editing ? "outline" : "default"}

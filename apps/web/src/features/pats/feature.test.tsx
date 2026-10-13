@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DateTime, Effect, Option, Redacted } from "effect";
+import { DateTime, Option, Redacted } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   type ActivePATMetadata,
@@ -10,11 +10,7 @@ import {
   TokenBearer,
   TokenShortId,
   defaultPATLifetimeDays,
-  patLifetimeDayOptions,
-  recipientLabelLimit,
 } from "@/transport/client";
-import { makeSensitiveClipboardSpy } from "@/testing/sensitive-clipboard";
-import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
   type ActivePATManagementState,
   ActivePATManagementView,
@@ -51,184 +47,7 @@ const issued: IssuedPAT = {
   bearer: redactedBearer,
 };
 
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-});
-
-const prepareGrantReview = (): void => {
-  fireEvent.change(screen.getByLabelText("Nombre"), {
-    target: { value: "  Automatización casa  " },
-  });
-  fireEvent.click(screen.getByRole("checkbox", { name: /Lectura/iu }));
-  fireEvent.click(screen.getByRole("checkbox", { name: /Tablero/iu }));
-  fireEvent.click(screen.getByRole("button", { name: "Crear token" }));
-};
-
-const issueReviewedPAT = (): void => {
-  prepareGrantReview();
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
-};
-
-it("defaults to 90 days, reviews exact expiration, and issues the selected fixed lifetime", () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(DateTime.toEpochMillis(createdAt));
-  const issue = vi.fn((command: IssueManualPATCommand) => {
-    command.onIssued(issued);
-  });
-  const clipboard = makeSensitiveClipboardSpy();
-  render(
-    <ManualPATView
-      initialDraft={Option.none()}
-      key="signed-in"
-      clipboard={clipboard}
-      issue={issue}
-    />
-  );
-
-  expect(screen.getByRole("button", { name: "Duración del token" })).toHaveTextContent("90 días");
-  prepareGrantReview();
-
-  expect(screen.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
-  expect(screen.getByText("Automatización casa", { exact: true })).toBeVisible();
-  expect(screen.getByText("90 días", { selector: "dd" })).toBeVisible();
-  expect(screen.getByText(/8 de noviembre de 2026/iu)).toBeVisible();
-  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
-
-  expect(issue).toHaveBeenCalledWith(
-    expect.objectContaining({
-      grant: {
-        recipientLabel: PATRecipientLabel.make("Automatización casa"),
-        scopes: ["read", "dashboard"],
-        lifetimeDays: 90,
-        reviewExpiresAt: issued.pat.expiresAt,
-      },
-    })
-  );
-  expect(issue.mock.calls[0]?.[0].requestId).toMatch(
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
-  );
-  expect(screen.getByText(bearer)).toBeVisible();
-  expect(screen.queryByText("Se muestra una sola vez")).not.toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: "Copiar token" }));
-  expect(clipboard.copy).toHaveBeenCalledWith(bearer, expect.any(Function));
-  expect(screen.getByRole("button", { name: "Copiado" })).toBeVisible();
-});
-
-it("hides an issued bearer when its owned reveal expires", () => {
-  const clipboard = makeSensitiveClipboardSpy();
-  const issue = vi.fn((command: IssueManualPATCommand) => command.onIssued(issued));
-  render(<ManualPATView initialDraft={Option.none()} clipboard={clipboard} issue={issue} />);
-
-  issueReviewedPAT();
-  expect(screen.getByText(bearer)).toBeVisible();
-  expect(clipboard.reveal).toHaveBeenCalledWith(expect.any(Function));
-
-  act(() => clipboard.reveal.mock.calls[0]?.[0]());
-
-  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-});
-
-it("hides an issued bearer and clears the clipboard when its disclosure unmounts", () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(DateTime.toEpochMillis(createdAt));
-  const issue = vi.fn((command: IssueManualPATCommand) => {
-    command.onIssued(issued);
-  });
-  const clipboard = makeSensitiveClipboardSpy();
-  const { rerender } = render(
-    <ManualPATView
-      initialDraft={Option.none()}
-      key="signed-in"
-      clipboard={clipboard}
-      issue={issue}
-    />
-  );
-
-  issueReviewedPAT();
-  expect(screen.getByText(bearer)).toBeVisible();
-
-  rerender(
-    <ManualPATView
-      initialDraft={Option.none()}
-      key="navigated"
-      clipboard={clipboard}
-      issue={issue}
-    />
-  );
-  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-  expect(clipboard.clear).toHaveBeenCalledWith(bearer);
-  vi.useRealTimers();
-});
-
-it("offers every fixed lifetime preset and preserves a changed selection through editing", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      render(
-        <ManualPATView
-          initialDraft={Option.none()}
-          clipboard={makeSensitiveClipboardSpy()}
-          issue={vi.fn()}
-        />
-      );
-
-      fireEvent.click(screen.getByRole("button", { name: "Duración del token" }));
-      const queries = patLifetimeDayOptions.map((days) =>
-        screen.findByRole("menuitemradio", { name: `${days} días` })
-      );
-      const presets = yield* Effect.tryPromise(() => Promise.all(queries));
-      for (const preset of presets) expect(preset).toBeVisible();
-      fireEvent.click(screen.getByRole("menuitemradio", { name: "30 días" }));
-      prepareGrantReview();
-      expect(screen.getByText("30 días", { selector: "dd" })).toBeVisible();
-      fireEvent.click(screen.getByRole("button", { name: "Editar" }));
-      expect(screen.getByRole("button", { name: "Duración del token" })).toHaveTextContent(
-        "30 días"
-      );
-    })
-  ));
-
-it("edits a reviewed grant and preserves one request identity across a failed retry", () => {
-  const issue = vi.fn<(command: IssueManualPATCommand) => void>();
-  render(
-    <ManualPATView
-      initialDraft={Option.none()}
-      clipboard={makeSensitiveClipboardSpy()}
-      issue={issue}
-    />
-  );
-
-  expect(screen.getByRole("button", { name: "Crear token" })).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Nombre"), {
-    target: { value: "x".repeat(recipientLabelLimit + 1) },
-  });
-  fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  expect(screen.getByRole("button", { name: "Crear token" })).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Robot" } });
-  fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  expect(screen.getByRole("button", { name: "Crear token" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  fireEvent.click(screen.getByRole("button", { name: "Crear token" }));
-  fireEvent.click(screen.getByRole("button", { name: "Editar" }));
-  expect(screen.getByLabelText("Nombre")).toHaveValue("Robot");
-
-  fireEvent.click(screen.getByRole("button", { name: "Crear token" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
-  expect(screen.getByRole("button", { name: "Creando token…" })).toBeDisabled();
-  const firstRequest = issue.mock.calls[0]?.[0];
-  act(() => firstRequest?.onFailed());
-
-  expect(screen.getByText("No pudimos crear el token")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Volver a la revisión" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
-  expect(issue.mock.calls[1]?.[0].requestId).toBe(firstRequest?.requestId);
-});
-
+afterEach(cleanup);
 it("lists safe active metadata and confirms one revocation before refreshing", () => {
   const activePat: ActivePATMetadata = {
     shortId: TokenShortId.make("active01"),
@@ -413,44 +232,4 @@ it("serializes revocation, allows cancellation, and reports failures and plural 
   expect(screen.getByRole("button", { name: "Desactivando todos…" })).toBeDisabled();
   act(() => revokeAll.mock.calls[0]?.[0].onRevoked(2));
   expect(screen.getByText("Se desactivaron 2 tokens activos.")).toBeVisible();
-});
-
-it("clears an issued bearer on reset and page hide", () => {
-  const clipboard = makeSensitiveClipboardSpy();
-  const issue = vi.fn((command: IssueManualPATCommand) => command.onIssued(issued));
-  render(<ManualPATView initialDraft={Option.none()} clipboard={clipboard} issue={issue} />);
-
-  issueReviewedPAT();
-  fireEvent.click(screen.getByRole("button", { name: "Crear otro token" }));
-  expect(clipboard.clear).toHaveBeenCalledWith(bearer);
-
-  issueReviewedPAT();
-  act(() => {
-    window.dispatchEvent(new Event("pagehide"));
-  });
-  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-  expect(clipboard.clear).toHaveBeenLastCalledWith(bearer);
-});
-
-it("keeps the reviewed grant when identity confirmation is required, without issuing or discarding choices", () => {
-  const issue = vi.fn((command: IssueManualPATCommand) =>
-    command.onReauthenticationRequired("10000000-0000-4000-8000-000000000001")
-  );
-  render(
-    <ManualPATView
-      initialDraft={Option.none()}
-      clipboard={makeSensitiveClipboardSpy()}
-      issue={issue}
-    />
-  );
-  issueReviewedPAT();
-  expect(screen.getByText("Confirma tu identidad")).toBeVisible();
-  expect(screen.getByRole("button", { name: "Confirmar mi identidad" })).toBeVisible();
-  expect(screen.queryByText("Sesión vencida")).not.toBeInTheDocument();
-  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Volver al formulario" }));
-  expect(screen.getByLabelText("Nombre")).toHaveValue("Automatización casa");
-  expect(screen.getByRole("checkbox", { name: /Lectura/iu })).toBeChecked();
-  expect(screen.getByRole("checkbox", { name: /Tablero/iu })).toBeChecked();
-  expect(issue).toHaveBeenCalledTimes(1);
 });

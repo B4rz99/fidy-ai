@@ -66,3 +66,17 @@ The subsequent live Google attempt completed and returned to `/settings/access?r
 The User initially chose to return to the original audit account. A fresh Google selection returned the same visible data. The User then explicitly authorized using the currently signed-in User and confirmed the exact test grant; the earlier metadata difference remains unexplained and is not proof of an identity-linking defect.
 
 Production completion, 2026-10-12: on the explicitly approved current User, submitting `Accesos QA 20261012` with Lectura only and seven-day duration required identity confirmation without issuing a token. The User completed the Google popup. Accesos restored the exact name, permission and duration to review, with a recalculated expiry and no automatic issuance. Explicit confirmation created the token; safe metadata remained present after a reload with creation date `12-10-2026`, expiration `19-10-2026` and last use “Nunca”. The one-time disclosure was disposed through “Crear otro token” without copying or recording its bearer. Individual revocation succeeded, and a subsequent reload returned no active tokens. This establishes the live Google same-User preservation, explicit issuance, metadata persistence and individual revocation journey. Bearer-based canonical invocation, live Microsoft completion, changed-User restoration and MCP continuation beyond 25 connections are not established by this observation.
+
+## Manual issuance ownership
+
+`creation.tsx` owns the mounted manual PAT flow and same-User draft continuation. Its private
+`issuance.ts` implementation owns review, request identity, canonical outcomes, explicit retry,
+identity handoff and disclosure cleanup. `view.tsx` receives display state and User actions;
+request identities and outcome callbacks do not enter presentation. Canonical command results
+remain void so bearer material cannot enter Atom caches. Late completion after page departure,
+page hide or authentication replacement cannot reopen disclosure.
+
+`issuance.test.tsx` exercises the generated transport and mounted module, including Strict Mode
+restoration, explicit retry identity, storage refusal, late completion and disclosure cleanup.
+Metadata listing/revocation and CLI pairing retain their independent ownership. Existing storage,
+clipboard, combined-page and native provider browser journeys remain applicable.

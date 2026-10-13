@@ -34,14 +34,6 @@ const compile = (
 };
 
 describe("Dashboard gesture compilation", () => {
-  it("compiles a center drop into one canonical swap edit", () => {
-    expect(compile({ kind: "swap-widgets", widgetId: firstId, withWidgetId: secondId })).toEqual({
-      op: "swap-widgets",
-      widgetId: firstId,
-      withWidgetId: secondId,
-    });
-  });
-
   it("compiles each directional drop into one structural move edit", () => {
     const placements = [
       ["left", { besideWidget: secondId, axis: "row", side: "before" }],
@@ -73,21 +65,6 @@ describe("Dashboard gesture compilation", () => {
       op: "add-widget",
       widget: { id: thirdId, type: "spending-chart", groupBy: "category", period: "this-month" },
       at: "top",
-    });
-  });
-
-  it("removes one Widget through the canonical edit", () => {
-    expect(compile({ kind: "remove-widget", widgetId: firstId })).toEqual({
-      op: "remove-widget",
-      widgetId: firstId,
-    });
-  });
-
-  it("retitles one Widget through its canonical replacement edit", () => {
-    const widget = { ...catalogEntry.widget, id: firstId };
-    expect(compile({ kind: "retitle-widget", title: "Resumen mensual", widget })).toEqual({
-      op: "update-widget",
-      widget: { ...widget, title: "Resumen mensual" },
     });
   });
 

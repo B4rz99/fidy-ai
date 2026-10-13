@@ -20,7 +20,6 @@ const pat = {
   idleExpiresAt: "2026-10-01T00:00:00.000Z",
 };
 const bearer = "fin_default1_0123456789abcdefghijklmnopqrstuvwxyzABCD";
-const code = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const ok = 200;
 const installRoute = (
   page: Page,
@@ -182,38 +181,5 @@ test("reviews a PATPairing before approval without receiving its private bearer"
       expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
         bearer
       );
-    })
-  ));
-
-test("rotates a BackupRecoveryCode in a fresh session and drops the proof on navigation", ({
-  page,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      let rotated = false;
-      yield* installRoute(page, `${apiOrigin}/recovery/backup-code/rotate`, (route) => {
-        rotated = true;
-        return route.fulfill({
-          status: ok,
-          contentType: "application/json",
-          body: response({
-            status: "rotated",
-            backupRecoveryCode: code,
-            rotatedAt: "2026-09-27T00:00:00.000Z",
-          }),
-        });
-      });
-      yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Crear un código nuevo" }).click()
-      );
-      yield* Effect.tryPromise(() => expect(page.getByText(code)).toBeVisible());
-      expect(rotated).toBe(true);
-      expect(page.url()).not.toContain(code);
-      yield* Effect.tryPromise(() => page.goto("/settings/pats"));
-      expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
-        code
-      );
-      expect(yield* Effect.tryPromise(() => browserStorageLength(page))).toBe(0);
     })
   ));

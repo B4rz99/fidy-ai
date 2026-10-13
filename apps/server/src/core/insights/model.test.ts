@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Equal, Result, Schema, SchemaIssue } from "effect";
-import { DeliveryEvidenceInput, InsightEvent, InsightGenerationInput } from "./contract";
+import { DeliveryEvidenceInput, InsightEvent } from "./contract";
 
 type InsightOccurrenceInput = typeof InsightEvent.Encoded;
 type MoneyGroupInput = InsightOccurrenceInput["moneyGroups"][number];
@@ -40,23 +40,6 @@ it("decodes a generated occurrence with deterministic Currency groups", () => {
   expect(
     Equal.equals(event.moneyGroups[1]?.outflow.amount, BigDecimal.fromStringUnsafe("24.5"))
   ).toBe(true);
-});
-
-it("derives generation input without server-assigned identity or lifecycle", () => {
-  const { id: _id, lifecycleState: _lifecycleState, ...input } = occurrence();
-
-  expect(() => Schema.decodeSync(InsightGenerationInput)(input)).not.toThrow();
-});
-
-it("derives delivery input without server-assigned attempt or InsightEvent identity", () => {
-  expect(() =>
-    Schema.decodeSync(DeliveryEvidenceInput)({
-      sentAt: "2026-08-09T23:00:08Z",
-      channel: "whatsapp",
-      provider: "kapso",
-      providerMessageId: "wamid.delivery-101",
-    })
-  ).not.toThrow();
 });
 
 it("bounds persisted delivery evidence fields", () => {

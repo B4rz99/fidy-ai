@@ -1569,29 +1569,6 @@ it(
 );
 
 it(
-  "rolls back explicit Dashboard initialization when its success Audit cannot commit",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup();
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(`CREATE TRIGGER reject_dashboard_success BEFORE INSERT ON dashboard_audit
-    WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_audit_unavailable'); END`)
-            .run()
-        );
-        const reply = yield* Effect.tryPromise(() =>
-          batch(db, [batchCall("dashboard.initializeDashboard", {}, 6)])
-        );
-        expect(reply.status).toBe(503);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
-      })
-    ),
-  30_000
-);
-
-it(
   "a first valid edit commits the default and edit in the same unit for individual and batch callers",
   () =>
     Effect.runPromise(

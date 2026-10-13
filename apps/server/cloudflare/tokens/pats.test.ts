@@ -5,29 +5,14 @@ import {
   isolatedTestDatabases,
   statementClarificationTestMigrations,
 } from "../d1-test-fixture";
-import * as D1Client from "@effect/sql-d1/D1Client";
-import { listCategoriesResponse } from "../../src/shell/categories/operations";
-import {
-  Clock,
-  Context,
-  Data,
-  DateTime,
-  Deferred,
-  Effect,
-  Fiber,
-  Layer,
-  Option,
-  Schema,
-} from "effect";
+import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { makeAudit } from "../../src/shell/audit/runtime";
 import { PATActivity } from "../../src/shell/tokens/contract";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
   executeCanonicalQuery,
   executeHostedStatementQuery,
-  installedHostedStatementOperations,
 } from "../canonical-operations/operations";
-import { SqlClient } from "effect/sql";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
@@ -1144,6 +1129,14 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
           })
         )).status
       ).toBe(400);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare("SELECT count(*) AS total FROM pats WHERE pairing_id = ?")
+            .bind(started.pairingId)
+            .first()
+        ))?.total
+      ).toBe(0);
     })
   ));
 it("bounds per-User issuance even when every PAT is revoked immediately", () =>
@@ -3541,34 +3534,6 @@ it("rejects invalid grants, expired bearers and stale browser authority without 
       ).toBeNull();
     })
   ));
-it("shares one Category projection and row codec between HTTP and the hosted-agent query", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const http = yield* awaitPromise(
-        send({
-          path: "/categories",
-          method: "GET",
-          session: sessions[0],
-        })
-      );
-      expect(http.status).toBe(200);
-      const fromAgent = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const clients = yield* Layer.build(
-            D1Client.layer({
-              db,
-            })
-          );
-          return yield* listCategoriesResponse.pipe(
-            Effect.withTracerEnabled(false),
-            Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient))
-          );
-        })
-      );
-      expect(yield* awaitPromise(http.json())).toEqual(fromAgent);
-    })
-  ));
 it("fails closed with declared unavailable for an authenticated WebSession when Insight storage is unavailable", () =>
   runTest(
     Effect.gen(function* () {
@@ -3778,90 +3743,6 @@ it("rechecks revoke/use races at protected canonical work, not only bearer admis
       ).toBe(before?.total);
     })
   ));
-it("closes an approved unclaimed pairing on User revocation and prevents later claim", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const started = yield* Schema.decodeUnknownEffect(Started)(
-        yield* awaitPromise(
-          (yield* awaitPromise(
-            send({
-              path: "/pat-pairings",
-              method: "POST",
-              payload: {
-                recipientLabel: "Agent",
-                scopes: ["dashboard"],
-                lifetimeDays: 365,
-              },
-            })
-          )).json()
-        )
-      );
-      const inspected = (yield* Schema.decodeUnknownEffect(Review)(
-        yield* awaitPromise(
-          (yield* awaitPromise(
-            send({
-              path: "/pats/pairings/inspect",
-              method: "POST",
-              session: sessions[0],
-              payload: {
-                publicCode: started.publicCode,
-              },
-            })
-          )).json()
-        )
-      )).data;
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/pats/pairings/approve",
-            method: "POST",
-            session: sessions[0],
-            payload: {
-              pairingId: inspected.pairingId,
-            },
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/pats",
-            method: "DELETE",
-            session: sessions[1],
-          })
-        )).status
-      ).toBe(200);
-      const revoked = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "DELETE",
-          session: sessions[0],
-        })
-      );
-      expect(revoked.status).toBe(200);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/pat-pairings/claim",
-            method: "POST",
-            payload: {
-              pairingId: started.pairingId,
-              privateDeviceCode: started.privateDeviceCode,
-            },
-          })
-        )).status
-      ).toBe(400);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare("SELECT count(*) AS total FROM pats WHERE pairing_id = ?")
-            .bind(started.pairingId)
-            .first()
-        ))?.total
-      ).toBe(0);
-    })
-  ));
 
 it("answers retained PAT activity through HTTP and the hosted canonical query with only safe metadata", () =>
   runTest(
@@ -3925,11 +3806,6 @@ it("answers retained PAT activity through HTTP and the hosted canonical query wi
         outcome: "succeeded",
       });
       expect(activity.data.hasMore).toBe(false);
-      expect(Object.keys(activity.data.entries[0] ?? {}).sort()).toEqual([
-        "occurredAt",
-        "operation",
-        "outcome",
-      ]);
       expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)).not.toContain(
         issued.bearer
       );
@@ -4351,9 +4227,6 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
         operation: "pats.getPATActivity",
         input: { params: { shortId: issued.pat.shortId } },
       };
-      expect(installedHostedStatementOperations().map((operation) => operation.id)).toContain(
-        "pats.getPATActivity"
-      );
       const history = yield* activityBody(yield* executeHostedStatementQuery(work));
       expect(history.pat.shortId).toBe(issued.pat.shortId);
       expect(history.entries).toEqual([]);

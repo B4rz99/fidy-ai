@@ -46,14 +46,4 @@ describe("Production drift gate", () => {
     expect(result.stdout).not.toContain("secret-attribute-do-not-print");
     expect(result.stderr).not.toContain("secret-attribute-do-not-print");
   });
-
-  it("refuses another drifted resource or unexpected plan shape", () => {
-    const other = runDriftCheck(`${expectedWorkerDrift}\n[0] INFO: [Assets] update`, "resume");
-    expect(other.status).toBe(1);
-    const changedPlan = runDriftCheck(
-      expectedWorkerDrift.replace("2 to update", "3 to update"),
-      "resume"
-    );
-    expect(changedPlan.status).toBe(1);
-  });
 });

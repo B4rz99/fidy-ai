@@ -183,7 +183,7 @@ it.effect("Ctrl-C style interruption aborts the request and cancels its pending 
 );
 
 it.effect(
-  "refuses redirected destinations and oversized requests without sending their body elsewhere",
+  "refuses foreign origins, redirects and oversized requests without sending their body elsewhere",
   () =>
     Effect.gen(function* () {
       let sent = false;
@@ -196,6 +196,10 @@ it.effect(
           );
         })
       );
+      expect(
+        Exit.isFailure(yield* Effect.exit(protectClient(raw).get("https://attacker.example")))
+      ).toBe(true);
+      expect(sent).toBe(false);
       const result = yield* Effect.exit(
         protectClient(raw).get("https://api.fidyapp.com/pat-pairings")
       );

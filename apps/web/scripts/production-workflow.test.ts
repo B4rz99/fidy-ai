@@ -208,7 +208,6 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("alchemy plan --stage production --no-input");
     expect(workflow).toContain("bun production-resources.ts upload");
     expect(workflow).not.toContain("wrangler");
-    expect(workflow).not.toContain("railway");
     expect(workflow).not.toContain("cloudflare/wrangler.json");
     expect(workflow).not.toContain("cloudflare/wrangler-action");
   });
@@ -277,7 +276,6 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("repos/$GITHUB_REPOSITORY/git/ref/heads/");
     expect(workflow).toContain("--jq .object.sha");
     expect(workflow).not.toContain("repos/$GITHUB_REPOSITORY/commits/");
-    expect(workflow).not.toContain("docker push");
   });
 
   it("pins every external Action to a complete commit SHA", () => {

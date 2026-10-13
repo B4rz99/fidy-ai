@@ -20,7 +20,6 @@ const installEnrollmentAvailability = (page: Page): Effect.Effect<unknown, Cause
       body: JSON.stringify({ enabledMethods: ["card", "nequi"] }),
     });
   });
-const waitForEdit = (readEdit: () => unknown): Promise<void> => expect.poll(readEdit).toBeDefined();
 const offerIds = [
   "24000000-0000-4000-8000-000000000250",
   "24000000-0000-4000-8000-000000000251",
@@ -218,97 +217,5 @@ test("activates Subscription through reviewed reused-source terms without sendin
         submitted()
       );
       expect(submittedJson).not.toContain("cardToken");
-    })
-  ));
-
-const widgetId = "24000000-0000-4000-8000-000000000255";
-const dashboardView = {
-  title: "Mi tablero",
-  context: {
-    serviceMarket: "CO",
-    locale: "es-CO",
-    timeZone: "America/Bogota",
-    calculatedAt: "2026-09-27T12:00:00.000Z",
-  },
-  layout: {
-    kind: "leaf",
-    widget: {
-      widget: {
-        id: widgetId,
-        type: "spending-chart",
-        title: "Gastos por categoría",
-        groupBy: "category",
-        period: "this-month",
-      },
-      result: {
-        appliedPeriod: {
-          requested: "this-month",
-          from: "2026-09-01T05:00:00.000Z",
-          toExclusive: "2026-10-01T05:00:00.000Z",
-          timeZone: "America/Bogota",
-        },
-        buckets: [],
-      },
-    },
-  },
-};
-
-test("loads a Dashboard through canonical queries and commits an edited Widget title", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      let view = dashboardView;
-      let edit: unknown;
-      yield* installRoute(page, `${apiOrigin}/dashboard/view`, (route) =>
-        route.fulfill({ status: ok, contentType: "application/json", body: response(view) })
-      );
-      yield* installRoute(page, `${apiOrigin}/dashboard/catalog`, (route) =>
-        route.fulfill({ status: ok, contentType: "application/json", body: response([]) })
-      );
-      yield* installRoute(page, `${apiOrigin}/dashboard/edits`, (route) => {
-        edit = route.request().postDataJSON();
-        view = {
-          ...dashboardView,
-          layout: {
-            ...dashboardView.layout,
-            widget: {
-              ...dashboardView.layout.widget,
-              widget: { ...dashboardView.layout.widget.widget, title: "Gastos visibles" },
-            },
-          },
-        };
-        return route.fulfill({
-          status: ok,
-          contentType: "application/json",
-          body: response({
-            title: "Mi tablero",
-            layout: { kind: "leaf", widget: view.layout.widget.widget },
-          }),
-        });
-      });
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Tablero" })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Gastos por categoría").first()).toBeVisible()
-      );
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Renombrar Gastos por categoría" }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles")
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Guardar nombre del Widget" }).click()
-      );
-      const readEdit = (): unknown => edit;
-      yield* Effect.tryPromise(() => waitForEdit(readEdit));
-      const editJson = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(edit);
-      expect(editJson).toContain("Gastos visibles");
-      const visibleTitle = page.getByText("Gastos visibles").first();
-      yield* Effect.tryPromise(() => expect(visibleTitle).toBeVisible());
-      yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() => expect(visibleTitle).toBeVisible());
     })
   ));

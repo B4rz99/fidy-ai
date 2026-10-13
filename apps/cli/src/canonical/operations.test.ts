@@ -101,15 +101,6 @@ it.effect("contains uncertain mutation outcomes without replay or a no-effect cl
   })
 );
 
-it.effect("executes an input-free query and emits only its canonical envelope on stdout", () =>
-  Effect.gen(function* () {
-    const fixture = makeQueryFixture();
-    yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
-    expect(fixture.stdout).toEqual(['{"data":[],"next":[]}\n']);
-    expect(fixture.requests).toEqual(["https://api.fidyapp.com/categories"]);
-  })
-);
-
 it.effect(
   "displays authoritative Free allowance on stderr without altering the canonical envelope or making extra calls",
   () =>

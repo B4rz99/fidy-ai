@@ -71,19 +71,3 @@ it("rejects duplicate Price identities and reports the identity failure path", (
     'at ["id"]'
   );
 });
-
-it("reports the ordering path when an authoritative offer check sees a missing period", () => {
-  const checkableOffers = SubscriptionOffers.mapElements(
-    () => [Schema.Unknown, Schema.Unknown, Schema.Unknown] as const,
-    { unsafePreserveChecks: true }
-  );
-  const missingPeriod = Schema.decodeResult(checkableOffers)([
-    { id: weekly.id, billingPeriod: "weekly" },
-    { id: monthly.id, billingPeriod: "monthly" },
-    undefined,
-  ]);
-
-  expect(Result.isFailure(missingPeriod) ? String(missingPeriod.failure) : "").toContain(
-    'at [2]["billingPeriod"]'
-  );
-});

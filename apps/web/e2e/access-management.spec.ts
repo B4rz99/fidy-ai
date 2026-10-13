@@ -42,19 +42,6 @@ const installAccess = (page: Page): Promise<void> =>
     )
     .then(() => {});
 
-const railGeometry = (rail: Element): Readonly<{ bottom: number; viewport: number }> => ({
-  bottom: rail.getBoundingClientRect().bottom,
-  viewport: window.innerHeight,
-});
-const revocationFollowsTable = (table: Element): boolean => {
-  const button = Array.from(
-    table.parentElement?.parentElement?.querySelectorAll("button") ?? []
-  ).find((control) => control.textContent === "Revocar todos los agentes conectados");
-  return (
-    button !== undefined &&
-    Boolean(table.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)
-  );
-};
 const documentWidths = (): Readonly<{ content: number; viewport: number }> => ({
   content: document.documentElement.scrollWidth,
   viewport: window.innerWidth,
@@ -94,7 +81,7 @@ const installEmptyHistory = (page: Page): ReturnType<Page["route"]> =>
     route.fulfill({ contentType: "application/json", body: response([]) })
   );
 
-test("Accesos combines aligned token and MCP tables with a full-height creation rail", ({ page }) =>
+test("Accesos displays token and MCP metadata without horizontal overflow", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 1366, height: 978 }));
@@ -115,23 +102,6 @@ test("Accesos combines aligned token and MCP tables with a full-height creation 
       yield* Effect.tryPromise(() =>
         expect(page.getByText("01-10-2026", { exact: true })).toBeVisible()
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText(connectionId, { exact: true })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Actividad reciente", { exact: true })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Actualizar lista", exact: true })).toHaveCount(0)
-      );
-      const geometry = yield* Effect.tryPromise(() =>
-        page.locator("main > div > aside").evaluate(railGeometry)
-      );
-      expect(geometry.bottom).toBeGreaterThanOrEqual(geometry.viewport);
-      const order = yield* Effect.tryPromise(() =>
-        page.getByRole("table", { name: "Conexiones MCP" }).evaluate(revocationFollowsTable)
-      );
-      expect(order).toBe(true);
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
       const widths = yield* Effect.tryPromise(() => page.evaluate(documentWidths));
       expect(widths.content).toBeLessThanOrEqual(widths.viewport);

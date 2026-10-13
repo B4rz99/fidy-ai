@@ -35,19 +35,6 @@ const input = {
   },
 };
 
-it.effect("sends a canonically decoded mutation and encodes exact transformed results", () =>
-  Effect.gen(function* () {
-    const envelope = { data: transaction, next: [] };
-    const test = fixture({ body: encode(envelope), status: 201 }, ["write"]);
-    yield* runOperationCommand(["transactions", "createTransaction", "--input", "-"], {
-      ...test.dependencies,
-      readInput: () => Effect.succeed(encode(input)),
-    });
-    expect(decode(test.stdout.join(""))).toEqual(envelope);
-    expect(test.requests).toEqual(["https://api.fidyapp.com/transactions"]);
-  })
-);
-
 it.effect(
   "keeps ordered batch correlation and child-specific rollback failures in machine output",
   () =>

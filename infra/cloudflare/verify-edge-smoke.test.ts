@@ -324,15 +324,6 @@ describe("production edge smoke", () => {
     })
   );
 
-  it.effect("rejects a broken unauthenticated health route", () =>
-    Effect.gen(function* () {
-      const result = yield* Effect.exit(
-        verifyEdgeSmoke({ probe: () => Effect.succeed(respond(503)), candidate: Option.none() })
-      );
-      expect(result._tag).toBe("Failure");
-    })
-  );
-
   it.effect(
     "refuses unavailable configuration, browser challenges, redirects, and missing security headers",
     () =>

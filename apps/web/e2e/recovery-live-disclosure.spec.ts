@@ -31,6 +31,9 @@ test("discloses a real rotated recovery code only in its mounted settings view",
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Copiar código" })).toBeVisible()
       );
+      const code = yield* Effect.tryPromise(() => page.locator("code").textContent());
+      expect(code).not.toBeNull();
+      expect(page.url()).not.toContain(code);
       yield* Effect.tryPromise(() => page.goto("/app/transactions"));
       yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
       yield* Effect.tryPromise(() =>

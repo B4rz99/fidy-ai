@@ -1,6 +1,7 @@
+import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import {
   DisabledTelemetryResource,
@@ -121,7 +122,7 @@ for (const path of [
           WOMPI_INTEGRITY_SECRET: "unused-clock-test",
         };
         yield* TestClock.setTime(current);
-        const clients = yield* Layer.build(FetchHttpClient.layer);
+        const clients = yield* Layer.build(outboundFetchHttpClientLayer);
         const response = yield* executeCoreHttp({
           request: new Request(`https://api.fidyapp.com${path}`, {
             method: "POST",

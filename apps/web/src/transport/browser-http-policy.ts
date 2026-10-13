@@ -8,6 +8,16 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http";
+import { ownBrowserResponse } from "./browser-response-lifetime";
+
+const ownBrowserFetch = (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
+  Object.assign(
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> =>
+      fetch(input, init).then((response) =>
+        ownBrowserResponse({ response, signal: Option.fromNullishOr(init?.signal) })
+      ),
+    fetch
+  );
 
 /** Browser API boundary whose transport budget follows the sensitivity and response shape it owns. */
 export type BrowserHttpBoundary = "canonical" | "enrollment" | "web-auth" | "hosted-turn";
@@ -169,7 +179,7 @@ const collectBoundedBytes = Effect.fn(function* (
         byteLength = maximumBytes + 1;
         return false;
       }
-      chunks.push(chunk);
+      if (chunk.byteLength > 0) chunks.push(chunk);
       byteLength += chunk.byteLength;
       return true;
     })
@@ -352,11 +362,17 @@ export const browserHttpClientLayer: {
       Layer.provide(
         httpClient.pipe(
           Layer.provide(
-            Layer.succeed(FetchHttpClient.RequestInit, {
-              credentials: "include",
-              redirect: "manual",
-              cache: "no-store",
-            })
+            Layer.merge(
+              Layer.succeed(FetchHttpClient.RequestInit, {
+                credentials: "include",
+                redirect: "manual",
+                cache: "no-store",
+              }),
+              Layer.effect(
+                FetchHttpClient.Fetch,
+                Effect.map(FetchHttpClient.Fetch, ownBrowserFetch)
+              )
+            )
           )
         )
       )

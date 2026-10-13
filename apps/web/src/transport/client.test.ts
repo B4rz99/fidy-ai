@@ -1084,3 +1084,82 @@ describe("canonical browser transport", () => {
     })
   );
 });
+
+describe("native browser response lifetime", () => {
+  for (const mode of [
+    "overflow",
+    "declared-overflow",
+    "redirect",
+    "success",
+    "read-error",
+  ] as const) {
+    it.effect(`releases the native reader for ${mode} without waiting for cancellation`, () =>
+      Effect.gen(function* () {
+        let cancellations = 0;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller): void {
+            if (mode === "overflow") controller.enqueue(new Uint8Array(65_537));
+            if (mode === "success") {
+              controller.enqueue(new Uint8Array());
+              controller.enqueue(new TextEncoder().encode("{}"));
+              controller.close();
+            }
+            if (mode === "read-error") controller.error(new Error("private body error"));
+          },
+          cancel(): Promise<void> {
+            cancellations++;
+            return Promise.withResolvers<void>().promise;
+          },
+        });
+        const response = new Response(body, {
+          status: mode === "redirect" ? 302 : 200,
+          headers: mode === "declared-overflow" ? { "content-length": "65537" } : {},
+        });
+        const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            Object.assign(() => Promise.resolve(response), globalThis.fetch)
+          )
+        );
+        const exit = yield* client.post(`${policyTestOrigin}/work`).pipe(Effect.exit);
+        expect(Exit.isSuccess(exit)).toBe(mode === "success");
+        expect(body.locked).toBe(false);
+        if (mode !== "success" && mode !== "read-error") expect(cancellations).toBe(1);
+      })
+    );
+  }
+  for (const mode of ["timeout", "interruption"] as const) {
+    it.effect(`settles ${mode} while native cancellation remains pending`, () =>
+      Effect.gen(function* () {
+        const started = Deferred.makeUnsafe<void>();
+        let cancellations = 0;
+        const body = new ReadableStream<Uint8Array>(
+          {
+            pull(): void {
+              Deferred.doneUnsafe(started, Effect.void);
+            },
+            cancel(): Promise<void> {
+              cancellations++;
+              return Promise.withResolvers<void>().promise;
+            },
+          },
+          { highWaterMark: 0 }
+        );
+        const client = yield* makePolicyTestClient(FetchHttpClient.layer, "web-auth").pipe(
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            Object.assign(() => Promise.resolve(new Response(body)), globalThis.fetch)
+          )
+        );
+        const fiber = yield* Effect.forkChild(client.post(`${policyTestOrigin}/work`));
+        yield* Deferred.await(started);
+        if (mode === "timeout") yield* TestClock.adjust("10 seconds");
+        else yield* Fiber.interrupt(fiber);
+        const exit = yield* Fiber.await(fiber);
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(cancellations).toBe(1);
+        expect(body.locked).toBe(false);
+      })
+    );
+  }
+});

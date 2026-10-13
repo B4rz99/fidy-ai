@@ -47,3 +47,15 @@ it.effect("releases a byte stream when bounded collection is interrupted", () =>
     expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   })
 );
+
+it.effect("collects fragmented bytes without retaining empty chunks", () =>
+  Effect.gen(function* () {
+    const chunks = Array.from({ length: 4096 }, (_, index) =>
+      index % 2 === 0 ? new Uint8Array(0) : new Uint8Array([index % 256])
+    );
+    const bytes = yield* collectBoundedBytes(Stream.fromIterable(chunks), 2048);
+    expect(Option.isSome(bytes) && bytes.value.byteLength).toBe(2048);
+    expect(Option.isSome(bytes) && bytes.value[0]).toBe(1);
+    expect(Option.isSome(bytes) && bytes.value[2047]).toBe(255);
+  })
+);

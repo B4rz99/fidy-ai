@@ -1,3 +1,4 @@
+import { outboundFetchHttpClientLayer } from "../outbound-http/runtime";
 import { Context, Data, Effect, Layer, type Option, Schema } from "effect";
 import { makeCliReleaseOutboundHttp } from "../../src/shell/outbound-http/operations";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -42,7 +43,7 @@ export const cliDistributionResponse = (
     return Effect.succeedSome(new Response(null, { status: 405, headers: { allow: "GET" } }));
   }
   return Effect.gen(function* () {
-    const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
+    const clients = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
       Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
     );
     return yield* latestVersion.pipe(

@@ -1,3 +1,4 @@
+import { outboundFetchHttpClientLayer } from "./outbound-http/runtime";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { type Cause, Clock, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { currentDisclosureFor } from "../src/shell/consent/operations";
@@ -89,7 +90,9 @@ const loopbackFetch: typeof globalThis.fetch = Object.assign(
   { preconnect: Bun.fetch.preconnect }
 );
 const nativeRuntime = ManagedRuntime.make(
-  FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, loopbackFetch)))
+  outboundFetchHttpClientLayer.pipe(
+    Layer.provide(Layer.succeed(FetchHttpClient.Fetch, loopbackFetch))
+  )
 );
 const sendNative = (url: string, init: RequestInit): Promise<Response> =>
   nativeRuntime.runPromise(

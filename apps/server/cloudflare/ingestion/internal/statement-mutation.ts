@@ -2,7 +2,7 @@ import { getCanonicalOperationInput } from "../../../src/shell/canonical-operati
 import type { StatementDecisionWork } from "../contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { StatementSubmission } from "../../../src/shell/ingestion/contract";
-import { Effect, Exit, Option, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "../../../src/shell/audit/operations";
 import {
   type PreparedStatementPublication,
@@ -118,7 +118,11 @@ const committedSubmission =
       });
       let result = yield* Effect.exit(read);
       for (let attempt = 1; attempt < 3 && Exit.isFailure(result); attempt += 1) {
+        if (Cause.hasInterrupts(result.cause)) return yield* Effect.interrupt;
         result = yield* Effect.exit(read);
+      }
+      if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
+        return yield* Effect.interrupt;
       }
       return Exit.isFailure(result)
         ? Option.none()

@@ -1,3 +1,4 @@
+import { releaseHttpClientLayer } from "./release-http";
 /// <reference types="bun-types" />
 
 import { type Cause, Context, Data, Effect, Layer, Option } from "effect";
@@ -159,13 +160,17 @@ export const productionProbe = ({
           });
     const response = yield* HttpClient.withScope(client).execute(request);
     return { status: response.status, headers: new Headers(response.headers) };
-  }).pipe(Effect.scoped, Effect.timeout("8 seconds"));
+  }).pipe(
+    Effect.scoped,
+    Effect.timeout("8 seconds"),
+    Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
+  );
 
 if (import.meta.main) {
   const result = await Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
-        const services = yield* Layer.build(FetchHttpClient.layer);
+        const services = yield* Layer.build(releaseHttpClientLayer);
         return yield* verifyEdgeSmoke({ probe: productionProbe, candidate: Option.none() }).pipe(
           Effect.provideService(
             HttpClient.HttpClient,

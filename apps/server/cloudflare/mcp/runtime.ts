@@ -12,6 +12,7 @@ import {
   projectMcpSchemas,
 } from "../../src/shell/mcp/contract";
 import { readNativeConfirmation, requestNativeConfirmation } from "./native-confirmation";
+import { leaseNativeReader } from "./internal/native-reader";
 import { OAuthMcpAdmission, maximumMcpRequestBytes } from "./contract";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
@@ -395,31 +396,19 @@ const leaseOwner = (owner: ResidentOwner): (() => void) => {
   };
 };
 /** Concurrent caller/disposer cancellation joins the same locked SDK reader settlement. */
-const leaseNativeReader = (
+const leaseResponseReader = (
   owner: ResidentOwner,
   ticket: ResidentTicket,
-  reader: Pick<ReadableStreamDefaultReader<unknown>, "cancel">
+  reader: Pick<ReadableStreamDefaultReader<unknown>, "cancel" | "releaseLock">
 ): Readonly<{ finish: () => void; cancel: () => Promise<void> }> => {
   const { release } = ticket;
-  let cancelling = false;
-  let cancellation: Option.Option<Promise<void>> = Option.none();
-  const finish = (): void => {
-    if (cancelling) return;
-    owner.bodies.delete(cancel);
-    release();
-  };
-  const cancel = (): Promise<void> => {
-    if (Option.isSome(cancellation)) return cancellation.value;
-    cancelling = true;
-    const pending = Promise.resolve()
-      .then(() => reader.cancel())
-      .finally(() => {
-        cancelling = false;
-        finish();
-      });
-    cancellation = Option.some(pending);
-    return pending;
-  };
+  const { finish, cancel } = leaseNativeReader({
+    reader,
+    releaseLease: () => {
+      owner.bodies.delete(cancel);
+      release();
+    },
+  });
   ticket.cancelBody = Option.some(cancel);
   owner.bodies.add(cancel);
   return { finish, cancel };
@@ -437,7 +426,7 @@ const leasedResponse = (
     return new Response(null, { status: response.status, headers });
   }
   const reader = response.body.getReader();
-  const { finish, cancel } = leaseNativeReader(owner, ticket, reader);
+  const { finish, cancel } = leaseResponseReader(owner, ticket, reader);
   return new Response(
     new ReadableStream<Uint8Array>({
       pull(controller) {

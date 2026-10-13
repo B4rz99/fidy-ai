@@ -1,10 +1,66 @@
 import { it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option, Stream } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { afterEach, expect, vi } from "vitest";
-import { requestWorkerd } from "./local-workerd-http";
+import { proofHttpClientLayer, requestWorkerd } from "./local-workerd-http";
 import { inspectorTarget } from "./workerd-inspector";
 
 const stops: Array<() => Promise<void>> = [];
+
+it.live("refuses proof redirects before sending the proof key to another destination", () =>
+  Effect.gen(function* () {
+    let received = false;
+    const destination = serve(() => {
+      received = true;
+      return new Response("unexpected");
+    });
+    const port = serve(() => Response.redirect(`http://127.0.0.1:${destination}/target`));
+    const response = yield* Effect.tryPromise(() =>
+      requestWorkerd({
+        method: "POST",
+        port,
+        path: "/statement",
+        body: "synthetic",
+        headers: { "x-proof-key": "synthetic-proof" },
+        signal: new AbortController().signal,
+      })
+    );
+    expect(response.status).toBe(302);
+    expect(received).toBe(false);
+  })
+);
+
+it("closes the native proof reader without awaiting a foreign cancel promise", () => {
+  const cancelled = vi.fn(() => Promise.withResolvers<void>().promise);
+  const raw = new ReadableStream<Uint8Array>({
+    start(controller): void {
+      controller.enqueue(new Uint8Array([1]));
+    },
+    cancel: cancelled,
+  });
+  const native: typeof fetch = Object.assign(() => Promise.resolve(new Response(raw)), {
+    preconnect: fetch.preconnect,
+  });
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      const response = yield* HttpClient.withScope(client).get("https://proof.example/statement");
+      yield* Stream.runDrain(response.stream.pipe(Stream.take(1)));
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        proofHttpClientLayer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, native)))
+      ),
+      Effect.timeout("1 second"),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          expect(cancelled).toHaveBeenCalledOnce();
+          expect(raw.locked).toBe(false);
+        })
+      )
+    )
+  );
+});
 
 const serve = (handle: (request: Request) => Response | Promise<Response>): number => {
   const server = Bun.serve({ port: 0, fetch: handle });

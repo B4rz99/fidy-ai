@@ -1,9 +1,10 @@
-import { Clock, Effect, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Fiber, Schema } from "effect";
 import { type Mock, expect, it, vi } from "vitest";
 import { UserId } from "../../src/core/identity/contract";
 import { TranscriptTurnId } from "../../src/core/agent/contract";
 import { WhatsAppWork } from "./contract";
 import { receiveWhatsAppWork } from "./runtime";
+import { receiveWhatsAppWork as receiveOwnedWhatsAppWork } from "./internal/whatsapp-work";
 
 const queuedMessage = (
   index: number,
@@ -21,6 +22,39 @@ const queuedMessage = (
   ack: vi.fn(),
   retry: vi.fn(),
 });
+
+it("preserves interrupted delivery without acknowledging, retrying or starting the next same-User message", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const first = queuedMessage(1);
+      const next = queuedMessage(1, 2);
+      const started = Promise.withResolvers<void>();
+      const response = Promise.withResolvers<Response>();
+      let calls = 0;
+      const fiber = yield* receiveOwnedWhatsAppWork({
+        messages: [first, next],
+        coordinator: {
+          getByName: (): Pick<Fetcher, "fetch"> => ({
+            fetch: (): Promise<Response> => {
+              calls += 1;
+              started.resolve();
+              return response.promise;
+            },
+          }),
+        },
+      }).pipe(Effect.forkChild);
+      yield* Effect.tryPromise(() => started.promise);
+      yield* Fiber.interrupt(fiber);
+      const result = yield* Fiber.await(fiber);
+      expect(Exit.isFailure(result) && Cause.hasInterrupts(result.cause)).toBe(true);
+      expect(calls).toBe(1);
+      expect(first.ack).not.toHaveBeenCalled();
+      expect(first.retry).not.toHaveBeenCalled();
+      expect(next.ack).not.toHaveBeenCalled();
+      expect(next.retry).not.toHaveBeenCalled();
+      response.resolve(new Response(null, { status: 202 }));
+    })
+  ));
 
 it("dispatches ten Users with bounded concurrency, per-User order and independent retry decisions", () =>
   Effect.runPromise(

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { verificationHttpClientLayer } from "./verification-http";
 import {
   Cause,
   Clock,
@@ -511,7 +512,9 @@ const result = await Effect.runPromiseExit(
   main.pipe(
     Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
     Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
-    Effect.provide(Layer.mergeAll(BunCrypto.layer, BunFileSystem.layer, FetchHttpClient.layer))
+    Effect.provide(
+      Layer.mergeAll(BunCrypto.layer, BunFileSystem.layer, verificationHttpClientLayer)
+    )
   )
 );
 if (Exit.isFailure(result)) {

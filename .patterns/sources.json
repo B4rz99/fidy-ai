@@ -1,0 +1,131 @@
+{
+  "effect": {
+    "repository": "https://github.com/Effect-TS/effect",
+    "verifiedOn": "2026-10-12",
+    "snapshot": {
+      "manifest": ".repos/effect/packages/effect/package.json",
+      "version": "4.0.0",
+      "revision": "43416c4142f973f4988440716eb54a498659cd3a",
+      "revisionKind": "upstream-commit",
+      "provenance": "git subtree metadata in 87f902a8721e54625d006d2e934cdddb29841604; upstream main differs from the integrity-locked published source.",
+      "status": "historical"
+    },
+    "packages": [
+      {
+        "name": "effect",
+        "manifest": "package.json",
+        "version": "4.0.1"
+      },
+      {
+        "name": "@effect/atom-react",
+        "manifest": "apps/web/package.json",
+        "version": "4.0.1"
+      }
+    ],
+    "sourcePaths": [
+      ".repos/effect/packages/effect/src/Effect.ts",
+      ".repos/effect/packages/effect/src/http/HttpClient.ts",
+      ".repos/effect/packages/effect/src/reactivity/Atom.ts"
+    ],
+    "patches": []
+  },
+  "alchemy": {
+    "repository": "https://github.com/alchemy-run/alchemy",
+    "verifiedOn": "2026-10-12",
+    "snapshot": {
+      "manifest": ".repos/alchemy/packages/alchemy/package.json",
+      "version": "2.0.0-beta.79",
+      "revision": "1f251fa6a8bcbe4ea19e85fd64aedf00c814fd95",
+      "revisionKind": "upstream-commit",
+      "provenance": "git subtree metadata in 52409ac4e8e3a06c909286aae788a8d09dfe7e4b; published beta.80 plus the retained patch is application authority.",
+      "status": "historical"
+    },
+    "packages": [
+      {
+        "name": "alchemy",
+        "manifest": "infra/cloudflare/package.json",
+        "version": "2.0.0-beta.80"
+      }
+    ],
+    "sourcePaths": [
+      ".repos/alchemy/packages/alchemy/src/Stack.ts",
+      ".repos/alchemy/packages/alchemy/src/Output.ts",
+      ".repos/alchemy/packages/alchemy/src/Cloudflare/Workers/Worker.ts"
+    ],
+    "patches": [
+      {
+        "path": "patches/alchemy@2.0.0-beta.80.patch",
+        "sha256": "c57300f47a6235653cad028cde089bb559bab94ee94adc29f2ed390ce59c6d08"
+      }
+    ]
+  },
+  "react": {
+    "repository": "https://github.com/facebook/react",
+    "verifiedOn": "2026-10-12",
+    "snapshot": {
+      "manifest": ".repos/react/packages/react/package.json",
+      "version": "19.2.8",
+      "revision": "1dd4ecbdabf826f527fc9a58c05ea70375b7d170",
+      "revisionKind": "upstream-commit",
+      "provenance": "Historical v19.2.8 import recorded in docs/research/react-shadcn-agent-guidance.md and restored by 274f64ecdb1ff2d2997ecc52202d9e446e361653. Published 19.3.0 gitHead is 1d34f91dfde6bba84d08b683aaba164c7194dacb; runtime/types verified against bun.lock.",
+      "status": "historical"
+    },
+    "packages": [
+      {
+        "name": "react",
+        "manifest": "apps/web/package.json",
+        "version": "19.3.0"
+      },
+      {
+        "name": "react-dom",
+        "manifest": "apps/web/package.json",
+        "version": "19.3.0"
+      },
+      {
+        "name": "@types/react",
+        "manifest": "apps/web/package.json",
+        "version": "19.3.0"
+      },
+      {
+        "name": "@types/react-dom",
+        "manifest": "apps/web/package.json",
+        "version": "19.3.0"
+      }
+    ],
+    "sourcePaths": [
+      ".repos/react/packages/react/src/ReactClient.js",
+      ".repos/react/packages/react-reconciler/src/ReactFiberHooks.js"
+    ],
+    "patches": []
+  },
+  "dnd-kit": {
+    "repository": "https://github.com/clauderic/dnd-kit",
+    "verifiedOn": "2026-10-12",
+    "snapshot": {
+      "manifest": ".repos/dnd-kit/packages/react/package.json",
+      "version": "0.5.0",
+      "revision": "0b8129b02fb44ab34cb7d3c35d379c03c403dc53",
+      "revisionKind": "repository-tree",
+      "provenance": "Exact vendored Git tree, restored in 6ebc6d61b639908ae68ace479a143b3d01ace922. Upstream commit was not retained in discoverable import metadata; matching package version is not proof of byte parity.",
+      "status": "matching-version"
+    },
+    "packages": [
+      {
+        "name": "@dnd-kit/react",
+        "manifest": "apps/web/package.json",
+        "version": "0.5.0"
+      },
+      {
+        "name": "@dnd-kit/dom",
+        "manifest": "apps/web/package.json",
+        "version": "0.5.0"
+      }
+    ],
+    "sourcePaths": [
+      ".repos/dnd-kit/packages/react/src/core/index.ts",
+      ".repos/dnd-kit/packages/react/src/sortable/index.ts",
+      ".repos/dnd-kit/packages/dom/src/core/sensors/keyboard/KeyboardSensor.ts"
+    ],
+    "patches": []
+  }
+}

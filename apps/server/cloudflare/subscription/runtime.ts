@@ -1,3 +1,4 @@
+import { outboundFetchHttpClientLayer } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchPriceNotices } from "./internal/price-notice";
 import { publishWeeklyPrice } from "./operations";
@@ -87,7 +88,7 @@ export const handleRefundSupport = (
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
+        const clients = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
             observeProviderFetch(globalThis.fetch, {

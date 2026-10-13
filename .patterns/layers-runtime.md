@@ -52,7 +52,7 @@ resources close on completion. No long-lived process runtime is part of the prod
 ## Config
 
 A `Config<T>` is an Effect resolved from the current `ConfigProvider`. Use schema-backed config for
-Worker environment and binding metadata; use `Config.redacted` for secrets and unwrap only at the
+Worker environment and binding metadata; use `Config.Redacted` for secrets and unwrap only at the
 narrow provider call. Missing and malformed configuration are distinct: defaults may handle absent
 optional values, but invalid values must fail closed.
 

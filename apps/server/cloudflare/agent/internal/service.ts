@@ -1,3 +1,4 @@
+import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
 import {
   type AgentEnvironment,
   type AgentService,
@@ -136,11 +137,11 @@ const prepareWhatsAppExecution = (
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
       return Option.none();
     }
-    const inference = yield* Effect.exit(
+    const inference = yield* Effect.option(
       makeUserCloudflareHostedInference({ environment, db: environment.DB, userId, admittedTurnId })
     );
-    if (Exit.isFailure(inference)) return Option.none();
-    const clients = yield* Layer.build(FetchHttpClient.layer);
+    if (Option.isNone(inference)) return Option.none();
+    const clients = yield* Layer.build(outboundFetchHttpClientLayer);
     const sender = makeHostedSender({
       apiKey: Redacted.make(environment.KAPSO_API_KEY),
       httpClient: Context.get(clients, HttpClient.HttpClient),
@@ -606,7 +607,7 @@ const runHostedTurn = (
       ) {
         return transactionUnavailable();
       }
-      const inference = yield* Effect.exit(
+      const inference = yield* Effect.option(
         makeUserCloudflareHostedInference({
           environment: env,
           db: env.DB,
@@ -614,7 +615,7 @@ const runHostedTurn = (
           admittedTurnId: deadline.admittedTurnId,
         })
       );
-      if (Exit.isFailure(inference)) return transactionUnavailable();
+      if (Option.isNone(inference)) return transactionUnavailable();
       return yield* completeHostedTurnWithAdmission({
         input: {
           db: env.DB,

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import { discoverRecurringWork } from "./operations";
 import { RecurringUnavailable, RecurringWork } from "./contract";
@@ -42,7 +42,14 @@ export const advanceRecurringWork = ({
     const users = yield* discoverRecurringWork(DB);
     const results = yield* Effect.forEach(
       users,
-      (userId) => Effect.exit(advanceUser({ coordinator: USER_TRANSACTION_COORDINATOR, userId })),
+      (userId) =>
+        Effect.exit(advanceUser({ coordinator: USER_TRANSACTION_COORDINATOR, userId })).pipe(
+          Effect.flatMap((result) =>
+            Exit.isFailure(result) && Cause.hasInterrupts(result.cause)
+              ? Effect.failCause(result.cause)
+              : Effect.succeed(result)
+          )
+        ),
       { concurrency: 1 }
     );
     if (results.some((result) => result._tag === "Failure")) {

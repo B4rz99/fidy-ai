@@ -1,3 +1,4 @@
+import { outboundFetchHttpClientLayer } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { Context, Effect, Layer, Option } from "effect";
 import type { TelemetryService } from "../../src/shell/observability/contract";
@@ -19,7 +20,7 @@ export const makeCoreHttp =
         },
       });
       if (Option.isSome(isolated)) return isolated.value;
-      const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
+      const clients = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
       return yield* executeCoreHttp({

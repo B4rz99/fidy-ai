@@ -7,6 +7,7 @@ import {
 } from "./wompi-tokenization";
 
 export class NequiAuthorizationFailed extends Data.TaggedError("NequiAuthorizationFailed")<{}> {}
+const ignoreCancellation = (): void => {};
 const maximumTokenCharacters = 4096;
 const maximumApprovalChecks = 100;
 const TokenResponse = Schema.Struct({
@@ -54,10 +55,9 @@ const requestToken = (
       catch: failure,
     });
     if (!response.ok) {
-      const body = response.body;
-      if (body !== null) {
-        yield* Effect.tryPromise({ try: () => body.cancel(), catch: failure }).pipe(Effect.ignore);
-      }
+      yield* Effect.sync(() => {
+        response.body?.cancel().catch(ignoreCancellation);
+      });
       return yield* failure();
     }
     const text = yield* readBoundedWompiResponse(response).pipe(Effect.mapError(failure));

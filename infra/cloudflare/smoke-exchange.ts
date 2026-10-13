@@ -84,7 +84,7 @@ export const exchangeSmoke = Effect.fn(
           new ReleaseSmokeFailed({ reason: "Smoke response exceeded its byte budget" })
         );
       }
-      chunks.push(chunk);
+      if (chunk.byteLength > 0) chunks.push(chunk);
       return Effect.void;
     }).pipe(Effect.catchReason("HttpClientError", "EmptyBodyError", () => Effect.void));
     const bytes = new Uint8Array(size);

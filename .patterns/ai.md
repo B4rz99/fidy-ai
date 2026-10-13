@@ -1,6 +1,6 @@
 # Effect v4 AI boundaries and Workers AI
 
-Use this reference for `effect/ai`, backed by the selected release's
+Use this reference for `effect/ai`, backed by Effect 4.0.1's
 `node_modules/effect/src/ai/{LanguageModel,Prompt,Tool,Toolkit}.ts`. Fidy's provider-neutral hosted
 inference contract lives in `apps/server/src/shell/hosted-inference/operations.ts`; its implemented
 Workers AI adapter lives under `apps/server/cloudflare/ai/`. Effect's `LanguageModel` is a library
@@ -18,6 +18,30 @@ Tool input and structured output are untrusted model data. Decode them with Sche
 authorization and confirmation on every operation, and treat malformed or unsupported output as a
 safe typed result. Model output never grants identity, scope, payment authority, or destructive
 permission.
+
+## Select execution and tool resolution
+
+| API                            | Result and bound                                                                                                     |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `LanguageModel.generateText`   | One complete response; bound prompt, provider output, tool count and deadline before retaining it                    |
+| `LanguageModel.generateObject` | Schema-decoded structured response; decoding proves shape, not permission or factual correctness                     |
+| `LanguageModel.streamText`     | Response parts; consume within the owner lifetime and cap accumulated bytes/parts instead of collecting indefinitely |
+
+Supplying a toolkit normally lets `LanguageModel` resolve tool calls through its handlers. When
+Fidy's owner must admit, confirm and schedule calls itself, pass `disableToolCallResolution: true`
+and route returned calls through that existing pipeline. This switch disables resolution, not model
+ability to request a tool. Otherwise every supplied handler must already enforce canonical access
+and confirmation before side effects. Do not execute returned calls again after automatic resolution.
+
+Set finite `concurrency` when using automatic resolution: the selected release defaults tool-call
+concurrency to `"unbounded"`. Choose sequential execution for dependent mutations; a concurrency cap
+alone does not bound rounds, total calls or output. Interrupt the model request and tool work with
+the owning Turn; a cancelled remote operation may still have committed.
+
+The concrete Fidy recipe is the [Workers AI inference adapter](../apps/server/src/shell/hosted-inference/internal/workers-ai.ts):
+keep bounded provider conversion below HostedInference, then use the canonical operation pipeline.
+Use the library selection above only when implementing a LanguageModel-backed adapter, without
+creating another AgentService loop.
 
 ## Prompt and structured output
 

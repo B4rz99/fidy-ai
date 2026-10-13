@@ -22,6 +22,7 @@ import {
 } from "@tanstack/react-router";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import type { FidyClient, HostedTurnClient, WebAuthClient } from "@/transport/client";
+import { RouteFailure } from "./route-failure";
 
 type WebRouterContext = Readonly<{
   apiClient: FidyClient;
@@ -272,6 +273,7 @@ const routeTree = rootRoute.addChildren([
 /** Builds the application router from independently owned route subtrees. */
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
+    defaultErrorComponent: RouteFailure,
     routeTree,
     context: {
       apiClient: options.apiClient,

@@ -16,6 +16,7 @@ export const collectBoundedBytes = Effect.fn(function* <E, R>(
         byteLength = maximumBytes + 1;
         return false;
       }
+      if (chunk.byteLength === 0) return true;
       chunks.push(chunk);
       byteLength += chunk.byteLength;
       return true;

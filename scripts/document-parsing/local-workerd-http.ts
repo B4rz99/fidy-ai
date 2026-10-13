@@ -1,4 +1,4 @@
-import { Data, Effect, ManagedRuntime, Option, Stream } from "effect";
+import { Data, Effect, Layer, ManagedRuntime, Option, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 
 const maximumResponseBytes = 1_048_576;
@@ -6,7 +6,77 @@ const noContentStatus = 204;
 const resetContentStatus = 205;
 const notModifiedStatus = 304;
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
-const runtime = ManagedRuntime.make(FetchHttpClient.layer);
+/** Native cancellation can remain pending after the local reader is no longer owned. */
+const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>): Response => {
+  if (response.body === null) return response;
+  const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
+  let released = false;
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    if (Option.isSome(signal)) signal.value.removeEventListener("abort", cancel);
+    reader.releaseLock();
+  };
+  const cancel = (): void => {
+    if (released) return;
+    // Start remote cancellation, but do not make local scope closure await provider code.
+    reader.cancel().catch(() => undefined);
+    release();
+  };
+  if (Option.isSome(signal)) {
+    signal.value.addEventListener("abort", cancel, { once: true });
+    if (signal.value.aborted) cancel();
+  }
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull: (controller): Promise<void> =>
+        reader
+          .read()
+          .then((chunk) => {
+            if (released) return;
+            if (chunk.done) {
+              release();
+              controller.close();
+            } else {
+              controller.enqueue(Schema.decodeUnknownSync(Schema.Uint8Array)(chunk.value));
+            }
+          })
+          .catch((error: unknown) => {
+            if (released) return;
+            cancel();
+            controller.error(error);
+          }),
+      cancel,
+    },
+    { highWaterMark: 0 }
+  );
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+};
+
+/** Proof tooling owns native cancellation and releases response readers locally. */
+export const proofHttpClientLayer = FetchHttpClient.layer.pipe(
+  Layer.provide(
+    Layer.effect(
+      FetchHttpClient.Fetch,
+      Effect.gen(function* () {
+        const fetch = yield* FetchHttpClient.Fetch;
+        return Object.assign(
+          (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
+            fetch(input, init).then((response) =>
+              ownResponseBody(response, Option.fromNullishOr(init?.signal))
+            ),
+          { preconnect: fetch.preconnect }
+        );
+      })
+    )
+  )
+);
+
+const runtime = ManagedRuntime.make(proofHttpClientLayer);
 
 class WorkerdResponseTooLarge extends Data.TaggedError("WorkerdResponseTooLarge")<{
   readonly maximumBytes: number;
@@ -53,16 +123,15 @@ const requestProof = (
         return new Response(null, { status: response.status, headers: response.headers });
       }
       let bytes = 0;
-      const chunks = yield* Stream.runCollect(
-        response.stream.pipe(
-          Stream.mapEffect((chunk) => {
-            bytes += chunk.byteLength;
-            return bytes <= maximumResponseBytes
-              ? Effect.succeed(chunk)
-              : Effect.fail(new WorkerdResponseTooLarge({ maximumBytes: maximumResponseBytes }));
-          })
-        )
-      );
+      const chunks: Array<Uint8Array> = [];
+      yield* Stream.runForEach(response.stream, (chunk) => {
+        bytes += chunk.byteLength;
+        if (bytes > maximumResponseBytes) {
+          return Effect.fail(new WorkerdResponseTooLarge({ maximumBytes: maximumResponseBytes }));
+        }
+        if (chunk.byteLength > 0) chunks.push(chunk);
+        return Effect.void;
+      });
       const body = new Uint8Array(bytes);
       let offset = 0;
       for (const chunk of chunks) {
@@ -73,6 +142,7 @@ const requestProof = (
     }).pipe(
       Effect.scoped,
       Effect.timeout("30 seconds"),
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
       Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
     ),
     { signal: options.signal }

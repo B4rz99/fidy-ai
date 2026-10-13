@@ -106,6 +106,7 @@ const checks: Array<Check> = [
     "email-formats:check",
   ]),
   rootCheck("static", "Effect dependency family", ["bun", "run", "check:effect-family"]),
+  rootCheck("static", "Pattern source references", ["bun", "run", "check:pattern-sources"]),
   rootCheck("static", "Dependency policy", ["bun", "run", "lint:dependencies"]),
   rootCheck("static", "Credential path evidence", ["bun", "run", "check:credential-evidence"]),
   rootCheck("static", "Reviewed Cloudflare security policy", [

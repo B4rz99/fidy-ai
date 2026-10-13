@@ -1,3 +1,4 @@
+import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
 import { makeStatusLookupAdmission } from "./status-admission";
 import { receiveWhatsAppProviderHandoff } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
@@ -83,7 +84,7 @@ const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>,
           if (!(chunk instanceof Uint8Array)) return Option.none();
           length += chunk.byteLength;
           if (length > maxWhatsAppWebhookBytes) return Option.none();
-          chunks.push(chunk);
+          if (chunk.byteLength > 0) chunks.push(chunk);
         }
         const body = new Uint8Array(length);
         let offset = 0;
@@ -471,7 +472,7 @@ export const receiveIngress =
   (request) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const clients = yield* Layer.build(FetchHttpClient.layer);
+        const clients = yield* Layer.build(outboundFetchHttpClientLayer);
         return yield* handleWebhook(request, environment).pipe(
           Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient)),
           Effect.provideService(Crypto.Crypto, workerCrypto)

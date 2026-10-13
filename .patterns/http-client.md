@@ -1,7 +1,7 @@
 # Outbound HTTP clients (v4)
 
-Import from `effect/http`. Selected sources are
-`node_modules/effect/src/http/{HttpClient,HttpClientRequest,HttpClientResponse,HttpIncomingMessage,Headers}.ts`.
+Use for provider and first-party outbound transports. Import from `effect/http`. Selected Effect 4.0.1 sources are
+`node_modules/effect/src/http/{FetchHttpClient,HttpClient,HttpClientRequest,HttpClientResponse,HttpIncomingMessage,Headers}.ts`.
 Search the named combinators when changing adapter policy.
 
 ## One policy-bearing client per provider boundary
@@ -48,15 +48,38 @@ side effect.
 
 ## Redirects and telemetry
 
-`followRedirects(max)` follows at most ten redirects by default, rewrites methods where appropriate,
-and strips authorization/proxy-authorization/cookie on origin changes. That protection is not an
-SSRF policy. Validate allowed destinations and personal-data egress at the adapter.
+Native fetch follows redirects by default, before Effect can inspect the response. Provide
+`FetchHttpClient.RequestInit` with `redirect: "manual"` when the adapter handles redirects, or
+`redirect: "error"` when any redirect must fail. `followRedirects(client, 0)` alone does not prevent
+native fetch from following. Browser manual redirects can produce an opaque redirect response;
+reject it rather than assuming the destination/status is inspectable.
 
-The default client tracer records URL data and selected headers. Extend `Headers.CurrentRedactedNames`
-for custom secret headers and narrow `HttpClient.TracerHeaderFilter`; even non-secret headers can
-contain personal data. Keep secrets out of URLs entirely. Configure `TracerDisabledWhen` and
-`Tracer.DisablePropagation` according to Fidy's metadata-only and provider-propagation policy,
-not as a substitute for safe fields. Never log broad request/response objects.
+With native redirect handling disabled, `HttpClient.followRedirects` follows at most ten redirects
+by default, rewrites methods where appropriate, and strips authorization/proxy-authorization/cookie
+on origin changes. This is not an SSRF policy: validate every allowed destination and personal-data
+egress before sending a follow-up request.
+
+The default client tracer records URLs and selected headers. Extend `Headers.CurrentRedactedNames`
+for custom secret headers and narrow `HttpClient.TracerHeaderFilter`; non-secret headers can still
+contain personal data. Select controls deliberately:
+
+| Requirement                                                                     | Effect 4.0.1 control                                                                    |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Suppress automatic HTTP spans and their URL/header metadata                     | Provide `HttpClient.TracerDisabledWhen` with the appropriate request predicate          |
+| Keep approved automatic HTTP spans but suppress injected outgoing trace headers | Provide `HttpClient.TracerPropagationEnabled` with `false`                              |
+| Disable propagation through the broader tracer context                          | `Tracer.DisablePropagation`; this also bypasses the HTTP tracing branch in this release |
+
+These controls do not remove trace headers already present in a request. Construct the allowed
+header set at the adapter. Never log broad request/response objects.
+
+## Existing recipe
+
+Follow `makeProtectedClient` and `makePairingClient` in the
+[CLI transport](../apps/cli/src/direct-client/runtime.ts): validate the fixed destination and request
+bytes, execute under manual-redirect/tracing settings, consume a byte-bounded response, map transport
+failures, and place the deadline around body consumption as well as headers. Feed that client into
+`HttpApiClient.makeWith`. For browser-specific credentials and opaque responses, use the
+[browser policy](../apps/web/src/transport/browser-http-policy.ts).
 
 ## Test seam
 

@@ -1,3 +1,4 @@
+import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
 import { DaviplataOtpPolicy } from "../../../src/core/subscription/contract";
 import { type WompiEnvironment } from "../../../src/shell/secret-material/contract";
 
@@ -39,7 +40,7 @@ export const wompiOutboundHttp = (
   environment: WompiBindings
 ): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
   Effect.scoped(
-    Layer.build(FetchHttpClient.layer).pipe(
+    Layer.build(outboundFetchHttpClientLayer).pipe(
       Effect.provideService(
         FetchHttpClient.Fetch,
         observeProviderFetch(globalThis.fetch, {

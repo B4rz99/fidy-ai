@@ -289,11 +289,6 @@ const decodeChunks = (chunks: ReadonlyArray<Uint8Array>, size: number): string =
   return new TextDecoder().decode(bytes);
 };
 
-type ResponseBodyCollection = Readonly<{
-  chunks: ReadonlyArray<Uint8Array>;
-  size: number;
-}>;
-
 const cancelBody = (body: Readonly<{ cancel: () => Promise<void> }>): Effect.Effect<void> =>
   Effect.sync(() => {
     try {
@@ -310,31 +305,27 @@ const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Eff
     )
   );
 
-const collectResponseBody = (
+const collectResponseBody = Effect.fnUntraced(function* (
   reader: ReadableStreamDefaultReader<unknown>,
-  collection: ResponseBodyCollection,
   overflow: () => HostedInferenceError
-): Effect.Effect<string, HostedInferenceError> =>
-  Effect.tryPromise({
-    try: () => reader.read(),
-    catch: () => invalidProviderOutput("Hosted provider response was invalid"),
-  }).pipe(
-    Effect.flatMap((chunk) =>
-      Effect.gen(function* () {
-        if (chunk.done) return decodeChunks(collection.chunks, collection.size);
-        const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(chunk.value).pipe(
-          Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid"))
-        );
-        const nextSize = collection.size + bytes.byteLength;
-        if (nextSize > providerResponseMaximumBytes) return yield* overflow();
-        return yield* collectResponseBody(
-          reader,
-          { chunks: [...collection.chunks, bytes], size: nextSize },
-          overflow
-        );
-      })
-    )
-  );
+) {
+  const chunks: Array<Uint8Array> = [];
+  let size = 0;
+  for (;;) {
+    const chunk = yield* Effect.tryPromise({
+      try: () => reader.read(),
+      catch: () => invalidProviderOutput("Hosted provider response was invalid"),
+    });
+    if (chunk.done) return decodeChunks(chunks, size);
+    const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(chunk.value).pipe(
+      Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid"))
+    );
+    if (size + bytes.byteLength > providerResponseMaximumBytes) return yield* overflow();
+    if (bytes.byteLength === 0) continue;
+    chunks.push(bytes);
+    size += bytes.byteLength;
+  }
+});
 
 const readBoundedBody = (
   response: Response,
@@ -349,7 +340,7 @@ const readBoundedBody = (
       try: (): ReadableStreamDefaultReader<unknown> => body.getReader(),
       catch: () => invalidProviderOutput("Hosted provider response was invalid"),
     }),
-    (reader) => collectResponseBody(reader, { chunks: [], size: 0 }, overflow),
+    (reader) => collectResponseBody(reader, overflow),
     releaseReader
   );
 };

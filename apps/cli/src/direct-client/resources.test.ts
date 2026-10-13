@@ -1,14 +1,106 @@
-import { expect, it } from "@effect/vitest";
+import { expect, it, layer } from "@effect/vitest";
 import { Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { HttpBody, HttpClient, HttpClientResponse } from "effect/http";
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse } from "effect/http";
 import { protectClient } from "./runtime";
+
+layer(FetchHttpClient.layer)((it) => {
+  it.effect(
+    "keeps rejected native cancellation out of the public failure and releases ownership",
+    () =>
+      Effect.gen(function* () {
+        const body = new ReadableStream<unknown>({
+          start(controller): void {
+            controller.enqueue(new Uint8Array(16_385));
+          },
+          cancel(): Promise<void> {
+            return Promise.reject(new Error("private adapter details"));
+          },
+        });
+        const client = yield* HttpClient.HttpClient;
+        const result = yield* protectClient(client)
+          .get("https://api.fidyapp.com/pat-pairings")
+          .pipe(
+            Effect.result,
+            Effect.provideService(
+              FetchHttpClient.Fetch,
+              Object.assign(() => Promise.resolve(new Response(body)), {
+                preconnect: fetch.preconnect,
+              })
+            )
+          );
+        expect(result).toMatchObject({ failure: { reason: "TransportUnavailable" } });
+        expect(body.locked).toBe(false);
+      })
+  );
+
+  for (const completion of [
+    "overflow",
+    "deadline",
+    "interruption",
+    "success",
+    "read failure",
+    "invalid chunk",
+  ] as const) {
+    it.effect(
+      `releases the native response reader on ${completion} even if cancel never settles`,
+      () =>
+        Effect.gen(function* () {
+          let cancelled = false;
+          const body = new ReadableStream<unknown>({
+            start(controller): void {
+              if (completion === "overflow") controller.enqueue(new Uint8Array(16_385));
+              if (completion === "success") {
+                controller.enqueue(new Uint8Array());
+                controller.enqueue(new TextEncoder().encode("{}"));
+                controller.close();
+              }
+              if (completion === "read failure") controller.error(new Error("source unavailable"));
+              if (completion === "invalid chunk") controller.enqueue("private invalid bytes");
+            },
+            cancel(): Promise<void> {
+              cancelled = true;
+              return Promise.withResolvers<void>().promise;
+            },
+          });
+          const client = yield* HttpClient.HttpClient;
+          const request = protectClient(client)
+            .get("https://api.fidyapp.com/pat-pairings")
+            .pipe(
+              Effect.provideService(
+                FetchHttpClient.Fetch,
+                Object.assign(() => Promise.resolve(new Response(body)), {
+                  preconnect: fetch.preconnect,
+                })
+              )
+            );
+          if (completion === "interruption") {
+            const fiber = yield* request.pipe(Effect.forkChild);
+            yield* TestClock.adjust("1 second");
+            yield* Fiber.interrupt(fiber);
+          } else if (completion === "deadline") {
+            const fiber = yield* request.pipe(Effect.result, Effect.forkChild);
+            yield* TestClock.adjust("16 seconds");
+            expect(yield* Fiber.join(fiber)).toMatchObject({
+              failure: { reason: "TransportUnavailable" },
+            });
+          } else {
+            const result = yield* Effect.result(request);
+            if (completion === "success") expect(result._tag).toBe("Success");
+            else expect(result).toMatchObject({ failure: { reason: "TransportUnavailable" } });
+          }
+          expect(body.locked).toBe(false);
+          expect(cancelled).toBe(completion !== "success" && completion !== "read failure");
+        })
+    );
+  }
+});
 
 it.effect("cancels a dishonest oversized response before decoding it", () =>
   Effect.gen(function* () {
     let cancelled = false;
     const tooManyBytes = 20_000;
-    const body = new ReadableStream<Uint8Array>({
+    const body = new ReadableStream<unknown>({
       start: (controller): void => {
         controller.enqueue(new Uint8Array(tooManyBytes));
       },
@@ -36,7 +128,7 @@ it.effect("Ctrl-C style interruption aborts the request and cancels its pending 
   Effect.gen(function* () {
     let cancelled = false;
     let aborted = false;
-    const body = new ReadableStream<Uint8Array>({
+    const body = new ReadableStream<unknown>({
       cancel: (): void => {
         cancelled = true;
       },

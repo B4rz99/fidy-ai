@@ -1,3 +1,4 @@
+import { releaseHttpClientLayer } from "./release-http";
 /// <reference types="bun-types" />
 
 import { Cause, Context, Effect, Exit, Layer, Option, Schedule, Schema } from "effect";
@@ -291,7 +292,7 @@ if (import.meta.main) {
   const result = await Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
-        const services = yield* Layer.build(FetchHttpClient.layer);
+        const services = yield* Layer.build(releaseHttpClientLayer);
         return yield* (
           process.argv[2] === "promoted"
             ? verifyReadOnlySmokeRouting(process.env, "promoted").pipe(

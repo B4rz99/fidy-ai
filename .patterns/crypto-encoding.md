@@ -83,7 +83,7 @@ for throwaway labels where unpredictability does not matter; secure hex starts w
 
 ## Secret lifetime and redaction
 
-Use `Config.redacted` for secret configuration and carry `Redacted.Redacted<A>` through ports and application services. Unwrap with `Redacted.value` only at the narrow adapter call that requires plaintext.
+Use `Config.Redacted` for secret configuration and carry `Redacted.Redacted<A>` through ports and application services. Unwrap with `Redacted.value` only at the narrow adapter call that requires plaintext.
 
 `Redacted` prevents ordinary inspection/stringification from revealing a value. Once unwrapped, the plain value can leak through logs, errors, traces, metrics, URLs, serialized requests, retained closures, or persistence. Therefore:
 

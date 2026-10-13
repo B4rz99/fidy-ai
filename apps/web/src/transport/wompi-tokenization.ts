@@ -12,6 +12,7 @@ export type CardFields = Readonly<{
 
 export class CardTokenizationFailed extends Data.TaggedError("CardTokenizationFailed")<{}> {}
 
+const ignoreCancellation = (): void => {};
 const maximumTokenCharacters = 4096;
 const wompiExpirationYearCharacters = 2;
 const WompiCardRequest = Schema.Struct({
@@ -90,7 +91,7 @@ export const readBoundedWompiResponse = (
             fail();
             return;
           }
-          chunks.push(next.value);
+          if (next.value.byteLength > 0) chunks.push(next.value);
           readNext();
         }, fail);
       };
@@ -153,7 +154,12 @@ export const tokenizeCardWithWompi: {
         }),
       catch: () => new CardTokenizationFailed(),
     });
-    if (!response.ok) return yield* new CardTokenizationFailed();
+    if (!response.ok) {
+      yield* Effect.sync(() => {
+        response.body?.cancel().catch(ignoreCancellation);
+      });
+      return yield* new CardTokenizationFailed();
+    }
     const text = yield* readBoundedWompiResponse(response);
     const json = decodeJson(text);
     if (Result.isFailure(json)) return yield* new CardTokenizationFailed();

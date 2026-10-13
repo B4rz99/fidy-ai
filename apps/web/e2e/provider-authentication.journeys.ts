@@ -8,7 +8,6 @@ export type ProviderJourneyConfiguration = Readonly<{
   provider: "google" | "microsoft";
   label: string;
   authorizationPattern: string;
-  selectFromPublicSite: boolean;
   recoverWithOperator: boolean;
 }>;
 type ProviderJourney = Readonly<{
@@ -424,15 +423,7 @@ export const signupJourney = ({
           redirectSubject(configuration, `browser-${configuration.provider}-signup`, route)
         )
       );
-      yield* Effect.tryPromise(() => page.goto("/"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Crear mi cuenta" }).first().click()
-      );
-      if (configuration.selectFromPublicSite) {
-        yield* Effect.tryPromise(() =>
-          page.getByRole("link", { name: configuration.label, exact: true }).click()
-        );
-      }
+      yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
       yield* expectSignupNotice(page);
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()

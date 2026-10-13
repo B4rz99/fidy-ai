@@ -1,0 +1,15 @@
+---
+import PrivacyPolicy from "../components/legal/privacy-policy.astro";
+import Terms from "../components/legal/terms.astro";
+
+export const getStaticPaths = (): Array<{
+  params: { document: string };
+  props: { Document: typeof PrivacyPolicy };
+}> => [
+  { params: { document: "politica" }, props: { Document: PrivacyPolicy } },
+  { params: { document: "terminos" }, props: { Document: Terms } },
+];
+const { Document } = Astro.props;
+---
+
+<Document />

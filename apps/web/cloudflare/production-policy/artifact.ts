@@ -45,8 +45,7 @@ const allowedPath = (path: string): boolean =>
   path === "install.sh" ||
   path === "install.ps1" ||
   path === "robots.txt" ||
-  path === "llms.txt" ||
-  path === "sitemap.xml" ||
+  path === "_redirects" ||
   (path.startsWith("assets/") && ASSET_SUFFIXES.has(extname(path).toLowerCase()));
 
 const validatePath = (path: string): void => {

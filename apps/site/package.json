@@ -1,0 +1,28 @@
+{
+  "name": "@fidy/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --ignore-lock",
+    "build": "astro build && bun scripts/check-artifact.ts",
+    "build:production": "bun run build && bun scripts/stamp-release.ts",
+    "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/react": "7.0.1",
+    "@astrojs/sitemap": "3.7.4",
+    "astro": "7.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3"
+  }
+}

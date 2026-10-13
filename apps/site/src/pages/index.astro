@@ -1,0 +1,273 @@
+---
+import SiteLayout from "../layouts/site-layout.astro";
+import Header from "../components/header.astro";
+import { AgentBrands } from "../islands/agent-brands";
+import { Footer } from "../islands/footer";
+import { LaunchButton } from "../islands/registration";
+import { PhoneDemo } from "../islands/phone-demo";
+import { FeatureTabs } from "../islands/feature-tabs";
+import { DashboardStory } from "../islands/dashboard-story";
+import { ChannelStory } from "../islands/channel-story";
+import { Pricing } from "../islands/pricing";
+---
+
+<SiteLayout
+  variant="landing"
+  title="Fidy — Finanzas personales en Colombia, desde WhatsApp"
+  description="Entiende en qué se va tu plata y planea lo que viene. Organiza transacciones y presupuestos desde WhatsApp, la web o tu agente de IA. Hecho para Colombia."
+>
+  {" "}
+  <Header />
+  <main itemscope itemtype="https://schema.org/SoftwareApplication">
+    <meta itemprop="name" content="Fidy" />
+    <meta itemprop="applicationCategory" content="FinanceApplication" />
+    <meta itemprop="operatingSystem" content="Web" />
+    <link itemprop="url" href="https://fidyapp.com/" />
+    <section class="hero peach">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <h1>
+            Tu plata, <br />
+            más clara. <br />
+            <em>
+              Tu vida, <br />
+              más tranquila.
+            </em>
+          </h1>
+          <p>
+            Entiende en qué se va tu plata y planea lo que viene. Lleva tus finanzas desde WhatsApp,
+            la web o tu agente de IA.
+          </p>
+          <div class="actions">
+            <LaunchButton dark={false} arrow />
+            <a class="textlink" href="#como">
+              Así funciona ↓
+            </a>
+          </div>
+          <small class="fine">7 días de Fidy Pro sin tarjeta. Tú eliges si te suscribes.</small>
+        </div>
+        <div id="demo">
+          <PhoneDemo client:load />
+        </div>
+      </div>
+    </section>
+    <div class="strip">
+      <div class="wrap">
+        <b>Hecho para tu día a día</b>
+        <span>Gastos con contexto</span>
+        <span>Presupuestos a tu medida</span>
+        <span>Tus propios agentes</span>
+      </div>
+    </div>
+    <section class="section wrap first-steps" aria-labelledby="primeros-pasos">
+      <div class="section-head">
+        <h2 id="primeros-pasos">Empieza con lo que ya sabes.</h2>
+        <p>No necesitas conectar un banco para empezar a organizar tus finanzas.</p>
+      </div>
+      <div class="steps">
+        <article class="step">
+          <h3>1. Crea tu cuenta.</h3>
+          <p>
+            Tu cuenta incluye una prueba de Fidy Pro de 7 días, sin tarjeta. Crear la cuenta no
+            activa una suscripción de pago.
+          </p>
+        </article>
+        <article class="step">
+          <h3>2. Registra una transacción.</h3>
+          <p>
+            Escribe cuánto fue y en qué consistió, desde la web o por WhatsApp. También puedes
+            adjuntar un Excel por WhatsApp para incorporar transacciones, según tu plan.
+          </p>
+        </article>
+        <article class="step">
+          <h3>3. Decide cómo seguir.</h3>
+          <p>
+            Revisa tus cifras y presupuestos durante la prueba. Para continuar con las funciones
+            Pro, elige y autoriza un plan en la sección de suscripción.
+          </p>
+          <a class="textlink" href="#precios">
+            Ver planes y precios ↓
+          </a>
+        </article>
+      </div>
+    </section>
+    <section class="section wrap" id="como">
+      <div class="section-head">
+        <h2>
+          Tus finanzas. <br />
+          Tres formas de usarlas.
+        </h2>
+        <p>
+          Fidy es agent-first: está pensado desde el inicio para que tú y tus agentes trabajen de
+          forma cohesiva y sin fricción con tus finanzas.
+        </p>
+      </div>
+      <ChannelStory client:visible />
+      <div class="agent-system">
+        <div class="agent-entry">
+          <h3>Conversa con Fidy.</h3>
+          <p>
+            Registra una transacción, consulta tus cifras o revisa un presupuesto conversando con
+            Fidy en WhatsApp.
+          </p>
+        </div>
+        <div class="agent-entry">
+          <h3>Explora la web app.</h3>
+          <p>
+            Revisa los detalles, corrige tus transacciones y organiza un dashboard con lo que
+            quieres tener a mano.
+          </p>
+        </div>
+        <div class="agent-entry">
+          <h3>
+            Conéctalo a
+            <AgentBrands />
+          </h3>
+          <p>
+            Revisa las opciones de MCP, CLI y API, su disponibilidad y los permisos antes de
+            autorizar a tu agente.
+          </p>
+          <a class="textlink" href="/funciones/agentes#conectar">
+            Conecta tu agente ↗
+          </a>
+        </div>
+      </div>
+    </section>
+    <FeatureTabs client:visible />
+    <DashboardStory client:visible />
+    <Pricing client:visible />
+    <section
+      class="section wrap faq"
+      id="preguntas"
+      itemscope
+      itemtype="https://schema.org/FAQPage"
+    >
+      <div>
+        <h2>Antes de empezar.</h2>
+      </div>
+      <div>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Qué información tengo que compartir?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                Para registrar una transacción, cuéntale a Fidy cuánto fue y en qué consistió. Por
+                ejemplo: “Pagué $28.000 de almuerzo en Crepes”. Las respuestas se basan en lo que
+                hayas registrado; no representan por sí solas todas tus finanzas.
+              </p>
+            </div>
+          </div>
+        </details>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Puedo corregir una transacción?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                Sí. Puedes corregir los datos de una transacción si algo quedó mal registrado, como
+                el monto o la categoría. La corrección actualiza esa transacción.
+              </p>
+            </div>
+          </div>
+        </details>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Qué pasa con mis datos?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                Usamos los datos que compartes para organizar tus finanzas, responder tus
+                solicitudes y proteger tu acceso. Cloudflare procesa el servicio y el asistente;
+                Kapso y Meta intervienen al usar WhatsApp. Estos proveedores pueden tratar datos
+                fuera de Colombia.
+              </p>
+              <p>
+                Puedes consultar, corregir o solicitar la eliminación de tus datos y revocar tu
+                autorización. Algunas obligaciones legales y de seguridad pueden exigir conservar
+                información específica. Consulta los plazos, proveedores y derechos en la{" "}
+                <a class="textlink" href="/politica">
+                  política de privacidad
+                </a>{" "}
+                o escribe a{" "}
+                <a class="textlink" href="mailto:obarboza@fidyapp.com">
+                  obarboza@fidyapp.com
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </details>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Necesito tener mi propio agente?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                No. Puedes conversar con Fidy en WhatsApp y usar la web app. Si quieres usar tu
+                propio agente, consulta la guía de conexión y la disponibilidad de cada opción antes
+                de configurarlo.
+              </p>
+            </div>
+          </div>
+        </details>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Qué puede hacer mi agente?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                Depende de los permisos que le des: consultar transacciones y hallazgos, registrar o
+                corregir transacciones y trabajar con tu dashboard. El acceso tiene vencimiento y
+                puedes revocarlo desde Fidy.
+              </p>
+            </div>
+          </div>
+        </details>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Qué son los hallazgos?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                Son señales basadas en tus transacciones, como resúmenes semanales, avisos de
+                presupuesto o patrones de cobros recurrentes. Tus agentes también pueden
+                consultarlos. No representan información que aún no hayas incorporado a Fidy.
+              </p>
+            </div>
+          </div>
+        </details>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Cuánto cuesta?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                Crear tu cuenta incluye una prueba de Fidy Pro de 7 días sin tarjeta. Después, Fidy
+                Pro cuesta $28.900 COP al mes. También puedes elegir $9.900 COP por semana o
+                $289.900 COP al año.
+              </p>
+            </div>
+          </div>
+        </details>
+        <details itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+          <summary itemprop="name">¿Cómo empiezo?</summary>
+          <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+            <div itemprop="text">
+              <p>
+                Revisa la autorización de tratamiento de datos, crea tu cuenta y registra tu primera
+                transacción. La prueba comienza al crear tu cuenta; no necesitas conectar un banco
+                ni registrar una tarjeta.
+              </p>
+              <div class="actions">
+                <LaunchButton dark={false} arrow />
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+    <section class="closing">
+      <h2>
+        Tu plata, más clara. <br />
+        Con la ayuda que tú eliges.
+      </h2>
+      <p>Conversa con Fidy, explora la web o trabaja con tu propio agente.</p>
+      <LaunchButton dark arrow />
+    </section>
+    <Footer />
+  </main>{" "}
+</SiteLayout>

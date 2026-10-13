@@ -73,7 +73,7 @@
     "import/extensions": [
       "error",
       "never",
-      { "pattern": { "mjs": "always", "css": "always", "html": "always" } }
+      { "pattern": { "mjs": "always", "css": "always", "html": "always", "astro": "always" } }
     ],
     "no-void": "error",
     "curly": ["error", "multi-line"],
@@ -152,6 +152,23 @@
     "yoda": "error"
   },
   "overrides": [
+    {
+      // Public documents and demonstrations have no product or server runtime authority.
+      "files": ["apps/site/src/**/*.{astro,ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@fidy/**", "**/server/**", "**/web/**", "**/cli/**", "node:*", "bun:*"],
+                "message": "The public site owns static documents and demonstrations. Link to the product; do not import another application's implementation or a server runtime."
+              }
+            ]
+          }
+        ]
+      }
+    },
     {
       // Reply delivery depends on committed DOM and native document visibility, not a User command.
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
@@ -296,7 +313,9 @@
         "apps/web/src/ui/class-names.ts",
         "apps/web/src/ui/components/{alert,badge,button,calendar,checkbox,dropdown-menu,empty,input,popover,progress,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
-        "apps/web/{playwright,vite,vitest}.config.ts"
+        "apps/web/{playwright,vite,vitest}.config.ts",
+        "apps/site/{astro,playwright}.config.ts",
+        "apps/site/e2e/site.spec.ts"
       ],
       "rules": {
         "import/extensions": "off"
@@ -304,7 +323,10 @@
     },
     // Vite and Vitest require default-exported configuration objects.
     {
-      "files": ["apps/web/{playwright,playwright.cli,playwright.oauth,vite,vitest}.config.ts"],
+      "files": [
+        "apps/web/{playwright,playwright.cli,playwright.oauth,vite,vitest}.config.ts",
+        "apps/site/{astro,playwright}.config.ts"
+      ],
       "rules": {
         "import/no-default-export": "off"
       }
@@ -376,7 +398,7 @@
     // TanStack Router needs inferred return types on two exact exported factories; the custom
     // guard still requires annotations on other named functions in these files.
     {
-      "files": ["apps/web/src/app/routes.ts", "apps/web/src/features/public-site/feature.tsx"],
+      "files": ["apps/web/src/app/routes.ts"],
       "rules": {
         "typescript/explicit-function-return-type": "off",
         "effect-guards/require-route-return-type": "error"

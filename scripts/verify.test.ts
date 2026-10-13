@@ -22,8 +22,13 @@ it.effect("overlaps isolated browser journeys and reports either journey's failu
           `#!/usr/bin/env bash
 set -eu
 journey_mode="\${CLI_ACCEPTANCE_MODE:-shared}"
+if [[ "$*" == *"apps/site"* ]]; then journey_mode="site"; fi
 printf "CHECK mode=%s args=%s \\n" "$journey_mode" "$*"
 touch "\${JOURNEY_RENDEZVOUS}/$journey_mode"
+if [[ "$journey_mode" == "site" ]]; then
+  [[ "\${FAIL_JOURNEY:-}" != "site" ]] || exit 1
+  exit 0
+fi
 for attempt in {1..100}; do
   if [[ -e "\${JOURNEY_RENDEZVOUS}/shared" && -e "\${JOURNEY_RENDEZVOUS}/cli" ]]; then break; fi
   sleep 0.01
@@ -62,8 +67,14 @@ if [[ "\${FAIL_JOURNEY:-}" == "$journey_mode" ]]; then exit 1; fi
     ).toEqual([
       "CHECK mode=cli args=run --cwd apps/web test:browser:cli ",
       "CHECK mode=shared args=run --cwd apps/web test:browser ",
+      "CHECK mode=site args=run --cwd apps/site test:browser ",
     ]);
-    for (const journey of ["cli", "shared"]) {
+    const failureLabels = {
+      cli: "Isolated native CLI browser journey",
+      shared: "Web static-shell browser checks",
+      site: "Public site browser checks",
+    };
+    for (const journey of ["cli", "shared", "site"] as const) {
       expect(Bun.spawnSync(["rm", `${directory}/shared`, `${directory}/cli`]).exitCode).toBe(0);
       const failed = Bun.spawnSync(
         [
@@ -84,11 +95,7 @@ if [[ "\${FAIL_JOURNEY:-}" == "$journey_mode" ]]; then exit 1; fi
         }
       );
       expect(failed.exitCode).toBe(1);
-      expect(new TextDecoder().decode(failed.stderr)).toContain(
-        journey === "cli"
-          ? "Isolated native CLI browser journey"
-          : "Web static-shell browser checks"
-      );
+      expect(new TextDecoder().decode(failed.stderr)).toContain(failureLabels[journey]);
     }
   })
 );
@@ -141,7 +148,8 @@ exit "\${CHECK_EXIT_CODE:-0}"
           expect(commands.includes("CHECK run --cwd apps/web test:browser:cli")).toBe(
             shard === "1/2"
           );
-          expect(commands).toHaveLength(shard === "1/2" ? 2 : 1);
+          expect(commands).toContain("CHECK run --cwd apps/site test:browser");
+          expect(commands).toHaveLength(shard === "1/2" ? 3 : 2);
         }
       }
     })

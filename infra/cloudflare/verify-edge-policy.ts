@@ -33,7 +33,9 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Selective telemetry creates isolated public roots and trusted private trace propagation;
 // credential admission, routing, topology and platform invocation-log policy stay unchanged.
 // #1262 expands refusal observation to exact callback and MCP boundaries; authority and edge rules are unchanged.
-const expectedEdgePolicyDigest = "b07a87cc0196ea3264f1e398d674d076cbeb6f694a168b9550a0bb793d968f24";
+// Public Astro site owns the apex; app legal/feature redirects and installer handoffs are static.
+// Both static response policies and the Astro CSP configuration are covered by this manifest.
+const expectedEdgePolicyDigest = "85a3c2a4f2883782420fb167ebd7763e636afffd2504e088304939628c738d10";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
@@ -82,6 +84,12 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/runtime/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(new URL("../../apps/web/cloudflare/production/_headers", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/web/cloudflare/production/_redirects", import.meta.url)
+  ).text(),
+  await Bun.file(new URL("../../apps/site/public/_headers", import.meta.url)).text(),
+  await Bun.file(new URL("../../apps/site/public/_redirects", import.meta.url)).text(),
+  await Bun.file(new URL("../../apps/site/astro.config.ts", import.meta.url)).text(),
 ];
 
 /** Digest of the complete desired edge, Worker, topology, and static-response policy. */

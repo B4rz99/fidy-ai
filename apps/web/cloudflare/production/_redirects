@@ -1,0 +1,4 @@
+/politica https://fidyapp.com/politica 301
+/cookies https://fidyapp.com/cookies 301
+/terminos https://fidyapp.com/terminos 301
+/funciones/* https://fidyapp.com/funciones/:splat 301

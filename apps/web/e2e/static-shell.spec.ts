@@ -5,16 +5,6 @@ import { type Cause, Effect } from "effect";
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const json = (value: object, space: number): string => JSON.stringify(value, undefined, space);
-const waitForEntrances = (page: Page): Promise<Animation[]> =>
-  page.evaluate(() =>
-    Promise.all(
-      document
-        .getAnimations()
-        // View timelines progress with scrolling and intentionally never finish while stationary.
-        .filter((animation) => animation.timeline instanceof DocumentTimeline)
-        .map((animation) => animation.finished)
-    )
-  );
 const expectSeriousAccessibilityViolations = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -150,57 +140,6 @@ test("Core refuses unauthenticated financial routes and untrusted support decisi
       );
       expect(support.status()).toBe(forbidden);
       expect(support.headers()["access-control-allow-origin"]).toBeUndefined();
-    })
-  ));
-test("renders the public home route without serious accessibility violations", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* wait(page.goto("/"));
-      yield* wait(expect(page).toHaveTitle("Fidy — Tu plata, más clara"));
-      yield* wait(
-        expect(
-          page.getByRole("heading", {
-            level: 1,
-            name: "Tu plata, más clara. Tu vida, más tranquila.",
-          })
-        ).toBeVisible()
-      );
-      yield* wait(waitForEntrances(page));
-      yield* wait(expectSeriousAccessibilityViolations(page));
-    })
-  ));
-test("persists landing appearance across reloads and feature pages", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* wait(page.emulateMedia({ colorScheme: "light" }));
-      yield* wait(page.goto("/"));
-      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "system"));
-      yield* wait(page.getByRole("button", { name: "Activar tema oscuro" }).click());
-      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "dark"));
-      yield* wait(waitForEntrances(page));
-      yield* wait(expectSeriousAccessibilityViolations(page));
-      yield* wait(page.reload());
-      yield* wait(expect(page.getByRole("button", { name: "Activar tema claro" })).toBeVisible());
-      yield* wait(page.goto("/funciones/agentes"));
-      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "dark"));
-      yield* wait(expectSeriousAccessibilityViolations(page));
-      yield* wait(page.getByRole("button", { name: "Activar tema claro" }).click());
-      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "light"));
-    })
-  ));
-test("renders the policy route without serious accessibility violations", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* wait(page.goto("/politica"));
-      yield* wait(
-        expect(
-          page.getByRole("heading", {
-            level: 1,
-            name: "Política de tratamiento de datos personales",
-          })
-        ).toBeVisible()
-      );
-      yield* wait(expectSeriousAccessibilityViolations(page));
     })
   ));
 test("renders not-found behavior without serious accessibility violations", ({ page }) =>

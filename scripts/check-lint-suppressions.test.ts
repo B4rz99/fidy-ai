@@ -166,7 +166,7 @@ it("does not re-disable unsafe rules for the typed dependency analyzer", () =>
       expect(exceptions).toEqual([]);
     }));
 
-it("guards both route factories without leaving other named functions unannotated", () =>
+it("guards the route factory without leaving other named functions unannotated", () =>
   Bun.file(new URL("../.oxlintrc.json", import.meta.url))
     .text()
     .then((contents) => Schema.decodeUnknownSync(OxlintExceptions)(Bun.JSONC.parse(contents)))
@@ -175,10 +175,7 @@ it("guards both route factories without leaving other named functions unannotate
         ({ rules }) => rules["typescript/explicit-function-return-type"] === "off"
       );
       expect(returnTypeExemptions).toHaveLength(1);
-      expect(returnTypeExemptions[0]?.files).toEqual([
-        "apps/web/src/app/routes.ts",
-        "apps/web/src/features/public-site/feature.tsx",
-      ]);
+      expect(returnTypeExemptions[0]?.files).toEqual(["apps/web/src/app/routes.ts"]);
       expect(returnTypeExemptions[0]?.rules["effect-guards/require-route-return-type"]).toBe(
         "error"
       );

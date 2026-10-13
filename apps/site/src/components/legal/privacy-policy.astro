@@ -1,0 +1,14 @@
+---
+import SiteLayout from "../../layouts/site-layout.astro";
+import policyHtml from "../../assets/policy.html?raw";
+---
+
+<SiteLayout
+  variant="document"
+  title="Política de privacidad — Fidy"
+  description="Consulta cómo Fidy trata tus datos personales, sus proveedores, conservación y tus derechos en Colombia."
+>
+  <main class="legal-document">
+    <article class="policy flex flex-col gap-4" set:html={policyHtml} />
+  </main>
+</SiteLayout>

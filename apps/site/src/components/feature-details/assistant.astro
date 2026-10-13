@@ -1,0 +1,79 @@
+---
+import { LaunchButton } from "../../islands/registration";
+---
+
+<section class="detail-hero wrap">
+  <h1>
+    Tu plata también
+    <br />
+    se puede conversar.
+  </h1>
+  <p>
+    Escribe como hablas. Fidy te ayuda a registrar transacciones y consultar tus cifras desde
+    WhatsApp.
+  </p>
+  <div class="actions">
+    <LaunchButton dark={false} arrow />
+    <a class="textlink" href="#vista">
+      Ver el ejemplo ↓
+    </a>
+  </div>
+</section>
+<section class="detail-showcase" id="vista" aria-label="Vista ilustrativa de Asistente">
+  <div class="wrap">
+    <div class="detail-assistant">
+      <aside>
+        <b>fidy</b>
+        <span>Tu asistente</span>
+        <p>Una conversación que te ayuda a entender lo que registras.</p>
+        <a class="textlink" href="/funciones/transacciones">
+          Explorar transacciones ↗
+        </a>
+      </aside>
+      <div class="detail-transcript">
+        <div class="detail-user">Pagué $28.000 de almuerzo en Crepes.</div>
+        <div class="detail-answer">
+          <b>Listo, quedó registrado.</b>
+          <p>Crepes · Restaurantes · $28.000 COP</p>
+        </div>
+        <div class="detail-user">¿Y cómo va mi presupuesto?</div>
+        <div class="detail-answer">
+          <b>Te quedan $216.000 en Restaurantes.</b>
+          <p>Has registrado $384.000 de los $600.000 que definiste para este mes.</p>
+          <div class="feature-track">
+            <i class="chart-width-64"></i>
+          </div>
+        </div>
+        <div class="detail-composer">
+          Escribe en tus propias palabras…
+          <span aria-hidden="true">↑</span>
+        </div>
+      </div>
+    </div>
+    <p class="detail-disclosure">
+      Vista ilustrativa · Datos ficticios en COP · No modifica tu información.
+    </p>
+  </div>
+</section>
+<section class="section wrap">
+  <div class="section-head">
+    <h2>De una pregunta, a algo útil.</h2>
+  </div>
+  <div class="steps">
+    <article class="step">
+      <h3>Registra con tus palabras.</h3>
+      <p>“Pagué $28.000 de almuerzo en Crepes”. Dale a Fidy el contexto de la transacción.</p>
+    </article>
+    <article class="step">
+      <h3>Haz la siguiente pregunta.</h3>
+      <p>Consulta cuánto llevas en una categoría o cómo va el presupuesto que definiste.</p>
+    </article>
+    <article class="step">
+      <h3>Respuestas con contexto.</h3>
+      <p>
+        El asistente se basa en la información disponible en Fidy. Sus respuestas no son una visión
+        completa de todas tus finanzas.
+      </p>
+    </article>
+  </div>
+</section>

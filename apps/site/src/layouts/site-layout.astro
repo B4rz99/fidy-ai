@@ -1,0 +1,67 @@
+---
+import "../styles/global.css";
+import "../styles/landing.css";
+
+type Props = {
+  title: string;
+  description: string;
+  variant: "landing" | "detail" | "document" | "draft" | "missing";
+};
+const { title, description, variant } = Astro.props;
+const legal = ["document", "draft", "missing"].includes(variant);
+const noindex = variant === "draft" || variant === "missing";
+const detail = variant === "detail";
+const pathname = Astro.url.pathname.replace(/\.html$/u, "").replace(/^\/index$/u, "/");
+const canonical = new URL(pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="es-CO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta
+      name="robots"
+      content={noindex ? "noindex, follow" : "index, follow, max-image-preview:large"}
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_CO" />
+    <meta property="og:site_name" content="Fidy" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={new URL("/fidy-logo.png", Astro.site)} />
+    <meta property="og:image:alt" content="Fidy" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={new URL("/fidy-logo.png", Astro.site)} />
+    <link rel="icon" type="image/png" href="/fidy-logo.png" />
+    <link
+      rel="alternate"
+      type="text/plain"
+      href="/llms.txt"
+      title="Guía de conexión para agentes"
+    />
+  </head>
+  <body>
+    {legal && (
+      <header class="legal-navigation">
+        <nav aria-label="Principal">
+          <a href="/">fidy</a>
+          <a href="/politica">Política de privacidad</a>
+        </nav>
+      </header>
+    )}
+    <div
+      class:list={["fidy-landing", "variant-a", { "feature-detail-open": detail }]}
+      data-theme="system"
+    >
+      <slot />
+    </div>
+    <script src="../scripts/site.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,55 @@
+---
+import { LaunchButton } from "../../islands/registration";
+import { CorrectionDemo } from "../../islands/correction-demo";
+---
+
+<section class="detail-hero wrap">
+  <h1>
+    De cada transacción,
+    <br />
+    al detalle que importa.
+  </h1>
+  <p>
+    Una lista para seguir tus transacciones. Un lugar para revisar lo que pasó y corregir lo que
+    haga falta.
+  </p>
+  <div class="actions">
+    <LaunchButton dark={false} arrow />
+    <a class="textlink" href="#vista">
+      Ver el ejemplo ↓
+    </a>
+  </div>
+</section>
+<section class="detail-showcase" id="vista" aria-label="Vista ilustrativa de Transacciones">
+  <div class="wrap">
+    <CorrectionDemo client:visible />
+    <p class="detail-disclosure">
+      Vista ilustrativa · Datos ficticios en COP · No modifica tu información.
+    </p>
+  </div>
+</section>
+<section class="section wrap">
+  <div class="section-head">
+    <h2>Tus transacciones cuentan una historia.</h2>
+  </div>
+  <div class="steps">
+    <article class="step">
+      <h3>Captura a tu ritmo.</h3>
+      <p>Registra una transacción desde la web app o cuéntasela a Fidy en WhatsApp.</p>
+    </article>
+    <article class="step">
+      <h3>Entiende cada dato.</h3>
+      <p>
+        Consulta el monto, la fecha y la categoría de tus transacciones. Los detalles te ayudan a
+        dar contexto a tus gastos.
+      </p>
+    </article>
+    <article class="step">
+      <h3>Corrige y sigue.</h3>
+      <p>
+        Si un monto o una categoría quedó mal, puedes corregir la misma transacción. No necesitas
+        duplicarla.
+      </p>
+    </article>
+  </div>
+</section>

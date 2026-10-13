@@ -20,7 +20,6 @@ import {
   redirect,
   useRouter,
 } from "@tanstack/react-router";
-import { createPublicSiteRoute } from "@/features/public-site/feature";
 import type { FidyClient, HostedTurnClient, WebAuthClient } from "@/transport/client";
 import { RouteFailure } from "./route-failure";
 
@@ -91,7 +90,15 @@ const DashboardRoute = (): JSX.Element => {
   );
 };
 
-const rootRoute = createRootRouteWithContext<WebRouterContext>()({});
+const rootRoute = createRootRouteWithContext<WebRouterContext>()({
+  notFoundComponent: () =>
+    createElement(
+      "main",
+      { className: "p-8" },
+      createElement("h1", null, "Página no encontrada"),
+      createElement("a", { href: "https://fidyapp.com" }, "Volver al inicio")
+    ),
+});
 const AuthenticatedRoute = lazyRouteComponent(() =>
   Promise.all([import("@/features/signed-in/feature"), import("@/features/agent/feature")]).then(
     ([signedIn, agent]) => ({
@@ -248,8 +255,13 @@ const microsoftReturnRoute = createRoute({
   path: "/auth/microsoft-return",
   component: () => createElement(ProviderReturnFeature, { provider: "microsoft" }),
 });
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  beforeLoad: () => redirect({ to: "/app/dashboard" }),
+});
 const routeTree = rootRoute.addChildren([
-  createPublicSiteRoute(rootRoute),
+  indexRoute,
   browserLoginPairingRoute,
   cliConnectionRoute,
   googleRoute,

@@ -82,11 +82,12 @@ export const productionTopology = {
     localPort: 8787,
     workersDev: false,
   },
+  site: { hostname: "fidyapp.com", localPort: 4321, workerName: "fidy-site", workersDev: false },
   web: {
     adoptExistingWorker: true,
     hostname: "app.fidyapp.com",
     localPort: 5173,
-    redirects: ["fidyapp.com"],
+    redirects: [],
     workerName: "fidy-web",
     workersDev: false,
   },

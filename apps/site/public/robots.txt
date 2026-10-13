@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://fidyapp.com/sitemap-index.xml

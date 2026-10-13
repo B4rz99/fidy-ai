@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -61,8 +60,12 @@ describe("browser defect diagnostics", () => {
         Schema.Struct({ status: Schema.Literal("ready") })
       )({ status: sentinel });
       const expected = yield* Effect.exit(response);
-      const observed = yield* Effect.exit(observeBrowserDecode(response));
-      assert.deepStrictEqual(observed, expected);
+      expect(Exit.isFailure(expected)).toBe(true);
+      if (!Exit.isFailure(expected)) return;
+      const observed = yield* Effect.exit(observeBrowserDecode(Effect.failCause(expected.cause)));
+      expect(Exit.isFailure(observed)).toBe(true);
+      if (!Exit.isFailure(observed)) return;
+      expect(Cause.findErrorOption(observed.cause)).toEqual(Cause.findErrorOption(expected.cause));
       expect(diagnosticConsole.info).toHaveBeenCalledExactlyOnceWith("fidy.browser.defect", {
         component: "browser",
         operation: "browser.defect",

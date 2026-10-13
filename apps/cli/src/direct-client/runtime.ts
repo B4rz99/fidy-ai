@@ -190,6 +190,11 @@ const projectAllowance = (
   });
 };
 
+const projectTrace = (
+  headers: Readonly<Record<string, string>>
+): Option.Option<typeof TelemetryTraceId.Type> =>
+  Schema.decodeUnknownOption(TelemetryTraceId)(headers[telemetryTraceHeader.toLowerCase()]);
+
 /** Fixed-origin policy for derived clients. No automatic telemetry, redirects or unbounded bytes escape. */
 export const makeProtectedClient = (
   options: Readonly<{
@@ -223,11 +228,7 @@ export const makeProtectedClient = (
       Clock.currentTimeMillis.pipe(
         Effect.map((now) => {
           options.captureAllowance(projectAllowance(response.headers));
-          options.captureTrace(
-            Schema.decodeUnknownOption(TelemetryTraceId)(
-              response.headers[telemetryTraceHeader.toLowerCase()]
-            )
-          );
+          options.captureTrace(projectTrace(response.headers));
           const retry = retryDelay(response.headers["retry-after"], now);
           if (Option.isSome(retry)) options.captureRetry(retry.value);
           return undefined;

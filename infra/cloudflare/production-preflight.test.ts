@@ -6,7 +6,7 @@ import { Data, Effect, FileSystem, Path, Schedule } from "effect";
 import { expect } from "vitest";
 
 const sourceDirectory = `${process.cwd()}/scripts`;
-const initialGates = ["worker-boundary", "hosted-inference", "static-artifact", "migration"];
+const initialGates = ["static-artifact", "migration"];
 
 class FixtureIoFailed extends Data.TaggedError("FixtureIoFailed")<{}> {}
 const fixturePromise = <A>(work: () => Promise<A>): Effect.Effect<A, FixtureIoFailed> =>
@@ -27,14 +27,13 @@ const waitForMarkers = Effect.fn(function* (directory: string, suffix: string) {
     }),
     Effect.timeout("3 seconds")
   );
-  expect(markers).toEqual([true, true, true, true]);
+  expect(markers).toEqual([true, true]);
 });
 type PreflightResult = {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
   readonly calls: ReadonlyArray<string>;
-  readonly inferenceFinished: boolean;
   readonly buildFinished: boolean;
   readonly stopped: ReadonlyArray<boolean>;
 };
@@ -43,8 +42,6 @@ type PreflightResult = {
 const fixtureCommand = `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-  *workers.test.ts) gate=worker-boundary ;;
-  *test:hosted-inference) gate=hosted-inference ;;
   *build:production) gate=static-artifact ;;
   *check-applied-migration-drift.ts) gate=migration ;;
   *'provider cloudflare bootstrap'*) gate=bootstrap ;;
@@ -53,13 +50,12 @@ case "$*" in
 esac
 printf '%s\\n' "$gate" >> "$FIXTURE_DIRECTORY/calls"
 case "$gate" in
-  worker-boundary|hosted-inference|static-artifact|migration)
+  static-artifact|migration)
+    if [[ -f "$FIXTURE_DIRECTORY/$gate.finished" ]]; then exit 0; fi
     touch "$FIXTURE_DIRECTORY/$gate.started"
     concurrent=false
     for attempt in {1..100}; do
-      if [[ -f "$FIXTURE_DIRECTORY/worker-boundary.started" &&
-            -f "$FIXTURE_DIRECTORY/hosted-inference.started" &&
-            -f "$FIXTURE_DIRECTORY/static-artifact.started" &&
+      if [[ -f "$FIXTURE_DIRECTORY/static-artifact.started" &&
             -f "$FIXTURE_DIRECTORY/migration.started" ]]; then
         concurrent=true
         break
@@ -76,7 +72,7 @@ if [[ "$FAILED_GATE" == interrupted ]]; then
   wait "$!"
 fi
 # Slow independent gates must still finish when the infrastructure lane fails.
-if [[ "$gate" == hosted-inference || "$gate" == static-artifact ]]; then sleep 0.1; fi
+if [[ "$gate" == static-artifact ]]; then sleep 0.1; fi
 touch "$FIXTURE_DIRECTORY/$gate.finished"
 if [[ "$gate" == "$FAILED_GATE" ]]; then exit 23; fi
 if [[ "$gate" == drift ]]; then echo 'Plan: no changes'; fi
@@ -141,7 +137,6 @@ const runPreflight = Effect.fn(function* (failedGate: string = "") {
     { concurrency: 3 }
   );
   const calls = (yield* fs.readFileString(paths.join(directory, "calls"))).trim().split("\n");
-  const inferenceFinished = yield* fs.exists(paths.join(directory, "hosted-inference.finished"));
   const buildFinished = yield* fs.exists(paths.join(directory, "static-artifact.finished"));
   if (failedGate === "interrupted") yield* waitForMarkers(directory, "stopped");
   const stopped = yield* gateMarkers(directory, "stopped");
@@ -150,21 +145,19 @@ const runPreflight = Effect.fn(function* (failedGate: string = "") {
     stdout,
     stderr,
     calls,
-    inferenceFinished,
     buildFinished,
     stopped,
   } satisfies PreflightResult;
 });
 // Subprocess polling observes real time, not the deterministic application TestClock.
 layer(BunServices.layer, { excludeTestServices: true })("Production preflight barrier", (it) => {
-  it.effect("overlaps all four gates while keeping migration, bootstrap and drift ordered", () =>
+  it.effect("overlaps both lanes while keeping migration, bootstrap and drift ordered", () =>
     Effect.gen(function* () {
       const result = yield* runPreflight();
       expect(result.exitCode, result.stderr).toBe(0);
       expect(
         result.calls.filter((gate) => ["migration", "bootstrap", "drift"].includes(gate))
       ).toEqual(["migration", "bootstrap", "drift"]);
-      expect(result.inferenceFinished).toBe(true);
       expect(result.buildFinished).toBe(true);
       expect(result.stdout).toContain("cloudflare-state (passed)");
     })
@@ -174,29 +167,23 @@ layer(BunServices.layer, { excludeTestServices: true })("Production preflight ba
     Effect.gen(function* () {
       const result = yield* runPreflight("interrupted");
       expect(result.exitCode).toBe(143);
-      expect(result.stopped).toEqual([true, true, true, true]);
+      expect(result.stopped).toEqual([true, true]);
       expect(result.calls).not.toContain("bootstrap");
     })
   );
 
-  it.effect.each([
-    "worker-boundary",
-    "hosted-inference",
-    "static-artifact",
-    "migration",
-    "bootstrap",
-    "drift",
-  ])("blocks release after %s fails and drains the other gates", (gate) =>
-    Effect.gen(function* () {
-      const result = yield* runPreflight(gate);
-      expect(result.exitCode, result.stderr).toBe(1);
-      expect(result.stdout).toContain("(failed)");
-      expect(result.inferenceFinished).toBe(true);
-      expect(result.buildFinished).toBe(true);
-      if (gate === "migration") expect(result.calls).not.toContain("bootstrap");
-      if (gate === "migration" || gate === "bootstrap") {
-        expect(result.calls).not.toContain("drift");
-      }
-    })
+  it.effect.each(["static-artifact", "migration", "bootstrap", "drift"])(
+    "blocks release after %s fails and drains the other gates",
+    (gate) =>
+      Effect.gen(function* () {
+        const result = yield* runPreflight(gate);
+        expect(result.exitCode, result.stderr).toBe(1);
+        expect(result.stdout).toContain("(failed)");
+        expect(result.buildFinished).toBe(true);
+        if (gate === "migration") expect(result.calls).not.toContain("bootstrap");
+        if (gate === "migration" || gate === "bootstrap") {
+          expect(result.calls).not.toContain("drift");
+        }
+      })
   );
 });

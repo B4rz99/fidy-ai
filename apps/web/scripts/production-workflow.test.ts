@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = `${process.cwd()}/../..`;
 const workflow = await Bun.file(`${repositoryRoot}/.github/workflows/production.yml`).text();
+const checks = await Bun.file(`${repositoryRoot}/.github/workflows/ci.yml`).text();
+const cliRelease = await Bun.file(`${repositoryRoot}/.github/workflows/cli-release.yml`).text();
 const manualRollback = await Bun.file(
   `${repositoryRoot}/.github/workflows/production-rollback.yml`
 ).text();
@@ -150,10 +152,21 @@ describe("Production release workflow policy", () => {
     );
   });
 
-  it("runs deterministic Worker and inference suites without live AI before deployment", () => {
-    expect(preflight).toContain("bun run --cwd infra/cloudflare test -- workers.test.ts");
-    expect(preflight).toContain("bun run --cwd apps/server test:hosted-inference");
+  it("validates code only before merge and publishes CLI releases from protected trunk", () => {
+    expect(checks).toContain("  pull_request:");
+    expect(checks).not.toContain("  push:");
+    expect(cliRelease).toContain("  push:\n    branches: [trunk]");
+    expect(cliRelease).not.toContain("workflow_run");
+    expect(cliRelease).toContain("ref: ${{ github.sha }}");
+    expect(cliRelease).toContain("SOURCE_SHA: ${{ github.sha }}");
+  });
+
+  it("keeps ordinary tests in PR validation and builds the exact production artifacts", () => {
+    expect(preflight).not.toContain("workers.test.ts");
+    expect(preflight).not.toContain("test:hosted-inference");
     expect(preflight).not.toContain("test:workers-ai-conformance");
+    expect(preflight).toContain("bun run --cwd apps/site build:production");
+    expect(preflight).toContain("bun run --cwd apps/web build:production");
   });
 
   it("rejects migration and provider drift before planning and approves the non-interactive deploy", () => {

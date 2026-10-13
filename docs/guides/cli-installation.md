@@ -42,7 +42,7 @@ server grants or remove credentials; use `fidy logout` and revoke the grant in F
 
 ## Automated releases
 
-`Publish CLI` runs after `Checks` succeeds for a push to `trunk`. It checks the exact source SHA,
+`Publish CLI` runs directly on protected `trunk` pushes after PR validation. It checks the exact source SHA,
 bundles the CLI to enumerate its resolved inputs and compares their fingerprint, including emitted
 bundle bytes, with the current
 published release. CLI code, consumed contracts, bundled dependency code/metadata/notices, the

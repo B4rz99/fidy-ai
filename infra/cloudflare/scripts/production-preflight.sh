@@ -6,7 +6,7 @@ set -m
 cd "$(dirname "$0")/../../.."
 log_dir="$(mktemp -d)"
 pids=()
-names=(worker-boundary hosted-inference static-artifact cloudflare-state)
+names=(static-artifact cloudflare-state)
 
 cleanup() {
   for pid in "${pids[@]}"; do
@@ -30,8 +30,6 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 commands=(
-  'bun run --cwd infra/cloudflare test -- workers.test.ts'
-  'bun run --cwd apps/server test:hosted-inference'
   'bun run --cwd apps/site build:production && bun run --cwd apps/web build:production'
   'cd infra/cloudflare
    bun scripts/check-applied-migration-drift.ts

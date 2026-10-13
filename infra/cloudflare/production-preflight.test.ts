@@ -90,6 +90,12 @@ const runPreflight = Effect.fn(function* (failedGate: string = "") {
   const bin = paths.join(directory, "bin");
   yield* fs.makeDirectory(scripts, { recursive: true });
   yield* fs.makeDirectory(bin);
+  const commandOwner = paths.join(directory, "scripts/cli-release");
+  yield* fs.makeDirectory(commandOwner, { recursive: true });
+  yield* fs.copyFile(
+    new URL("../../scripts/cli-release/command.py", import.meta.url).pathname,
+    paths.join(commandOwner, "command.py")
+  );
   yield* Effect.forEach(["production-preflight.sh", "check-topology-drift.sh"], (filename) =>
     fs
       .readFileString(paths.join(sourceDirectory, filename))

@@ -5,8 +5,8 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { WorkBook, WorkSheet } from "xlsx";
 import {
+  ProofHttpLive,
   closeWorkerdHttp,
-  proofHttpClientLayer,
   requestHostedProof,
   requestWorkerd,
 } from "./local-workerd-http";
@@ -515,8 +515,5 @@ const program = Effect.gen(function* () {
   });
 });
 await Effect.runPromise(
-  program.pipe(
-    Effect.scoped,
-    Effect.provide([BunFileSystem.layer, BunCrypto.layer, proofHttpClientLayer])
-  )
+  program.pipe(Effect.scoped, Effect.provide([BunFileSystem.layer, BunCrypto.layer, ProofHttpLive]))
 );

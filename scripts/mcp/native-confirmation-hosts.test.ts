@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import { expect } from "vitest";
@@ -26,7 +26,9 @@ for (const mode of ["streamed-overflow", "declared-overflow", "redirect", "malfo
       const client = HttpClient.make((request) =>
         Effect.gen(function* () {
           expect(request.url).toBe("http://127.0.0.1:19488/finish");
-          expect((yield* FetchHttpClient.RequestInit).redirect).toBe("manual");
+          expect(
+            Option.getOrThrow(yield* Effect.serviceOption(FetchHttpClient.RequestInit)).redirect
+          ).toBe("manual");
           expect((yield* HttpClient.TracerDisabledWhen)(request)).toBe(true);
           return HttpClientResponse.fromWeb(
             request,

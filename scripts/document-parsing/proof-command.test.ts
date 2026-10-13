@@ -59,7 +59,7 @@ it.live("finishes interruption when the proof subprocess ignores SIGTERM", () =>
           import("node:fs/promises").then((fs) =>
             fs.rm(directory, { recursive: true, force: true })
           )
-        )
+        ).pipe(Effect.orDie)
       )
     );
   }).pipe(Effect.timeout("10 seconds"))

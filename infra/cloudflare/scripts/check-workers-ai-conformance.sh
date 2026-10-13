@@ -46,6 +46,9 @@ EOF
 cleanup() {
   if [[ -n "$worker_pid" ]]; then
     kill "$worker_pid" 2>/dev/null || true
+    # The command owner escalates its native child at two seconds; allow it to reap first.
+    sleep 3
+    kill -KILL "$worker_pid" 2>/dev/null || true
     wait "$worker_pid" 2>/dev/null || true
   fi
   rm -rf "$config_dir"
@@ -53,7 +56,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-wrangler dev \
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+python3 "$root/scripts/cli-release/command.py" --timeout 300 -- wrangler dev \
   --config "$config_file" \
   --port "$port" \
   --var "HOSTED_AI_MODEL:$model" \
@@ -90,6 +94,7 @@ fi
 if ! status=$(curl --silent \
   --connect-timeout "$conformance_connect_seconds" \
   --max-time "$conformance_total_seconds" \
+  --max-filesize 1048576 \
   --request POST \
   --write-out '%{http_code}' \
   --output "$response_file" \

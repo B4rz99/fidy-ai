@@ -1,4 +1,4 @@
-import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
+import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { Cause, Context, Effect, Exit, Layer, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import type {
@@ -34,7 +34,7 @@ export const sendThroughResend = (
   Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
-        const clients = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
+        const clients = yield* Layer.build(OutboundHttpLive).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
             observeProviderFetch(globalThis.fetch, {

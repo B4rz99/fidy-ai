@@ -1,4 +1,4 @@
-import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
+import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { BillingEmail } from "../../../src/core/subscription/contract";
@@ -96,7 +96,7 @@ const deliverPriceNotice = (
   Effect.scoped(
     Effect.gen(function* () {
       const { environment, work, notice } = input;
-      const services = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
+      const services = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(
           FetchHttpClient.Fetch,
           observeProviderFetch(globalThis.fetch, {

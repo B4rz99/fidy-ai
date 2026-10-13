@@ -6,6 +6,35 @@ import { protectClient } from "./runtime";
 
 layer(FetchHttpClient.layer)((it) => {
   it.effect(
+    "preserves native no-content success and decodes an empty body without leaking its reader",
+    () =>
+      Effect.gen(function* () {
+        let cancelled = false;
+        const body = new ReadableStream<unknown>({
+          cancel(): Promise<void> {
+            cancelled = true;
+            return Promise.withResolvers<void>().promise;
+          },
+        });
+        const native = new Response(null, { status: 204 });
+        Object.defineProperty(native, "body", { value: body });
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* protectClient(client)
+          .get("https://api.fidyapp.com/pat-pairings")
+          .pipe(
+            Effect.provideService(
+              FetchHttpClient.Fetch,
+              Object.assign(() => Promise.resolve(native), { preconnect: fetch.preconnect })
+            )
+          );
+        expect(response.status).toBe(204);
+        expect(yield* response.text).toBe("");
+        expect(cancelled).toBe(true);
+        expect(body.locked).toBe(false);
+      })
+  );
+
+  it.effect(
     "keeps rejected native cancellation out of the public failure and releases ownership",
     () =>
       Effect.gen(function* () {

@@ -1,4 +1,4 @@
-import { releaseHttpClientLayer } from "./release-http";
+import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
 import { type Cause, Context, Data, Effect, Layer, Option } from "effect";
@@ -170,7 +170,7 @@ if (import.meta.main) {
   const result = await Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
-        const services = yield* Layer.build(releaseHttpClientLayer);
+        const services = yield* Layer.build(ReleaseHttpLive);
         return yield* verifyEdgeSmoke({ probe: productionProbe, candidate: Option.none() }).pipe(
           Effect.provideService(
             HttpClient.HttpClient,

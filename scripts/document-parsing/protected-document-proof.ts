@@ -15,7 +15,7 @@ type ProofOptions = {
 const stopWorker = (process: Bun.Subprocess): Effect.Effect<void> =>
   Effect.tryPromise(() => stopProofProcess(process)).pipe(Effect.orDie);
 
-const startWorker = (options: ProofOptions): Bun.Subprocess<"pipe", "pipe", "pipe"> =>
+const startWorker = (options: ProofOptions): Bun.Subprocess<"pipe", "ignore", "pipe"> =>
   Bun.spawn(
     [
       options.wranglerPath,

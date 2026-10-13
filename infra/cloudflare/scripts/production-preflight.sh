@@ -12,6 +12,14 @@ cleanup() {
   for pid in "${pids[@]}"; do
     if [[ -n "$pid" ]]; then kill -- "-$pid" 2>/dev/null || true; fi
   done
+  local active=false
+  for pid in "${pids[@]}"; do [[ -z "$pid" ]] || active=true; done
+  if [[ "$active" == true ]]; then
+    sleep 2
+    for pid in "${pids[@]}"; do
+      if [[ -n "$pid" ]]; then kill -KILL -- "-$pid" 2>/dev/null || true; fi
+    done
+  fi
   for pid in "${pids[@]}"; do
     if [[ -n "$pid" ]]; then wait "$pid" 2>/dev/null || true; fi
   done

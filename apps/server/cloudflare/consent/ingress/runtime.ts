@@ -1,4 +1,4 @@
-import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
+import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { Context, type Crypto, Effect, Layer, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { makeDisclosureSender } from "../../../src/shell/consent/runtime";
@@ -65,7 +65,7 @@ export const recoverPendingDisclosures = ({
 }>): Effect.Effect<void, void> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const clients = yield* Layer.build(outboundFetchHttpClientLayer);
+      const clients = yield* Layer.build(OutboundHttpLive);
       const delivery =
         apiKey.length === 0
           ? Option.none()

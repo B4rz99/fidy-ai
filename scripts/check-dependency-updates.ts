@@ -499,7 +499,7 @@ const readBunfig = (directory: string): Effect.Effect<Option.Option<typeof Bunfi
     Effect.flatMap((text) => Effect.try(() => Bun.TOML.parse(text))),
     Effect.flatMap(Schema.decodeUnknownEffect(Bunfig)),
     Effect.asSome,
-    Effect.catch(() => Effect.succeed(Option.none<typeof Bunfig.Type>()))
+    Effect.orElseSucceed(() => Option.none<typeof Bunfig.Type>())
   );
 
 /** Every manifest the repo owns, nearest first. `node_modules` is excluded by name and dotted directories by the scanner. */

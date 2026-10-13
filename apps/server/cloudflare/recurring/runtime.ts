@@ -4,6 +4,12 @@ import { discoverRecurringWork } from "./operations";
 import { RecurringUnavailable, RecurringWork } from "./contract";
 
 type Coordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+const preserveInterruption = Effect.fn(function* (result: Exit.Exit<void, RecurringUnavailable>) {
+  if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
+    return yield* Effect.failCause(result.cause);
+  }
+  return result;
+});
 const advanceUser = ({
   coordinator,
   userId,
@@ -44,11 +50,7 @@ export const advanceRecurringWork = ({
       users,
       (userId) =>
         Effect.exit(advanceUser({ coordinator: USER_TRANSACTION_COORDINATOR, userId })).pipe(
-          Effect.flatMap((result) =>
-            Exit.isFailure(result) && Cause.hasInterrupts(result.cause)
-              ? Effect.failCause(result.cause)
-              : Effect.succeed(result)
-          )
+          Effect.flatMap(preserveInterruption)
         ),
       { concurrency: 1 }
     );

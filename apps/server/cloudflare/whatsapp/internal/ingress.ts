@@ -1,4 +1,4 @@
-import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
+import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { makeStatusLookupAdmission } from "./status-admission";
 import { receiveWhatsAppProviderHandoff } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
@@ -472,7 +472,7 @@ export const receiveIngress =
   (request) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const clients = yield* Layer.build(outboundFetchHttpClientLayer);
+        const clients = yield* Layer.build(OutboundHttpLive);
         return yield* handleWebhook(request, environment).pipe(
           Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient)),
           Effect.provideService(Crypto.Crypto, workerCrypto)

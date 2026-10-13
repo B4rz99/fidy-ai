@@ -1,4 +1,3 @@
-import { outboundFetchHttpClientLayer } from "../outbound-http/runtime";
 import { Context, Effect, Layer, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { Miniflare } from "miniflare";
@@ -83,7 +82,7 @@ it("Access recovery signing-key requests work in Workers without following redir
           Effect.gen(function* () {
             for (const status of [200, 302]) {
               const observed = { calls: 0 };
-              const clients = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
+              const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
                 Effect.provideService(
                   FetchHttpClient.Fetch,
                   makeProviderFetch(runtime, status, observed)
@@ -115,7 +114,7 @@ it("Google and Microsoft OIDC requests work in Workers and return redirects with
               for (const status of [200, 302]) {
                 const observed = { calls: 0 };
                 const providerFetch = makeProviderFetch(runtime, status, observed);
-                const clients = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
+                const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
                   Effect.provideService(FetchHttpClient.Fetch, providerFetch)
                 );
                 const http = makeHttp({

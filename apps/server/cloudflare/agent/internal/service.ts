@@ -1,4 +1,4 @@
-import { outboundFetchHttpClientLayer } from "../../outbound-http/runtime";
+import { OutboundHttpLive } from "../../outbound-http/runtime";
 import {
   type AgentEnvironment,
   type AgentService,
@@ -141,7 +141,7 @@ const prepareWhatsAppExecution = (
       makeUserCloudflareHostedInference({ environment, db: environment.DB, userId, admittedTurnId })
     );
     if (Option.isNone(inference)) return Option.none();
-    const clients = yield* Layer.build(outboundFetchHttpClientLayer);
+    const clients = yield* Layer.build(OutboundHttpLive);
     const sender = makeHostedSender({
       apiKey: Redacted.make(environment.KAPSO_API_KEY),
       httpClient: Context.get(clients, HttpClient.HttpClient),

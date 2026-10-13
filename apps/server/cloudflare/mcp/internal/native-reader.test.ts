@@ -59,7 +59,7 @@ it.effect("keeps SDK ownership until shared cancellation settles, then unlocks t
 
 it.effect("releases the reader when SDK cancellation rejects, preserving the refusal", () =>
   Effect.gen(function* () {
-    const refusal = new Error("SDK cancellation refused");
+    const refusal = new FixtureRefusal();
     const body = new ReadableStream<Uint8Array>({
       cancel: (): Promise<void> => Promise.reject(refusal),
     });

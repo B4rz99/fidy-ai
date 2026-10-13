@@ -10,13 +10,23 @@ import {
 } from "effect/http";
 import { ownBrowserResponse } from "./browser-response-lifetime";
 
-const ownBrowserFetch = (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
+const ownBrowserFetch = (nativeFetch: typeof globalThis.fetch): typeof globalThis.fetch =>
   Object.assign(
-    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> =>
-      fetch(input, init).then((response) =>
+    (
+      input: Parameters<typeof nativeFetch>[0],
+      init?: Parameters<typeof nativeFetch>[1]
+    ): Promise<Response> =>
+      nativeFetch(input, init).then((response) =>
         ownBrowserResponse({ response, signal: Option.fromNullishOr(init?.signal) })
       ),
-    fetch
+    nativeFetch
+  );
+
+const ownNativeResponses = (client: HttpClient.HttpClient): HttpClient.HttpClient =>
+  HttpClient.transformResponse(client, (response) =>
+    Effect.flatMap(FetchHttpClient.Fetch, (nativeFetch) =>
+      response.pipe(Effect.provideService(FetchHttpClient.Fetch, ownBrowserFetch(nativeFetch)))
+    )
   );
 
 /** Browser API boundary whose transport budget follows the sensitivity and response shape it owns. */
@@ -355,24 +365,19 @@ export const browserHttpClientLayer: {
     boundary: BrowserHttpBoundary,
     apiOrigin: string
   ): Layer.Layer<HttpClient.HttpClient> =>
-    Layer.effect(
-      HttpClient.HttpClient,
-      Effect.map(HttpClient.HttpClient, (client) => makePolicyClient(client, apiOrigin, boundary))
+    HttpClient.layerMergedContext(
+      Effect.map(HttpClient.HttpClient, (client) =>
+        makePolicyClient(ownNativeResponses(client), apiOrigin, boundary)
+      )
     ).pipe(
       Layer.provide(
         httpClient.pipe(
           Layer.provide(
-            Layer.merge(
-              Layer.succeed(FetchHttpClient.RequestInit, {
-                credentials: "include",
-                redirect: "manual",
-                cache: "no-store",
-              }),
-              Layer.effect(
-                FetchHttpClient.Fetch,
-                Effect.map(FetchHttpClient.Fetch, ownBrowserFetch)
-              )
-            )
+            Layer.succeed(FetchHttpClient.RequestInit, {
+              credentials: "include",
+              redirect: "manual",
+              cache: "no-store",
+            })
           )
         )
       )

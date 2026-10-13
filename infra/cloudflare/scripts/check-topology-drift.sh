@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+command_owner="$root/scripts/cli-release/command.py"
 log_file="$(mktemp)"
 trap 'rm -f "$log_file"' EXIT
 
-if NO_COLOR=1 bun ../../node_modules/alchemy/bin/alchemy.js \
+if NO_COLOR=1 python3 "$command_owner" --timeout 120 -- bun ../../node_modules/alchemy/bin/alchemy.js \
   drift --config alchemy-drift.run.ts --stage production --no-input >"$log_file" 2>&1; then
   drift_exit=0
 else
@@ -50,7 +52,7 @@ if grep --fixed-strings --quiet 'Plan:' "$log_file"; then
     '\[[[:alnum:]_-]+\] (create|update|replace|delete)' "$log_file" | sort -u || true)
   echo 'Production Cloudflare topology drift inspection failed: category=drift_detected' >&2
   # Take an additional dry-run snapshot for diagnostics only; never repair or change this verdict.
-  bun inspect-worker-drift.ts >>"$log_file" 2>&1 || true
+  python3 "$command_owner" --timeout 120 -- bun inspect-worker-drift.ts >>"$log_file" 2>&1 || true
   # Emit only closed field names produced by the read-only field projector. Never values,
   # unknown keys, or raw provider lines, even when the inspection is not an explicit dispatch.
   grep --extended-regexp --only-matching \

@@ -3,7 +3,7 @@ import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Redacted, Schema 
 import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
-import { outboundFetchHttpClientLayer } from "./runtime";
+import { OutboundHttpLive } from "./runtime";
 import { WhatsAppBusinessPhoneNumberId, WhatsAppMediaId } from "~/shell/channels/whatsapp/contract";
 
 const pendingCancellation = (): Promise<void> => Promise.withResolvers<void>().promise;
@@ -13,7 +13,7 @@ const makeTransport = Effect.fn(function* (response: Response) {
     { preconnect: (): void => undefined }
   );
   const services = yield* Layer.build(
-    outboundFetchHttpClientLayer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch)))
+    OutboundHttpLive.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch)))
   );
   return makeKapsoOutboundHttp({
     apiKey: Redacted.make("test-secret"),
@@ -119,4 +119,71 @@ it.effect("rejects malformed native response chunks and releases ownership", () 
     expect(cancelled).toBe(true);
     expect(raw.locked).toBe(false);
   })
+);
+
+it.effect("preserves no-content provider status and releases an unexpected native body", () =>
+  Effect.gen(function* () {
+    let cancelled = false;
+    const raw = new ReadableStream<Uint8Array>({
+      cancel: (): Promise<void> => {
+        cancelled = true;
+        return pendingCancellation();
+      },
+    });
+    const response = new Response(raw);
+    // Native browser/protocol fixtures can expose a stream even for a body-forbidden status.
+    Object.defineProperty(response, "status", { value: 204 });
+    const outbound = yield* makeTransport(response);
+    const result = yield* outbound.execute(request);
+    expect(result.status).toBe(204);
+    expect(result.body).toEqual(new Uint8Array());
+    expect(cancelled).toBe(true);
+    expect(raw.locked).toBe(false);
+  })
+);
+
+it.effect(
+  "uses the request's supplied Fetch while retaining hostile body cancellation ownership",
+  () =>
+    Effect.gen(function* () {
+      let staleCalls = 0;
+      let currentCalls = 0;
+      let cancelled = false;
+      const stale: typeof fetch = Object.assign(
+        (): Promise<Response> => {
+          staleCalls += 1;
+          return Promise.resolve(new Response(null, { status: 204 }));
+        },
+        { preconnect: (): void => undefined }
+      );
+      const body = new ReadableStream<Uint8Array>({
+        pull: (controller): void => controller.enqueue(new Uint8Array(65_537)),
+        cancel: (): Promise<void> => {
+          cancelled = true;
+          return pendingCancellation();
+        },
+      });
+      const current: typeof fetch = Object.assign(
+        (): Promise<Response> => {
+          currentCalls += 1;
+          return Promise.resolve(new Response(body));
+        },
+        { preconnect: (): void => undefined }
+      );
+      const services = yield* Layer.build(
+        OutboundHttpLive.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, stale)))
+      );
+      const outbound = makeKapsoOutboundHttp({
+        apiKey: Redacted.make("test-secret"),
+        httpClient: Context.get(services, HttpClient.HttpClient),
+      });
+      const result = yield* outbound
+        .execute(request)
+        .pipe(Effect.provideService(FetchHttpClient.Fetch, current), Effect.exit);
+      expect(Exit.isFailure(result) && Cause.hasFails(result.cause)).toBe(true);
+      expect(staleCalls).toBe(0);
+      expect(currentCalls).toBe(1);
+      expect(cancelled).toBe(true);
+      expect(body.locked).toBe(false);
+    })
 );

@@ -21,6 +21,17 @@ import { type PairingClient, PollingDelayed } from "../login/contract";
 
 const maximumResponseBytes = 16_384;
 
+const noContentStatus = 204;
+const resetContentStatus = 205;
+const notModifiedStatus = 304;
+const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
+
+const responseMetadata = (response: Response): ResponseInit => ({
+  status: response.status,
+  statusText: response.statusText,
+  headers: response.headers,
+});
+
 // Own the native reader before Effect's Web-stream adapter. Native cancellation may
 // never settle; starting it must still release the lock and finish our finalizer.
 const ownedResponse = (response: Response, init: Pick<RequestInit, "signal"> = {}): Response => {
@@ -44,6 +55,10 @@ const ownedResponse = (response: Response, init: Pick<RequestInit, "signal"> = {
     }
   };
   signal?.addEventListener("abort", cancel, { once: true });
+  if (noBodyStatuses.has(response.status)) {
+    cancel();
+    return new Response(null, responseMetadata(response));
+  }
   const body = new ReadableStream<Uint8Array>(
     {
       pull(controller): Promise<void> {
@@ -73,11 +88,7 @@ const ownedResponse = (response: Response, init: Pick<RequestInit, "signal"> = {
     { highWaterMark: 0 }
   );
   if (signal?.aborted === true) cancel();
-  return new Response(body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
+  return new Response(body, responseMetadata(response));
 };
 const ownFetch = (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
   Object.assign(
@@ -122,14 +133,16 @@ const collectResponse = Effect.fn(function* (
 ) {
   const chunks: Array<Uint8Array> = [];
   let size = 0;
-  yield* Stream.runForEachWhile(response.stream, (chunk) =>
-    Effect.sync(() => {
-      size += chunk.byteLength;
-      if (size > byteLimit) return false;
-      if (chunk.byteLength > 0) chunks.push(chunk);
-      return true;
-    })
-  );
+  if (!noBodyStatuses.has(response.status)) {
+    yield* Stream.runForEachWhile(response.stream, (chunk) =>
+      Effect.sync(() => {
+        size += chunk.byteLength;
+        if (size > byteLimit) return false;
+        if (chunk.byteLength > 0) chunks.push(chunk);
+        return true;
+      })
+    );
+  }
   if (
     size > byteLimit ||
     (response.status >= redirectStatusMinimum && response.status < clientFailureMinimum)
@@ -144,7 +157,7 @@ const collectResponse = Effect.fn(function* (
   }
   return HttpClientResponse.fromWeb(
     response.request,
-    new Response(bytes, {
+    new Response(noBodyStatuses.has(response.status) ? null : bytes, {
       status: response.status,
       headers: { "content-type": response.headers["content-type"] ?? "application/octet-stream" },
     })

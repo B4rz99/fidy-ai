@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+from command import run_owned
 
 REPOSITORY = 'B4rz99/fidy-ai'
 TARGETS = ('darwin-arm64', 'linux-x64', 'windows-x64')
@@ -17,7 +18,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def run(*args):
-    return subprocess.run(args, cwd=ROOT, check=True, capture_output=True, text=True).stdout
+    writes = args[:2] in (('gh', 'release'),) and args[2] in ('create', 'upload', 'edit')
+    timeout = 610 if args[0] == 'curl' else 120
+    return run_owned(args, cwd=ROOT, writes=writes, timeout=timeout)[0]
 
 
 def api(path):

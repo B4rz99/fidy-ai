@@ -1,4 +1,6 @@
-import { outboundFetchHttpClientLayer } from "../outbound-http/runtime";
+import { makeWompiTransport } from "./internal/wompi-runtime";
+import { type WompiBindings } from "./contract";
+import { OutboundHttpLive } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchPriceNotices } from "./internal/price-notice";
 import { publishWeeklyPrice } from "./operations";
@@ -26,7 +28,10 @@ import {
 } from "cloudflare:workers";
 import { type Cause, Context, Effect, Layer, type Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import {
+  makeAccessSigningKeysOutboundHttp,
+  type makeWompiOutboundHttp,
+} from "../../src/shell/outbound-http/operations";
 import {
   type RefundDispatchInput,
   type RefundReceiveInput,
@@ -59,6 +64,26 @@ import {
 } from "./internal/billing-workflow";
 import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
 
+/** Construct the native provider transport at the Subscription composition boundary. */
+export const wompiOutboundHttp = (
+  environment: WompiBindings
+): Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>> =>
+  Effect.scoped(
+    Layer.build(OutboundHttpLive).pipe(
+      Effect.provideService(
+        FetchHttpClient.Fetch,
+        observeProviderFetch(globalThis.fetch, {
+          provider: "wompi",
+          environment,
+          telemetry: cloudflareWorkerTelemetry,
+        })
+      ),
+      Effect.map((clients) =>
+        makeWompiTransport({ environment, httpClient: Context.get(clients, HttpClient.HttpClient) })
+      )
+    )
+  );
+
 const refundWorkFailure = (error: unknown): RefundWorkFailure =>
   new RefundWorkFailure({
     reason: Schema.isSchemaError(error) ? "invalid-work" : "unavailable",
@@ -88,7 +113,7 @@ export const handleRefundSupport = (
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const clients = yield* Layer.build(outboundFetchHttpClientLayer).pipe(
+        const clients = yield* Layer.build(OutboundHttpLive).pipe(
           Effect.provideService(
             FetchHttpClient.Fetch,
             observeProviderFetch(globalThis.fetch, {
@@ -111,7 +136,10 @@ export const handleRefundSupport = (
 /** Execute one versioned correction with a durable no-retry submission claim. */
 export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void> =>
   Effect.runPromise(
-    Effect.tryPromise({ try: () => executeRefundWorkflow(input), catch: refundWorkFailure })
+    Effect.tryPromise({
+      try: () => executeRefundWorkflow({ ...input, wompiHttp: wompiOutboundHttp }),
+      catch: refundWorkFailure,
+    })
   );
 
 export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
@@ -200,12 +228,12 @@ export const runBillingCollectionWorkflow = (
       run: () => Promise<void>
     ) => Promise<void>;
   }>
-): Promise<void> => runWorkflow(input);
+): Promise<void> => runWorkflow({ ...input, wompiHttp: wompiOutboundHttp });
 
 /** Fresh-session browser enrollment; provider references and transient authorization stay private. */
 export const handlePaymentEnrollment = (
   input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
-): Promise<Response> => enroll(input);
+): Promise<Response> => enroll({ ...input, wompiHttp: wompiOutboundHttp });
 
 /** Offer bounded due Subscription renewals to their original User coordinator; D1 owns eligibility and history. */
 export const dispatchSubscriptionRenewals = (

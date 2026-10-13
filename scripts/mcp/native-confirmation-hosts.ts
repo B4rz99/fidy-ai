@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { verificationHttpClientLayer } from "./verification-http";
+import { VerificationHttpLive } from "./verification-http";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { join, resolve } from "node:path";
@@ -324,9 +324,7 @@ const execute = Effect.gen(function* () {
 if (import.meta.main) {
   Effect.runPromise(
     Effect.scoped(execute).pipe(
-      Effect.provide(
-        Layer.mergeAll(BunFileSystem.layer, BunCrypto.layer, verificationHttpClientLayer)
-      )
+      Effect.provide(Layer.mergeAll(BunFileSystem.layer, BunCrypto.layer, VerificationHttpLive))
     )
   ).catch((error: unknown) => {
     if (error instanceof LocalProofFailure) process.stderr.write(error.message + "\n");

@@ -1,4 +1,4 @@
-import { releaseHttpClientLayer } from "./release-http";
+import { ReleaseHttpLive } from "./release-http";
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import * as Drift from "alchemy/Alchemist/routes/drift";
 import * as CliKit from "alchemy/Cli/CliKit";
@@ -17,7 +17,7 @@ const services = Layer.mergeAll(
   CredentialsStoreLive,
   ProfileStoreLive,
   Layer.succeed(ArtifactStore, createArtifactStore()),
-  releaseHttpClientLayer,
+  ReleaseHttpLive,
   Layer.provideMerge(CliKit.CliKitInteraction, CliKit.layer())
 ).pipe(Layer.provideMerge(PlatformServices));
 

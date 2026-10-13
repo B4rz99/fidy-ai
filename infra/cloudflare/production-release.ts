@@ -1,4 +1,4 @@
-import { releaseHttpClientLayer } from "./release-http";
+import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
 import { Cause, Context, Data, Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
@@ -513,17 +513,17 @@ const releaseOutput = (
       const decoder = new TextDecoder();
       let size = 0;
       let retained = "";
-      let exceeded = false;
+      const outputState = { exceeded: false };
       yield* Stream.fromReadableStream({
         evaluate: () => stream,
         onError: () => new ReleaseFailure({ message: "Release tooling output could not be read" }),
         releaseLockOnEnd: true,
       }).pipe(
         Stream.runForEach((chunk) => {
-          if (exceeded) return Effect.void;
+          if (outputState.exceeded) return Effect.void;
           size += chunk.byteLength;
           if (size > limit) {
-            exceeded = true;
+            outputState.exceeded = true;
             retained = "";
             return overflow();
           }
@@ -531,7 +531,7 @@ const releaseOutput = (
           return Effect.void;
         })
       );
-      if (exceeded) {
+      if (outputState.exceeded) {
         return yield* new ReleaseFailure({ message: "Release tooling output exceeded limit" });
       }
       return retained + decoder.decode();
@@ -1556,7 +1556,7 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(Commands)(process.argv[2]);
     const environment = config();
-    const services = yield* Layer.build(releaseHttpClientLayer);
+    const services = yield* Layer.build(ReleaseHttpLive);
     const client = Context.get(services, HttpClient.HttpClient);
     const port = releasePort({ env: environment, client });
     if (command === "verify-retirement") {

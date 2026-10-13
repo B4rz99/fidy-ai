@@ -1,5 +1,5 @@
 import { TranscriptText } from "../../src/core/agent/contract";
-import { Data, DateTime, Effect, Option } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   UserId,
@@ -184,6 +184,106 @@ it("publishes accepted unextractable images through the canonical visible-review
           db.prepare("SELECT sum(units) AS total FROM commercial_allowance_consumptions").first()
         )
       ).toEqual({ total: 1 });
+    })
+  ));
+
+it("keeps canonical review reads independent of retained evidence size before D1 transfer", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup;
+      const query = yield* prepareVisibleReviewRead(db);
+      const now = current.epochMilliseconds;
+      const submissionId = "10000000-0000-4000-8000-000000000092";
+      const rawRecord = "x".repeat(200_000);
+      const evidence = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        sourceFormat: "csv",
+        recordNumber: 1,
+        startLine: 2,
+        endLine: 2,
+        rawRecord,
+        fields: [rawRecord],
+      });
+      yield* io(() =>
+        db
+          .prepare("INSERT INTO statement_clarifications VALUES (?,?,'awaiting',?)")
+          .bind(submissionId, userId, now + 60000)
+          .run()
+      );
+      for (let index = 0; index < 4; index += 1) {
+        yield* io(() =>
+          db
+            .prepare(
+              "INSERT INTO statement_needs_review VALUES (?,?,?,'mapping-unavailable',?,'[]','pending',?,'CO','es-CO','America/Bogota','csv','csv-v1','csv-v1',?,?)"
+            )
+            .bind(
+              `10000000-0000-4000-8000-00000000010${index}`,
+              submissionId,
+              index + 1,
+              evidence,
+              now - index,
+              now + 60000,
+              userId
+            )
+            .run()
+        );
+      }
+      const context = yield* Effect.context<never>();
+      let transferredBytes = 0;
+      let transferredRows = 0;
+      const measure = (statement: D1PreparedStatement): D1PreparedStatement =>
+        new Proxy(statement, {
+          get(target, property): unknown {
+            if (property === "bind") {
+              return (...values: ReadonlyArray<unknown>): D1PreparedStatement =>
+                measure(target.bind(...values));
+            }
+            if (property === "all") {
+              return (): Promise<D1Result> =>
+                Effect.runPromiseWith(context)(
+                  io(() => target.all()).pipe(
+                    Effect.flatMap((result) =>
+                      Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+                        result.results
+                      ).pipe(
+                        Effect.map((encoded) => {
+                          transferredRows += result.results.length;
+                          transferredBytes += new TextEncoder().encode(encoded).byteLength;
+                          return result;
+                        })
+                      )
+                    )
+                  )
+                );
+            }
+            const member: unknown = Reflect.get(target, property, target);
+            return typeof member === "function" ? member.bind(target) : member;
+          },
+        });
+      const measured = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "prepare") {
+            return (sql: string): D1PreparedStatement => measure(target.prepare(sql));
+          }
+          const member: unknown = Reflect.get(target, property, target);
+          return typeof member === "function" ? member.bind(target) : member;
+        },
+      });
+      query.url.searchParams.set("limit", "1");
+      const response = yield* listNeedsReviewItems({ ...query, database: measured });
+      expect(response.status).toBe(200);
+      expect(yield* io(() => response.json())).toMatchObject({
+        data: [{ id: "10000000-0000-4000-8000-000000000100", issues: [] }],
+      });
+      // This measures actual native D1 results, not SQL text or the final redacted response.
+      expect(transferredBytes).toBeLessThan(4096);
+      expect(transferredRows).toBe(1);
+      expect(
+        yield* io(() =>
+          db
+            .prepare("SELECT sum(length(original_evidence)) AS bytes FROM statement_needs_review")
+            .first()
+        )
+      ).toEqual({ bytes: evidence.length * 4 });
     })
   ));
 

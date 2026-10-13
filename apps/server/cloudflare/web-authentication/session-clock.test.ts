@@ -4,13 +4,7 @@ import { Effect, Exit } from "effect";
 import { TestClock } from "effect/testing";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { handleWebAuthentication } from "./operations";
-import {
-  seedSession,
-  sessionId,
-  sessionRequest,
-  sessionToken,
-  sessionUser,
-} from "./session.test-fixture";
+import { seedSession, sessionId, sessionRequest, sessionUser } from "./session.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -111,7 +105,7 @@ it.effect.each([
         Exit.succeed({
           status: 200,
           cache: "no-store",
-          cookie: `__Host-fidy_session=${sessionToken}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+          cookie: null,
           body: {
             data: {
               id: sessionUser,

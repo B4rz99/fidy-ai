@@ -157,7 +157,10 @@ const send = (
           origin: "https://app.fidyapp.com",
           "cf-connecting-ip": "192.0.2.35",
           ...(typeof credential === "number"
-            ? { cookie: `__Host-fidy_session=${bearer(credential)}` }
+            ? {
+                "Fidy-Session-Binding": sessions[credential] ?? "invalid",
+                cookie: `__Host-fidy_session=${bearer(credential)}`,
+              }
             : { authorization: `Bearer ${credential}`, "x-provider-id": users[0] ?? "" }),
           ...(typeof pathAndBody === "string" ? {} : { "content-type": "application/json" }),
         },

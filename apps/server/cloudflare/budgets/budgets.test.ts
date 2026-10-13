@@ -261,6 +261,7 @@ const request = (
     method,
     headers: {
       origin: "https://app.fidyapp.com",
+      "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },

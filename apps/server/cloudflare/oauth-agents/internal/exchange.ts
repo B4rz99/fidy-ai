@@ -1,4 +1,4 @@
-import { Effect, type PlatformError, Redacted, Schema } from "effect";
+import { Clock, Effect, type PlatformError, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { OAuthRedirect, oauthResource } from "../../../src/shell/oauth-agents/contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
@@ -57,6 +57,8 @@ const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 3000,
 });
 const secondMs = 1000;
+const databaseCurrentMillis = `(CAST(strftime('%s', 'now') AS INTEGER) * 1000
+  + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER))`;
 const tokenDeadlineMs = 5000;
 type ExchangeInput = Readonly<{
   request: Request;
@@ -121,9 +123,9 @@ const consumptionStatement = (
     requirement: "active",
     statement: {
       sql: `UPDATE oauth_codes SET consumed_at_ms = ? WHERE digest = ? AND connection_id = ?
-    AND consumed_at_ms IS NULL AND expires_at_ms > ? AND challenge = ?
+    AND consumed_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis} AND challenge = ?
     AND EXISTS (SELECT 1 FROM oauth_connections WHERE id = ? AND user_id = ? AND client_id = ?
-      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?)`,
+      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis})`,
       params: [
         input.current,
         proof.digest,
@@ -211,26 +213,27 @@ export const exchangeToken = (
     const challenge = Base64Url.encode(
       yield* digestBytes(new TextEncoder().encode(payload.code_verifier))
     );
+    const admitted = { ...input, current: yield* Clock.currentTimeMillis };
     const proof = { payload, digest, challenge };
-    const grant = yield* findGrant(input, proof);
+    const grant = yield* findGrant(admitted, proof);
     const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(grant.scopes_json);
     const access = yield* newSecret;
     const refresh = yield* newSecret;
     const accessDigest = yield* secretDigest({ purpose: "oauth-access", value: access });
     const refreshDigest = yield* secretDigest({ purpose: "oauth-refresh", value: refresh });
     const { accessExpiresAt, refreshExpiresAt } = decideOAuthCredentialExpirations({
-      current: input.current,
+      current: admitted.current,
       grantExpiresAt: grant.expires_at_ms,
     });
     const body = yield* Schema.encodeEffect(TokenResponse)({
       access_token: Redacted.value(access),
       refresh_token: Redacted.value(refresh),
       token_type: "Bearer",
-      expires_in: Math.floor((accessExpiresAt - input.current) / secondMs),
+      expires_in: Math.floor((accessExpiresAt - admitted.current) / secondMs),
       scope: scopes.join(" "),
     });
     yield* commitExchange({
-      input,
+      input: admitted,
       proof,
       grant,
       issuance: { accessDigest, refreshDigest, accessExpiresAt, refreshExpiresAt },

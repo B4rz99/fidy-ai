@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 
@@ -113,3 +113,34 @@ export const signInPaginationThroughCore = (input: SignInFixture): Promise<void>
 /** Independent metadata-only MCP continuation User; no usable OAuth grant is seeded. */
 export const signInAccessThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, "access");
+
+/** Direct acceptance probes latch the same public identity as a mounted browser client. */
+export const browserSessionHeaders = (
+  request: APIRequestContext
+): Promise<Record<string, string>> =>
+  request
+    .get(`${browserAcceptanceTopology().api}/web/session/binding`, {
+      headers: { origin: browserAcceptanceTopology().app },
+    })
+    .then((reply) => reply.json())
+    .then((body: unknown) => {
+      const identity = Schema.decodeUnknownSync(
+        Schema.Struct({ binding: Schema.OptionFromNullOr(Schema.String) })
+      )(body);
+      return {
+        origin: browserAcceptanceTopology().app,
+        "Fidy-Session-Binding": Option.getOrElse(identity.binding, () => "none"),
+      };
+    });
+export const boundSessionRequests = (
+  request: APIRequestContext
+): Pick<APIRequestContext, "get" | "post"> => ({
+  get: (url, options) =>
+    browserSessionHeaders(request).then((binding) =>
+      request.get(url, { ...options, headers: { ...binding, ...options?.headers } })
+    ),
+  post: (url, options) =>
+    browserSessionHeaders(request).then((binding) =>
+      request.post(url, { ...options, headers: { ...binding, ...options?.headers } })
+    ),
+});

@@ -1,3 +1,4 @@
+import { bindingResponse } from "./internal/binding";
 import { type Effect, Option } from "effect";
 import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
@@ -71,3 +72,8 @@ export const authenticateCanonicalWebSession = (
   input: WebSessionRequest & Readonly<{ current: number }>
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
   authenticate({ ...input, freshness: "live", requireConsent: true });
+
+/** Check browser lifetime binding at private HTTP ingress; correlation never replaces the cookie. */
+export const browserSessionBindingResponse = (
+  input: WebSessionRequest
+): Effect.Effect<Option.Option<Response>> => bindingResponse(input);

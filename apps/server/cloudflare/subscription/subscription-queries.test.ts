@@ -301,7 +301,7 @@ effectIt.effect(
       };
       const request = (): Request =>
         new Request("https://core.internal/subscription/status", {
-          headers: { cookie: `__Host-fidy_session=${bearer}` },
+          headers: { "Fidy-Session-Binding": sessionA, cookie: `__Host-fidy_session=${bearer}` },
         });
       const before = yield* fromTestPromise(() => coreWorker.fetch(request(), environment));
       expect(before.status).toBe(200);

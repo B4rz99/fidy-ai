@@ -1,3 +1,4 @@
+import { browserSessionBindingPath } from "../../apps/server/src/shell/web-session/contract";
 import {
   microsoftProviderPaths,
   providerPaths,
@@ -122,6 +123,7 @@ const reservedRateLimitPaths = [
   "/web/pairings",
   "/web/pairings/redeem",
   "/web/session/logout",
+  browserSessionBindingPath,
   "/web/hosted-turns",
   "/web/hosted-turns/delivery",
   "/web/subscription/payment-enrollments/availability",

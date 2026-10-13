@@ -4,7 +4,7 @@ import { User, UserId } from "../../../src/core/identity/contract";
 import { readCurrentUser } from "../../identity/operations";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { webSessionIdleRenewalCandidate } from "../../../src/core/web-session/operations";
-import { sessionCookie, sessionDigest, sessionSetCookie } from "./credentials";
+import { sessionCookie, sessionDigest } from "./credentials";
 import { attempt, json, noSession, unavailable, uuid } from "./support";
 
 const HTTP_OK = 200;
@@ -45,7 +45,6 @@ export const currentUser = ({
         db,
         subject: subject.value,
         session: session.value,
-        token: token.value,
         digest,
       });
     }
@@ -55,13 +54,11 @@ const projectCurrentUser = ({
   db,
   subject,
   session,
-  token,
   digest,
 }: {
   db: D1Database;
   subject: UserId;
   session: typeof Session.Type;
-  token: string;
   digest: Uint8Array;
 }): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
@@ -89,8 +86,6 @@ const projectCurrentUser = ({
     return json({
       body: { data, next: loaded.value.next },
       status: HTTP_OK,
-      headers: {
-        "set-cookie": sessionSetCookie(token),
-      },
+      headers: {},
     });
   });

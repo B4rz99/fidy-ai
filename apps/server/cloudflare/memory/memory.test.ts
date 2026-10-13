@@ -205,7 +205,10 @@ const forwardedHeaders = (input: Send): Headers => {
   const headers = new Headers({ origin: input.origin ?? "https://app.fidyapp.com" });
   if (input.body !== undefined) headers.set("content-type", input.contentType ?? "text/plain");
   if (input.payload !== undefined) headers.set("content-type", "application/json");
-  if (input.session !== undefined) headers.set("cookie", input.session);
+  if (input.session !== undefined) {
+    headers.set("cookie", input.session);
+    headers.set("Fidy-Session-Binding", sessions[input.session === cookie(0) ? 0 : 1]);
+  }
   if (input.bearer !== undefined) headers.set("authorization", `Bearer ${input.bearer}`);
   return headers;
 };

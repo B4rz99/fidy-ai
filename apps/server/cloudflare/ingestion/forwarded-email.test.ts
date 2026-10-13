@@ -614,7 +614,7 @@ it("keeps uncertain mail in visible review rather than creating a Transaction", 
   ));
 
 it.effect(
-  "validates persisted XLSX optional fields and neighboring CSV without publishing purpose-bound evidence",
+  "reads persisted XLSX optional fields and neighboring CSV metadata independently of purpose-bound evidence",
   () =>
     Effect.gen(function* () {
       const { db } = yield* setup();
@@ -707,7 +707,7 @@ it.effect(
         subject: { id, userId: userA, digest },
         url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
       });
-      expect(corrupt.status).toBe(503);
+      expect(corrupt.status).toBe(200);
       yield* wait(() => db.prepare("DELETE FROM statement_clarifications").run());
       const metadata = yield* listNeedsReviewItems({
         database: db,

@@ -1,6 +1,11 @@
+import {
+  announceAuthenticationTransition,
+  authenticationEndedEvent,
+  observeAuthenticationTransitions,
+} from "./authentication-events";
 import { RegistryProvider } from "@effect/atom-react";
 import { Option } from "effect";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 import { type BrowserAuthentication, SessionContext } from "./session-context";
 
@@ -26,6 +31,7 @@ export const SessionRegistryProvider = ({
     setAuthenticationEpoch((currentEpoch) => currentEpoch + 1);
   };
   const transitionAuthentication = (next: typeof authentication): void => {
+    announceAuthenticationTransition();
     setAuthentication(next);
     replaceAuthenticationLifetime();
   };
@@ -34,6 +40,16 @@ export const SessionRegistryProvider = ({
   const expireAuthentication = (): void => {
     if (authentication !== "expired") transitionAuthentication("expired");
   };
+
+  const observe = useCallback(
+    (_node: HTMLSpanElement): (() => void) =>
+      observeAuthenticationTransitions(() => {
+        window.dispatchEvent(new Event(authenticationEndedEvent));
+        setAuthentication("expired");
+        setAuthenticationEpoch((current) => current + 1);
+      }),
+    []
+  );
 
   return (
     <SessionContext.Provider
@@ -45,6 +61,7 @@ export const SessionRegistryProvider = ({
         replaceAuthenticationLifetime,
       })}
     >
+      <span ref={observe} hidden />
       <RegistryProvider key={authenticationEpoch}>{children}</RegistryProvider>
     </SessionContext.Provider>
   );

@@ -702,3 +702,96 @@ it("refuses an assertion that expires on the supplied Clock while foreign key ve
       yield* expectUnchanged({ fixture, credential });
     })
   ));
+
+it("rejects oversized streamed signing keys before reading or consuming recovery proof", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const current = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+      const fixture = yield* setup(current);
+      const credential = yield* credentialSnapshot(fixture);
+      const assertion = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 300,
+      });
+      let cancelled = false;
+      vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller): void {
+                controller.enqueue(new Uint8Array(64 * 1024));
+              },
+              cancel(): void {
+                cancelled = true;
+              },
+            })
+          )
+        )
+      );
+      const request = fixture.request(assertion);
+      if (request.body === null) throw new Error("Expected request body");
+      const reader = vi.spyOn(request.body, "getReader");
+      const response = yield* handleSupportRecovery({
+        request,
+        db: fixture.db,
+        config: fixture.config,
+      });
+      expect(response.status).toBe(401);
+      expect(cancelled).toBe(true);
+      expect(reader).not.toHaveBeenCalled();
+      yield* expectUnchanged({ fixture, credential });
+    })
+  ));
+
+it.each(["request", "fiber"] as const)(
+  "cancels pending signing-key retrieval with its owning %s",
+  (owner) => {
+    const controller = new AbortController();
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const current = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+        const fixture = yield* setup(current);
+        const credential = yield* credentialSnapshot(fixture);
+        const assertion = yield* fixture.assertion({
+          subject: Option.none(),
+          issuedAt: current / 1000,
+          expiresAt: current / 1000 + 300,
+        });
+        const started = Promise.withResolvers<void>();
+        let cancelled = false;
+        vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
+          const result = Promise.withResolvers<Response>();
+          init?.signal?.addEventListener(
+            "abort",
+            () => {
+              cancelled = true;
+              result.reject(new Error("aborted"));
+            },
+            { once: true }
+          );
+          started.resolve();
+          return result.promise;
+        });
+        const request = new Request(fixture.request(assertion), { signal: controller.signal });
+        if (request.body === null) throw new Error("Expected request body");
+        const reader = vi.spyOn(request.body, "getReader");
+        const pending = yield* handleSupportRecovery({
+          request,
+          db: fixture.db,
+          config: fixture.config,
+        }).pipe(Effect.forkChild);
+        yield* wait(() => started.promise);
+        if (owner === "request") {
+          controller.abort();
+          expect((yield* Fiber.join(pending)).status).toBe(401);
+        } else {
+          yield* Fiber.interrupt(pending);
+        }
+        expect(cancelled).toBe(true);
+        expect(reader).not.toHaveBeenCalled();
+        yield* expectUnchanged({ fixture, credential });
+      })
+    );
+  }
+);

@@ -20,4 +20,4 @@ export const sessionDigest = (value: WebSessionBearer): Promise<Uint8Array> =>
     .then((digest) => new Uint8Array(digest));
 
 export const sessionSetCookie = (token: string): string =>
-  `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`;
+  `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=7776000`;

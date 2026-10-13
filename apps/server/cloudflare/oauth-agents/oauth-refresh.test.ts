@@ -1307,7 +1307,11 @@ it.each([
         let headers = fixture.headers;
         let payload = choice;
         if (guard === "foreign_user") {
-          headers = { ...headers, cookie: yield* sessionFor({ db: fixture.db, index: 2 }) };
+          headers = {
+            ...headers,
+            cookie: yield* sessionFor({ db: fixture.db, index: 2 }),
+            "Fidy-Session-Binding": "20000000-0000-4000-8000-000000000003",
+          };
         }
         if (guard === "stale_session") {
           yield* wait(

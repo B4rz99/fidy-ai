@@ -13,6 +13,8 @@ import { BootstrapUnavailable, dbWork } from "./bootstrap";
 import { oauthResponse } from "./response";
 
 const secondMs = 1000;
+const databaseCurrentMillis = `(CAST(strftime('%s', 'now') AS INTEGER) * 1000
+  + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER))`;
 export const invalidGrant = (): Response =>
   oauthResponse({ body: { error: "invalid_grant" }, status: 400 });
 const GrantRow = Schema.Struct({
@@ -285,8 +287,8 @@ export const commitRotation = ({
       subject: { _tag: "User", userId: input.admission.userId },
       requirement: "active",
       statement: {
-        sql: `UPDATE oauth_refresh_credentials SET consumed_at_ms = ? WHERE ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ?
-      AND scopes_json = ? AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = ? AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ?
+        sql: `UPDATE oauth_refresh_credentials SET consumed_at_ms = ? WHERE ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis}
+      AND scopes_json = ? AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = ? AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ? AND g.expires_at_ms > ${databaseCurrentMillis}
         AND NOT EXISTS (SELECT 1 FROM json_each(?) s WHERE NOT EXISTS (SELECT 1 FROM json_each(g.scopes_json) a WHERE a.value = s.value)))`,
         params: [
           current,

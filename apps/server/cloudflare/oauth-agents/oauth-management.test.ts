@@ -70,7 +70,13 @@ it("lists distinct owned agent connections with canonical activity and no creden
       expect(text).not.toContain(token.refresh_token);
       expect(text).not.toContain("digest");
       const isolated = yield* wait(
-        fixture.send("/web/oauth/connections", { headers: { ...fixture.headers, cookie: other } })
+        fixture.send("/web/oauth/connections", {
+          headers: {
+            ...fixture.headers,
+            cookie: other,
+            "Fidy-Session-Binding": "20000000-0000-4000-8000-000000000003",
+          },
+        })
       );
       expect(yield* wait(isolated.json())).toEqual({ connections: [], nextCursor: null });
       expect(listed.headers.get("cache-control")).toBe("no-store");
@@ -229,7 +235,10 @@ it.each(["wrong-user", "forged-session", "stale-session", "csrf", "oauth-bearer"
           yield* wait((yield* wait(exchangeFixture(fixture))).json())
         );
         const headers = { ...fixture.headers };
-        if (kind === "wrong-user") headers.cookie = yield* sessionFor({ db: fixture.db, index: 2 });
+        if (kind === "wrong-user") {
+          headers.cookie = yield* sessionFor({ db: fixture.db, index: 2 });
+          headers["Fidy-Session-Binding"] = "20000000-0000-4000-8000-000000000003";
+        }
         if (kind === "forged-session" || kind === "oauth-bearer") {
           headers.cookie = "__Host-fidy_session=forged";
         }
@@ -305,7 +314,11 @@ it("revokes all owned agents while a refresh is queued, leaving another User and
       );
       const other = yield* approveAgain({
         ...fixture,
-        headers: { ...fixture.headers, cookie: otherCookie },
+        headers: {
+          ...fixture.headers,
+          cookie: otherCookie,
+          "Fidy-Session-Binding": "20000000-0000-4000-8000-000000000003",
+        },
       });
       const original = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())

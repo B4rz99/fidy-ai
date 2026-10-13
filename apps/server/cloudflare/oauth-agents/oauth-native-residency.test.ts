@@ -4,6 +4,7 @@ import {
   type Cause,
   Clock,
   Deferred,
+  Duration,
   Effect,
   Option,
   Predicate,
@@ -23,6 +24,21 @@ import coreWorker from "../core-worker";
 
 const decodeResponseJson = (response: Response): Promise<Schema.Json> =>
   response.json().then((body: unknown) => Schema.decodeUnknownSync(Schema.Json)(body));
+
+const drainSubscription = (reader: ReadableStreamDefaultReader<unknown>): Promise<void> =>
+  reader.read().then(
+    (chunk) => (chunk.done ? undefined : drainSubscription(reader)),
+    () => undefined
+  );
+const settleSubscriptionReaders = (
+  readers: ReadonlyArray<ReadableStreamDefaultReader<unknown>>
+): Promise<void[]> => Promise.all(readers.map(drainSubscription));
+const settleRetiredResponses = (responses: ReadonlyArray<Response>): Promise<unknown[]> =>
+  Promise.all(responses.map((response) => response.text().catch(() => undefined)));
+const assertRecovered = (send: () => Promise<Response>): Promise<void> =>
+  expect.poll(() => responseStatus(send())).toBe(200);
+const responseStatus = (pending: Promise<Response>): Promise<number> =>
+  pending.then((response) => response.text().then(() => response.status));
 
 // Native2025 residency: real OAuth/public/Core/User coordinator integration lives at this earned composition.
 describe("native2025 residency integration", () => {
@@ -146,7 +162,8 @@ describe("native2025 residency integration", () => {
     revoke: () => Promise<Response>;
   }>;
   const fixture = (
-    scopes: ReadonlyArray<string> = ["read", "write", "dashboard"]
+    scopes: ReadonlyArray<string> = ["read", "write", "dashboard"],
+    credentialLifetime = 30000
   ): Effect.Effect<
     NativeFixture,
     Cause.UnknownError | Effect.Error<ReturnType<typeof secretDigest>>
@@ -277,7 +294,7 @@ describe("native2025 residency integration", () => {
               resource,
               json([...scopes]),
               current,
-              current + 60000
+              current + credentialLifetime * 2
             ),
           db
             .prepare(
@@ -294,7 +311,7 @@ describe("native2025 residency integration", () => {
               userId,
               digest,
               current,
-              current + 30000,
+              current + credentialLifetime,
               json([...scopes])
             ),
         ])
@@ -1152,10 +1169,11 @@ describe("native2025 residency integration", () => {
           gate.release.resolve();
           expect((yield* wait(() => revocation)).status).toBe(200);
           yield* wait(() => gate.settled.promise);
-          const result = yield* Schema.decodeUnknownEffect(ToolReply)(
-            yield* wait(() => settlement)
-          );
-          expect(result.result.isError).toBe(true);
+          // Active retirement interrupts the queued native transport after durable revocation.
+          // The financial and lease assertions below still require its callback to settle.
+          expect(yield* wait(() => settlement)).toMatchObject({
+            error: { code: -32603, message: "Internal error" },
+          });
           expect(
             (yield* wait(() =>
               harness.send(
@@ -1286,6 +1304,113 @@ describe("native2025 residency integration", () => {
         ).toBe(0);
       })
     ));
+
+  it.each(["expiry", "revocation", "maximum lifetime"])(
+    "reclaims eight native subscriptions after %s without client disconnect",
+    (reason) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const lifetime = reason === "maximum lifetime" ? 300000 : 30000;
+          const harness = yield* fixture(["read"], reason === "maximum lifetime" ? 600000 : 30000);
+          const deadline = yield* Deferred.make<void>();
+          const liveClock = yield* Clock.Clock;
+          let current = harness.current;
+          const clock: Clock.Clock = {
+            currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+            currentTimeNanos: liveClock.currentTimeNanos,
+            monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+            monotonicTimeNanos: liveClock.monotonicTimeNanos,
+            currentTimeMillisUnsafe: () => current,
+            currentTimeMillis: Effect.sync(() => current),
+            sleep: (duration) =>
+              Duration.toMillis(duration) === lifetime
+                ? Deferred.await(deadline)
+                : liveClock.sleep(duration),
+          };
+          const module = makeMcpResidency({
+            db: harness.db,
+            userId,
+            enqueueCanonicalWork: () => Effect.die("Subscriptions cannot execute canonical work."),
+          });
+          const services = yield* Effect.context<never>();
+          const send = (method: string, id: number): Promise<Response> =>
+            Effect.runPromiseWith(services)(
+              module
+                .handle({
+                  signal: new AbortController().signal,
+                  admission: Schema.decodeSync(OAuthMcpAdmission)({
+                    userId,
+                    connectionId,
+                    credentialId,
+                    clientId,
+                    resource,
+                    digest: Array.from(harness.digest),
+                    deadlineMilliseconds: current + 3000,
+                    method: "POST",
+                    headers: {
+                      "content-type": "application/json",
+                      accept: "application/json, text/event-stream",
+                      "mcp-protocol-version": "2026-07-28",
+                      "mcp-method": method,
+                    },
+                    body: Array.from(
+                      new TextEncoder().encode(
+                        json({
+                          jsonrpc: "2.0",
+                          id,
+                          method,
+                          params: {
+                            ...(method === "subscriptions/listen"
+                              ? { notifications: { toolsListChanged: true } }
+                              : {}),
+                            _meta: {
+                              "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                              "io.modelcontextprotocol/clientCapabilities": {},
+                            },
+                          },
+                        })
+                      )
+                    ),
+                  }),
+                })
+                .pipe(Effect.provideService(Clock.Clock, clock))
+            );
+          const readers: Array<ReadableStreamDefaultReader<unknown>> = [];
+          try {
+            for (let id = 0; id < 8; id += 1) {
+              const response = yield* wait(() => send("subscriptions/listen", id));
+              expect(response.status).toBe(200);
+              const reader = response.body?.getReader();
+              if (reader === undefined) throw new Error("Expected native subscription stream.");
+              readers.push(reader);
+              const chunk: unknown = (yield* wait(() => reader.read())).value;
+              if (!(chunk instanceof Uint8Array)) throw new Error("Expected subscription bytes.");
+              expect(new TextDecoder().decode(chunk)).toContain("subscriptions/acknowledged");
+            }
+            const refused = yield* wait(() => send("tools/list", 9));
+            expect(refused.status).toBe(503);
+            yield* wait(() => refused.text());
+            if (reason !== "revocation") {
+              yield* wait(() =>
+                harness.db
+                  .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ? WHERE id = ?")
+                  .bind(harness.current + lifetime + 30000, credentialId)
+                  .run()
+              );
+              current += lifetime + 1;
+              yield* Deferred.succeed(deadline, undefined);
+            } else {
+              yield* module.retireConnections(Option.some(connectionId));
+            }
+            yield* wait(() => settleSubscriptionReaders(readers));
+            const recovered = (): Promise<Response> => send("tools/list", 10);
+            yield* wait(() => assertRecovered(recovered));
+          } finally {
+            yield* module.dispose();
+          }
+        })
+      )
+  );
 
   it("native residency essential actual SDK disposal waits for public Scope cleanup before replacement capacity", () =>
     Effect.runPromise(
@@ -1460,6 +1585,14 @@ describe("native2025 residency integration", () => {
           yield* wait(() => control.text());
           progress.push("control202 settled with callback-local cleanup held");
           yield* module.retireConnections(Option.some(connectionId));
+          // Idle retired owners now close proactively. Refill their seven released slots while
+          // callback-local cleanup still blocks the eighth owner's disposal.
+          yield* wait(() => settleRetiredResponses(held.splice(0)));
+          for (let index = 0; index < 7; index++) {
+            const replacement = yield* wait(() => send(initializeBody));
+            expect(replacement.status).toBe(200);
+            held.push(replacement);
+          }
           yield* settleNativeStatus(
             send({
               jsonrpc: "2.0",
@@ -1474,7 +1607,9 @@ describe("native2025 residency integration", () => {
             503
           );
           expect(yield* Deferred.isDone(cleanupFinished)).toBe(false);
-          progress.push("eight busy/retiring owners refuse ninth503 before cleanup release");
+          progress.push(
+            "seven replacements plus one retiring callback refuse ninth503 before cleanup release"
+          );
           const disposal = Effect.runPromiseWith(services)(
             Deferred.succeed(disposalStarted, undefined).pipe(
               Effect.andThen(module.dispose()),

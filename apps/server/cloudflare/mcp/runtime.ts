@@ -29,6 +29,7 @@ import {
 const queryLifetimeMilliseconds = 3000;
 const transportLifetimeMilliseconds = 5000;
 const maximumResidentOwners = 8;
+const maximumResidentLifetimeMilliseconds = 300000;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumMcpRequestBytes,
   deadlineMilliseconds: 3000,
@@ -366,6 +367,7 @@ type ResidentOwner = {
   readonly expiresAtMilliseconds: number;
   sessionId: Option.Option<string>;
   retiring: boolean;
+  cancelLifetime: () => void;
   leases: number;
   drained: ReturnType<typeof Promise.withResolvers<void>>;
   disposal: Option.Option<Promise<void>>;
@@ -575,6 +577,7 @@ const completeOwnerDisposal = (registry: ResidentRegistry, owner: ResidentOwner)
 const disposeOwner = (registry: ResidentRegistry, owner: ResidentOwner): Promise<void> => {
   if (Option.isSome(owner.disposal)) return owner.disposal.value;
   owner.retiring = true;
+  owner.cancelLifetime();
   const disposal = Promise.resolve().then(() => completeOwnerDisposal(registry, owner));
   owner.disposal = Option.some(disposal);
   return disposal;
@@ -644,7 +647,11 @@ const residentRegistration = (
       });
     }
   });
-const createOwner = (registry: ResidentRegistry, catalog: ResidentCatalog): ResidentOwner => {
+const createOwner = (
+  registry: ResidentRegistry,
+  catalog: ResidentCatalog,
+  clock: Clock.Clock
+): ResidentOwner => {
   const server = McpServer.layerHttp({
     name: "fidy",
     version: "0.0.0",
@@ -669,6 +676,7 @@ const createOwner = (registry: ResidentRegistry, catalog: ResidentCatalog): Resi
     expiresAtMilliseconds: catalog.expiresAtMilliseconds,
     sessionId: Option.none(),
     retiring: false,
+    cancelLifetime: (): void => {},
     leases: 0,
     drained,
     disposal: Option.none(),
@@ -676,6 +684,20 @@ const createOwner = (registry: ResidentRegistry, catalog: ResidentCatalog): Resi
     pendingTransfers: new Set(),
   };
   registry.owners.add(owner);
+  // Native subscriptions and unread replies cannot retain a resident after its authority or
+  // bounded protocol lifetime. Disposal interrupts transport and still joins canonical settlement.
+  const lifetime = Effect.runFork(
+    Effect.sleep(Math.max(0, owner.expiresAtMilliseconds - clock.currentTimeMillisUnsafe())).pipe(
+      Effect.provideService(Clock.Clock, clock),
+      Effect.andThen(
+        Effect.sync(() => {
+          owner.cancelLifetime = (): void => {};
+          disposeOwner(registry, owner).catch(() => undefined);
+        })
+      )
+    )
+  );
+  owner.cancelLifetime = (): void => lifetime.interruptUnsafe();
   return owner;
 };
 const admissionSubject = (admission: OAuthMcpAdmission): OAuthCaller => ({
@@ -755,7 +777,7 @@ const reserveResidentOwner = (
     ) {
       return Option.none();
     }
-    return Option.some(createOwner(registry, catalog));
+    return Option.some(createOwner(registry, catalog, yield* Clock.Clock));
   });
 const ensureResidentOwner = (
   registry: ResidentRegistry,
@@ -888,7 +910,8 @@ const handleResidentRequest = (
     const selectedAt = yield* Clock.currentTimeMillis;
     const expiresAtMilliseconds = Math.min(
       DateTime.toEpochMillis(live.value.credentialExpiresAt),
-      DateTime.toEpochMillis(live.value.grantExpiresAt)
+      DateTime.toEpochMillis(live.value.grantExpiresAt),
+      selectedAt + maximumResidentLifetimeMilliseconds
     );
     if (selectedAt >= expiresAtMilliseconds) return denied();
     const catalog: ResidentCatalog = {
@@ -911,7 +934,7 @@ const retireConnections = (
   Effect.sync(() => {
     for (const owner of registry.owners) {
       if (Option.isNone(connectionId) || owner.connectionId === connectionId.value) {
-        owner.retiring = true;
+        disposeOwner(registry, owner).catch(() => undefined);
       }
     }
     // Do not await native shutdown while holding a financial ticket: callbacks use that chain.

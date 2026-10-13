@@ -7,7 +7,8 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { emailPairingAllowsUser } from "../../../src/shell/email-authentication/operations";
 import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
 import { recoveryCodeDigest } from "./material";
-import { type JWTVerifyGetKey, createRemoteJWKSet, jwtVerify } from "jose";
+import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
+import { type OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
 import { admitOperator } from "./admission";
@@ -33,7 +34,36 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 256,
   deadlineMilliseconds: 2_000,
 });
-const keys = new Map<string, JWTVerifyGetKey>();
+// Only public key data is shared; each resolver and lookup belongs to its request.
+let cachedKeys: Option.Option<Readonly<{ issuer: string; data: JWKSCacheInput }>> = Option.none();
+const signingKeys = (
+  issuer: string,
+  http: OutboundHttpService,
+  signal: AbortSignal
+): ReturnType<typeof createRemoteJWKSet> => {
+  const retained =
+    Option.isSome(cachedKeys) && cachedKeys.value.issuer === issuer
+      ? cachedKeys.value
+      : { issuer, data: {} satisfies JWKSCacheInput };
+  cachedKeys = Option.some(retained);
+  return createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`), {
+    [jwksCache]: retained.data,
+    [customFetch]: (_url, options): Promise<Response> =>
+      Effect.runPromise(
+        http.execute({ _tag: "CloudflareAccessSigningKeys" }).pipe(
+          Effect.timeout("5 seconds"),
+          Effect.map(
+            (response) =>
+              new Response(new Uint8Array(response.body), {
+                status: response.status,
+                headers: { "content-type": "application/json" },
+              })
+          )
+        ),
+        { signal: AbortSignal.any([signal, options.signal]) }
+      ),
+  });
+};
 const httpBadRequest = 400;
 const httpUnauthorized = 401;
 const httpTooManyRequests = 429;
@@ -72,23 +102,22 @@ const verifySupportAccess = ({
   issuer,
   audience,
   clock,
+  http,
+  signal,
 }: {
   assertion: Option.Option<string>;
   issuer: string;
   audience: string;
   clock: Clock.Clock;
+  http: OutboundHttpService;
+  signal: AbortSignal;
 }): Promise<Option.Option<VerifiedOperator>> => {
   if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion)) {
     return Promise.resolve(Option.none());
   }
   return Promise.resolve()
-    .then(() => {
-      let jwks = keys.get(issuer);
-      if (jwks === undefined) {
-        jwks = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
-        keys.set(issuer, jwks);
-      }
-      return jwtVerify(assertion.value, jwks, {
+    .then(() =>
+      jwtVerify(assertion.value, signingKeys(issuer, http, signal), {
         issuer,
         audience,
         algorithms: ["RS256"],
@@ -96,8 +125,8 @@ const verifySupportAccess = ({
         get currentDate(): Date {
           return DateTime.toDateUtc(DateTime.makeUnsafe(clock.currentTimeMillisUnsafe()));
         },
-      });
-    })
+      })
+    )
     .then(({ payload }) => {
       const claims = Schema.decodeUnknownOption(Claims)(payload);
       const now = Math.floor(clock.currentTimeMillisUnsafe() / millisecondsPerSecond);
@@ -261,22 +290,28 @@ export const handleSupportRecovery = ({
   request,
   db,
   config,
+  http,
 }: {
   request: Request;
   db: D1Database;
+  http: OutboundHttpService;
   config: { CLOUDFLARE_ACCESS_ISSUER: string; CLOUDFLARE_ACCESS_AUDIENCE: string };
 }): Effect.Effect<Response> => {
   if (!configuredAccess(config)) return Effect.succeed(unavailable());
   return Effect.gen(function* () {
     const clock = yield* Clock.Clock;
-    const operator = yield* waitFor(() =>
-      verifySupportAccess({
-        assertion: Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
-        issuer: config.CLOUDFLARE_ACCESS_ISSUER,
-        audience: config.CLOUDFLARE_ACCESS_AUDIENCE,
-        clock,
-      })
-    );
+    const operator = yield* Effect.tryPromise({
+      try: (signal) =>
+        verifySupportAccess({
+          assertion: Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
+          issuer: config.CLOUDFLARE_ACCESS_ISSUER,
+          audience: config.CLOUDFLARE_ACCESS_AUDIENCE,
+          clock,
+          http,
+          signal: AbortSignal.any([signal, request.signal]),
+        }),
+      catch: () => new SupportBoundaryFailure(),
+    });
     if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
     const now = yield* Clock.currentTimeMillis;
     const admission = yield* waitFor(() => admitOperator({ db, operator: operator.value, now }));

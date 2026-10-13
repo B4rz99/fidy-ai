@@ -76,6 +76,7 @@ const request = (index: number, path = "/transactions", body?: object): Request 
   new Request(`https://core.internal${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: {
+      "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
@@ -390,6 +391,7 @@ const batchRequest = (index: number, calls: ReadonlyArray<AtomicBatchCall>): Req
     method: "POST",
     headers: {
       origin: "https://app.fidyapp.com",
+      "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
       "content-type": "application/json",
     },
@@ -873,6 +875,7 @@ effectIt.effect(
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -924,6 +927,7 @@ const hostedReceiptBrowserRequest = (index: number, body: string): Request =>
     method: "POST",
     headers: {
       origin: "https://app.fidyapp.com",
+      "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
       "content-type": "application/json",
     },
@@ -934,6 +938,7 @@ const hostedBrowserRequest = (index: number, text: string): Request =>
     method: "POST",
     headers: {
       origin: "https://app.fidyapp.com",
+      "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
       "content-type": "application/json",
     },
@@ -1500,6 +1505,7 @@ const postTransaction = (index: number, body: object): Request =>
     method: "POST",
     headers: {
       origin: "https://app.fidyapp.com",
+      "Fidy-Session-Binding": sessions[index] ?? "invalid",
       cookie: `__Host-fidy_session=${bearer(index)}`,
       "content-type": "application/json",
     },
@@ -1540,6 +1546,7 @@ it("searches only the caller's FinancialRecord with bounded literal terms", () =
             method: body === undefined ? "GET" : "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
               ...(body === undefined ? {} : { "content-type": "application/json" }),
             },
@@ -1651,6 +1658,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
             method: body === undefined ? "GET" : "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               ...(body === undefined ? {} : { "content-type": "application/json" }),
             },
@@ -1762,6 +1770,7 @@ it("refuses ineligible pairs without writing any relation", () =>
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -1790,6 +1799,7 @@ it("refuses ineligible pairs without writing any relation", () =>
             new Request("https://api.fidyapp.com/transactions", {
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
               },
             })
@@ -1844,6 +1854,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -1897,6 +1908,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
             new Request("https://api.fidyapp.com/transactions", {
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
               },
             })
@@ -1974,6 +1986,7 @@ it("refuses duplicate, chained, and cross-User links without partial relation st
             method: body === undefined ? "GET" : "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
               ...(body === undefined ? {} : { "content-type": "application/json" }),
             },
@@ -2078,6 +2091,7 @@ it("serializes concurrent links through the User coordinator so only one pair co
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -2141,6 +2155,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
             method,
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -2161,6 +2176,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
           new Request(`https://api.fidyapp.com/transactions/${id}`, {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
             },
           })
@@ -2212,6 +2228,7 @@ it("keeps the effective Transaction consistent after corrections to either membe
             new Request("https://api.fidyapp.com/transactions", {
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
               },
             })
@@ -2299,6 +2316,7 @@ it("derives each effective fact group from the member the Transaction policy sel
               method: "POST",
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
                 "content-type": "application/json",
               },
@@ -2317,6 +2335,7 @@ it("derives each effective fact group from the member the Transaction policy sel
             new Request("https://api.fidyapp.com/transactions", {
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
               },
             })
@@ -2352,6 +2371,7 @@ it("derives each effective fact group from the member the Transaction policy sel
             new Request("https://api.fidyapp.com/transactions", {
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
               },
             })
@@ -2521,6 +2541,7 @@ it("links and unlinks under the caller's live credential scope and records only 
               method: "POST",
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
                 "content-type": "application/json",
               },
@@ -2581,6 +2602,7 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
             method: methodFor(path, body),
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
               ...(body === undefined ? {} : { "content-type": "application/json" }),
             },
@@ -2736,6 +2758,7 @@ it("serializes competing corrections and rolls back evidence when the correction
             method,
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -2801,6 +2824,7 @@ it("rolls back public Transaction capture when its audit silently refuses a writ
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -2873,6 +2897,7 @@ it("coordinates concurrent public mutations through a real per-User Durable Obje
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
               "content-type": "application/json",
             },
@@ -2894,6 +2919,7 @@ it("coordinates concurrent public mutations through a real per-User Durable Obje
           new Request(`https://api.fidyapp.com${path}`, {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
               authorization: `Bearer ${bearer(index)}`,
               "x-provider-id": users[1 - index] ?? "untrusted",
@@ -2924,6 +2950,7 @@ it("coordinates concurrent public mutations through a real per-User Durable Obje
           method: "DELETE",
           headers: {
             origin: "https://app.fidyapp.com",
+            "Fidy-Session-Binding": sessions[1] ?? "invalid",
             cookie: `__Host-fidy_session=${bearer(1)}`,
             authorization: `Bearer ${bearer(1)}`,
             "x-provider-id": users[0] ?? "",
@@ -3004,6 +3031,7 @@ it("bounds authenticated audit growth atomically per stable User at the public b
             method: body === undefined ? "GET" : "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
               ...(body === undefined ? {} : { "content-type": "application/json" }),
             },
@@ -3028,6 +3056,7 @@ it("bounds authenticated audit growth atomically per stable User at the public b
           new Request("https://api.fidyapp.com/transactions", {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
             },
           })
@@ -3063,6 +3092,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           method: "POST",
           headers: {
             origin,
+            "Fidy-Session-Binding": sessions[0] ?? "invalid",
             cookie: `__Host-fidy_session=${bearer(0)}`,
             "content-type": "application/json",
           },
@@ -3102,6 +3132,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           new Request(`https://api.fidyapp.com${path}`, {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
             },
           })
@@ -3140,6 +3171,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           new Request(`https://api.fidyapp.com/transactions/${transaction.id}`, {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[1] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(1)}`,
               authorization: `Bearer ${bearer(0)}`,
               "x-provider-id": users[0] ?? "",
@@ -3205,6 +3237,7 @@ it("retains the Transaction owner's not-found refusal and Audit for malformed ca
           new Request("https://api.fidyapp.com/transactions/not-an-id", {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
             },
           })
@@ -3426,6 +3459,7 @@ it("continues the canonical history beyond its first bounded page without losing
           new Request(`https://api.fidyapp.com/transactions?direction=outflow&${period}`, {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
             },
           })
@@ -3468,6 +3502,7 @@ it("continues the canonical history beyond its first bounded page without losing
             {
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
               },
             }
@@ -4626,6 +4661,7 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
             method: "PUT",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -4818,6 +4854,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
           new Request(`https://api.fidyapp.com${path}`, {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
             },
           })
@@ -5496,6 +5533,7 @@ it("serializes concurrent batches and individual mutations through one User coor
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[index] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(index)}`,
               "content-type": "application/json",
             },
@@ -5528,6 +5566,7 @@ it("serializes concurrent batches and individual mutations through one User coor
           new Request("https://api.fidyapp.com/transactions", {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
             },
           }),
@@ -5545,6 +5584,7 @@ it("serializes concurrent batches and individual mutations through one User coor
           new Request("https://api.fidyapp.com/transactions", {
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[1] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(1)}`,
             },
           }),
@@ -6031,6 +6071,7 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -6089,6 +6130,7 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
           method: "POST",
           headers: {
             origin: "https://app.fidyapp.com",
+            "Fidy-Session-Binding": sessions[0] ?? "invalid",
             cookie: `__Host-fidy_session=${bearer(0)}`,
             "content-type": "application/json",
           },
@@ -6229,6 +6271,7 @@ it("does not misattribute a repeated callId with a malformed later operation to 
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -6246,6 +6289,7 @@ it("does not misattribute a repeated callId with a malformed later operation to 
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -6263,6 +6307,7 @@ it("does not misattribute a repeated callId with a malformed later operation to 
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -6298,6 +6343,7 @@ it("records an envelope when a non-canonical first child prevents a later child 
             method: "POST",
             headers: {
               origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -6411,6 +6457,7 @@ it.each([
               method: "PUT",
               headers: {
                 origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
                 "content-type": "application/json",
               },
@@ -6571,6 +6618,7 @@ it("refuses a cookie-admitted batch without the browser origin and writes nothin
           new Request("https://api.fidyapp.com/operations/atomic-batch", {
             method: "POST",
             headers: {
+              "Fidy-Session-Binding": sessions[0] ?? "invalid",
               cookie: `__Host-fidy_session=${bearer(0)}`,
               "content-type": "application/json",
             },
@@ -6614,6 +6662,7 @@ it("permanently deletes visible history with provenance retained and rejects ano
         new Request(request(index, `/transactions/${id}`), {
           method: "DELETE",
           headers: {
+            "Fidy-Session-Binding": sessions[index] ?? "invalid",
             cookie: `__Host-fidy_session=${bearer(index)}`,
             origin: "https://app.fidyapp.com",
           },
@@ -6626,6 +6675,7 @@ it("permanently deletes visible history with provenance retained and rejects ano
             db,
             new Request(request(0, `/transactions/${id}`), {
               headers: {
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
                 cookie: `__Host-fidy_session=${bearer(0)}`,
                 origin: "https://app.fidyapp.com",
               },
@@ -6674,6 +6724,7 @@ it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
         let deletion = new Request(request(0, `/transactions/${id}`), {
           method: "DELETE",
           headers: {
+            "Fidy-Session-Binding": sessions[0] ?? "invalid",
             cookie: `__Host-fidy_session=${bearer(0)}`,
             origin: "https://app.fidyapp.com",
           },
@@ -6802,7 +6853,11 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
       );
       const deletion = new Request(request(0, `/transactions/${first}`), {
         method: "DELETE",
-        headers: { cookie: `__Host-fidy_session=${bearer(0)}`, origin: "https://app.fidyapp.com" },
+        headers: {
+          "Fidy-Session-Binding": sessions[0] ?? "invalid",
+          cookie: `__Host-fidy_session=${bearer(0)}`,
+          origin: "https://app.fidyapp.com",
+        },
       });
       expect((yield* fromTestPromise(() => sendPublicRequest(db, deletion))).status).toBe(200);
       const link = new Request(
@@ -6812,6 +6867,7 @@ it("cannot link a hidden Transaction or restore its visibility", () =>
         }),
         {
           headers: {
+            "Fidy-Session-Binding": sessions[0] ?? "invalid",
             cookie: `__Host-fidy_session=${bearer(0)}`,
             origin: "https://app.fidyapp.com",
             "content-type": "application/json",
@@ -6862,6 +6918,8 @@ const loadMeasurementCodec = Schema.fromJsonString(
   })
 );
 
+const sessionBinding = (index: number): string => sessions[index] ?? "invalid";
+
 const measureMixedRequest = Effect.fn(function* ({
   db,
   coordinator,
@@ -6887,6 +6945,7 @@ const measureMixedRequest = Effect.fn(function* ({
   const mutation = index % 2 === 0;
   const headers = {
     origin: "https://app.fidyapp.com",
+    "Fidy-Session-Binding": sessionBinding(user),
     cookie: `__Host-fidy_session=${bearer(user)}`,
     ...(mutation ? { "content-type": "application/json" } : {}),
   };

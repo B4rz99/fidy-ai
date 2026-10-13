@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import { signInThroughCore } from "./real-core-fixture";
+import { boundSessionRequests, signInThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const { api, app } = browserAcceptanceTopology();
@@ -17,7 +17,7 @@ test("renders the persisted Dashboard title after an admitted edit and browser r
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() => expect(page.getByRole("heading", { level: 1 })).toBeVisible());
       const edited = yield* Effect.tryPromise(() =>
-        page.request.post(`${api}/dashboard/edits`, {
+        boundSessionRequests(page.request).post(`${api}/dashboard/edits`, {
           headers: { origin: app },
           data: { op: "set-title", title: "Mis finanzas verificadas" },
         })

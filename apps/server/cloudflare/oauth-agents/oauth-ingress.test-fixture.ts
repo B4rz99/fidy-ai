@@ -12,6 +12,15 @@ import coreWorker from "../core-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();
+const fixtureSessionBindings = new Map<string, string>();
+const browserFixtureHeaders = (headers: HeadersInit): Headers => {
+  const result = new Headers(headers);
+  const binding = fixtureSessionBindings.get(result.get("cookie") ?? "");
+  if (binding !== undefined && !result.has("Fidy-Session-Binding")) {
+    result.set("Fidy-Session-Binding", binding);
+  }
+  return result;
+};
 
 export class TestFailure extends Data.TaggedError("TestFailure")<{ cause: unknown }> {}
 
@@ -258,7 +267,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
           ...init,
           headers: new Headers({
             "cf-connecting-ip": "198.51.100.10",
-            ...Object.fromEntries(new Headers(init.headers)),
+            ...Object.fromEntries(browserFixtureHeaders(init.headers ?? {})),
           }),
         }),
         {
@@ -409,7 +418,9 @@ const createBrowserSession = (
         }),
       ])
     );
-    return `__Host-fidy_session=${bearer}`;
+    const cookie = `__Host-fidy_session=${bearer}`;
+    fixtureSessionBindings.set(cookie, session);
+    return cookie;
   });
 
 export const sessionForUser = (
@@ -487,7 +498,12 @@ export const assertReleased = (db: D1Database): Effect.Effect<void, TestFailure>
     ).toBe(0);
   });
 
-export type FixtureHeaders = Readonly<{ origin: string; cookie: string; "content-type": string }>;
+export type FixtureHeaders = Readonly<{
+  origin: string;
+  cookie: string;
+  "content-type": string;
+  "Fidy-Session-Binding": string;
+}>;
 
 export const reviewedFixture = (
   {
@@ -519,6 +535,7 @@ export const reviewedFixture = (
     const headers = {
       origin: "https://app.fidyapp.com",
       cookie,
+      "Fidy-Session-Binding": fixtureSessionBindings.get(cookie) ?? "",
       "content-type": "application/json",
     };
     const review = yield* Schema.decodeUnknownEffect(
@@ -901,6 +918,7 @@ export const nativePeer = ({
     const headers = {
       origin: "https://app.fidyapp.com",
       cookie,
+      "Fidy-Session-Binding": fixtureSessionBindings.get(cookie) ?? "",
       "content-type": "application/json",
     };
     const reviewed = yield* wait(

@@ -1719,7 +1719,7 @@ it.each(["single", "mixed"])(
 it("rechecks immutable OAuth grant expiration at the protected mixed-batch commit even with an unexpired credential", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const expiresAt = (yield* Clock.currentTimeMillis) + 5000;
+      const expiresAt = (yield* Clock.currentTimeMillis) + 4000;
       const approvalClock = vi
         .spyOn(Date, "now")
         .mockReturnValue(expiresAt - 7 * 24 * 60 * 60 * 1000);
@@ -1728,10 +1728,14 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
         lifetimeDays: 7,
         auditMigration: true,
       });
+      approvalClock.mockRestore();
+      // The grant is deliberately near expiry; issue its single-use code at real database time.
+      yield* wait(
+        fixture.db.prepare("UPDATE oauth_codes SET expires_at_ms = ?").bind(expiresAt).run()
+      );
       const original = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
       );
-      approvalClock.mockRestore();
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait(
           (yield* wait(
@@ -1767,7 +1771,10 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       held.release();
       const response = yield* wait(pending);
       yield* wait(held.settled);
-      expect(yield* wait(response.json())).toMatchObject({ result: { isError: true } });
+      // Grant expiry now retires the MCP transport before the held commit can reply.
+      expect(yield* wait(response.json())).toMatchObject({
+        error: { code: -32603, message: "Internal error" },
+      });
       for (const table of ["transactions", "source_attestations", "dashboard_documents"]) {
         expect(
           yield* wait(

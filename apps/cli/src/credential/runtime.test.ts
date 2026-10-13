@@ -26,19 +26,30 @@ const credential: Credential = {
   grant: { origin: apiOrigin, pat: issued.pat },
   bearer: issued.bearer,
 };
-const nativeFixture = (): Readonly<{ native: NativeSecrets; values: Map<string, string> }> => {
+const nativeFixture = (): Readonly<{
+  native: NativeSecrets;
+  values: Map<string, string>;
+  calls: Array<string>;
+}> => {
   const values = new Map<string, string>();
+  const calls: Array<string> = [];
   return {
     values,
+    calls,
     native: {
       get: (name) =>
-        Effect.sync(() => Option.map(Option.fromUndefinedOr(values.get(name)), Redacted.make)),
+        Effect.sync(() => {
+          calls.push(`get:${name}`);
+          return Option.map(Option.fromUndefinedOr(values.get(name)), Redacted.make);
+        }),
       set: (name, value) =>
         Effect.sync(() => {
+          calls.push(`set:${name}`);
           values.set(name, Redacted.value(value));
         }),
       delete: (name) =>
         Effect.sync(() => {
+          calls.push(`delete:${name}`);
           values.delete(name);
         }),
     },
@@ -46,6 +57,70 @@ const nativeFixture = (): Readonly<{ native: NativeSecrets; values: Map<string, 
 };
 
 layer(BunServices.layer)((it) => {
+  const unsafePaths = ["linked directory", "linked metadata", "nonregular metadata"] as const;
+  for (const unsafePath of unsafePaths) {
+    it.effect(
+      `refuses ${unsafePath} before accessing native credentials or changing link targets`,
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const root = yield* fs.makeTempDirectoryScoped();
+          const directory = `${root}/credentials`;
+          const target = `${root}/target`;
+          yield* fs.makeDirectory(target, { mode: 0o700 });
+          yield* fs.writeFileString(`${target}/sentinel`, "untouched", { mode: 0o600 });
+          if (unsafePath === "linked directory") {
+            yield* fs.symlink(target, directory);
+          } else {
+            yield* fs.makeDirectory(directory, { mode: 0o700 });
+            if (unsafePath === "linked metadata") {
+              yield* fs.symlink(`${target}/sentinel`, `${directory}/grant.json`);
+            } else {
+              yield* fs.makeDirectory(`${directory}/grant.json`, { mode: 0o700 });
+            }
+          }
+          const fixture = nativeFixture();
+          fixture.values.set("login", bearer);
+          const { store } = yield* makeCredentialStore(directory, fixture.native);
+          expect(Exit.isFailure(yield* Effect.exit(store.load))).toBe(true);
+          expect(Exit.isFailure(yield* Effect.exit(store.save(credential)))).toBe(true);
+          expect(fixture.calls).toEqual([]);
+          expect(fixture.values.get("login") === bearer).toBe(true);
+          expect(yield* fs.readFileString(`${target}/sentinel`)).toBe("untouched");
+          expect(yield* fs.exists(`${directory}/login.lock`)).toBe(false);
+          expect(yield* fs.readDirectory(target)).toEqual(["sentinel"]);
+        }).pipe(Effect.scoped)
+    );
+  }
+
+  if (process.platform !== "win32") {
+    for (const unsafePath of ["directory", "metadata"] as const) {
+      it.effect(
+        `refuses nonprivate UNIX ${unsafePath} without releasing or replacing credentials`,
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const directory = yield* fs.makeTempDirectoryScoped();
+            const fixture = nativeFixture();
+            const { store } = yield* makeCredentialStore(directory, fixture.native);
+            yield* store.save(credential);
+            const metadata = yield* fs.readFileString(`${directory}/grant.json`);
+            fixture.calls.length = 0;
+            yield* fs.chmod(
+              unsafePath === "directory" ? directory : `${directory}/grant.json`,
+              0o755
+            );
+            expect(Exit.isFailure(yield* Effect.exit(store.load))).toBe(true);
+            expect(Exit.isFailure(yield* Effect.exit(store.save(credential)))).toBe(true);
+            expect(fixture.calls).toEqual([]);
+            expect(fixture.values.get("login") === bearer).toBe(true);
+            expect(yield* fs.readFileString(`${directory}/grant.json`)).toBe(metadata);
+            expect(yield* fs.exists(`${directory}/login.lock`)).toBe(false);
+          }).pipe(Effect.scoped)
+      );
+    }
+  }
+
   it.effect(
     "stores only metadata in the file and reuses the bearer in a newly constructed store",
     () =>

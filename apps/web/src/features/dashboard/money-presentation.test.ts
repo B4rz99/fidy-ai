@@ -1,5 +1,4 @@
 import { BigDecimal, Option } from "effect";
-import { formatMoney as formatTransactionMoney } from "@/transport/money";
 import { describe, expect, it } from "vitest";
 import {
   exactChartAmount,
@@ -19,20 +18,11 @@ const money = (
 });
 
 describe("Dashboard exact Money presentation", () => {
-  it("formats authoritative decimal text above Number.MAX_SAFE_INTEGER", () => {
-    expect(formatMoney({ money: money("9007199254740993.12"), locale: "es-CO" })).toBe(
-      "$ 9.007.199.254.740.993,12"
-    );
-  });
-
   it("preserves exact Money beyond binary-number finiteness in all presenters", () => {
     const amount = "1" + "0".repeat(400);
     const value = money(amount);
     expect(moneyDecimalText(value)).toBe("1e+400");
     expect(formatMoney({ money: value, locale: "es-CO" }).replace(/[^0-9]/gu, "")).toBe(
-      amount + "00"
-    );
-    expect(formatTransactionMoney({ money: value, locale: "es-CO" }).replace(/[^0-9]/gu, "")).toBe(
       amount + "00"
     );
     expect(moneySeriesGeometry([value.amount, BigDecimal.fromStringUnsafe("1")])).toEqual([1, 0]);

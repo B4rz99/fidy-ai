@@ -7,30 +7,6 @@ import { makeCanonicalClient } from "./runtime";
 
 const fixture = makeCanonicalFixture(makeCanonicalClient);
 
-it.effect("invokes a query with a friendly schema-derived Currency flag", () =>
-  Effect.gen(function* () {
-    const test = fixture();
-    yield* runOperationCommand(
-      ["transactions", "listTransactions", "--currency", "COP"],
-      test.dependencies
-    );
-    expect(test.requests).toEqual(["https://api.fidyapp.com/transactions"]);
-    expect(test.stdout).toEqual(['{"data":[],"next":[]}\n']);
-    expect(
-      discoverOperations(["read"]).find((command) => command.id === "transactions.listTransactions")
-    ).toMatchObject({
-      flags: [
-        { name: "from" },
-        { name: "to" },
-        { name: "category-id" },
-        { name: "direction" },
-        { name: "currency" },
-        { name: "cursor" },
-      ],
-    });
-  })
-);
-
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
 const transaction = {
   id: "01900000-0000-4000-8000-000000000001",

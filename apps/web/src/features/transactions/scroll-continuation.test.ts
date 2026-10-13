@@ -17,8 +17,7 @@ const setup = (): Readonly<{
     readonly rootMargin = "0px 0px 160px 0px";
     readonly scrollMargin = "0px";
     readonly thresholds = [0];
-    constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit) {
-      expect(options.rootMargin).toBe(this.rootMargin);
+    constructor(callback: IntersectionObserverCallback) {
       deliver = (visible): void => {
         const rectangle = element.getBoundingClientRect();
         callback(

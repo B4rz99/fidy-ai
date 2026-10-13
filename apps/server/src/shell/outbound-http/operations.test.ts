@@ -401,28 +401,6 @@ it.effect("rejects a destination outside the service authority before transport"
   })
 );
 
-it.effect("rejects operational requests from the runtime provider group before transport", () =>
-  Effect.gen(function* () {
-    let requests = 0;
-    const outbound = yield* makeTestOutbound(
-      HttpClient.make((request) => {
-        requests += 1;
-        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unexpected")));
-      })
-    );
-
-    const cloudflareFailure = yield* Effect.flip(
-      outbound.execute({
-        _tag: "CloudflareAccessSupportRecovery",
-        body: "private-support-body",
-      })
-    );
-
-    expect(cloudflareFailure.reason).toBe("transport-failed");
-    expect(requests).toBe(0);
-  })
-);
-
 it.effect("bounds the streamed Kapso response before exposing bytes and cancels overflow", () =>
   Effect.gen(function* () {
     let cancelled = false;

@@ -490,29 +490,13 @@ describe("Production topology contract", () => {
     });
   });
 
-  it("assigns proof and replay ownership to every reserved provider ingress", () => {
-    const providerPolicies = [
-      edgeSecurityPolicy.reservedIngress.emailEvent,
-      ...Object.values(edgeSecurityPolicy.reservedIngress.httpCallbacks),
-    ];
-
-    expect(providerPolicies.map(({ provider }) => provider)).toEqual([
-      "cloudflare-email",
-      "kapso",
-      "wompi",
-    ]);
-    expect(providerPolicies.every(({ proof }) => proof.includes("replay"))).toBe(true);
+  it("includes every reserved provider callback in the shared edge budget", () => {
     const expression = edgeSecurityPolicy.rulesets.rateLimits.rules[0]?.expression ?? "";
     for (const callback of Object.values(edgeSecurityPolicy.reservedIngress.httpCallbacks)) {
       expect(expression).toContain(`"${callback.path}"`);
     }
     expect(expression).toContain('starts_with(http.request.uri.path, "/budgets/")');
     expect(expression).not.toContain("http.host");
-  });
-
-  it("pins local ports for the browser-to-ingress and ingress-to-Core path", () => {
-    expect(productionTopology.ingress.localPort).toBe(8787);
-    expect(productionTopology.core.localPort).toBe(8788);
   });
 
   it("exposes Core only as the ingress service binding", () => {

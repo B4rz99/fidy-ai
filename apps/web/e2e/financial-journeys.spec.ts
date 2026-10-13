@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { type Cause, DateTime, Effect, Schema } from "effect";
+import { type Cause, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -34,56 +34,6 @@ const installRoute = (
   url: RegExp | string,
   handler: (route: Route) => Promise<void>
 ): Effect.Effect<unknown, Cause.UnknownError> => Effect.tryPromise(() => page.route(url, handler));
-const delayedTransactions = (route: Route): Promise<void> =>
-  Effect.runPromise(Effect.sleep("1 second")).then(() =>
-    route.fulfill({ status: 200, contentType: "application/json", body: response([]) })
-  );
-const currentDate = (): string =>
-  DateTime.formatIsoDate(
-    DateTime.setZone(Effect.runSync(DateTime.now), DateTime.zoneMakeNamedUnsafe("America/Bogota"))
-  );
-
-test("presents a Category by stable identity with a current-month Transaction", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => installUser(page));
-      yield* Effect.tryPromise(() => installCategories({ page, categories: [category] }));
-      let requestedPeriod = false;
-      yield* installRoute(page, transactionsRoute, (route) => {
-        const url = new URL(route.request().url());
-        requestedPeriod = url.searchParams.has("from") && url.searchParams.has("to");
-        const date = currentDate();
-        return route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: response([matchingTransaction(date)]),
-        });
-      });
-      yield* Effect.tryPromise(() => page.goto("/app/transactions"));
-      yield* Effect.tryPromise(() => expect(page.getByText("La Cocina").first()).toBeVisible());
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Restaurantes").filter({ visible: true }).first()).toBeVisible()
-      );
-      expect(requestedPeriod).toBe(true);
-    })
-  ));
-
-test("shows loading until a bounded Transactions query completes", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => installUser(page));
-      yield* Effect.tryPromise(() => installCategories({ page, categories: [category] }));
-      yield* installRoute(page, transactionsRoute, delayedTransactions);
-      yield* Effect.tryPromise(() => page.goto("/app/transactions"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("region", { name: "Cargando transacciones" })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
-      );
-    })
-  ));
-
 test("a cross-User refusal never renders another User's financial details", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

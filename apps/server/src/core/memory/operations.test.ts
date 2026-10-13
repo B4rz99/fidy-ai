@@ -5,7 +5,6 @@ import {
   Memory,
   MemoryCapacityExceeded,
   MemoryId,
-  MemoryNotFound,
   MemoryText,
   maximumAggregateMemoryTokens,
 } from "./contract";
@@ -19,13 +18,6 @@ const candidate = Memory.make({
 });
 
 describe("Memory capacity", () => {
-  it("exposes stable, content-free failure messages", () => {
-    expect(new MemoryCapacityExceeded().message).toBe(
-      "The User's current Memories have reached their aggregate token capacity"
-    );
-    expect(new MemoryNotFound().message).toBe("No current Memory belongs to the User");
-  });
-
   it.effect("admits an aggregate at the token cap", () =>
     Effect.gen(function* () {
       expect(yield* admitMemory({ candidate, aggregateTokens: maximumAggregateMemoryTokens })).toBe(

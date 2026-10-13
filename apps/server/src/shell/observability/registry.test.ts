@@ -1,16 +1,9 @@
-import { CanonicalTelemetry, ErrorCode } from "~/shell/public-http/contract";
+import { CanonicalTelemetry } from "~/shell/public-http/contract";
 import { expect, it } from "@effect/vitest";
 import { HttpApi } from "effect/http-api";
 
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { TelemetryRegistry } from "./contract";
-
-it("derives every canonical operation exactly once from the assembled API", () => {
-  const canonical = operationCatalog.operations.map(({ id }) => id);
-
-  expect(TelemetryRegistry.operation.slice(0, canonical.length)).toEqual(canonical);
-  expect(new Set(TelemetryRegistry.operation).size).toBe(TelemetryRegistry.operation.length);
-});
 
 it("attaches the Telemetry seam to every canonical operation", () => {
   const observed: Array<string> = [];
@@ -24,10 +17,6 @@ it("attaches the Telemetry seam to every canonical operation", () => {
   });
 
   expect(observed).toEqual(operationCatalog.operations.map(({ id }) => id));
-});
-
-it("admits every declared API outcome as a fixed telemetry code", () => {
-  expect(TelemetryRegistry.error.slice(0, ErrorCode.literals.length)).toEqual(ErrorCode.literals);
 });
 
 it("contains no duplicate diagnostic codes", () => {

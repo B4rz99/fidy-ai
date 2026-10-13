@@ -1501,49 +1501,6 @@ it(
   30_000
 );
 
-it("carries only an identity through Workflow history and delegates to the User coordinator", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const requests: Array<Readonly<{ name: string; body: unknown }>> = [];
-      const coordinator = {
-        getByName: (name: string): Pick<Fetcher, "fetch"> => ({
-          fetch: (request: Request): Promise<Response> =>
-            request.json().then((body) => {
-              requests.push({ name, body });
-              return new Response(null, { status: 200 });
-            }),
-        }),
-      };
-      const names: Array<string> = [];
-      yield* fromTestPromise(() =>
-        executeStatementExtraction({
-          coordinator,
-          payload: {
-            version: 1,
-            userId: userA,
-            submissionId: "50000000-0000-4000-8000-000000000001",
-          },
-          activity: (name, _options, run) => {
-            names.push(name);
-            return run();
-          },
-        })
-      );
-      expect(names).toEqual(["finalize-statement-chunk-v1-0"]);
-      expect(requests).toEqual([
-        {
-          name: userA,
-          body: {
-            _tag: "StatementWork",
-            version: 1,
-            userId: userA,
-            submissionId: "50000000-0000-4000-8000-000000000001",
-          },
-        },
-      ]);
-    })
-  ));
-
 const clarifyStatement = (
   runtime: Runtime,
   csv: string
@@ -2608,19 +2565,20 @@ it("shows committed review rows only to their User through the canonical read", 
     })
   ));
 
-it("continues a bounded statement across distinct durable Workflow steps", () =>
+it("routes identity-only statement work through distinct Workflow activities and stops on completion", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const steps: Array<string> = [];
-      let progress = 0;
+      const requests: Array<Readonly<{ name: string; body: unknown }>> = [];
       yield* fromTestPromise(() =>
         executeStatementExtraction({
           coordinator: {
-            getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
-              fetch: (): Promise<Response> => {
-                progress += 1;
-                return Promise.resolve(new Response(null, { status: progress === 1 ? 202 : 200 }));
-              },
+            getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+              fetch: (request: Request): Promise<Response> =>
+                request.json().then((body) => {
+                  requests.push({ name, body });
+                  return new Response(null, { status: requests.length < 4 ? 202 : 200 });
+                }),
             }),
           },
           payload: {
@@ -2634,39 +2592,22 @@ it("continues a bounded statement across distinct durable Workflow steps", () =>
           },
         })
       );
-      expect(steps).toEqual(["finalize-statement-chunk-v1-0", "finalize-statement-chunk-v1-1"]);
-    })
-  ));
-
-it("continues a supported 97-row statement through four durable Workflow activities", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const steps: Array<string> = [];
-      yield* fromTestPromise(() =>
-        executeStatementExtraction({
-          coordinator: {
-            getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
-              fetch: (): Promise<Response> =>
-                Promise.resolve(
-                  new Response(null, {
-                    status: steps.length < 4 ? 202 : 200,
-                  })
-                ),
-            }),
-          },
-          payload: {
+      expect(steps).toEqual([
+        "finalize-statement-chunk-v1-0",
+        "finalize-statement-chunk-v1-1",
+        "finalize-statement-chunk-v1-2",
+        "finalize-statement-chunk-v1-3",
+      ]);
+      expect(requests).toEqual(
+        Array.from({ length: 4 }, () => ({
+          name: userA,
+          body: {
+            _tag: "StatementWork",
             version: 1,
             userId: userA,
             submissionId: "50000000-0000-4000-8000-000000000001",
           },
-          activity: (name, _options, run) => {
-            steps.push(name);
-            return run();
-          },
-        })
-      );
-      expect(steps).toEqual(
-        Array.from({ length: 4 }, (_, index) => `finalize-statement-chunk-v1-${index}`)
+        }))
       );
     })
   ));

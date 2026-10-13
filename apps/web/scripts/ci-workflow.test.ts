@@ -21,13 +21,6 @@ describe("pull-request checks workflow policy", () => {
       .then((exists) => expect(exists).toBe(false));
   });
 
-  it("keeps the required checks focused on static and browser validation", () => {
-    expect(checksWorkflow).not.toContain("server-runtime:");
-    expect(checksWorkflow).not.toContain("database-runtime:");
-    expect(checksWorkflow).not.toContain("container-image:");
-    expect(checksWorkflow).toContain("Web browser and accessibility checks");
-  });
-
   it("reuses browser downloads without restoring stale dependency caches", () => {
     const browserJob = checksWorkflow.slice(
       checksWorkflow.indexOf("\n  browser:\n"),

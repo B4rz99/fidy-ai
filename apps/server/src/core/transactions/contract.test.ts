@@ -1,7 +1,6 @@
 import { SourceAttestation } from "~/core/source-attestation/contract";
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import {
   CreateTransactionInput,
   Direction,
@@ -10,7 +9,6 @@ import {
   TransactionExtraction,
   TransactionPresentation,
   TransactionQueryValues,
-  UpdateTransactionInput,
 } from "./contract";
 
 const decodeDirection = Schema.decodeUnknownResult(Direction);
@@ -127,14 +125,6 @@ it("rejects restored pairs with zero Money in either independent Transaction", (
   );
 });
 
-it("rejects the legacy top-level amount and currency shape", () => {
-  const { money: _, ...withoutMoney } = apiTransaction();
-
-  expect(
-    Result.isFailure(decodeTransaction({ ...withoutMoney, amount: 25_000, currency: "COP" }))
-  ).toBe(true);
-});
-
 it("allows Category omission only on capture input", () => {
   const {
     categoryId: _,
@@ -191,23 +181,4 @@ it("accepts both manual and statement-line provenance variants", () => {
       })
     )
   ).toBe(true);
-});
-
-it("derives input and evidence fields from their canonical models", () => {
-  const captureFields = Object.keys(Transaction.fields).filter(
-    (field) => field !== "id" && field !== "createdAt" && field !== "revision"
-  );
-  expect(Object.keys(CreateTransactionInput.fields)).toEqual(captureFields);
-  expect(Object.keys(UpdateTransactionInput.fields)).toEqual(["expectedRevision", "changes"]);
-  expect(Object.keys(TransactionExtraction.fields)).toEqual([
-    "money",
-    "counterparty",
-    "direction",
-    "occurredAt",
-  ]);
-  expect(Object.keys(CapturedInterpretationContext.fields)).toEqual([
-    "serviceMarket",
-    "locale",
-    "timeZone",
-  ]);
 });

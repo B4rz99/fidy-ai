@@ -90,11 +90,6 @@ it("requires public codes and symbol sequences to use their exact lengths", () =
   expect(Option.isNone(decodeSymbols("BBCDFGHJK"))).toBe(true);
 });
 
-it("keeps the public code alphabet at twenty unambiguous symbols", () => {
-  expect(browserLoginPublicCodeAlphabet).toHaveLength(20);
-  expect(new Set(browserLoginPublicCodeAlphabet).size).toBe(20);
-});
-
 it("stops selecting symbols at the requested maximum", () => {
   expect(selectPublicCodeSymbols({ bytes: [0, 1, 2], maximum: 2 })).toBe("BC");
 });

@@ -1,9 +1,12 @@
 import { playwright } from "./playwright-runtime";
 import {
   denialAndCancellationJourney,
+  isolateProviderSource,
   signupJourney,
   whatsappAssociationJourney,
 } from "./provider-authentication.journeys";
+
+playwright.test.beforeEach(({ context }) => isolateProviderSource(context));
 
 const configuration = {
   provider: "microsoft",

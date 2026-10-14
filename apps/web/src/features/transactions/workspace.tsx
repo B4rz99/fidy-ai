@@ -148,10 +148,19 @@ const WorkspaceToolbar = ({
     ) : null}
   </div>
 );
-const panelLocked = (panel: TransactionPanel): boolean =>
-  (panel._tag === "Bulk" && panel.stage === "editing" && panel.status === "saving") ||
-  (panel._tag === "Capture" && panel.status === "saving") ||
-  (panel._tag === "Detail" && panel.mode._tag === "Editing" && panel.mode.status === "saving");
+const panelLocked = (panel: TransactionPanel): boolean => {
+  switch (panel._tag) {
+    case "Bulk":
+      return panel.stage === "editing" && panel.status === "saving";
+    case "Capture":
+      return panel.status === "saving";
+    case "Detail":
+      if (panel.mode._tag === "Deleting") return panel.mode.status !== "idle";
+      return panel.mode._tag === "Editing" && panel.mode.status === "saving";
+    case "Summary":
+      return false;
+  }
+};
 type PanelProps = WorkspaceProps &
   Readonly<{
     panel: TransactionPanel;
@@ -239,6 +248,11 @@ const DetailPanel = ({
       onRefresh={props.onRefresh}
       onSaved={() => {
         toast.success("Cambios guardados");
+        props.onRefresh();
+      }}
+      onDeleted={() => {
+        toast.success("Transacción eliminada");
+        close();
         props.onRefresh();
       }}
     />
@@ -410,7 +424,7 @@ const renderResponsivePanel = (
 const panelEditing = (panel: TransactionPanel): boolean => {
   if (panel._tag === "Capture") return true;
   if (panel._tag === "Bulk") return panel.stage === "editing";
-  return panel._tag === "Detail" && panel.mode._tag === "Editing";
+  return panel._tag === "Detail" && panel.mode._tag !== "Viewing";
 };
 const bulkIds = (panel: TransactionPanel): ReadonlyArray<string> => {
   if (panel._tag !== "Bulk") return [];
@@ -463,6 +477,10 @@ const renderCategoryCell = (
     }}
   />
 );
+const ledgerDisabled = (panel: TransactionPanel): boolean =>
+  panelLocked(panel) ||
+  (panelEditing(panel) && panel._tag !== "Detail") ||
+  (panel._tag === "Detail" && panel.mode._tag === "Deleting");
 const WorkspaceContent = ({
   props,
   panel,
@@ -483,7 +501,6 @@ const WorkspaceContent = ({
   rows: ReturnType<typeof presentTransactionRows>;
 }>): JSX.Element => {
   const locked = panelLocked(panel);
-  const editing = panelEditing(panel);
   return (
     <WorkspaceColumns
       panel={
@@ -513,7 +530,7 @@ const WorkspaceContent = ({
         rows={rows}
         locale={props.currentUser.locale}
         selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
-        disabled={locked || (editing && panel._tag !== "Detail")}
+        disabled={ledgerDisabled(panel)}
         renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
         onSelect={(id) => onPanel(detailPanel(id, props.editable))}
       />

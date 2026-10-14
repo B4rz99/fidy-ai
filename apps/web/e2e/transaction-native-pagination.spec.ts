@@ -11,7 +11,7 @@ const historyRows = (page: Page): Locator =>
 const loadContinuation = (page: Page): Promise<void> =>
   historyRows(page).last().scrollIntoViewIfNeeded();
 
-test("real Core/D1 history continues beyond 100 and persists a correction on the next page", ({
+test("real Core/D1 history persists correction and confirmed deletion on the next page", ({
   page,
   request,
 }) =>
@@ -43,5 +43,30 @@ test("real Core/D1 history continues beyond 100 and persists a correction on the
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Monto ($)", { exact: true })).toHaveValue("2000")
       );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Eliminar transacción", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cancelar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(laterRecord).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Eliminar transacción", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Eliminar definitivamente", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Transacción eliminada", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(historyRows(page)).toHaveCount(firstPageSize));
+      yield* Effect.tryPromise(() => loadContinuation(page));
+      yield* Effect.tryPromise(() => expect(historyRows(page)).toHaveCount(retainedRecords - 1));
+      yield* Effect.tryPromise(() => expect(laterRecord).toHaveCount(0));
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => expect(historyRows(page)).toHaveCount(firstPageSize));
+      yield* Effect.tryPromise(() => loadContinuation(page));
+      yield* Effect.tryPromise(() => expect(historyRows(page)).toHaveCount(retainedRecords - 1));
+      yield* Effect.tryPromise(() => expect(laterRecord).toHaveCount(0));
     })
   ));

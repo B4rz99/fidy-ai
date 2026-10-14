@@ -7,6 +7,7 @@ import { Button } from "@/ui/components/button";
 import type { FidyClient } from "@/transport/client";
 import type { DetailMode } from "./panel-state";
 import { TransactionCorrection } from "./correction";
+import { TransactionDeletion } from "./deletion";
 import {
   type Category,
   type Transaction,
@@ -22,6 +23,7 @@ type DetailProps = Readonly<{
   locale: string;
   timeZone: string;
   onSaved: () => void;
+  onDeleted: () => void;
   onRefresh: () => void;
   onClose: () => void;
   editable: boolean;
@@ -92,19 +94,52 @@ const DetailFrame = ({
       <Button
         size="sm"
         variant="ghost"
-        onClick={props.onClose}
+        onClick={
+          props.mode._tag === "Deleting" && props.mode.status !== "idle"
+            ? props.onRefresh
+            : props.onClose
+        }
         aria-label="Cerrar detalle"
-        disabled={props.mode._tag === "Editing" && props.mode.status === "saving"}
+        disabled={props.mode._tag !== "Viewing" && props.mode.status === "saving"}
       >
         <HugeiconsIcon icon={Cancel01Icon} size={20} aria-hidden="true" />
       </Button>
     </header>
     <DetailIdentity {...props} />
     {children}
+    {props.editable && props.mode._tag !== "Deleting" ? (
+      <Button
+        variant="destructive"
+        disabled={
+          props.mode._tag === "Editing" &&
+          props.mode.status !== "idle" &&
+          props.mode.status !== "invalid"
+        }
+        onClick={() => props.onMode({ _tag: "Deleting", status: "idle" })}
+      >
+        Eliminar transacción
+      </Button>
+    ) : null}
   </section>
 );
 /** Keeps mutation and draft ownership above the responsive layout boundary. */
 export const TransactionDetail = (props: DetailProps): JSX.Element => {
+  if (props.mode._tag === "Deleting") {
+    return props.renderPanel(
+      <DetailFrame props={props}>
+        <TransactionDeletion
+          apiClient={props.apiClient}
+          transaction={props.transaction}
+          editable={props.editable}
+          status={props.mode.status}
+          onStatus={(status) => props.onMode({ _tag: "Deleting", status })}
+          onDeleted={props.onDeleted}
+          onCancel={() => props.onMode({ _tag: "Editing", status: "idle" })}
+          onRefresh={props.onRefresh}
+        />
+      </DetailFrame>
+    );
+  }
   if (props.mode._tag === "Editing") {
     return (
       <TransactionCorrection

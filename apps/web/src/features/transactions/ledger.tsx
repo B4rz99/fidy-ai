@@ -147,6 +147,7 @@ const TransactionRow = ({
   canEdit,
 }: Readonly<{ row: TransactionListRow }> & Omit<LedgerProps, "rows">): JSX.Element => (
   <TableRow
+    className="[clip-path:inset(0_round_var(--radius-md))]"
     data-state={
       Option.contains(selected, row.id) || selection.ids.includes(row.id) ? "selected" : "idle"
     }

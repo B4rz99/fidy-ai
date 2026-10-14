@@ -270,19 +270,13 @@
         "max-lines-per-function": "off"
       }
     },
-    // Dependency-guard batches advance in order and clean up before retry.
+    // Terminal reporting is the output channel of these tool entrypoints.
     {
       "files": [
-        "apps/server/scripts/check-dependency-guards.ts",
-        "apps/web/scripts/check-dependency-guards.ts"
+        "tools/depcruise/run.mjs",
+        "tools/depcruise/check-publication.mjs",
+        "tools/mutation/run.mjs"
       ],
-      "rules": {
-        "no-await-in-loop": "off"
-      }
-    },
-    // Terminal reporting is the output channel of these two tool runners.
-    {
-      "files": ["tools/depcruise/run.mjs", "tools/mutation/run.mjs"],
       "rules": {
         "no-console": "off"
       }

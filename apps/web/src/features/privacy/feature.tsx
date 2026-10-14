@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Checkbox } from "@/ui/components/checkbox";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { AuthorizationCopy } from "./authorization-copy";
+import { TransactionCopy } from "./transaction-copy";
 
 const consentKey = "processing-consent";
 
@@ -216,6 +217,7 @@ export const PrivacyFeature = (): JSX.Element => {
         </div>
       ) : null}
       <AuthorizationCopy client={client} />
+      <TransactionCopy client={client} />
     </PrivacyWorkspace>
   );
 };

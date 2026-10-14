@@ -1,6 +1,10 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
-import { ProcessingConsentWithdrawal } from "../../src/shell/processing-consent/contract";
+import {
+  PrivacyTransactionRequest,
+  ProcessingConsentWithdrawal,
+} from "../../src/shell/processing-consent/contract";
+import { readPrivacyTransactions } from "../transactions/operations";
 import { authenticateWebSession } from "../web-session/operations";
 import { protectCanonicalPressure } from "../canonical-admission/operations";
 import { boundedJsonBody } from "../http/operations";
@@ -29,6 +33,23 @@ type PrivacyRequest = Readonly<{
   browserOrigin: string;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 }>;
+const readTransactions = (
+  input: PrivacyRequest,
+  subject: AuthenticatedWebSession
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const policy = yield* Schema.decodeEffect(RequestBodyPolicy)({
+      maximumBytes: 1024,
+      deadlineMilliseconds: 2000,
+    });
+    const body = yield* boundedJsonBody({ request: input.request, policy, schema: Schema.Unknown });
+    const decoded = Option.flatMap(
+      body,
+      Schema.decodeUnknownOption(PrivacyTransactionRequest, { onExcessProperty: "error" })
+    );
+    if (Option.isNone(decoded)) return consentResponse(invalidStatus);
+    return yield* readPrivacyTransactions({ db: input.db, subject, request: decoded.value });
+  }).pipe(Effect.orElseSucceed(() => consentResponse(unavailableStatus)));
 const forwardWithdrawal = (
   input: PrivacyRequest,
   subject: AuthenticatedWebSession
@@ -87,7 +108,11 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
     }
     const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      authenticateWebSession({ ...input, current, freshness: "live" })
+      authenticateWebSession({
+        ...input,
+        current,
+        freshness: transport.value.operation === "transactions" ? "fresh" : "live",
+      })
     );
     if (Option.isNone(subject)) {
       return consentResponse(unauthenticatedStatus);
@@ -99,6 +124,7 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
       work: {
         status: readProcessingConsent({ ...input, subject: subject.value }),
         authorization: readProcessingAuthorization({ ...input, subject: subject.value }),
+        transactions: readTransactions(input, subject.value),
         withdraw: forwardWithdrawal(input, subject.value),
       }[transport.value.operation],
     });

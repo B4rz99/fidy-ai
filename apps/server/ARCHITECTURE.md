@@ -80,6 +80,15 @@ the upstream read. The route shares the edge's source-IP request bound.
 
 ### Operator request register
 
+The cookie-only privacy transport also serves explicit access to visible effective Transactions at
+`POST /web/privacy/transactions`. Transactions owns the financial selection and decoding; Consent's
+browser composition owns the shared exact Origin, body bound, request pressure and fresh-session
+admission. Every page independently binds that exact credential and freshness in the native D1
+snapshot with its metadata-only Audit. It requires no renewed processing Consent or commercial
+standing, offers no mutation or PAT/OAuth authority, and never treats a cursor as a credential.
+The scope excludes deleted records, raw Ingestion bytes, suppressed original members and other
+owners' data; a broader request cannot be closed as fulfilled by this projection.
+
 `scripts/titular-requests` is a local manual operator ledger, separate from canonical User state.
 It persists bounded UUID references and workflow observations in private SQLite outside Git, under
 the owning POSIX OS User. It cannot authenticate a Titular, query Core, send a response, withdraw

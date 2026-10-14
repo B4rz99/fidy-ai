@@ -48,6 +48,52 @@ const fixture = Effect.gen(function* () {
 });
 
 it.live(
+  "tracks claim annotation and the original completion-review date without resetting the case clock",
+  () =>
+    Effect.gen(function* () {
+      const setup = yield* fixture;
+      const original = yield* setup.submit(receive("Complaint"));
+      expect(original.targets.claimAnnotation).toEqual(Option.some("2026-10-13"));
+      const completion = yield* setup.submit({
+        action: "RequestCompletion",
+        caseId,
+        commandId: reference(101),
+        revision: 0,
+        evidenceRef: reference(102),
+      });
+      expect(completion.targets.completionReview).toEqual(Option.some("2026-12-14"));
+      const repeated = yield* setup
+        .submit({
+          action: "RequestCompletion",
+          caseId,
+          commandId: reference(103),
+          revision: 1,
+          evidenceRef: reference(104),
+        })
+        .pipe(Effect.flip);
+      expect(repeated.reason).toBe("InvalidTransition");
+      const complete = yield* setup.submit({
+        action: "RecordCompletion",
+        caseId,
+        commandId: reference(105),
+        revision: 1,
+        evidenceRef: reference(106),
+      });
+      const annotated = yield* setup.submit({
+        action: "RecordClaimAnnotation",
+        caseId,
+        commandId: reference(107),
+        revision: 2,
+        evidenceRef: reference(108),
+      });
+      expect(Option.isSome(annotated.case.claimAnnotation)).toBe(true);
+      expect(complete.case.receivedAtMs).toBe(original.case.receivedAtMs);
+      expect(annotated.targets.response).toEqual(original.targets.response);
+      expect(annotated.targets.completionReview).toEqual(completion.targets.completionReview);
+    }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
+);
+
+it.live(
   "records a non-User intake privately, preserves original receipt on replay, and refuses substituted replay",
   () =>
     Effect.gen(function* () {
@@ -134,6 +180,66 @@ it.live(
     }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
 );
 
+it.live(
+  "binds a recorded erasure withdrawal to its actual case receipt and refuses contradictory outcomes",
+  () =>
+    Effect.gen(function* () {
+      const setup = yield* fixture;
+      yield* setup.submit(receive("Erasure"));
+      yield* setup.submit({
+        action: "RecordVerification",
+        caseId,
+        commandId: reference(201),
+        revision: 0,
+        evidenceRef: reference(202),
+      });
+      yield* setup.submit({
+        action: "RecordWithdrawal",
+        caseId,
+        commandId: reference(203),
+        revision: 1,
+        evidenceRef: reference(204),
+      });
+      const addressed = {
+        action: "ReferErasure",
+        caseId,
+        commandId: reference(205),
+        revision: 2,
+        evidenceRef: reference(206),
+      } as const;
+      for (const withdrawal of [
+        { status: "Recorded", reference: reference(207) },
+        { status: "NotRequested" },
+      ] as const) {
+        expect(yield* setup.submit({ ...addressed, withdrawal }).pipe(Effect.flip)).toMatchObject({
+          reason: "InvalidTransition",
+        });
+      }
+      const command = {
+        ...addressed,
+        withdrawal: { status: "Recorded", reference: reference(204) },
+      } as const;
+      const result = yield* setup.submit(command);
+      expect(yield* setup.submit(command)).toEqual(result);
+      expect(Option.getOrThrow(result.case.erasureHandoff).withdrawal).toEqual(command.withdrawal);
+      expect(result.deletion).toBe("not-performed");
+      for (const action of ["RecordWithdrawal", "RecordVerification"] as const) {
+        expect(
+          yield* setup
+            .submit({
+              action,
+              caseId,
+              commandId: reference(action === "RecordWithdrawal" ? 208 : 209),
+              revision: 3,
+              evidenceRef: reference(210),
+            })
+            .pipe(Effect.flip)
+        ).toMatchObject({ reason: "InvalidTransition" });
+      }
+      expect((yield* setup.read).case).toEqual(result.case);
+    }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
+);
+
 it.live("keeps erasure a tracked handoff and never reports deletion", () =>
   Effect.gen(function* () {
     const setup = yield* fixture;
@@ -142,6 +248,7 @@ it.live("keeps erasure a tracked handoff and never reports deletion", () =>
       yield* setup
         .submit({
           action: "ReferErasure",
+          withdrawal: { status: "NotRequested" },
           caseId,
           commandId: reference(4),
           revision: 0,
@@ -158,12 +265,18 @@ it.live("keeps erasure a tracked handoff and never reports deletion", () =>
     });
     const referred = yield* setup.submit({
       action: "ReferErasure",
+      withdrawal: { status: "NotRequested" },
       caseId,
       commandId: reference(8),
       revision: 1,
       evidenceRef: reference(9),
     });
-    expect(Option.getOrNull(referred.case.erasureHandoffRef)).toBe(reference(9));
+    expect(Option.getOrNull(referred.case.erasureHandoff)).toEqual({
+      evidenceRef: reference(9),
+      authorityRef: reference(7),
+      scopeRef: receive("Erasure").scopeRef,
+      withdrawal: { status: "NotRequested" },
+    });
     expect(referred.deletion).toBe("not-performed");
   }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
 );

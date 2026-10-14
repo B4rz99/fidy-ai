@@ -13,6 +13,17 @@ export const RequestKind = Schema.Literals([
   "Erasure",
 ]);
 export const RequesterKind = Schema.Literals(["User", "NonUser", "Representative"]);
+export const HandoffWithdrawal = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("Recorded"), reference: EvidenceReference }),
+  Schema.Struct({ status: Schema.Literals(["NotRequested", "Pending", "Unavailable"]) }),
+]);
+/** An erasure handoff records the observed request authority and scope, never deletion or product authority. */
+export const ErasureHandoff = Schema.Struct({
+  evidenceRef: EvidenceReference,
+  authorityRef: EvidenceReference,
+  scopeRef: EvidenceReference,
+  withdrawal: HandoffWithdrawal,
+});
 const responsePrepared = { responseRef: EvidenceReference };
 const deliveryEvidence = { ...responsePrepared, evidenceRef: EvidenceReference };
 export const ResponseDelivery = Schema.Union([
@@ -53,6 +64,11 @@ export const CaseCommand = Schema.Union([
     evidenceRef: EvidenceReference,
   }),
   Schema.Struct({
+    action: Schema.Literal("RecordClaimAnnotation"),
+    ...transition,
+    evidenceRef: EvidenceReference,
+  }),
+  Schema.Struct({
     action: Schema.Literal("RecordOwnerResult"),
     ...transition,
     evidenceRef: EvidenceReference,
@@ -66,6 +82,7 @@ export const CaseCommand = Schema.Union([
     action: Schema.Literal("ReferErasure"),
     ...transition,
     evidenceRef: EvidenceReference,
+    withdrawal: HandoffWithdrawal,
   }),
   Schema.Struct({
     action: Schema.Literal("PrepareResponse"),
@@ -116,9 +133,12 @@ export const TitularCase = Schema.Struct({
     Schema.Struct({ evidenceRef: EvidenceReference, completedAtMs: Schema.Int })
   ),
   verificationRef: Schema.OptionFromNullOr(EvidenceReference),
+  claimAnnotation: Schema.OptionFromNullOr(
+    Schema.Struct({ evidenceRef: EvidenceReference, annotatedAtMs: Schema.Int })
+  ),
   ownerResultRef: Schema.OptionFromNullOr(EvidenceReference),
   withdrawalRef: Schema.OptionFromNullOr(EvidenceReference),
-  erasureHandoffRef: Schema.OptionFromNullOr(EvidenceReference),
+  erasureHandoff: Schema.OptionFromNullOr(ErasureHandoff),
   delivery: ResponseDelivery,
   extension: Schema.OptionFromNullOr(
     Schema.Struct({
@@ -144,6 +164,8 @@ export const CaseReceipt = Schema.Struct({
     maximumExtension: Schema.OptionFromNullOr(LocalDate),
     completion: Schema.OptionFromNullOr(LocalDate),
     transfer: Schema.OptionFromNullOr(LocalDate),
+    claimAnnotation: Schema.OptionFromNullOr(LocalDate),
+    completionReview: Schema.OptionFromNullOr(LocalDate),
     calendarReviewRequired: Schema.Boolean,
   }),
 });

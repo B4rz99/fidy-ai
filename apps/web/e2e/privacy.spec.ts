@@ -1,11 +1,38 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { signInPrivacyThroughCore } from "./real-core-fixture";
-import type { Route } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
+import { exerciseTitularCase } from "./titular-case-fixture";
 
 const { expect, test } = playwright;
 const unauthenticatedStatus = 401;
+
+const verifyTransactionAccess = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Consultar mis transacciones", exact: true }).click()
+      );
+      const transactionCopy = page.getByRole("region", { name: "Copia de transacciones" });
+      yield* Effect.tryPromise(() =>
+        expect(transactionCopy).toContainText("Solicitud de acceso de prueba")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(transactionCopy).toContainText("24000000-0000-4000-8000-000000000383")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(transactionCopy).toContainText("Fin de las transacciones disponibles.")
+      );
+      const referenceText = yield* Effect.tryPromise(() =>
+        transactionCopy.getByText("Referencia de consulta:", { exact: false }).innerText()
+      );
+      const ownerResultRef = yield* Schema.decodeEffect(Schema.String.check(Schema.isUUID()))(
+        referenceText.replace("Referencia de consulta: ", "")
+      );
+      yield* Effect.tryPromise(() => exerciseTitularCase(ownerResultRef));
+    })
+  );
 
 test("an expired-trial User withdraws through real Core and can recover the same receipt after ordinary access stops", ({
   page,
@@ -51,6 +78,7 @@ test("an expired-trial User withdraws through real Core and can recover the same
         )
       );
       // Cookie remains usable for privacy, but cannot authorize ordinary canonical work.
+      yield* Effect.tryPromise(() => verifyTransactionAccess(page));
       const response = yield* Effect.tryPromise(() =>
         page.request.get(`${apiOrigin}/transactions`, {
           headers: { origin: "https://127.0.0.1:4173" },

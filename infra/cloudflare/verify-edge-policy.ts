@@ -38,7 +38,7 @@ import { edgeSecurityPolicy } from "./edge-security";
 // #1291 wires existing Proactivity configuration with disabled defaults; routing and authority are unchanged.
 // Includes #1273 cookie-only Processing Consent controls, declaration-derived edge path limits,
 // and no new public database binding, external provider authority or production bank access.
-const expectedEdgePolicyDigest = "1e1ea39dc32f1abeb8eef6e29aace3e097d182bb16d052c660204a27a23c6a52";
+const expectedEdgePolicyDigest = "a582983d08c8af81ec3a6ead0e514709433b22c9f7273771e4aa6a49c4560e08";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

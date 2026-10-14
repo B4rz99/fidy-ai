@@ -478,6 +478,7 @@ describe("Production topology contract", () => {
       "/web/consent",
       "/web/consent/authorization",
       "/web/consent/withdraw",
+      "/web/privacy/transactions",
       "/web/connections/review",
       "/web/connections/begin",
       "/web/subscription/payment-enrollments/prepare",

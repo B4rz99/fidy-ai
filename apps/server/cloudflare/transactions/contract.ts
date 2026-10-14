@@ -12,10 +12,20 @@ import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type Category, type CategoryId } from "../../src/core/categories/contract";
 
 import type { Money } from "../../src/core/_shared/money";
+import type { WebSessionSubject } from "../../src/shell/web-session/contract";
+import type { PrivacyTransactionRequest } from "../../src/shell/processing-consent/contract";
+
 import type {
   NotificationEmailSourceAttestation,
   StatementLineSourceAttestation,
 } from "../../src/core/source-attestation/contract";
+
+/** An explicit browser privacy request, independent of processing Consent and commercial access. */
+export type PrivacyTransactionsRead = Readonly<{
+  db: D1Database;
+  subject: WebSessionSubject;
+  request: typeof PrivacyTransactionRequest.Type;
+}>;
 
 /** Unreadable or malformed aggregate facts never become empty history or partial report totals. */
 export class TransactionAggregatesUnavailable extends Data.TaggedError(

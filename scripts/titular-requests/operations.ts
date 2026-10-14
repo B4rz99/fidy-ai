@@ -42,9 +42,10 @@ const receive = (
       completion: Option.none(),
       completed: Option.none(),
       verificationRef: Option.none(),
+      claimAnnotation: Option.none(),
       ownerResultRef: Option.none(),
       withdrawalRef: Option.none(),
-      erasureHandoffRef: Option.none(),
+      erasureHandoff: Option.none(),
       delivery: { status: "NotPrepared" },
       extension: Option.none(),
     })
@@ -97,7 +98,7 @@ const prepareResponse = (
     Correction: current.ownerResultRef,
     Complaint: current.ownerResultRef,
     Withdrawal: current.withdrawalRef,
-    Erasure: current.erasureHandoffRef,
+    Erasure: Option.map(current.erasureHandoff, (handoff) => handoff.evidenceRef),
   };
   if (Option.isNone(current.verificationRef) || Option.isNone(required[current.kind])) {
     return refuse();
@@ -133,6 +134,40 @@ const recordDelivery = (
   });
 };
 
+const referErasure = ({
+  current,
+  command,
+}: Readonly<{
+  current: TitularCase;
+  command: Extract<CaseCommand, { action: "ReferErasure" }>;
+}>): Effect.Effect<TitularCase, RegisterFailure> => {
+  if (
+    current.kind !== "Erasure" ||
+    Option.isNone(current.verificationRef) ||
+    Option.isSome(current.erasureHandoff)
+  ) {
+    return refuse();
+  }
+  if (
+    command.withdrawal.status === "Recorded" &&
+    !Option.contains(command.withdrawal.reference)(current.withdrawalRef)
+  ) {
+    return refuse();
+  }
+  if (command.withdrawal.status !== "Recorded" && Option.isSome(current.withdrawalRef)) {
+    return refuse();
+  }
+  return Effect.succeed({
+    ...current,
+    erasureHandoff: Option.some({
+      evidenceRef: command.evidenceRef,
+      authorityRef: current.verificationRef.value,
+      scopeRef: current.scopeRef,
+      withdrawal: command.withdrawal,
+    }),
+  });
+};
+
 const recordResolution = ({
   current,
   command,
@@ -142,17 +177,45 @@ const recordResolution = ({
     case "RecordOwnerResult":
       return Effect.succeed({ ...current, ownerResultRef: Option.some(command.evidenceRef) });
     case "RecordWithdrawal":
-      return ["Withdrawal", "Erasure"].includes(current.kind)
+      return ["Withdrawal", "Erasure"].includes(current.kind) &&
+        Option.isNone(current.erasureHandoff)
         ? Effect.succeed({ ...current, withdrawalRef: Option.some(command.evidenceRef) })
         : refuse();
     case "ReferErasure":
-      return current.kind === "Erasure"
-        ? Effect.succeed({ ...current, erasureHandoffRef: Option.some(command.evidenceRef) })
-        : refuse();
+      return referErasure({ current, command });
     case "PrepareResponse":
       return prepareResponse(current, command.evidenceRef);
   }
 };
+
+const requestCompletion = ({
+  current,
+  command,
+  atMs,
+}: CaseTransition<Extract<CaseCommand, { action: "RequestCompletion" }>>): Effect.Effect<
+  TitularCase,
+  RegisterFailure
+> =>
+  Option.isSome(current.completion) || Option.isSome(current.completed)
+    ? refuse()
+    : Effect.succeed({
+        ...current,
+        completion: Option.some({ evidenceRef: command.evidenceRef, requestedAtMs: atMs }),
+      });
+const completeRequest = ({
+  current,
+  command,
+  atMs,
+}: CaseTransition<Extract<CaseCommand, { action: "RecordCompletion" }>>): Effect.Effect<
+  TitularCase,
+  RegisterFailure
+> =>
+  Option.isNone(current.completion) || Option.isSome(current.completed)
+    ? refuse()
+    : Effect.succeed({
+        ...current,
+        completed: Option.some({ evidenceRef: command.evidenceRef, completedAtMs: atMs }),
+      });
 
 const recordAdministrative = ({
   current,
@@ -163,17 +226,13 @@ const recordAdministrative = ({
     case "Assign":
       return Effect.succeed({ ...current, ownerRef: command.ownerRef });
     case "RequestCompletion":
-      return Effect.succeed({
-        ...current,
-        completion: Option.some({ evidenceRef: command.evidenceRef, requestedAtMs: atMs }),
-      });
+      return requestCompletion({ current, command, atMs });
     case "RecordCompletion":
-      return Effect.succeed({
-        ...current,
-        completed: Option.some({ evidenceRef: command.evidenceRef, completedAtMs: atMs }),
-      });
+      return completeRequest({ current, command, atMs });
     case "RecordVerification":
-      return Effect.succeed({ ...current, verificationRef: Option.some(command.evidenceRef) });
+      return Option.isSome(current.erasureHandoff)
+        ? refuse()
+        : Effect.succeed({ ...current, verificationRef: Option.some(command.evidenceRef) });
   }
 };
 const recordTransition = (input: CaseTransition): Effect.Effect<TitularCase, RegisterFailure> =>
@@ -183,6 +242,17 @@ const recordTransition = (input: CaseTransition): Effect.Effect<TitularCase, Reg
       RequestCompletion: (command) => recordAdministrative({ ...input, command }),
       RecordCompletion: (command) => recordAdministrative({ ...input, command }),
       RecordVerification: (command) => recordAdministrative({ ...input, command }),
+      RecordClaimAnnotation: (command) =>
+        Option.isNone(caseDeadlines(input.current).claimAnnotation) ||
+        Option.isSome(input.current.claimAnnotation)
+          ? refuse()
+          : Effect.succeed({
+              ...input.current,
+              claimAnnotation: Option.some({
+                evidenceRef: command.evidenceRef,
+                annotatedAtMs: input.atMs,
+              }),
+            }),
       RecordOwnerResult: (command) => recordResolution({ ...input, command }),
       RecordWithdrawal: (command) => recordResolution({ ...input, command }),
       ReferErasure: (command) => recordResolution({ ...input, command }),

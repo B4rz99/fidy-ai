@@ -97,6 +97,12 @@ await seedIdentity({
   consentId: "24000000-0000-4000-8000-000000000382",
   createdAtMs: now - expiredTrialAgeMs,
 });
+await db
+  .prepare(
+    "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,notes,occurred_at,created_at) VALUES('24000000-0000-4000-8000-000000000383',?,'12000','COP','outflow','10000000-0000-4000-8000-000000000001','Solicitud de acceso de prueba','2026-10-01T12:00:00.000Z','2026-10-01T12:00:00.000Z')"
+  )
+  .bind(privacyUserId)
+  .run();
 await seedIdentity({
   userId: dashboardUserId,
   bsuid: "CO.Dashboard",

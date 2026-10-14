@@ -6,6 +6,7 @@ import { AuditLogEntry } from "~/core/audit/contract";
 /** The closed canonical vocabulary shared with credential accountability. */
 export type AuditCredentialOperation =
   | "consent.withdraw"
+  | "privacy.transactions"
   | "connections.listInstitutions"
   | "connections.listConnections"
   | "connections.getConnection"
@@ -84,7 +85,7 @@ export type AuditAuthority =
 
 type AcceptedSessionOperation = Extract<
   AuditCredentialOperation,
-  `${"consent" | "connections" | "budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
+  `${"consent" | "privacy" | "connections" | "budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
 >;
 type CategoryOperation = Extract<AuditCredentialOperation, `categories.${string}`>;
 type LegacySessionOperation = Exclude<

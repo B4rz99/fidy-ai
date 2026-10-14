@@ -74,8 +74,12 @@ evidence storage and retention, applicable calendar/classification and deadlines
 in-flight cutoff, tracked erasure handoff and operator dry run. A displayed email address
 does not establish those procedures operate. No deployment, live Titular request, customer
 deletion or external notification was performed.
-Broad personal-data access/correction for a requested scope still needs its executable privacy-purpose
-owner authority; the narrow authorization-copy demonstration is not a full FinancialRecord export.
+Explicit access to visible effective Transactions now has executable privacy-purpose owner authority
+at `POST /web/privacy/transactions`, with fresh same-User proof and atomic Audit after withdrawal.
+The built-browser journey obtains that actual owner result and visibly delivers it, then exercises
+the native private case-register CLI through failed/uncertain delivery, confirmation and replay.
+Other owners' data, raw retained evidence, deleted/suppressed originals and correction must retain
+their actual requested scope; this bounded access projection is not a full personal-data export.
 
 Local verification passed: 41 Consent/Connections tests, 24 Consent/reminder/weekly tests,
 38 infrastructure/edge-policy tests and two built-browser privacy tests. These sets overlap;

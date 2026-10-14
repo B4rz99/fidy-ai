@@ -148,6 +148,14 @@ from access to the exact saved authorization: an explicit “Consultar prueba”
 same-User historical disclosure, record reference and acceptance instant through the cookie-only
 privacy transport, including after withdrawal. The record is inert text and grants no new Consent.
 The browser never keeps this evidence beyond its authentication registry lifetime. Copy distinguishes withdrawal
+from explicit access to visible effective Transaction history. The “Consultar mis transacciones” action
+uses the server-declared privacy transport after fresh browser authentication, independent of Consent
+or commercial standing. One mounted, bounded page renders exact Money and inert Transaction text;
+continuation rechecks proof rather than granting access through its cursor. A failed page is unavailable,
+never complete or empty history. The disposable built-browser fixture links the actual scoped Audit
+reference and visible result to the native case-register CLI; it does not import register implementation
+into the web application or establish live non-User or representative entitlement.
+Copy distinguishes withdrawal
 from erasure, Subscription cancellation and individual access revocation, and discloses that an
 already-admitted request may finish. See [scope and remaining review](../../docs/operations/processing-withdrawal-1273.md).
 

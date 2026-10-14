@@ -187,4 +187,5 @@ export { Budget, BudgetStatusReport } from "~/core/budgets/contract";
 export type {
   ProcessingConsentStatus,
   ProcessingAuthorization,
+  PrivacyTransactionPage,
 } from "~/shell/processing-consent/contract";

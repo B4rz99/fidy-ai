@@ -1,5 +1,5 @@
 import { DateTime, Option } from "effect";
-import type { RequestKind } from "./contract";
+import type { RequestKind, TitularCase } from "./contract";
 
 const monthDayOffset = 5;
 const consultationDays = 10;
@@ -7,6 +7,18 @@ const complaintDays = 15;
 const consultationExtensionDays = 5;
 const complaintExtensionDays = 8;
 const completionDays = 5;
+const completionMonths = 2;
+const bogotaZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
+
+/** Original-request calendar-month review date, never automatic abandonment or an extension of the response target. */
+export const completionReviewDate = (value: TitularCase): Option.Option<string> =>
+  Option.flatMap(value.completion, (completion) =>
+    Option.map(DateTime.make(completion.requestedAtMs), (instant) =>
+      DateTime.formatIsoDate(
+        DateTime.add(DateTime.setZone(instant, bogotaZone), { months: completionMonths })
+      )
+    )
+  );
 
 // Ley 51/1983 Article 1, including moved observances and Easter-relative days.
 // This finite calendar deliberately refuses unsupported years; it never silently ignores holidays.
@@ -93,6 +105,7 @@ export const caseDeadlines = ({
   maximumExtension: Option.Option<string>;
   completion: Option.Option<string>;
   transfer: Option.Option<string>;
+  claimAnnotation: Option.Option<string>;
 }> => {
   const consultation = ["Access", "AuthorizationProof", "UseExplanation"].includes(kind);
   const response = workingDeadline(
@@ -111,5 +124,6 @@ export const caseDeadlines = ({
     ),
     completion: consultation ? Option.none() : workingDeadline(receivedDate, completionDays, false),
     transfer: workingDeadline(receivedDate, 2, false),
+    claimAnnotation: consultation ? Option.none() : workingDeadline(receivedDate, 2, false),
   };
 };

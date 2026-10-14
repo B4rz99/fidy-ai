@@ -1,6 +1,25 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { ConsentRecordId, DisclosureSnapshot } from "~/core/consent/contract";
+import { Transaction } from "~/core/transactions/contract";
+
+/** A pagination position conveys no authority; every page authenticates the same browser afresh. */
+export const PrivacyTransactionCursor = Schema.Struct({
+  occurredAt: Transaction.fields.occurredAt,
+  createdAt: Transaction.fields.createdAt,
+  id: Transaction.fields.id,
+});
+export const PrivacyTransactionRequest = Schema.Struct({
+  cursor: Schema.NullOr(PrivacyTransactionCursor),
+});
+/** One bounded owner result for the explicit Transactions scope, with its metadata-only Audit reference. */
+export const PrivacyTransactionPage = Schema.Struct({
+  reference: Schema.String.check(Schema.isUUID()),
+  scope: Schema.Literal("transactions"),
+  data: Schema.Array(Transaction).check(Schema.isMaxLength(100)),
+  next: Schema.NullOr(PrivacyTransactionCursor),
+});
+export type PrivacyTransactionPage = typeof PrivacyTransactionPage.Type;
 
 const maximumPublicEpochMs = 253402300799999;
 const publicReceiptTime = Schema.Int.check(
@@ -41,6 +60,10 @@ export const ProcessingConsentGroup = HttpApiGroup.make("processingConsent").add
   HttpApiEndpoint.get("status", "/web/consent", { success: ProcessingConsentStatus }),
   HttpApiEndpoint.get("authorization", "/web/consent/authorization", {
     success: ProcessingAuthorization,
+  }),
+  HttpApiEndpoint.post("transactions", "/web/privacy/transactions", {
+    payload: PrivacyTransactionRequest,
+    success: PrivacyTransactionPage,
   }),
   HttpApiEndpoint.post("withdraw", "/web/consent/withdraw", {
     payload: ProcessingConsentWithdrawal,

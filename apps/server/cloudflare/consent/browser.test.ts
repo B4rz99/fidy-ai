@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, DateTime, Effect, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
@@ -13,6 +13,7 @@ import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import publicWorker from "../public-worker";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import {
+  PrivacyTransactionPage,
   ProcessingAuthorization,
   ProcessingConsentStatus,
 } from "../../src/shell/processing-consent/contract";
@@ -261,6 +262,185 @@ const consentSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     );
     return db;
   });
+
+const privacyHistorySetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const db = yield* consentSetup();
+    yield* Effect.tryPromise(() =>
+      db.batch(
+        users.map((userId, index) =>
+          db
+            .prepare(
+              "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,notes,occurred_at,created_at) VALUES(?,?,'12000','COP','outflow','10000000-0000-4000-8000-000000000001',?,'2026-10-01T12:00:00.000Z','2026-10-01T12:00:00.000Z')"
+            )
+            .bind(
+              `40000000-0000-4000-8000-00000000000${index}`,
+              userId,
+              `Synthetic owned record ${index}`
+            )
+        )
+      )
+    );
+    return db;
+  });
+
+it("bounds privacy history pages and keeps every continuation bound to the authenticated User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* privacyHistorySetup();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value+1 FROM n WHERE value<100)
+      INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at,created_at)
+      SELECT printf('41000000-0000-4000-8000-%012d',value),?,'1000','COP','outflow','10000000-0000-4000-8000-000000000001',
+      '2026-10-02T12:00:00.000Z','2026-10-02T12:00:00.000Z' FROM n`)
+          .bind(users[0])
+          .run()
+      );
+      const first = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
+      );
+      const firstPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
+        yield* Effect.tryPromise(() => first.json())
+      );
+      expect(firstPage.data).toHaveLength(100);
+      expect(firstPage.next).not.toBeNull();
+      const encoded = yield* Schema.encodeEffect(PrivacyTransactionPage)(firstPage);
+      const second = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: encoded.next }))
+      );
+      const secondPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
+        yield* Effect.tryPromise(() => second.json())
+      );
+      expect(secondPage.data).toHaveLength(1);
+      expect(secondPage.next).toBeNull();
+      expect(new Set([...firstPage.data, ...secondPage.data].map((record) => record.id)).size).toBe(
+        101
+      );
+      const other = yield* Effect.tryPromise(() =>
+        send(db, request(1, "/web/privacy/transactions", "POST", { cursor: encoded.next }))
+      );
+      const otherPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
+        yield* Effect.tryPromise(() => other.json())
+      );
+      expect(otherPage.data.every((record) => record.id.endsWith("001"))).toBe(true);
+      const wrongOrigin = request(0, "/web/privacy/transactions", "POST", { cursor: null });
+      wrongOrigin.headers.set("origin", "https://hostile.example");
+      expect((yield* Effect.tryPromise(() => send(db, wrongOrigin))).status).toBe(403);
+      const bearerOnly = request(0, "/web/privacy/transactions", "POST", { cursor: null });
+      bearerOnly.headers.delete("cookie");
+      bearerOnly.headers.set("authorization", "Bearer synthetic-pat");
+      expect((yield* Effect.tryPromise(() => send(db, bearerOnly))).status).toBe(401);
+    })
+  ));
+
+it("delivers actual same-User Transactions after withdrawal with scoped Audit and no renewed processing Consent", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* privacyHistorySetup();
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+        )).status
+      ).toBe(200);
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const page = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      expect(page.scope).toBe("transactions");
+      expect(page.data.map((record) => Option.getOrThrow(record.notes))).toEqual([
+        "Synthetic owned record 0",
+      ]);
+      expect(page.next).toBeNull();
+      const audit = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT user_id,operation,outcome FROM pat_audit WHERE id=?")
+          .bind(page.reference)
+          .first()
+      );
+      expect(audit).toEqual({
+        user_id: users[0],
+        operation: "privacy.transactions",
+        outcome: "accepted",
+      });
+      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Revoked");
+      const foreignSelector = yield* Effect.tryPromise(() =>
+        send(
+          db,
+          request(0, "/web/privacy/transactions", "POST", { cursor: null, userId: users[1] })
+        )
+      );
+      expect(foreignSelector.status).toBe(400);
+      const other = yield* Effect.tryPromise(() =>
+        send(db, request(1, "/web/privacy/transactions", "POST", { cursor: null }))
+      );
+      const otherPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
+        yield* Effect.tryPromise(() => other.json())
+      );
+      expect(otherPage.data.map((record) => Option.getOrThrow(record.notes))).toEqual([
+        "Synthetic owned record 1",
+      ]);
+    })
+  ));
+
+it("refuses stale or raced privacy proof and rolls back failed accountability without disclosing history", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* privacyHistorySetup();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001 WHERE user_id=?"
+          )
+          .bind(users[0])
+          .run()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
+        )).status
+      ).toBe(401);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE web_sessions SET created_at_ms=created_at_ms+600001,fresh_until_ms=fresh_until_ms+600001,hard_expires_at_ms=hard_expires_at_ms+600001 WHERE user_id=?"
+          )
+          .bind(users[0])
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        db.exec(
+          "CREATE TRIGGER fail_privacy_audit BEFORE INSERT ON pat_audit WHEN NEW.operation='privacy.transactions' BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END;"
+        )
+      );
+      const failed = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
+      );
+      expect(failed.status).toBe(503);
+      expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("Synthetic owned record");
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS n FROM pat_audit WHERE operation='privacy.transactions'")
+            .first()
+        ))?.n
+      ).toBe(0);
+      yield* Effect.tryPromise(() =>
+        db.exec(
+          "DROP TRIGGER fail_privacy_audit; CREATE TRIGGER expire_privacy_session AFTER INSERT ON canonical_request_leases BEGIN UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001; END;"
+        )
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/privacy/transactions", "POST", { cursor: null }))
+        )).status
+      ).toBe(401);
+    })
+  ));
 
 it("withdraws only the authenticated User, keeps one stable receipt on concurrent replay and refuses later protected work", () =>
   Effect.runPromise(

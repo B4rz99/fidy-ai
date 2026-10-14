@@ -68,10 +68,14 @@ as review evidence, not competing declarations. The project-reference build orde
 CLI and web; the root gate checks generated artifact freshness, not compatibility with older revisions.
 See [Server contract artifacts](docs/server-contract-artifacts.md).
 
-Four transports sit outside the stable-User canonical operation surface: proof-bearing credential
+Dedicated transports sit outside the stable-User canonical operation surface: proof-bearing credential
 bootstrap before a stable User exists, bounded User-authenticated statement-byte staging before a
 canonical mutation publishes the bytes, the browser-only hosted Turn conversation channel, and
-fresh-session reusable payment-source enrollment.
+fresh-session reusable payment-source enrollment, and authenticated privacy-purpose controls.
+Privacy requests remain independent of withdrawn processing Consent and commercial access.
+Their exact browser declarations, origin checks and same-User credential proof do not confer
+canonical or agent authority. Transaction access requires fresh proof rechecked atomically with
+its bounded owner result and metadata-only Audit; the browser is the verified delivery destination.
 The bootstrap establishes authority only after proof exchange; staging returns no readable content,
 grants no authority, and expires if unpublished. The bootstrap's direct-client contract is checked
 separately; staging's limits and publication boundary are specified in

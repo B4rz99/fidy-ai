@@ -20,6 +20,12 @@ import {
 import { Currency } from "../../../src/core/_shared/money";
 import { effectiveHistoryPage, effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Effect, Option, Schema } from "effect";
+import { PrivacyTransactionPage } from "../../../src/shell/processing-consent/contract";
+import {
+  freshSessionConditions,
+  webSessionCredentialAuthority,
+} from "../../../src/shell/web-session/operations";
+import type { PrivacyTransactionsRead } from "../contract";
 import type { AuthorizedPAT } from "../../tokens/contract";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import {
@@ -483,6 +489,80 @@ const browserHistoryStatements = (
     }),
   ];
 };
+
+const presentPrivacyPage = (rows: D1Result, reference: string): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    if (rows.results.length > boundarySize) return unavailable();
+    const decoded = Option.all(rows.results.map(decodeTransactionRow));
+    if (Option.isNone(decoded)) return unavailable();
+    const data = decoded.value.slice(0, pageSize);
+    const last = data.at(-1);
+    const page = yield* Schema.encodeEffect(Schema.toCodecJson(PrivacyTransactionPage))({
+      reference,
+      scope: "transactions",
+      data,
+      next:
+        decoded.value.length > pageSize && last !== undefined
+          ? { occurredAt: last.occurredAt, createdAt: last.createdAt, id: last.id }
+          : null,
+    });
+    return Response.json(page, { headers: noStore });
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+/** Deliver one explicit privacy-purpose page; native credential, freshness and Audit share its snapshot. */
+export const readPrivacyTransactions = ({
+  db,
+  subject,
+  request,
+}: PrivacyTransactionsRead): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const budgetCurrent = DateTime.toEpochMillis(yield* DateTime.now);
+    if (
+      yield* Effect.tryPromise(() =>
+        dailyAuditExhausted({ db, userId: subject.userId, current: budgetCurrent })
+      )
+    ) {
+      return rateLimited();
+    }
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
+    const base = webSessionCredentialAuthority({ subject, current });
+    const fresh = freshSessionConditions({
+      session: { id: subject.id, user_id: subject.userId },
+      current,
+    });
+    const authority = {
+      ...base,
+      predicate: `${base.predicate} AND ${fresh.sql}`,
+      bindings: [...base.bindings, ...fresh.params],
+    };
+    const query = yield* Schema.decodeEffect(Query)(
+      request.cursor === null
+        ? {}
+        : {
+            cursor: `${DateTime.formatIso(request.cursor.occurredAt)}|${DateTime.formatIso(request.cursor.createdAt)}|${request.cursor.id}`,
+          }
+    );
+    const reference = uuid();
+    const [rows, audit] = yield* Effect.uninterruptible(
+      Effect.tryPromise(() =>
+        db.batch([
+          listStatement({ db, userId: subject.userId, query, authority }),
+          prepareAuthorizedAuditCall({
+            db,
+            authority,
+            id: reference,
+            current,
+            operation: "privacy.transactions",
+            outcome: "accepted",
+            afterOwnerWrite: false,
+          }),
+        ])
+      )
+    );
+    if (audit?.meta.changes !== 1) return noSession();
+    if (rows === undefined) return unavailable();
+    return yield* presentPrivacyPage(rows, reference);
+  }).pipe(Effect.orElseSucceed(unavailable));
 
 type PATSelection = Selection & Readonly<{ subject: AuthorizedPAT }>;
 

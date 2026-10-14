@@ -10,6 +10,7 @@ import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { Effect, Option } from "effect";
 import type {
   BudgetContributionCursor,
+  PrivacyTransactionsRead,
   RecurringFactPage,
   RecurringFactSnapshot,
   RecurringFactsUnavailable,
@@ -29,6 +30,7 @@ import type {
 import {
   browseTransactions as ownerBrowseTransactions,
   findTransaction as ownerFindCapturedTransaction,
+  readPrivacyTransactions as ownerReadPrivacyTransactions,
 } from "./internal/transaction-history";
 import {
   correctionInput as ownerCorrectionInput,
@@ -104,6 +106,10 @@ export const prepareFactRevisionProjection = (
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
 export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>
   ownerBrowseTransactions(...args);
+
+/** Return bounded same-User financial history for an explicit Titular access request; every page requires fresh browser proof and atomic Audit, never renewed processing Consent. */
+export const readPrivacyTransactions = (input: PrivacyTransactionsRead): Effect.Effect<Response> =>
+  ownerReadPrivacyTransactions(input);
 
 /** Decode a bounded correction without treating omitted facts as explicit decisions. */
 export const correctionInput: typeof ownerCorrectionInput = (...args) =>

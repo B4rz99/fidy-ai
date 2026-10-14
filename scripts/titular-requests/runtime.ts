@@ -8,7 +8,7 @@ import {
   TitularCase,
 } from "./contract";
 import { applyCaseCommand } from "./operations";
-import { caseDeadlines } from "./calendar";
+import { caseDeadlines, completionReviewDate } from "./calendar";
 
 const privateDirectoryMode = 0o700;
 const privateFileMode = 0o600;
@@ -216,7 +216,11 @@ const report = (value: TitularCase): CaseReceipt => {
       maximumExtension: targets.maximumExtension,
       completion: targets.completion,
       transfer: targets.transfer,
-      calendarReviewRequired: Option.isNone(targets.response),
+      claimAnnotation: targets.claimAnnotation,
+      completionReview: completionReviewDate(value),
+      calendarReviewRequired: [targets.response, targets.maximumExtension, targets.transfer].some(
+        Option.isNone
+      ),
     },
   };
 };

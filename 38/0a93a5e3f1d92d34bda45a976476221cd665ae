@@ -1,0 +1,35 @@
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  s_8a4c08d01c58a2::t_ea437887b9f809 51-55
+apps/server/cloudflare/oauth-agents/oauth-discovery.test.ts
+  s_8a4c08d01c58a2::t_e9fac062755888 307-309
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_8a4c08d01c58a2::t_cf164ebf3189f1 325-327
+apps/server/cloudflare/oauth-agents/oauth-refresh.test.ts
+  s_8a4c08d01c58a2::t_1b42341c024d6d 656-658
+apps/web/src/features/budgets/controller.ts
+  s_8a4c08d01c58a2::t_e16a26df69134a 71
+apps/web/src/features/budgets/dev-fixtures.ts
+  s_8a4c08d01c58a2::t_dad64a2367aa05 130-132
+apps/web/src/features/budgets/presentation.ts
+  s_8a4c08d01c58a2::t_920e97c9c0432d 100-102,105-107,110-112
+apps/web/src/features/budgets/workspace.tsx
+  s_8a4c08d01c58a2::t_dfa150f05e36f5 470-474
+apps/web/src/ui/components/workspace-responsive.tsx
+  s_8a4c08d01c58a2::t_769912bf85b1ca 15,19-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "380a93a5e3f1d92d34bda45a976476221cd665ae",
+  "prompts": {},
+  "sessions": {
+    "s_8a4c08d01c58a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13242-05f1-7a43-8ea7-1fe876e3b7bb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

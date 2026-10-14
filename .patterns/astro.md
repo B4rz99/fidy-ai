@@ -1,7 +1,7 @@
 # Astro static documents and React islands
 
 Use Astro for public documents that should be complete before JavaScript runs.
-Fidy pins `astro@7.3.6`, `@astrojs/react@7.0.1` and `@astrojs/sitemap@3.7.4` in
+Fidy pins `astro@7.3.7`, `@astrojs/react@7.0.1` and `@astrojs/sitemap@3.7.4` in
 [the site manifest](../apps/site/package.json). The integrity-locked installed
 packages are the selected implementation source.
 

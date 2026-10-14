@@ -64,8 +64,17 @@ implementation, and approved tool/integration compositions. A test or harness fi
 additional access. The pure Shared Kernel is limited to `core/_shared/money.ts`, `context.ts`, and
 `time.ts`; shell helpers have named owners rather than a generic shared bucket.
 
-Dependency and publication checks enforce the resolved graph; browser bundle checks independently
-bound the client graph. Semantic leakage through an otherwise legal interface still requires review.
+`bun run lint:deps` checks resolved import relationships. General ownership, publication targets,
+layer direction and runtime roles are enforced once in `tools/depcruise/boundaries.mjs`; the server
+cruiser configuration holds cycles, platform dependencies and narrow application seams. These
+policies apply to future owners without adding owner-specific rule families.
+
+`bun run check:publication` separately checks exported source bindings for private value/type
+forwarding. Both commands share complete graph resolution and reject empty, incomplete or unresolved
+graphs. `bun run test:architecture` covers policy combinations in memory and checks actual resolution
+and command wiring in isolated temporary projects. Production rules do not recognize test filenames.
+Browser bundle checks independently bound the client graph.
+Semantic leakage through an otherwise legal interface still requires review.
 See root architecture's public-surface review and
 [ADR 0031](../../docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
 

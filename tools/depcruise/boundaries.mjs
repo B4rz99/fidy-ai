@@ -246,7 +246,7 @@ const privateReachability = (modules, owner, packageRoot) => {
  * @param {string} packageRoot - Graph cwd.
  * @returns {PublicationViolation[]} All publication violations, including type-only edges.
  */
-export const publicationViolations = (report, packageRoot) => {
+export const boundaryViolations = (report, packageRoot) => {
   const modules = new Map(
     report.modules.map((module) => [serverPath(module.source, packageRoot), module])
   );

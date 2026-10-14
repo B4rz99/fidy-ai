@@ -172,7 +172,7 @@ it("guards the route factory without leaving other named functions unannotated",
       );
     }));
 
-it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules", () =>
+it("keeps refactored lint rules enabled", () =>
   Bun.file(new URL("../.oxlintrc.json", import.meta.url))
     .text()
     .then((contents) => Schema.decodeUnknownSync(OxlintExceptions)(Bun.JSONC.parse(contents)))
@@ -180,12 +180,7 @@ it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules"
       const sequential = overrides.flatMap(({ files, rules }) =>
         rules["no-await-in-loop"] === "off" ? files : []
       );
-      expect(sequential.toSorted()).toEqual(
-        [
-          "apps/server/scripts/check-dependency-guards.ts",
-          "apps/web/scripts/check-dependency-guards.ts",
-        ].toSorted()
-      );
+      expect(sequential).toEqual([]);
       expect(overrides.some(({ rules }) => "effect-guards/no-nullable-type" in rules)).toBe(false);
       expect(
         overrides.find(({ files }) =>

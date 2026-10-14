@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { publicationViolations } from "./publication.mjs";
+import { boundaryViolations } from "./boundaries.mjs";
 
 /** @param {string} from - Caller. @param {string} to - Exact resolved target. */
 const inspect = (from, to) =>
-  publicationViolations(
+  boundaryViolations(
     {
       modules: [
         { source: from, dependencies: [{ resolved: to }] },
@@ -109,5 +109,48 @@ await test("owned code cannot escape publication through unowned source or repos
         `${from} must reject ${to}`
       );
     }
+  }
+});
+
+await test("future portable and native owners share one privacy and direction policy", () => {
+  for (const tree of ["src/core", "src/shell", "cloudflare"]) {
+    const owner = `${tree}/future-owner`;
+    const peer = `${tree}/another-owner`;
+    /** @param {string} from - Caller. @param {string} to - Resolved target. */
+    const violations = (from, to) =>
+      boundaryViolations(
+        {
+          modules: [
+            { source: from, dependencies: [{ resolved: to }] },
+            { source: to, dependencies: [] },
+            ...[`${owner}/contract.ts`, `${peer}/contract.ts`]
+              .filter((source) => source !== from && source !== to)
+              .map((source) => ({ source, dependencies: [] })),
+          ],
+        },
+        "/synthetic/apps/server"
+      ).map(({ name }) => name);
+    assert.deepEqual(violations(`${peer}/operations.ts`, `${owner}/contract.ts`), []);
+    assert.deepEqual(violations(`${peer}/operations.ts`, `${owner}/operations.ts`), []);
+    assert.deepEqual(violations(`${owner}/operations.ts`, `${owner}/internal/read.ts`), []);
+    assert.ok(violations(`${peer}/operations.ts`, `${owner}/rows.ts`).includes("published-only"));
+    assert.ok(
+      violations(`${peer}/operations.ts`, `${owner}/internal/read.ts`).includes("published-only")
+    );
+    assert.ok(
+      violations(`${owner}/contract.ts`, `${owner}/operations.ts`).includes(
+        "contract-imports-implementation"
+      )
+    );
+    assert.ok(
+      violations(`${owner}/internal/read.ts`, `${owner}/operations.ts`).includes(
+        "internal-imports-outward-interface"
+      )
+    );
+    assert.ok(
+      violations(`${owner}/operations.ts`, `${owner}/runtime.ts`).includes(
+        "operations-imports-runtime"
+      )
+    );
   }
 });

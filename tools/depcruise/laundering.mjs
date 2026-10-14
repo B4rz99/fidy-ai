@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
-import { ownership, serverPath } from "./publication.mjs";
+import { ownership, serverPath } from "./boundaries.mjs";
 
 /** @typedef {{source: string, dependencies: ReadonlyArray<{module: string, resolved: string}>}} GraphModule */
 /** @typedef {{name: string, from: string, to: string, reason: string}} LaunderingViolation */

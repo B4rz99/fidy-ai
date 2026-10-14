@@ -1,0 +1,49 @@
+apps/web/src/features/transactions/deletion.tsx
+  s_9a2e12249a0ca5::t_382cbdbd267b93 3,16-19,41-42,58-60,92
+  s_9a2e12249a0ca5::t_f1f983f19e5fb0 43-44,49-52,56-57
+  s_9a2e12249a0ca5::t_848c298691c882 62-73,102-106
+  s_9a2e12249a0ca5::t_7c1ab4a8b2e218 1-2,4-15,20-40,61,74-91,93-97,99-101,107-113
+  s_9a2e12249a0ca5::t_c4d1874963900a 45-48,53-55
+  s_9a2e12249a0ca5::t_5912a41afa0f3d 98
+apps/web/e2e/transaction-deletion.spec.ts
+  s_9a2e12249a0ca5::t_ec30811012b1b1 8-9,28-30,112
+  s_9a2e12249a0ca5::t_c080d3e11a3138 1,3-7,18-23,35-38,70,77-79,131-132,179
+  s_9a2e12249a0ca5::t_89c869fb0f8c03 2
+  s_9a2e12249a0ca5::t_f1f983f19e5fb0 10-17,24-27,31-34
+  s_9a2e12249a0ca5::t_aeb4f8bc5bc3c9 39-63,65-69,71-76,80-111,113-130,133-178
+  s_9a2e12249a0ca5::t_535be64635663a 64
+apps/web/src/features/transactions/FEATURE.md
+  s_9a2e12249a0ca5::t_11d0a637fc950f 9-22,48,59,71-72
+  s_9a2e12249a0ca5::t_535be64635663a 29-30
+apps/web/src/features/transactions/detail.tsx
+  s_9a2e12249a0ca5::t_7c1ab4a8b2e218 10,26,103,110-112,118-122,127-142
+  s_9a2e12249a0ca5::t_848c298691c882 97-101,113-117
+apps/web/src/features/transactions/panel-state.ts
+  s_9a2e12249a0ca5::t_3a3475a69b51d7 7,10-11
+apps/web/e2e/transaction-native-pagination.spec.ts
+  s_9a2e12249a0ca5::t_cae57e09fd4c8c 14,52,62-70
+  s_9a2e12249a0ca5::t_c4d1874963900a 46-51,53-61
+apps/web/src/features/transactions/ledger.tsx
+  s_9a2e12249a0ca5::t_26c64748b6f9a3 150
+apps/web/src/features/transactions/workspace.tsx
+  s_9a2e12249a0ca5::t_c4d1874963900a 153-156,160-161
+  s_9a2e12249a0ca5::t_ff4c08f4fe78ae 480-483
+  s_9a2e12249a0ca5::t_382cbdbd267b93 151-152,157-159,162-163,533
+  s_9a2e12249a0ca5::t_7c1ab4a8b2e218 253-257,427
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a8ede5b22826d01449d2c67f244df7a6cff57f33",
+  "prompts": {},
+  "sessions": {
+    "s_9a2e12249a0ca5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1383f-9a7e-78a1-ae08-171cf8ea5eb9",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

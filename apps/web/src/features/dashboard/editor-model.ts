@@ -59,6 +59,7 @@ export type DashboardGesture =
       weight: number;
     }>
   | Readonly<{ kind: "remove-widget"; widgetId: WidgetId }>
+  | Readonly<{ kind: "retitle-dashboard"; title: string }>
   | Readonly<{ kind: "retitle-widget"; title: string; widget: DashboardWidget }>;
 
 const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
@@ -103,6 +104,8 @@ const editFor = (gesture: Readonly<DashboardGesture>): unknown => {
       return { op: "remove-widget", widgetId: gesture.widgetId };
     case "retitle-widget":
       return { op: "update-widget", widget: { ...gesture.widget, title: gesture.title } };
+    case "retitle-dashboard":
+      return { op: "set-title", title: gesture.title };
   }
 };
 

@@ -9,6 +9,7 @@ import {
   type JSX,
   type KeyboardEvent,
   type PointerEvent,
+  type RefCallback,
   useMemo,
   useRef,
   useState,
@@ -426,33 +427,41 @@ const WidgetActions = ({
   </div>
 );
 
-const maximumWidgetTitleLength = 80;
+const maximumTitleLength = 80;
 
-type WidgetTitleEditorProps = Readonly<{
+type TitleEditorProps = Readonly<{
   disabled: boolean;
   initialTitle: string;
+  target: "tablero" | "Widget";
   onCancel: () => void;
   onSave: (title: string) => void;
 }>;
 
-const WidgetTitleEditor = ({
+const focusTitleInput: RefCallback<HTMLInputElement> = (input) => {
+  input?.focus();
+  input?.select();
+};
+
+const TitleEditor = ({
   disabled,
   initialTitle,
+  target,
   onCancel,
   onSave,
-}: WidgetTitleEditorProps): JSX.Element => {
+}: TitleEditorProps): JSX.Element => {
   const [title, setTitle] = useState(initialTitle);
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const trimmedTitle = title.trim();
-    if (trimmedTitle.length > 0) onSave(trimmedTitle);
+    if (!disabled && trimmedTitle.length > 0) onSave(trimmedTitle);
   };
   return (
     <form className="flex min-w-0 items-center gap-1" onSubmit={submit}>
       <Input
-        aria-label="Nuevo nombre del Widget"
+        aria-label={`Nuevo nombre del ${target}`}
         disabled={disabled}
-        maxLength={maximumWidgetTitleLength}
+        maxLength={maximumTitleLength}
+        ref={focusTitleInput}
         onChange={(event) => setTitle(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") onCancel();
@@ -460,13 +469,22 @@ const WidgetTitleEditor = ({
         value={title}
       />
       <Button
-        aria-label="Guardar nombre del Widget"
+        aria-label={`Guardar nombre del ${target}`}
         disabled={disabled || title.trim().length === 0}
         size="icon-sm"
         type="submit"
         variant="ghost"
       >
         <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
+      </Button>
+      <Button
+        aria-label={`Cancelar cambio de nombre del ${target}`}
+        onClick={onCancel}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <HugeiconsIcon icon={XIcon} strokeWidth={2} />
       </Button>
     </form>
   );
@@ -549,9 +567,10 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
           titleEditor={
             renaming
               ? Option.some(
-                  <WidgetTitleEditor
+                  <TitleEditor
                     disabled={editor.disabled}
                     initialTitle={label}
+                    target="Widget"
                     onCancel={() => setRenaming(false)}
                     onSave={saveTitle}
                   />
@@ -955,6 +974,50 @@ const DashboardEditorNotice = ({
   </Alert>
 );
 
+const EditableDashboardTitle = ({
+  editor,
+  title,
+}: Readonly<{ editor: DashboardEditor; title: string }>): JSX.Element => {
+  const [renaming, setRenaming] = useState(false);
+  const renameButton = useRef<HTMLButtonElement>(null);
+  const cancel = (): void => {
+    setRenaming(false);
+    requestAnimationFrame(() => renameButton.current?.focus());
+  };
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      {renaming ? (
+        <TitleEditor
+          disabled={editor.disabled}
+          initialTitle={title}
+          target="tablero"
+          onCancel={cancel}
+          onSave={(nextTitle) => {
+            if (nextTitle !== title) {
+              editor.onGesture({ kind: "retitle-dashboard", title: nextTitle });
+            }
+            setRenaming(false);
+          }}
+        />
+      ) : (
+        <h1 className="font-heading text-3xl font-semibold tracking-tight break-words">{title}</h1>
+      )}
+      <Button
+        aria-label="Renombrar tablero"
+        className={renaming ? "hidden" : undefined}
+        disabled={editor.disabled}
+        onClick={() => setRenaming(true)}
+        ref={renameButton}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <HugeiconsIcon icon={PencilIcon} strokeWidth={2} />
+      </Button>
+    </div>
+  );
+};
+
 /** Responsive projection of one schema-decoded canonical Dashboard view. */
 export const DashboardViewComponent = ({
   editor,
@@ -970,8 +1033,15 @@ export const DashboardViewComponent = ({
   const content = (
     <main className="flex w-full flex-col gap-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">{view.title}</h1>
+        <div className="min-w-0 max-w-full">
+          {Option.match(activeEditor, {
+            onSome: (current) => <EditableDashboardTitle editor={current} title={view.title} />,
+            onNone: () => (
+              <h1 className="font-heading text-3xl font-semibold tracking-tight break-words">
+                {view.title}
+              </h1>
+            ),
+          })}
           <p className="text-muted-foreground">Lectura actual de tus finanzas.</p>
         </div>
         {Option.isNone(editor) ? null : (

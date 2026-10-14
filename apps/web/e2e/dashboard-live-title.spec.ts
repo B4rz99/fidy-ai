@@ -1,13 +1,11 @@
 import { Effect } from "effect";
-import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import { boundSessionRequests, signInThroughCore } from "./real-core-fixture";
+import { signInThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
-const { api, app } = browserAcceptanceTopology();
 const successStatus = 200;
 
-test("renders the persisted Dashboard title after an admitted edit and browser reload", ({
+test("persists the Dashboard title through the visible editor and browser reload", ({
   page,
   request,
 }) =>
@@ -16,13 +14,28 @@ test("renders the persisted Dashboard title after an admitted edit and browser r
       yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() => expect(page.getByRole("heading", { level: 1 })).toBeVisible());
-      const edited = yield* Effect.tryPromise(() =>
-        boundSessionRequests(page.request).post(`${api}/dashboard/edits`, {
-          headers: { origin: app },
-          data: { op: "set-title", title: "Mis finanzas verificadas" },
-        })
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Personalizar", exact: true }).click()
       );
-      expect(edited.status()).toBe(successStatus);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Renombrar tablero" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Nuevo nombre del tablero").fill("  Mis finanzas verificadas  ")
+      );
+      const edited = page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/dashboard/edits") && response.status() === successStatus
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar nombre del tablero" }).click()
+      );
+      expect((yield* Effect.tryPromise(() => edited)).status()).toBe(successStatus);
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { level: 1, name: "Mis finanzas verificadas", exact: true })
+        ).toBeVisible()
+      );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
         expect(

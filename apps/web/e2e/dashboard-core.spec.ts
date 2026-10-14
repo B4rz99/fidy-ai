@@ -90,6 +90,7 @@ test("Dashboard refresh resolves a committed edit with a lost acknowledgment wit
       yield* loseEditResponse(page, committedWrites);
       yield* Effect.tryPromise(() =>
         page
+          .getByRole("region", { name: "Diseño responsivo del tablero" })
           .getByRole("button", { name: /^Renombrar /u })
           .first()
           .click()

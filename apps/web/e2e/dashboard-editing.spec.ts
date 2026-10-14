@@ -123,6 +123,38 @@ const expectSwap = (edits: Array<unknown>): Promise<void> =>
   expect
     .poll(() => edits)
     .toEqual([{ op: "swap-widgets", widgetId: firstId, withWidgetId: secondId }]);
+
+test("validates and cancels Dashboard title drafts without saving", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const edits: Array<unknown> = [];
+      yield* install(page, edits);
+      const rename = page.getByRole("button", { name: "Renombrar tablero", exact: true });
+      yield* Effect.tryPromise(() => rename.click());
+      const input = page.getByLabel("Nuevo nombre del tablero");
+      yield* Effect.tryPromise(() => expect(input).toBeFocused());
+      yield* Effect.tryPromise(() => expect(input).toHaveValue(view.title));
+      yield* Effect.tryPromise(() => expect(input).toHaveAttribute("maxlength", "80"));
+      yield* Effect.tryPromise(() => input.fill("   "));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Guardar nombre del tablero" })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() => input.press("Enter"));
+      yield* Effect.tryPromise(() => input.fill("Borrador cancelado"));
+      yield* Effect.tryPromise(() => input.press("Escape"));
+      yield* Effect.tryPromise(() => expect(rename).toBeFocused());
+      yield* Effect.tryPromise(() => rename.click());
+      yield* Effect.tryPromise(() => expect(input).toHaveValue(view.title));
+      yield* Effect.tryPromise(() => input.fill("Otro borrador"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cancelar cambio de nombre del tablero" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { level: 1 })).toHaveText(view.title)
+      );
+      expect(edits).toEqual([]);
+    })
+  ));
 const expectOneEdit = (edits: Array<unknown>): Promise<void> =>
   expect.poll(() => edits.length).toBe(1);
 const startSwapDrag = Effect.fnUntraced(function* (page: Page) {

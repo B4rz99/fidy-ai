@@ -1,0 +1,47 @@
+apps/server/cloudflare/agent/internal/turn-store.ts
+  s_8692a8e3f01e05::t_72cb35d5bae09b 1,80-81,187,190,192,197,203,836-837,843-856
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_8692a8e3f01e05::t_226546c4df3e27 5487-5492,6340-6358,6385-6413,6467-6468
+  s_8692a8e3f01e05::t_462b93e9312246 6362,6366-6367,6370-6373,6418,6422-6444
+  s_8692a8e3f01e05::t_b663b337cf5bf5 6368-6369
+  s_8692a8e3f01e05::t_f22daa83eb8836 6382-6384,6414-6416
+  s_8692a8e3f01e05::t_c047a436032e81 6375-6376
+  s_8692a8e3f01e05::t_db9a0a3e93fb5e 6421
+  s_8692a8e3f01e05::t_f97041646acdc7 6445-6449,6451-6460
+  s_8692a8e3f01e05::t_30dac27ee2aeff 6359-6361
+  s_8692a8e3f01e05::t_7b4b6642ffd273 6464-6466
+  s_8692a8e3f01e05::t_c43dbcbb302c6a 6363,6374,6381,6417,6419-6420,6461-6463
+  s_8692a8e3f01e05::t_923597b188e141 6378-6380
+  s_8692a8e3f01e05::t_6cd83ec7800e7c 6364-6365
+docs/operations/commercial-allowances.md
+  s_8692a8e3f01e05::t_d7c66303b35da6 9
+apps/server/cloudflare/migrations/0032_commercial_allowances.sql
+  s_8692a8e3f01e05::t_d7c66303b35da6 21
+apps/server/src/core/quotas/contract.ts
+  s_8692a8e3f01e05::t_d7c66303b35da6 15
+apps/server/src/core/ingestion/rules.test.ts
+  s_8692a8e3f01e05::t_d7c66303b35da6 100,109,118,131,137,143,149,164,166,169
+docs/operations/admission-coverage.md
+  s_8692a8e3f01e05::t_b6e7f3bf0a0a0e 16
+apps/server/src/core/ingestion/contract.ts
+  s_8692a8e3f01e05::t_bc5a5e605fcb2a 149,152,155
+  s_8692a8e3f01e05::t_671c59e858be5b 156
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_8692a8e3f01e05::t_d7c66303b35da6 260,315,320,329,369
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e4bf831c2c65bb9bd908e045c2246524d6436f8",
+  "prompts": {},
+  "sessions": {
+    "s_8692a8e3f01e05": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13c38-1e3f-7d60-bcbe-359b82bc673d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

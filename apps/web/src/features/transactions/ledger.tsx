@@ -44,6 +44,7 @@ const columns: Array<ColumnDef<TransactionListRow>> = [
 ];
 type LedgerProps = Readonly<{
   partial: boolean;
+  readOnly: boolean;
   rows: ReadonlyArray<TransactionListRow>;
   selected: Option.Option<string>;
   onSelect: (id: string) => void;
@@ -316,7 +317,9 @@ const LedgerControls = ({
   onEdit,
   empty,
   selecting,
+  readOnly,
 }: Readonly<{
+  readOnly: boolean;
   table: ReactTable<TransactionListRow>;
   sorting: SortingState;
   onSorting: (sorting: SortingState) => void;
@@ -329,9 +332,11 @@ const LedgerControls = ({
   <RecordToolbar>
     {toolbar}
     <div className="ledger-actions contents">
-      <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
-        {selecting ? "Cancelar selección" : "Editar varias"}
-      </Button>
+      {readOnly ? null : (
+        <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
+          {selecting ? "Cancelar selección" : "Editar varias"}
+        </Button>
+      )}
       <SortControl sorting={sorting} onSorting={onSorting} disabled={disabled} />
       <ColumnControls table={table} disabled={disabled} />
     </div>
@@ -375,18 +380,23 @@ const LedgerBody = ({
     ))}
   </TableBody>
 );
-const EmptyLedger = ({ partial }: Readonly<{ partial: boolean }>): JSX.Element => (
+const emptyDescription = (partial: boolean, readOnly: boolean): string => {
+  if (partial) return "Carga más transacciones para buscar en el resto del periodo.";
+  return readOnly
+    ? "Prueba otros filtros para consultar tus transacciones guardadas."
+    : "Prueba otros filtros o registra una transacción.";
+};
+const EmptyLedger = ({
+  partial,
+  readOnly,
+}: Readonly<{ partial: boolean; readOnly: boolean }>): JSX.Element => (
   <div className="p-8">
     <h2 className="font-medium">
       {partial
         ? "No hay coincidencias entre las transacciones cargadas"
         : "No hay transacciones para mostrar"}
     </h2>
-    <p className="mt-2 text-sm text-muted-foreground">
-      {partial
-        ? "Carga más transacciones para buscar en el resto del periodo."
-        : "Prueba otros filtros o registra una transacción."}
-    </p>
+    <p className="mt-2 text-sm text-muted-foreground">{emptyDescription(partial, readOnly)}</p>
   </div>
 );
 /** A date-grouped ledger; sorting preserves dates as the primary grouping key. */
@@ -409,7 +419,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
   const dates = Array.from(new Set(rows.map((row) => row.occurredOnText)));
   return (
     <section
-      aria-label="Transacciones del mes"
+      aria-label={props.readOnly ? "Transacciones guardadas" : "Transacciones del mes"}
       className="transaction-ledger min-w-0"
       data-category-visible={table.getColumn("categoryLabel")?.getIsVisible()}
       data-type-visible={table.getColumn("transactionTypeLabel")?.getIsVisible()}
@@ -423,9 +433,10 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
         onEdit={props.onEdit}
         empty={rows.length === 0 || !props.canEdit}
         selecting={props.selection.active}
+        readOnly={props.readOnly}
       />
       {rows.length === 0 ? (
-        <EmptyLedger partial={props.partial} />
+        <EmptyLedger partial={props.partial} readOnly={props.readOnly} />
       ) : (
         <Table aria-label="Tabla de transacciones">
           <LedgerHeader table={table} />

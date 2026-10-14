@@ -26,6 +26,8 @@ import {
   webSessionCredentialAuthority,
 } from "../../../src/shell/web-session/operations";
 import type { PrivacyTransactionsRead } from "../contract";
+import { readPrivacyPreferences } from "../../identity/operations";
+import { listCategories } from "../../categories/operations";
 import type { AuthorizedPAT } from "../../tokens/contract";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import {
@@ -490,7 +492,11 @@ const browserHistoryStatements = (
   ];
 };
 
-const presentPrivacyPage = (rows: D1Result, reference: string): Effect.Effect<Response> =>
+const presentPrivacyPage = (
+  rows: D1Result,
+  reference: string,
+  display: Pick<PrivacyTransactionPage, "presentation" | "categories">
+): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (rows.results.length > boundarySize) return unavailable();
     const decoded = Option.all(rows.results.map(decodeTransactionRow));
@@ -501,6 +507,7 @@ const presentPrivacyPage = (rows: D1Result, reference: string): Effect.Effect<Re
       reference,
       scope: "transactions",
       data,
+      ...display,
       next:
         decoded.value.length > pageSize && last !== undefined
           ? { occurredAt: last.occurredAt, createdAt: last.createdAt, id: last.id }
@@ -524,6 +531,8 @@ export const readPrivacyTransactions = ({
     ) {
       return rateLimited();
     }
+    const presentation = yield* readPrivacyPreferences({ db, userId: subject.userId });
+    const categories = yield* listCategories({ db });
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const base = webSessionCredentialAuthority({ subject, current });
     const fresh = freshSessionConditions({
@@ -561,7 +570,7 @@ export const readPrivacyTransactions = ({
     );
     if (audit?.meta.changes !== 1) return noSession();
     if (rows === undefined) return unavailable();
-    return yield* presentPrivacyPage(rows, reference);
+    return yield* presentPrivacyPage(rows, reference, { presentation, categories });
   }).pipe(Effect.orElseSucceed(unavailable));
 
 type PATSelection = Selection & Readonly<{ subject: AuthorizedPAT }>;

@@ -84,7 +84,8 @@ The cookie-only privacy transport also serves explicit access to visible effecti
 `POST /web/privacy/transactions`. Transactions owns the financial selection and decoding; Consent's
 browser composition owns the shared exact Origin, body bound, request pressure and fresh-session
 admission. Every page independently binds that exact credential and freshness in the native D1
-snapshot with its metadata-only Audit. It requires no renewed processing Consent or commercial
+snapshot with its metadata-only Audit. Identity supplies only same-User display preferences and
+Categories supplies its bounded public taxonomy before that final proof recheck. It requires no renewed processing Consent or commercial
 standing, offers no mutation or PAT/OAuth authority, and never treats a cursor as a credential.
 The scope excludes deleted records, raw Ingestion bytes, suppressed original members and other
 owners' data; a broader request cannot be closed as fulfilled by this projection.

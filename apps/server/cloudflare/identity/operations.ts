@@ -2,8 +2,8 @@ import { prepareCurrentUser } from "../../src/shell/identity/operations";
 import type { CurrentUserResponse } from "../../src/shell/identity/contract";
 import { IdentityUnavailable } from "./contract";
 import { onboardingWhatsAppStatement, userCreationStatements } from "./internal/bootstrap";
-import { Effect, type Option } from "effect";
-import type { UserId } from "../../src/core/identity/contract";
+import { Effect, type Option, Schema } from "effect";
+import { UserId, UserPreferences } from "../../src/core/identity/contract";
 import type {
   IdentityStatement,
   OnboardingWhatsAppAssociation,
@@ -13,6 +13,25 @@ import type {
   WhatsAppCallerLookup,
 } from "./contract";
 import { associationProjection, associationQuery, resolveCaller } from "./internal/association";
+
+/** Load only display preferences for an authenticated privacy read; the caller must recheck its exact credential before releasing these values. */
+export const readPrivacyPreferences = ({
+  db,
+  userId,
+}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<
+  UserPreferences,
+  IdentityUnavailable
+> =>
+  Effect.gen(function* () {
+    const owner = yield* Schema.decodeEffect(UserId)(userId);
+    const value = yield* Effect.tryPromise(() =>
+      db
+        .prepare("SELECT locale, time_zone AS timeZone FROM users WHERE id = ? LIMIT 1")
+        .bind(owner)
+        .first()
+    );
+    return yield* Schema.decodeUnknownEffect(UserPreferences)(value);
+  }).pipe(Effect.mapError(() => new IdentityUnavailable()));
 
 /**
  * Resolve only a persisted Business Portfolio and BSUID association. Contact values and provider

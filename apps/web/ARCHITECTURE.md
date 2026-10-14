@@ -148,11 +148,16 @@ from access to the exact saved authorization: an explicit “Consultar prueba”
 same-User historical disclosure, record reference and acceptance instant through the cookie-only
 privacy transport, including after withdrawal. The record is inert text and grants no new Consent.
 The browser never keeps this evidence beyond its authentication registry lifetime. Copy distinguishes withdrawal
-from explicit access to visible effective Transaction history. The “Consultar mis transacciones” action
-uses the server-declared privacy transport after fresh browser authentication, independent of Consent
-or commercial standing. One mounted, bounded page renders exact Money and inert Transaction text;
-continuation rechecks proof rather than granting access through its cursor. A failed page is unavailable,
-never complete or empty history. The disposable built-browser fixture links the actual scoped Audit
+from explicit access to visible effective Transaction history. Privacy links to the existing
+`/app/transactions` workspace. Its independently reachable application shell selects the ordinary
+canonical view only with current granted Consent; revoked Consent mounts the same ledger, filters,
+summary and viewing-only details through fresh privacy authentication, outside commercial standing.
+The privacy read supplies only display preferences and public Category taxonomy alongside financial
+records. No financial record id or Audit reference appears in the UI. Atom queries own each bounded
+page and the loaded-history projection in the authentication registry; each continuation rechecks
+proof. No create, correction, category-write, deletion or hosted-agent control mounts in this mode.
+A failed continuation remains visibly incomplete and retryable; first-page/freshness failure requires
+retry or renewed sign-in. The disposable built-browser fixture links the actual scoped Audit
 reference and visible result to the native case-register CLI; it does not import register implementation
 into the web application or establish live non-User or representative entitlement.
 Copy distinguishes withdrawal

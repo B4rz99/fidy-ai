@@ -10,7 +10,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Checkbox } from "@/ui/components/checkbox";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { AuthorizationCopy } from "./authorization-copy";
-import { TransactionCopy } from "./transaction-copy";
 
 const consentKey = "processing-consent";
 
@@ -167,6 +166,22 @@ const PrivacyWorkspace = ({
   </main>
 );
 
+const SavedTransactionsLink = (): JSX.Element => (
+  <section className="flex flex-col gap-4 border-t pt-6">
+    <h2 className="text-xl font-semibold">Tus transacciones guardadas</h2>
+    <p>
+      Puedes consultar tus transacciones después de retirar la autorización, sin un plan de pago.
+      Necesitas un inicio de sesión reciente. La vista será de solo lectura y no reactivará el
+      tratamiento.
+    </p>
+    <div>
+      <Button variant="outline" render={<Link to="/app/transactions" />}>
+        Ver mis transacciones
+      </Button>
+    </div>
+  </section>
+);
+
 /** Cookie-only privacy control; ordinary product access is not a prerequisite for withdrawal or its receipt. */
 export const PrivacyFeature = (): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
@@ -217,7 +232,7 @@ export const PrivacyFeature = (): JSX.Element => {
         </div>
       ) : null}
       <AuthorizationCopy client={client} />
-      <TransactionCopy client={client} />
+      <SavedTransactionsLink />
     </PrivacyWorkspace>
   );
 };

@@ -6,6 +6,7 @@ import type { JSX } from "react";
 import { Skeleton } from "@/ui/components/skeleton";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
+import { PrivacyTransactions } from "./privacy-view";
 import { TransactionWorkspace } from "./workspace";
 import { type HistoryState, transactionHistory } from "./history";
 import {
@@ -247,6 +248,7 @@ const TransactionResources = ({
   return (
     <TransactionWorkspace
       key={history.generation}
+      readOnly={false}
       continuation={history.continuation}
       onMore={onMore}
       onRetryMore={onRetryMore}
@@ -326,3 +328,6 @@ const CurrentUserQuery = (): JSX.Element => {
 
 /** Transaction route whose canonical server state is owned exclusively by Effect Atom queries. */
 export const TransactionListFeature = (): JSX.Element => <CurrentUserQuery />;
+
+/** Existing Transaction workspace using independent privacy-purpose reads after withdrawal. */
+export const PrivacyTransactionFeature = (): JSX.Element => <PrivacyTransactions />;

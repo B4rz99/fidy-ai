@@ -338,6 +338,9 @@ it("delivers actual same-User Transactions after withdrawal with scoped Audit an
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* privacyHistorySetup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE users SET time_zone='Europe/Madrid' WHERE id=?").bind(users[0]).run()
+      );
       expect(
         (yield* Effect.tryPromise(() =>
           send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
@@ -351,6 +354,10 @@ it("delivers actual same-User Transactions after withdrawal with scoped Audit an
       const page = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
         yield* Effect.tryPromise(() => response.json())
       );
+      expect(page.presentation).toEqual({ locale: "es-CO", timeZone: "Europe/Madrid" });
+      expect(
+        page.categories.find((category) => category.id === page.data[0]?.categoryId)?.label
+      ).toBe("Restaurantes");
       expect(page.scope).toBe("transactions");
       expect(page.data.map((record) => Option.getOrThrow(record.notes))).toEqual([
         "Synthetic owned record 0",
@@ -381,6 +388,7 @@ it("delivers actual same-User Transactions after withdrawal with scoped Audit an
       const otherPage = yield* Schema.decodeUnknownEffect(PrivacyTransactionPage)(
         yield* Effect.tryPromise(() => other.json())
       );
+      expect(otherPage.presentation.timeZone).toBe("America/Bogota");
       expect(otherPage.data.map((record) => Option.getOrThrow(record.notes))).toEqual([
         "Synthetic owned record 1",
       ]);

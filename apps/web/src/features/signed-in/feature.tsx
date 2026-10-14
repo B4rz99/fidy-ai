@@ -208,14 +208,19 @@ export const ApplicationShell = ({
   );
 };
 
-/** Authenticated route layout whose child server state shares one authentication lifetime. */
-export const SignedInFeature = ({
+/** Refuses expired authentication without adding navigation around an already composed application shell. */
+export const SignedInContent = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const { authentication } = useSession();
-  return authentication === "expired" ? (
-    <AuthenticationExpired />
-  ) : (
-    <ApplicationShell>{children}</ApplicationShell>
-  );
+  return authentication === "expired" ? <AuthenticationExpired /> : <>{children}</>;
 };
+
+/** Authenticated route layout whose child server state shares one authentication lifetime. */
+export const SignedInFeature = ({
+  children,
+}: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => (
+  <SignedInContent>
+    <ApplicationShell>{children}</ApplicationShell>
+  </SignedInContent>
+);

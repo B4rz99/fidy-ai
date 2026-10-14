@@ -2,6 +2,8 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { ConsentRecordId, DisclosureSnapshot } from "~/core/consent/contract";
 import { Transaction } from "~/core/transactions/contract";
+import { UserPreferences } from "~/core/identity/contract";
+import { Category } from "~/core/categories/contract";
 
 /** A pagination position conveys no authority; every page authenticates the same browser afresh. */
 export const PrivacyTransactionCursor = Schema.Struct({
@@ -17,6 +19,8 @@ export const PrivacyTransactionPage = Schema.Struct({
   reference: Schema.String.check(Schema.isUUID()),
   scope: Schema.Literal("transactions"),
   data: Schema.Array(Transaction).check(Schema.isMaxLength(100)),
+  presentation: UserPreferences,
+  categories: Schema.Array(Category).check(Schema.isMaxLength(100)),
   next: Schema.NullOr(PrivacyTransactionCursor),
 });
 export type PrivacyTransactionPage = typeof PrivacyTransactionPage.Type;

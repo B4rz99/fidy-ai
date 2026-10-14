@@ -73,8 +73,8 @@ const SubscriptionOffersFeature = lazyRouteComponent(
   "SubscriptionOffersFeature"
 );
 const TransactionListFeature = lazyRouteComponent(
-  () => import("@/features/transactions/feature"),
-  "TransactionListFeature"
+  () => import("./transactions-page"),
+  "TransactionsPage"
 );
 
 const DashboardRouteContent = lazy(() =>
@@ -129,11 +129,6 @@ const dashboardRoute = createRoute({
   path: "/dashboard",
   component: DashboardRoute,
 });
-const transactionsRoute = createRoute({
-  getParentRoute: () => signedInRoute,
-  path: "/transactions",
-  component: TransactionListFeature,
-});
 const budgetsRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/budgets",
@@ -184,13 +179,18 @@ const accessManagementRoute = createRoute({
     )(search),
   component: AccessManagementPage,
 });
-const privacyLayoutRoute = createRoute({
+const independentApplicationRoute = createRoute({
   getParentRoute: () => rootRoute,
-  id: "privacy-layout",
+  id: "independent-application",
   component: lazyRouteComponent(() => import("@/features/signed-in/feature"), "ApplicationShell"),
 });
+const transactionsRoute = createRoute({
+  getParentRoute: () => independentApplicationRoute,
+  path: "/app/transactions",
+  component: TransactionListFeature,
+});
 const privacyRoute = createRoute({
-  getParentRoute: () => privacyLayoutRoute,
+  getParentRoute: () => independentApplicationRoute,
   path: "/settings/privacy",
   component: lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature"),
 });
@@ -298,14 +298,9 @@ const routeTree = rootRoute.addChildren([
   oauthReviewRoute,
   connectionContinuationRoute,
   subscriptionOffersRoute,
-  privacyLayoutRoute.addChildren([privacyRoute]),
+  independentApplicationRoute.addChildren([privacyRoute, transactionsRoute]),
   authenticatedRoute.addChildren([
-    signedInRoute.addChildren([
-      signedInIndexRoute,
-      dashboardRoute,
-      transactionsRoute,
-      budgetsRoute,
-    ]),
+    signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, budgetsRoute]),
     accessManagementRoute,
     patManagementRoute,
     oauthManagementRoute,

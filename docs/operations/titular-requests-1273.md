@@ -126,10 +126,12 @@ a direct D1 query, a foreign-User operation or a canonical call after its Consen
 If the necessary privacy-purpose owner authority is not executable, escalate that capability gap;
 do not substitute operator access or call an empty result completed access.
 
-Visible effective Transaction access is executable through `/settings/privacy` and
+Visible effective Transaction access is executable through the existing `/app/transactions` view
+(linked from `/settings/privacy`) and
 `POST /web/privacy/transactions`, even after withdrawal and expired commercial access. Each page
 requires fresh same-User browser proof and atomic Audit; the browser delivers the scoped result
-directly to that verified requester. Use its `Referencia de consulta` to trace the privacy Audit.
+directly to that verified requester. The native response reference traces its privacy Audit; it is
+kept out of the ordinary UI, alongside internal Transaction ids.
 Pages have at most 100 Transactions, exact Money and explicit continuation. Each page observes
 current state; this is not an immutable full-database export. This scope excludes deleted records,
 raw capture material, suppressed original members and unrelated owners. Keep a broader request open

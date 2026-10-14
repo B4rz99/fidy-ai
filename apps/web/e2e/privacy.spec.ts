@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { type Cause, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { signInPrivacyThroughCore } from "./real-core-fixture";
 import type { Page, Route } from "@playwright/test";
@@ -11,25 +11,56 @@ const unauthenticatedStatus = 401;
 const verifyTransactionAccess = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Consultar mis transacciones", exact: true }).click()
-      );
-      const transactionCopy = page.getByRole("region", { name: "Copia de transacciones" });
-      yield* Effect.tryPromise(() =>
-        expect(transactionCopy).toContainText("Solicitud de acceso de prueba")
+      const response = page.waitForResponse(
+        (value) =>
+          value.url() === `${apiOrigin}/web/privacy/transactions` &&
+          value.request().method() === "POST"
       );
       yield* Effect.tryPromise(() =>
-        expect(transactionCopy).toContainText("24000000-0000-4000-8000-000000000383")
+        page.getByRole("link", { name: "Ver mis transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Solo lectura", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(transactionCopy).toContainText("Fin de las transacciones disponibles.")
+        expect(page.getByRole("table", { name: "Tabla de transacciones" })).toContainText("12.000")
       );
-      const referenceText = yield* Effect.tryPromise(() =>
-        transactionCopy.getByText("Referencia de consulta:", { exact: false }).innerText()
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toHaveCount(0)
       );
-      const ownerResultRef = yield* Schema.decodeEffect(Schema.String.check(Schema.isUUID()))(
-        referenceText.replace("Referencia de consulta: ", "")
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Editar varias", exact: true })).toHaveCount(0)
       );
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: "Ver transacción Contraparte no identificada", exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Detalle de transacción" })).toContainText(
+          "Solicitud de acceso de prueba"
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Eliminar transacción", exact: true })).toHaveCount(
+          0
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("24000000-0000-4000-8000-000000000383", { exact: true })).toHaveCount(
+          0
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Referencia de consulta:", { exact: false })).toHaveCount(0)
+      );
+      const payload = yield* Effect.tryPromise(() => response).pipe(
+        Effect.flatMap((value) => Effect.tryPromise((): Promise<unknown> => value.json()))
+      );
+      const { reference: ownerResultRef } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ reference: Schema.String.check(Schema.isUUID()) })
+      )(payload);
       yield* Effect.tryPromise(() => exerciseTitularCase(ownerResultRef));
     })
   );
@@ -166,3 +197,99 @@ const documentDimensions = (): Readonly<{ width: number; content: number }> => (
   width: document.documentElement.clientWidth,
   content: document.documentElement.scrollWidth,
 });
+
+const privacyHistoryCount = 101;
+const uuidWidth = 12;
+const privacyRows = Array.from({ length: privacyHistoryCount }, (_, index) => ({
+  id: `26000000-0000-4000-8000-${String(index + 1).padStart(uuidWidth, "0")}`,
+  categoryId: "10000000-0000-4000-8000-000000000001",
+  money: { amount: "12000", currency: "COP" },
+  direction: "outflow",
+  counterparty: `Registro privado ${index + 1}`,
+  occurredAt: "2026-10-01T12:00:00.000Z",
+  createdAt: "2026-10-01T12:00:00.000Z",
+  revision: 0,
+}));
+const installPrivacyHistory = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    let calls = 0;
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/web/consent`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            status: "Revoked",
+            withdrawal: { reference: "26000000-0000-4000-8000-000000000200", occurredAtMs: 1000 },
+          }),
+        })
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/web/privacy/transactions`, (route) => {
+        calls += 1;
+        if (calls === 2) return route.fulfill({ status: 503 });
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            reference: "26000000-0000-4000-8000-000000000201",
+            scope: "transactions",
+            presentation: { locale: "es-CO", timeZone: "America/Bogota" },
+            categories: [{ id: privacyRows[0]?.categoryId, label: "Restaurantes" }],
+            data: calls === 1 ? privacyRows.slice(0, 100) : privacyRows.slice(100),
+            next:
+              calls === 1
+                ? {
+                    id: privacyRows[99]?.id,
+                    occurredAt: privacyRows[99]?.occurredAt,
+                    createdAt: privacyRows[99]?.createdAt,
+                  }
+                : null,
+          }),
+        });
+      })
+    );
+  });
+
+test("read-only Transactions retain loaded history through a failed continuation and allow browsing after retry", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installPrivacyHistory(page);
+      yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+      const rows = page.getByRole("button", { name: /^Ver transacción Registro privado / });
+      yield* Effect.tryPromise(() => expect(rows).toHaveCount(100));
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Continuación de transacciones", { exact: true }).scrollIntoViewIfNeeded()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("alert").filter({ hasText: "No pudimos cargar más transacciones" })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(rows).toHaveCount(100));
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: "Reintentar carga de más transacciones", exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() => expect(rows).toHaveCount(privacyHistoryCount));
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: "Ver transacción Registro privado 101", exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Detalle de transacción" })).toContainText(
+          "Registro privado 101"
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Eliminar transacción", exact: true })).toHaveCount(
+          0
+        )
+      );
+    })
+  ));

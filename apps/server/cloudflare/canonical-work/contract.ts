@@ -5,12 +5,7 @@ import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { AuthorizedPAT } from "../tokens/contract";
 
-/**
- * How one decided refusal was durably handled. `"recorded"` means the refusal stands and the
- * response follows from it, whether or not the owner keeps a refusal AuditLogEntry; the other
- * values name the cause that denied the durable record instead. `recordTransactionRefusal`
- * returns it, and it is the only answer a refusal Audit row can give.
- */
+/** A recorded refusal stands, whether or not its owner retains Audit; other dispositions identify why durable recording failed. */
 export type CanonicalRefusalDisposition =
   | "recorded"
   | "credential_refused"
@@ -50,24 +45,18 @@ export const transactionNoStore = { "cache-control": "no-store" };
 /** One canonical Transaction input is bounded by this many bytes, for every adapter that reads one. */
 export const maximumTransactionInputBytes = 4096;
 
-/** The message `transactions.getTransaction` and corrections share for an absent or foreign id. */
 export const missingTransactionMessage = "Transaction unavailable.";
 
-/** The message every adapter shares for an input that fails its canonical schema. */
 export const invalidTransactionMessage = "Invalid Transaction input.";
 
-/** The message both pair entry points share when the pair cannot describe one purchase. */
 export const pairPolicyMessage =
   "Only two different Transactions with equal Currency, exact amount, and the same direction can describe one purchase.";
 
-/** The message both pair entry points share when either member is already linked. */
 export const alreadyLinkedMessage =
   "One of the Transactions is already linked to another Transaction.";
 
-/** The message both pair entry points share when the exact pair is not currently linked. */
 export const unlinkedPairMessage = "That exact Transaction pair is not currently linked.";
 
-/** The canonical mutations this adapter executes, individually or as children of one batch. */
 export type TransactionMutationOperation =
   | "transactions.createTransaction"
   | "transactions.updateTransaction"

@@ -1,5 +1,3 @@
--- A queued receipt was published under active Consent. Withdrawal does not admit new receipts
--- or publish a storing reservation; it permits only bounded continuation of already queued work.
 DROP TRIGGER forwarded_email_publication_authority;
 CREATE TRIGGER forwarded_email_publication_authority BEFORE UPDATE OF state ON forwarded_email_receipts
 WHEN NEW.state = 'queued' AND (

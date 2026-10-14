@@ -337,7 +337,6 @@ export const projectEvent = Effect.fn(function* (
   } satisfies WhatsAppInboundEvent;
 });
 
-/** Kapso event names routed through disclosure lifecycle reconciliation. */
 export const DisclosureLifecycleEventName = Schema.Literals([
   "whatsapp.message.sent",
   "whatsapp.message.delivered",

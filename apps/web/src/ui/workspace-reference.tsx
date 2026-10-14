@@ -64,7 +64,6 @@ const ChoiceReference = (): JSX.Element => {
   );
 };
 
-/** Interactive local examples share the application controls without requesting domain transitions. */
 export const WorkspaceReference = (): JSX.Element => {
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);

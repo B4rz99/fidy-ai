@@ -189,7 +189,6 @@ export const acceptedWorkPublisher =
     if (Option.isNone(context)) return;
     const identity = Option.some(id);
     const publishers = publicationActivities(environment, identity);
-    // Neither Queue failure nor a missing execution lifetime can change an already committed answer.
     Effect.runSync(
       Effect.try(() =>
         context.value.waitUntil(
@@ -299,14 +298,12 @@ const providerCallbackEffect = (
 const enrollmentCorePath = (path: string): boolean =>
   Option.isSome(paymentEnrollmentTransport(path));
 
-/** The PAT admission variant for one piece of canonical work. */
 const patAdmission = (authority: PATAuthority, work: CanonicalWork): CanonicalWorkAdmission => ({
   _tag: "PATWork",
   ...authority,
   work,
 });
 
-/** The WebSession admission variant for one piece of canonical work. */
 const sessionAdmission = (
   authority: WebSessionAuthority,
   work: CanonicalWork
@@ -377,7 +374,6 @@ const sendToCoordinator = ({
   work: CanonicalWork;
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
-    // Work spans bound latency and status. Keep opaque ids and Money out of trace attributes.
     const traceHeaders = yield* captureTraceHeaders;
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalWorkAdmission))(
@@ -394,8 +390,6 @@ const sendToCoordinator = ({
     );
   });
 
-// One canonical child input is bounded by its own operation policy; a batch carries at most one
-// such input per declared child, and each child is decoded and attributed by the batch adapter.
 const maximumBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;
 const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumBatchBytes,
@@ -471,8 +465,6 @@ const dispatchCanonicalCorrection = (
       environment,
       subject,
       work: canonicalCall(CanonicalOperationId.make("transactions.updateTransaction"), {
-        // The correction owner classifies the addressed Transaction, so an id that is not a
-        // stable identity is forwarded verbatim instead of being answered here.
         params: { id: rawPathId({ request }) },
         payload: input.value,
       }),
@@ -569,7 +561,6 @@ const ownerCall = (
   input: unknown
 ): CanonicalWork => canonicalCall(CanonicalOperationId.make(operation), input);
 
-/** One canonical keyword-rule mutation delivered to the caller's User coordinator. */
 const keywordRuleMutationResponse = (
   input: Readonly<{
     request: Request;
@@ -642,7 +633,6 @@ const keywordRuleResponse = (
 const memoryIdFromPath = (request: Request): Option.Option<MemoryId> =>
   pathId({ schema: MemoryId, request });
 
-/** Refuse one Memory mutation whose route or retained prose failed its published schema. */
 const rejectInvalidMemory = ({
   environment,
   subject,
@@ -687,7 +677,6 @@ const dispatchMemoryMutation = <Input>({
     });
   }).pipe(Effect.orElseSucceed(unavailable));
 
-/** Decode one `memory.remember` body and dispatch it to the caller's User coordinator. */
 const rememberMemoryResponse = ({
   request,
   environment,
@@ -707,7 +696,6 @@ const rememberMemoryResponse = ({
     ),
   });
 
-/** Decode one `memory.revise` path and body and dispatch it to the caller's User coordinator. */
 const reviseMemoryResponse = ({
   request,
   environment,
@@ -734,7 +722,6 @@ const reviseMemoryResponse = ({
     }),
   });
 
-/** Dispatch one `memory.forget` path to the caller's User coordinator. */
 const forgetMemoryResponse = ({
   request,
   environment,
@@ -751,7 +738,6 @@ const forgetMemoryResponse = ({
     decode: Effect.succeed(Option.map(memoryIdFromPath(request), (id) => ({ params: { id } }))),
   });
 
-/** Decode and dispatch one canonical Memory mutation to the caller's User coordinator. */
 const memoryMutationResponse = (
   input: Readonly<{
     request: Request;
@@ -855,7 +841,6 @@ const budgetMutationResponse = ({
   }).pipe(Effect.orElseSucceed(unavailable));
 };
 
-/** The Budget owner's canonical query or mutation, never a parallel path declaration. */
 const BudgetOperation = Schema.Literals([
   "budgets.createBudget",
   "budgets.updateBudget",
@@ -894,7 +879,6 @@ const memoryBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2_000,
 });
 
-/** The Memory mutation ids this dispatch owns, derived from the declared Memory operations. */
 type MemoryMutationId = Exclude<MemoryOperationId, "memory.recall">;
 
 /** The Memory mutation this dispatch owns, and None for any other canonical operation. */
@@ -938,7 +922,6 @@ const statementUploadResponse = (request: Request): Effect.Effect<Response> =>
       : methodNotAllowed()
   );
 
-/** Direct Core paths that own their own admission and session resolution. */
 const hostedTurnPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16_384,
   deadlineMilliseconds: 2_000,
@@ -948,7 +931,6 @@ const hostedReceiptPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2_000,
 });
 
-/** A browser-authenticated Turn crosses the same per-User coordinator as canonical work. */
 const hostedTurnResponse = (
   request: Request,
   environment: CoreHttpEnvironment
@@ -1093,7 +1075,6 @@ type IngestionResponseInput = Readonly<{
   subject: TransactionCaller;
 }>;
 
-/** Canonical forwarding operations retain their own admission and read audit. */
 const forwardingCanonicalResponse = ({
   operation,
   environment,
@@ -1117,7 +1098,6 @@ const clarificationBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2000,
 });
 
-/** Clarification mutations share canonical preparation, authority, confirmation and Audit. */
 const clarificationCanonicalResponse = ({
   operation,
   request,
@@ -1158,7 +1138,6 @@ const clarificationCanonicalResponse = ({
   );
 };
 
-/** Ingestion canonical work: route forwarding and supported statement projections. */
 const ingestionCanonicalResponse = (
   input: IngestionResponseInput
 ): Option.Option<Effect.Effect<Response>> => {
@@ -1233,7 +1212,6 @@ const transactionResponse = (
 };
 
 const insightRoutePosition = -2;
-/** Canonical Insight reads and User-coordinated lifecycle calls share the same D1 owner. */
 const insightResponse = (
   input: Readonly<{
     request: Request;
@@ -1290,7 +1268,6 @@ const DashboardOperation = Schema.Literals([
   "dashboard.applyDashboardEdit",
 ]);
 
-/** Select Dashboard work from the canonical catalog without an independent route declaration. */
 const dashboardResponse = (
   input: Readonly<{
     request: Request;
@@ -1340,7 +1317,6 @@ const connectInstitutionResponse = (
     });
   }).pipe(Effect.orElseSucceed(unavailable));
 
-/** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
     request: Request;

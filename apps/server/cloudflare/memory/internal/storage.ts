@@ -7,7 +7,7 @@ import {
   maximumAggregateMemoryTokens,
 } from "../../../src/core/memory/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-/** The exact Memory row projection every owner query returns, kept in one place. */
+
 const memoryRowColumns = "id,text,created_at,updated_at";
 
 /**

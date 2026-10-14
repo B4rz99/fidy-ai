@@ -2,7 +2,6 @@ import { Miniflare } from "miniflare";
 import { Option, Schema } from "effect";
 
 const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
-// A binding's bootstrap route follows its identity without retaining the binding or its runtime.
 const schemaInstallers = new WeakMap<D1Database, (sql: ReadonlyArray<string>) => Promise<void>>();
 
 const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
@@ -68,8 +67,6 @@ export const installTestSchemaWithPrefix = ({
     .then(() => undefined);
 
 type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
-// Prepare pooled schema batches inside the Worker instead of crossing the synchronous proxy
-// for each statement. Independently wrapped/custom bindings keep the ordinary batch path.
 const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
   slot.runtime.getD1Database(`DB_${slot.index}`).then((db) => {
     schemaInstallers.set(db, (sql) =>
@@ -84,7 +81,6 @@ const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
     );
     return db;
   });
-// Only immutable fixture schema SQL crosses this private local bootstrap route.
 const schemaWorker = `
 const baselines = new Map();
 const installed = new Set();
@@ -236,7 +232,6 @@ export const isolatedTestStorage = (): Readonly<{
   };
 };
 
-/** Canonical/hosted admission reads live Trial/Subscription standing in the same database. */
 export const canonicalAdmissionMigrationNames = (
   names: ReadonlyArray<string>
 ): ReadonlyArray<string> =>
@@ -303,7 +298,6 @@ export const statementClarificationTestMigrations = [
   "0079_statement_progress",
   "0082_statement_review_capacity",
 ] as const;
-/** Canonical Audit's full shared-budget dependencies for owner integration harnesses. */
 export const statementAuditTestMigrations = [
   "0027_recurring",
   "0028_recurring_audit_budget",
@@ -311,7 +305,6 @@ export const statementAuditTestMigrations = [
   ...statementClarificationTestMigrations,
 ] as const;
 
-/** Ordered schema additions shared by isolated D1 integration harnesses across owners. */
 export const hostedTurnTestMigrations = [
   "0027_recurring",
   "0021_hosted_confirmation",

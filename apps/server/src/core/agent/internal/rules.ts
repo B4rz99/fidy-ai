@@ -43,7 +43,6 @@ type WindowResultEntry = Pick<
   readonly outcome: WindowOutcome;
 };
 
-/** Canonical Transcript fields considered for complete-turn model context selection. */
 export type TranscriptWindowEntry = WindowTextEntry | WindowCallEntry | WindowResultEntry;
 type LifecycleWindowEntry =
   | Pick<typeof FailedTurnTranscriptEntry.Encoded, "_tag" | "turnId">
@@ -51,7 +50,6 @@ type LifecycleWindowEntry =
 /** Any persisted entry accepted for model selection; lifecycle-only markers are removed. */
 export type TranscriptSelectionEntry = TranscriptWindowEntry | LifecycleWindowEntry;
 
-/** Narrows a persisted selection entry to content that is legal in a model prompt. */
 export const isTranscriptWindowEntry = (
   entry: TranscriptSelectionEntry
 ): entry is TranscriptWindowEntry =>
@@ -153,7 +151,6 @@ const trailingTurnUnit = (
     : [entry];
 };
 
-/** Whether the entry at the index is the call already carried by the result that follows it. */
 const pairedWithFollowingResult = (
   turn: ReadonlyArray<TranscriptWindowEntry>,
   index: number

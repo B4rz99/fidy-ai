@@ -16,7 +16,6 @@ export const isReviewedOAuthExpiration = (input: OAuthExpirationReview): boolean
   input.reviewedAt <= input.current &&
   input.reviewedAt + oauthReviewLifetimeMs > input.current &&
   input.expiresAt === input.reviewedAt + input.lifetimeDays * dayMs;
-/** A code is short-lived independently of the later finite credential lifetimes. */
 export const oauthAuthorizationCodeExpiresAt = (current: number): number =>
   current + oauthAuthorizationCodeLifetimeMs;
 /** Finite credentials share the reviewed grant's absolute upper bound, never a sliding grant. */
@@ -27,7 +26,6 @@ export const decideOAuthCredentialExpirations = (
   refreshExpiresAt: Math.min(input.current + oauthRefreshLifetimeMs, input.grantExpiresAt),
 });
 
-/** Approved OAuth disclosure labels share the existing capability facts without changing PAT UX. */
 export const oauthScopeCopy: Readonly<
   Record<PATScopes[number], Readonly<{ label: string; description: string }>>
 > = {

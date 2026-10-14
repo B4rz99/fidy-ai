@@ -2,7 +2,6 @@ import type { JSX } from "react";
 import { Progress } from "./progress";
 import { cn } from "@/ui/class-names";
 
-/** Budget spending ratio with a semantic over-cap treatment and an explicit accessible label. */
 export const BudgetMeter = ({
   value,
   over,
@@ -28,7 +27,6 @@ export const BudgetMeter = ({
   />
 );
 
-/** Color accompanies the remaining/overage label rather than carrying meaning alone. */
 export const BudgetBalance = ({
   over,
   children,

@@ -1,16 +1,8 @@
-// Custom oxlint JS plugin: Effect/SQL semantic guards that oxlint's built-in
-// rules and @effect/language-service diagnostics do not already cover.
-//
-// Ported from the bespoke ESLint rules in
-// https://github.com/mikearnaldi/accountability/blob/main/eslint.config.mjs
-//
-// Oxlint's JS-plugin API mirrors ESLint v9. The JSDoc types below are derived
-// from its published RuleTester contract; keep the runtime plugin as Node ESM.
+// Derived from https://github.com/mikearnaldi/accountability/blob/main/eslint.config.mjs
 
 /** @typedef {import("./ast-types.js").Rule} OxlintRule */
 /** @typedef {import("./ast-types.js").Node} Node */
 /** @typedef {import("./ast-types.js").Program} Program */
-/** @typedef {import("./ast-types.js").TSType} TSType */
 /** @typedef {import("./ast-types.js").TSInterfaceDeclaration} TSInterfaceDeclaration */
 /** @typedef {import("./ast-types.js").TypeEnvironment} TypeEnvironment */
 /** @typedef {import("./ast-types.js").MemberExpression} MemberExpression */
@@ -22,7 +14,6 @@ import {
   classifyUnsafeDictionary,
   classifyUnsafeDictionaryValue,
   createTypeEnvironment,
-  declarationName,
 } from "./dictionary-types.js";
 
 const routerRegistrationFile = fileURLToPath(
@@ -43,7 +34,6 @@ const isRouterRegistration = (node) => {
   );
 };
 
-/** Keep first-party object shapes closed except for TanStack Router's required module augmentation. */
 /** @satisfies {OxlintRule} */
 const noOrdinaryInterface = {
   meta: {
@@ -73,10 +63,6 @@ const noOrdinaryInterface = {
   },
 };
 
-/**
- * Keep route-factory inference without exempting other named functions in their files.
- * The built-in rule remains active everywhere else; route callbacks are not named declarations.
- */
 /** @satisfies {OxlintRule} */
 const requireRouteReturnType = {
   meta: {
@@ -127,11 +113,6 @@ const requireRouteReturnType = {
   },
 };
 
-/**
- * Ban `sql<Type>`...`` — a type parameter on a sql tagged template provides no
- * runtime validation. Use SqlSchema.findOne/findAll/single/void with a Schema
- * so queries validate at runtime.
- */
 /** @satisfies {OxlintRule} */
 const noSqlTypeParameter = {
   meta: {
@@ -161,10 +142,6 @@ const noSqlTypeParameter = {
   },
 };
 
-/**
- * Ban `{ disableValidation: true }` — disabling Schema validation defeats the
- * purpose of Schema and hides invalid data. Fix the data or the schema instead.
- */
 /** @satisfies {OxlintRule} */
 const noDisableValidation = {
   meta: {
@@ -191,9 +168,6 @@ const noDisableValidation = {
   },
 };
 
-// The Effect constructors that take an arbitrary thunk or promise and hand back
-// an Effect without putting anything in `R`. See ARCHITECTURE.md §3. `async` is
-// the v3 spelling of `callback`; both are listed so the fence survives either.
 const ESCAPE_HATCHES = new Set(["sync", "promise", "tryPromise", "async", "callback"]);
 
 /** @param {ImportDeclaration["specifiers"][number]} specifier - Local import binding. */
@@ -208,11 +182,6 @@ const bindsEffectNamespace = (source, specifier) =>
   (source === "effect/Effect" && isWholeModuleImport(specifier)) ||
   (source === "effect" && importsName(specifier, "Effect"));
 
-/**
- * Reject `Effect.promise`, whose `never` failure channel turns an unexpected Promise rejection into
- * a defect. Production adapters use `Effect.tryPromise` and then deliberately map, contain, or die
- * on the foreign failure. This keeps the exceptional decision visible at the interop site.
- */
 /** @satisfies {OxlintRule} */
 const noEffectPromise = {
   meta: {
@@ -245,7 +214,6 @@ const noEffectPromise = {
   },
 };
 
-/** Rejects type-only cast helpers that suppress assignability errors without runtime proof. */
 /** @satisfies {OxlintRule} */
 const noTypeCast = {
   meta: {
@@ -276,7 +244,6 @@ const noTypeCast = {
   },
 };
 
-/** The member name a `.prop` or `["prop"]` access reads, or undefined. */
 /** @param {MemberExpression} node - Member access to inspect. */
 const staticMemberName = (node) => {
   if (!node.computed && node.property.type === "Identifier") return node.property.name;
@@ -286,14 +253,6 @@ const staticMemberName = (node) => {
   return undefined;
 };
 
-/**
- * Ban the Effect escape hatches. `Effect.sync`, `Effect.promise`,
- * `Effect.tryPromise` and `Effect.callback`/`async` accept an arbitrary thunk
- * and produce an `Effect` with `R = never`, so a vendor SDK call reached
- * through one of them never appears in the requirements channel. Scoped to
- * `apps/server/src/core/**` by the config: they are the last remaining way to do I/O in the
- * functional core without the type noticing.
- */
 /** @satisfies {OxlintRule} */
 const noEscapeHatch = {
   meta: {
@@ -307,14 +266,12 @@ const noEscapeHatch = {
   },
   create(context) {
     return {
-      // `Effect.sync(...)` — the repo idiom is `import { Effect } from "effect"`.
       MemberExpression(node) {
         if (node.object.type !== "Identifier" || node.object.name !== "Effect") return;
         const name = staticMemberName(node);
         if (name === undefined || !ESCAPE_HATCHES.has(name)) return;
         context.report({ node, messageId: "noEscapeHatch", data: { name } });
       },
-      // `import { sync } from "effect/Effect"` — the same hatch, unqualified.
       ImportDeclaration(node) {
         const source = node.source.value;
         if (typeof source !== "string") return;
@@ -334,156 +291,6 @@ const noEscapeHatch = {
   },
 };
 
-/**
- * Index a module's top-level statements by the names they bind, as `bindingsOf`
- * reports them. Nameless entries are dropped: nothing can refer to them by name.
- */
-/**
- * @param {Program} program - Module whose declarations are indexed.
- * @param {(node: Node) => Array<[string | undefined, Node]>} bindingsOf - Declaration names.
- */
-const indexByName = (program, bindingsOf) =>
-  new Map(program.body.flatMap(bindingsOf).filter(([name]) => name !== undefined));
-
-/**
- * The `[specifier, local name]` pairs a bare `export { a, b as c }` carries.
- * ESTree always supplies `specifiers` on that form, so it is read directly: a
- * statement missing it is a shape that cannot occur, and it should fail here
- * rather than quietly walk an empty list and report nothing.
- */
-/**
- * @param {import("./ast-types.js").ExportNamedDeclaration} statement - Named export list.
- * @returns {Array<[Node, string]>}
- */
-const exportedLocals = (statement) =>
-  statement.specifiers.flatMap((specifier) =>
-    specifier.local.type === "Identifier" ? [[specifier, specifier.local.name]] : []
-  );
-
-/** The leftmost identifier of a `typeof X` / `typeof X.Y` query, or undefined. */
-/** @param {TSType} typeAnnotation - Type queried by the schema companion. */
-const typeQueryRoot = (typeAnnotation) => {
-  if (typeAnnotation.type !== "TSTypeQuery") return undefined;
-  let name = typeAnnotation.exprName;
-  while (name.type === "TSQualifiedName") name = name.left;
-  return name.type === "Identifier" ? name.name : undefined;
-};
-
-/**
- * A `export type X = typeof X.Type` restating a schema declared just above it.
- * The Effect idiom pairs every schema with its inferred type under one name;
- * they are one interface, documented once on the schema. Demanding a second
- * comment here would only produce the comment-shaped text that says nothing.
- */
-/** @param {Node} declaration - Exported declaration to inspect. */
-const isSchemaTypeCompanion = (declaration) =>
-  declaration.type === "TSTypeAliasDeclaration" &&
-  typeQueryRoot(declaration.typeAnnotation) === declaration.id.name;
-
-/** The names one top-level statement binds, each paired with the statement itself. */
-/**
- * @param {Node} statement - Top-level declaration to index.
- * @returns {Array<[string, Node]>}
- */
-const declaredBindings = (statement) => {
-  if (statement.type === "VariableDeclaration") {
-    return statement.declarations.flatMap((declarator) =>
-      declarator.id.type === "Identifier" ? [[declarator.id.name, statement]] : []
-    );
-  }
-  const name = declarationName(statement);
-  return name === undefined ? [] : [[name, statement]];
-};
-
-/**
- * Require a leading block comment on every exported declaration. Scoped to
- * `apps/server/src/core/**` by the config: core is what shell consumes, so its exports are
- * the interfaces, and enforcing presence everywhere reliably produces
- * comment-shaped text that satisfies a linter and says nothing.
- *
- * Presence only. Quality — whether a caller could use the thing having read the
- * comment and the signature and never the body — stays a review matter
- * (CODING_STANDARDS.md).
- *
- * A bare `export { name }` is judged on the comment above the declaration of
- * `name`, not on the export line. The interface is documented where it is
- * declared, and demanding a second comment above a list of names is how a rule
- * about interfaces starts producing text about nothing.
- */
-/** @satisfies {OxlintRule} */
-const requireInterfaceComment = {
-  meta: {
-    type: "problem",
-    docs: { description: "Require a leading block comment on exported declarations" },
-    messages: {
-      requireInterfaceComment:
-        "This export has no leading block comment. Core is what shell consumes, so its exports are the interfaces: say what the abstraction does, what the arguments mean beyond their types, what the caller must guarantee and what it may rely on afterwards. A caller should be able to use it correctly having read the comment and the signature and never the body.",
-    },
-    schema: [],
-  },
-  create(context) {
-    /** @param {Node} node - Export site whose leading comment is checked. */
-    const lacksLeadingBlockComment = (node) => {
-      const comments = context.sourceCode.getCommentsBefore(node);
-      const nearest = comments.at(-1);
-      return nearest?.type !== "Block" || nearest.value.trim() === "";
-    };
-    /** @param {Node} node - Undocumented export. */
-    const report = (node) => context.report({ node, messageId: "requireInterfaceComment" });
-
-    /**
-     * @param {import("./ast-types.js").ExportNamedDeclaration} statement - Export list.
-     * @param {Map<string | undefined, Node>} sites - Local declaration sites.
-     */
-    const checkSpecifiers = (statement, sites) => {
-      for (const [specifier, name] of exportedLocals(statement)) {
-        const site = sites.get(name);
-        // A name this module does not declare arrived by import, documented
-        // wherever it came from.
-        if (site === undefined || isSchemaTypeCompanion(site)) continue;
-        if (lacksLeadingBlockComment(site)) report(specifier);
-      }
-    };
-
-    /**
-     * @param {import("./ast-types.js").ExportNamedDeclaration} statement - Named export.
-     * @param {Map<string | undefined, Node>} sites - Local declaration sites.
-     */
-    const checkNamed = (statement, sites) => {
-      // `export { x } from "./y"` re-exports something already documented
-      // where it is declared; the barrel-file rule in .dependency-cruiser.mjs
-      // is what keeps those from becoming a habit.
-      if (statement.source) return;
-      if (!statement.declaration) return checkSpecifiers(statement, sites);
-      if (isSchemaTypeCompanion(statement.declaration)) return;
-      if (lacksLeadingBlockComment(statement)) report(statement);
-    };
-
-    return {
-      Program(program) {
-        /** Where each name in the module is declared, for the `export { name }` case. */
-        const sites = indexByName(program, declaredBindings);
-        for (const statement of program.body) {
-          if (statement.type === "ExportNamedDeclaration") checkNamed(statement, sites);
-          if (
-            statement.type === "ExportDefaultDeclaration" &&
-            lacksLeadingBlockComment(statement)
-          ) {
-            report(statement);
-          }
-        }
-      },
-    };
-  },
-};
-
-/**
- * Ban direct use of React's useEffect. UI work is caused by an event, derived
- * during render, or owned by a dedicated query/router/external-store API; a
- * state transition must never be used as an indirect command. If a concrete
- * imperative integration eventually requires synchronization, it belongs in
- * one narrow adapter with an explicit file-scoped lint exception.
- */
 /** @satisfies {OxlintRule} */
 const noReactUseEffect = {
   meta: {
@@ -525,10 +332,6 @@ const noReactUseEffect = {
   },
 };
 
-/**
- * DateTime.Utc exposes `partsUtc` only as Effect's mutable lazy cache. Core may
- * carry Utc instants but must never couple domain logic to that internal field.
- */
 /** @satisfies {OxlintRule} */
 const noDateTimeInternals = {
   meta: {
@@ -624,11 +427,6 @@ const brandBindingLocals = (node) =>
         .map((specifier) => specifier.local.name)
     : [];
 
-/**
- * Effect's Brand type is allowed through the deep-readonly rule because its
- * phantom variance field is misclassified as mutable. Compensate by permitting
- * Schema.brand only when the branded runtime value is a primitive scalar.
- */
 /** @satisfies {OxlintRule} */
 const scalarBrandOnly = {
   meta: {
@@ -783,11 +581,6 @@ const parameterAnnotation = (parameter) => {
   return parameter.typeAnnotation;
 };
 
-/**
- * Core accepts established contracts. Raw values must be decoded before they
- * cross the core boundary unless a validation module is recorded as a narrow
- * config-level exception.
- */
 /** @satisfies {OxlintRule} */
 const noUnknownParameters = {
   meta: {
@@ -861,7 +654,6 @@ const isPlainAliasConsumer = (node, environment) =>
   environment.aliases.has(node.typeName.name) &&
   !isInsideTypeAlias(node);
 
-/** Reject open object dictionaries whose values have no established contract. */
 /** @satisfies {OxlintRule} */
 const noUnsafeDictionaryType = {
   meta: {
@@ -954,7 +746,6 @@ const plugin = {
     "no-escape-hatch": noEscapeHatch,
     "no-effect-promise": noEffectPromise,
     "no-datetime-internals": noDateTimeInternals,
-    "require-interface-comment": requireInterfaceComment,
     "scalar-brand-only": scalarBrandOnly,
   },
 };

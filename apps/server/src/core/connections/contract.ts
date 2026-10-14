@@ -41,7 +41,6 @@ export const InstitutionSummary = Schema.Struct({
 }).annotate({ identifier: "InstitutionSummary" });
 export type InstitutionSummary = typeof InstitutionSummary.Type;
 
-/** Starting requires only Fidy's stable institution identity. */
 export const ConnectInstitutionInput = Schema.Struct({ institutionId: InstitutionId }).annotate({
   identifier: "ConnectInstitutionInput",
 });

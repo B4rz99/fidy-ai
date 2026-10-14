@@ -129,8 +129,6 @@ it(
           ).toBe(202);
           yield* waitForCount(db, "handoffs", backlog - 1);
           yield* waitForCount(db, "dead_letters", 10);
-          // Miniflare's broker retries the whole failed batch even after explicit individual acks.
-          // Characterize its conservative replay behavior; this is not production ack isolation.
           expect(yield* Effect.tryPromise(() => count(db, "dead_letters"))).toBe(10);
           expect(yield* Effect.tryPromise(() => count(db, "deliveries"))).toBe(backlog + 30);
           expect(

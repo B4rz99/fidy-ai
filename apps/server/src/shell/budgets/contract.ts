@@ -36,7 +36,6 @@ const destructiveWrite = operationPolicy({
   kind: "mutation",
 });
 
-/** User-scoped monthly Budget management and one-call current-month status lookup. */
 export const BudgetsGroup = HttpApiGroup.make("budgets")
   .add(
     HttpApiEndpoint.post("createBudget", "/budgets", {

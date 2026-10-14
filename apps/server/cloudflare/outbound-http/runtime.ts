@@ -19,7 +19,6 @@ const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>)
   };
   const cancel = (): void => {
     if (released) return;
-    // Start remote cancellation, but do not make local scope closure await provider code.
     reader.cancel().catch(() => undefined);
     release();
   };

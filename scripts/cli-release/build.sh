@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Build natively with the retained runtime; never download a cross-compilation runtime.
 set -euo pipefail
 [[ "$(bun --revision)" == '1.4.3-canary.1+13a98b0db' ]] || { echo 'Use the reviewed Bun runtime.' >&2; exit 1; }
 case "$(uname -s)/$(uname -m)" in

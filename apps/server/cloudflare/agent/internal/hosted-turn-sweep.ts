@@ -20,7 +20,6 @@ export const sweepHostedTurns = ({
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
-    // Bound each indexed source before grouping Users to keep discovery work bounded.
     const due = yield* Effect.tryPromise(() =>
       db
         .prepare(`WITH

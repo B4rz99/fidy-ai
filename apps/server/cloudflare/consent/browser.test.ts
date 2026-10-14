@@ -35,7 +35,6 @@ const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((value) => new Uint8Array(value));
-// The Miniflare fixture owns foreign Promise APIs, not application workflow.
 const seedUser = (
   db: D1Database,
   input: Readonly<{
@@ -633,7 +632,6 @@ const expireSession = (
   expiry: "idle_expires_at_ms" | "hard_expires_at_ms"
 ): Promise<D1Result> => {
   const current = DateTime.nowUnsafe().epochMilliseconds;
-  // Hard expiry has a fixed lifetime in storage, so arrange an older session rather than an invalid row.
   return expiry === "idle_expires_at_ms"
     ? db
         .prepare("UPDATE web_sessions SET idle_expires_at_ms=? WHERE id=?")

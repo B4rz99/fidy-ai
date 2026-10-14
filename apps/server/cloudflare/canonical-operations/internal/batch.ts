@@ -47,7 +47,7 @@ import type {
   CanonicalMutationRefusal,
   PreparedCanonicalMutation,
 } from "../contract";
-/** One raw child as the published batch mutation carries it; the catalog call schema decodes it. */
+
 type CanonicalBatchCall = unknown;
 
 type PreparedCall = Readonly<{
@@ -71,13 +71,6 @@ type CatalogDecision =
     }>
   | Readonly<{ _tag: "Response"; response: Response }>;
 
-// A batch executes a call the caller already confirmed: hosted confirmation is enforced before a
-// batch reaches this D1 seam, exactly as it is for an individual mutation, and no confirmation
-// evidence exists at the D1 boundary either way.
-//
-// No Subscription adapter resolves AccessTier in this slice. Every implemented child is free-tier,
-// and a Pro-only child is not implementable yet, so the stricter `free` default cannot admit work
-// a Pro caller was owed.
 const callerAccessTier = "free";
 const executableChildMessage = "Each batch child must name an executable canonical mutation.";
 const unsupportedChildMessage =
@@ -207,8 +200,6 @@ const rejectChild = ({
   operation: CanonicalOperationId;
   refusal: CanonicalMutationRefusal;
 }>): Effect.Effect<Response> =>
-  // `record` and `respond` never fail by contract; a future fallible refusal must widen the
-  // contract first, failing to build here until every caller answers the new failure.
   refusal
     .record()
     .pipe(
@@ -260,7 +251,6 @@ const rawChildInput = (call: CanonicalBatchCall): unknown =>
     () => call
   );
 
-/** Decide one named canonical operation against the batch's own executable-child policy. */
 const catalogDecision = (operation: CanonicalOperationId, index: number): CatalogDecision => {
   const catalogOperation = operationCatalog.byId.get(operation);
   if (catalogOperation === undefined) {
@@ -393,7 +383,6 @@ const childAuthorizationStep = ({
   );
 };
 
-/** Map one owner preparation to its batch step, recording the evidence of an owner refusal. */
 const preparationStep = ({
   db,
   scopedSubject,
@@ -426,7 +415,6 @@ const preparationStep = ({
     case "Failed":
       return failedCallStep({ db, subject: scopedSubject, current });
     case "Refused":
-      // The refusal Audit belongs to the same child authority the owner prepared under.
       return rejectChild({
         db,
         subject: scopedSubject,
@@ -632,8 +620,6 @@ const prepareBatch = (work: BatchWork): Effect.Effect<BatchPreparation, never, H
       }
       const target = childTarget(step.mutation);
       if (Option.isSome(target)) {
-        // Two children that address one retained row cannot both present independent results, and
-        // the owner guards do not serialize them, so the batch refuses before any child commits.
         if (targets.has(target.value)) {
           return {
             _tag: "Response",
@@ -664,7 +650,6 @@ const presentCommitted = ({
     for (const [index, child] of children.entries()) {
       const value = execution.values[index];
       if (value === undefined) return transactionUnavailable();
-      // Every child presents the same canonical success value its individual response would.
       const result = yield* decodeAtomicBatchResult({
         callId: child.call.callId,
         operation: child.operation.id,

@@ -146,13 +146,11 @@ export type InsightTemplateSender = Readonly<{
 
 export { WhatsAppBusinessPhoneNumberId, WhatsAppProviderMessageId };
 
-/** Stable identity of one accepted User-owned inbound message and its durable queue item. */
 export const WhatsAppInboundJobId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("WhatsAppInboundJobId")
 );
 export type WhatsAppInboundJobId = typeof WhatsAppInboundJobId.Type;
 
-/** Opaque retry key for one authenticated WhatsApp delivery. */
 export const WhatsAppDeliveryKey = Schema.String.check(
   Schema.isTrimmed(),
   Schema.isMinLength(1),
@@ -160,7 +158,6 @@ export const WhatsAppDeliveryKey = Schema.String.check(
 ).pipe(Schema.brand("WhatsAppDeliveryKey"));
 export type WhatsAppDeliveryKey = typeof WhatsAppDeliveryKey.Type;
 
-/** Provider-qualified evidence projected into the WhatsApp operational slice. */
 export const WhatsAppMessageEvidence = Schema.Struct({
   ...ProviderMessageEvidence.fields,
   channel: Schema.Literal("whatsapp"),
@@ -221,7 +218,6 @@ export const HostedDeliveryCorrelationToken = Schema.String.check(Schema.isUUID(
 );
 export type HostedDeliveryCorrelationToken = typeof HostedDeliveryCorrelationToken.Type;
 
-/** Provider-independent input for one authenticated WhatsApp event. */
 export type WhatsAppInboundEvent = Readonly<{
   readonly messageEvidence: WhatsAppMessageEvidence;
   readonly caller: WhatsAppCaller;
@@ -244,7 +240,6 @@ export type WhatsAppIdentityChangeEvent = Readonly<{
   readonly occurredAt: DateTime.Utc;
 }>;
 
-/** One authenticated WhatsApp delivery normalized to a non-empty event collection. */
 export type WhatsAppWebhookReceipt = Readonly<{
   readonly deliveryKey: WhatsAppDeliveryKey;
   readonly events: EffectArray.NonEmptyReadonlyArray<WhatsAppInboundEvent>;
@@ -302,7 +297,6 @@ export type WhatsAppDelivery = {
   }) => Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed>;
 };
 
-/** Maximum raw Kapso delivery accepted before payload decoding. */
 export const maxWhatsAppWebhookBytes = 1_048_576;
 /** Maximum lead of a signed Kapso event clock over receipt; Consent replay windows must reserve it. */
 export const maxWhatsAppFutureTimestampMinutes = 5;
@@ -311,7 +305,6 @@ export const maxWhatsAppDeliveryEvents = 100;
 
 /** Signature is absent, malformed, or does not authenticate the exact raw bytes. */
 export class InvalidWhatsAppSignature extends Data.TaggedError("InvalidWhatsAppSignature")<{}> {}
-/** Raw webhook bytes exceed Fidy's fixed launch resource bound. */
 export class WhatsAppPayloadTooLarge extends Data.TaggedError("WhatsAppPayloadTooLarge")<{}> {}
 /** Authentic JSON does not match the supported Kapso v2 message projection. */
 export class InvalidWhatsAppPayload extends Data.TaggedError("InvalidWhatsAppPayload")<{}> {

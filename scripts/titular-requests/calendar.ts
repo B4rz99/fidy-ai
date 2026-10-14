@@ -21,7 +21,6 @@ export const completionReviewDate = (value: TitularCase): Option.Option<string> 
   );
 
 // Ley 51/1983 Article 1, including moved observances and Easter-relative days.
-// This finite calendar deliberately refuses unsupported years; it never silently ignores holidays.
 const holidays: Readonly<Record<string, ReadonlyArray<string>>> = {
   "2026": [
     "01-01",
@@ -96,7 +95,7 @@ const workingDeadline = (
   return Option.some(DateTime.formatIsoDateUtc(date));
 };
 
-/** Draft Ley 1581 internal targets; legal classification/approval and any shorter special regime remain operator gates. */
+/** Provisional Ley 1581 targets cover only 2026–2027; unsupported years require review. Apply any shorter special-regime deadline separately. */
 export const caseDeadlines = ({
   kind,
   receivedDate,

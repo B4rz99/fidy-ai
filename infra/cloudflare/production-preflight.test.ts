@@ -38,7 +38,6 @@ type PreflightResult = {
   readonly stopped: ReadonlyArray<boolean>;
 };
 
-// Substitute only the external command boundary; exercise the real orchestration and drift gate.
 const fixtureCommand = `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
@@ -149,7 +148,6 @@ const runPreflight = Effect.fn(function* (failedGate: string = "") {
     stopped,
   } satisfies PreflightResult;
 });
-// Subprocess polling observes real time, not the deterministic application TestClock.
 layer(BunServices.layer, { excludeTestServices: true })("Production preflight barrier", (it) => {
   it.effect("overlaps both lanes while keeping migration, bootstrap and drift ordered", () =>
     Effect.gen(function* () {

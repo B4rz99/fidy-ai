@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# User-authorized #969 exception, carried through #996/#973 and explicitly renewed under #1011.
-# The #1011 Workers types and merged #1036 tooling updates are seven-day-eligible; prior young resolutions are unchanged.
-# This exact snapshot only; the original 2026-10-10 UTC expiry is unchanged.
-# The ordinary seven-day policy remains in bunfig; changed locks receive no exception.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if [[ $# -gt 1 || ( $# -eq 1 && "$1" != '--ignore-scripts' ) ]]; then

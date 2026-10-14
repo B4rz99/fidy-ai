@@ -12,10 +12,8 @@ fi
 port="${WORKERS_AI_CONFORMANCE_PORT:-8799}"
 model="${HOSTED_AI_MODEL:?HOSTED_AI_MODEL must select the approval candidate}"
 
-# Client availability bounds, not proof that remote inference was cancelled or safe to replay.
 readonly readiness_connect_seconds=2 readiness_total_seconds=10
 readonly conformance_connect_seconds=5
-# Operators and local protocol tests may tighten the client deadline, never raise it.
 conformance_total_seconds="${WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS:-180}"
 if [[ ! "$conformance_total_seconds" =~ ^[1-9][0-9]{0,2}$ ]] ||
   (( conformance_total_seconds > 180 )); then
@@ -24,7 +22,6 @@ if [[ ! "$conformance_total_seconds" =~ ^[1-9][0-9]{0,2}$ ]] ||
 fi
 readonly conformance_total_seconds
 
-# Deterministic malformed-output/recovery checks must pass before live verification or quota deferral.
 bun run --cwd ../../apps/server test:hosted-inference
 
 config_dir="$(mktemp -d)"
@@ -46,7 +43,6 @@ EOF
 cleanup() {
   if [[ -n "$worker_pid" ]]; then
     kill "$worker_pid" 2>/dev/null || true
-    # The command owner escalates its native child at two seconds; allow it to reap first.
     sleep 3
     kill -KILL "$worker_pid" 2>/dev/null || true
     wait "$worker_pid" 2>/dev/null || true
@@ -103,8 +99,6 @@ if ! status=$(curl --silent \
   exit 1
 fi
 
-# Deployment availability is independent of provider quota. Standalone verification remains strict.
-# Only a closed report from a live inference check can defer; configuration and internal failures cannot.
 if [[ "$allow_quota_deferral" == true && "$status" == 503 ]] && jq --slurp --exit-status '
   length == 1 and (.[0] | .modelApprovalRevision == "workers-ai-gemma-4-2026-09-22"
     and .outcome == "non_conforming"

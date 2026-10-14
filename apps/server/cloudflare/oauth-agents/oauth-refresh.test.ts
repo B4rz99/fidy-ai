@@ -115,7 +115,6 @@ it("treats lost token delivery as replay, revokes every generation across restar
         refreshFixture({ ...fixture, refresh: original.refresh_token, scope: Option.none() })
       );
       const winner = yield* Schema.decodeUnknownEffect(TokenFixture)(yield* wait(delivered.json()));
-      // The host did not retain this response. There is deliberately no replacement recovery channel.
       fixture.restartCoordinators();
       const replay = yield* wait(
         refreshFixture({ ...fixture, refresh: original.refresh_token, scope: Option.none() })

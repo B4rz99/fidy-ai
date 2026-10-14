@@ -1,6 +1,5 @@
 import { Crypto, Effect, PlatformError } from "effect";
 
-/** Uses browser entropy and digest APIs through the shared Effect Crypto interface. */
 export const browserCrypto = Crypto.make({
   randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
   digest: (algorithm, data) =>

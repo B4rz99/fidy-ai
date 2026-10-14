@@ -108,7 +108,6 @@ test("an expired-trial User withdraws through real Core and can recover the same
           "Referencia:"
         )
       );
-      // Cookie remains usable for privacy, but cannot authorize ordinary canonical work.
       yield* Effect.tryPromise(() => verifyTransactionAccess(page));
       const response = yield* Effect.tryPromise(() =>
         page.request.get(`${apiOrigin}/transactions`, {

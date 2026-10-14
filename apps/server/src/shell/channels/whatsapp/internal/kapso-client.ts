@@ -185,7 +185,6 @@ const decodeSentMessage = (
     } satisfies WhatsAppSentMessage;
   });
 
-/** Builds a client that routes recipients by delivery mode and reports closed evidence or failures. */
 export const makeWhatsAppDelivery = ({
   deliveryMode,
   outboundHttp,

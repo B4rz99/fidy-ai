@@ -28,7 +28,6 @@ import {
   transactionId,
 } from "../../canonical-work/operations";
 
-/** The owner cap enforced by budget_capacity in migration 0016. */
 const maximumBudgetsPerUser = 128;
 
 /** Owner checks run under the same D1 lock as the child write and its Audit. */

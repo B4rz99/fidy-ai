@@ -122,7 +122,6 @@ const DetailFrame = ({
     ) : null}
   </section>
 );
-/** Keeps mutation and draft ownership above the responsive layout boundary. */
 export const TransactionDetail = (props: DetailProps): JSX.Element => {
   if (props.mode._tag === "Deleting") {
     return props.renderPanel(

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Codex cloud setup for Fidy: Debian-based worker, no root required.
 set -euo pipefail
 project_root=${FIDY_PROJECT_DIR:-$(git rev-parse --show-toplevel)}
 local_root=${FIDY_LOCAL_ROOT:-/workspace/.local}
@@ -27,8 +26,6 @@ for package in "$local_root"/native-cli/packages/*.deb; do
   dpkg-deb -x "$package" "$local_root/native-cli/root"
 done
 cd "$project_root"
-# Replace the executable atomically so rerunning setup also works while Bun is running.
-# The repository installer remains the sole authority for its revision and checksum.
 runtime_directory=$(mktemp -d "$local_root/fidy-bun.XXXXXX")
 trap 'rm -rf "$runtime_directory"' EXIT
 bash scripts/install-bun.sh "$runtime_directory"
@@ -44,7 +41,6 @@ bash scripts/install-workspace.sh
 bun node_modules/playwright/cli.js install --only-shell chromium
 cat > "$local_root/bin/fidy-native-tests" <<'LAUNCHER'
 #!/usr/bin/env bash
-# Run native CLI checks with an isolated, encrypted test keyring.
 set -euo pipefail
 if [[ "${FIDY_NATIVE_DBUS_SESSION:-}" != 1 ]]; then
   exec dbus-run-session -- env FIDY_NATIVE_DBUS_SESSION=1 "$0" "$@"

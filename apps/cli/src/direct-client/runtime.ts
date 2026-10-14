@@ -34,8 +34,7 @@ const responseMetadata = (response: Response): ResponseInit => ({
   headers: response.headers,
 });
 
-// Own the native reader before Effect's Web-stream adapter. Native cancellation may
-// never settle; starting it must still release the lock and finish our finalizer.
+// Native reader cancellation may never settle; release the lock without awaiting it.
 const ownedResponse = (response: Response, init: Pick<RequestInit, "signal"> = {}): Response => {
   const signal = init.signal;
   const source = response.body;

@@ -14,7 +14,6 @@ const encodeMetadata = Schema.encodeSync(
   )
 );
 
-// Vitest owns teardown; keep every directory registered even when fixture construction fails.
 afterEach(() =>
   Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })))
 );

@@ -48,8 +48,6 @@ const setup = (includeRetention = true): Promise<D1Database> =>
     })
   );
 
-// Model already-retired history without paying thousands of live admission batches. All
-// production triggers are restored before either new evidence or the retention operation runs.
 const seedHistory = (db: D1Database): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {

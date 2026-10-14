@@ -45,8 +45,6 @@ it.each(["plain ASCII", 'é🙂\ud800x\udfff"\\\n\r\t\b\f\u0000'])(
   (suffix) => {
     const prefix = "\u0001".repeat(165_000) + suffix;
     const empty = Schema.encodeUnknownSync(evidenceCodec)(reviewRow("", 0).evidence);
-    // The independent JSON encoder supplies bounded fixture sizes. Fixed UUIDs, timestamps,
-    // metadata and SQLite record overhead leave 1,999,706 bytes for this evidence value.
     const requiredPayload = (1_999_706 - encodedLength(empty)) / 2;
     const raw = prefix + "x".repeat(requiredPayload - (encodedLength(prefix) - 2));
     const admits = statementReviewAdmission(context);
@@ -58,7 +56,6 @@ it.each(["plain ASCII", 'é🙂\ud800x\udfff"\\\n\r\t\b\f\u0000'])(
       const row = reviewRow(raw, extra);
       expect(encodedLength(Schema.encodeUnknownSync(evidenceCodec)(row.evidence))).toBe(1_999_706);
       expect(encodedLength(row.issues)).toBe(59 + extra);
-      // The resulting complete records are 1,999,999 / 2,000,000 / 2,000,001 bytes.
       expect(admits(row)).toBe(expected);
     }
   }
@@ -105,7 +102,6 @@ it("charges actual UTF-8 metadata without a fixed safety reserve", () => {
   const row = reviewRow(raw, 0);
   expect(statementReviewAdmission({ ...context, locale: "es-COx" })(row)).toBe(true);
   expect(statementReviewAdmission({ ...context, locale: "es-COé" })(row)).toBe(false);
-  // Zero uses the zero-byte integer serial type, freeing six bytes from a timestamp.
   expect(statementReviewAdmission({ ...context, createdAt: 0 })(reviewRow(raw, 7))).toBe(true);
   expect(statementReviewAdmission({ ...context, createdAt: 0 })(reviewRow(raw, 8))).toBe(false);
 });

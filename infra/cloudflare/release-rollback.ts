@@ -38,7 +38,6 @@ const routeStable = Effect.fn(function* (port: RollbackPort, name: string, stabl
   return result;
 });
 
-/** Restore only code traffic for the captured pair; refuse unknown compatibility or racing deployments. */
 const restore = Effect.fn(function* (
   port: RollbackPort,
   input: Readonly<{

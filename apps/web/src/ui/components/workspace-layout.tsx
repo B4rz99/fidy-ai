@@ -2,7 +2,6 @@ import { Option } from "effect";
 import type { JSX, ReactNode } from "react";
 import { WorkspaceDesktop, useWorkspaceSize } from "./workspace-responsive";
 
-/** Keeps the page title and responsive actions aligned; features supply their own context and commands. */
 export const WorkspaceHeader = ({
   title,
   context,
@@ -21,7 +20,6 @@ export const WorkspaceHeader = ({
   </header>
 );
 
-/** Reserves the desktop rail while stacking its content below the records on smaller screens. */
 export const WorkspaceColumns = ({
   children,
   panel,
@@ -58,7 +56,6 @@ export const WorkspaceColumns = ({
   );
 };
 
-/** Wraps compact record controls without separating filters from actions. */
 export const RecordToolbar = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
   <div className="mb-4 flex flex-wrap items-center gap-2 [&_button]:px-3">{children}</div>
 );

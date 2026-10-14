@@ -1,8 +1,7 @@
 # Conectar tu agente con Fidy
 
 MCP remoto está disponible para conectar agentes con Fidy. El responsable del producto confirmó
-su prueba en Producción el 9 de octubre de 2026. La evidencia automatizada y su alcance histórico
-siguen documentados en el [informe de verificación](../research/hosted-mcp-release-990.md).
+su prueba en Producción el 9 de octubre de 2026.
 Esta actualización no amplía las versiones o clientes cubiertos por las pruebas automatizadas.
 
 ## Configuración

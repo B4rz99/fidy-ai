@@ -121,7 +121,6 @@ export const classifyConsentIngressReplay = ({
 export const isConsentIngressDecisionPhase = (exchange: ConsentIngressExchange): boolean =>
   exchange.phase._tag !== "BeforeDelivery";
 
-/** Derives the fixed disclosure and honest origin for one terminal PAT grant transition. */
 export const decidePATRevocation = <Origin extends PATRevocationOrigin>(
   origin: Origin
 ): PATRevocationDisclosure<Origin> => patRevocationDisclosures[origin];

@@ -33,7 +33,6 @@ cleanup() {
   rm -f "$proof/.dev.vars" "$proof/curl.conf"
 }
 trap cleanup EXIT
-# Capability is never placed on a command line or in a printable HTTP URL.
 token="$(openssl rand -hex 32)"
 printf 'EVALUATION_TOKEN="%s"\n' "$token" > "$proof/.dev.vars"
 printf 'header = "Authorization: Bearer %s"\n' "$token" > "$proof/curl.conf"
@@ -41,7 +40,6 @@ unset token
 jq -n --arg main "$root/apps/server/cloudflare/ai/workers-ai-evaluation-worker.ts" \
   --arg model "$model" --arg commit "$commit" --arg mode "${mode#--}" \
   '{name:"fidy-hosted-adversarial-local",main:$main,compatibility_date:"2026-09-22",compatibility_flags:["nodejs_compat"],vars:{HOSTED_AI_MODEL:$model,EVALUATION_COMMIT:$commit,EVALUATION_MODE:$mode},observability:{enabled:false}} + (if $mode == "live" then {ai:{binding:"AI",remote:true}} else {} end)' > "$config"
-# Record actual local source bytes, including a dirty dry-run tree. No generated content goes to stdout.
 git ls-files --cached --others --exclude-standard -z apps/server/src/shell/hosted-inference apps/server/cloudflare/ai apps/server/src/shell/canonical-operations apps/server/src/shell/api.ts apps/server/src/core/agent bun.lock infra/cloudflare/scripts/check-hosted-adversarial.sh \
   | xargs -0 shasum -a 256 > "$proof/source-sha256.txt"
 python3 "$root/scripts/cli-release/command.py" --timeout 1320 -- bunx --no-install wrangler dev --config "$config" --ip 127.0.0.1 --port "$port" \
@@ -76,7 +74,6 @@ for index in $(seq 0 64); do
     echo 'Evaluation wall-clock limit reached; do not retry this run.' >&2
     exit 1
   fi
-  # No automatic retries: an interrupted HTTP exchange may already have purchased inference.
   status="$(curl --noproxy '*' --silent --max-filesize 2097152 --config "$proof/curl.conf" --connect-timeout 2 --max-time 125 \
     --request POST --write-out '%{http_code}' --output "$proof/case-$index.json" \
     "http://127.0.0.1:$port/evaluate/$index")" || {

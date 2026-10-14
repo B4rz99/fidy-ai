@@ -130,7 +130,6 @@ const UserBudgets = ({ user }: Readonly<{ user: CurrentUser }>): JSX.Element => 
   return <MonthlyBudgets key={`${user.id}:${user.timeZone}:${month}`} user={user} month={month} />;
 };
 
-/** Owns canonical monthly plan resources inside the authentication-lifetime registry. */
 export const BudgetsFeature = (): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() =>

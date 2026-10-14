@@ -9,8 +9,6 @@ if (title === undefined || title.trim().length === 0) {
   process.exit(1);
 }
 
-// The squashed trunk subject is the PR title, so it answers to the same
-// allowlist the commit-msg hook enforces: CODING_STANDARDS.md's commit convention.
 const convention = await loadCommitConvention();
 const errors = convention.validateHeader(title);
 

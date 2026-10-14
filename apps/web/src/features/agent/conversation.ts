@@ -64,7 +64,6 @@ const rejectSubmission = (
     }))
   );
 
-// Commands retain the exact proposal privately; their callers never supply transition callbacks.
 const conversationCommands = (
   client: HostedTurnClient,
   setConversation: SetConversation,

@@ -2,7 +2,7 @@
 
 Use when changing MCP ingress, tool registration, protocol negotiation or native confirmation.
 Import `McpServer`, `McpSchema` and `McpProtocol` from `effect/ai`; HTTP assembly uses
-`HttpRouter` from `effect/http`. Selected Effect 4.0.1 sources:
+`HttpRouter` from `effect/http`. Selected Effect 4.0.2 sources:
 `node_modules/effect/src/ai/{McpServer,McpSchema,McpProtocol}.ts`. Verify `layerHttp`,
 `McpServer.addTool`, `McpRequestContext`, `InputRequired` and the selected protocol adapters.
 

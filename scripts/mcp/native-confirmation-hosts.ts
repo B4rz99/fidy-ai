@@ -21,9 +21,6 @@ import {
   nativeTools,
 } from "./production-native";
 
-/** Local-only native confirmation proof. Start oauth-confirmation.test.ts's opt-in
- * FIDY_988_HOST_BRIDGE_FILE fixture first, then pass the pinned --claude/--codex binaries.
- * The bridge injects a disposable approved OAuth credential; this never proves native OAuth login. */
 const stringify = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 class LocalProofFailure extends Data.TaggedError("LocalProofFailure")<{
   message: string;

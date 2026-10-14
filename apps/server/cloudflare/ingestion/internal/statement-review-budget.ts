@@ -242,7 +242,6 @@ export const statementReviewAdmission = (
         integerValue(row.recordNumber),
         text(row.reason),
         textValue(evidence),
-        // The INSERT intentionally persists known_money as NULL today.
         { bytes: 0, serial: 0 },
         textValue(issues),
         ...afterIssues,

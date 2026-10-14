@@ -78,7 +78,6 @@ const selectReminderDate = (
   if (input.cadence.kind !== "every-three-days") return candidate;
   const anchor = DateTime.makeUnsafe(input.cadence.anchorDate);
   let next = candidate;
-  // Calendar selection remains bounded even for zones with skipped local dates or times.
   for (let attempt = 0; attempt < maximumCalendarCandidates; attempt += 1) {
     const localDate = DateTime.makeUnsafe(
       DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(next, input.timeZone))
@@ -239,7 +238,6 @@ const allowedTargets: Readonly<
   dismissed: [],
 };
 
-/** Returns the complete valid next states for one current lifecycle state. */
 export const allowedInsightTransitions = (
   current: InsightLifecycleState
 ): ReadonlyArray<InsightLifecycleState> => allowedTargets[current];

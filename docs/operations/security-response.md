@@ -1,9 +1,8 @@
 # Security incident response
 
 Repository procedure established by #1260. **No incident exercise or live alert receipt is claimed.**
-Use with [production recovery](production-recovery.md),
-[background-work monitoring](cloudflare-background-work.md), and the
-[OWASP evidence assessment](../research/owasp-implementation-evidence-1260.md).
+Use with [production recovery](production-recovery.md) and
+[background-work monitoring](cloudflare-background-work.md).
 This procedure does not widen production access, permit destructive recovery, or enable MCP launch.
 
 ## Ownership and detection

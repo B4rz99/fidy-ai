@@ -82,7 +82,6 @@ export const prepareStatementCapture = (
   ];
 };
 
-// The persisted deterministic evidence retains its original embedded interpretation revision.
 const interpretationCodec = Schema.fromJsonString(
   Schema.Struct({
     ...NotificationInterpretationEvidence.fields,

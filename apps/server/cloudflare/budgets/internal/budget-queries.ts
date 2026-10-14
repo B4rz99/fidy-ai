@@ -45,7 +45,6 @@ export const monthlySpent = ({
         complete: false,
       })
     );
-    // Persist each bounded page; later calls resume rather than replaying an oversized month.
     while (!progress.complete) {
       const available = yield* Ref.getAndUpdate(pageQuota, (remaining) =>
         Math.max(0, remaining - 1)

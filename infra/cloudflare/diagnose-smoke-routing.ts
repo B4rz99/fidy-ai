@@ -47,8 +47,6 @@ const routingRequest = Effect.fn(function* (config: RoutingConfig, sample: Routi
   const publicVersion =
     sample.pairing === "candidate" ? config.PUBLIC_VERSION_ID : config.STABLE_PUBLIC_VERSION_ID;
   const headers = smokeHeaders({ config, publicVersion: Option.some(publicVersion) });
-  // Both methods use the same URL and override. The reserved revision stops POST effects,
-  // even on older Core code, whose Production revision cannot be all-zero.
   const query = "?readiness=1";
   if (sample.method === "GET") return { query, headers, body: Option.none<string>() };
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
@@ -142,7 +140,6 @@ export const diagnoseSmokeRouting = Effect.fn(function* (env: unknown) {
   const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
   if (Option.isNone(decoded)) return yield* new RoutingDiagnosticFailed();
   const window = decoded.value.SMOKE_ROUTING_WINDOW ?? "early";
-  // Settling precedes the convergence gate, never replaces exact-pair synthetic smoke.
   if (window === "settled") yield* Effect.sleep("60 seconds");
   const observations: RoutingObservation[] = [];
   for (let round = 1; round <= rounds; round++) {

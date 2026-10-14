@@ -52,7 +52,6 @@ if (import.meta.main) {
     program.pipe(
       Effect.catchCause((cause) =>
         Effect.gen(function* () {
-          // The entrypoint reports only closed failure classes, never native errors or rejected input.
           const failure = cause.reasons.find(
             (reason) => reason._tag === "Fail" && reason.error instanceof RegisterFailure
           );

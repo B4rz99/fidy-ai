@@ -67,7 +67,6 @@ const deadLetter: OperationalAlert = {
   severity: "critical",
 };
 
-// Assertions of rejected provider calls stay inside the Effect test, without a second async runner.
 const rejects = (promise: Promise<unknown>): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() => expect(promise).rejects.toThrow()).pipe(Effect.asVoid);
 

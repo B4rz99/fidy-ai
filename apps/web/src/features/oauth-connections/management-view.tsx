@@ -74,7 +74,7 @@ const ConnectionRow = ({
     </TableRow>
   </>
 );
-/** A server-derived page: names are text, identity selects revocation, and absent evidence is not a claim of no historical work. */
+/** Display names are unverified; absent activity does not prove no historical work. */
 export const OAuthManagementView = ({
   list,
   busy,

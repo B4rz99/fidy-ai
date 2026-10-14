@@ -579,7 +579,6 @@ const enrollmentWorkers = (
         CORE: {
           fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
             const forwarded = new Request(input, init);
-            // Forwarding is itself the public/Core protocol under test, not an owner mock.
             expect(forwarded.headers.has("authorization")).toBe(false);
             expect(forwarded.headers.has("x-untrusted-header")).toBe(false);
             expect(forwarded.headers.get("cookie")).toBe(request.headers.get("cookie") ?? "");
@@ -843,7 +842,6 @@ it.each([
           status: "source-verifying",
           enrollmentId: prepared.enrollmentId,
         });
-        // Arrange an elapsed persisted cooldown without delaying the adapter suite.
         yield* fromTestPromise(() =>
           fixture.db
             .prepare("UPDATE card_enrollments SET last_verification_at_ms = ? WHERE id = ?")
@@ -1596,7 +1594,6 @@ const sandboxCases = [
   { period: "yearly", priceId: "22700000-0000-4000-8000-000000000003", outcome: "approved" },
   { period: "weekly", priceId: "22700000-0000-4000-8000-000000000001", outcome: "declined" },
 ] as const;
-// Manual, protected Actions proof only. No credentials, bodies or provider identities are reported.
 it
   .runIf(Effect.runSync(Config.String("FIDY_NEQUI_SANDBOX").pipe(Config.withDefault("0"))) === "1")
   .each(sandboxCases)(
@@ -1724,7 +1721,6 @@ it
   600_000
 );
 
-// Opt-in real provider proof. Neither provider bodies nor failed live projections enter assertions.
 it
   .runIf(
     Effect.runSync(Config.String("FIDY_DAVIPLATA_SANDBOX").pipe(Config.withDefault("0"))) === "1"
@@ -1800,7 +1796,6 @@ it
         let submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
           yield* fromTestPromise(() => response.json())
         ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
-        // This continuation observes the existing source; it cannot replay tokenization or source POST.
         for (let poll = 0; poll < 7 && submitted.status === "source-verifying"; poll++) {
           yield* Effect.sleep("4 seconds");
           const observed = yield* fromTestPromise(() =>
@@ -2033,7 +2028,6 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission), {
         onExcessProperty: "error",
       })(result).pipe(Effect.orDie);
-      // Worked SHA-256/UUID-v4 vector for this User and PaymentRequestId, independent of the helper.
       const expectedId = "c130318e-2d38-470c-90b0-4f77028b0364";
       expect(result).toMatchObject({
         status: "payment-pending",
@@ -2116,7 +2110,6 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT id FROM billing_attempts").all())).results
       ).toHaveLength(1);
-      // Even a failed BillingAttempt cannot release another collection without no-charge evidence.
       const confirmation = (ref: string): Promise<D1Result> =>
         db
           .prepare(`INSERT INTO billing_no_charge_confirmations
@@ -2200,7 +2193,6 @@ it.each([8_640_000_000_000_001, 1_800_000_000_000.5])(
         const data = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
           yield* fromTestPromise(() => prepared.json())
         );
-        // Model a hostile D1 projection without weakening production persistence constraints.
         const corruptDb = new Proxy(db, {
           get: (target, key): unknown =>
             key === "prepare"
@@ -2344,7 +2336,6 @@ it("inherits the workflow Clock through source authorization and live settlement
   ));
 
 it("cancels an unfinished enrollment body without reserving provider work", () => {
-  // The native Request is cancelled independently of the test's Effect fiber.
   const controller = new AbortController();
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -2380,7 +2371,6 @@ it("cancels an unfinished enrollment body without reserving provider work", () =
 it.each(["contracts", "source", "commit"] as const)(
   "cancels enrollment at %s without detached continuation or replaying a source POST",
   (stage) => {
-    // Drive the native ingress signal, not interruption of the test's own Effect fiber.
     const controller = new AbortController();
     return Effect.runPromise(
       Effect.gen(function* () {
@@ -2407,7 +2397,6 @@ it.each(["contracts", "source", "commit"] as const)(
               new Response(providerBody(new URL(req.url), "AVAILABLE"));
             if (!blocked) return Promise.resolve(response());
             started.resolve();
-            // Native fetch must return a Promise; the fixture owns its settlement gate.
             const pending = Promise.withResolvers<Response>();
             req.signal.addEventListener(
               "abort",
@@ -2523,7 +2512,6 @@ it("reserves preparation before calling Wompi and bounds failed preparations", (
         (yield* fromTestPromise(() => db.prepare("SELECT status FROM card_enrollments").first()))
           ?.status
       ).toBe("refused");
-      // Other failed reservations consume the same rate-limit window, regardless of provider outcome.
       const now = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
         db.batch(

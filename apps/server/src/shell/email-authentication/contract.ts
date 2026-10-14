@@ -45,10 +45,8 @@ const emailReplacementFreshError = {
 export const CompleteEmailReplacementPayload = Schema.Struct({
   combinedCode: EmailVerificationCode,
 });
-/** Decoded browser replacement-completion body. */
 export type CompleteEmailReplacementPayload = typeof CompleteEmailReplacementPayload.Type;
 
-/** Bounded success response for a completed credential replacement. */
 export const CompletedEmailReplacement = Schema.Struct({
   status: Schema.Literal("replaced"),
 }).annotate({ identifier: "CompletedEmailReplacement" });
@@ -65,17 +63,14 @@ export class EmailReplacementInvalidApi extends Schema.Error<EmailReplacementInv
   "EmailReplacementInvalidApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 400 }) {}
 
-/** Browser response when replacement completion does not come from the first-party origin. */
 export class EmailReplacementOriginRejectedApi extends Schema.Error<EmailReplacementOriginRejectedApi>(
   "EmailReplacementOriginRejectedApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 403 }) {}
 
-/** Browser response when the replacement-completion body exceeds its fixed bound. */
 export class EmailReplacementPayloadTooLargeApi extends Schema.Error<EmailReplacementPayloadTooLargeApi>(
   "EmailReplacementPayloadTooLargeApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 413 }) {}
 
-/** Browser response when replacement completion is not encoded as JSON. */
 export class EmailReplacementUnsupportedMediaTypeApi extends Schema.Error<EmailReplacementUnsupportedMediaTypeApi>(
   "EmailReplacementUnsupportedMediaTypeApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 415 }) {}
@@ -120,7 +115,6 @@ export const StartBrowserPairingEmailAuthenticationPayload = Schema.Struct({
   privateVerifier: BrowserLoginPrivateVerifier,
   email: EmailAddress,
 });
-/** Decoded, branded start request accepted by the direct browser transport. */
 export type StartBrowserPairingEmailAuthenticationPayload =
   typeof StartBrowserPairingEmailAuthenticationPayload.Type;
 
@@ -130,7 +124,6 @@ export const CompleteBrowserPairingEmailAuthenticationPayload = Schema.Struct({
   privateVerifier: BrowserLoginPrivateVerifier,
   combinedCode: EmailVerificationCode,
 });
-/** Decoded, branded completion request accepted by the direct browser transport. */
 export type CompleteBrowserPairingEmailAuthenticationPayload =
   typeof CompleteBrowserPairingEmailAuthenticationPayload.Type;
 

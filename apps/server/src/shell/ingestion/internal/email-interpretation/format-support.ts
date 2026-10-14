@@ -5,7 +5,6 @@ import { AccountHints, type NotificationCurrencyBasis } from "~/core/transaction
 import type { EmailDocument } from "./document";
 import type { FormatInterpretation } from "./format-definition";
 
-/** Exact value for one unique two-cell label row; duplicates are ambiguous. */
 const rowCell = (row: ReadonlyArray<string>, index: number): string =>
   Option.getOrThrow(Option.fromNullishOr(row[index]));
 

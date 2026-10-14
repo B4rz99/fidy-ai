@@ -1,13 +1,4 @@
-/**
- * The authoritative, User-scoped effective Transaction relation.
- *
- * `dashboard_effective_source` is the Transaction-owned SQL view installed by migration 0020;
- * History, search, projection maintenance, and repair all read the same policy. The retained
- * members are not rewritten on Reconciliation: the SQL view chooses the visible member and each
- * fact group from its latest correction, statement attestation, or explicit User decision.
- * This fragment exposes `effective_transaction` for existing Transaction callers. Always bind
- * the explicit User id before appending any other query parameters.
- */
+/** Exposes the effective_transaction relation. Bind the explicit User id before any other query parameters. */
 export type EffectiveTransactionRelation = Readonly<{
   sql: string;
   bindings: ReadonlyArray<string>;
@@ -64,8 +55,6 @@ export const effectiveHistoryPage = ({
   const decoded = fields.map((field) => `json_extract(value, '$.${field}') AS ${field}`).join(", ");
   const ordered = `ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT ${limit}`;
   return {
-    // CASE is lazy; a false UNION branch can still materialize the expensive source view.
-    // Serialize only the bounded selected page, retaining one atomic readiness/authority snapshot.
     sql: `WITH selected AS (SELECT CASE WHEN EXISTS (
         SELECT 1 FROM dashboard_projection_state
         WHERE user_id = ? AND version = 1 AND readiness = 'ready')

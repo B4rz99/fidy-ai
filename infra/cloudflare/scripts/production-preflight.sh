@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Each lane owns a process group, including Bun, Vitest and Wrangler descendants.
 set -m
 cd "$(dirname "$0")/../../.."
 log_dir="$(mktemp -d)"

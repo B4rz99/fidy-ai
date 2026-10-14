@@ -4,7 +4,6 @@ import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CategoryId } from "~/core/categories/contract";
 
-/** Stable identity of one User-owned monthly Budget. */
 export const BudgetId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BudgetId"))
   .annotate({ identifier: "BudgetId" });
@@ -15,7 +14,6 @@ const maximumBudgetGroupCategories = 128;
 
 /** Local calendar month label, independent of the zone used to measure spending. */
 export const BudgetMonth = Schema.String.check(Schema.isPattern(/^[2-9]\d{3}-(0[1-9]|1[0-2])$/));
-/** User-visible grouping label; blank names and labels over the display bound are rejected. */
 export const BudgetGroupName = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumBudgetGroupNameLength),
@@ -34,7 +32,6 @@ const positiveBudgetCap = Schema.makeFilter<{
       }
 );
 
-/** One User-owned monthly cap for one Category in the Currency carried by cap. */
 export const Budget = Schema.Struct({
   id: BudgetId,
   categoryId: CategoryId,
@@ -168,18 +165,15 @@ const BudgetStatusCommon = {
   period: AppliedBudgetMonth,
 } as const;
 
-/** Canonical under-cap Budget status, including the exact remaining Money. */
 export const UnderBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("under"),
   remaining: Money,
 });
-/** Canonical exactly-reached Budget status. */
 export const ReachedBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("reached"),
 });
-/** Canonical over-cap Budget status, including the exact overage Money. */
 export const OverBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("over"),
@@ -205,7 +199,6 @@ type StatusCurrencyView =
       overBy: ReadonlyMoney;
     }>;
 
-/** Minimal cap, spending, and projected status facts used to preserve exact Budget progress. */
 export type BudgetProgressFact = Readonly<{
   cap: ReadonlyMoney;
   spent: ReadonlyMoney;
@@ -231,7 +224,6 @@ const hasExactOverProgress = (
   BigDecimal.Order(spent.amount, cap.amount) > 0 &&
   BigDecimal.equals(overBy.amount, BigDecimal.subtract(spent.amount, cap.amount));
 
-/** Whether projected progress exactly represents one positive Budget cap and its spending. */
 const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boolean => {
   if (
     spent.currency !== cap.currency ||
@@ -316,7 +308,6 @@ export const BudgetStatusReport = Schema.Struct({
 }).annotate({ identifier: "BudgetStatusReport" });
 export type BudgetStatusReport = typeof BudgetStatusReport.Type;
 
-/** Values from which optional status lookup filters are projected. */
 export const BudgetStatusQueryValues = Schema.Struct({
   categoryId: CategoryId,
   currency: Money.fields.currency,
@@ -331,7 +322,6 @@ export const BudgetStatusQueryParameters = Schema.Struct({
   month: Schema.optionalKey(BudgetMonth),
 });
 
-/** Optional status filters after canonical query decoding. */
 export const BudgetStatusQuery = Schema.Struct({
   categoryId: Schema.Option(BudgetStatusQueryValues.fields.categoryId),
   currency: Schema.Option(BudgetStatusQueryValues.fields.currency),
@@ -381,5 +371,4 @@ export class BudgetCurrencyImmutable extends Data.TaggedError("BudgetCurrencyImm
   readonly received: Currency;
 }> {}
 
-/** Closed domain failure set produced while managing one User's Budgets. */
 export type BudgetFailure = BudgetNotFound | BudgetAlreadyExists | BudgetCurrencyImmutable;

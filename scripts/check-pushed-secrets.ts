@@ -34,7 +34,6 @@ const pushedTips = pushLines.flatMap((line) => {
   return [{ localSha, remoteSha }];
 });
 
-// Deleting refs introduces no commits. Empty stdin still means an explicit local scan.
 if (pushLines.length > 0 && pushedTips.length === 0) process.exit(0);
 
 const scanTargets = (
@@ -60,8 +59,6 @@ for (const { baseSha, localSha } of scanTargets) {
       "--redact",
       "--no-banner",
       "--source=.",
-      // Follow every pushed parent and inspect merge diffs too: secrets may exist only in
-      // a side-branch commit or be introduced while resolving the merge itself.
       `--log-opts=--full-history -m ${logRange}`,
     ],
     { stderr: "inherit", stdout: "inherit" }

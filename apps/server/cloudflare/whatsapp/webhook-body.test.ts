@@ -7,7 +7,6 @@ import { receiveWhatsAppWebhook } from "./runtime";
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 
-// Native stream fixture: cancellation deliberately remains unsettled until after observation.
 const probeOversizedBody = (
   db: D1Database
 ): Promise<

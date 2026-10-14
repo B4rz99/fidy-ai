@@ -20,7 +20,6 @@ import {
 } from "~/core/categories/internal/rules";
 import { categoryRows } from "~/core/categories/internal/taxonomy";
 
-/** The directional last resort when capture has no explicit or matching keyword Category. */
 export const fallbackCaptureCategory = (direction: "inflow" | "outflow"): CategoryId =>
   chooseFallback(direction);
 

@@ -67,7 +67,6 @@ def run_owned(args, *, cwd=None, writes=False, timeout=120, max_output=MAX_OUTPU
         process.wait()
     except BaseException:
         if writes:
-            # A local interruption cannot retract a begun publication. Drain it to settlement.
             process.wait()
         else:
             stop_owned(process)

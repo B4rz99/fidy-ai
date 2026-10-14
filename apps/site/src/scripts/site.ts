@@ -5,9 +5,7 @@ const storedTheme = (): Theme => {
   try {
     const saved = localStorage.getItem("fidy-landing-theme");
     if (saved === "light" || saved === "dark") return saved;
-  } catch {
-    // Browser storage is optional; the system preference remains usable.
-  }
+  } catch {}
   return "system";
 };
 
@@ -30,9 +28,7 @@ const mountTheme = (root: HTMLDivElement): void => {
       theme = isDark() ? "light" : "dark";
       try {
         localStorage.setItem("fidy-landing-theme", theme);
-      } catch {
-        // The preference applies for this document when storage is unavailable.
-      }
+      } catch {}
       updateTheme();
     });
   }

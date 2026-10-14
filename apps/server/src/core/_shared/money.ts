@@ -209,7 +209,6 @@ export const Currency = Schema.Literals(currencyCodes).annotate({
 });
 export type Currency = typeof Currency.Type;
 
-/** The ISO facts retained for one Currency accepted by this build. */
 export type CurrencyMetadata = {
   readonly alphabeticCode: Currency;
   /** Maximum decimal places ISO 4217 assigns to ordinary values in this Currency. */

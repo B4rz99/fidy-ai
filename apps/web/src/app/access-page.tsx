@@ -3,7 +3,6 @@ import { OAuthManagementFeature } from "@/features/oauth-connections/feature";
 import { PATManagementFeature } from "@/features/pats/feature";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 
-/** Combines access management without coupling token and MCP grant lifetimes or commands. */
 export const AccessManagementPage = (): JSX.Element => (
   <PATManagementFeature>
     {({ tokens, creation }) => (

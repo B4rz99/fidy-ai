@@ -9,10 +9,8 @@ type SubscriptionEnrollmentLifetimeProps = Readonly<{
   readonly makeClient: () => SubscriptionEnrollmentClient;
 }>;
 
-/**
- * Owns exactly one direct enrollment client for the mounted authentication lifetime. The ref
- * cleanup runs on subtree replacement and application unmount instead of waiting for Effect Atom's
- * delayed registry disposal; React Strict Mode replay acquires a fresh client after cleanup.
+/** Ends enrollment authority immediately on lifetime replacement or unmount.
+ * React Strict Mode replay acquires a fresh client after cleanup.
  */
 export const SubscriptionEnrollmentLifetime = ({
   children,

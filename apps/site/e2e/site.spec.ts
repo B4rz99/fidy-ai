@@ -92,7 +92,6 @@ test("hydrates demos and preserves appearance without browser errors", async ({ 
   expect(errors).toEqual([]);
 });
 
-// Reduced motion still has finite fades; audit resting colors after entrance motion.
 const settleEntranceMotion = async (): Promise<void> => {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

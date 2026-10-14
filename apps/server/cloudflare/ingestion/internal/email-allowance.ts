@@ -92,8 +92,6 @@ export const activateDeferredEmails = ({
     });
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(DeferredEmail))(result.results);
     for (const row of rows) {
-      // Queue continuation retains the original expiry and allowance. Advance each
-      // candidate fairly even when its independent authority unit rolls back.
       yield* Effect.tryPromise({
         try: () =>
           db

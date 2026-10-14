@@ -11,13 +11,11 @@ const viteBuild = measuringBrowserCost
   ? `${fixtureRuntime} ../../node_modules/vite/bin/vite.js`
   : "bun --bun vite";
 
-/** Browser checks intentionally exercise the built static shell, not a development server. */
 export default defineConfig({
   testDir: "./e2e",
   expect: {
     timeout: measuringBrowserCost ? measurementAssertionMilliseconds : normalAssertionMilliseconds,
   },
-  // Native CLI mutations and exact Audit assertions require a separate User/D1 topology.
   testIgnore: "cli-login.spec.ts",
   fullyParallel: false,
   forbidOnly: isCI,

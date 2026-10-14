@@ -331,7 +331,6 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
           })
         );
       }
-      // The stored disclosure is generated from the same canonical snapshot onboarding retains.
       const snapshot = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
       )(currentDisclosureFor());
@@ -1362,7 +1361,6 @@ it("retries malformed retained WhatsApp continuation without acknowledging or ex
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
       const turnId = yield* Effect.tryPromise(() => queuedWhatsAppTurn(db, 0, "Texto pendiente"));
-      // Fault injection models malformed retained evidence without changing production guards.
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare("DROP TRIGGER transcript_no_update"),
@@ -1541,7 +1539,6 @@ it.each([false, true])(
           })
         );
         expect(invalidAck).toHaveBeenCalledOnce();
-        // Revocation closes the next admission, not this already-committed Turn.
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO consent_user_revocations
@@ -2390,7 +2387,6 @@ const publishStatementWithRecovery = ({
   Effect.gen(function* () {
     if (checkpoint === "none") return yield* start(db);
     const interrupted = yield* Effect.exit(start(publicationOutage({ db, checkpoint })));
-    // This owner seam rejects when the simulated connection loss also prevents delivery proposal.
     expect(Exit.isFailure(interrupted)).toBe(true);
     const resumed = yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
     expect(
@@ -3150,7 +3146,6 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
         { status: "failed", kind: "user" },
         { status: "failed", kind: "failed", marker: "DeliveryFailed" },
       ]);
-      // Older overdue rows must not hide the failed reply in a shared sample.
       yield* Effect.tryPromise(() =>
         db.batch(
           Array.from({ length: 8 }, (_, index) => {
@@ -4526,7 +4521,6 @@ it.each([
           } else if (recoverBeforeCommit) {
             yield* makeAgentRetention({ db }).sweep(now() + 136_000);
           } else {
-            // The committed owner can return after the model-round deadline but before recovery.
             yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(96_001));
           }
         } finally {
@@ -6989,7 +6983,6 @@ it.each(continuityCorruptions)(
       Effect.gen(function* () {
         const db = yield* Effect.tryPromise(() => setup());
         const fixture = yield* closedContinuityFixture(db);
-        // Fault injection only: legitimate owner writes retain the append-only production guard.
         if (!snapshot) {
           yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER transcript_no_update").run());
         }

@@ -12,7 +12,6 @@ export const ContractDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64
   .annotate({ identifier: "ContractDigest" });
 export type ContractDigest = typeof ContractDigest.Type;
 
-/** Public diagnostic identity binding one static artifact to its server contract. */
 export const ReleaseMetadata = Schema.Struct({
   contractDigest: ContractDigest,
   gitRevision: GitRevision,

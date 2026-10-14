@@ -113,7 +113,6 @@ const ReviewActions = ({
     </div>
   );
 };
-/** Render only reviewed permissions as text; local choices can narrow but cannot grant authority. */
 export const OAuthReviewView = ({
   review,
   cancel,

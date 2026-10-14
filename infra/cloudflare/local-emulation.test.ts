@@ -66,7 +66,6 @@ layer(LocalEmulationServices, {
           status: "available",
         });
 
-        // This local fixture is not a persisted PAT; Core must reject it rather than bypassing auth.
         const categoriesResponse = yield* HttpClient.get(`${ingressOrigin}/categories`, {
           headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
         });

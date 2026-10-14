@@ -22,7 +22,6 @@ type QueryActivity =
   | Readonly<{ _tag: "Refreshing" }>
   | Readonly<{ _tag: "RefreshFailure"; onRetry: () => void; waiting: boolean }>;
 
-/** Exhaustive rendering state for the current-month Transaction list. */
 export type TransactionPageState =
   | Readonly<{ _tag: "Initial" }>
   | Readonly<{ _tag: "Loading" }>
@@ -94,7 +93,6 @@ const TransactionPageContent = ({
   }
 };
 
-/** Renders the current-month Transaction list's presentation state. */
 export const TransactionListView = ({
   state,
 }: Readonly<{ state: TransactionPageState }>): JSX.Element => (
@@ -326,8 +324,6 @@ const CurrentUserQuery = (): JSX.Element => {
   }
 };
 
-/** Transaction route whose canonical server state is owned exclusively by Effect Atom queries. */
 export const TransactionListFeature = (): JSX.Element => <CurrentUserQuery />;
 
-/** Existing Transaction workspace using independent privacy-purpose reads after withdrawal. */
 export const PrivacyTransactionFeature = (): JSX.Element => <PrivacyTransactions />;

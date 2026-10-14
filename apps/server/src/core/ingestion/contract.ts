@@ -92,11 +92,9 @@ export const maximumEmailEvidenceIdCharacters = 256;
 /** Delivery identifiers are bounded to replay verification input and evidence. */
 export const maximumForwardedEmailDeliveryIdCharacters = 128;
 
-/** Stable kind code for deterministic tabular statement formats. */
 export const StatementSourceFormat = Schema.Literals(["csv", "xlsx"]);
 export type StatementSourceFormat = typeof StatementSourceFormat.Type;
 
-/** The only notification-email format interpreted by this direct Colombia launch slice. */
 export const EmailSourceFormat = Schema.Literal("notification-email");
 export type EmailSourceFormat = typeof EmailSourceFormat.Type;
 
@@ -120,7 +118,6 @@ export const EmailForwardingLocalPart = Schema.String.check(
   .annotate({ identifier: "EmailForwardingLocalPart" });
 export type EmailForwardingLocalPart = typeof EmailForwardingLocalPart.Type;
 
-/** Stable identity of a User's one permanent forwarded-email address. */
 export const EmailForwardingAddressId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("EmailForwardingAddressId"))
   .annotate({ identifier: "EmailForwardingAddressId" });
@@ -146,13 +143,10 @@ export const ForwardedEmailDeliveryId = Schema.NonEmptyString.check(
 ).pipe(Schema.brand("ForwardedEmailDeliveryId"));
 export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;
 
-// Product and evidence bounds shared by the notification-email model and forwarded-email policy.
-// Transport-only limits remain at their owning shell boundary.
-
 /** Free receipt and screenshot extraction share two unique submissions per Bogotá calendar month. */
 export const freeMediaSubmissionCap = freeAllowanceLimits.media_submission;
 
-/** Issue #22 grants each Free User fifty unique notification emails per Bogotá calendar month. */
+/** Free Users may submit fifty unique notification emails per Bogotá calendar month. */
 export const freeForwardedEmailCap = freeAllowanceLimits.forwarded_email;
 
 /** One additional month of Free email can wait without making retained work unbounded. */
@@ -198,7 +192,6 @@ const bytesPerMebibyte = bytesPerKibibyte * bytesPerKibibyte;
  */
 export const maximumStatementBytes = maximumStatementMebibytes * bytesPerMebibyte;
 
-/** One permanent unpredictable forwarding address owned by the authenticated User. */
 export const EmailForwardingAddress = Schema.Struct({
   id: EmailForwardingAddressId,
   address: Schema.NonEmptyString.check(
@@ -271,7 +264,6 @@ export const StatementIdempotencyKey = Schema.String.check(Schema.isUUID()).pipe
 );
 export type StatementIdempotencyKey = typeof StatementIdempotencyKey.Type;
 
-/** The staged-material reference and retry identity required to queue one statement. */
 export const SubmitForExtractionInput = Schema.Struct({
   idempotencyKey: StatementIdempotencyKey,
   reference: StagedStatementReference,
@@ -302,7 +294,6 @@ export const StatementAccounting = StatementAccountingFields.check(conservedStat
 );
 export type StatementAccounting = typeof StatementAccounting.Type;
 
-/** Durable public lifecycle after one statement submission is accepted. */
 export const StatementSubmissionStatus = Schema.Literals([
   "queued",
   "processing",
@@ -397,11 +388,9 @@ export const XlsxRowEvidence = Schema.Struct({
   cells: Schema.Array(XlsxCellEvidence),
 });
 
-/** Parser-neutral evidence for a single rejected source row. */
 export const StatementRowEvidence = Schema.Union([CsvRowEvidence, XlsxRowEvidence]);
 export type StatementRowEvidence = typeof StatementRowEvidence.Type;
 
-/** Stable mechanical classifications explaining why a row was not captured. */
 export const NeedsReviewReason = Schema.Literals([
   "malformed-source-row",
   "missing-required-fact",
@@ -445,7 +434,6 @@ export const EmailNeedsReviewReason = Schema.Union([
 ]);
 export type EmailNeedsReviewReason = typeof EmailNeedsReviewReason.Type;
 
-/** A safe field-local explanation attached to a review item. */
 export const CapturedFieldIssue = Schema.Struct({
   path: Schema.String,
   message: Schema.String,
@@ -528,7 +516,6 @@ const EmailNeedsReviewFields = {
   createdAt: UtcTimestamp,
 } as const;
 
-/** A visible notification email that could not safely become a canonical Transaction. */
 export const EmailNeedsReviewItem = Schema.Union([
   Schema.Struct({
     ...EmailNeedsReviewFields,
@@ -558,7 +545,6 @@ export const MediaNeedsReviewItem = Schema.Struct({
 }).annotate({ identifier: "MediaNeedsReviewItem" });
 export type MediaNeedsReviewItem = typeof MediaNeedsReviewItem.Type;
 
-/** Every visible Ingestion outcome requiring User review, independent of source channel. */
 export const NeedsReviewItem = Schema.Union([
   StatementNeedsReviewItem,
   EmailNeedsReviewItem,
@@ -625,7 +611,6 @@ const matchingCsvRowEvidence = Schema.makeFilter<typeof ParsedStatementRowFields
 export const ParsedStatementRow = ParsedStatementRowFields.check(matchingCsvRowEvidence);
 export type ParsedStatementRow = typeof ParsedStatementRow.Type;
 
-/** A parser row that deterministic interpretation could not safely accept. */
 export type NeedsReviewStatementRow = Readonly<{
   outcome: "needs-review";
   recordNumber: number;
@@ -635,7 +620,6 @@ export type NeedsReviewStatementRow = Readonly<{
   evidence: StatementRowEvidence;
 }>;
 
-/** The exhaustive accepted-or-review result of mechanical row interpretation. */
 export type InterpretedStatementRow<Extraction> =
   | Readonly<{
       outcome: "accepted";

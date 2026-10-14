@@ -109,7 +109,6 @@ const verifyCandidateHealth = <E, R>(
   candidate: Candidate
 ): Effect.Effect<void, EdgeSmokeFailure, R> =>
   Effect.gen(function* () {
-    // The reserved proof exposes version metadata, not private data.
     const health = yield* probe({
       method: "GET",
       path: "/health",

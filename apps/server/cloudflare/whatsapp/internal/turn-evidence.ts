@@ -83,7 +83,7 @@ export const recoverWhatsAppDelivery = ({
     if (raw === null) return Option.none();
     const delivery = yield* Schema.decodeUnknownEffect(RecoverableWhatsAppDelivery)(raw);
     if (isUnstartedWhatsAppSend(delivery)) {
-      return Option.none(); // Pre-send abandonment: normal Pending Turn recovery writes Interrupted.
+      return Option.none();
     }
     if (
       delivery.state === "sending" ||

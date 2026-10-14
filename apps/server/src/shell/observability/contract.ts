@@ -22,7 +22,6 @@ const canonicalHttpRequests = requireNonEmpty(
   operationCatalog.operations.map(({ method, route }) => `${method} ${route}`)
 );
 
-/** Groups work kinds by the only metadata shape each kind may carry. */
 export const TelemetryWorkKindGroup = {
   http: ["http_request"],
   queue: ["queue_publication", "queue_attempt"],
@@ -188,7 +187,6 @@ export const TelemetryRegistry = {
 
 type Registry = typeof TelemetryRegistry;
 
-/** One literal from a named part of the telemetry registry. */
 export type TelemetryCode<Key extends keyof Registry> = Registry[Key][number];
 
 /** Runtime schemas derived from the same registry that supplies compile-time code unions. */
@@ -216,13 +214,11 @@ export const maximumTelemetryCount = 1_000_000;
 /** Shared upper bound for every approved telemetry duration, in milliseconds. */
 export const maximumTelemetryDurationMilliseconds = 86_400_000;
 
-/** An integer count from zero through the shared telemetry-count maximum. */
 export const TelemetryCount = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: maximumTelemetryCount })
 ).pipe(Schema.brand("TelemetryCount"));
 export type TelemetryCount = typeof TelemetryCount.Type;
 
-/** Clamps any count reading into the approved telemetry-count range. */
 export const boundedTelemetryCount = (value: number): TelemetryCount =>
   TelemetryCount.make(Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryCount));
 
@@ -241,7 +237,6 @@ export const TelemetryDuration = Schema.Int.check(
 ).pipe(Schema.brand("TelemetryDuration"));
 export type TelemetryDuration = typeof TelemetryDuration.Type;
 
-/** Clamps any millisecond reading into the approved telemetry-duration range. */
 export const boundedTelemetryDuration = (value: number): TelemetryDuration =>
   TelemetryDuration.make(
     Math.min(Math.max(0, Math.trunc(value)), maximumTelemetryDurationMilliseconds)
@@ -521,7 +516,6 @@ export type TelemetryAdapter = {
     span: TelemetrySpan,
     exit: Exit.Exit<unknown, unknown>
   ) => Effect.Effect<void>;
-  /** Replaces the declared outcome retained by an active adapter span. */
   readonly recordOutcome: (span: TelemetrySpan, outcome: DeclaredOutcome) => Effect.Effect<void>;
   /** Adds a validated HTTP response status to an active HTTP or provider span. */
   readonly recordResponseStatus: (

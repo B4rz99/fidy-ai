@@ -99,7 +99,6 @@ export const makeProactivityTemplateSender = (
   input: Readonly<{ configuration: unknown; outboundHttp: OutboundHttpService }>
 ): ProactivityTemplateSender => buildProactivityTemplateSender(input);
 
-/** Build the separately approved full-disclosure sender at the bounded external-provider seam. */
 export const makeWeeklyQuestionSender = (
   input: Readonly<{ configuration: unknown; outboundHttp: OutboundHttpService }>
 ): WeeklyQuestionSender => buildWeeklyQuestionSender(input);

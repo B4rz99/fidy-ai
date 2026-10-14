@@ -10,7 +10,6 @@ export const amountInCentsForBilling = (
   return Effect.succeed(Number(whole) * 100 + Number(fraction.padEnd(2, "0")));
 };
 
-/** Persisted lifecycle of one BillingAttempt. */
 export type BillingAttemptStatus = "pending" | "failed" | "succeeded";
 
 /** Wompi's documented retry opportunity after a failed payment under one checkout reference. */

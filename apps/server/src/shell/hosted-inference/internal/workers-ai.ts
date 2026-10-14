@@ -255,10 +255,19 @@ const makeRequest = (messages: ReadonlyArray<WorkersAiInputItem>): WorkersAiRequ
 const makeTextRequest = (
   messages: ReadonlyArray<WorkersAiInputItem>,
   policy: HostedTextToolPolicy
-): WorkersAiRequest =>
-  policy.toolChoice === "auto"
-    ? { ...makeRequest(messages), tool_choice: "auto", tools: toolsFor(policy.availableOperations) }
-    : makeRequest(messages);
+): WorkersAiRequest => {
+  const tools = policy.toolChoice === "auto" ? toolsFor(policy.availableOperations) : [];
+  const capabilityFrame: WorkersAiInputItem = {
+    role: "system",
+    content:
+      tools.length === 0
+        ? "No hay herramientas disponibles en esta ronda. Responde usando solamente la evidencia suministrada; no prometas consultas adicionales como si pudieras ejecutarlas aquí."
+        : `Herramientas disponibles en esta ronda: ${JSON.stringify(tools.map(({ function: tool }) => tool.name))}. ` +
+          "Sus descripciones y esquemas definen las consultas posibles. No atribuyas capacidades adicionales a una herramienta; listar Transactions no consulta un Balance bancario.",
+  };
+  const request = makeRequest([capabilityFrame, ...messages]);
+  return policy.toolChoice === "auto" ? { ...request, tool_choice: "auto", tools } : request;
+};
 
 const capacityCheck = (request: WorkersAiRequest): Effect.Effect<number, HostedInferenceError> => {
   const inputTokens = tokenUpperBound(JSON.stringify(request));
@@ -287,9 +296,7 @@ const cancelBody = (body: Readonly<{ cancel: () => Promise<void> }>): Effect.Eff
   Effect.sync(() => {
     try {
       body.cancel().catch(() => undefined);
-    } catch {
-      // Hostile cancellation cannot prevent the response owner from settling.
-    }
+    } catch {}
   });
 
 const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
@@ -583,7 +590,6 @@ type ConfiguredWorkersAi = Readonly<{
   model: ApprovedWorkersAiModel;
 }>;
 
-/** Builds provider-owned counting and one-shot request execution from decoded native inputs. */
 export const makeWorkersAiInferenceServiceInternal = ({
   run,
   model,

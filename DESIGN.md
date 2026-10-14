@@ -391,7 +391,7 @@ view leaves, and preserve focus during state changes and dialog dismissal.
 Implementation reference: [public-site landing](apps/site/src/pages/index.astro).
 Application foundation: [shared theme](apps/web/src/index.css) and
 [UI primitives](apps/web/src/ui/components/). Review the local `/ui-reference.html` page
-and [frontend polish audit](docs/design/frontend-polish.md) before extending screen layouts.
+before extending screen layouts.
 Document format: [DESIGN.md specification](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
 
 ## Signed-in transaction workspace

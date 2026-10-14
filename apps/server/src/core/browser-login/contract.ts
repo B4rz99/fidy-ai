@@ -1,7 +1,6 @@
 import { type DateTime, type Option, Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/** Stable, non-secret identity of one BrowserLoginPairing. */
 export const BrowserLoginPairingId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BrowserLoginPairingId"))
   .annotate({ identifier: "BrowserLoginPairingId" });
@@ -10,7 +9,6 @@ export type BrowserLoginPairingId = typeof BrowserLoginPairingId.Type;
 /** Minimum cadence advertised to browsers polling a pairing challenge. */
 export const browserLoginPollingIntervalSeconds = 5;
 
-/** Unambiguous base-20 alphabet used by every public-code representation. */
 export const browserLoginPublicCodeAlphabet = "BCDFGHJKLMNPQRSTVWXZ" as const;
 
 const browserLoginPublicCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u;
@@ -33,7 +31,6 @@ export const BrowserLoginPublicCodeSymbols = Schema.String.check(
 ).pipe(Schema.brand("BrowserLoginPublicCodeSymbols"));
 export type BrowserLoginPublicCodeSymbols = typeof BrowserLoginPublicCodeSymbols.Type;
 
-/** Persisted lifecycle values against which redemption decisions are total. */
 export const BrowserLoginPairingLifecycle = Schema.Literals([
   "pending_approval",
   "ready",
@@ -55,7 +52,6 @@ export type RedemptionInput = Readonly<{
   attemptedAt: DateTime.Utc;
 }>;
 
-/** Closed result set consumed by the transactional redemption shell. */
 export type BrowserLoginRedemptionDecision =
   | Readonly<{
       _tag: "Pending";

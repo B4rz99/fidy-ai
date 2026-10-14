@@ -15,7 +15,6 @@ import { NotificationInterpretationEvidence, TransactionId } from "~/core/transa
 
 const maximumAttestationNameLength = 80;
 
-/** Stable identity of one immutable provenance statement attached to a Transaction. */
 export const SourceAttestationId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SourceAttestationId"))
   .annotate({ identifier: "SourceAttestationId" });
@@ -25,7 +24,6 @@ const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumAttestationNameLength)
 );
 
-/** Fields shared by every immutable provenance statement. */
 export const SourceAttestationCommon = Schema.Struct({
   id: SourceAttestationId,
   transactionId: TransactionId,
@@ -41,7 +39,6 @@ const ManualSourceAttestation = Schema.Struct({
   kind: Schema.Literal("manual"),
 });
 
-/** Immutable provenance linking a captured Transaction to one parsed statement record. */
 export const StatementLineSourceAttestation = Schema.Struct({
   ...SourceAttestationCommon.fields,
   kind: Schema.Literal("statement-line"),
@@ -53,7 +50,6 @@ export const StatementLineSourceAttestation = Schema.Struct({
 });
 export type StatementLineSourceAttestation = typeof StatementLineSourceAttestation.Type;
 
-/** Immutable provenance linking one captured Transaction to one authenticated forwarded-email email. */
 export const NotificationEmailSourceAttestation = Schema.Struct({
   ...SourceAttestationCommon.fields,
   kind: Schema.Literal("notification-email"),

@@ -130,7 +130,6 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
   if (secrets.some((secret) => typeof secret !== "string" || secret.length === 0)) {
     return yield* new SmokeBindingFailed({ stage: "secrets" });
   }
-  // The owner verifies its schema without loading Category or User content.
   yield* verifyCategoryStorage({ db: environment.DB }).pipe(
     Effect.mapError(() => new SmokeBindingFailed({ stage: "schema" }))
   );
@@ -216,7 +215,6 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
     return identityFailure(probe, environment);
   }
   const now = yield* Clock.currentTimeMillis;
-  // One serialized statement caps concurrent distinct probes; replays are idempotent.
   yield* platform({
     tryWork: () =>
       environment.DB.prepare(smokeAdmissionSql)
@@ -226,7 +224,6 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
   });
   const row = yield* readProbe(environment, probe.probeId);
   if (!validRow(row, environment, now)) return fail("probe_state");
-  // Atomic claim prevents replays from repeating binding checks or Queue publication.
   if (row.value.status === "pending") yield* publishClaimedProbe(probe.probeId, environment, now);
   return responseFor(
     environment,
@@ -237,7 +234,6 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
 
 const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnvironment) {
   const parameters = new URL(request.url).searchParams;
-  // Identity-only readiness precedes synthetic work; no schema, admission, or binding effects.
   if (parameters.get("readiness") === "1") {
     return responseFor(environment, "pending", completedStatus);
   }

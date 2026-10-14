@@ -37,8 +37,6 @@ const signInWithIdentity = (
     .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&${identity}=true`))
     .then((approval) => {
       expect(approval.status()).toBe(noContentStatus);
-      // Advance only the browser's first-poll delay after approval. Core's clock, proof
-      // verification, rate limits, and session creation remain real; no pending poll is skipped.
       const redemption = page.waitForResponse("**/web/pairings/redeem");
       return page.clock.fastForward(firstPollMilliseconds).then(() => redemption);
     })
@@ -159,8 +157,6 @@ const RetrySeconds = Schema.NumberFromString.check(
   Schema.isLessThanOrEqualTo(maximumProbeDelaySeconds)
 );
 
-// Direct test probes do not use the app's policy-bearing client. Pace only declared
-// resource refusals, preserving real Core limits and all state/status assertions.
 export const probeCanonicalRequest = (
   send: () => Promise<APIResponse>
 ): Effect.Effect<APIResponse, Cause.UnknownError | Cause.TimeoutError> =>

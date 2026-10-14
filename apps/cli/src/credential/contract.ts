@@ -34,7 +34,7 @@ export class CliFailure extends Data.TaggedError("CliFailure")<{
     | "InputTooLarge";
 }> {}
 
-/** Native credential storage boundary; raw retrieval stays inside the credential owner. */
+/** Raw retrieval remains inside the credential owner. */
 export type NativeSecrets = Readonly<{
   get: (name: string) => Effect.Effect<Option.Option<Redacted.Redacted<string>>, CliFailure>;
   set: (name: string, value: Redacted.Redacted<string>) => Effect.Effect<void, CliFailure>;

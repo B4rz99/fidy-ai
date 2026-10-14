@@ -25,7 +25,6 @@ export class EmailReplacementMutation extends Context.Service<
   EmailReplacementMutationService
 >()("@fidy/server/shell/email-authentication/operations/EmailReplacementMutation") {}
 
-/** Both browser operations enter the same canonical mutation seam as other stable-User work. */
 export const requestEmailReplacement = ({
   input,
   caller,
@@ -62,7 +61,6 @@ export const completeEmailReplacement = ({
     return { data: { status: "replaced" }, next: [] } as const;
   });
 
-/** The Worker binds its two D1 handlers to these declared operations, not to a copied route table. */
 export const emailReplacementOperations = {
   request: EmailAuthenticationGroup.endpoints.requestEmailReplacement,
   complete: EmailAuthenticationGroup.endpoints.completeEmailReplacement,

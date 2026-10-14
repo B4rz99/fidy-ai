@@ -193,7 +193,6 @@ const cases: ReadonlyArray<
 ];
 
 const initial = Brand.nominal<HostedInitialTextContext>();
-/** Synthetic semantic sections pass through the same private production projection and catalog. */
 export const adversarialCorpus = cases.map((entry) => ({
   ...entry,
   input: {

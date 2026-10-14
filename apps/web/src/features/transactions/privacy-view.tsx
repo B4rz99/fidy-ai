@@ -23,7 +23,7 @@ const ReadOnlyNotice = (): JSX.Element => (
   </div>
 );
 
-/** Uses the existing ledger and detail presentation without mounting mutation or hosted-agent authority. */
+/** Read-only Transaction access grants neither mutation nor hosted-agent authority. */
 export const PrivacyTransactions = (): JSX.Element => {
   const router = useRouter();
   const [historyResource] = useState(() =>

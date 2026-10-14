@@ -63,7 +63,6 @@ const makeHttpClient = (
     never
   >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
 
-/** The encoded JSON body one intercepted browser request carried. */
 const requestBodyText = (request: HttpClientRequestType.HttpClientRequest): string =>
   request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
 
@@ -809,8 +808,6 @@ describe("canonical browser transport", () => {
         const response = yield* AtomRegistry.getResult(registry, mutation);
 
         expect(response.data.status).toBe("queued");
-        // The browser sends exactly the retry key and the opaque staged reference: no name, media
-        // type, or byte claim travels beside them.
         expect(
           requests.map(({ body, url }) => ({
             body: Schema.decodeUnknownSync(SentStatementSubmission)(

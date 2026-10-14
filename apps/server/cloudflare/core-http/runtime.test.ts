@@ -44,8 +44,6 @@ const environment = (db: D1Database): CoreHttpEnvironment => ({
 it.live("preserves actual Core callback refusals and never stores attacker request content", () =>
   Effect.gen(function* () {
     const db = yield* database();
-    // Effect's live millisecond clock reads Date.now(); freeze that external boundary only.
-    // Native D1 and timer scheduling remain live, including the observer's timeout.
     yield* Effect.acquireRelease(
       Effect.sync(() => vi.spyOn(Date, "now").mockReturnValue(1_800_000)),
       (clock) => Effect.sync(() => clock.mockRestore())

@@ -1,7 +1,7 @@
 # Selected stable Effect source
 
-The application uses exact **effect@4.0.1**, coordinated platform/SQL/Atom packages at
-4.0.1 and **alchemy@2.0.0-beta.80**. Topic notes cite source files and symbols in these selected
+The application uses exact **effect@4.0.2**, coordinated platform/SQL/Atom packages at
+4.0.2 and **alchemy@2.0.0-beta.80**. Topic notes cite source files and symbols in these selected
 packages. Verify against the installed release before adopting an upstream example; matching
 package version strings alone do not establish identical source.
 
@@ -15,11 +15,11 @@ sources are `node_modules/effect/src`, `node_modules/@effect/atom-react/src` and
 `node_modules/alchemy/src` (and its patched `lib` counterpart).
 
 `.repos/effect` is refreshed to upstream main **43416c4142**, which declares 4.0.0 but differs from
-the published 4.0.1 source. Use it for upstream tests, examples, and investigation, not as proof that
+the published 4.0.2 source. Use it for upstream tests, examples, and investigation, not as proof that
 a newer behavior exists in the pinned application. `.repos/alchemy` remains an older snapshot;
 the installed beta.80 source plus `patches/alchemy@2.0.0-beta.80.patch` defines the selected behavior.
 For a fresh checkout, install the admitted frozen graph first. Published source is also
-available at `https://unpkg.com/effect@4.0.1/src/<module>.ts` and
+available at `https://unpkg.com/effect@4.0.2/src/<module>.ts` and
 `https://unpkg.com/alchemy@2.0.0-beta.80/src/<module>.ts`; the latter does not contain Fidy's patch.
 
 | Topic                    | Current public namespace / source                                                               |
@@ -70,4 +70,5 @@ available at `https://unpkg.com/effect@4.0.1/src/<module>.ts` and
 
 Stable package version does not mean every individual module is upstream marked stable.
 Keep exact pins, owned boundaries, focused behavior tests and the complete release gates.
-See `docs/research/effect-4-stable-integration.md` for verified outcomes and limitations.
+The completed migration’s verification and release evidence is recorded in
+[PR #992](https://github.com/B4rz99/fidy-ai/pull/992#issuecomment-5971693618).

@@ -371,8 +371,6 @@ export const prepareStatementReadinessReply = (
         : `Las Transacciones claras ya son visibles. Para la fila ${first.recordNumber}, indica fecha, importe, moneda y si es entrada o salida. También puedes pedir omitirla o cancelar lo pendiente. No envíes credenciales ni números de cuenta.`
     );
   });
-// None keeps the original Turn Pending while the installed Workflow extracts the statement.
-// Existing recovery alarms revisit readiness; neither a model loop nor this Turn drains chunks.
 export const prepareStatementDocumentReply = (
   work: DocumentWork
 ): Effect.Effect<Option.Option<TranscriptText>> =>

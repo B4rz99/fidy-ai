@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This is an evidence/completeness check, not a remote attestation of Kapso's dashboard.
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 evidence=${1:-"$root/docs/operations/kapso-launch-evidence.json"}
 policy=$(grep -o 'policy-[0-9-]*[a-z-]*' "$root/apps/site/src/assets/policy.html" | head -n 1)

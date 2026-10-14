@@ -161,7 +161,6 @@ const confirmClaim = (
     const confirmed = { ...claim, confirmed: true, next: claim.started + repeatMs(claim.severity) };
     const saved = yield* persistClaim(input, confirmed, { etagMatches: etag });
     if (Option.isSome(saved)) return;
-    // A concurrent observation or operator acknowledgement must survive confirmation.
     const latest = yield* findClaim(input);
     if (Option.isNone(latest)) return;
     const current = latest.value.claim;

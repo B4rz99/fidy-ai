@@ -93,7 +93,6 @@ export type CanonicalMutationAdapter = Readonly<{
   invalidRefusal: (work: CanonicalPreparationWork) => CanonicalMutationRefusal;
 }>;
 
-/** The installed statement operations' hosted adapter shares owner preparation and presentation. */
 export const canonicalHostedStatementAdapter = (
   operation: string
 ): Option.Option<
@@ -152,7 +151,6 @@ const present =
   (value: CommittedMutationValue): Effect.Effect<Response> =>
     committedJsonResponse({ value, status });
 
-/** The owner's validation refusal for a child whose published call schema did not decode. */
 const transactionInvalidRefusal =
   (operation: TransactionMutationOperation) =>
   (work: CanonicalPreparationWork): CanonicalMutationRefusal =>
@@ -198,7 +196,6 @@ const keywordRuleInvalidRefusal = (_work: CanonicalPreparationWork): CanonicalMu
   respond: () => Effect.succeed(keywordRuleInvalidInput()),
 });
 
-/** The Memory owner records its own validation refusal, like the individual entry point. */
 const memoryInvalidRefusal =
   (operation: MemoryOperationId) =>
   (work: CanonicalPreparationWork): CanonicalMutationRefusal =>
@@ -209,7 +206,6 @@ const memoryInvalidRefusal =
       current: work.current,
     });
 
-/** Recover one owner's typed payload from an input the catalog call schema already validated. */
 const decodeAndPrepare =
   <Decoded>(
     schema: Schema.Codec<Decoded, unknown, never, never>,
@@ -649,7 +645,6 @@ export const canonicalMutationAdapter = (
   operation: CanonicalOperationId
 ): Option.Option<CanonicalMutationAdapter> => Option.fromUndefinedOr(adapters.get(operation));
 
-/** An installed owner adapter must name a published composable mutation. Missing adapters fail closed. */
 const assertCanonicalMutationAdapters = (): void => {
   const published = new Set(getAtomicBatchChildIds());
   for (const operation of adapters.keys()) {

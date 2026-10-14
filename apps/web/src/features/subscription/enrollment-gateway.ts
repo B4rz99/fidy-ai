@@ -378,7 +378,6 @@ const makeStartDaviplata = (
       });
 };
 
-/** Adapts the credentialed browser client and direct Wompi tokenizer into one UI workflow. */
 export const makeEnrollmentGateway = (
   clientService: SubscriptionEnrollmentClient
 ): EnrollmentGateway => {

@@ -26,7 +26,6 @@ export type HostedCommitFence = Readonly<{ turnId: TranscriptTurnId; toolCallId:
 
 /** Decode a bounded User request; the authenticated channel owns its credential separately. */
 export const hostedTurnInput = HostedTurnRequest;
-/** Bounded Core-to-DO admission with explicit User identity and ephemeral credential proof. */
 export const HostedTurnAdmission = Schema.Struct({
   userId: UserId,
   sessionId: Schema.String.check(Schema.isUUID()),

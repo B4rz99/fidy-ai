@@ -67,7 +67,6 @@ export const receiveCanary = (
         Effect.tryPromise(() => input.workflow.create({ id, params: decoded.value }))
       );
       if (Exit.isFailure(created)) {
-        // A redelivery may race a successful handoff; only a confirmed existing instance is safe.
         const instance = yield* Effect.tryPromise(() => input.workflow.get(id)).pipe(
           Effect.catch(() => Effect.failCause(created.cause))
         );

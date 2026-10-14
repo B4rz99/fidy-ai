@@ -135,7 +135,6 @@ const admit = <A, Requirements>(
     Effect.catchTag("MemoryCapacityExceeded", () => Effect.succeedNone)
   );
 
-/** The metadata-only success Audit one accepted Memory mutation commits with its owner write. */
 const acceptedAudit = ({
   db,
   subject,

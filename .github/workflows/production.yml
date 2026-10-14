@@ -13,8 +13,6 @@ on:
 permissions:
   contents: read
 
-# Releases are serialized without cancelling an active deployment. A newer
-# trunk revision waits for the current candidate to finish.
 concurrency:
   group: production-deployment
   cancel-in-progress: false

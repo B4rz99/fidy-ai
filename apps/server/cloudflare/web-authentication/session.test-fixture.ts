@@ -50,7 +50,6 @@ const runHeldCallback = <A>({
   settled: Deferred.Deferred<void>;
   state: { held: boolean };
 }>): Promise<A> =>
-  // Genuine foreign D1 Promise ingress: retain the result and the original rejection as its cause.
   Effect.runPromise(
     Effect.gen(function* () {
       const result = yield* Effect.tryPromise({

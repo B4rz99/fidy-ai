@@ -9,7 +9,6 @@ import {
   makeInterpretation,
 } from "~/shell/ingestion/internal/email-interpretation/format-support";
 
-/** Evidence-backed RappiCard purchase notification revision. */
 export const format: NotificationEmailFormat = {
   id: NotificationFormatId.make("rappicard-purchase"),
   revision: InterpretationRevision.make("rappicard-purchase-v1"),

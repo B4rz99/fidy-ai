@@ -82,7 +82,6 @@ const claim = (
     })
   );
 
-// Source evidence is minted at public ingress; private Core never accepts caller-selected policy.
 export const admitProviderRequest = ({
   request,
   db,
@@ -106,7 +105,6 @@ export const admitProviderRequest = ({
   ]);
 };
 
-// Bind polling to the private proof, so rotating IPs cannot bypass it and public pairing IDs cannot exhaust it.
 export const admitProviderPoll = ({
   db,
   privateVerifier,

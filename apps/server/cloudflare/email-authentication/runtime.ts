@@ -48,7 +48,6 @@ export const runBrowserPairingEmailWorkflow = (input: EmailWorkflowInput): Promi
   runPairing(input);
 /** Select this Queue protocol without interpreting it as authority. */
 export const isBrowserPairingEmailWork = (value: unknown): boolean => recognizesPairing(value);
-/** Version 1 delegates only bounded delivery; persisted payloads and Activity names are unchanged. */
 export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
   EmailDeliveryEnvironment,
   unknown
@@ -91,7 +90,6 @@ export const runEmailReplacementWorkflow = (input: EmailWorkflowInput): Promise<
   runReplacement(input);
 /** Select this Queue protocol without interpreting it as authority. */
 export const isEmailReplacementWork = (value: unknown): boolean => recognizesReplacement(value);
-/** Version 1 delegates only bounded delivery; persisted payloads and Activity names are unchanged. */
 export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
   EmailDeliveryEnvironment,
   unknown

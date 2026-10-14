@@ -238,7 +238,6 @@ export const inspectPending = ({
     const rejected = yield* Effect.exit(rejectedEmailWork(environment, operation, current));
     if (Exit.isFailure(rejected)) return unavailableSignal(operation);
     const rows = fetched.value;
-    // Fresh work may not have reached a Workflow yet; inspect only stalled instances.
     const workflowStates = yield* inspectPendingWorkflow({ environment, operation, rows, current });
     const oldestPendingAgeMilliseconds = Math.max(0, ...rows.map((row) => current - row.created));
     const expiredUndelivered = rows.filter(

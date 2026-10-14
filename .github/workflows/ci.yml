@@ -1,6 +1,5 @@
 name: Checks
 
-# Code validation runs before merge; protected trunk triggers releases directly.
 on:
   pull_request:
     branches:
@@ -34,7 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Path-only, no-rename diff needs full history and trees, not historical file bodies.
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
@@ -68,8 +66,6 @@ jobs:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
-      # Oxlint's RuleTester requires Node 22+; pin the static gate rather than
-      # relying on whichever Node version the runner image supplies.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
@@ -137,7 +133,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
         with:
-          # Other jobs publish this exact cache; avoid compressing it again at teardown.
           save-cache: "false"
       - name: Cloudflare adapter validation
         env:
@@ -205,7 +200,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
         with:
-          # Other jobs publish this exact cache; avoid compressing it again at teardown.
           save-cache: "false"
       - name: Select installed Playwright version
         id: playwright-version
@@ -218,11 +212,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
       - name: Install Chromium system dependencies
-        # This disposable runner has no long-lived application daemons to restart.
-        # Use its Node CLI for root-only installation; native tests retain pinned Bun.
         run: time sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
-      # Default headless Chromium launches the shell, not the full headed browser.
-      # Still run installation on cache hits to validate/download any missing binaries.
       - name: Install Chromium headless shell
         env:
           BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
@@ -234,7 +224,6 @@ jobs:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
-          # Playwright install-deps already refreshed the package index.
           sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
           dbus-run-session -- bash -euc '
             printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
@@ -328,14 +317,11 @@ jobs:
     needs: [changes, cli-native-package]
     if: ${{ needs.changes.outputs.cli-native == 'true' }}
     name: CLI native store (${{ matrix.os }})
-    # Run the same bundled adapter/probe on each OS without workspace install/cache extraction.
     timeout-minutes: 5
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # Keep ARM release packaging in cli-release-build.yml; avoid its constrained
-        # hosted pool for this platform-neutral native store conformance bundle.
         os: [macos-15-intel, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

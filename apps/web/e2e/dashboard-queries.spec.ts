@@ -157,8 +157,6 @@ const runScenario = Effect.fnUntraced(function* (page: Page, scenario: Scenario)
       yield* Effect.tryPromise(() => expect(page.getByText(scenario.notice)).toBeVisible());
     }
   }
-  // Runtime Layer startup may interrupt/restart observation before authority is ready. Only
-  // the explicit initializer can change the fixture's state, and failures cannot recursively initialize.
   expect(calls.filter((call, index) => index === 0 || call !== calls[index - 1])).toEqual(
     scenario.calls
   );

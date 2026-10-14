@@ -33,7 +33,6 @@ const syntheticDaviplataBindings = {
   WOMPI_DAVIPLATA_OTP_CONFIRM_URL: syntheticDaviplataConfirmUrl,
 };
 
-// Opt-in, loopback-only measurement; operator setup and background collection use the raw binding.
 const browserCost =
   Bun.env.BROWSER_COST_MEASUREMENT === "1" ? Option.some(observeBrowserCost(db)) : Option.none();
 const browserDatabase = Option.match(browserCost, {
@@ -58,7 +57,6 @@ const publicPort = selectedTopology.apiPort;
 const operatorPort = selectedTopology.operatorPort;
 const browserOrigin = browserOrigins.acceptance;
 const isolatedBrowserOrigin = selectedTopology.app;
-// Bridge only the isolated fixture's port identity; production origin policy stays unchanged.
 const bridgeBrowserOrigin = (response: Response): Response => {
   if (
     acceptanceMode === "shared" ||
@@ -291,7 +289,6 @@ const operatorCode = (request: Request, path: string): Option.Option<string> =>
   operatorRoute(request, path, "POST")
     ? Option.fromNullishOr(new URL(request.url).searchParams.get("code"))
     : Option.none();
-// Loopback-only metadata evidence for the native CLI journey, never public ingress.
 const CliEvidence = Schema.Struct({
   entries: Schema.Array(
     Schema.Struct({
@@ -326,7 +323,6 @@ const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
   if (acceptanceMode === "cli" && operatorRoute(request, "/cli/evidence", "GET")) {
     return Option.some(cliEvidence());
   }
-  // Loopback-only test setup for a fresh journey; never part of public ingress.
   if (operatorRoute(request, "/dashboard/reset", "POST")) {
     return Option.some(
       db
@@ -435,7 +431,6 @@ process.stdout.write(`Browser approval fixture listening at ${operator.url}\n`);
 const telemetry = makeWorkerTelemetry(() => undefined);
 const core = makeCoreWorker(telemetry);
 const worker = makePublicWorker(telemetry);
-// Retain each fixture actor as Cloudflare does; resident MCP sessions span HTTP requests.
 const coordinators = new Map<string, Pick<Fetcher, "fetch">>();
 const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
   const existing = coordinators.get(name);
@@ -486,8 +481,6 @@ const server = Bun.serve({
   port: publicPort,
   tls: { cert: Bun.file(certificate), key: Bun.file(key) },
   fetch: (request) => {
-    // This loopback-only fixture represents independent browser sources within one test runner.
-    // Production ingress receives this evidence exclusively from Cloudflare.
     const ingress = new Request(request);
     ingress.headers.set(
       "cf-connecting-ip",

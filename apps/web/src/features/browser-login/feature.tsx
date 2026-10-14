@@ -262,7 +262,7 @@ const PairingStatus = ({
   }
 };
 
-/** Browser-first pairing surface. Nothing is created until its primary button is pressed. */
+/** Pairing starts only after an explicit primary-button press. */
 export const BrowserLoginPairingFeature = (): JSX.Element => {
   const pairing = useBrowserLoginPairing();
   const router = useRouter();

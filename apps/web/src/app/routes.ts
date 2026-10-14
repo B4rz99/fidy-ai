@@ -310,7 +310,6 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
-/** Builds the application router from independently owned route subtrees. */
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
     defaultErrorComponent: RouteFailure,

@@ -2,8 +2,6 @@ import { Effect, Schema } from "effect";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import { type Deployment, type ReleaseSnapshot } from "./release-controller";
 
-// Land and deploy the code-only prerequisite before the retention migration. If it is squash
-// merged, replace this with that reviewed immutable commit; never use trunk or an environment flag.
 export const retentionCompatibilityRevision = "cf11ac4c396634f555386bd49ea772548f17e5cb";
 
 const RevisionBinding = Schema.Struct({

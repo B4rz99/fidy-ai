@@ -1,5 +1,3 @@
-// The web graph gate. It keeps the browser application a strict vertical composition rather than
-// allowing routes, features, session state, and transport to become a second flat shell.
 /** @type {import("dependency-cruiser").IConfiguration} */
 export default {
   forbidden: [

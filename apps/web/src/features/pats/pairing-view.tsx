@@ -207,7 +207,7 @@ const PairingCodeSection = ({
   );
 };
 
-/** Fresh-session review surface; it never receives a private proof or PAT bearer. */
+/** Requires a fresh session; receives no private pairing proof or PAT bearer. */
 export const PATPairingView = ({
   inspect,
   approve,

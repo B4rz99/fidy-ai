@@ -65,7 +65,6 @@ type UploadRefusalFixture = Readonly<{
   current: number;
   kind: UploadRefusalCase;
 }>;
-/** Exhaust the installed policy through its published admission seam, not a replacement limit. */
 export const seedStatementUploadRefusal = ({
   db,
   userId,

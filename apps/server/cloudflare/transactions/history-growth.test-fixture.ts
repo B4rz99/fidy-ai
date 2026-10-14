@@ -5,8 +5,6 @@ const fromTestPromise = <Value>(run: () => PromiseLike<Value>): Effect.Effect<Va
   Effect.tryPromise({ try: run, catch: () => new TestPromiseFailure() }).pipe(Effect.orDie);
 const categoryId = "10000000-0000-4000-8000-000000000016";
 
-// Suppress only per-row projection refresh during bulk arrangement. All measured operations run
-// with the complete migrated trigger graph restored, including exact aggregate maintenance.
 export const seedHistory = ({
   db,
   subject,

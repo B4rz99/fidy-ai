@@ -29,8 +29,6 @@ const millisecondsPerMinute = 60_000;
 const minutesPerHour = 60;
 const sweepLookaheadHours = 12;
 const storingInterruptionMinutes = 15;
-// 10,000 retained receipts clear in at most 100 five-minute sweeps (8h20m);
-// stage expiry 12 hours early so the bounded sweep can keep up at full capacity.
 const sweepLookaheadMs = sweepLookaheadHours * minutesPerHour * millisecondsPerMinute;
 const storingInterruptionMs = storingInterruptionMinutes * millisecondsPerMinute;
 const dispatchCooldownMs = 60_000;
@@ -101,7 +99,6 @@ const reject = (message: ForwardedEmailMessage): void => {
 };
 const releaseEmailReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
   Effect.sync(() => {
-    // SMTP input cannot make local cleanup wait for its own cancellation promise.
     reader.cancel().catch(() => undefined);
     reader.releaseLock();
   });
@@ -139,7 +136,6 @@ const resolveForwardingRecipient = (
   localPart: string
 ): Effect.Effect<Option.Option<typeof ApprovedRecipient.Type>, EmailUnavailable> =>
   Effect.gen(function* () {
-    // The address supplies a hint; its ownership and Consent are rechecked with the context read.
     const subjectRow = yield* io(() =>
       db
         .prepare("SELECT user_id FROM email_forwarding_addresses WHERE local_part = ?")
@@ -200,7 +196,6 @@ export const receiveForwardedEmail = Effect.fn(function* (
     return;
   }
   const approved = recipient.value;
-  // Advisory cheap preflight: the D1 trigger enforces both capacities atomically at reservation.
   const capacity = yield* io(() =>
     environment.DB.prepare(
       `SELECT
@@ -252,7 +247,6 @@ export const receiveForwardedEmail = Effect.fn(function* (
     return;
   }
   const mime = parsed.value;
-  // Even inline images and nested message parts are refused, not expanded or treated as trusted.
   if (
     mime.attachments.length !== 0 ||
     (mime.text?.length ?? 0) > maximumEmailTextCharacters ||
@@ -315,8 +309,6 @@ export const receiveForwardedEmail = Effect.fn(function* (
     if (Option.isSome(claimed) && claimed.value.state === "queued") return;
     return yield* authorityUnavailable();
   }
-  // Interrupted writes stay 'storing' and retain their key until the retention deadline.
-  // Deleting an in-flight reservation early could race a late R2 put and orphan private bytes.
   const stored = yield* Effect.result(
     io(() =>
       environment.EMAIL_BUCKET.put(objectKey, bytes, {
@@ -325,7 +317,6 @@ export const receiveForwardedEmail = Effect.fn(function* (
     )
   );
   if (Result.isFailure(stored)) {
-    // R2 failure is ambiguous: delete first, then release capacity only if cleanup succeeded.
     yield* io(() => environment.EMAIL_BUCKET.delete(objectKey));
     yield* io(() =>
       environment.DB.prepare(

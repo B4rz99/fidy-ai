@@ -501,7 +501,6 @@ describe("read-only routing readiness", () => {
   );
 });
 
-/** A wrong public version in the second smoke must never generate a passing release gate. */
 describe("intermediate production smoke", () => {
   effectIt.effect("reports the owned failing edge path without provider response content", () =>
     Effect.gen(function* () {
@@ -571,7 +570,6 @@ describe("intermediate production smoke", () => {
                   headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicVersion },
                 }
               );
-              // Sequential smoke deadlocks here instead of accidentally passing a timing assertion.
               return gatedResponse(bothStarted.promise, { request, bodies, response });
             }
             return Promise.resolve(edgeResponse(request));
@@ -888,7 +886,7 @@ describe("intermediate production smoke", () => {
                     public: {
                       gitRevision: oldPublic ? previousRevision : revision,
                       contractDigest: digest,
-                      workerVersionId: publicCandidate, // The old public's override was ignored
+                      workerVersionId: publicCandidate,
                     },
                     core: {
                       gitRevision: revision,

@@ -88,7 +88,6 @@ export const makeEvaluationBudget = (environment: EvaluationEnvironment): Evalua
       ) {
         return yield* refused();
       }
-      // Reservation precedes every asynchronous step, including hashing and native dispatch.
       state = {
         ...state,
         reservedCalls: state.reservedCalls + 1,

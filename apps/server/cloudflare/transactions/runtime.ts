@@ -440,7 +440,6 @@ const reservedCoordinatorProbe = ({
         )
     );
   }
-  // Reserved smoke compatibility never enters User coordination or reads D1.
   if (userId !== "_release-smoke-v1") return Option.none();
   return Option.some(
     Promise.resolve(
@@ -541,8 +540,6 @@ export class UserTransactionCoordinator {
       }),
       ({ preceding }) =>
         Effect.tryPromise(() => preceding).pipe(
-          // The pending chain is normalized on every ordinary ingress and our resolve-only
-          // ticket owns this predecessor. Rejection would violate that internal invariant.
           Effect.orDie,
           Effect.andThen(
             Effect.scoped(
@@ -579,7 +576,6 @@ export class UserTransactionCoordinator {
     if (Option.isSome(probe)) return probe.value;
     if (path === "/oauth-mcp") {
       const mcp = this.mcp;
-      // Protocol/control never waits behind its target; only canonical callbacks take a ticket.
       return executeMcpProtocolAdmission(mcp, request, { userId, environment });
     }
     const hosted = makeAgentService({

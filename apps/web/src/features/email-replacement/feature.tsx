@@ -166,7 +166,7 @@ const replacementContent = ({
   );
 };
 
-/** Pure authenticated settings view; mailbox proofs remain body-only transient form state. */
+/** Mailbox proofs stay in transient form state and request bodies. */
 export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Element => (
   <main className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
     <Card>
@@ -186,7 +186,6 @@ export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Elem
   </main>
 );
 
-/** Renders the signed-in email-replacement workflow using its transient controller state. */
 export const EmailReplacementFeature = (): JSX.Element => (
   <EmailReplacementView {...useEmailReplacement()} />
 );

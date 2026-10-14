@@ -114,7 +114,6 @@ export const startBrowserPairing = ({
   Effect.gen(function* () {
     const started = yield* Clock.currentTimeMillis;
     const retained = retainedSessionPairingsQuery();
-    // Expiry is checked at every use; pruning is bounded and cannot change an active pairing.
     yield* attempt(() =>
       db
         .prepare(

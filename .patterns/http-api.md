@@ -1,6 +1,6 @@
 # Effect v4 HttpApi and Cloudflare adapter boundaries
 
-Import HttpApi modules from `effect/http-api`. Selected Effect 4.0.1 source:
+Import HttpApi modules from `effect/http-api`. Selected Effect 4.0.2 source:
 `node_modules/effect/src/http-api/{HttpApi,HttpApiBuilder,HttpApiClient,HttpApiMiddleware,HttpApiSchema,OpenApi}.ts`.
 
 Use HttpApi as the define-once public contract. The canonical operation declaration derives typed

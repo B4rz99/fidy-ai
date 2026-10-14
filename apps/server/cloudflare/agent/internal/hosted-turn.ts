@@ -119,7 +119,6 @@ type HostedWorkFailure =
   | AgentUnavailable
   | InsightUnavailable;
 
-// Only installed owners whose caller policy permits this authority enter the toolkit.
 const hostedExecutableOperations = installedCanonicalOperations().filter(
   ({ policy }) =>
     decideOperationAccess(policy.access, {
@@ -149,7 +148,6 @@ const hostedBatchChildren = Schema.Struct({
     calls: Schema.NonEmptyArray(Schema.Struct({ operation: Schema.String })),
   }),
 });
-/** A batch cannot use its WebSession executor to smuggle a child denied to Hosted Agent Sessions. */
 const hostedBatchAllowed = (input: CanonicalToolEvidence): boolean => {
   const parsed = Schema.decodeUnknownOption(hostedBatchChildren)(input);
   return (
@@ -814,8 +812,6 @@ const prepareHostedWork = ({
 type HostedContinuity = Effect.Success<ReturnType<typeof readHostedContinuity>>;
 
 /** Best-effort replacement: failure cannot delete evidence or invalidate existing continuity. */
-// No new telemetry: this optional preflight shares the Turn's bounded provider work; existing
-// provider telemetry observes its execution. Failures are contained without reporting User content.
 const compactHostedContinuity = ({
   db,
   subject,
@@ -972,7 +968,6 @@ const recordRoundUsage = (
     }
   });
 
-/** The only path allowed to terminalize a Pending Turn. */
 const executeAdmittedTurn = ({
   db,
   userId,
@@ -1003,7 +998,6 @@ const executeAdmittedTurn = ({
       );
     const seenCalls = new Set<string>();
     const mutation = { started: false };
-    // Each continuation is one-shot; the next round starts only after every result is retained.
     const executeRound = (
       active: PreparedHostedText,
       iteration: number,
@@ -1192,8 +1186,6 @@ const executeAdmittedTurn = ({
           scheduleRecovery,
         });
       });
-    // A platform defect may still have committed a canonical query. Never publish a reply or
-    // claim a successful Turn without its evidence; the durable alarm is the fallback if D1 fails.
     return yield* executeRound(prepared, 1, 0).pipe(
       Effect.catchCause(() =>
         Effect.gen(function* () {
@@ -1345,7 +1337,6 @@ const fencedMutationOutcome = ({
         .first()
     );
     if (committed !== null) return { _tag: "CommittedOutputUnavailable" };
-    // A server error can race a late canonical D1 commit. Keep the Turn Pending for its fence.
     if (response.status >= serverErrorStatusMinimum) {
       return yield* Effect.die(new Error("Uncertain canonical mutation"));
     }
@@ -1506,8 +1497,6 @@ const executeHostedTool = ({
         Option.none
       );
     }
-    // The canonical owner may finish after our deadline; retain the attempted call's
-    // unavailable outcome without claiming that its late Audit or result was delivered.
     if (operation.policy.kind === "query" && (yield* isExpired)) executed = Option.none();
     const outcome = Option.isSome(executed)
       ? yield* operation.policy.kind === "mutation"
@@ -1621,7 +1610,6 @@ const executeConfirmedHostedTurn = ({
         )
       );
     const mutation = { started: false };
-    // Bound this recovery attempt; permanent session authority still uses the original Turn.
     const executionDeadline = (yield* Clock.currentTimeMillis) + maximumModelRoundMillis;
     const expired = Clock.currentTimeMillis.pipe(
       Effect.map((now) => signal.aborted || now >= executionDeadline)
@@ -1689,7 +1677,6 @@ const executeConfirmedHostedTurn = ({
       }
       mutation.started = true;
       const retainedOutcome = yield* findConfirmedOutcome({ db, userId, ...identity });
-      // A retained result or durable fence is recovery evidence, never authority to replay.
       const outcome = Option.isSome(retainedOutcome)
         ? confirmedOutcome(retainedOutcome.value)
         : yield* executeConfirmedMutation({
@@ -1734,7 +1721,6 @@ const executeConfirmedHostedTurn = ({
               )
             );
           }
-          // Once the owner begins, its fence and durable recovery decide an uncertain commit.
           return unavailable();
         })
       )
@@ -1837,7 +1823,6 @@ const proposeChannelDelivery = ({
         const receipt = yield* stageHostedDelivery({ db, userId, turnId, text: answer });
         const recoveryAt = (yield* Clock.currentTimeMillis) + deliveryAcknowledgmentWindowMs;
         yield* Effect.tryPromise(() => scheduleRecovery(recoveryAt));
-        // The channel rejected the proposed reply. Nothing became visible.
         const delivered = yield* Effect.tryPromise(() =>
           deliver.propose({ text: answer, turnId, receipt })
         ).pipe(Effect.option);

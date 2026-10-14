@@ -601,7 +601,6 @@ it("isolates two callers during interrupted sandbox disclosure recovery and neve
         (yield* sendChat(journey, "Hola", { phone: "573009876543", caller: "CO.Person2" })).status
       ).toBe(200);
       const prepared = [...outbound];
-      // Model a crash after durable preparation but before the provider-send claim.
       yield* Effect.tryPromise(() =>
         journey.db
           .prepare(

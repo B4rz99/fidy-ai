@@ -92,7 +92,6 @@ const unambiguousTriples = (facts: ReadonlyArray<DatedFact>): ReadonlyArray<Trip
   const ambiguous = new Set<string>();
   for (const [index, left] of triples.entries()) {
     for (const right of triples.slice(index + 1)) {
-      // Compatible anchors are continuations; the earliest accepted reference stays fixed.
       if (related(left[0], right[0]) && related(right[0], left[0])) continue;
       for (const { fact } of left.filter(({ fact }) =>
         right.some((candidate) => candidate.fact.id === fact.id)

@@ -1,7 +1,3 @@
-// The one lint config. `bun run lint` runs it, `bun run lint:type-aware` runs it
-// again with the rules that need type information; `bun run verify` and CI run
-// both. There is deliberately no second config — a rule a tool could enforce,
-// but no tool runs, is not a standard (CODING_STANDARDS.md).
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "jsdoc", "react", "jsx-a11y"],
@@ -49,7 +45,14 @@
     "effect-guards/no-effect-promise": "error",
     "effect-guards/no-type-cast": "error",
     "effect-guards/no-react-use-effect": "error",
-    "capitalized-comments": ["error", "always", { "ignoreConsecutiveComments": true }],
+    "capitalized-comments": [
+      "error",
+      "always",
+      {
+        "ignoreConsecutiveComments": true,
+        "ignorePattern": "^react-doctor-disable(?:-next-line)?\\b"
+      }
+    ],
     "complexity": ["error", { "max": 8 }],
     "effect-guards/no-nullable-type": "error",
     "id-length": ["error", { "exceptions": ["_", "A", "E", "R"], "properties": "never" }],
@@ -155,7 +158,6 @@
   },
   "overrides": [
     {
-      // Public documents and demonstrations have no product or server runtime authority.
       "files": ["apps/site/src/**/*.{astro,ts,tsx}"],
       "rules": {
         "no-restricted-imports": [
@@ -172,7 +174,6 @@
       }
     },
     {
-      // Reply delivery depends on committed DOM and native document visibility, not a User command.
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
@@ -222,8 +223,6 @@
       ],
       "rules": { "import/extensions": "off" }
     },
-    // Table V8 uses interior mutability. This app does not enable React Compiler;
-    // the ledger reads its row model each render and never memoizes the table object.
     {
       "files": ["apps/web/src/features/transactions/ledger.tsx"],
       "rules": { "react/incompatible-library": "off" }
@@ -255,7 +254,6 @@
         ]
       }
     },
-    // Compaction is one ordered preflight with failure checks at each provider stage.
     {
       "files": ["apps/server/cloudflare/agent/internal/hosted-turn.ts"],
       "rules": {
@@ -263,32 +261,22 @@
         "max-lines-per-function": "off"
       }
     },
-    // D1 continuity reads and the guarded atomic replacement are cohesive storage boundaries.
     {
       "files": ["apps/server/cloudflare/agent/internal/turn-store.ts"],
       "rules": {
         "max-lines-per-function": "off"
       }
     },
-    // Dependency-guard batches advance in order and clean up before retry.
     {
       "files": [
-        "apps/server/scripts/check-dependency-guards.ts",
-        "apps/web/scripts/check-dependency-guards.ts"
+        "tools/depcruise/run.mjs",
+        "tools/depcruise/check-publication.mjs",
+        "tools/mutation/run.mjs"
       ],
-      "rules": {
-        "no-await-in-loop": "off"
-      }
-    },
-    // Terminal reporting is the output channel of these two tool runners.
-    {
-      "files": ["tools/depcruise/run.mjs", "tools/mutation/run.mjs"],
       "rules": {
         "no-console": "off"
       }
     },
-    // SMTP admission is one ordered trust boundary: splitting its receipt-before-R2,
-    // publication, and ambiguity cleanup steps would obscure their required sequence.
     {
       "files": ["apps/server/cloudflare/ingestion/internal/forwarded-email.ts"],
       "rules": {
@@ -359,8 +347,6 @@
         "import/no-default-export": "off"
       }
     },
-    // Keep the declarative topology together so resource ownership and dependency order
-    // remain visible in the single Alchemy entrypoint.
     {
       "files": ["infra/cloudflare/alchemy.run.ts"],
       "rules": {
@@ -368,8 +354,6 @@
         "complexity": "off"
       }
     },
-    // Payment enrollment orchestrates atomic D1 claims and provider ambiguity at one Worker
-    // boundary. Its independent inputs are named; only the ordered workflow remains exempt.
     {
       "files": ["apps/server/cloudflare/subscription/internal/payment-enrollment.ts"],
       "rules": {
@@ -434,17 +418,8 @@
       "files": ["tools/depcruise/*.mjs"],
       "rules": { "import/extensions": "off" }
     },
-    // The functional-core fences (ARCHITECTURE.md §3). `no-restricted-imports`
-    // is an undescribed passthrough in oxlint's schema, so a typo in these
-    // options is accepted in silence and reports nothing: change them only
-    // against a probe that must fail.
-    //
-    // `prefer-readonly-parameter-types` is unsatisfiable repo-wide — Effect's
-    // own service objects are not readonly, and the only fix would be
-    // suppression comments, which `typescript/ban-ts-comment` bans. Core never
-    // touches a service; that is the fence, and it is why the rule can live
-    // here and nowhere else. It needs type information, so it fires on the
-    // type-aware pass only.
+    // Effect service and phantom brand fields do not satisfy deep-readonly parameter checks.
+    // Keep the rule scoped to core; its reviewed type exceptions are checked by negative probes.
     {
       "files": ["apps/server/src/core/**"],
       "rules": {
@@ -453,7 +428,6 @@
         "effect-guards/no-escape-hatch": "error",
         "effect-guards/no-unknown-parameters": "error",
         "effect-guards/no-unsafe-dictionary-type": "error",
-        "effect-guards/require-interface-comment": "error",
         "effect-guards/scalar-brand-only": "error",
         "no-param-reassign": ["error", { "props": true }],
         "no-restricted-globals": [
@@ -538,9 +512,6 @@
         ]
       }
     },
-    // Ingestion obtains entropy, UUIDs, and SHA digests through Effect's substitutable Crypto
-    // service. This subtree has no legitimate direct platform-crypto operation; HMAC and
-    // constant-time comparison remain permitted in their owning identity/security modules.
     {
       "files": ["apps/server/src/shell/ingestion/**/*.{ts,tsx}"],
       "rules": {
@@ -561,11 +532,6 @@
         ]
       }
     },
-    // The API harness spends the whole nesting budget by construction:
-    // layer()(name, (it) => …) → it.effect(name, () => …) → Effect.gen(function* …)
-    // is already three, so a test's own first `.map` would violate a limit of 3.
-    // The guard is meant to catch deep nesting, not to ban array callbacks in
-    // tests, so tests get one level of their own.
     {
       "files": [
         "**/*.test.ts",

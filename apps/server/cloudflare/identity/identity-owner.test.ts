@@ -270,7 +270,6 @@ it("does not release another User's Memory through a valid but borrowed associat
         { text: "A private context" },
         { text: "B private context" },
       ]);
-      // A malformed current row makes the entire owned context unavailable, not partially visible.
       yield* Effect.tryPromise(() =>
         db
           .prepare(

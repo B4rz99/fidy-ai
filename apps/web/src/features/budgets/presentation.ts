@@ -8,7 +8,6 @@ export type BudgetStatus = BudgetReport["statuses"][number];
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
 
-/** Defaults organize presentation without changing canonical Category identities. */
 export const defaultBudgetGroup = (label: string): string => {
   if (["Vivienda", "Servicios"].includes(label)) return "Hogar";
   if (["Restaurantes", "Domicilios", "Mercado"].includes(label)) return "Alimentación";

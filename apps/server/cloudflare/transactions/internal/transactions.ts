@@ -210,7 +210,6 @@ const resolveCaptureCategory = ({
     Effect.mapError(boundaryFailure)
   );
 
-/** One capture refusal built from the shared Transaction refusal vocabulary. */
 const refusedCapture = ({
   db,
   subject,

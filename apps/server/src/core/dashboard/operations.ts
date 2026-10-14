@@ -96,7 +96,6 @@ const monthlyOutflows = DashboardCatalogEntry.make({
   },
 });
 
-/** Builds the four direct-launch presets from the shell-supplied restaurant CategoryId. */
 export const makeDashboardCatalog = (
   input: Readonly<{ readonly restaurantCategoryId: CategoryId }>
 ): DashboardCatalog => [
@@ -499,11 +498,9 @@ export const dashboardProjectionRanges: {
   }
 );
 
-/** Traverse the validated layout in the same order used for its mobile presentation. */
 export const collectLayoutWidgets = (node: Readonly<LayoutNode>): ReadonlyArray<Widget> =>
   layoutLeaves(node).map((leaf) => leaf.widget);
 
-/** The Widgets whose Category filter is optional; absence is not an empty filter. */
 type FilteredWidget = SpendingChartWidget | TransactionListWidget | CustomMetricWidget;
 
 const collectFilteredWidgetReferences = (
@@ -517,7 +514,6 @@ const collectFilteredWidgetReferences = (
         field: `categories.${index}` satisfies `categories.${number}`,
       }));
 
-/** Collects Category references without exposing recursive traversal to the shell. */
 export const collectDashboardCategoryReferences = (
   document: Readonly<DashboardDocument>
 ): ReadonlyArray<DashboardCategoryReference> =>

@@ -254,3 +254,15 @@ Reply body:
 
 Record confirmed delivery only after observing the reply in the intended inbox. A failed send or
 uncertain receipt remains failed or uncertain; do not mark the rehearsal complete from a draft.
+
+## Operator storage setup — 2026-10-14
+
+The sole operator’s Mac reports FileVault enabled. An empty native register and separate evidence
+directory were initialized under the operator’s local Application Support directory, outside Git
+and cloud-sync folders. The directories are owned by the operator’s OS account with mode 0700;
+`register.sqlite` has mode 0600. Initialization checked the real CLI refusal for an unknown case
+without fabricating intake or verification. The restricted evidence directory contains the setup
+receipt. This setup creates no backup destination or automatic retention/deletion job; apply the
+approved operator retention procedure to actual evidence and restrict any future backup equally.
+
+Production release and the complete published-channel rehearsal are still pending.

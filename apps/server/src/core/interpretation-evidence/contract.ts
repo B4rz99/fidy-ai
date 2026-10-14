@@ -11,7 +11,6 @@ export const CapturedInterpretationContext = Schema.Struct({
 }).annotate({ identifier: "CapturedInterpretationContext" });
 export type CapturedInterpretationContext = typeof CapturedInterpretationContext.Type;
 
-/** Names one bounded parser, extractor, or interpretation contract. */
 export const InterpretationRevision = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumInterpretationRevisionLength)

@@ -498,7 +498,6 @@ it("keeps corrupt retained OAuth review and connection dates in the typed failur
         (yield* wait(reviewed.db.prepare("SELECT id FROM oauth_connections").all())).results
       ).toEqual([]);
       const approved = yield* approvedFixture();
-      // Inject retained corruption without changing the production grant immutability fence.
       yield* wait(approved.db.exec("DROP TRIGGER oauth_connection_immutable"));
       for (const dates of [
         { expiry: -8_640_000_000_000_001, revokedAt: null },

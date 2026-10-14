@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import type { JSX, ReactNode } from "react";
 
-/** Bridges a committed reply to the browser document's visibility lifecycle. */
 export const VisibleReply = ({
   active,
   onVisible,

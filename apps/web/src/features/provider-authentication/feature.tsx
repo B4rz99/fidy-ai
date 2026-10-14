@@ -8,7 +8,6 @@ import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { closeProviderReturn, useProviderAuthentication } from "./controller";
 
-/** First-party web signup and returning login, with explicit signup Consent and one-time recovery. */
 const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boolean): boolean =>
   intent === "login" || (accepted && ready);
 type Authentication = ReturnType<typeof useProviderAuthentication>;

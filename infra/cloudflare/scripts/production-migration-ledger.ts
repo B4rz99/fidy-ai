@@ -38,10 +38,7 @@ const decodeProductionDatabaseName = (output: string): string => {
     try {
       return Schema.decodeUnknownSync(DatabaseResourceState)(JSON.parse(output.slice(index).trim()))
         .attr.databaseName;
-    } catch {
-      // Alchemy's non-interactive credential refresh can write progress before the JSON state.
-      // Only a complete JSON object matching the expected resource schema is accepted.
-    }
+    } catch {}
   }
 
   throw new Error("Alchemy Production D1 state output is invalid");

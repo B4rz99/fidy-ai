@@ -7,14 +7,11 @@ const databases = isolatedTestDatabases();
 export const db = await databases.acquire();
 const migrationDirectory = new URL("./migrations/", import.meta.url);
 const migrations = Array.from(new Bun.Glob("*.sql").scanSync(migrationDirectory.pathname)).sort();
-// Acceptance needs the final native schema; migration-boundary tests run separately.
 await installTestSchema({
   db,
   sources: migrations.map((name) => new URL(name, migrationDirectory)),
 });
 
-// This identity is confined to Miniflare. The separate loopback operator simulates a verified
-// WhatsApp approval; the browser still obtains its cookie only by redeeming with the real Core.
 export const fixtureUserId = "24000000-0000-4000-8000-000000000241";
 export const firstCardUserId = "24000000-0000-4000-8000-000000000281";
 export const firstDaviplataUserId = "24000000-0000-4000-8000-000000000291";
@@ -109,21 +106,18 @@ await seedIdentity({
   email: "tablero@example.com",
   consentId: "24000000-0000-4000-8000-000000000352",
 });
-// Budget spending and cap changes must not affect concurrent Dashboard journeys.
 await seedIdentity({
   userId: budgetUserId,
   bsuid: "CO.Budget",
   email: "presupuesto@example.com",
   consentId: "24000000-0000-4000-8000-000000000372",
 });
-// History continuation has its own User so parallel mutation journeys cannot alter its pages.
 await seedIdentity({
   userId: paginationUserId,
   bsuid: "CO.Pagination",
   email: "paginacion@example.com",
   consentId: "24000000-0000-4000-8000-000000000342",
 });
-// Metadata-only connections exercise listing continuation; no usable OAuth authority is minted.
 await seedIdentity({
   userId: accessUserId,
   bsuid: "CO.Access",
@@ -160,7 +154,6 @@ const millisecondsPerDay = 86_400_000;
 const uuidSuffixWidth = 12;
 await db.batch(
   Array.from({ length: historyPageSize + continuationRecords }, (_, index) => {
-    // Creation spans two days to respect the native daily creation allowance.
     const createdAt = now - (index < continuationRecords ? millisecondsPerDay : 0);
     return db
       .prepare(`INSERT INTO transactions
@@ -179,7 +172,6 @@ await db.batch(
       );
   })
 );
-// Pairing owns its standing and Dashboard; enrollment journeys may run first or concurrently.
 await seedIdentity({
   userId: pairingUserId,
   bsuid: "CO.Pairing",
@@ -245,8 +237,6 @@ await db
   .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
   .bind(sourceEnrollmentId)
   .run();
-// A second User has verified credentials and consent but no PaymentSource. It must
-// traverse first-time tokenization instead of silently reusing the primary User's source.
 await seedIdentity({
   userId: firstCardUserId,
   bsuid: "CO.FirstCard",
@@ -254,21 +244,17 @@ await seedIdentity({
   consentId: "24000000-0000-4000-8000-000000000282",
 });
 
-// The browser suite retains history in one D1. DaviPlata must not inherit the first CARD source.
 await seedIdentity({
   userId: firstDaviplataUserId,
   bsuid: "CO.FirstDaviplata",
   email: "daviplata@example.com",
   consentId: "24000000-0000-4000-8000-000000000292",
-  // Born eight days ago: original TrialPeriod is expired before any payment is verified.
   createdAtMs: now - expiredTrialAgeMs,
 });
 
 const recoveryDigest = new Uint8Array(
   await crypto.subtle.digest("SHA-256", new TextEncoder().encode(backupRecoveryCode))
 );
-// Recovery revokes existing sessions. Its parallel journey must not invalidate the
-// ordinary pairing journey's User while that browser is exercising financial operations.
 await seedIdentity({
   userId: recoveryUserId,
   bsuid: "CO.Recovery",
@@ -282,7 +268,6 @@ await db
   .bind(recoveryUserId, recoveryDigest, now)
   .run();
 
-// Rotation must not replace the proof used by the parallel recovery sign-in journey.
 const recoveryDisclosureUserId = "24000000-0000-4000-8000-000000000331";
 const recoveryDisclosureDigest = new Uint8Array(
   await crypto.subtle.digest("SHA-256", new TextEncoder().encode("23456-789AB-CDEFG-HJKLM-NPQRS"))

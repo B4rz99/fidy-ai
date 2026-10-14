@@ -56,7 +56,6 @@ import {
   isPATAuthority,
 } from "../../canonical-work/operations";
 
-/** Versioned prefix for every statement object written by staging. */
 const statementStagingObjectPrefix = "staging/statement/v1/";
 const statementStagingObjectEntropyBytes = 32;
 const millisecondsPerHour = 3_600_000;
@@ -126,7 +125,6 @@ export type PreparedStatementPublication = Readonly<{
   readonly submissionId: string;
 }>;
 
-/** One bounded expired-staging cleanup result. */
 export type StatementStagingSweep = Readonly<{
   readonly rowsDeleted: number;
   readonly objectsDeleted: number;
@@ -137,7 +135,6 @@ export type ExpiredStatementSubmissions = Readonly<{
   readonly submissionsFailed: number;
 }>;
 
-/** Stored lifecycle of one submission, exactly as the public projection needs it. */
 export type StoredStatementSubmission = Readonly<{
   readonly id: StatementSubmissionId;
   readonly sourceFormat: "csv" | "xlsx";
@@ -483,7 +480,6 @@ const stageStatementBytes = (
   Effect.gen(function* () {
     const bytes = yield* readBoundedStatementBytes(input.request);
     if (bytes.byteLength === 0) return yield* failed("malformed-file");
-    // Content, not a claimed name or media type, decides what may become durable staging state.
     if (knownUnsupportedStatementBytes(bytes)) return yield* failed("unsupported-format");
     const sourceFormat = statementSourceFormat(bytes);
     const digest = yield* digestUnavailable(bytes);
@@ -747,12 +743,6 @@ export const statementSubmissionReadAudit = ({
     },
   });
 
-/**
- * The two outcomes a statement refusal audit can record. The closed publication refusal map already
- * answers every reason as `resource_limit` or `validation_failed`; narrowing through one total map
- * keeps that invariant checkable at the audit column's closed set, so an id a caller cannot prove
- * ownership of can never be recorded as `not_found`.
- */
 const refusalAuditOutcome = (
   outcome: StatementPublicationRefusal["auditOutcome"]
 ): "resource_limit" | "validation_failed" =>
@@ -807,14 +797,7 @@ const statementSubmissionReplayAudit = ({
     afterOwnerWrite: false,
   });
 
-/**
- * The guarded writes that own the staged material, the Free-backfill reservation, the
- * AuditLogEntry, and the bounded extraction outbox identity. Each changes a row only when the
- * previous step did, so the assertion that follows the caller's accountability writes can turn any
- * silently skipped step into a rolled-back unit. The outbox row this commits is the durable seam a
- * future extraction Workflow consumes with replay-safe identity (#805); this unit only ever writes
- * the identity and never does provider work itself.
- */
+/** Guard-chained publication writes require a completion assertion after caller accountability in the same D1 batch. They retain only an extraction identity and perform no provider work. */
 const publicationAccountabilityStatements = (
   config: StatementStagingConfig,
   input: PublicationAttempt & Readonly<{ submissionId: string; auditId: string }>
@@ -880,14 +863,11 @@ const classifyStagedRow = (
   return Option.none();
 };
 
-/** The one canonical mutation this module publishes, with its staged-reference input. */
 export const submitForExtraction = CanonicalOperationId.make("ingestion.submitForExtraction");
 
-/** The one sentence a same-key material conflict is answered with, in every caller and suite. */
 export const statementConflictMessage =
   "The idempotency key already names different statement material. Stage that material and use a new key.";
 
-/** The one sentence every absent, foreign, or mismatched staged reference is answered with. */
 export const stagedMaterialMessage =
   "The staged statement material is unavailable; upload the file again.";
 
@@ -949,7 +929,6 @@ export const statementRefusal = (
   reason: StatementStagingFailureReason
 ): StatementPublicationRefusal => statementPublicationRefusals[reason];
 
-/** One submission's durable fields, decoded once from storage for the public projection. */
 type SubmissionBase = Readonly<{
   readonly id: ReturnType<typeof StatementSubmissionId.make>;
   readonly parserRevision: string;
@@ -1569,8 +1548,6 @@ const expireStatementSubmissions = (
     const ids = encodeRetentionIds(rows.map(({ id }) => id));
     const stagingIds = encodeRetentionIds(rows.map(({ staging_id: stagingId }) => stagingId));
     const results = yield* settleBatch(config.database, [
-      // The terminal transition commits before any object delete, so no authoritative submission
-      // that still lacks a useful outcome can ever point at material a later cleanup run reclaimed.
       config.database
         .prepare(
           `UPDATE statement_submissions
@@ -1579,16 +1556,12 @@ const expireStatementSubmissions = (
            WHERE id IN (SELECT value FROM json_each(?)) AND status IN ('queued', 'processing') RETURNING id`
         )
         .bind(nowEpochMs, nowEpochMs, ids),
-      // A submission that never produced a useful outcome returns the Free backfill to the User.
       config.database
         .prepare(
           `UPDATE statement_backfill_entitlements SET submission_id = NULL
            WHERE consumed_at_ms IS NULL AND submission_id IN (SELECT value FROM json_each(?))`
         )
         .bind(ids),
-      // Published material becomes sweepable exactly once; the sweep deletes the object and keeps
-      // the referenced row as durable evidence that the locator's bytes are gone. Clearing the
-      // publication pointer is what lets the row leave `published` under the staging state check.
       config.database
         .prepare(
           `UPDATE statement_staging_objects
@@ -1636,10 +1609,6 @@ const sweepExpiredStatementStaging = (
   Effect.gen(function* () {
     const nowEpochMs = config.nowEpochMs();
     if (!isSafeEpoch(nowEpochMs)) return yield* unavailable();
-    // One bounded D1 statement moves expired unpublished rows to `deleting`, so a publication can
-    // never commit against material whose object delete is pending: D1 serializes this against the
-    // publication unit, and `deleting` rows are refused. Objects are deleted next and rows last;
-    // an interrupted sweep re-selects its `deleting` rows, so no object is left unreachable.
     const marked = yield* settleAll(prepareStagingRetention(config.database, nowEpochMs));
     const rows = marked.results.flatMap((value) =>
       Option.match(Schema.decodeUnknownOption(ExpiredRow)(value), {
@@ -1653,7 +1622,6 @@ const sweepExpiredStatementStaging = (
     );
     const ids = encodeRetentionIds(rows.map(({ id }) => id));
     const results = yield* settleBatch(config.database, [
-      // Rows a submission still references stay as durable cleanup evidence; only the object goes.
       config.database
         .prepare(
           `DELETE FROM statement_staging_objects
@@ -1684,15 +1652,12 @@ const makeStatementStagingService = (config: StatementStagingConfig): StatementS
   sweepExpiredStatementStaging: sweepExpiredStatementStaging(config),
 });
 
-/** Substitutable private-R2 statement staging assembled by the private Core Worker. */
 export class StatementStaging extends Context.Service<StatementStaging, StatementStagingService>()(
   "@fidy/server/cloudflare/ingestion/internal/statement-staging/StatementStaging"
 ) {
-  /** Constructs a staging value for direct Worker adapter composition. */
   static readonly make = (config: StatementStagingConfig): StatementStagingService =>
     this.of(makeStatementStagingService(config));
 
-  /** Primary production layer parameterized by the Core Worker's D1 and R2 bindings. */
   static readonly layer = (config: StatementStagingConfig): Layer.Layer<StatementStaging> =>
     Layer.succeed(this, this.make(config));
 }

@@ -27,7 +27,6 @@ export const OAuthClientId = Schema.String.check(Schema.isUUID()).pipe(
 );
 export type OAuthClientId = typeof OAuthClientId.Type;
 
-/** Stable identity of one separately reviewed external-agent authorization. */
 export const OAuthConnectionId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("OAuthConnectionId")
 );

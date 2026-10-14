@@ -714,7 +714,6 @@ it("an exhausted Proactivity Workflow step records one metadata-only failure and
             (error: unknown) => error
           )
       );
-      // The native step error stays in the existing Effect rejection; observation cannot replace it.
       expect(outcome).toHaveProperty("cause", original);
       expect(
         yield* Effect.tryPromise(() =>

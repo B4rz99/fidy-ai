@@ -23,7 +23,6 @@ import { activePATReactivityKey } from "./presentation";
 type PATScopeValue = PATScope;
 export type ReviewedManualPATGrant = ManualPATGrantInput &
   Readonly<{ reviewExpiresAt: DateTime.Utc }>;
-/** Closed UI lifecycle that prevents issuance before exact grant review. */
 type ManualPATCreationState =
   | Readonly<{
       _tag: "Editing";
@@ -83,7 +82,7 @@ const beginReview = (
   };
 };
 
-/** Presentation never receives request identities, User-bound handoff data or terminal callbacks. */
+/** Presentation receives no request identity or User-bound handoff data. */
 export type PATCreationDisplay =
   | Extract<ManualPATCreationState, { _tag: "Editing" | "Issued" }>
   | Readonly<{ _tag: "Reviewing" | "Issuing"; grant: ReviewedManualPATGrant }>

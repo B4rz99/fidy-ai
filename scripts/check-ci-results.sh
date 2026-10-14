@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# A conditional job may be skipped only when the successful detector explicitly
-# selected false for it. Missing outputs, failures, and cancellations fail closed.
 jq --exit-status '
   . as $jobs
   | ($jobs.changes.result == "success")

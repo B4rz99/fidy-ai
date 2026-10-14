@@ -16,7 +16,6 @@ type Props = Readonly<{
   width: "full" | "auto";
   onChange: (value: string) => void;
 }>;
-/** Searchable single selection using shadcn's Base UI composition and Fidy's choice trigger. */
 export const SearchableChoiceDropdown = ({
   id,
   label,

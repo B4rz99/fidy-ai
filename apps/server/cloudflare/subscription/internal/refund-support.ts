@@ -27,7 +27,6 @@ const Claims = Schema.Struct({
   email: Schema.String.check(Schema.isPattern(/^[^@\s]+@[^@\s]+$/u)),
 });
 type KeyLookup = ReturnType<typeof createRemoteJWKSet>;
-// Cache only trusted public key data. Resolvers and in-flight lookups belong to one authorization.
 let cachedKeyData: Option.Option<Readonly<{ issuer: string; data: JWKSCacheInput }>> =
   Option.none();
 const signingKeys = (issuer: string, http: OutboundHttpService, signal: AbortSignal): KeyLookup => {
@@ -87,7 +86,6 @@ const authorize = (
         clockTolerance: 0,
       })
     );
-    // Service-token assertions cannot become attributable human refund permission.
     if (verified.payload["common_name"] !== undefined) return Option.none();
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload);
     return Option.some({
@@ -134,7 +132,6 @@ const submit = (
         })
       )
     );
-    // Acceptance is already durable. Cron owns publication, so no failed handoff can reverse it.
     return response;
   }).pipe(Effect.orElseSucceed(() => refundFailureResponse("unavailable")));
 /** Authentication is reverified at Core even when Access/ingress has already checked the assertion. */

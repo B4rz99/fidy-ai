@@ -85,8 +85,6 @@ const StateEntry = Schema.Struct({
   status: Schema.Literals(["created", "updated", "replaced"]),
   attr: ResourceAttributes,
 });
-// Interrupted updates retain both the current output and the last-applied output. Capture may
-// use them only when their Worker identities agree; completed-receipt consumers reject updates.
 const UpdatingStateEntry = Schema.Struct({
   logicalId: Schema.String,
   status: Schema.Literal("updating"),
@@ -181,7 +179,6 @@ const config = (): Config => {
   };
 };
 
-// Bound the stream before decoding; early termination releases the response stream's scope.
 const boundedJson = Effect.fn(function* (response: HttpClientResponse.HttpClientResponse) {
   if (response.status < successStatusStart || response.status >= successStatusEnd) {
     return yield* Effect.fail(Error("Provider rejected the release request"));
@@ -407,7 +404,6 @@ export const redactReleaseQueries = Effect.fn(function* (
   for (const name of names) {
     const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`;
     const headers = { authorization: `Bearer ${env.token}` };
-    // Patch only privacy metadata. Bindings, code and traffic remain owned by their release gates.
     yield* providerJson(
       HttpClientRequest.patch(`${base}/script-settings`, {
         headers: { ...headers, "content-type": "application/json" },
@@ -442,7 +438,6 @@ export const redactReleaseQueries = Effect.fn(function* (
     );
   }
 });
-// Retain at most 32 KiB in memory; drain the pipe without publishing foreign output.
 const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
   const decoder = new TextDecoder();
   const limit = 32_768;
@@ -469,7 +464,6 @@ const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Opti
             ? Option.some("100405")
             : Option.none()
         ),
-        // Closed resource categories help diagnose deleted bindings without retaining provider text.
         Option.map((code) => {
           if (/\bqueues?\b/iu.test(output)) return `${code}; resource=queue`;
           if (/\bworkflows?\b/iu.test(output)) return `${code}; resource=workflow`;
@@ -502,7 +496,6 @@ const stopReadOnlyCommand = Effect.fn(function* (child: Bun.Subprocess) {
   }
 });
 
-// Keep draining a started write even after output overflow: losing output cannot roll back its effect.
 const releaseOutput = (
   stream: ReadableStream<Uint8Array>,
   overflow: () => Effect.Effect<void, ReleaseFailure>
@@ -670,10 +663,7 @@ const decodeStateMap = (output: string): typeof StateMap.Type => {
   for (const index of objectStarts) {
     try {
       return Schema.decodeUnknownSync(StateMap)(JSON.parse(output.slice(index).trim()));
-    } catch {
-      // Alchemy can write credential-refresh progress before its JSON state. Accept only a
-      // complete object matching the state-map schema; never include the output in an error.
-    }
+    } catch {}
   }
 
   throw Error("Alchemy Worker state output is invalid");
@@ -752,8 +742,6 @@ export const decodeCaptureWorkerReceipts = (output: string): WorkerReceipts =>
   decodeWorkerReceiptsWithMode(output, "capture");
 
 const workersFromState = Effect.fn(function* (mode: "capture" | "completed" = "completed") {
-  // Alchemy's persisted upload receipts, not a health response. Never print state: it also
-  // contains other resources' binding metadata.
   const rawState = yield* shell([
     "bun",
     "../../node_modules/alchemy/bin/alchemy.js",
@@ -850,7 +838,6 @@ const createDeployment = Effect.fn(function* (
   return asDeployment(response.result);
 });
 const readTrunk = Effect.fn(function* (env: Config) {
-  // Full commit responses contain file patches whose size grows with the commit.
   const raw = yield* providerJson(
     HttpClientRequest.get(`https://api.github.com/repos/${env.repository}/git/ref/heads/trunk`, {
       headers: {
@@ -1062,7 +1049,6 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpC
   yield* writeFile(env.file, encodeJson(result));
 });
 
-/** Restricted to the inspected incident; ordinary releases cannot select this recovery path. */
 const isolate = Effect.fn(function* (
   port: ReleasePort,
   env: Config,
@@ -1177,7 +1163,6 @@ const proveRecoveryIsolation = Effect.fn(
   Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 })
 );
 
-/** Read every public route on the inspected zone and account, including workers.dev previews. */
 const proveRecoveryCorePrivate = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -1333,7 +1318,6 @@ const promote = Effect.fn(function* (port: ReleasePort, env: Config) {
     exactPairPassed: true,
     middlePairPassed: true,
   });
-  // A successful promotion must retain the exact deployment IDs for guarded recovery.
   yield* writeFile(`${env.file}.promoted`, encodeJson({ release: staged, promoted }));
 });
 
@@ -1403,7 +1387,6 @@ const verifyRetentionMigration = Effect.fn(function* (
 });
 
 const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snapshot.Type) {
-  // A code-only release is the only automatic rollback case. A missing Git ancestor refuses.
   yield* shell([
     "git",
     "-C",
@@ -1485,7 +1468,6 @@ const rollback = Effect.fn(function* (
   const { release, promoted } = yield* Schema.decodeUnknownEffect(RollbackReceipt)(
     yield* readFile(`${env.file}.promoted`)
   );
-  // This also rejects pre-migration receipts whose deployment IDs still match after D1 apply.
   yield* requireRetentionRollback(retentionCompatibilityPort(port, env, client), release.snapshot);
   const compatible = yield* rollbackCompatibility(env, client, release);
   const guarded: RollbackPort = {

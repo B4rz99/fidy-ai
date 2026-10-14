@@ -5,11 +5,7 @@ import { type Option, Schema, Struct } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/**
- * Hard upper bounds on one hosted Turn: its iteration count, its tool calls, and the wall-clock
- * bound on each model round. Native Turn execution and the provider adapter share these maxima so their
- * admission, iteration and deadline policies cannot drift apart.
- */
+/** Maximum model rounds admitted in one hosted Turn. */
 export const maximumHostedTurnIterations = 32;
 /** Wall-clock limit for one admitted hosted model round, in milliseconds. */
 export const maximumModelRoundMillis = 120_000;
@@ -48,13 +44,11 @@ const canonicalToolEvidenceIsValid = Schema.makeFilter<Schema.Json>((value) => {
     : `Expected at most ${maximumCanonicalToolEvidenceBytes} encoded UTF-8 bytes`;
 });
 
-/** Stable lowercase UUID identity for one append-only Transcript entry. */
 export const TranscriptEntryId = Schema.String.check(Schema.isUUID(), isCanonicalUuid)
   .pipe(Schema.brand("TranscriptEntryId"))
   .annotate({ identifier: "TranscriptEntryId" });
 export type TranscriptEntryId = typeof TranscriptEntryId.Type;
 
-/** Stable lowercase UUID joining every entry produced by one hosted-agent turn. */
 export const TranscriptTurnId = Schema.String.check(Schema.isUUID(), isCanonicalUuid)
   .pipe(Schema.brand("TranscriptTurnId"))
   .annotate({ identifier: "TranscriptTurnId" });
@@ -124,7 +118,6 @@ export const ProactiveMessageTranscriptEntry = Schema.TaggedStruct(
   }
 );
 export type ProactiveMessageTranscriptEntry = typeof ProactiveMessageTranscriptEntry.Type;
-/** A retained proactive context is either Insight-linked evidence or a verified control/disclosure message. */
 export const ProactiveTranscriptEntry = Schema.Union([
   ProactiveInsightTranscriptEntry,
   ProactiveMessageTranscriptEntry,
@@ -172,7 +165,6 @@ export const CanonicalToolCallEntry = Schema.TaggedStruct("CanonicalToolCallEntr
 });
 export type CanonicalToolCallEntry = typeof CanonicalToolCallEntry.Type;
 
-/** The mutually exclusive results a canonical tool invocation may retain. */
 export const CanonicalToolOutcome = Schema.Union([
   Schema.TaggedStruct("Succeeded", { output: CanonicalToolEvidence }),
   // A fenced mutation committed, but its canonical response was lost before retention.
@@ -232,7 +224,6 @@ export const TranscriptContentEntry = Schema.Union([
 ]).annotate({ identifier: "TranscriptContentEntry" });
 export type TranscriptContentEntry = typeof TranscriptContentEntry.Type;
 
-/** The complete provider-neutral record retained for exact conversation history. */
 export const TranscriptEntry = Schema.Union([
   UserTranscriptEntry,
   AssistantTranscriptEntry,
@@ -303,7 +294,6 @@ export const ConversationTurn = Schema.Union([
 ]).annotate({ identifier: "ConversationTurn" });
 export type ConversationTurn = typeof ConversationTurn.Type;
 
-/** Stable lowercase UUID identity for one Fidy-owned hosted conversational session. */
 export const HostedAgentSessionId = Schema.String.check(
   Schema.isUUID(),
   Schema.makeFilter<string>((value) =>
@@ -318,7 +308,6 @@ export type HostedAgentSessionId = typeof HostedAgentSessionId.Type;
 export const HostedAgentSessionConsentBasis = OnboardingConsentBasis;
 export type HostedAgentSessionConsentBasis = typeof HostedAgentSessionConsentBasis.Type;
 
-/** Durable lifecycle of one Fidy-owned hosted conversational session. */
 export const HostedAgentSession = Schema.Struct({
   id: HostedAgentSessionId,
   subjectUserId: UserId,

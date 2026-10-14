@@ -1,6 +1,5 @@
 import { Data, Effect, Function, Option } from "effect";
 
-/** The browser clipboard is absent or refused an attempted read or write. */
 export class ClipboardAccessFailed extends Data.TaggedError("ClipboardAccessFailed")<{}> {}
 
 /** Read capability modeled separately because browsers may deny it while allowing writes. */
@@ -9,10 +8,8 @@ export type ClipboardReader = Readonly<{ readText: () => Promise<string> }>;
 /** Write capability whose rejected Promise represents browser or permission failure. */
 export type ClipboardWriter = Readonly<{ writeText: (text: string) => Promise<void> }>;
 
-/** Browser clipboard capability required for conditional sensitive-value clearing. */
 export type BrowserClipboard = ClipboardReader & ClipboardWriter;
 
-/** Reads clipboard text when the browser exposes and authorizes that capability. */
 export const readClipboardText = (
   clipboard: Option.Option<ClipboardReader>
 ): Effect.Effect<string, ClipboardAccessFailed> =>
@@ -25,7 +22,6 @@ export const readClipboardText = (
       }),
   });
 
-/** Writes clipboard text when the browser exposes and authorizes that capability. */
 export const writeClipboardText: {
   (
     text: string

@@ -17,7 +17,6 @@ import {
   CardTitle,
 } from "@/ui/components/card";
 
-/** Terminal callbacks for one fresh-WebSession credential rotation. */
 export type RotateBackupRecoveryCommand = Readonly<{
   onRotated: (code: BackupRecoveryCode) => void;
   onFailed: () => void;
@@ -168,7 +167,6 @@ const makeRotateCommand = (
     { concurrent: false }
   );
 
-/** Coordinates the canonical mutation without retaining its raw response in shared Atom state. */
 export const BackupRecoveryFeature = (): JSX.Element => {
   const router = useRouter();
   const [rotateAtom] = useState(() => makeRotateCommand(router.options.context.apiClient));

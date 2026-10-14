@@ -42,7 +42,6 @@ const ownNativeResponses = (client: HttpClient.HttpClient): HttpClient.HttpClien
     )
   );
 
-/** Browser API boundary whose transport budget follows the sensitivity and response shape it owns. */
 export type BrowserHttpBoundary = "canonical" | "enrollment" | "web-auth" | "hosted-turn";
 
 type BrowserHttpPolicy = Readonly<{
@@ -237,9 +236,7 @@ const boundedWebResponse = (
     status,
     headers,
   });
-  // Expose the exact bounded bytes as an ArrayBuffer from the active browser realm. Besides
-  // avoiding another implementation-defined body conversion, this keeps jsdom's realm check
-  // equivalent to a real browser response.
+  // Use the active realm’s ArrayBuffer so jsdom accepts the reconstructed browser response.
   if (typeof window !== "undefined") {
     const realmBody = new window.Uint8Array(body.byteLength);
     realmBody.set(body);
@@ -390,9 +387,7 @@ const exportTransportDiagnostic = ({
   };
   try {
     Effect.runSync(Console.info("fidy.browser.transport", record));
-  } catch {
-    // Diagnostics are best effort and never change transport completion or cancellation.
-  }
+  } catch {}
 };
 
 type PolicyExecution = Readonly<{

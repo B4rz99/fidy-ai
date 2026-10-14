@@ -371,7 +371,7 @@ const makeStructuredBehavior = <Output>(
   return makePreparedStructuredAuthority({ execute, discard });
 };
 
-/** Provider object name every structured conversation-compaction projection requests. @internal */
+/** @internal */
 export const hostedStructuredCompactionObjectName = "compacted_conversation";
 
 const hostedStructuredObjectNames: Readonly<Record<HostedStructuredPurpose, string>> = {
@@ -395,7 +395,6 @@ const makeHostedStructuredRuntime = (
   },
 });
 
-/** Gives one adapter one-shot ownership of its prepared requests and continuations. */
 export const makeHostedInferenceInternal = <Request, Continuation>(
   adapter: HostedInferenceAdapter<Request, Continuation>
 ): HostedInferenceService => {

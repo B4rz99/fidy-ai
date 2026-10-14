@@ -1,6 +1,9 @@
 {
   "compilerOptions": {
     "allowJs": true,
+    "paths": {
+      "dependency-cruiser": ["./node_modules/dependency-cruiser/types/dependency-cruiser.d.mts"]
+    },
     "checkJs": true,
     "forceConsistentCasingInFileNames": true,
     "module": "NodeNext",

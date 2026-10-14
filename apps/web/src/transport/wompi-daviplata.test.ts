@@ -4,7 +4,6 @@ import { TestClock } from "effect/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { startDaviplataWithWompi } from "./wompi-daviplata";
 
-// Synthetic protocol fixtures, not recorded provider responses or live Sandbox/CORS proof.
 const approvedUrl = "https://sandbox.wompi.co/synthetic/send";
 const mountedSignal = (): AbortSignal => new AbortController().signal;
 
@@ -169,7 +168,6 @@ it.each([
         provider.mockResolvedValueOnce(otpResponse(status, foreignBearer, foreignPk));
         const started = yield* Effect.exit(start(provider));
         if (stage === "SEND") {
-          // No challenge/approval capability is returned from a refused initial send.
           expect(Exit.isFailure(started)).toBe(true);
         } else {
           if (!Exit.isSuccess(started)) {
@@ -191,7 +189,6 @@ it.each([
         expect(provider.mock.calls.map(([, init]) => init?.headers)).not.toContainEqual(
           expect.objectContaining({ authorization: `Bearer ${foreignBearer}` })
         );
-        // This transport owns no Fidy submission function: no approved outcome may leave this seam.
       })
     )
 );

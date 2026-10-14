@@ -66,7 +66,6 @@ export type CanonicalMutationUnitExecution =
   | Readonly<{ _tag: "Aborted" }>
   | Readonly<{ _tag: "ConfirmationReview"; review: OAuthNativeReview }>;
 
-/** The commit-time trigger classes one aborted unit can name by its own D1 constraint message. */
 type TriggerKind = "movement" | "audit";
 
 /** A child's canonical identity is fixed by its owner's prepared outcome, never by D1's error. */
@@ -80,7 +79,6 @@ const commitInstant = (
     ? Clock.currentTimeMillis
     : Effect.succeed(admitted);
 
-/** Reuse the owner's changes() completion premise while binding each child's identity to its slot. */
 const childCompletion = (db: D1Database, index: number, operation: string): D1PreparedStatement =>
   db
     .prepare(`INSERT INTO canonical_child_guard (child_index, operation, accepted)
@@ -89,7 +87,6 @@ const childCompletion = (db: D1Database, index: number, operation: string): D1Pr
       accepted = excluded.accepted`)
     .bind(index, operation);
 
-/** Check the shared Audit count atomically before the child's success Audit. */
 const childBudget = ({
   db,
   userId,
@@ -133,11 +130,7 @@ const auditBudgetIndex = (
   mutations: ReadonlyArray<PreparedCanonicalMutation>
 ): Option.Option<number> => (mutations.length === 1 ? Option.some(0) : Option.none());
 
-/**
- * Record one already-decided child refusal and report how the unit's caller must answer it.
- * `record` never fails by contract; a future fallible refusal must widen the contract first,
- * failing to build here until the unit answers the new failure.
- */
+/** Record the already-decided child refusal and return the disposition its caller must report. */
 const rejectRecorded = ({
   callIndex,
   refusal,
@@ -205,8 +198,6 @@ const triggerAttribution = ({
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
   detail: string;
 }>): Option.Option<Readonly<{ index: number; kind: TriggerKind }>> => {
-  // Owner resource/capacity triggers require indexed proof: recounting rolled-back state
-  // cannot attribute a child. Audit classifies its own persistence failure independently.
   if (Option.isSome(canonicalTriggerOf(detail)) || !refusedByAuditBudget(detail)) {
     return Option.none();
   }
@@ -259,7 +250,6 @@ const refuseChildGuard = ({
     const mutation = mutations[index];
     if (mutation === undefined) return { _tag: "Unavailable" } as const;
     const scoped = childCaller({ subject, requiredScope: mutation.requiredScope });
-    // A same-material publication that won the race is a retry, not a refused child.
     if (
       mutation.outcome._tag === "StatementSubmission" &&
       (yield* mutation.outcome.publication.lostReplay)
@@ -364,8 +354,6 @@ const classifyAbortedUnit = ({
         kind: attributed.value.kind,
       });
     }
-    // No unmarked abort proves a child; leave individual statement replay free to retry a
-    // same-material race while all other callers answer unavailable without a refusal Audit.
     return { _tag: "Aborted" } as const;
   });
 
@@ -436,7 +424,6 @@ const oauthChildStatements = ({
   ];
 };
 
-/** Guard every owner's known commit-time trigger before its write, then assert completion. */
 const childStatements = ({
   db,
   subject,
@@ -572,7 +559,6 @@ export const executeCanonicalMutationUnit = ({
     })
   );
 
-/** Select the published data from a retained Transaction or statement value. */
 const retainedMutationPayload = (
   value: Extract<
     CommittedMutationValue,
@@ -592,7 +578,6 @@ const retainedMutationPayload = (
   }
 };
 
-/** The JSON payload one committed canonical value carries as its operation's success data. */
 export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
   if (value._tag === "ForwardingAddress") return value.address;
   if (value._tag === "Owner") return value.payload;
@@ -636,7 +621,6 @@ const encodeCommittedValue = (
     ? Schema.encodeEffect(Schema.toCodecJson(EmailForwardingAddress))(value.address)
     : encodeExistingValue(value);
 
-/** Encode one committed value as its canonical individual success response. */
 export const committedJsonResponse = ({
   value,
   status,
@@ -678,8 +662,6 @@ const singleResponse = ({
   switch (execution._tag) {
     case "Committed": {
       const [value] = execution.values;
-      // A committed single-child unit always reports one value; an empty list is a defect, not a
-      // caller-visible refusal, so it dies instead of masquerading as unavailability.
       return value === undefined
         ? Effect.die("A committed canonical unit reported no value")
         : present(value);
@@ -761,12 +743,7 @@ const executePreparedSingle = ({
     })
   );
 
-/**
- * Execute one owner-prepared canonical mutation as its own caller-owned unit and map every outcome
- * to its canonical individual response. This is the individual half of the same implementation the
- * atomic batch composes, so validation, live authority, refusal Audit, and commit classification
- * cannot drift between them.
- */
+/** Execute an owner-prepared mutation in its caller-owned unit, retaining individual validation, live authority, refusal Audit and commit classification. */
 export const executeSingleCanonicalMutation = ({
   db,
   subject,
@@ -779,7 +756,6 @@ export const executeSingleCanonicalMutation = ({
 }: SingleWork): Effect.Effect<Response> => {
   switch (preparation._tag) {
     case "Refused":
-      // `record` and `respond` never fail by contract; see `rejectChild` for the same guarantee.
       return preparation.refusal.record().pipe(Effect.flatMap(preparation.refusal.respond));
     case "CredentialRefused":
       return refusedCredentialResponse({ db, subject });

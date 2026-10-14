@@ -16,7 +16,7 @@ type ChatWindowProps = Readonly<{
   children: ReactNode;
 }>;
 
-/** Non-modal chat anchored to a persistent launcher; focus and dismissal belong to Base UI. */
+/** Non-modal chat; Base UI owns focus and dismissal. */
 export const ChatWindow = ({ open, onOpenChange, children }: ChatWindowProps): JSX.Element => (
   <Popover open={open} onOpenChange={onOpenChange}>
     <PopoverTrigger

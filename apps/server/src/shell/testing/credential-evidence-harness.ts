@@ -2,10 +2,6 @@ import { inspect } from "node:util";
 import { expect } from "@effect/vitest";
 import { Cause, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 
-/**
- * Builds a layer into an Exit so a failure-path test can inspect the typed construction failure
- * instead of a thrown defect, without repeating the scoped-build wrapper.
- */
 export const buildLayerExit = <A, E, R>(
   layer: Layer.Layer<A, E, R>
 ): Effect.Effect<Exit.Exit<Context.Context<A>, E>, never, Exclude<R, Scope.Scope>> =>

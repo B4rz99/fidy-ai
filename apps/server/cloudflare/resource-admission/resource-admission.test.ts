@@ -38,8 +38,6 @@ const migrationUrl = new URL("../migrations/0002_resource_admission.sql", import
 const workerFixtureUrl = new URL("./resource-admission-worker.fixture.ts", import.meta.url);
 const activeMiniflare = new Set<Miniflare>();
 
-// Miniflare exposes a Promise-native lifecycle at this integration boundary.
-
 const makeMiniflare = (resourcePersistencePath?: string): Promise<Miniflare> =>
   Effect.runPromise(
     Effect.gen(function* () {

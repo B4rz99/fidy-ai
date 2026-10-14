@@ -71,7 +71,6 @@ const decideLivePendingBrowserLoginProof = (
     ? { _tag: "Expired" }
     : decideUnexpiredPendingBrowserLoginProof(input);
 
-/** Decides a non-polling proof check against one locked pending pairing. */
 export const decidePendingBrowserLoginProof = (
   input: PendingBrowserLoginProofInput
 ): PendingBrowserLoginProofDecision =>

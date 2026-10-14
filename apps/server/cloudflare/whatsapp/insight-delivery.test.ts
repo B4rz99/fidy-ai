@@ -130,7 +130,6 @@ it.live("refuses corrupt staged claim dates without consuming send authority", (
   Effect.gen(function* () {
     const input = yield* prepare(yield* weeklySummaryTestDatabase);
     yield* stageInsightDelivery(input);
-    // Inject retained corruption without weakening the production write fence.
     yield* Effect.tryPromise(() => input.db.exec("DROP TRIGGER insight_whatsapp_claim_identity"));
     for (const scheduledAt of [-8_640_000_000_000_001, 8_640_000_000_000_000]) {
       yield* Effect.tryPromise(() =>

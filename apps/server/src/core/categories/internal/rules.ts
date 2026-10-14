@@ -9,7 +9,6 @@ import {
 
 import { normalizeSearchText as normalizeCategoryKeyword } from "~/core/search/operations";
 
-/** The last-resort capture Category when no explicit choice or User rule applies. */
 export const fallbackCaptureCategory = (direction: "inflow" | "outflow"): CategoryId =>
   direction === "inflow" ? categoryIds.ingresos : categoryIds.otros;
 
@@ -42,7 +41,6 @@ export const findKeywordCategory = <Category extends string>(
   return Effect.succeed(first === undefined ? Option.none() : Option.some(first.categoryId));
 };
 
-/** Decides whether a normalized keyword is already claimed, excluding one rule during updates. */
 export const hasKeywordRule = ({
   keyword,
   rules,
@@ -62,7 +60,6 @@ export const hasKeywordRule = ({
   );
 };
 
-/** Decides whether one more rule fits the bounded set of retained User rules. */
 export const canCreateKeywordRule = (
   rules: ReadonlyArray<CategoryRule<string>>
 ): Effect.Effect<boolean> => Effect.succeed(rules.length < maximumKeywordRulesPerUser);

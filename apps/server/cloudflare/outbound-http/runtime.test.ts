@@ -131,7 +131,6 @@ it.effect("preserves no-content provider status and releases an unexpected nativ
       },
     });
     const response = new Response(raw);
-    // Native browser/protocol fixtures can expose a stream even for a body-forbidden status.
     Object.defineProperty(response, "status", { value: 204 });
     const outbound = yield* makeTransport(response);
     const result = yield* outbound.execute(request);

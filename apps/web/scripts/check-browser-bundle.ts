@@ -307,11 +307,6 @@ const assertSourceBoundary = (
   }
 };
 
-/**
- * Builds the browser entrypoint and rejects forbidden runtime inputs plus web-source boundary
- * violations. The metafile check protects all reachable web dependencies; source checks protect
- * ownership rules that the module graph cannot express.
- */
 export const checkBrowserBundle = (options: BrowserBundleCheckOptions): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {

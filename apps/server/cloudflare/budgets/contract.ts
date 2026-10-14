@@ -31,7 +31,6 @@ export type BudgetOutcome = Readonly<{
   month: Option.Option<string>;
 }>;
 
-/** The canonical reads implemented by the Budget owner for every authorized caller surface. */
 export type BudgetQueryOperation =
   | "budgets.listBudgets"
   | "budgets.getBudget"

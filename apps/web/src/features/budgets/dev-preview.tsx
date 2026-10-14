@@ -18,7 +18,6 @@ const restoreTextSizeOnUnmount = (_element: HTMLDivElement): (() => void) => {
     document.documentElement.style.fontSize = original;
   };
 };
-/** Dev-only fixture switch; production compilation removes its lazy import. */
 export const BudgetDataPreview = (props: WorkspaceProps): JSX.Element => {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();

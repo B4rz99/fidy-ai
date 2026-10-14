@@ -14,7 +14,6 @@ const pages =
   /^(?:index|cookies|politica|terminos|404|funciones\/(?:transacciones|presupuestos|asistente|tablero|insights|agentes))\.html$/u;
 const assets = /^_astro\/[^/]+\.[A-Za-z0-9_-]{8,}\.(?:js|css|woff2)$/u;
 
-// Publish only static documents and hashed browser assets, never source maps or server files.
 for (const path of await readdir(new URL("../dist", import.meta.url), { recursive: true })) {
   if (path === "_astro" || path === "funciones") continue;
   if (!publicFiles.has(path) && !pages.test(path) && !assets.test(path)) {

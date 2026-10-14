@@ -112,37 +112,28 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "nodeBuiltinImport:./scripts/document-parsing/check.ts",
           "nodeBuiltinImport:./scripts/document-parsing/extraction-proof.ts",
           "nodeBuiltinImport:./scripts/document-parsing/protected-document-proof.ts",
-          // Native CLI ownership needs the host's OS path semantics.
           "nodeBuiltinImport:./scripts/mcp/native-confirmation-hosts.ts",
           "nodeBuiltinImport:./scripts/mcp/production-native.test.ts",
           "nodeBuiltinImport:./scripts/mcp/production-native.ts",
           "processEnv:./apps/web/playwright.config.ts",
-          // Alchemy exposes an any-typed failure channel; the isolated SDK entrypoint
-          // contains all failures and Schema-decodes the read-only plan before reporting.
           "anyUnknownInErrorContext:./infra/cloudflare/inspect-worker-drift.ts",
           "anyUnknownInErrorContext:./infra/cloudflare/worker-receipt.test.ts",
-          // The protected Alchemy SDK entrypoint contains foreign planning failures.
           "anyUnknownInErrorContext:./infra/cloudflare/production-resources.ts",
-          // CLI process roots and the broad browser composition construct the reviewed runtime.
           "strictEffectProvide:./apps/cli/src/main.ts",
           "strictEffectProvide:./apps/cli/test/journey-entry.ts",
           "strictEffectProvide:./apps/cli/test/recovery-entry.ts",
           "strictEffectProvide:./apps/web/e2e/cli-login.spec.ts",
-          // The browser fixture process and live process tests own their filesystem scope.
           "strictEffectProvide:./apps/server/cloudflare/browser-acceptance-core-module.ts",
           "strictEffectProvide:./scripts/browser-core-bundle.test.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
-          // Alchemy builds dynamic session/stack contexts at its public SDK boundary.
           "strictEffectProvide:./infra/cloudflare/production-resources.ts",
           "strictEffectProvide:./infra/cloudflare/resource-retirement.test.ts",
-          // Standalone Bun process roots and their isolated integration fixtures.
           "strictEffectProvide:./scripts/mcp/native-confirmation-hosts.ts",
           "strictEffectProvide:./scripts/mcp/production-catalog.test.ts",
           "strictEffectProvide:./scripts/mcp/production-checks.test.ts",
           "strictEffectProvide:./scripts/mcp/production-checks.ts",
           "strictEffectProvide:./scripts/mcp/production-cleanup.test.ts",
           "strictEffectProvide:./scripts/mcp/production-native.test.ts",
-          // Standalone characterization entrypoint owns its filesystem layer.
           "strictEffectProvide:./scripts/document-parsing/xlsx-work.ts",
         ].toSorted()
       );
@@ -181,7 +172,7 @@ it("guards the route factory without leaving other named functions unannotated",
       );
     }));
 
-it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules", () =>
+it("keeps refactored lint rules enabled", () =>
   Bun.file(new URL("../.oxlintrc.json", import.meta.url))
     .text()
     .then((contents) => Schema.decodeUnknownSync(OxlintExceptions)(Bun.JSONC.parse(contents)))
@@ -189,12 +180,7 @@ it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules"
       const sequential = overrides.flatMap(({ files, rules }) =>
         rules["no-await-in-loop"] === "off" ? files : []
       );
-      expect(sequential.toSorted()).toEqual(
-        [
-          "apps/server/scripts/check-dependency-guards.ts",
-          "apps/web/scripts/check-dependency-guards.ts",
-        ].toSorted()
-      );
+      expect(sequential).toEqual([]);
       expect(overrides.some(({ rules }) => "effect-guards/no-nullable-type" in rules)).toBe(false);
       expect(
         overrides.find(({ files }) =>

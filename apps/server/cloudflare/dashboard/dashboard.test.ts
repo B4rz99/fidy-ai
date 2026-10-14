@@ -1028,7 +1028,6 @@ it(
           }
         }
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(1);
-        // The real User B may initialize only B's document, including through the public batch.
         const other = yield* Effect.tryPromise(() =>
           send(db, 1, {
             path: "/operations/atomic-batch",
@@ -1114,7 +1113,6 @@ it(
           yield* seedPAT(db, { token, scope: "dashboard", id });
           let prepared = false;
           let revoked = false;
-          // Revoke through the real binding after owner preparation, immediately before its commit.
           const guarded: D1Database = {
             prepare: (sql) => {
               if (sql.includes("INSERT INTO dashboard_documents")) prepared = true;
@@ -1283,7 +1281,6 @@ it(
           expect((yield* Effect.tryPromise(() => send(db, 0, path))).status).toBe(429);
         }
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(256);
-        // A permit for B cannot delete A's evidence, and cutoff equality is retained.
         const maximum = yield* Effect.tryPromise(() =>
           db
             .prepare("SELECT MAX(occurred_at_ms) AS time FROM dashboard_audit")
@@ -2239,7 +2236,6 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
-        // Spread retained records over days to respect the canonical 100-writes-per-day limit.
         yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
@@ -2285,7 +2281,6 @@ it(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(200);
-        // Bypass only the fixture's daily capture quota to exercise the read work budget.
         yield* Effect.tryPromise(() =>
           db.prepare("DROP TRIGGER transaction_manual_daily_budget").run()
         );
@@ -2354,7 +2349,6 @@ it(
         expect(yield* listIds(viewResponse22, list.widget.id)).toEqual([
           "30000000-0000-4000-8000-000000000001",
         ]);
-        // A damaged projection cannot become a stale financial view while its private repair proceeds.
         yield* Effect.tryPromise(() =>
           db
             .prepare(
@@ -2379,8 +2373,6 @@ it(
                 status === "ready" ? Effect.succeed(true) : repair(remaining - 1)
               );
         expect(yield* repair(35)).toBe(false);
-        // Bypass the fixture's daily capture admission limit to simulate a concurrent committed
-        // effective Transaction during the private rebuild; both use the same D1 maintenance triggers.
         const time = DateTime.formatIso(DateTime.nowUnsafe());
         yield* Effect.tryPromise(() =>
           db
@@ -2527,7 +2519,6 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
               return Reflect.get(target, property, receiver);
             },
           });
-        // Pause the external D1 response after one real aggregate batch has read its old contribution.
         const delayed: D1Database = {
           prepare: (sql) =>
             sql.includes("FROM dashboard_projection_bucket")
@@ -2559,8 +2550,6 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
           body: { expectedRevision: 0, changes: { occurredAt: DateTime.formatIso(second) } },
         });
         try {
-          // A coordinated Correction waits behind the view; an uncoordinated view permits its commit.
-          // Both schedules attempt the same public Correction before the next calendar bucket is read.
           if (coordinatedOperations.has("dashboard.getDashboardView")) {
             yield* Effect.tryPromise(() => correctionQueued.promise);
           } else {
@@ -2775,7 +2764,6 @@ it.each(disclosureEdits)(
         expect(review.effect).not.toContain("Búsqueda privada no modificada");
         expect(review.revision).toContain(encoded.replaceAll('"', '\\"'));
         yield* Effect.tryPromise(() => db.batch([...review.guards]));
-        // A changed retained document at the same revision must still invalidate the exact snapshot.
         yield* Effect.tryPromise(() =>
           db
             .prepare("UPDATE dashboard_documents SET document_json = ? WHERE user_id = ?")

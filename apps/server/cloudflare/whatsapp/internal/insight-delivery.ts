@@ -81,8 +81,6 @@ export const prepareInsightRecipient = (
   }>
 ): D1PreparedStatement => {
   const association = whatsAppIdentityQuery({ ...input.recipient, userId: input.userId });
-  // UPDATE and INSERT are deliberately one UPSERT; the association is rechecked before mutation.
-  // Consent's generic action helper appends a predicate, so qualify this SELECT directly with its published query instead.
   return input.db
     .prepare(`INSERT INTO insight_whatsapp_routes(user_id,portfolio_id,bsuid,business_phone_number_id,verified_at_ms)
  SELECT ?,?,?,?,? WHERE EXISTS (${association.sql})

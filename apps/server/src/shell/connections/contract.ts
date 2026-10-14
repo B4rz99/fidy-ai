@@ -24,7 +24,6 @@ const write = operationPolicy({
   kind: "mutation",
 });
 
-/** Discover institutions, initiate browser authorization, and inspect caller-owned Connections. */
 export const ConnectionsGroup = HttpApiGroup.make("connections")
   .add(
     HttpApiEndpoint.get("listInstitutions", "/institutions", {

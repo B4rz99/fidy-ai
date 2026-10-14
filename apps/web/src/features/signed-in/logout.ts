@@ -2,7 +2,6 @@ import { Effect } from "effect";
 
 type LogoutTrigger = (input: Readonly<{ onLoggedOut: () => void }>) => void;
 
-/** Builds the Atom mutation program that performs transport logout before publishing completion. */
 export const makeLogoutOperation =
   <A, E, R>(
     logout: Effect.Effect<A, E, R>

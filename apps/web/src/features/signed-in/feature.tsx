@@ -9,7 +9,7 @@ import {
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Option } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 import type { ComponentProps, JSX, MouseEvent } from "react";
@@ -19,7 +19,6 @@ import { Button } from "@/ui/components/button";
 import { FidyWordmark } from "@/ui/components/wordmark";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 
-/** Explains the authentication-lifetime transition without exposing or retaining credentials. */
 export const AuthenticationExpired = (): JSX.Element => (
   <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
     <Alert className="max-w-md" variant="destructive">
@@ -79,6 +78,13 @@ const SignedInNavigation = ({
   loggingOut: boolean;
 }>): JSX.Element => {
   const { authentication } = useSession();
+  const client = useRouter().options.context.webAuthClient;
+  const [binding] = useState(() => client.query("browserSession", "binding", {}));
+  const session = useAtomValue(binding);
+  const signedIn =
+    authentication !== "expired" &&
+    AsyncResult.isSuccess(session) &&
+    Option.isSome(Option.fromNullishOr(session.value.binding));
   return (
     <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
       {navigationLinks.map((link) => (
@@ -95,7 +101,7 @@ const SignedInNavigation = ({
         </Link>
       ))}
       <SettingsNavigation />
-      {authentication === "signed-in" ? (
+      {signedIn ? (
         <Button
           className="justify-start md:mt-auto"
           disabled={loggingOut}

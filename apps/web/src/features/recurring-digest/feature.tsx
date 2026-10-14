@@ -26,7 +26,6 @@ const UnavailableReport = ({
   />
 );
 
-/** Authenticated complete historical facts, preserving every item and exact Currency without active-charge inference. */
 export const RecurringDigestFeature = (): JSX.Element => {
   const { id } = useParams({ strict: false });
   const router = useRouter();

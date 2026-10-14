@@ -724,8 +724,6 @@ const acceptHostedRequest = (
     }),
     settled: Option.match(deadline, {
       onNone: () => ownerSettled,
-      // Recovery fences only this hosted execution, never its ordinary predecessor. Its timer
-      // cannot release the shared User queue until that predecessor has independently settled.
       onSome: () =>
         preceding.then(
           () => boundedHostedOwner({ ownerSettled, recover: () => recoverAbandonedWork(owner) }),

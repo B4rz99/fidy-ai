@@ -40,7 +40,6 @@ const prepareDatabase = (): Effect.Effect<D1Database> =>
     return db;
   });
 
-// Seed real deferred-FK/claim-checked grants, without substituting admission or storage.
 const seedGrants = (
   db: D1Database,
   {

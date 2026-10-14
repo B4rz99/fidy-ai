@@ -150,7 +150,6 @@ const observeApplicationResponseWork = <E, R>(
     parent
   );
 
-/** Observe one catalog operation through the shared metadata-only application boundary. */
 const observeCanonicalResponseWork = <E, R>(
   work: Effect.Effect<Response, E, R>,
   operation: ApplicationSpan["operation"]
@@ -164,7 +163,6 @@ const observeCanonicalResponseWork = <E, R>(
     metadata: { _tag: "None" },
   });
 
-/** Give each hosted Turn a closed response classification before Promise runtime settlement. */
 const observeHostedResponseWork = <E, R>(
   work: Effect.Effect<Response, E, R>,
   observation: HostedObservation

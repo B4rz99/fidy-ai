@@ -43,8 +43,6 @@ const filePath = (pathname: string): Option.Option<string> => {
   return Option.some(`${root}/${relativePath}`);
 };
 
-// The acceptance host applies the Production _headers policy, changing only its API origin to
-// the separate loopback TLS fixture. Missing or unexpected policy fails before serving anything.
 const policy = await Bun.file(new URL("../cloudflare/production/_headers", import.meta.url)).text();
 const apiOrigin = browserAcceptanceTopology().api;
 const productionOrigin = "https://api.fidyapp.com";

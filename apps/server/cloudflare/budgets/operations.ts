@@ -123,7 +123,6 @@ const budgetGuardRefusal =
     if (outcome.operation === "budgets.createBudget") {
       return Effect.succeed(refusal("validation_failed"));
     }
-    // A completed deletion disappears in the unit but reappears after rollback.
     if (
       earlier.some(
         (child) =>
@@ -735,7 +734,6 @@ export const readBudgetCrossings = (
       .sort((left, right) => left.threshold - right.threshold);
   });
 
-// One period per request keeps the aggregate report and latch work independent of backlog size.
 const maximumPendingWork = 1;
 
 const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
@@ -803,7 +801,6 @@ export const evaluateBudgetAlerts = ({
           .run()
       );
     }
-    // A partially drained backlog must not allow a later correction to erase an unobserved peak.
     const remaining = yield* Effect.tryPromise(() =>
       db
         .prepare("SELECT 1 FROM budget_reconciliation_work WHERE user_id = ? LIMIT 1")

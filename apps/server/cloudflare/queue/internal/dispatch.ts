@@ -135,7 +135,6 @@ const receiveWorkflowBatch = <E>(
         if (Option.isNone(failure)) failure = Option.some(result.cause);
       }
     }
-    // Owner acknowledgments fence successful handoffs from this final batch rejection.
     if (Option.isSome(failure)) return yield* Effect.failCause(failure.value);
   });
 

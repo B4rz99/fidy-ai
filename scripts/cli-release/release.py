@@ -55,8 +55,6 @@ def fingerprint():
         paths.update(str(path.relative_to(ROOT)) for path in (ROOT / 'scripts/cli-release').iterdir()
                      if path.is_file() and not path.name.startswith('test-'))
         paths.update(str(path.relative_to(ROOT)) for path in (ROOT / '.github/workflows').glob('cli-release*.yml'))
-        # Include emitted bytes so consumed compiler configuration is tracked without
-        # releasing for configuration changes that leave the CLI bundle unchanged.
         digest = hashlib.sha256(bundle.read_bytes())
         for name in sorted(paths):
             path = ROOT / name
@@ -141,7 +139,6 @@ def publish(plan_path, directory):
     latest.write_text(release['version'] + '\n')
     assets.extend([manifest, latest])
     tag = 'cli-v' + release['version']
-    # Reserved tags are never reused. A failed draft remains inspectable and the next plan gets a new version.
     run('gh', 'release', 'create', tag, '--repo', REPOSITORY, '--target', release['gitRevision'],
         '--title', f'Fidy CLI {release["version"]}', '--notes', 'Standalone Fidy CLI for macOS arm64, Linux x64 desktops and Windows x64.',
         '--draft', '--latest=false')
@@ -149,10 +146,8 @@ def publish(plan_path, directory):
     run('gh', 'release', 'edit', tag, '--repo', REPOSITORY, '--draft=false', '--latest=false')
     published = json.loads(run('gh', 'api', f'repos/{REPOSITORY}/releases/tags/{tag}'))
     # The workflow token can read releases but cannot read administrative settings.
-    # Require the published artifact itself to be immutable before advancing latest.
     if not published.get('immutable') or published.get('draft'):
         raise ValueError('Release is not published and immutable; default unchanged')
-    # No token or ambient authentication: verify every final asset before changing the public default.
     with tempfile.TemporaryDirectory() as temporary:
         for asset in assets:
             destination = Path(temporary) / asset.name

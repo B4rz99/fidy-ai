@@ -187,7 +187,6 @@ export const OperationalAlert = Schema.Union([
     owner: Schema.Literal("retention"),
     severity,
   }),
-  // Existing Tail-only alert rows remain decodable so their delivery state can be retired cleanly.
   Schema.Struct({
     kind: Schema.Literal("worker_exception"),
     owner: Schema.Literal("workerExceptions"),

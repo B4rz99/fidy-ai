@@ -12,7 +12,7 @@ const subscribe = (onChange: () => void): (() => void) => {
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
 };
-/** Shares one panel instance across a desktop rail and an accessible full-screen mobile sheet. */
+
 export const WorkspacePanel = ({
   children,
   open,

@@ -27,7 +27,6 @@ import {
   type OwnerOutcome,
 } from "../../canonical-operations/contract";
 
-/** The persisted Dashboard is decoded before it is used to plan any mutation. */
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));
 const StoredDocument = Schema.Struct({
   document_json: Schema.String,
@@ -211,7 +210,6 @@ export const editWrite = ({
   );
 };
 
-/** Commit-time owner decisions stay with the Dashboard, not in the common mutation unit. */
 export const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOutcome => ({
   _tag: "Owner",
   operation,

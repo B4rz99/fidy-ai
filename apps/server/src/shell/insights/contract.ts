@@ -13,7 +13,6 @@ import {
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
-/** Canonical operations over the caller's shared InsightEvent stream. */
 const InsightParams = Schema.Struct({ id: InsightEventId });
 const InsightOperationFailures = [NotFound, ValidationFailed] as const;
 

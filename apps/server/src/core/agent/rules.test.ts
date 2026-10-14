@@ -99,7 +99,6 @@ const windowCall = (
     input: Schema.decodeSync(Schema.Json)({}),
     occurredAt,
   });
-/** A call whose serialized input alone overruns the character bounds under test. */
 const windowOversizedCall = (
   suffix: string,
   id: TranscriptTurnId,

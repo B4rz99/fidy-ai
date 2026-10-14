@@ -2,7 +2,6 @@ import { Option } from "effect";
 
 declare const FIDY_CLI_VERSION: string;
 
-/** Release builds embed their assigned version; source execution reports the initial candidate version. */
 export const cliVersion = typeof FIDY_CLI_VERSION === "undefined" ? "0.1.0" : FIDY_CLI_VERSION;
 
 /** Public installation diagnostics never open a credential store or make a network request. */

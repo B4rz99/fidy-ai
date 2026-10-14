@@ -1,7 +1,3 @@
-# Fluid Attacks SAST scanner configuration (passed to `sast scan` in CI).
-# .repos/ holds vendored reference checkouts (read-only source of truth for
-# agents); they are never installed, built, or shipped, so findings there are
-# not reachable in this product.
 namespace: fidy-ai
 working_dir: /src
 language: EN

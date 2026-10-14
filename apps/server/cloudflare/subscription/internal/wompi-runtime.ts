@@ -21,7 +21,6 @@ export type WompiTransportFactory = (
   environment: WompiBindings
 ) => Effect.Effect<ReturnType<typeof makeWompiOutboundHttp>>;
 
-/** Adapt the transport supplied by the Subscription runtime composition. */
 export const makeWompiTransport = ({
   environment,
   httpClient,

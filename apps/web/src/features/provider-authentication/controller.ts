@@ -5,10 +5,14 @@ import { Cause, type Context, Effect, Option, Redacted, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
-import type { AuthenticationProvider, WebAuthClient } from "@/transport/client";
+import type {
+  AuthenticationProvider,
+  StartedBrowserLoginPairing,
+  WebAuthClient,
+} from "@/transport/client";
 
 type Client = Context.Service.Shape<WebAuthClient>;
-type Pairing = Effect.Success<ReturnType<Client["browserLogin"]["startPairing"]>>;
+type Pairing = StartedBrowserLoginPairing;
 type CommandError =
   | Effect.Error<ReturnType<Client["browserLogin"]["startPairing"]>>
   | Effect.Error<ReturnType<Client["providerAuthentication"]["start"]>>
@@ -40,7 +44,6 @@ const awaitProviderVerification = (
 ): Effect.Effect<void, "rejected" | "cancelled"> =>
   Effect.gen(function* () {
     for (;;) {
-      // Read status after observing closure: a response already in flight may predate completion.
       const popupClosed = input.popup.closed;
       const result = yield* providerClient(client, input.provider)
         .status({
@@ -332,7 +335,6 @@ export const useProviderAuthentication = ({
   };
 };
 
-/** Closes the provider popup from the clean first-party return URL. */
 export const closeProviderReturn = (node: Parameters<RefCallback<HTMLElement>>[0]): void => {
   if (node === null) return;
   window.close();

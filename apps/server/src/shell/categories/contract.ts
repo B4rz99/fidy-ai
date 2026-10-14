@@ -17,13 +17,10 @@ import {
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
-/** Canonical public path for Category discovery. */
 export const listCategoriesPath = "/categories";
 
-/** Canonical public path for the caller's own keyword rules. */
 export const keywordRulesPath = "/category-keyword-rules";
 
-/** Canonical public path template for one retained keyword rule. */
 export const retainedKeywordRulePath = `${keywordRulesPath}/:id`;
 
 /**
@@ -70,7 +67,6 @@ const destructiveWrite = operationPolicy({
   kind: "mutation",
 });
 
-/** Public Category discovery and caller-owned keyword-rule management. */
 export const CategoriesGroup = HttpApiGroup.make("categories")
   .add(
     HttpApiEndpoint.get("listCategories", listCategoriesPath, {

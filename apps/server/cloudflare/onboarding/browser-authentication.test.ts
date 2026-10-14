@@ -1147,13 +1147,46 @@ it("rejects unproved support recovery without creating a case or approving a pai
     })
   ));
 
-it("binds an Access-approved recovery case to one stable User, consumes its code and refuses replay", () =>
+it("rejects the old recovery code after rotation and redeems its single-use replacement for the same User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
-      const created: { backupRecoveryCode: string } = yield* Schema.decodeUnknownEffect(
+      const initial: { backupRecoveryCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ backupRecoveryCode: Schema.String })
       )(yield* Effect.tryPromise(() => seedUser().then((awaited2) => awaited2.json())));
+      const sessionToken = "T".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, sessionToken));
+      const rotated = yield* Effect.tryPromise(() =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${sessionToken}`,
+            },
+          })
+        )
+      );
+      expect(rotated.status).toBe(200);
+      const { data: created } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ backupRecoveryCode: Schema.String }) })
+      )(yield* Effect.tryPromise(() => rotated.json()));
+      expect(created.backupRecoveryCode).not.toBe(initial.backupRecoveryCode);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          sendRequest(
+            new Request("https://api.fidyapp.com/web/session/logout", {
+              method: "POST",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+                cookie: `__Host-fidy_session=${sessionToken}`,
+              },
+            })
+          )
+        )).status
+      ).toBe(204);
       const pairing: { pairingId: string; publicCode: string; privateVerifier: string } =
         yield* Schema.decodeUnknownEffect(
           Schema.Struct({
@@ -1201,6 +1234,28 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
             body: encodeJson({ pairingCode: publicCode, backupRecoveryCode }),
           })
         );
+      const oldProofOperator = yield* Effect.tryPromise(() =>
+        new SignJWT({})
+          .setProtectedHeader({ alg: "RS256", kid: "support-key" })
+          .setIssuer("https://example.cloudflareaccess.com")
+          .setAudience("test-support-audience")
+          .setSubject("old-proof-operator")
+          .setIssuedAt(now)
+          .setExpirationTime(now + 300)
+          .sign(privateKey)
+      );
+      expect(
+        (yield* Effect.tryPromise(() => approve(initial.backupRecoveryCode, oldProofOperator)))
+          .status
+      ).toBe(400);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state,user_id FROM browser_login_pairings WHERE id=?")
+            .bind(pairing.pairingId)
+            .first()
+        )
+      ).toEqual({ state: "pending_approval", user_id: null });
       expect(
         (yield* Effect.tryPromise(() => approve(created.backupRecoveryCode, `${assertion}invalid`)))
           .status
@@ -1404,7 +1459,9 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
       }
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM web_sessions").first()
+          db
+            .prepare("SELECT count(*) AS count FROM web_sessions WHERE revoked_at_ms IS NULL")
+            .first()
         )
       ).toEqual({ count: 0 });
       expect(
@@ -1437,6 +1494,12 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
         )
       );
       expect(redeemed.status).toBe(200);
+      expect(redeemed.headers.get("set-cookie")).toContain("__Host-fidy_session=");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT user_id FROM web_sessions WHERE revoked_at_ms IS NULL").first()
+        )
+      ).toEqual({ user_id: subject?.proof_user });
     })
   ));
 

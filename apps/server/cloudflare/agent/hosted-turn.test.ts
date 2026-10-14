@@ -907,6 +907,76 @@ const retained = (db: D1Database, user: string): Promise<D1Result> =>
     .bind(user)
     .all();
 
+it("repairs malformed first-round output once while retaining the original request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const requests: Array<unknown> = [];
+      const coordinator = coordinatorFor(db, (request) => {
+        requests.push(request);
+        return Promise.resolve(reply(requests.length === 1 ? "" : "Respuesta reparada"));
+      });
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text: "Resume mis gastos del mes",
+            }),
+          })
+        )
+      );
+      expect(response.status).toBe(202);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+        text: "Respuesta reparada",
+      });
+      expect(requests).toHaveLength(2);
+      expect(encodeJson(requests[1])).toContain("Resume mis gastos del mes");
+      expect(encodeJson(requests[1])).toContain("No inventes identificadores");
+      expect(
+        (yield* Effect.tryPromise(() => retained(db, users[0]))).results.filter((row) =>
+          Schema.is(Schema.Struct({ kind: Schema.Literal("user") }))(row)
+        )
+      ).toHaveLength(1);
+    })
+  ));
+
+it("terminates after a single malformed-output repair rather than retrying indefinitely", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      let calls = 0;
+      const coordinator = coordinatorFor(db, () => {
+        calls += 1;
+        return Promise.resolve(reply(""));
+      });
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text: "Hola",
+            }),
+          })
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(calls).toBe(2);
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "failed", kind: "user" },
+        { status: "failed", kind: "failed", marker: "HostedInferenceFailed" },
+      ]);
+    })
+  ));
+
 const VisibleReply = Schema.Struct({
   text: TranscriptText,
   turnId: TranscriptTurnId,
@@ -1995,7 +2065,7 @@ it("treats signed voice instructions as User text without granting identity or t
       expect(modelCalls).toBe(0);
       const coordinator = coordinatorFor(db, model);
       expect((yield* Effect.tryPromise(() => coordinator.fetch(request()))).status).toBe(503);
-      yield* Effect.tryPromise(() => vi.waitFor(() => expect(modelCalls).toBe(1)));
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(modelCalls).toBe(2)));
       yield* Effect.tryPromise(() => waitForFailedVoice(db, text));
       expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toHaveLength(0);
       expect(

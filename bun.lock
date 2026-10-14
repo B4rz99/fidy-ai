@@ -1533,6 +1533,8 @@
 
     "lefthook-darwin-arm64": ["lefthook-darwin-arm64@2.2.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-7Y5Kq7jxi69lQz0w8EMbB3acxPYSIlCZx1ZykurlmkPYm7pYF4hvFzou+e9QXpuvuBpHJF+lgzwdiPxeEoVOaA=="],
 
+    "lefthook-darwin-x64": ["lefthook-darwin-x64@2.2.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-2yJenDYDCOHJqywQpDRxwfgUP3UwhikOaoa07k5J5F3Gov3+im8HnDvcHV81Of1V3sT/gxD4T+mZ6a3GFb3zvQ=="],
+
     "lefthook-freebsd-arm64": ["lefthook-freebsd-arm64@2.2.0", "", { "os": "freebsd", "cpu": "arm64" }, "sha512-bRtEN4c1Z4yUxb8nDo2y6dbEhPfKmsEBO8xi7e/SjA3tITR0sgD2MBDsUmRoTIxvZPssGWKfURlFVmrH0cRQnA=="],
 
     "lefthook-freebsd-x64": ["lefthook-freebsd-x64@2.2.0", "", { "os": "freebsd", "cpu": "x64" }, "sha512-jYLatxOW4bjCRCc8KCO7gRuSm38IzmU32nVbJrgZgLnbxUjKv3seLMK0nODYx2UobFLVqptul+hWJG/6zX5SWQ=="],

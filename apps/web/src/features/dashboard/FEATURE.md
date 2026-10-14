@@ -1,5 +1,7 @@
 # Dashboard
 
+Rebased audit, 2026-10-14, baseline `a387f50fb5`: the actual Core/D1 browser title editor journey passed again, persisting the canonical title through reload. The two actual Budget Widget journeys also passed, including canonical cap changes/deletion and display-Currency isolation. Production chat title editing still failed before tool execution on that baseline; the Agent feature records its diagnosis and pending repair verification.
+
 Broad non-AI audit, 2026-10-12, baseline `9aafe8db54`: all 449 web checks, 427 Core checks, 302 selected Transaction/Dashboard/HostedTurn Worker/D1 checks, and 99 ordinary browser checks passed. Dashboard browser journeys covered initialization refusals, real Core/D1 rename/removal/resize/placement persistence, mobile stacking, keyboard cancellation and recovery from a committed edit with lost acknowledgment. Delayed/refused transport journeys use controlled responses; they do not establish live failure rates. Production release `6863b80f2a` displayed four empty Widgets consistently with empty Transaction history. At 390px they stacked in canonical order with no document overflow; mobile navigation worked and the viewport was restored. No production Dashboard edit was submitted. The newer trunk commit changes only the public landing CLI instructions; its 25 focused web checks passed after synchronization.
 
 Capability and verification map for `/app/dashboard`. This records implementation evidence, not a replacement for GitHub product requirements.

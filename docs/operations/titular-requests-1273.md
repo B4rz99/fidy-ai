@@ -174,11 +174,12 @@ its verified minimal receipt. Stage/promote the browser/server release through t
 production workflow separately. This implementation authorizes no deployment, live disclosure,
 customer erasure, external notification or closure of #1273.
 
-## Prepared mailbox transport rehearsal (not sent)
+## Completed mailbox transport rehearsal
 
-The signed-in published mailbox was reachable on 2026-10-14. No rehearsal message has been sent.
-After operator authorization, send this synthetic request from `obarboza@fidyapp.com` to the same
-address, verify it appears in the inbox, then reply in that exact thread and verify receipt.
+With explicit operator authorization, the synthetic request was sent from `obarboza@fidyapp.com`
+to the same address on 2026-10-14 at 11:21 America/Bogota. Its inbox arrival was observed before
+replying in the same thread at 11:22. After reloading Gmail, both the received request and response
+were present with their exact synthetic reference and bodies. Receipt is confirmed for this rehearsal.
 Self-mail proves mailbox transport only: it does not establish requester identity, representative
 authority, safe disclosure of customer data or the full operator acceptance criterion.
 

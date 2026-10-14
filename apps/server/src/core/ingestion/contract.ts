@@ -146,14 +146,14 @@ export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;
 /** Free receipt and screenshot extraction share two unique submissions per Bogotá calendar month. */
 export const freeMediaSubmissionCap = freeAllowanceLimits.media_submission;
 
-/** Free Users may submit fifty unique notification emails per Bogotá calendar month. */
+/** Unique notification emails processed per Free User per Bogotá calendar month. */
 export const freeForwardedEmailCap = freeAllowanceLimits.forwarded_email;
 
-/** One additional month of Free email can wait without making retained work unbounded. */
+/** Deferred email capacity is independent of the monthly processing allowance. */
 export const freeForwardedEmailDeferredCap = 50;
 
-/** Current-month work plus one full deferred month bounds unfinished work for every User. */
-export const forwardedEmailOutstandingCap = freeForwardedEmailCap + freeForwardedEmailDeferredCap;
+/** Unfinished email work is bounded independently of commercial standing. */
+export const forwardedEmailOutstandingCap = 100;
 
 /** Complete metadata and streamed inline-image retrieval must finish within this lease sub-window. */
 export const forwardedEmailRetrievalDeadline = "3 minutes";

@@ -97,7 +97,7 @@ it("activates deferred email from a locked allowance snapshot", () => {
   expect(
     decideDeferredForwardedEmailActivation({
       access: "free",
-      consumed: 49,
+      consumed: 29,
       now,
       resumeAt,
       nextResumeAt,
@@ -106,7 +106,7 @@ it("activates deferred email from a locked allowance snapshot", () => {
   expect(
     decideDeferredForwardedEmailActivation({
       access: "free",
-      consumed: 50,
+      consumed: 30,
       now,
       resumeAt,
       nextResumeAt,
@@ -115,7 +115,7 @@ it("activates deferred email from a locked allowance snapshot", () => {
   expect(
     decideDeferredForwardedEmailActivation({
       access: "pro",
-      consumed: 50,
+      consumed: 30,
       now,
       resumeAt: nextResumeAt,
       nextResumeAt,
@@ -128,25 +128,25 @@ it("applies the Free forwarded-email allowance to a Bogota calendar month", () =
   expect(DateTime.formatIso(period.from)).toBe("2026-08-01T05:00:00.000Z");
   expect(DateTime.formatIso(period.toExclusive)).toBe("2026-09-01T05:00:00.000Z");
   expect(
-    decideForwardedEmailAdmission({ access: "free", consumed: 49, deferred: 0, outstanding: 49 })
+    decideForwardedEmailAdmission({ access: "free", consumed: 29, deferred: 0, outstanding: 49 })
   ).toEqual({
     status: "queued",
     remaining: Option.some(0),
   });
   expect(
-    decideForwardedEmailAdmission({ access: "free", consumed: 50, deferred: 0, outstanding: 50 })
+    decideForwardedEmailAdmission({ access: "free", consumed: 30, deferred: 0, outstanding: 50 })
   ).toEqual({
     status: "deferred",
     remaining: Option.some(0),
   });
   expect(
-    decideForwardedEmailAdmission({ access: "free", consumed: 50, deferred: 50, outstanding: 99 })
+    decideForwardedEmailAdmission({ access: "free", consumed: 30, deferred: 50, outstanding: 99 })
   ).toEqual({
     status: "backlog-full",
     remaining: Option.some(0),
   });
   expect(
-    decideForwardedEmailAdmission({ access: "free", consumed: 50, deferred: 0, outstanding: 100 })
+    decideForwardedEmailAdmission({ access: "free", consumed: 30, deferred: 0, outstanding: 100 })
   ).toEqual({
     status: "backlog-full",
     remaining: Option.some(0),
@@ -161,12 +161,12 @@ it("applies the Free forwarded-email allowance to a Bogota calendar month", () =
     decideForwardedEmailAdmission({ access: "pro", consumed: 500, deferred: 0, outstanding: 100 })
   ).toEqual({ status: "backlog-full", remaining: Option.none() });
   expect(forwardedEmailAllowanceRemaining({ access: "free", consumed: 0 })).toEqual(
-    Option.some(50)
+    Option.some(30)
   );
-  expect(forwardedEmailAllowanceRemaining({ access: "free", consumed: 51 })).toEqual(
+  expect(forwardedEmailAllowanceRemaining({ access: "free", consumed: 31 })).toEqual(
     Option.some(0)
   );
-  expect(forwardedEmailAllowanceRemaining({ access: "pro", consumed: 51 })).toEqual(Option.none());
+  expect(forwardedEmailAllowanceRemaining({ access: "pro", consumed: 31 })).toEqual(Option.none());
 });
 
 it("reduces an email to value-free structural evidence", () => {

@@ -6,7 +6,7 @@ User's Durable Object owns a counter.
 
 | Allowance                | Free limit | Consumption boundary                                                                        |
 | ------------------------ | ---------- | ------------------------------------------------------------------------------------------- |
-| Forwarded email          | 50         | First processing admission, not receipt retention                                           |
+| Forwarded email          | 30         | First processing admission, not receipt retention                                           |
 | Receipt/screenshot       | 2 combined | Atomic accepted media submission, even when extraction is unavailable                       |
 | Hosted history           | 2 Turns    | First successful publication of newly loaded saved Transactions in a Turn, before inference |
 | External canonical calls | 50         | One admitted PAT or OAuth MCP envelope, including domain failures and atomic batches        |

@@ -1,5 +1,5 @@
 import { ResourceLimited } from "@fidy/server/client";
-import type { APIRequestContext, APIResponse, Page, Response } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
@@ -26,31 +26,42 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
     });
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
-const confirmConsentRead = (page: Page, first: Response): Promise<void> =>
+type ConsentRead = Readonly<{ status: number; body: unknown }>;
+const observeConsentRead = (page: Page): Promise<ConsentRead> =>
+  page
+    .waitForRequest(
+      (request) => request.url().endsWith("/web/consent") && request.method() === "GET"
+    )
+    .then((request) => request.response())
+    .then((response) => {
+      if (response === null) throw new Error("Expected the new consent read response");
+      return response.json().then((body: unknown) => ({ status: response.status(), body }));
+    });
+const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       let response = first;
       const maximumRetries = 6;
       for (
         let retry = 0;
-        response.status() === resourceLimitedStatus && retry < maximumRetries;
+        response.status === resourceLimitedStatus && retry < maximumRetries;
         retry++
       ) {
-        expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+        expect(response.body).toEqual({
           error: { code: "consent_unavailable" },
         });
         yield* Effect.sleep("1 second");
-        const refreshed = page.waitForResponse("**/web/consent");
+        const refreshed = observeConsentRead(page);
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Reintentar", exact: true }).click()
         );
         response = yield* Effect.tryPromise(() => refreshed);
       }
-      expect(response.status()).toBe(successStatus);
+      expect(response.status).toBe(successStatus);
     }).pipe(Effect.timeout("15 seconds"))
   );
 export const reloadTransactionsThroughCore = (page: Page): Promise<void> => {
-  const consent = page.waitForResponse("**/web/consent");
+  const consent = observeConsentRead(page);
   return page
     .reload()
     .then(() => consent)
@@ -68,7 +79,7 @@ const signInWithIdentity = (
     .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&${identity}=true`))
     .then((approval) => {
       expect(approval.status()).toBe(noContentStatus);
-      const consent = page.waitForResponse("**/web/consent");
+      const consent = observeConsentRead(page);
       const redemption = page.waitForResponse("**/web/pairings/redeem");
       return page.clock
         .fastForward(firstPollMilliseconds)

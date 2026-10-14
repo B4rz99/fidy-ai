@@ -1,3 +1,4 @@
+import { continueQueuedDelivery, queuedDeliveryQuery } from "./queued-delivery";
 import { advance as advanceRecurringDigest } from "./recurring-generation";
 import { findRecurringDiscovery } from "../../recurring/operations";
 import { DateTime, Effect, Option } from "effect";
@@ -9,9 +10,9 @@ import {
 } from "../contract";
 import { findSchedule, materialize } from "./reminder-schedule";
 import { admitWeeklyResource } from "./weekly-admission";
-import { deliveryQuery, findReport } from "./proactivity-reports";
+import { deliveryQuery, findQueuedReport } from "./proactivity-reports";
 import {
-  findInsightRecipient,
+  findQueuedInsightRecipient,
   recordProactivitySend,
   stageProactivityMessage,
   startProactivitySend,
@@ -103,8 +104,12 @@ export const deliverProactivity = (
 ): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();
-    const report = yield* findReport({ ...input, id: input.work.id });
-    const recipient = yield* findInsightRecipient(input);
+    if (!(yield* continueQueuedDelivery({ ...input, now: input.now.epochMilliseconds }))) {
+      return { _tag: "Done" } as const;
+    }
+    const queued = queuedDeliveryQuery({ ...input, now: input.now.epochMilliseconds });
+    const report = yield* findQueuedReport({ ...input, id: input.work.id, queued });
+    const recipient = yield* findQueuedInsightRecipient({ ...input, queued });
     if (Option.isNone(report) || Option.isNone(recipient)) return yield* new InsightUnavailable();
     const frozen = report.value;
     if (Option.isNone(frozen.text)) return { _tag: "Done" } as const;
@@ -116,6 +121,7 @@ export const deliverProactivity = (
       ...input,
       id: input.work.id,
       ...permission,
+      queuedAdmission: Option.some(queued),
       guard: deliveryQuery({ userId: input.userId, id: input.work.id }),
     };
     yield* stageProactivityMessage({
@@ -128,7 +134,14 @@ export const deliverProactivity = (
       sender: input.sender,
     });
     yield* admitWeeklyResource({ ...input, phase: "send" });
-    const claim = yield* startProactivitySend({ ...scope, now: yield* DateTime.now });
+    const sendAt = yield* DateTime.now;
+    const claim = yield* startProactivitySend({
+      ...scope,
+      now: sendAt,
+      queuedAdmission: Option.some(
+        queuedDeliveryQuery({ ...input, now: sendAt.epochMilliseconds })
+      ),
+    });
     if (claim._tag === "Deferred") {
       return {
         _tag: "Deferred",

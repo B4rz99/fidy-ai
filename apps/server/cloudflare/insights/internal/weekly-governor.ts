@@ -1,3 +1,4 @@
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { type UserId } from "../../../src/core/identity/contract";
 import { type InsightEventId, ProactivityThresholds } from "../../../src/core/insights/contract";
@@ -56,6 +57,21 @@ export const findGovernor = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 /** The proof comes from the Channel's verified-delivery projection, not provider acceptance. */
+/** A delivery callback settles existing work but cannot create a new question after withdrawal. */
+const prepareQuestionIntent = (
+  input: Readonly<{ db: D1Database; userId: UserId; proof: OwnedStatement }>
+): D1PreparedStatement => {
+  const statement = protectConsentStatement({
+    subject: { _tag: "User", userId: input.userId },
+    requirement: "active",
+    statement: {
+      sql: `INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) SELECT g.question_event_id,g.user_id,'proactive',v.delivered_at_ms FROM weekly_governors AS g JOIN (${input.proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL`,
+      params: [...input.proof.params, input.userId],
+    },
+  });
+  return input.db.prepare(`${statement.sql} ON CONFLICT DO NOTHING`).bind(...statement.params);
+};
+
 export const prepareCount = (
   input: Readonly<{
     db: D1Database;
@@ -93,11 +109,7 @@ export const prepareCount = (
         thresholds.askAfter + thresholds.pauseAfter,
         userId
       ),
-    db
-      .prepare(
-        `INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) SELECT g.question_event_id,g.user_id,'proactive',v.delivered_at_ms FROM weekly_governors AS g JOIN (${proof.sql}) AS v ON v.user_id=g.user_id AND v.insight_event_id=g.question_event_id WHERE g.user_id=? AND g.question_needed=1 AND g.paused_at_ms IS NULL ON CONFLICT DO NOTHING`
-      )
-      .bind(...proof.params, userId),
+    prepareQuestionIntent(input),
     db
       .prepare(
         "UPDATE weekly_schedules SET enabled=0 WHERE user_id=? AND EXISTS (SELECT 1 FROM weekly_governors WHERE user_id=? AND paused_at_ms IS NOT NULL)"

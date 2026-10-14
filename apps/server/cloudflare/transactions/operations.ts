@@ -190,9 +190,11 @@ export const prepareStatementCapture: typeof ownerPrepareStatementCapture = (inp
 
 /**
  * Prepare one notification-email Transaction and its captured evidence for the caller's existing
- * User-coordinated outcome batch. Both writes recheck current Consent and a live source query
- * projecting the same user_id. Malformed evidence fails before writes; commit both with the unique
- * source outcome and its assertion. Category assignment remains with the caller.
+ * User-coordinated outcome batch. Both writes recheck a live same-User source query. Without
+ * queuedAdmission they require current Consent. For bounded continuation after withdrawal, the
+ * caller must supply the exact same-User unfinished, unexpired native admission originally queued
+ * under active Consent. Malformed evidence fails before writes; commit both with the unique source
+ * outcome and its assertion. Category assignment remains with the caller.
  */
 export const prepareNotificationEmailCapture: typeof ownerPrepareNotificationEmailCapture = (
   input

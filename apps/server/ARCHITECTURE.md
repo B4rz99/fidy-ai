@@ -255,8 +255,13 @@ at `/web/consent` and `/web/consent/withdraw`, outside canonical operations and 
 Private Core authenticates without requiring Consent or a paid plan; withdrawal enters the
 existing User coordinator and atomically rechecks live credential proof with Consent and Audit.
 Repeated withdrawal returns the original receipt. These controls remain reachable after withdrawal.
-Ordinary protected work checks current Consent. An exact Pending hosted Turn retains its admitted
-Consent basis for bounded completion; revocation prevents the next Turn. Model egress still passes
+Ordinary protected work checks current Consent. Exact durably queued work retains its historical
+Consent only through the owner's same-User unfinished-item projection and original expiry. Consent
+owns that composition; Ingestion and Insights own native receipt/outbox/intent proofs. Queue payloads
+and recurring schedules grant no authority. New admissions and scheduled occurrences remain blocked;
+category grants, association, security limits and one-shot egress remain independently live.
+An exact Pending hosted Turn retains its admitted Consent basis for bounded completion; revocation
+prevents the next Turn. Model egress still passes
 through the Consent-owned boundary, and PAT work retains its per-call guard.
 
 `shell/outbound-http` is the raw outbound provider transport boundary for Kapso/Meta, Wompi, and

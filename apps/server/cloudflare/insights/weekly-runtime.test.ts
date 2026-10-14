@@ -184,8 +184,8 @@ afterEach(() => {
 });
 afterAll(() => weeklySummaryTestDatabases.dispose());
 
-it.each(["reassociation", "withdrawal", "expiry", "withdrawal-expiry"])(
-  "a queued question cannot send after %s",
+it.each(["reassociation", "withdrawal", "summary-withdrawal", "expiry", "withdrawal-expiry"])(
+  "a queued question preserves its cutoff, association and expiry after %s",
   (change) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -200,6 +200,9 @@ it.each(["reassociation", "withdrawal", "expiry", "withdrawal-expiry"])(
           activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
         );
         const insightEventId = yield* testPromise(() => eventFor(db, fixture.at));
+        if (change === "summary-withdrawal") {
+          yield* withdrawWeeklyFixtureConsent({ db, userId, now: fixture.at.epochMilliseconds });
+        }
         yield* testPromise(() =>
           activity(coordinator, { kind: "weekly-summary", version: 1, userId, insightEventId })
         );
@@ -227,7 +230,12 @@ it.each(["reassociation", "withdrawal", "expiry", "withdrawal-expiry"])(
           activity(coordinator, { kind: "weekly-question", version: 1, userId, id: insightEventId })
         );
         expect(response.status).toBe(200);
-        expect(fetch).toHaveBeenCalledOnce();
+        expect(fetch).toHaveBeenCalledTimes(change === "withdrawal" ? 2 : 1);
+        const replay = yield* testPromise(() =>
+          activity(coordinator, { kind: "weekly-question", version: 1, userId, id: insightEventId })
+        );
+        expect(replay.status).toBe(200);
+        expect(fetch).toHaveBeenCalledTimes(change === "withdrawal" ? 2 : 1);
       })
     )
 );

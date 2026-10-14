@@ -79,6 +79,7 @@ const prepare = (db: D1Database): Effect.Effect<InsightWhatsAppStage, InsightUna
       expiresAt: report.expiresAt,
       timeZone: schedule.timeZone,
       now: schedule.nextScheduledAt,
+      queuedAdmission: Option.none(),
       guard: weeklyReportDeliveryQuery({
         userId: weeklySummaryTestUser,
         insightEventId: outcome.id,
@@ -198,6 +199,7 @@ it.live("refuses corrupt weekly question dates before consuming send authority",
       userId: input.userId,
       id,
       now: input.now,
+      queuedAdmission: Option.none(),
       guard: { sql: "SELECT 1", params: [] },
     };
     for (const createdAt of [8_640_000_000_000_000, -8_640_000_000_000_001]) {

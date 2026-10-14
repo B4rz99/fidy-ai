@@ -23,7 +23,7 @@ export const prepareEmailProcessingAdmission = ({
 }>): ReadonlyArray<D1PreparedStatement> => {
   const authority = protectConsentStatement({
     subject: { _tag: "Owner", column: "r.user_id" },
-    requirement: "active",
+    requirement: state === "queued" ? "granted" : "active",
     statement: {
       sql: "SELECT r.user_id AS userId FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ? AND r.state = ? AND r.expires_at_ms > ? AND EXISTS (SELECT 1 FROM email_forwarding_addresses a WHERE a.user_id = r.user_id)",
       params: [receiptId, userId, state, current],
@@ -92,8 +92,8 @@ export const activateDeferredEmails = ({
     });
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(DeferredEmail))(result.results);
     for (const row of rows) {
-      // Maintenance scheduling is not processing admission: a revoked User must not
-      // monopolize the head of the bounded sweep when the authority unit rolls back.
+      // Queue continuation retains the original expiry and allowance. Advance each
+      // candidate fairly even when its independent authority unit rolls back.
       yield* Effect.tryPromise({
         try: () =>
           db

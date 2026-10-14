@@ -1,3 +1,6 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
+import { protectQueuedStatement } from "./queued-work";
+import type { QueuedConsentAction } from "../contract";
 import { Effect, Option, Schema } from "effect";
 import {
   ConsentRecord,
@@ -94,19 +97,40 @@ export const guardedAction = ({
   });
   return db.prepare(guard.sql).bind(...guard.params);
 };
+/** Category revocation still wins over historical processing Consent. */
+export const queuedAction = (
+  input: WeeklyConsentAction & Readonly<{ queued: QueuedConsentAction["queued"] }>
+): D1PreparedStatement => {
+  const statement = protectQueuedStatement({
+    ...input,
+    statement: {
+      sql: `${input.statement.sql} AND EXISTS (${liveGrant} AND g.id=?)`,
+      params: [...input.statement.params, input.userId, input.grantId],
+    },
+  });
+  return input.db.prepare(statement.sql).bind(...statement.params);
+};
+
 const channelAction = (
   input: WeeklyConsentContext,
-  statement: WeeklyConsentAction["statement"]
+  statement: WeeklyConsentAction["statement"],
+  queued: Option.Option<OwnedStatement> = Option.none()
 ): D1PreparedStatement => {
   const context = Schema.decodeSync(Context)({ userId: input.userId, caller: input.caller });
   const association = whatsAppAssociationQuery(context);
-  const protectedStatement = protectConsentStatement({
-    subject: { _tag: "User", userId: context.userId },
-    requirement: "active",
-    statement: {
-      sql: `${statement.sql} AND EXISTS (${association.sql})`,
-      params: [...statement.params, ...association.params],
-    },
+  const scoped = {
+    sql: `${statement.sql} AND EXISTS (${association.sql})`,
+    params: [...statement.params, ...association.params],
+  };
+  const protectedStatement = Option.match(queued, {
+    onNone: () =>
+      protectConsentStatement({
+        subject: { _tag: "User", userId: context.userId },
+        requirement: "active",
+        statement: scoped,
+      }),
+    onSome: (admission) =>
+      protectQueuedStatement({ ...input, queued: admission, statement: scoped }),
   });
   return input.db.prepare(protectedStatement.sql).bind(...protectedStatement.params);
 };
@@ -123,17 +147,29 @@ const privacyChannelAction = (
     .bind(...statement.params, ...association.params);
 };
 
-export const latestRejection = (
-  input: Readonly<{ db: D1Database; userId: UserId }>
+const readLatestRejection = (
+  input: Readonly<{ db: D1Database; userId: UserId }>,
+  queued: Option.Option<OwnedStatement> = Option.none()
 ): Effect.Effect<Option.Option<ConsentRecordId>, ConsentUnavailable> =>
   Effect.gen(function* () {
-    const query = protectConsentStatement({
-      subject: { _tag: "User", userId: input.userId },
-      requirement: "active",
-      statement: {
-        sql: "SELECT id FROM weekly_consent_rejections WHERE user_id=?",
-        params: [input.userId],
-      },
+    const statement = {
+      sql: "SELECT id FROM weekly_consent_rejections WHERE user_id=?",
+      params: [input.userId],
+    };
+    const query = Option.match(queued, {
+      onNone: () =>
+        protectConsentStatement({
+          subject: { _tag: "User", userId: input.userId },
+          requirement: "active",
+          statement,
+        }),
+      onSome: (admission) =>
+        protectQueuedStatement({
+          db: input.db,
+          userId: input.userId,
+          queued: admission,
+          statement,
+        }),
     });
     const raw = yield* Effect.tryPromise(() =>
       input.db
@@ -148,13 +184,18 @@ export const latestRejection = (
         );
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
 
+export const latestRejection = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<ConsentRecordId>, ConsentUnavailable> => readLatestRejection(input);
+
 const requestedOfferIsCurrent = (
-  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>
+  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>,
+  queued: Option.Option<OwnedStatement>
 ): Effect.Effect<boolean, ConsentUnavailable> =>
   Effect.gen(function* () {
     const request = input.request;
     if (request._tag !== "GovernorQuestion" || request.origin !== "requested") return true;
-    const rejection = yield* latestRejection(input);
+    const rejection = yield* readLatestRejection(input, queued);
     return (
       request.requestedAt.epochMilliseconds <= input.now.epochMilliseconds &&
       request.requestedAt.epochMilliseconds + dailyWindowMs > input.now.epochMilliseconds &&
@@ -163,7 +204,8 @@ const requestedOfferIsCurrent = (
   });
 
 const existingSourceOffer = (
-  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>
+  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>,
+  queued: Option.Option<OwnedStatement>
 ): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> =>
   Effect.gen(function* () {
     if (input.request._tag === "GovernorQuestion") {
@@ -171,16 +213,20 @@ const existingSourceOffer = (
         input.request.sourceId
       );
       const raw = yield* Effect.tryPromise(() =>
-        channelAction(input, {
-          sql: "SELECT id,disclosure_json FROM weekly_consent_offers WHERE user_id=? AND source_id=? AND portfolio_id=? AND bsuid=? AND expires_at_ms>?",
-          params: [
-            input.userId,
-            sourceId,
-            input.caller.businessPortfolioId,
-            input.caller.businessScopedUserId,
-            input.now.epochMilliseconds,
-          ],
-        }).first()
+        channelAction(
+          input,
+          {
+            sql: "SELECT id,disclosure_json FROM weekly_consent_offers WHERE user_id=? AND source_id=? AND portfolio_id=? AND bsuid=? AND expires_at_ms>?",
+            params: [
+              input.userId,
+              sourceId,
+              input.caller.businessPortfolioId,
+              input.caller.businessScopedUserId,
+              input.now.epochMilliseconds,
+            ],
+          },
+          queued
+        ).first()
       );
       if (raw !== null) {
         const row = yield* Schema.decodeUnknownEffect(
@@ -201,12 +247,13 @@ const existingSourceOffer = (
     return Option.none();
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
 
-export const createOffer = (
-  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>
+const createOfferWithAdmission = (
+  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>,
+  queued: Option.Option<OwnedStatement>
 ): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> =>
   Effect.gen(function* () {
-    if (!(yield* requestedOfferIsCurrent(input))) return Option.none();
-    const existing = yield* existingSourceOffer(input);
+    if (!(yield* requestedOfferIsCurrent(input, queued))) return Option.none();
+    const existing = yield* existingSourceOffer(input, queued);
     if (Option.isSome(existing)) return existing;
     const id = ConsentRecordId.make(newId());
     const disclosure = weeklyDisclosureFor();
@@ -215,29 +262,33 @@ export const createOffer = (
     )(disclosure);
     const now = input.now.epochMilliseconds;
     const inserted = yield* Effect.tryPromise(() =>
-      channelAction(input, {
-        sql: `INSERT INTO weekly_consent_offers (id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,source_id,rejection_id)
+      channelAction(
+        input,
+        {
+          sql: `INSERT INTO weekly_consent_offers (id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,source_id,rejection_id)
       SELECT ?,?,?,?,?,?,?,NULLIF(?,''),(SELECT id FROM weekly_consent_rejections WHERE user_id=? ORDER BY sequence DESC LIMIT 1) WHERE (SELECT COUNT(*) FROM weekly_consent_offers WHERE user_id = ? AND created_at_ms > ?) < 8
       AND NOT EXISTS (SELECT 1 FROM weekly_consent_offers WHERE user_id = ? AND decision IS NULL AND expires_at_ms > ?)
       AND (? = 'requested' OR NOT EXISTS (SELECT 1 FROM weekly_consent_rejections WHERE user_id = ?))`,
-        params: [
-          id,
-          input.userId,
-          input.caller.businessPortfolioId,
-          input.caller.businessScopedUserId,
-          json,
-          now,
-          now + (input.request._tag === "GovernorQuestion" ? dailyWindowMs : offerLifetimeMs),
-          input.request._tag === "GovernorQuestion" ? input.request.sourceId : "",
-          input.userId,
-          input.userId,
-          now - dailyWindowMs,
-          input.userId,
-          now,
-          input.request.origin,
-          input.userId,
-        ],
-      }).run()
+          params: [
+            id,
+            input.userId,
+            input.caller.businessPortfolioId,
+            input.caller.businessScopedUserId,
+            json,
+            now,
+            now + (input.request._tag === "GovernorQuestion" ? dailyWindowMs : offerLifetimeMs),
+            input.request._tag === "GovernorQuestion" ? input.request.sourceId : "",
+            input.userId,
+            input.userId,
+            now - dailyWindowMs,
+            input.userId,
+            now,
+            input.request.origin,
+            input.userId,
+          ],
+        },
+        queued
+      ).run()
     );
     return inserted.meta.changes === 1
       ? Option.some({
@@ -249,6 +300,16 @@ export const createOffer = (
         })
       : Option.none();
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
+
+export const createOffer = (
+  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>
+): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> =>
+  createOfferWithAdmission(input, Option.none());
+export const createQueuedOffer = (
+  input: WeeklyConsentContext &
+    Readonly<{ request: WeeklyConsentOfferRequest; queued: OwnedStatement }>
+): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> =>
+  createOfferWithAdmission(input, Option.some(input.queued));
 
 export const discloseOffer = (
   input: WeeklyConsentContext & Readonly<{ offerId: ConsentRecordId; disclosureMessageId: string }>

@@ -8,7 +8,12 @@ import {
   type WhatsAppProviderMessageId,
 } from "../../../src/shell/channels/whatsapp/contract";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { prepareConsentAction, prepareProactivityConsentAction } from "../../consent/operations";
+import {
+  prepareConsentAction,
+  prepareProactivityConsentAction,
+  prepareQueuedConsentAction,
+  prepareQueuedProactivityConsentAction,
+} from "../../consent/operations";
 import { whatsAppIdentityQuery } from "../../identity/operations";
 import { newId } from "../../secret-material/operations";
 import {
@@ -45,6 +50,13 @@ const protectedAction = (
 ): Effect.Effect<D1PreparedStatement, WhatsAppUnavailable> =>
   Effect.sync(() => {
     if (!("grantId" in input)) {
+      if (Option.isSome(input.queuedAdmission)) {
+        return prepareQueuedConsentAction({
+          ...input,
+          queued: input.queuedAdmission.value,
+          statement,
+        });
+      }
       return prepareConsentAction({
         db: input.db,
         subject: { _tag: "User", userId: input.userId },
@@ -52,7 +64,14 @@ const protectedAction = (
         statement,
       });
     }
-    return prepareProactivityConsentAction({
+    const action = Option.isSome(input.queuedAdmission)
+      ? (work: Parameters<typeof prepareProactivityConsentAction>[0]): D1PreparedStatement =>
+          prepareQueuedProactivityConsentAction({
+            ...work,
+            queued: Option.getOrThrow(input.queuedAdmission),
+          })
+      : prepareProactivityConsentAction;
+    return action({
       db: input.db,
       userId: input.userId,
       kind: input.role === "reminder-question" ? "manual-entry-reminder" : input.role,

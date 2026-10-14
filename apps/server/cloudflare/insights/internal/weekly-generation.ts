@@ -16,7 +16,7 @@ import {
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { InsightTemplateSummary } from "../../../src/shell/channels/whatsapp/contract";
 import { listCategories } from "../../categories/operations";
-import { prepareConsentAction } from "../../consent/operations";
+import { prepareConsentAction, prepareQueuedConsentAction } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
 import {
   preparePeriodAggregateGuard,
@@ -243,19 +243,29 @@ const ReportRow = Schema.Struct({
   presentation_json: Schema.String,
   expires_at_ms: Schema.Int,
 });
-export const findReport = (
-  input: Readonly<{ db: D1Database; userId: UserId; id: InsightEventId }>
+const readReport = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    id: InsightEventId;
+    queuedAdmission: Option.Option<OwnedStatement>;
+  }>
 ): Effect.Effect<Option.Option<WeeklySummaryReport>, InsightUnavailable> =>
   Effect.gen(function* () {
+    const statement: OwnedStatement = {
+      sql: "SELECT insight_event_id,consent_grant_id,payload_json,presentation_json,expires_at_ms FROM weekly_summary_reports WHERE user_id = ? AND insight_event_id = ?",
+      params: [input.userId, input.id],
+    };
     const raw = yield* Effect.tryPromise(() =>
-      prepareConsentAction({
-        db: input.db,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement: {
-          sql: "SELECT insight_event_id,consent_grant_id,payload_json,presentation_json,expires_at_ms FROM weekly_summary_reports WHERE user_id = ? AND insight_event_id = ?",
-          params: [input.userId, input.id],
-        },
+      Option.match(input.queuedAdmission, {
+        onNone: () =>
+          prepareConsentAction({
+            db: input.db,
+            subject: { _tag: "User", userId: input.userId },
+            requirement: "active",
+            statement,
+          }),
+        onSome: (queued) => prepareQueuedConsentAction({ ...input, queued, statement }),
       }).first()
     );
     if (raw === null) return Option.none();
@@ -282,3 +292,12 @@ export const findReport = (
       consentGrantId: row.consent_grant_id,
     });
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
+export const findReport = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: InsightEventId }>
+): Effect.Effect<Option.Option<WeeklySummaryReport>, InsightUnavailable> =>
+  readReport({ ...input, queuedAdmission: Option.none() });
+export const findQueuedReport = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: InsightEventId; queued: OwnedStatement }>
+): Effect.Effect<Option.Option<WeeklySummaryReport>, InsightUnavailable> =>
+  readReport({ ...input, queuedAdmission: Option.some(input.queued) });

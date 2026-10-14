@@ -1,10 +1,10 @@
 # Titular requests — operator procedure for #1273
 
-Status: implementation and procedure draft, dated 2026-10-14. FIDY S.A.S. must review the
-classification, verification, calendar, retention and response procedure before using this with
-live requests. The local register is working software; it is not legal signoff, a production
-privacy authority, or proof that a live claimant's full request has been completed. Keep #1273 open until the
-live acceptance evidence and withdrawal cutoff below have been reviewed.
+Status: implementation procedure, dated 2026-10-14. The product owner reported that legal
+review of the procedure is approved and confirmed the withdrawal cutoff below. This records the
+owner's confirmation; it is not an independent legal opinion or production acceptance evidence.
+The owner of `obarboza@fidyapp.com` is the sole operator, with no backup. The local register is
+working software; deployment and a full live operator rehearsal remain separate release evidence.
 
 ## Intake and storage
 
@@ -93,30 +93,33 @@ missing owner capability to the accountable owner and legal reviewer. Never post
 
 ## Identity and purpose verification
 
-Keep intake, verification and product authority distinct. Record a verification artifact only after
-its reviewer checks the evidence, subject binding, requested purpose, scope and safe response
-destination. The artifact must identify the actual method, verifier, time, conclusion and limitations;
-only its opaque reference enters `RecordVerification`. An operator assertion, caller-supplied email,
-phone number or financial facts cannot establish authority.
+Receive every request without requiring login or payment. Receiving correspondence and releasing
+personal data are separate steps. Record verification only after checking the existing proof,
+same-person binding, scope and safe destination. Its private artifact identifies method, verifier,
+time, conclusion and limitations; only its opaque reference enters `RecordVerification`.
 
-- **User:** use an existing authenticated same-User browser and its ordinary proof mechanisms.
-  After withdrawal, the privacy status/receipt transport remains available with a live WebSession.
-  Do not ask the User to send their cookie, PAT, browser-private verifier or BackupRecoveryCode
-  into correspondence or the case ledger. The separate support-recovery procedure keeps its
-  own proof requirements and cannot fabricate a privacy authorization.
-- **Non-User Titular:** do not create a User. The reviewer must establish the subject's entitlement
-  to the particular held material and lawful request authority through an approved purpose-specific
-  method. Receiving an email or recognizing claimed facts is insufficient. The exact alternate
-  method and restricted evidence system remain a live-use review gate; this draft does not invent
-  a verification credential or accept identity documents into the ordinary register.
-- **Representative:** establish both the principal's request authority and the representative's
-  independently verified, scope-limited mandate through the reviewed procedure. A forwarded
-  email, an uploaded unsigned statement or the representative's own login is insufficient.
+- **User with access:** freshly authenticate through Fidy's existing provider or Browser Login
+  mechanism. Supported privacy results are delivered to the same verified browser, including
+  after withdrawal. A signup code or old sign-in does not establish fresh authority forever.
+- **User who lost access:** use the existing [support-recovery procedure](support-recovery.md).
+  It requires the live BrowserLoginPairing reference and the preissued BackupRecoveryCode through
+  the designated recovery control. Never request cookies, PATs, browser-private verifiers or
+  recovery secrets in email or the case ledger. Recovery does not renew Processing Consent.
+- **All established proofs lost / Non-User Titular:** keep the rights request tracked, preserve
+  deadlines and provide a non-disclosing acknowledgement. Existing recovery refuses when its
+  required proofs are unavailable. No new assisted ID-document or selfie procedure is approved
+  or implemented here. Email addresses, claimed financial facts and emailed documents do not
+  authorize account access or disclosure. A separately established purpose-specific entitlement
+  would be needed to release material outside Fidy's existing supported proofs; record that
+  capability gap explicitly instead of treating the request as completed or rejecting intake.
+- **Representative:** the representative's own login does not prove entitlement to another
+  person's data. Record the need for established principal entitlement and a verified mandate
+  covering the requested scope. Without those established proofs, track the case and give only
+  non-disclosing notices. This implementation creates no representative disclosure authority.
 
-If established User proofs are lost, keep the rights request open and escalate the alternate Titular
-verification path; do not claim that inability to recover ordinary login removes privacy rights.
-Neither alternate privacy verification nor case metadata creates a WebSession or changes User identity.
-Do not disclose whether another person's User, records or credentials exist during verification.
+Inability to recover ordinary login does not remove privacy rights. Neither case metadata nor
+operator assertions create a WebSession or change User identity. Do not confirm whether another
+person's User, records or credentials exist during verification.
 
 ## Scoped action and response
 
@@ -142,10 +145,13 @@ For withdrawal, have the proven User use `/settings/privacy`. Its same-User publ
 path rechecks live authority and commits Consent evidence and Audit atomically. Record only the
 verified durable receipt reference with `RecordWithdrawal`. Operator-assisted intake cannot bypass
 this proof. Withdrawal, individual access revocation, Subscription cancellation and physical erasure
-are distinct. The product owner selected on 2026-10-14 that an already-running admitted Turn may
-finish, while waiting and new consent-dependent work cannot start after withdrawal commits.
-Queued material does not inherit that Turn's historical basis. The legal review remains open;
-do not present the product decision as legal approval.
+are distinct. The product owner confirmed on 2026-10-14, with legal approval reported, that
+specific work already durably queued or admitted before withdrawal may finish. No new
+consent-dependent work is admitted after withdrawal commits, including new scheduled occurrences.
+Only the exact same-User unfinished item retains its original bounded authority and expiry;
+a transport payload, recurring schedule or retry cannot create or extend that permission.
+Independent category revocation, recipient changes, credential restrictions, security limits,
+expiry and one-shot provider claims still apply. Necessary privacy/security actions remain available.
 
 For erasure, prepare a tracked #1274 handoff containing the verified request-authority reference,
 scope reference, explicit withdrawal outcome (recorded receipt, not requested, pending or unavailable),
@@ -189,55 +195,39 @@ visible-delivery witness, proves failed/uncertain states stay unresolved, and co
 final case without deletion. This is disposable integration evidence, not live claimant verification
 or human legal approval.
 
-Before live use: approve the actual verification/representative method, evidence store, operator
-identity mapping, calendar/classification and special-regime rules, case/evidence retention and
-lawful-hold procedure, safe delivery destination, executable scoped privacy-purpose access/correction,
-and exact withdrawal cutoff. Register capacity does not establish a retention period. Do not retain
-live cases indefinitely while waiting for that decision. Perform an operator-led published-channel
-dry run with disposable data, including failed destination and ambiguous completion, and retain
-its verified minimal receipt. Stage/promote the browser/server release through the normal reviewed
-production workflow separately. This implementation authorizes no deployment, live disclosure,
-customer erasure, external notification or closure of #1273.
+## Operating decisions and release evidence
 
-## Concrete operating proposal for review
+- **Owner:** the owner of `obarboza@fidyapp.com` is the sole operator; no backup is appointed or
+  required by this implementation. Review pending cases each working day and act before targets
+  expire. Track absence and overdue risk explicitly.
+- **Approval:** the product owner reported legal approval of the procedure and explicitly confirmed
+  the queued/running cutoff. Do not reopen that approval as an implementation blocker.
+- **Verification:** use fresh Fidy authentication and the existing support-recovery proofs described
+  above. No proposed assisted identity appointment, document check or new credential is introduced.
+- **Private evidence:** use an encrypted company-controlled volume, outside Git, with access limited
+  to the sole operator and explicitly authorized reviewers. Restrict backups equivalently. The local
+  CLI enforces OS ownership and file permissions; it cannot prove that a particular operator volume
+  is encrypted or configured. Keep the existing register/evidence mapping private.
+- **Retention:** apply the approved purpose and retention procedure to real evidence; storage capacity
+  is not a retention period. Temporary response copies and closed-case evidence need documented
+  expiry or a specific hold with the next review date. No automated deletion is supplied by this CLI.
+- **Unsupported requests:** keep unmet scope or entitlement visible, track its original deadline and
+  communicate a non-disclosing status. Do not invent proof, infer access from email, or mark delivery
+  complete without the verified scoped result and receipt.
+- **Erasure:** retain the tracked #1274 handoff and its explicit withdrawal outcome. Report deletion
+  only after the erasure owner supplies actual completion evidence.
 
-This proposal supplies decisions to approve or amend; it is not recorded approval.
+The existing fresh-login/recovery methods prove product access. The rights procedure also needs
+sufficient entitlement to the particular requested material and accredited representation, as
+summarized in [Decreto 1074/2015, Article 2.2.2.25.4.1](https://cancilleria.gov.co/sites/default/files/Normograma/docs/decreto_1074_2015_pr025.htm).
+This distinction does not introduce a Bancolombia OAuth requirement or a new ID-checking service.
 
-- **Owner and cadence:** appoint the operator of `obarboza@fidyapp.com` as accountable case owner,
-  with a named backup in the private roster. Review pending cases at 09:00 America/Bogota each
-  Monday–Saturday while the conservative calendar applies. Escalate missing authority or capability
-  immediately, and delivery failure or a response due within two working days on that review.
-- **User verification:** freshly authenticate through the existing provider/pairing mechanism.
-  Deliver supported owner results in the same browser. Link the native privacy Audit to the restricted
-  case evidence without copying its credential or customer content into metadata.
-- **Non-User or lost proof:** offer an assisted confidential appointment without creating a User.
-  The reviewer independently checks an original identity credential against an authoritative issuer
-  or a reviewed identity-verification service, then separately establishes entitlement to the exact
-  material. Financial facts and contact addresses supply no identity proof. Retain a minimal signed
-  verification conclusion rather than document images or biometrics unless specifically necessary.
-  A concrete issuer-checking method, appointment channel and reviewer must be approved and available
-  before this method is advertised or a result is released.
-- **Representative:** verify the principal's entitlement and the representative's identity separately;
-  verify the mandate's authenticity, requested scope and validity through its independently established
-  source. Record why it permits this request and bind delivery to the verified recipient. Neither an
-  unsigned attachment nor a forward is sufficient. The exact mandate-checking method requires approval.
-- **Private evidence:** use a managed encrypted company volume, limited to the named owner/backup
-  and authorized reviewer, with access logging and equivalently restricted backups. The supplied local
-  CLI enforces OS ownership and file permissions; it does not establish encryption or approve a volume.
-- **Retention:** proposed temporary scoped-response files expire 30 days after confirmed delivery.
-  Review closed-case evidence at 90 days: erase data no longer needed for its documented purpose, or
-  record the specific obligation/hold, reviewer and next review date. These are proposed internal periods,
-  not statutory periods or implemented automatic deletion. The reviewer must reconcile them with owner
-  retention and applicable duties before live use. No operator may retain data indefinitely by default.
-- **Erasure handoff:** submit the verified authority artifact, exact scope, withdrawal receipt/outcome,
-  responsible owner and private case reference to #1274. Require an erasure-owner result before reporting
-  deletion; the ledger's `not-performed` value is never a deletion receipt.
-
-[Decreto 1074/2015, Article 2.2.2.25.4.1](https://cancilleria.gov.co/sites/default/files/Normograma/docs/decreto_1074_2015_pr025.htm)
-distinguishes sufficient Titular identity and accredited representation. Article 2.2.2.25.2.8 requires
-purpose-limited retention and documented conservation/suppression procedures. The appointment,
-proof-checking and retention choices above are Fidy proposals, not methods or durations prescribed
-by that source. Review the applicable current regime and any bank-specific obligations separately.
+Remaining release evidence is concrete: promote the reviewed browser/server/migration through the
+normal production workflow, configure the actual private operator storage, and run a disposable
+end-to-end case through the published channel, existing proof, supported scoped result and verified
+response, including failed delivery and uncertain completion. Local integration tests and self-mail
+are recorded below; they do not claim production release, a live claimant's completed request,
+customer erasure, or closure of #1273.
 
 ## Completed mailbox transport rehearsal
 

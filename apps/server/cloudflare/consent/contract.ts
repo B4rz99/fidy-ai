@@ -12,6 +12,14 @@ import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
 const digestLength = 32;
 
+/** Continuation of one durable item originally queued under active processing Consent. The owner supplies a same-User user_id projection for its exact unexpired, unfinished item, never a transport claim or a recurring schedule. */
+export type QueuedConsentAction = Readonly<{
+  db: D1Database;
+  userId: string;
+  queued: OwnedStatement;
+  statement: OwnedStatement;
+}>;
+
 /** Short-lived private withdrawal admission, rechecked against the coordinator User and live credential. */
 export const ConsentWithdrawalAdmission = Schema.Struct({
   userId: UserId,

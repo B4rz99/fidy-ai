@@ -1282,6 +1282,72 @@ it("offers eligible statement identities in publication order even after an earl
     })
   ));
 
+it("finishes a durably queued statement after withdrawal without reopening ordinary access or replaying capture", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,'{}','fixture','fixture',1,1)"
+          )
+          .bind(userA, userA)
+          .run()
+      );
+      const { staged } = yield* fromTestPromise(() =>
+        stageOne(
+          runtime,
+          0,
+          statementBytes("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
+        )
+      );
+      const published = yield* fromTestPromise(() =>
+        publishFixture(runtime, {
+          index: 0,
+          reference: staged,
+          idempotencyKey: "20000000-0000-4000-8000-000000000992",
+        })
+      );
+      expect(published.status).toBe(202);
+      const submission = yield* fromTestPromise(() => submissionOf(published));
+      const withdrawnAt = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)"
+          )
+          .bind(newId(), userA, userA, sessionA, withdrawnAt)
+          .run()
+      );
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          DB: runtime.db,
+          STATEMENT_STAGING_BUCKET: runtime.bucket,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }
+      );
+      const work = (): Request =>
+        new Request("https://coordinator.internal/statement-work", {
+          method: "POST",
+          body: JSON.stringify({
+            _tag: "StatementWork",
+            version: 1,
+            userId: userA,
+            submissionId: submission.id,
+          }),
+        });
+      expect((yield* fromTestPromise(() => coordinator.fetch(work()))).status).toBe(200);
+      expect((yield* fromTestPromise(() => coordinator.fetch(work()))).status).toBe(200);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(1);
+      expect((yield* fromTestPromise(() => getSubmission(runtime, 0, submission.id))).status).toBe(
+        401
+      );
+    })
+  ));
+
 it(
   "offers a queued submission with only its owned identity and starts one deterministic Workflow on redelivery",
   () =>

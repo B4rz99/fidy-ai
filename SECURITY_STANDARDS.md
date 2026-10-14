@@ -296,6 +296,14 @@ explicit current purpose. Outbound payloads are projections of what the
 recipient needs, not broad domain objects. Current User preferences never reinterpret historical
 consent, ingestion, billing, schedule, delivery, or persisted-report artifacts.
 
+The approved withdrawal cutoff permits completion of exact work durably queued or admitted under
+active Processing Consent before withdrawal, within its original lifetime. Native owner projections
+must recheck same-User identity, unfinished state and expiry with every protected continuation; no
+transport payload or recurring schedule grants this authority. New operations and future scheduled
+occurrences still require current Consent. Category withdrawal, recipient reassociation, credential
+restrictions, resource limits and one-shot egress claims remain effective. Evidence must cover queued
+completion and refusal of new, expired, foreign, replayed or independently revoked work.
+
 Raw ingestion material has enforced bounded retention. Indefinite structural samples qualify only
 after anonymisation removes identifying and transaction-specific values. Protected-PDF passwords
 are transient Secrets. Fidy never solicits bank credentials or card/account numbers in chat and

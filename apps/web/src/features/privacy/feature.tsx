@@ -111,8 +111,8 @@ const PrivacyExplanation = (): JSX.Element => (
     <h2 className="text-xl font-semibold">Retirar autorización</h2>
     <p>
       Retirar tu autorización detiene nuevas acciones que dependan de ella, incluido el acceso de
-      tus agentes. La solicitud que ya esté en ejecución puede terminar después del retiro. Las
-      solicitudes en espera no comenzarán.
+      tus agentes. Las solicitudes que ya estén en espera o en ejecución pueden terminar después del
+      retiro. Desde ese momento no se aceptarán nuevas solicitudes.
     </p>
     <p>
       Esto no elimina tus datos, cancela la renovación de tu suscripción ni revoca por separado un

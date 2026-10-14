@@ -79,6 +79,8 @@ export type StatementCaptureInput = CaptureFacts &
 /** Canonical capture facts and versioned notification evidence, already interpreted by the source owner. */
 export type NotificationEmailCaptureInput = CaptureFacts &
   Readonly<{
+    /** Some projects user_id for the exact unfinished, unexpired native item admitted under active Consent; None requires current Consent. */
+    queuedAdmission: Option.Option<OwnedStatement>;
     attestation: Pick<
       typeof NotificationEmailSourceAttestation.Encoded,
       | "id"

@@ -8,7 +8,7 @@ legal/production acceptance record.
 
 `/settings/privacy` is reachable independently of ordinary canonical access. It shows the
 same-User processing Consent, requires explicit confirmation before withdrawal, and displays
-a durable reference and UTC occurrence time. The published rights-request contact remains
+a durable reference and a readable date in Colombia time. The published rights-request contact remains
 visible without authentication. No paid plan or renewed Consent is required for this control.
 “Consultar prueba” now obtains the exact saved authorization from the Consent owner at
 `GET /web/consent/authorization`. Its live same-User proof is rechecked in the native read, the
@@ -27,31 +27,26 @@ cannot withdraw. Storage/Audit failure rolls back the batch. An uncertain browse
 never reports completion or automatically replays the mutation; the User explicitly rereads
 authoritative status before a fresh confirmed attempt.
 
-## Current cutoff and remaining review
+## Approved cutoff
 
-The product owner selected this cutoff on 2026-10-14: when authenticated withdrawal commits,
-no waiting or new consent-dependent work may start. An already-running, admitted hosted Turn
-may finish under its existing bounded basis; withdrawal does not extend that Turn or authorize
-its replay as a new Turn. Unstarted queued Ingestion and scheduled work require current Consent
-at their native action. Privacy requests and necessary security controls remain available.
-This is the product decision, not a record of legal approval or a promise of physical erasure.
+On 2026-10-14 the product owner confirmed that specific work already durably queued or admitted
+before authenticated withdrawal may finish, and reported legal approval. This records that
+confirmation rather than an independent legal opinion. After withdrawal commits, no new
+consent-dependent operation or scheduled occurrence is admitted.
 
-The native hosted regression withdraws through the authenticated Consent owner during model
-execution, proves the admitted reply can complete, and proves the next Turn is refused before
-another model call or Transcript append. Existing native tests cover abandoned Pending recovery,
-queued email dispatch, prepared publication and due reminder refusal. Receipt of queued material
-is not admission to a hosted Turn.
+Bounded continuation uses the exact same-User unfinished native item, its original lifetime,
+terminal-state and replay protections. It never relies on a Queue payload or recurring schedule
+alone. Forwarded email retains its queued receipt and original expiry; storing reservations
+cannot publish after withdrawal. Statement submissions retain their original native admission.
+Frozen proactive/weekly deliveries and queued weekly questions retain their exact outbox/intent
+identity. Independently revoked category grants, changed recipient associations, expiry and provider
+one-shot claims still block execution. New generation continues to require current Consent.
+An already-admitted hosted Turn retains its bounded model/tool budget; the next Turn is refused.
+Privacy requests, authentication and necessary security controls remain available.
 
-Ordinary consent-dependent actions and later hosted Turn admission recheck withdrawn standing.
-The existing architecture allows an already-admitted Pending hosted Turn to retain its bounded
-historical basis and finish after withdrawal. The UI states that limitation. See
-[server authority](../../apps/server/ARCHITECTURE.md), [domain timing](../../GLOSSARY.md) and
-[security consent timing](../../SECURITY_STANDARDS.md).
-
-The operator reported approval of the proposed bank-access arrangement. That does not verify
-legal approval of this precise Pending Turn cutoff. #1273 remains open pending the applicable
-legal/architecture review and any resulting change. Withdrawal does not physically erase data,
-cancel Subscription renewal, revoke individual credentials or establish bank suppression coverage.
+See [operator procedure](titular-requests-1273.md), [server authority](../../apps/server/ARCHITECTURE.md),
+[domain timing](../../GLOSSARY.md) and [security consent timing](../../SECURITY_STANDARDS.md).
+Withdrawal does not physically erase data, cancel Subscription renewal or revoke individual credentials.
 
 ## Verification and outstanding work
 
@@ -69,11 +64,11 @@ tracking, source-backed provisional targets, scoped evidence references, deliver
 erasure handoff. [Disposable CLI evidence](titular-requests-dry-run-1273.json) is distinct from live intake.
 Native and built-browser tests demonstrate scoped access to the real saved authorization.
 
-Still required by #1273: review of the request/identity-verification procedure, approved private
-evidence storage and retention, applicable calendar/classification and deadlines, reviewed
-in-flight cutoff, tracked erasure handoff and operator dry run. A displayed email address
-does not establish those procedures operate. No deployment, live Titular request, customer
-deletion or external notification was performed.
+Legal approval and the sole-operator decision have been confirmed by the product owner.
+Production release, actual restricted operator storage configuration and a complete operator rehearsal
+remain release evidence. The supported verification paths use existing fresh sign-in and recovery;
+unsupported entitlement/representative cases remain tracked without granting disclosure authority.
+No deployment, live Titular request, customer deletion or further external notification was performed.
 Explicit access to visible effective Transactions now has executable privacy-purpose owner authority
 at `POST /web/privacy/transactions`, with fresh same-User proof and atomic Audit after withdrawal.
 The built-browser journey obtains that actual owner result and visibly delivers it, then exercises

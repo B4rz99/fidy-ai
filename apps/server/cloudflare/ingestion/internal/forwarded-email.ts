@@ -385,7 +385,7 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
   );
   const dispatch = protectConsentStatement({
     subject: { _tag: "Owner", column: "o.user_id" },
-    requirement: "active",
+    requirement: "granted",
     statement: {
       sql: `SELECT o.receipt_id, o.user_id FROM forwarded_email_outbox o
         JOIN forwarded_email_receipts r ON r.id = o.receipt_id AND r.user_id = o.user_id
@@ -428,9 +428,7 @@ const prepareCleanupSelection = (db: D1Database, now: number): D1PreparedStateme
     statement: {
       sql: `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
         WHERE state IN ('storing', 'queued') AND (expires_at_ms <= ?
-          OR (state = 'storing' AND received_at_ms <= ?)
-          OR (state = 'queued' AND EXISTS
-            (SELECT 1 FROM consent_withdrawals c WHERE c.user_id = forwarded_email_receipts.user_id)))
+          OR (state = 'storing' AND received_at_ms <= ?))
         ORDER BY expires_at_ms ASC, id ASC LIMIT ?`,
       params: [now + sweepLookaheadMs, now - storingInterruptionMs, maximumSweep],
     },

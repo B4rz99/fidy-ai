@@ -14,6 +14,8 @@ import { Spinner } from "@/ui/components/spinner";
 import { CompactTableReference } from "./compact-table-reference";
 import { cn } from "./class-names";
 import { type DarkPalette, darkPalettes } from "./dark-palettes";
+import { BudgetBalance, BudgetMeter } from "@/ui/components/budget-meter";
+import { FinancialReference } from "./financial-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import "./reference.css";
 
@@ -326,6 +328,26 @@ export const UIReference = (): JSX.Element => {
         </div>
         <WorkspaceReference />
         <CompactTableReference />
+        <FinancialReference />
+        <section
+          aria-label="Indicadores de presupuestos"
+          className="flex flex-col gap-4 rounded-lg border bg-card p-5"
+        >
+          <h2 className="text-lg font-semibold">Presupuestos</h2>
+          <div>
+            <BudgetBalance over={false}>$ 120.000,00 disponibles</BudgetBalance>
+            <BudgetMeter
+              variant="default"
+              value={60}
+              over={false}
+              label="Presupuesto con saldo disponible"
+            />
+          </div>
+          <div>
+            <BudgetBalance over>$ 30.000,00 excedidos</BudgetBalance>
+            <BudgetMeter variant="default" value={100} over label="Presupuesto excedido" />
+          </div>
+        </section>
         <FeedbackReference />
         <div className="grid gap-6 lg:grid-cols-2">
           <TransactionReference />

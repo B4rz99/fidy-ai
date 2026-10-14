@@ -10,6 +10,7 @@ export const buttonVariants = cva(
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        disclosure: "hover:bg-muted hover:text-foreground",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         destructive:
@@ -17,6 +18,7 @@ export const buttonVariants = cva(
         link: "text-foreground underline underline-offset-4 hover:text-muted-foreground",
       },
       size: {
+        label: "min-h-11 gap-2 px-0 py-2.5 [&_svg:not([class*='size-'])]:size-4",
         offer: "h-auto min-h-12 px-6 py-6 font-heading text-xl font-semibold tabular-nums",
         default:
           "min-h-11 gap-2 px-5 py-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",

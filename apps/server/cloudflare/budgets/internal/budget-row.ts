@@ -12,6 +12,7 @@ export const budgetFromRow = (raw: unknown): Effect.Effect<Budget, Schema.Schema
         cap: Schema.String,
         created_at: Schema.String,
         updated_at: Schema.String,
+        group_name: Schema.optionalKey(Schema.NullOr(Schema.String)),
       })
     )(raw);
     return yield* Schema.decodeEffect(Schema.toCodecJson(Budget))({
@@ -20,5 +21,6 @@ export const budgetFromRow = (raw: unknown): Effect.Effect<Budget, Schema.Schema
       cap: { amount: row.cap, currency: row.currency },
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      ...(row.group_name == null ? {} : { groupName: row.group_name }),
     });
   });

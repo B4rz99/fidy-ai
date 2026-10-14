@@ -6,6 +6,7 @@ import {
   Home01Icon,
   Menu01Icon,
   Settings01Icon,
+  Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import { Cause, Effect } from "effect";
@@ -31,6 +32,7 @@ export const AuthenticationExpired = (): JSX.Element => (
 const navigationLinks = [
   { to: "/app/dashboard", label: "Tablero", icon: Home01Icon },
   { to: "/app/transactions", label: "Transacciones", icon: CreditCardIcon },
+  { to: "/app/budgets", label: "Presupuestos", icon: Wallet01Icon },
 ] as const;
 const settingsLinks = [
   { to: "/settings/email", label: "Correo" },

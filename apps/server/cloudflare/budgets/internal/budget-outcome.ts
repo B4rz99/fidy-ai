@@ -13,18 +13,24 @@ export const findOwnedBudget = ({
   db,
   userId,
   id,
+  month,
 }: Readonly<{
   db: D1Database;
   userId: string;
   id: BudgetId;
+  month: Option.Option<string>;
 }>): Effect.Effect<Option.Option<Budget>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT id, category_id, currency, cap, created_at, updated_at FROM budgets WHERE user_id = ? AND id = ?"
+          `SELECT b.id,b.category_id,
+          COALESCE((SELECT g.currency FROM budget_group_currencies g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=COALESCE(?,'9999-12') ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
+          CASE WHEN ? IS NULL THEN b.cap ELSE COALESCE((SELECT p.cap FROM budget_month_caps p
+            WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) END AS cap,
+          b.created_at,b.updated_at,b.group_name FROM budgets b WHERE b.user_id=? AND b.id=?`
         )
-        .bind(userId, id)
+        .bind(Option.getOrNull(month), Option.getOrNull(month), Option.getOrNull(month), userId, id)
         .first()
     );
     return raw === null ? Option.none<Budget>() : Option.some(yield* budgetFromRow(raw));
@@ -46,7 +52,7 @@ export const findBudgetValue = ({
         payload: outcome.budgetId,
         encode: () => Schema.encodeEffect(Schema.toCodecJson(BudgetId))(outcome.budgetId),
       })
-    : findOwnedBudget({ db, userId, id: outcome.budgetId }).pipe(
+    : findOwnedBudget({ db, userId, id: outcome.budgetId, month: outcome.month }).pipe(
         Effect.map(
           Option.map((budget) => ({
             _tag: "Owner" as const,

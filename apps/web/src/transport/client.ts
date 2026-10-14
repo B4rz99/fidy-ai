@@ -49,6 +49,8 @@ export {
   OAuthReviewChoice,
 } from "@fidy/server/client";
 export {
+  BudgetMonth,
+  Currency,
   AtomicBatchCallId,
   AtomicBatchRejected,
   maximumAtomicBatchCalls,
@@ -291,3 +293,4 @@ export { RecurringDigestReport, RecurringDigestReportParams } from "@fidy/server
 export { ProviderHandoffSearch } from "@fidy/server/client";
 
 export { ManualPATReauthenticationRequired, User } from "@fidy/server/client";
+export { Budget, Category, BudgetStatusReport } from "@fidy/server/client";

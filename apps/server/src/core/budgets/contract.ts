@@ -1,6 +1,6 @@
 import { BigDecimal, Data, DateTime, Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { type Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
+import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CategoryId } from "~/core/categories/contract";
 
@@ -9,6 +9,18 @@ export const BudgetId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BudgetId"))
   .annotate({ identifier: "BudgetId" });
 export type BudgetId = typeof BudgetId.Type;
+
+const maximumBudgetGroupNameLength = 64;
+const maximumBudgetGroupCategories = 128;
+
+/** Local calendar month label, independent of the zone used to measure spending. */
+export const BudgetMonth = Schema.String.check(Schema.isPattern(/^[2-9]\d{3}-(0[1-9]|1[0-2])$/));
+/** User-visible grouping label; blank names and labels over the display bound are rejected. */
+export const BudgetGroupName = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(maximumBudgetGroupNameLength),
+  Schema.isPattern(/\S/)
+);
 
 const zero = BigDecimal.make(0n, 0);
 const positiveBudgetCap = Schema.makeFilter<{
@@ -29,21 +41,57 @@ export const Budget = Schema.Struct({
   cap: Money,
   createdAt: UtcTimestamp,
   updatedAt: UtcTimestamp,
+  groupName: Schema.optionalKey(BudgetGroupName),
 })
   .check(positiveBudgetCap)
   .annotate({ identifier: "Budget" });
 export type Budget = typeof Budget.Type;
 
 /** Caller-owned facts for creating a Budget; identity and ownership come from the shell. */
-export const CreateBudgetInput = Budget.mapFields(Struct.pick(["categoryId", "cap"]))
+export const CreateBudgetInput = Schema.Struct({
+  ...Budget.mapFields(Struct.pick(["categoryId", "cap", "groupName"])).fields,
+  month: Schema.optionalKey(BudgetMonth),
+})
   .check(positiveBudgetCap)
   .annotate({ identifier: "CreateBudgetInput" });
 export type CreateBudgetInput = typeof CreateBudgetInput.Type;
 
-/** Complete editable Budget facts; the shell rejects a change to cap Currency. */
-export const UpdateBudgetInput = Budget.mapFields(Struct.pick(["categoryId", "cap"]))
-  .check(positiveBudgetCap)
-  .annotate({ identifier: "UpdateBudgetInput" });
+/** Category caps inherit group Currency; explicit group settings version it from the selected month. */
+const UpdateBudgetFields = Schema.Struct({
+  ...Budget.mapFields(Struct.pick(["categoryId", "cap", "groupName"])).fields,
+  month: Schema.optionalKey(BudgetMonth),
+  groupCurrency: Schema.optionalKey(Currency),
+  groupCategoryIds: Schema.optionalKey(
+    Schema.Array(CategoryId).check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(maximumBudgetGroupCategories)
+    )
+  ),
+});
+type GroupSettings = {
+  readonly [
+    Key in keyof Omit<typeof UpdateBudgetFields.Type, "cap">
+  ]: Key extends "groupCategoryIds" ? ReadonlyArray<string> : string;
+};
+
+/** Validates a monthly cap and, when supplied, the complete collection affected by group settings. */
+export const UpdateBudgetInput = UpdateBudgetFields.check(
+  positiveBudgetCap,
+  Schema.makeFilter<GroupSettings>((input) =>
+    input.groupCurrency === undefined ||
+    (input.groupCategoryIds !== undefined &&
+      input.groupCategoryIds.includes(input.categoryId) &&
+      input.groupName !== undefined &&
+      input.month !== undefined)
+      ? undefined
+      : "Group currency requires a selected collection, name, and month"
+  ),
+  Schema.makeFilter<GroupSettings>((input) =>
+    input.groupCategoryIds === undefined || input.groupName !== undefined
+      ? undefined
+      : "A group rename requires groupName"
+  )
+).annotate({ identifier: "UpdateBudgetInput" });
 export type UpdateBudgetInput = typeof UpdateBudgetInput.Type;
 
 const calendarMonth = Schema.makeFilter<{
@@ -263,6 +311,8 @@ export type BudgetStatus = typeof BudgetStatus.Type;
 export const BudgetStatusReport = Schema.Struct({
   period: AppliedBudgetMonth,
   statuses: Schema.Array(BudgetStatus),
+  cashFlow: Schema.Struct({ income: Schema.Array(Money), expenses: Schema.Array(Money) }),
+  initialized: Schema.optionalKey(Schema.Boolean),
 }).annotate({ identifier: "BudgetStatusReport" });
 export type BudgetStatusReport = typeof BudgetStatusReport.Type;
 
@@ -278,6 +328,7 @@ export const BudgetStatusQueryParameters = Schema.Struct({
   categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
   currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
   timeZone: BudgetStatusQueryValues.fields.timeZone,
+  month: Schema.optionalKey(BudgetMonth),
 });
 
 /** Optional status filters after canonical query decoding. */

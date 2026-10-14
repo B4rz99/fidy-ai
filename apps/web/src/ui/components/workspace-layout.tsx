@@ -1,4 +1,6 @@
+import { Option } from "effect";
 import type { JSX, ReactNode } from "react";
+import { WorkspaceDesktop, useWorkspaceSize } from "./workspace-responsive";
 
 /** Keeps the page title and responsive actions aligned; features supply their own context and commands. */
 export const WorkspaceHeader = ({
@@ -23,12 +25,38 @@ export const WorkspaceHeader = ({
 export const WorkspaceColumns = ({
   children,
   panel,
-}: Readonly<{ children: ReactNode; panel: ReactNode }>): JSX.Element => (
-  <div className="grid items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
-    <div className="min-w-0 p-5">{children}</div>
-    {panel}
-  </div>
-);
+  variant,
+}: Readonly<{
+  children: ReactNode;
+  panel: ReactNode;
+  variant: "default" | "container";
+}>): JSX.Element => {
+  const { desktop, measure } = useWorkspaceSize();
+  if (variant === "default") {
+    return (
+      <div className="grid items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="min-w-0 p-5">{children}</div>
+        {panel}
+      </div>
+    );
+  }
+  return (
+    <WorkspaceDesktop value={Option.some(desktop)}>
+      <div ref={measure} className="min-w-0">
+        <div
+          className={
+            desktop
+              ? "grid items-stretch grid-cols-[minmax(0,1fr)_24rem]"
+              : "grid items-stretch grid-cols-1"
+          }
+        >
+          <div className="min-w-0 p-5">{children}</div>
+          {panel}
+        </div>
+      </div>
+    </WorkspaceDesktop>
+  );
+};
 
 /** Wraps compact record controls without separating filters from actions. */
 export const RecordToolbar = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (

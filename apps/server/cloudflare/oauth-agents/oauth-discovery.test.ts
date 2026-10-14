@@ -304,7 +304,9 @@ it.each(queryGroups)(
               )
               .bind(resourceId, "10000000-0000-4000-8000-000000000001"),
             fixture.db
-              .prepare("INSERT INTO budgets VALUES (?, ?, ?, 'COP', '9007199254740994', ?, ?)")
+              .prepare(
+                "INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at) VALUES (?, ?, ?, 'COP', '9007199254740994', ?, ?)"
+              )
               .bind(
                 resourceId,
                 "10000000-0000-4000-8000-000000000001",

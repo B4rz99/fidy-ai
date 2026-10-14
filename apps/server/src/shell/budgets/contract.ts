@@ -46,7 +46,7 @@ export const BudgetsGroup = HttpApiGroup.make("budgets")
     })
       .annotate(
         OpenApi.Description,
-        "Create one positive monthly Money cap for a stable Category and Currency. Only one Budget may exist for the same Category and Currency."
+        "Create one positive Money cap for a stable Category and Currency. Supply month (YYYY-MM) to save a monthly plan and groupName to organize the view. Other saved months retain their amounts; new plans inherit previous amounts without rollover."
       )
       .annotateMerge(additiveWrite)
   )
@@ -78,7 +78,7 @@ export const BudgetsGroup = HttpApiGroup.make("budgets")
     })
       .annotate(
         OpenApi.Description,
-        "Replace a Budget's Category and positive cap. Its Currency is immutable; previously reached monthly alert marks remain latched."
+        "Replace a Budget's Category and positive cap. Supply month (YYYY-MM) to edit only that saved month and groupName to organize it. Supply groupCategoryIds with groupName to rename the caller-owned category collection across months. Currency is immutable; reached monthly alert marks remain latched."
       )
       .annotateMerge(destructiveWrite)
   )
@@ -101,7 +101,7 @@ export const BudgetsGroup = HttpApiGroup.make("budgets")
     })
       .annotate(
         OpenApi.Description,
-        "Answer current monthly Budget status in one call. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation."
+        "Answer Budget status for an optional month (YYYY-MM), defaulting to the current month. Uninitialized plans preview previous planned amounts; an explicit month-scoped write freezes the plan. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation."
       )
       .annotateMerge(read)
   );

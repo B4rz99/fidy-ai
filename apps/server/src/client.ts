@@ -167,6 +167,7 @@ export type { AuthenticationProvider } from "~/shell/web-authentication/contract
 
 export { ProviderHandoffSearch } from "~/shell/web-authentication/contract";
 
+export { BudgetMonth } from "~/core/budgets/contract";
 export { Currency, currencyMetadata } from "~/core/_shared/money";
 
 export { Transaction, TransactionId, TransactionQueryValues } from "~/core/transactions/contract";
@@ -181,3 +182,4 @@ export {
   browserSessionBindingHeader,
   browserSessionBindingPath,
 } from "~/shell/web-authentication/contract";
+export { Budget, BudgetStatusReport } from "~/core/budgets/contract";

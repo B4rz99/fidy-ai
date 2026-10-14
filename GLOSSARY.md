@@ -102,9 +102,17 @@ an explicit Transaction correction.
 _Avoid_: Tag, label, bucket.
 
 **Budget**:
-A monthly positive Money cap on one Category and Currency. Only outflows in that Category and
-Currency contribute. Alerts latch once each at 80% and 100% per month.
+A positive Money cap on one Category, inheriting its Budget Group Currency and planned separately
+for each calendar month;
+new monthly plans start with the previous planned amounts without carrying unspent Money forward.
+Only matching outflows contribute, and alerts latch once each at 80% and 100% per month.
 _Avoid_: Limit, goal, target.
+
+**Budget Group**:
+A User-named collection organizing Categories in the budget view. Each Category retains its own
+Budget amount; the group owns one Currency, versioned from an explicitly selected month. Earlier
+months retain their recorded Currency. Changing Currency preserves nominal amounts without conversion.
+_Avoid_: Account, shared cap, envelope.
 
 **RecurringSeries**:
 A historical repeating-charge pattern detected from comparable Transaction Money in one Currency

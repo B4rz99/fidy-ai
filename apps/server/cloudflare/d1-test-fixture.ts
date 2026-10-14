@@ -248,7 +248,13 @@ export const canonicalAdmissionMigrationNames = (
         : []),
       ...(names.includes("0029_audit_owner_retention") ? ["0084_transaction_deletion_audit"] : []),
       ...(names.includes("0016_budgets")
-        ? ["0037_budget_crossing_facts", "0038_proactivity_consent", "0042_budget_proactivity"]
+        ? [
+            "0037_budget_crossing_facts",
+            "0038_proactivity_consent",
+            "0042_budget_proactivity",
+            "0089_budget_month_plans",
+            "0090_budget_group_currencies",
+          ]
         : []),
       "0007_browser_pairing_email",
       "0008_support_recovery",

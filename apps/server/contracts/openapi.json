@@ -682,6 +682,11 @@
           "createdAt": {
             "$ref": "#/components/schemas/UtcTimestamp"
           },
+          "groupName": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
           "id": {
             "$ref": "#/components/schemas/BudgetId"
           },
@@ -1012,6 +1017,31 @@
       "BudgetStatusReport": {
         "additionalProperties": false,
         "properties": {
+          "cashFlow": {
+            "additionalProperties": false,
+            "properties": {
+              "expenses": {
+                "items": {
+                  "$ref": "#/components/schemas/Money_2"
+                },
+                "type": "array"
+              },
+              "income": {
+                "items": {
+                  "$ref": "#/components/schemas/Money_2"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "income",
+              "expenses"
+            ],
+            "type": "object"
+          },
+          "initialized": {
+            "type": "boolean"
+          },
           "period": {
             "$ref": "#/components/schemas/AppliedBudgetMonth"
           },
@@ -1024,7 +1054,8 @@
         },
         "required": [
           "period",
-          "statuses"
+          "statuses",
+          "cashFlow"
         ],
         "type": "object"
       },
@@ -1295,6 +1326,14 @@
           },
           "categoryId": {
             "$ref": "#/components/schemas/CategoryId"
+          },
+          "groupName": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -1307,6 +1346,14 @@
           },
           "categoryId": {
             "$ref": "#/components/schemas/CategoryId"
+          },
+          "groupName": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
           }
         },
         "required": [
@@ -7965,6 +8012,9 @@
                       "currency": {
                         "$ref": "#/components/schemas/CurrencyPartial_1"
                       },
+                      "month": {
+                        "type": "string"
+                      },
                       "timeZone": {
                         "$ref": "#/components/schemas/IanaTimeZone"
                       }
@@ -11784,6 +11834,25 @@
           },
           "categoryId": {
             "$ref": "#/components/schemas/CategoryId"
+          },
+          "groupCategoryIds": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryId"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
+          },
+          "groupCurrency": {
+            "$ref": "#/components/schemas/CurrencyPartial_1"
+          },
+          "groupName": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -11796,6 +11865,25 @@
           },
           "categoryId": {
             "$ref": "#/components/schemas/CategoryId"
+          },
+          "groupCategoryIds": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryId"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
+          },
+          "groupCurrency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "groupName": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
           }
         },
         "required": [
@@ -12378,7 +12466,7 @@
     },
     "/budget-status": {
       "get": {
-        "description": "Answer current monthly Budget status in one call. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation.",
+        "description": "Answer Budget status for an optional month (YYYY-MM), defaulting to the current month. Uninitialized plans preview previous planned amounts; an explicit month-scoped write freezes the plan. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation.",
         "operationId": "budgets.getBudgetStatus",
         "parameters": [
           {
@@ -12403,6 +12491,14 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/IanaTimeZone"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -12664,7 +12760,7 @@
         "x-fidy-required-tier": "free"
       },
       "post": {
-        "description": "Create one positive monthly Money cap for a stable Category and Currency. Only one Budget may exist for the same Category and Currency.",
+        "description": "Create one positive Money cap for a stable Category and Currency. Supply month (YYYY-MM) to save a monthly plan and groupName to organize the view. Other saved months retain their amounts; new plans inherit previous amounts without rollover.",
         "operationId": "budgets.createBudget",
         "parameters": [],
         "requestBody": {
@@ -13082,7 +13178,7 @@
         "x-fidy-required-tier": "free"
       },
       "put": {
-        "description": "Replace a Budget's Category and positive cap. Its Currency is immutable; previously reached monthly alert marks remain latched.",
+        "description": "Replace a Budget's Category and positive cap. Supply month (YYYY-MM) to edit only that saved month and groupName to organize it. Supply groupCategoryIds with groupName to rename the caller-owned category collection across months. Currency is immutable; reached monthly alert marks remain latched.",
         "operationId": "budgets.updateBudget",
         "parameters": [
           {

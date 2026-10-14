@@ -54,6 +54,15 @@ The browser imports only the generated/client declaration seam. It must not impo
 implementations, platform bindings, provider SDKs, database code, or server-only Effect modules. Build
 checks validate the browser graph and static artifact separately from API contract generation.
 
+For decoded endpoint result types, use `HttpApiClient.SuccessType` with the declaration's
+`HttpApiEndpoint.Success`, as in `WebAuthSuccess` in the
+[browser client](../apps/web/src/transport/client.ts). In 4.0.2, `ReturnType` on a generic client
+method includes decoded-only, response-only and decoded-and-response modes; it does not select
+the default decoded-only mode used by an ordinary call.
+Upstream [#8767](https://github.com/Effect-TS/effect/pull/8767) and the refreshed
+`.repos/effect/packages/effect/typetest/httpapi/HttpApiClient.tst.ts` cover the response-mode
+union; `src/reactivity/AtomHttpApi.ts` derives its decoded success from `SuccessType` too.
+
 OpenAPI and operation-policy files are generated review artifacts. Run freshness and compatibility
 checks after every operation/schema/annotation change. A generated artifact never becomes a second
 source of truth.

@@ -18,15 +18,12 @@ import {
 } from "@fidy/server/client";
 import { Context, Data, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/http";
-import { HttpApiClient } from "effect/http-api";
+import { HttpApiClient, type HttpApiEndpoint, type HttpApiGroup } from "effect/http-api";
 import { AtomHttpApi } from "effect/reactivity";
 import { type BrowserHttpBoundary, browserHttpClientLayer } from "./browser-http-policy";
 import { observeBrowserDecode } from "./browser-defects";
 
 export type {
-  StartedBrowserLoginPairing,
-  PendingBrowserLoginPairing,
-  AuthenticatedBrowserLoginPairing,
   LayoutNodeFor,
   AuthenticationProvider,
   CanonicalInput,
@@ -208,6 +205,18 @@ export type WebAuthClient = AtomHttpApi.AtomHttpApiClient<
   never,
   "@fidy/web/WebAuthClient",
   WebAuthApiGroups
+>;
+
+export type WebAuthSuccess<
+  Group extends WebAuthApiGroups["identifier"],
+  Endpoint extends HttpApiGroup.EndpointsWithIdentifier<WebAuthApiGroups, Group>["identifier"],
+> = HttpApiClient.SuccessType<
+  HttpApiEndpoint.Success<
+    HttpApiEndpoint.WithIdentifier<
+      HttpApiGroup.EndpointsWithIdentifier<WebAuthApiGroups, Group>,
+      Endpoint
+    >
+  >
 >;
 
 /**

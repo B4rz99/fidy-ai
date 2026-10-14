@@ -1146,16 +1146,12 @@ describe("native2025 residency integration", () => {
       const response = yield* wait(() => input.response);
       expect(response.status).toBe(202);
       input.progress.push(
-        "genuine late native cancelled202 received; body deliberately unread until public disposal completes"
+        "native cancellation202 received; public disposal must still settle before response consumption"
       );
       yield* wait(() => input.disposal);
-      input.progress.push(
-        "public disposal completed with late cancelled202 body still unread by caller"
-      );
+      input.progress.push("public disposal completed before cancellation response consumption");
       expect(yield* wait(() => response.text())).toBe("");
-      input.progress.push(
-        "late native cancelled202 body completion verified after public disposal"
-      );
+      input.progress.push("empty native cancellation response verified after public disposal");
     });
   const saveSdkDisposalEvidence = (
     input: SdkDisposalEvidence,
@@ -1828,7 +1824,7 @@ describe("native2025 residency integration", () => {
           expect(yield* Deferred.isDone(cleanupFinished)).toBe(true);
           expect(yield* Deferred.isDone(disposalFinished)).toBe(true);
           progress.push(
-            "cleanup completed, genuine cancelled202/body settled, published disposal completed"
+            "cleanup completed, empty cancellation202 settled, published disposal completed"
           );
           const freshModule = makeMcpResidency(config);
           modules.push(freshModule);
@@ -1847,7 +1843,7 @@ describe("native2025 residency integration", () => {
             "published dispose started; admission closed503; disposal unfinished while cleanup held"
           );
           expect(progress).toContain(
-            "cleanup completed, genuine cancelled202/body settled, published disposal completed"
+            "cleanup completed, empty cancellation202 settled, published disposal completed"
           );
           expect(
             yield* wait(() =>

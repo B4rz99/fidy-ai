@@ -49,9 +49,9 @@ confirmation decline/expiry/replay, client disconnect during streaming and dispo
 Assert safe protocol failures and no additional operation execution. Source-backed assembly describes
 library mechanics; OAuth authority, canonical admission and residency limits are Fidy policy.
 
-In selected Effect 4.0.2, `McpServer`'s HTTP serialization suppresses the JSON-RPC response for a
-cancelled request; the native HTTP handler settles that completion with an empty 202 response.
-This follows the [MCP cancellation rule](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation)
-that receivers should not send a result for cancelled requests. Test cancellation independently
-from native settlement and public Scope disposal: an HTTP acknowledgement does not establish that
-canonical work, SQL, SDK cleanup or resident capacity has been released.
+In the selected 4.0.2 SDK, a cancelled stateful request with no emitted JSON-RPC reply settles as an
+empty HTTP 202. `McpServer.ts` suppresses cancelled replies and its pre-response handler maps an
+empty 200 to 202. Residency tests assert that response separately from SQL settlement and public
+Scope disposal; a 202 does not prove mutation completion or release admission capacity. Newer
+upstream [#8888](https://github.com/Effect-TS/effect/pull/8888) uses an empty SSE response instead;
+that behavior is outside the pinned 4.0.2 release.

@@ -14,7 +14,7 @@ The npm artifacts include upstream TypeScript source. The frozen lock records in
 sources are `node_modules/effect/src`, `node_modules/@effect/atom-react/src` and
 `node_modules/alchemy/src` (and its patched `lib` counterpart).
 
-`.repos/effect` is refreshed to upstream main **43416c4142**, which declares 4.0.0 but differs from
+`.repos/effect` is refreshed to upstream main **f9f43352d6**, which declares 4.0.4 but differs from
 the published 4.0.2 source. Use it for upstream tests, examples, and investigation, not as proof that
 a newer behavior exists in the pinned application. `.repos/alchemy` remains an older snapshot;
 the installed beta.80 source plus `patches/alchemy@2.0.0-beta.80.patch` defines the selected behavior.

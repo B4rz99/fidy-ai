@@ -5,7 +5,6 @@ import type { Atom } from "effect/reactivity";
 import { useState } from "react";
 import { useSession } from "@/session/session-context";
 import {
-  type AuthenticatedBrowserLoginPairing,
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
   ConnectionAttemptReference,
@@ -13,9 +12,8 @@ import {
   type EmailVerificationCode,
   OAuthRequestId,
   PATPairingPublicCode,
-  type PendingBrowserLoginPairing,
-  type StartedBrowserLoginPairing,
   type WebAuthClient,
+  type WebAuthSuccess,
 } from "@/transport/client";
 
 export const invalidPairingMessage = "Esta vinculación ya no es válida. Inicia de nuevo." as const;
@@ -67,8 +65,8 @@ const pollTimeoutMilliseconds = 15_000;
 const invalidState = { _tag: "Invalid" } as const satisfies BrowserLoginPairingViewState;
 
 type DirectWebAuthClient = Context.Service.Shape<WebAuthClient>;
-type StartedPairing = StartedBrowserLoginPairing;
-type RedeemResult = PendingBrowserLoginPairing | AuthenticatedBrowserLoginPairing;
+type StartedPairing = WebAuthSuccess<"browserLogin", "startPairing">;
+type RedeemResult = WebAuthSuccess<"browserLogin", "redeemPairing">;
 type PollAttempt = PollFailure | Readonly<{ _tag: "Success"; value: RedeemResult }>;
 
 const requestPairingPoll = (

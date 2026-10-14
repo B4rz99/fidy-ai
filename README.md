@@ -1,73 +1,98 @@
-# Fidy
+<!-- Use a static Shields badge because pkg.pr.new's dynamic badge times out while counting this repository's releases. -->
 
-Fidy is an agent-first personal finance product being built for Colombia. It brings financial
-records, budgets, and insights into one system that people can use through conversation, a web
-application, or their own agents.
+[![pkg.pr.new](https://img.shields.io/badge/pkg.pr.new-Effect--TS%2Feffect-black)](https://pkg.pr.new/~/Effect-TS/effect)
 
-**Fidy is in development and has not launched.** Implemented components are not a promise that a
-channel, integration, or workflow is available to real users.
+# Effect
 
-## One financial model, multiple interfaces
+Effect is a library for building robust, maintainable, type-safe, and production grade applications in TypeScript. It helps you handle the hard problems at scale: typed errors, dependency injection, structured concurrency, scheduling, tracing, and unified schema validation.
 
-WhatsApp is the conversational channel: users describe financial activity and interact with Fidy's
-hosted agent. The React web application provides structured views and controls for financial data,
-dashboards, account security, and subscriptions. A canonical API gives user-owned agents access to
-the same operations, with explicit permissions rather than unrestricted database access.
+> **Effect 4.x is a long-term support (LTS) release.** If you are upgrading from Effect 3.x, follow the [migration guide](MIGRATION.md).
 
-These interfaces share one domain model. A transaction captured through conversation is not a
-separate record system from one viewed on the web. The hosted agent invokes the same canonical
-operations as other authorized clients; generated text never grants permission or becomes an
-independent source of financial truth.
+## Installation
 
-## Financial records with context
+```sh
+npm install effect
+```
 
-The implemented foundation includes transaction capture and correction, source evidence,
-categorization and user-defined keyword rules, budgets, dashboard documents and views, statement
-processing and review, recurring-charge detection, and user-owned Memory for relevant context.
+## Requirements
 
-Money uses exact decimal values with explicit Currency. Different currencies remain separate rather
-than being silently converted or summed together. Corrections and reconciliation preserve source
-evidence, and uncertain imported material can require review instead of becoming an unquestioned
-financial fact.
+- **TypeScript 5.9 or newer.** TypeScript 7 is recommended for the best performance and compatibility with [Effect's TypeScript tooling](https://github.com/Effect-TS/tsgo#installation).
+- **Node.js 18 or newer** is the general minimum for running Effect on Node.js. Some integration packages require newer runtimes; for example, `@effect/sql-sqlite-node` requires Node.js 22.16 or newer.
+- **Strict type-checking:** the `strict` flag must be enabled in your `tsconfig.json`.
 
-Some product paths remain deliberately unavailable. Forwarded institutional email requires verified
-sender and connection admission before inbound routing can be enabled. Receipt/image processing is
-not yet an executable capture path, and hosted MCP/OAuth access remains a design rather than a live
-integration.
+## Links
 
-## Technical foundation
+- [Website](https://effect.website): documentation, guides, and news
+- [Discord](https://discord.gg/effect-ts): ask questions, share what you're building, and talk to the core team
+- [Community](https://effect.website/community-hub): meetups and events, or bring Effect to your own
+- [Issues](https://github.com/Effect-TS/effect/issues): bug reports and feature requests
+- [Jobs](https://effect.website/effect-jobs): companies hiring Effect developers
+- Follow us on [X](https://x.com/EffectTS_), [Bluesky](https://bsky.app/profile/effect-ts.bsky.social), and [LinkedIn](https://www.linkedin.com/company/effect-ts)
 
-Fidy is a TypeScript monorepo built around Effect and Schema. Domain decisions are separated from
-provider and platform adapters. Canonical operation declarations supply typed clients, OpenAPI,
-access policy, and hosted-agent tool descriptions, keeping interfaces aligned without parallel
-hand-maintained contracts.
+## Let's talk
 
-The web application uses React, Vite, and Effect Atom. The Bun CLI provides a user-owned-agent
-credential entrypoint through browser-approved pairing and native OS credential storage; it is not
-a separate authorization authority.
+Whether your team is considering Effect, rolling it out, or already running it in production, we'd love to hear from you: what you're building, what works, and what you need from Effect next.
 
-Cloudflare provides the production execution model:
+- **Talk to the maintainers.** Introduce your team on [Discord](https://discord.gg/effect-ts) or email [contact@effectful.co](mailto:contact@effectful.co). We're happy to connect privately on Slack or Discord for feedback and help with adoption.
+- **Production support.** We're exploring how to better support teams running Effect in production. If your organization has specific support needs, let's discuss them.
+- **Adoption help.** Our [adoption partners](https://effect.website/adoption-partners) offer implementation, consulting, team extension, training, and commercial support.
 
-- **Workers** separate public ingress from the private application boundary.
-- **D1** retains authoritative application state; **Durable Objects** coordinate per-user work.
-- **Queues and Workflows** handle redelivery and durable multi-step execution.
-- **R2** retains bounded private source material.
-- **Workers AI** supplies Fidy-controlled hosted inference.
+Feedback from teams using and evaluating Effect directly shapes what we stabilize and build next.
 
-Alchemy declares the deployment topology. Specialist adapters connect WhatsApp through Kapso/Meta,
-payments through Wompi, and outbound email through Resend.
+## Long-term support
 
-## Trust boundaries
+Teams depend on Effect for systems they expect to run for years. Effect 4.x is a long-term support (LTS) release with the following guarantees:
 
-Authorization is enforced by the server for each protected action. Browser sessions, personal access
-tokens, consent, and sensitive-operation confirmation have distinct responsibilities. An agent's
-request or a queued identifier cannot bypass those checks.
+- At least three years of support, including bug and security fixes.
+- Bug fixes for one year after the next major version is released.
+- Security fixes for two years after the next major version is released.
 
-Financial changes and their required accountability evidence commit together. External delivery and
-provider calls are treated separately: retries must account for uncertain outcomes rather than
-assuming that a timeout means nothing happened. Hosted replies become completed Transcript evidence
-only after authenticated delivery evidence, not merely after generation.
+Stable APIs reserve breaking changes for major releases. APIs marked unstable may change in minor releases, and experimental APIs may change in patch releases.
 
-Telemetry is limited to approved operational metadata. Credentials, financial content, prompts,
-replies, and raw provider payloads are not diagnostic data. Missing authority or an unavailable
-adapter produces a closed failure rather than a local-state or alternate-provider fallback.
+## Effect v3
+
+The Effect v3 source code is available on the [`v3`](https://github.com/Effect-TS/effect/tree/v3) branch, which is also where issues and pull requests meant for Effect v3 should be targeted. To upgrade, see the [migration guide](MIGRATION.md).
+
+## Packages
+
+This monorepo contains the core `effect` package alongside integration packages that extend it. All packages listed below are released together with synchronized versions.
+
+| Package                                                               | Description                                              | API Reference                                                      |
+| --------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`effect`](packages/effect)                                           | The core package                                         | [docs](https://effect.website/docs/v4/api/effect)                  |
+| [`@effect/platform-browser`](packages/platform/browser)               | Platform services for the browser                        | [docs](https://effect.website/docs/v4/api/platform-browser)        |
+| [`@effect/platform-bun`](packages/platform/bun)                       | Platform services for [Bun](https://bun.sh)              | [docs](https://effect.website/docs/v4/api/platform-bun)            |
+| [`@effect/platform-deno`](packages/platform/deno)                     | Platform services for [Deno](https://deno.com)           | [docs](https://effect.website/docs/v4/api/platform-deno)           |
+| [`@effect/platform-node`](packages/platform/node)                     | Platform services for [Node.js](https://nodejs.org)      | [docs](https://effect.website/docs/v4/api/platform-node)           |
+| [`@effect/platform-node-shared`](packages/platform/node-shared)       | Shared services for Node.js-compatible runtimes          | [docs](https://effect.website/docs/v4/api/platform-node-shared)    |
+| [`@effect/sql-clickhouse`](packages/sql/clickhouse)                   | SQL client for [ClickHouse](https://clickhouse.com)      | [docs](https://effect.website/docs/v4/api/sql-clickhouse)          |
+| [`@effect/sql-d1`](packages/sql/d1)                                   | SQL client for Cloudflare D1                             | [docs](https://effect.website/docs/v4/api/sql-d1)                  |
+| [`@effect/sql-libsql`](packages/sql/libsql)                           | SQL client for libSQL                                    | [docs](https://effect.website/docs/v4/api/sql-libsql)              |
+| [`@effect/sql-mssql`](packages/sql/mssql)                             | SQL client for Microsoft SQL Server                      | [docs](https://effect.website/docs/v4/api/sql-mssql)               |
+| [`@effect/sql-mysql2`](packages/sql/mysql2)                           | SQL client for MySQL                                     | [docs](https://effect.website/docs/v4/api/sql-mysql2)              |
+| [`@effect/sql-pg`](packages/sql/pg)                                   | SQL client for PostgreSQL                                | [docs](https://effect.website/docs/v4/api/sql-pg)                  |
+| [`@effect/sql-pglite`](packages/sql/pglite)                           | SQL client for [PGlite](https://pglite.dev)              | [docs](https://effect.website/docs/v4/api/sql-pglite)              |
+| [`@effect/sql-sqlite-bun`](packages/sql/sqlite-bun)                   | SQL client for SQLite via `bun:sqlite`                   | [docs](https://effect.website/docs/v4/api/sql-sqlite-bun)          |
+| [`@effect/sql-sqlite-do`](packages/sql/sqlite-do)                     | SQL client for Cloudflare Durable Objects SQLite         | [docs](https://effect.website/docs/v4/api/sql-sqlite-do)           |
+| [`@effect/sql-sqlite-node`](packages/sql/sqlite-node)                 | SQL client for SQLite via `node:sqlite`                  | [docs](https://effect.website/docs/v4/api/sql-sqlite-node)         |
+| [`@effect/sql-sqlite-react-native`](packages/sql/sqlite-react-native) | SQL client for SQLite in React Native                    | [docs](https://effect.website/docs/v4/api/sql-sqlite-react-native) |
+| [`@effect/sql-sqlite-wasm`](packages/sql/sqlite-wasm)                 | SQL client for SQLite compiled to WebAssembly            | [docs](https://effect.website/docs/v4/api/sql-sqlite-wasm)         |
+| [`@effect/ai-anthropic`](packages/ai/anthropic)                       | Anthropic provider for the Effect AI modules             | [docs](https://effect.website/docs/v4/api/ai-anthropic)            |
+| [`@effect/ai-openai`](packages/ai/openai)                             | OpenAI provider for the Effect AI modules                | [docs](https://effect.website/docs/v4/api/ai-openai)               |
+| [`@effect/ai-cloudflare`](packages/ai/cloudflare)                     | Cloudflare decision provider for the Effect AI modules   | [docs](https://effect.website/docs/v4/api/ai-cloudflare)           |
+| [`@effect/ai-typesafe`](packages/ai/typesafe)                         | TypeSafe decision provider for the Effect AI modules     | [docs](https://effect.website/docs/v4/api/ai-typesafe)             |
+| [`@effect/ai-openai-compat`](packages/ai/openai-compat)               | OpenAI-compatible API provider for the Effect AI modules | [docs](https://effect.website/docs/v4/api/ai-openai-compat)        |
+| [`@effect/ai-openrouter`](packages/ai/openrouter)                     | OpenRouter provider for the Effect AI modules            | [docs](https://effect.website/docs/v4/api/ai-openrouter)           |
+| [`@effect/atom-react`](packages/atom/react)                           | React bindings for Effect Atom                           | [docs](https://effect.website/docs/v4/api/atom-react)              |
+| [`@effect/atom-solid`](packages/atom/solid)                           | SolidJS bindings for Effect Atom                         | [docs](https://effect.website/docs/v4/api/atom-solid)              |
+| [`@effect/atom-vue`](packages/atom/vue)                               | Vue bindings for Effect Atom                             | [docs](https://effect.website/docs/v4/api/atom-vue)                |
+| [`@effect/opentelemetry`](packages/opentelemetry)                     | [OpenTelemetry](https://opentelemetry.io) integration    | [docs](https://effect.website/docs/v4/api/opentelemetry)           |
+| [`@effect/vitest`](packages/vitest)                                   | Helpers for testing with [Vitest](https://vitest.dev)    | [docs](https://effect.website/docs/v4/api/vitest)                  |
+| [`@effect/docgen`](packages/tools/docgen)                             | Documentation generator for Effect projects              | [docs](https://effect.website/docs/v4/api/docgen)                  |
+| [`@effect/doctest`](packages/tools/doctest)                           | Runs JSDoc examples as Vitest tests                      | [docs](https://effect.website/docs/v4/api/doctest)                 |
+| [`@effect/openapi-generator`](packages/tools/openapi-generator)       | Generate Effect code from OpenAPI specifications         | [docs](https://effect.website/docs/v4/api/openapi-generator)       |
+| [`@effect/graphql-generator`](packages/tools/graphql-generator)       | Generate Effect code from GraphQL documents              | [docs](https://effect.website/docs/v4/api/graphql-generator)       |
+
+## License
+
+MIT

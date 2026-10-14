@@ -1,5 +1,0 @@
-[install]
-linker = "hoisted"
-# Supply-chain delay, matching the root bunfig — including its refusal to carry
-# an exclude list.
-minimumReleaseAge = 604800

@@ -1,183 +1,67 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "include": [],
   "compilerOptions": {
+    "outDir": "${configDir}/dist",
+    "rootDir": "${configDir}/src",
+    // Use incremental builds with project references.
+    "incremental": true,
+    "composite": true,
+    // Target modern JavaScript (ES2022+) whilst staying closely compatible with the Node.js module system.
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleDetection": "force", // Treat every non-declaration file as a module.
+    "verbatimModuleSyntax": true, // Only transform/eliminate type-only import/export statements.
+    "allowJs": false, // If you touch this, a puppy dies.
+    "rewriteRelativeImportExtensions": true, // Rewrite `.ts` imports to `.js` at build time.
+    "erasableSyntaxOnly": true, // Allows to run directly with node and type removal
+    // Emit source- & declaration maps.
+    "declarationMap": true,
+    "sourceMap": true,
+    // Opt-in to stricter type checking and correctness guard rails. The more the merrier.
     "strict": true,
-    "moduleResolution": "bundler",
-    "target": "ESNext",
-    "module": "ESNext",
-    "lib": ["ESNext"],
-    "types": ["bun-types"],
-    "skipLibCheck": true,
-    "noEmit": true,
-    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    "forceConsistentCasingInFileNames": true,
-    "noImplicitReturns": true,
-    "verbatimModuleSyntax": true,
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        "diagnostics": true,
-        "includeSuggestionsInTsc": true,
-        "ignoreEffectSuggestionsInTscExitCode": false,
-        "ignoreEffectWarningsInTscExitCode": false,
-        "ignoreEffectErrorsInTscExitCode": false,
-        "diagnosticSeverity": {
-          "anyUnknownInErrorContext": "error",
-          "asyncFunction": "error",
-          "catchAllToMapError": "error",
-          "catchToIgnore": "error",
-          "catchToOrElseSucceed": "error",
-          "catchUnfailableEffect": "error",
-          "classSelfMismatch": "error",
-          "cryptoRandomUUID": "error",
-          "cryptoRandomUUIDInEffect": "error",
-          "deterministicKeys": "error",
-          "duplicatePackage": "error",
-          "effectDoNotation": "error",
-          "effectFnIife": "error",
-          "effectFnImplicitAny": "error",
-          "effectFnOpportunity": "error",
-          "effectGenUsesAdapter": "error",
-          "effectInFailure": "error",
-          "effectInVoidSuccess": "error",
-          "effectMapFlatten": "error",
-          "effectMapVoid": "error",
-          "effectSucceedWithVoid": "error",
-          "extendsNativeError": "error",
-          "flatMapToMap": "error",
-          "floatingEffect": "error",
-          "genericEffectServices": "error",
-          "globalConsole": "error",
-          "globalConsoleInEffect": "error",
-          "globalDate": "error",
-          "globalDateInEffect": "error",
-          "globalErrorInEffectCatch": "error",
-          "globalErrorInEffectFailure": "error",
-          "globalFetch": "error",
-          "globalFetchInEffect": "error",
-          "globalRandom": "error",
-          "globalRandomInEffect": "error",
-          "globalTimers": "error",
-          "globalTimersInEffect": "error",
-          "instanceOfSchema": "error",
-          "layerMergeAllWithDependencies": "error",
-          "lazyEffect": "error",
-          "lazyPromiseInEffectSync": "error",
-          "leakingRequirements": "error",
-          "missedPipeableOpportunity": "error",
-          "missingEffectContext": "error",
-          "missingEffectError": "error",
-          "missingEffectServiceDependency": "error",
-          "missingLayerContext": "error",
-          "missingPipeableSignature": "error",
-          "missingReturnYieldStar": "error",
-          "missingStarInYieldEffectGen": "error",
-          "multipleCatchTag": "error",
-          "multipleEffectProvide": "error",
-          "nestedEffectGenYield": "error",
-          "newPromise": "error",
-          "newSchemaClass": "error",
-          "nodeBuiltinImport": "error",
-          "nonObjectEffectServiceType": "error",
-          "outdatedApi": "error",
-          "overriddenSchemaConstructor": "error",
-          "preferSchemaOverJson": "error",
-          "processEnv": "error",
-          "processEnvInEffect": "error",
-          "redundantMapError": "error",
-          "redundantOrDie": "error",
-          "redundantSchemaTagIdentifier": "error",
-          "returnEffectInGen": "error",
-          "runEffectInsideEffect": "error",
-          "schemaNumber": "error",
-          "schemaOpaqueInstanceMember": "error",
-          "schemaStructWithTag": "error",
-          "schemaSyncInEffect": "error",
-          "schemaUnionOfLiterals": "error",
-          "scopeInLayerEffect": "error",
-          "serviceNotAsClass": "error",
-          "strictBooleanExpressions": "error",
-          "strictEffectProvide": "error",
-          "syncToSucceed": "error",
-          "tryCatchInEffectGen": "error",
-          "unknownInEffectCatch": "error",
-          "unnecessaryArrowBlock": "error",
-          "unnecessaryEffectGen": "error",
-          "unnecessaryFailYieldableError": "error",
-          "unnecessaryPipe": "error",
-          "unnecessaryPipeChain": "error",
-          "unnecessaryTypeofType": "error",
-          "unsafeEffectTypeAssertion": "error"
-        },
-        "overrides": [
-          {
-            "include": ["./apps/cli/src/credential/internal/local-path.ts"],
-            "options": { "diagnosticSeverity": { "nodeBuiltinImport": "off" } }
-          },
-          {
-            "include": [
-              "./apps/cli/src/main.ts",
-              "./apps/cli/test/journey-entry.ts",
-              "./apps/web/e2e/cli-login.spec.ts"
-            ],
-            "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
-          },
-          {
-            "include": ["./apps/web/cloudflare/production-policy/artifact.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "nodeBuiltinImport": "off"
-              }
-            }
-          },
-          {
-            "include": [
-              "./apps/web/scripts/build-production.test.ts",
-              "./apps/web/scripts/check-browser-bundle.test.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "nodeBuiltinImport": "off"
-              }
-            }
-          },
-          {
-            "include": [
-              "./scripts/document-parsing/check.ts",
-              "./scripts/document-parsing/extraction-proof.ts",
-              "./scripts/document-parsing/protected-document-proof.ts"
-            ],
-            "options": {
-              "diagnosticSeverity": {
-                "nodeBuiltinImport": "off"
-              }
-            }
-          },
-          {
-            "include": ["./infra/cloudflare/worker-receipt.test.ts"],
-            "options": {
-              "diagnosticSeverity": { "anyUnknownInErrorContext": "off" }
-            }
-          },
-          {
-            "include": ["./infra/cloudflare/inspect-worker-drift.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "anyUnknownInErrorContext": "off",
-                "strictEffectProvide": "off"
-              }
-            }
-          },
-          {
-            "include": ["./apps/web/playwright.config.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "processEnv": "off"
-              }
+    // Miscellaneoaus
+    "stripInternal": false, // tests require `false` because project references type-check against those declarations.
+    "skipLibCheck": true, // Skip type checking of third party libraries.
+    "noErrorTruncation": true, // Do not truncate error messages.
+    "types": [], // Disable automatic loading of `@types/*` packages.
+    "jsx": "react-jsx",
+    "plugins": [{
+      "name": "@effect/language-service",
+      "namespaceImportPackages": ["effect", "@effect/*"],
+      "diagnosticSeverity": {
+        "globalErrorInEffectFailure": "off", // TODO: Check if we should fix the warnings this reports
+        "unstableApiUsage": "off",
+        "experimentalApiUsage": "off"
+      },
+      "includeSuggestionsInTsc": false,
+      "ignoreEffectWarningsInTscExitCode": true,
+      "ignoreEffectErrorsInTscExitCode": true,
+      "overrides": [
+        {
+          "exclude": [
+            "**/internal/**/*",
+            "**/index.ts",
+            "**/index.tsx",
+            "**/index.mts",
+            "**/index.cts",
+            "**/ai-docs/**/*",
+            "**/test/**/*",
+            "**/Generated.ts",
+            "**/packages/tools/**/*"
+          ],
+          "options": {
+            "diagnosticSeverity": {
+              "apiStabilityLeak": "error"
             }
           }
-        ]
-      }
-    ]
+        }
+      ]
+    }]
   }
 }

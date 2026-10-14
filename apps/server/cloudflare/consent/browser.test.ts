@@ -18,7 +18,13 @@ import {
   ProcessingConsentStatus,
 } from "../../src/shell/processing-consent/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
-import { executeConsentWithdrawal, prepareConsentAction, readConsentStatus } from "./operations";
+import {
+  executeConsentWithdrawal,
+  prepareConsentAction,
+  readConsentStatus,
+  recordWebOnboardingConsent,
+} from "./operations";
+import { UserId } from "../../src/core/identity/contract";
 import type { ConsentUnavailable } from "./contract";
 
 const users = [
@@ -688,6 +694,46 @@ it("refuses idle- and hard-expired cookies at public admission and coordinated c
     })
   ));
 
+it("returns the exact provider-signup authorization before and after withdrawal", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const reference = "a".repeat(43);
+      const acceptedAtMs = yield* Clock.currentTimeMillis;
+      const disclosure = currentDisclosureFor();
+      yield* Effect.tryPromise(() =>
+        recordWebOnboardingConsent({
+          db,
+          userId: UserId.make(users[0]),
+          attemptId: reference,
+          disclosure,
+          acceptedAtMs,
+        }).run()
+      );
+      const readCopy = (): Effect.Effect<unknown, Cause.UnknownError> =>
+        Effect.gen(function* () {
+          const response = yield* Effect.tryPromise(() =>
+            send(db, request(0, "/web/consent/authorization"))
+          );
+          expect(response.status).toBe(200);
+          expect(response.headers.get("cache-control")).toContain("no-store");
+          return yield* Effect.tryPromise(() => response.json());
+        });
+      const expected = { authorization: { reference, acceptedAtMs, disclosure } };
+      expect(yield* readCopy()).toEqual(expected);
+      const other = yield* Effect.tryPromise(() =>
+        send(db, request(1, "/web/consent/authorization"))
+      );
+      expect(yield* Effect.tryPromise(() => other.json())).toEqual({ authorization: null });
+      const withdrawal = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+      );
+      expect(withdrawal.status).toBe(200);
+      expect(yield* readCopy()).toEqual(expected);
+      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Revoked");
+    })
+  ));
+
 it("returns each authenticated User's exact authorization copy after withdrawal without reviving Consent", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -722,6 +768,31 @@ it("returns each authenticated User's exact authorization copy after withdrawal 
           send(db, request(0, "/web/consent/authorization?userId=" + users[1]))
         )).status
       ).toBe(400);
+    })
+  ));
+
+it("refuses malformed saved onboarding references instead of publishing an authorization copy", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      for (const reference of ["a".repeat(42), "a".repeat(44), "!".repeat(43)]) {
+        const db = yield* setup();
+        const acceptedAtMs = yield* Clock.currentTimeMillis;
+        yield* Effect.tryPromise(() =>
+          recordWebOnboardingConsent({
+            db,
+            userId: UserId.make(users[0]),
+            attemptId: reference,
+            disclosure: currentDisclosureFor(),
+            acceptedAtMs,
+          }).run()
+        );
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/consent/authorization"))
+        );
+        expect(response.status).toBe(503);
+        expect(response.headers.get("cache-control")).toContain("no-store");
+        expect(yield* Effect.tryPromise(() => response.text())).not.toContain(reference);
+      }
     })
   ));
 

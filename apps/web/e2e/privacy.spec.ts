@@ -5,8 +5,19 @@ import type { Page, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
 import { exerciseTitularCase } from "./titular-case-fixture";
 
+const { AxeBuilder } = await import("@axe-core/playwright");
 const { expect, test } = playwright;
 const unauthenticatedStatus = 401;
+
+const verifyAccessibility = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+      expect(
+        result.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
+      ).toEqual([]);
+    })
+  );
 
 const verifyTransactionAccess = (page: Page): Promise<void> =>
   Effect.runPromise(
@@ -65,6 +76,33 @@ const verifyTransactionAccess = (page: Page): Promise<void> =>
     })
   );
 
+const verifyAuthorizationRecovery = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const withdraw = page.getByRole("button", { name: "Retirar autorización", exact: true });
+      const copyEndpoint = `${apiOrigin}/web/consent/authorization`;
+      yield* Effect.tryPromise(() =>
+        page.route(copyEndpoint, (route) => route.fulfill({ status: 503 }))
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Consultar prueba", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos consultar la prueba")
+      );
+      yield* Effect.tryPromise(() => expect(withdraw).toBeDisabled());
+      yield* Effect.tryPromise(() => page.unroute(copyEndpoint));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Consultar prueba", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Copia de autorización" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
+      yield* Effect.tryPromise(() => verifyAccessibility(page));
+    })
+  );
+
 test("an expired-trial User withdraws through real Core and can recover the same receipt after ordinary access stops", ({
   page,
   request,
@@ -82,6 +120,7 @@ test("an expired-trial User withdraws through real Core and can recover the same
       );
       const withdraw = page.getByRole("button", { name: "Retirar autorización", exact: true });
       yield* Effect.tryPromise(() => expect(withdraw).toBeDisabled());
+      yield* Effect.tryPromise(() => verifyAuthorizationRecovery(page));
       yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() => withdraw.click());
       const receipt = page.getByRole("region", { name: "Constancia de retiro" });
@@ -149,6 +188,23 @@ test("an uncertain withdrawal never claims success or repeats the mutation befor
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("region", { name: "Constancia de retiro" })).toHaveCount(0)
       );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Verificar autorización", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).not.toBeChecked());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Retirar autorización", exact: true })
+        ).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Retirar autorización", exact: true })
+        ).toBeEnabled()
+      );
+      expect(posts).toBe(1);
     })
   ));
 
@@ -188,6 +244,7 @@ test("privacy retains application navigation and the public contact when the ses
       );
       const dimensions = yield* Effect.tryPromise(() => page.evaluate(documentDimensions));
       expect(dimensions.content).toBeLessThanOrEqual(dimensions.width);
+      yield* Effect.tryPromise(() => verifyAccessibility(page));
     })
   ));
 

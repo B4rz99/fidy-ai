@@ -17,7 +17,7 @@ const Metadata = Schema.Struct({
   id: Schema.String,
   mime_type: Mime,
   sha256: StatementContentDigest,
-  file_size: Schema.NumberFromString.check(
+  file_size: Schema.Union([Schema.Finite, Schema.FiniteFromString]).check(
     Schema.isInt(),
     Schema.isBetween({ minimum: 1, maximum: maximumStatementBytes })
   ),

@@ -16,6 +16,27 @@ const metadata = {
   download_url_expires_at: "2026-04-03T12:14:00Z",
 };
 layer(TestCrypto)((it) => {
+  it.effect("retrieves verified bytes when Kapso reports a numeric file size", () =>
+    Effect.gen(function* () {
+      const outbound: OutboundHttpService = {
+        execute: (request) =>
+          Effect.succeed({
+            status: 200,
+            headers: {},
+            body:
+              request._tag === "KapsoMediaMetadata"
+                ? new TextEncoder().encode(JSON.stringify({ ...metadata, file_size: bytes.length }))
+                : bytes,
+          }),
+      };
+      expect(yield* readWhatsAppStatementMedia({ ...input, outbound })).toEqual({
+        bytes,
+        sha256,
+        mimeType: "text/csv",
+      });
+    })
+  );
+
   it.effect("refuses redirected, failed and length-mismatched downloads", () =>
     Effect.gen(function* () {
       for (const download of [
@@ -123,6 +144,12 @@ layer(TestCrypto)((it) => {
           { download_url_expires_at: "2026-04-03T12:09:00Z" },
           { mime_type: "image/jpeg" },
           { file_size: "999999999" },
+          { file_size: 999999999 },
+          { file_size: 0 },
+          { file_size: -1 },
+          { file_size: 1.5 },
+          { file_size: null },
+          { file_size: true },
         ]) {
           let calls = 0;
           const outbound: OutboundHttpService = {

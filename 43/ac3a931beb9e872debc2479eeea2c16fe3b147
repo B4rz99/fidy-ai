@@ -1,0 +1,25 @@
+apps/server/cloudflare/d1-test-fixture.ts
+  s_8692a8e3f01e05::t_745b246a538cf1 281
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_8692a8e3f01e05::t_0131b11cba3205 211
+apps/server/cloudflare/migrations/0032_commercial_allowances.sql
+  s_8692a8e3f01e05::t_321f8d18c995a2 21
+apps/server/cloudflare/migrations/0091_free_email_allowance.sql
+  s_8692a8e3f01e05::t_1c5615937eee39 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "43ac3a931beb9e872debc2479eeea2c16fe3b147",
+  "prompts": {},
+  "sessions": {
+    "s_8692a8e3f01e05": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13c38-1e3f-7d60-bcbe-359b82bc673d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

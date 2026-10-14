@@ -49,8 +49,8 @@
     "dev:site": "bun run --cwd apps/site dev"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.6",
-    "@babel/traverse": "8.0.6",
+    "@babel/parser": "8.0.7",
+    "@babel/traverse": "8.0.7",
     "@babel/types": "8.0.6",
     "@effect/platform-bun": "4.0.1",
     "@effect/tsgo": "0.46.1",

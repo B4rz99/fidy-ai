@@ -120,7 +120,6 @@ export type WeeklyMaterialization =
 
 /** Only identities cross Queue and Workflow history; neither financial facts nor authorization does. */
 export const WeeklySummaryWork = Schema.Struct({
-  // Diagnostic continuation is decoded independently and never grants work authority.
   traceContext: Schema.optionalKey(Schema.Unknown),
   kind: Schema.Literal("weekly-summary"),
   version: Schema.Literal(1),
@@ -131,7 +130,6 @@ export type WeeklySummaryWork = typeof WeeklySummaryWork.Type;
 
 /** Separate question identity; a question is not a financial InsightEvent or a counted delivery. */
 export const WeeklyQuestionWork = Schema.Struct({
-  // Diagnostic continuation is decoded independently and never grants work authority.
   traceContext: Schema.optionalKey(Schema.Unknown),
   kind: Schema.Literal("weekly-question"),
   version: Schema.Literal(1),
@@ -141,7 +139,6 @@ export const WeeklyQuestionWork = Schema.Struct({
 export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
 /** Content-free continuation for one frozen category message; the report owns its role and live grant. */
 export const CategoryDeliveryWork = Schema.Struct({
-  // Diagnostic continuation is decoded independently and never grants work authority.
   traceContext: Schema.optionalKey(Schema.Unknown),
   kind: Schema.Literal("proactivity-delivery"),
   version: Schema.Literal(1),

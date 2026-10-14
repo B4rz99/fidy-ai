@@ -26,7 +26,6 @@ const isStaged = (deployment: Deployment, stableId: string, candidateId: string)
   );
 };
 
-/** Remove only this run's 0%-traffic candidates, never another release's versions. */
 const cleanRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,

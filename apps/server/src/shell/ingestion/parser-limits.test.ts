@@ -119,7 +119,6 @@ it.effect("bounds decoding work for long leading fields followed by many empty c
     if (!Schema.is(BufferDecoder)(prototype)) return yield* Effect.die("Missing Buffer decoder");
     const decodeBuffer = prototype.toString;
     let decodedCharacters = 0;
-    // Observe actual decoding work without substituting the parser or its returned values.
     const observeDecoding = function (this: unknown, ...args: Array<unknown>): string {
       const result: unknown = Reflect.apply(decodeBuffer, this, args);
       const decoded = Schema.decodeUnknownSync(Schema.String)(result);

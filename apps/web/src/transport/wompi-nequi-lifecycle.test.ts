@@ -86,7 +86,6 @@ it("binds Production authorization to its fixed origin and token environment", (
       });
       expect(Redacted.value(token)).toBe("nequi_prod_example");
       expect(provider.mock.calls).toHaveLength(1);
-      // This test uses only an injected transport; it never contacts Production.
     })
   ));
 

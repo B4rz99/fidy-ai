@@ -39,7 +39,6 @@ const compareCount = (left: number, right: number): number => left - right;
 const databases = isolatedTestDatabases();
 const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
 const iso = (milliseconds: number): string => DateTime.formatIso(DateTime.makeUnsafe(milliseconds));
-/** Advances wall-clock ordering so two retained Memories cannot share one created instant. */
 const tick = Effect.sleep("5 millis");
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
@@ -47,7 +46,6 @@ const digest = (text: string): Promise<Uint8Array> =>
     .then((bytes) => new Uint8Array(bytes));
 const bearer = (index: number): string => String(index + 1).repeat(43);
 let identifierSequence = 0;
-/** Deterministic version-4-shaped identifier for client-generated request and path values. */
 const identifier = (): string =>
   `20000000-0000-4000-8000-${String((identifierSequence += 1)).padStart(12, "0")}`;
 const cookie = (index: number): string => `__Host-fidy_session=${bearer(index)}`;
@@ -67,7 +65,6 @@ type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }
 const setup = (): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      // Each test owns fresh coordinator instances so no request can reach a disposed database.
       coordinators.clear();
       const db = yield* fromTestPromise(() => databases.acquire());
       yield* fromTestPromise(() =>
@@ -277,7 +274,6 @@ const issuePAT = (
     })
   );
 
-/** Canonical Memory decoded through its own published JSON codec at the public seam. */
 const Cell = Schema.toCodecJson(Memory);
 const Single = Schema.Struct({ data: Cell, next: Schema.Array(Schema.Unknown) });
 const Listed = Schema.Struct({ data: Schema.Array(Cell), next: Schema.Array(Schema.Unknown) });
@@ -289,7 +285,6 @@ const Failure = Schema.Struct({
   error: Schema.Struct({ code: ErrorCode, message: Schema.String }),
   next: Schema.Array(Schema.Unknown),
 });
-/** Serializes an already-decoded value with the canonical JSON codec for containment assertions. */
 const serialized = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
 /**
@@ -501,7 +496,6 @@ it("refuses malformed, empty, and oversized prose without changing Memory state"
       const audits = yield* fromTestPromise(() => auditRows(db, users[0]));
       expect(audits.filter((row) => row.outcome === "validation_failed")).toHaveLength(6);
       expect(audits.filter((row) => row.outcome === "success")).toHaveLength(2);
-      // Absence and malformed identity stay indistinguishable to the caller.
       const malformed = yield* decode(
         Failure,
         yield* fromTestPromise(() =>
@@ -741,7 +735,6 @@ it("requires the declared PAT scope, lifetime, revocation standing, and Consent 
         )).status
       ).toBe(401);
 
-      // Consent withdrawal blocks protected Memory work for the still-live writer grant.
       const grantId = "e0000000-0000-4000-8000-000000000061";
       yield* fromTestPromise(() =>
         db
@@ -807,9 +800,6 @@ it("stops a revoked WebSession and a withdrawn Consent from reading or writing M
         expect.objectContaining({ operation: "memory.remember", outcome: "success" }),
       ]);
 
-      // A live session with withdrawn Consent is refused before any protected Memory work: the
-      // ingress session resolver stops resolving such a session platform-wide, exactly as it does
-      // for Transactions, so a browser caller is answered as unauthenticated rather than by name.
       yield* fromTestPromise(() => remembered(db, "memoria dos", cookie(1)));
       const grantId = "e0000000-0000-4000-8000-000000000063";
       yield* fromTestPromise(() =>
@@ -893,7 +883,6 @@ it("keeps retained prose out of logs and bounded telemetry records", () =>
       } finally {
         for (const spy of spies) spy.mockRestore();
       }
-      // The captured records are the Worker's own telemetry, so containment is not vacuous.
       expect(captured.some((line) => line.includes("worker.core.fetch"))).toBe(true);
       expect(captured.some((line) => line.includes(canary))).toBe(false);
     })

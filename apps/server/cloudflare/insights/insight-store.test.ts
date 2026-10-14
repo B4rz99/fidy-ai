@@ -34,7 +34,6 @@ const users = [
 ] as const;
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const databases = isolatedTestDatabases();
-/** Direct owner-statement tests keep their historical assertion; the unit uses indexed guards. */
 const insightCompletion = (db: D1Database): D1PreparedStatement =>
   db.prepare(`INSERT INTO insight_mutation_assertion (id, accepted)
     VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
@@ -437,7 +436,6 @@ effectIt.effect(
       const db = yield* setup();
       yield* fromTestPromise(() => authorizeBrowser(db));
       const seed = Option.getOrThrow(yield* generated(db));
-      // Seed the remaining occurrences in one native batch; generator behavior is covered above.
       yield* fromTestPromise(() =>
         db.batch(
           Array.from({ length: 64 }, (_, index) =>

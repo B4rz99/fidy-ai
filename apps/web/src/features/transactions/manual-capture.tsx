@@ -183,7 +183,6 @@ const CaptureFeedback = ({
   </>
 );
 
-/** Captures one browser-initiated Transaction through the generated canonical client. */
 type CaptureProps = Readonly<{
   renderForm: (form: JSX.Element) => JSX.Element;
   apiClient: FidyClient;

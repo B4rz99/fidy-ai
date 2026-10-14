@@ -1,6 +1,3 @@
-// Graph-wide constraints and narrow application seams. General owner privacy and direction
-// are enforced once in tools/depcruise/boundaries.mjs for portable and native owners.
-// Export provenance is a separate check: bun run check:publication.
 /** @type {import("dependency-cruiser").IConfiguration} */
 export default {
   forbidden: [

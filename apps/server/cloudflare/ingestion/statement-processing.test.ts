@@ -34,8 +34,6 @@ const userB = "10000000-0000-4000-8000-000000000102";
 const submissionId = "10000000-0000-4000-8000-000000000601";
 const stagingId = "10000000-0000-4000-8000-000000000602";
 const retentionMs = 86_400_000;
-// Keep this processing fixture minimal: the HTTP integration fixture exercises the full
-// migration chain, while these tests need only the dependencies of row finalization.
 const migrations = [
   "0001_categories",
   "0003_pending_consent",
@@ -1822,8 +1820,6 @@ effectIt.effect(
         expect(new TextEncoder().encode(issues).byteLength).toBe(59 + extra);
         expect(statementReviewAdmission(context)(row)).toBe(expected);
         if (!expected) continue;
-        // Exercise actual D1 record encoding, independently of the production preflight. All
-        // values are bounded synthetic data; do not expose the provider's raw exception.
         const inserted = yield* Effect.exit(
           Effect.tryPromise(() =>
             db
@@ -1870,8 +1866,6 @@ effectIt.effect("fails an already-processing oversized review row without undoin
       ).bytes()
     );
     const { db, bucket } = yield* fromTestPromise(() => setup(source, "xlsx"));
-    // Simulate a submission admitted by an earlier processor: there is no queued admission
-    // left to run. Its first chunk commits normally before the next chunk reaches overflow.
     yield* fromTestPromise(() =>
       db.batch([
         db
@@ -2368,7 +2362,6 @@ it.each(["failed-delete", "lost-reservation-response"] as const)(
         if (failure === "failed-delete") {
           yield* fromTestPromise(() => db.prepare("DROP TRIGGER fail_cache_cleanup").run());
         }
-        // The fixture's daily capture allowance is 100; prove three resumed chunks within it.
         for (let activity = 0; activity < 3; activity += 1) {
           expect(yield* processStatementSubmission({ ...input, DB: db })).toBe("continue");
         }
@@ -2470,7 +2463,6 @@ const measureNextActivity = (
       yield* seedUnrelatedReceipts(db);
     }
     const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
-    // Source publication is measured separately from equal, warm 32-row activities.
     expect(yield* processStatementSubmission(input)).toBe("continue");
     const measured = observeRetentionCost(db);
     expect(yield* processStatementSubmission({ ...input, DB: measured.database })).toBe("continue");
@@ -2639,8 +2631,6 @@ effectIt.effect("refuses forged progress and preserves captures after a lost row
   })
 );
 
-// Insert synthetic fixture receipts in native SQL chunks, independently of the processor's
-// 32-row activity. Every row still runs the installed triggers; avoid a proxy crossing per row.
 const receiptBatchSize = 96;
 
 const seedReceipts = ({

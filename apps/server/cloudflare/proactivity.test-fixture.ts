@@ -341,7 +341,6 @@ const databaseThrough = (
     return db;
   });
 
-/** Independent latest-schema database for owner behavior. */
 export const proactivityDatabase = databaseThrough("Current");
 /** Independent populated-upgrade baseline; 0040 must be applied separately by the migration test. */
 export const proactivityDatabaseBeforeCanonicalAudit = databaseThrough("BeforeCanonicalAudit");
@@ -393,7 +392,6 @@ export const seedRecurringDigestSource = (
     clock.mockRestore();
   });
 
-/** Arrange one detector evaluation spanning multiple source pages. */
 export const seedLargeRecurringDigestSource = (
   input: Readonly<{ db: D1Database; userId: UserId; confirmedAt: string; count: number }>
 ): Effect.Effect<void, Cause.UnknownError | RecurringUnavailable> =>

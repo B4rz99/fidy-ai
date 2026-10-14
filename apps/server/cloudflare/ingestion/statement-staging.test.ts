@@ -55,7 +55,6 @@ type StagingResult<A> = Result.Result<A, StatementStagingFailed | StatementStagi
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
 const migrationsDirectoryUrl = new URL("../migrations/", import.meta.url);
-// Migrate in deployment order so staging and its retention sweep use real D1 schema.
 const migrationNames = [
   "0001_categories",
   "0003_pending_consent",
@@ -410,7 +409,6 @@ const verifyDelayedUpload = (
           rowsDeleted: 1,
         });
       } else {
-        // Capture the owner before rejecting acknowledgement, then let ordinary failure cleanup settle.
         delayed.rejectAcknowledgement();
         const result = yield* Fiber.join(fiber);
         assert.deepStrictEqual(
@@ -470,7 +468,6 @@ const verifyDelayedUpload = (
         objectsDeleted: 0,
         rowsDeleted: 0,
       });
-      // This assertion records the failed cleanup invariant; the issue requests an investigation.
       expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).not.toBeNull();
     }).pipe(
       Effect.ensuring(
@@ -599,8 +596,6 @@ describe("Cloudflare statement byte staging", () => {
             yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
           );
           const submissionId = yield* completedSubmission(runtime, staged.stagingId);
-          // D1 itself permits this out-of-Date-domain integer; other malformed shapes are injected
-          // after the real owner query because the SQL constraints prevent retaining them normally.
           if (column === "completed_at_ms") {
             yield* fromTestPromise(() =>
               runtime.database
@@ -863,7 +858,6 @@ describe("Cloudflare statement byte staging", () => {
           yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId))
         );
         expect(row.status).toBe("available");
-        // The R2 locator never carries the opaque staging identity the caller holds.
         expect(row.object_key.startsWith("staging/statement/v1/")).toBe(true);
         expect(row.object_key.includes(staged.stagingId)).toBe(false);
         expect(
@@ -893,7 +887,6 @@ describe("Cloudflare statement byte staging", () => {
           )
         ).toBe("resource-limit");
 
-        // The actual streamed count decides, not a declared length: no Content-Length is present here.
         const oversized = streamOf([new Uint8Array(5 * 1024 * 1024), new Uint8Array(1024 * 1024)]);
         expect(reasonOf(yield* fromTestPromise(() => stage(runtime, userA, oversized)))).toBe(
           "resource-limit"
@@ -941,14 +934,10 @@ describe("Cloudflare statement byte staging", () => {
             staging.stageStatementBytes({ request: request(statementBytes), userId: userA })
           )
         );
-        // The pending row is durable before the object write begins, so an interruption here is
-        // indistinguishable from a lost response: bytes may exist without a usable staging reference.
         yield* fromTestPromise(() => entered.promise);
         expect(
           required(yield* fromTestPromise(() => onlyStagingRow(runtime.database))).status
         ).toBe("pending");
-        // Interruption of the interruptible R2 write completes without waiting for the object write,
-        // so the durable outcome is the pending row the next sweep owns.
         yield* Fiber.interrupt(fiber);
         release.resolve();
 
@@ -960,7 +949,6 @@ describe("Cloudflare statement byte staging", () => {
         );
         expect(objects.objects).toHaveLength(1);
         const row = required(yield* fromTestPromise(() => onlyStagingRow(runtime.database)));
-        // An unfinished upload is never readable even though its bytes reached R2.
         expect(row.status).toBe("pending");
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, row.id)))).toBe(
           "not-found"
@@ -995,7 +983,6 @@ describe("Cloudflare statement byte staging", () => {
         );
         nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
 
-        // Expiry is a hard bound, not a sweep: the row is still present and both operations refuse.
         expect(reasonOf(yield* fromTestPromise(() => read(runtime, userA, staged.stagingId)))).toBe(
           "retention-expired"
         );
@@ -1084,7 +1071,6 @@ describe("Cloudflare statement byte staging", () => {
         if (!Result.isFailure(interruptedSweep)) throw new Error("Expected the sweep to fail");
         expect(interruptedSweep.failure).toBeInstanceOf(StatementStagingUnavailable);
 
-        // The durable outcome is a `deleting` row whose object still exists; a retry owns both.
         const row = required(
           yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId))
         );
@@ -1108,8 +1094,6 @@ describe("Cloudflare statement byte staging", () => {
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => makeRuntime());
-        // The object write and its compensating delete both fail, so the discarded upload must keep
-        // its durable row: the bounded sweep finds the object again instead of leaking one.
         const failing = StatementStaging.make({
           bucket: failingUploadBucket(runtime.bucket),
           database: runtime.database,

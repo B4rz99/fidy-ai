@@ -1,4 +1,3 @@
-# Exercise the real Windows binary and installer with local release fixtures, never the network.
 $ErrorActionPreference = 'Stop'
 $ExpectedVersion = if ($env:FIDY_CLI_VERSION) { $env:FIDY_CLI_VERSION } else { '0.1.0' }
 $OriginalLocalAppData = $env:LOCALAPPDATA
@@ -83,7 +82,6 @@ try {
     if ($Failure -ne 'Unexpected archive contents.') {
       throw "Hostile archive did not reach and fail the entry-name gate: $Failure"
     }
-    # No extraction means the fresh temporary directory cannot contain an executable to launch.
     if ($Extraction.Count -ne $BeforeExtraction) { throw 'Hostile archive reached extraction.' }
     if ((Get-FileHash $Installed).Hash -ne $PreviousHash) { throw 'Hostile update changed installation.' }
     if ($env:Path -ne $InstalledPath -or

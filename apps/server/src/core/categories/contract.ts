@@ -1,10 +1,7 @@
 import { Data, Schema, Struct } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/**
- * Stable identity of a Category, independent of its label, display order, and taxonomy version.
- * Any slice may retain this value without importing the Categories slice that owns its metadata.
- */
+/** Stable Category identity, independent of label, display order, and taxonomy version. */
 export const CategoryId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("CategoryId"))
   .annotate({ identifier: "CategoryId" });
@@ -83,19 +80,16 @@ export class KeywordRuleNotFound extends Data.TaggedError("KeywordRuleNotFound")
   readonly keywordRuleId: KeywordRuleId;
 }> {}
 
-/** The User already retains the bounded maximum of capture-time keyword rules. */
 export class KeywordRuleLimitReached extends Data.TaggedError("KeywordRuleLimitReached")<{
   readonly maximum: number;
 }> {}
 
-/** Actionable failures produced while validating or changing Category rules. */
 export type CategoryFailure =
   | CategoryNotFound
   | KeywordRuleAlreadyExists
   | KeywordRuleNotFound
   | KeywordRuleLimitReached;
 
-/** Stable identities for the Colombian Categories. */
 export const categoryIds = {
   restaurantes: CategoryId.make("10000000-0000-4000-8000-000000000001"),
   domicilios: CategoryId.make("10000000-0000-4000-8000-000000000002"),

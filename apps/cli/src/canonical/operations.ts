@@ -89,7 +89,6 @@ const decodeInput = Effect.fn(function* (
     onExcessProperty: "error",
   })(input).pipe(Effect.mapError(() => new CliFailure({ reason: "InvalidInput" })));
   if (operation.id === atomicBatchOperation) {
-    // Reuse the owning ordered child union, not a CLI-owned subset or alternate batch contract.
     const batch = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ payload: getAtomicBatchInputSchema() }),
       { errors: "all", onExcessProperty: "error" }
@@ -111,7 +110,6 @@ const decodeInput = Effect.fn(function* (
   };
 });
 
-/** Invokes one eligible operation without retries, returning only canonical encoded data and safe metadata. */
 type InvocationOptions = Readonly<{
   id: string;
   input: unknown;
@@ -122,6 +120,7 @@ type InvocationOptions = Readonly<{
   json: boolean;
 }>;
 
+/** Invokes one eligible operation without retries, returning only canonical encoded data and safe metadata. */
 export const invokeOperation = Effect.fn(function* (options: InvocationOptions) {
   const { id, input, credential } = options;
   const operation = operationCatalog.byId.get(id);
@@ -345,7 +344,6 @@ const Arguments = Schema.Array(
   Schema.String.check(Schema.isMaxLength(maximumArgumentCharacters))
 ).check(Schema.isMaxLength(maximumArguments));
 
-/** Generic group/operation parser, input decoding, derived execution and channel-separated presentation. */
 export const runOperationCommand = Effect.fn(function* (
   inputArgs: unknown,
   dependencies: CanonicalDependencies

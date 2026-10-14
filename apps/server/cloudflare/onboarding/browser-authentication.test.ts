@@ -113,7 +113,6 @@ const setup = (
           )
           .run()
       );
-      // Enter the decision phase before recording the append-only accepted evidence.
       yield* Effect.tryPromise(() =>
         db
           .prepare("UPDATE pending_consent_exchanges SET state = 'awaiting_decision' WHERE id = ?")
@@ -1334,8 +1333,6 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
           .prepare("SELECT user_id, portfolio_id, bsuid FROM whatsapp_identities ORDER BY user_id")
           .all()
       );
-      // The first operator exhausted its minute allowance with refusal/rollback checks above.
-      // A separately verified operator still competes for the same globally single-use proof.
       const competingOperator = yield* Effect.tryPromise(() =>
         new SignJWT({})
           .setProtectedHeader({ alg: "RS256", kid: "support-key" })
@@ -1826,7 +1823,6 @@ it("redeems one approved pairing under concurrent replay without accepting a fix
     })
   ));
 
-// Exercise the published Workflow with only the external Resend transport substituted.
 const runProofDelivery =
   (
     kind: "browser-pairing-email" | "email-replacement",

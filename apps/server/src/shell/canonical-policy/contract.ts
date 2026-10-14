@@ -100,7 +100,6 @@ const encodePublishedAccess = (access: CanonicalOperationAccess): PublishedOpera
   }
 };
 
-/** One codec deriving canonical operation access from its public metadata representation. */
 export const OperationAccess = PublishedOperationAccessWire.pipe(
   Schema.decodeTo(
     CanonicalOperationAccess,
@@ -172,7 +171,6 @@ export const freshWebOrVerifiedWhatsAppHosted: OperationAccess = {
 
 const encodeOperationAccess = Schema.encodeSync(OperationAccess);
 
-/** Encodes canonical access into the metadata carried by OpenAPI and policy evidence. */
 export const publishOperationAccess = (access: OperationAccess): PublishedOperationAccess =>
   encodeOperationAccess(access);
 

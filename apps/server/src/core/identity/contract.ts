@@ -55,7 +55,6 @@ export const WhatsAppBusinessScopedUserId = Schema.String.check(
   .annotate({ identifier: "WhatsAppBusinessScopedUserId" });
 export type WhatsAppBusinessScopedUserId = typeof WhatsAppBusinessScopedUserId.Type;
 
-/** Business sender identifier required to route a WhatsApp reply. */
 export const WhatsAppBusinessPhoneNumberId = Schema.String.check(
   Schema.isPattern(/^[0-9]{1,32}$/u)
 ).pipe(Schema.brand("WhatsAppBusinessPhoneNumberId"));

@@ -1,7 +1,6 @@
 const { defineConfig } = await import("@playwright/test");
 const isCI = Boolean(Bun.env.CI);
 
-/** Dedicated loopback topology avoids borrowing or killing another session's acceptance servers. */
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "cli-login.spec.ts",

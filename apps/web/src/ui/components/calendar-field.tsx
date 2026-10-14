@@ -32,7 +32,6 @@ const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
-/** Shares one Spanish calendar and User-zone conversion across filters and forms. */
 export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));

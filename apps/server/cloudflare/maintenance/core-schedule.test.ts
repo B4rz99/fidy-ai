@@ -45,7 +45,6 @@ it("keeps maintenance alarms inert while preserving the User alarm's real D1 rec
         { id: { name: "10000000-0000-4000-8000-000000000003" }, storage },
         environment(db)
       );
-      // An uninitialized real D1 cannot perform User recovery; maintenance must never enter it.
       yield* awaitPromise(() => expect(user.alarm()).rejects.toThrow());
     })
   ));

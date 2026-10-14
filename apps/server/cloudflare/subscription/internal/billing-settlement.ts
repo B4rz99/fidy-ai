@@ -99,7 +99,6 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
         Option.map(period, (value) => value.startsAtMs).pipe(Option.getOrNull),
         attemptId
       ),
-    // User is the stable coordination key: the guarded upsert serializes competing attempts in D1.
     db
       .prepare(`INSERT INTO subscriptions
       (user_id, attempt_id, price_id, paid_period_ends_at_ms, renewal_anchor_ms)

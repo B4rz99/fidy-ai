@@ -29,15 +29,28 @@ Bad names cause bugs. **A good name says what the entity is and what it is not.*
 
 ## Comments
 
-**Interface comments** describe the abstraction: behaviour, what the arguments _mean_ beyond their
-types, what the caller must guarantee, what it may rely on afterwards, side effects, failures.
+**Enforce obligations in the code.** Prefer API design and types, boundary validation, deterministic
+lint or CI checks, and behavioral tests over instructions a reader must remember. When a reliable
+check already enforces a convention, put its remediation in the diagnostic rather than repeating
+the rule in comments or this document. Keep judgment and semantic context in prose; do not replace
+them with approximate syntax bans.
+
+**Interface comments** describe obligations and guarantees that names and types cannot express:
+what arguments mean, what the caller must guarantee, what it may rely on afterwards, side effects,
+and failures. Obvious declarations need no comment; exporting a name does not require prose.
 
 > The test: a caller should be able to use this correctly having read only the comment and the
 > signature, **never the body**.
 
 Interface comments must not describe implementation. **Field comments** carry what a name and type
-cannot — units, ranges, invariants, lifecycle. **Implementation comments** live inside bodies and
-never leak upward.
+cannot — units, ranges, invariants, lifecycle. **Implementation comments** explain only non-obvious
+behavior imposed by an external dependency, platform, vendor, or protocol. Verify that constraint
+against the selected source or a behavioral test, and keep the explanation beside the affected code.
+
+Delete narration, banners, maintenance history, commented-out code, and explanations of first-party
+design choices. If prose compensates for an unclear name, type, or boundary, improve the code.
+Preserve executable JSDoc typing, required legal attribution, and links explaining constraints the
+code cannot express. Keep durable design rationale in the owning architecture document or ADR.
 
 **Don't repeat the code.** A comment at the same level of abstraction as the declaration is worse
 than none: it spends attention and returns nothing. The reference is `Money`'s comment: it should
@@ -316,7 +329,8 @@ developer comfort. Write to an agent: what the operation does and when to reach 
 not implementation detail. Follow the voice already set by suggested operation hints.
 
 Construct SuggestedOperations with `suggestOperation`; checkpoint every non-empty `next` by caller
-scope and tier. Hints are one English sentence of at most 140 characters.
+scope and tier. Hints explain why the next call is worth making, in English; their schema enforces
+sentence count and length.
 
 ---
 

@@ -5,10 +5,6 @@ inputs:
     description: Save a missing cache after the job; disable when another job publishes the same key.
     default: "true"
 
-# The cache key hashes every lockfile in the repo, not just the root one, so all
-# jobs share one exact entry — including jobs that install an isolated tool
-# tree under tools/. Stale fallback entries are intentionally not restored:
-# measured fallback transfer time exceeded a fresh Bun install.
 runs:
   using: composite
   steps:

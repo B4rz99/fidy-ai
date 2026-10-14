@@ -34,7 +34,6 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 256,
   deadlineMilliseconds: 2_000,
 });
-// Only public key data is shared; each resolver and lookup belongs to its request.
 let cachedKeys: Option.Option<Readonly<{ issuer: string; data: JWKSCacheInput }>> = Option.none();
 const signingKeys = (
   issuer: string,
@@ -236,7 +235,6 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
       db.prepare(credentialStatement.sql).bind(...credentialStatement.params),
       db.prepare(caseStatement.sql).bind(...caseStatement.params),
       db.prepare(supportCaseOpened).bind(openedId, now, caseId),
-      // If any conditional transition did not create its case, the final FK aborts the D1 batch.
       db
         .prepare(supportCaseApproved)
         .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
@@ -256,8 +254,6 @@ const decideSupportCase = (db: D1Database, input: CaseDecision): Promise<Respons
   Promise.resolve()
     .then(() => approveCase(db, input))
     .catch((error: unknown) => {
-      // A competing approval can invalidate a conditional D1 batch. Other D1 failures
-      // still require a candidate recheck; unrelated exceptions are defects.
       if (isD1Failure(error)) return false;
       throw error;
     })
@@ -271,7 +267,6 @@ const decideSupportCase = (db: D1Database, input: CaseDecision): Promise<Respons
 
 class SupportBoundaryFailure extends Data.TaggedError("SupportBoundaryFailure")<{}> {}
 
-// D1 rejects with a fixed error prefix, while user or programmer exceptions must stay defects.
 const isD1Failure = (error: unknown): boolean =>
   error instanceof Error && /^D1_(?:EXEC_)?ERROR(?::|$)/u.test(error.message);
 

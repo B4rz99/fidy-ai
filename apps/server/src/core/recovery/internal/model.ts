@@ -19,13 +19,11 @@ export const SupportOperatorId = Schema.Struct({
 }).annotate({ identifier: "SupportOperatorId" });
 export type SupportOperatorId = typeof SupportOperatorId.Type;
 
-/** Stable SupportRecoveryCase identity. */
 export const SupportRecoveryCaseId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SupportRecoveryCaseId"))
   .annotate({ identifier: "SupportRecoveryCaseId" });
 export type SupportRecoveryCaseId = typeof SupportRecoveryCaseId.Type;
 
-/** Stable append-only SupportRecoveryCase event identity. */
 export const SupportRecoveryCaseEventId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SupportRecoveryCaseEventId"))
   .annotate({ identifier: "SupportRecoveryCaseEventId" });

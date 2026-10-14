@@ -23,7 +23,6 @@ export type MutationTriggerKind = "movement" | "capacity" | "audit";
 
 type OwnerWork = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
 
-/** Owner behavior at the shared commit, audit, and readback boundary. */
 export type OwnerOutcome = Readonly<{
   _tag: "Owner";
   operation: string;
@@ -37,11 +36,7 @@ export type OwnerOutcome = Readonly<{
   ) => Option.Option<CanonicalMutationRefusal>;
 }>;
 
-/**
- * One owner's committed readback descriptor: what the owner must read after the unit commits and
- * how that read presents. A new owner adds one variant, so the unit's exhaustive switches fail to
- * build until its readback, refusal, and abort attribution are answered.
- */
+/** The committed value an owner must read back and how it presents to the caller. */
 export type CanonicalMutationOutcome =
   | OwnerOutcome
   | TransactionOutcome
@@ -75,11 +70,7 @@ export type PreparedCanonicalMutation = Readonly<{
   /** Absent until an owner supplies exact sensitive effect/revision guards. */
   oauthReview: Option.Option<OAuthMutationReview>;
 
-  /**
-   * The exact PAT capability the owner prepared this child under, so an abort or refusal the child
-   * owns is recorded and audited against that same child authority. None means the owner prepared
-   * the child for a WebSession, which carries no capability.
-   */
+  /** Exact PAT or OAuth capability used to prepare and audit this child. None carries no child-specific capability. */
   requiredScope: Option.Option<CanonicalCapability>;
   statements: ReadonlyArray<D1PreparedStatement>;
   outcome: CanonicalMutationOutcome;
@@ -101,7 +92,6 @@ export type PreparedCanonicalMutation = Readonly<{
   guardRefusal: (work: GuardRefusalWork) => Effect.Effect<CanonicalMutationRefusal>;
 }>;
 
-/** One canonical success value an owner read back after the unit committed. */
 export type CommittedMutationValue =
   | Readonly<{
       _tag: "Owner";
@@ -139,21 +129,13 @@ export type CanonicalMutationPreparation =
   | Readonly<{ _tag: "Unavailable" }>
   | Readonly<{ _tag: "Failed" }>;
 
-/**
- * The bounded raw child list a Batch work payload carries. Each entry stays `Unknown` here because the
- * batch adapter decodes it against the published catalog call union, where a malformed child can
- * still be attributed and audited as the child it named.
- */
+/** Raw children are decoded against the catalog; malformed named children remain attributable for refusal Audit. */
 export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
   Schema.isMaxLength(maximumAtomicBatchCalls)
 );
 export type BatchCalls = typeof BatchCalls.Type;
 const Batch = { calls: BatchCalls } as const;
-/**
- * One canonical call an individual work payload carries: the operation id the catalog publishes and the
- * raw canonical input its owner adapter decodes. The operation id alone selects the owner adapter,
- * so a new composable mutation joins this dispatcher without editing it.
- */
+/** Catalog operation identity selects the adapter; its raw input is decoded by that owner. */
 const Call = {
   operation: CanonicalOperationId,
   input: Schema.Unknown,
@@ -175,7 +157,6 @@ export const CanonicalWork = Schema.Union([
 ]);
 export type CanonicalWork = typeof CanonicalWork.Type;
 
-/** The atomic batch request envelope: the bounded raw child list the adapter decodes per child. */
 export const BatchInput = Schema.Struct(Batch);
 export type BatchInput = typeof BatchInput.Type;
 
@@ -198,11 +179,7 @@ const PAT = {
   patId: Schema.String.check(Schema.isUUID()),
   requiredScope: Schema.NullOr(CanonicalCapability),
 } as const;
-/**
- * One work admission: the live subject authority plus the exact work it admits. It is not
- * itself a canonical mutation — the mutation travels inside `work` — so it is named for what it
- * does rather than for the thing it carries.
- */
+/** Live caller authority paired with the exact work admitted; this envelope is not a canonical mutation. */
 export const CanonicalWorkAdmission = Schema.Union([
   Schema.TaggedStruct("WebSessionWork", { ...WebSession, work: CanonicalWork }),
   Schema.TaggedStruct("PATWork", { ...PAT, work: CanonicalWork }),

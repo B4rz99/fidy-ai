@@ -60,7 +60,6 @@ const rejectedPostResponse = (
         ...headers,
         "x-fidy-smoke-failure": "identity",
         "x-fidy-smoke-identity": "101",
-        // Exercise equality-based identification for the older stable Core.
         "x-fidy-smoke-core-version": "secret-provider-value",
       },
     });

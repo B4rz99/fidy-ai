@@ -90,11 +90,9 @@ const budgetPageStatement = ({
     after.transactionId,
   ];
   const ordered = `ORDER BY occurred_at, id LIMIT ${contributionPageSize}`;
-  return (
-    db
-      // Readiness and the selected facts share one snapshot; CASE evaluates only its chosen branch.
-      .prepare(
-        `WITH selected AS (SELECT CASE WHEN EXISTS (
+  return db
+    .prepare(
+      `WITH selected AS (SELECT CASE WHEN EXISTS (
           SELECT 1 FROM dashboard_projection_state
           WHERE user_id = ? AND version = 1 AND readiness = 'ready')
         THEN (SELECT json_group_array(${encoded}) FROM (
@@ -103,7 +101,6 @@ const budgetPageStatement = ({
           SELECT ${columns} FROM effective_transaction WHERE ${where} ${ordered}))
         END AS records)
         SELECT ${decoded} FROM selected, json_each(selected.records) ${ordered}`
-      )
-      .bind(userId, ...bindings, ...relation.bindings, ...bindings)
-  );
+    )
+    .bind(userId, ...bindings, ...relation.bindings, ...bindings);
 };

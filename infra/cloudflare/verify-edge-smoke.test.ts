@@ -329,7 +329,7 @@ describe("production edge smoke", () => {
     () =>
       Effect.gen(function* () {
         const challenges = [
-          respond(503), // A missing required runtime binding must block promotion.
+          respond(503),
           respond(401, { ...safeHeaders, "cf-mitigated": "challenge" }),
           respond(302, { ...safeHeaders, location: "https://api.fidyapp.com/categories" }),
           respond(401, { "cache-control": "no-store" }),

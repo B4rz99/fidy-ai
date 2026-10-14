@@ -201,11 +201,9 @@
   }
 }
 
-/* Application geometry shares Fidy's global brand and light/Grafito tokens. */
 .signed-in-theme {
   line-height: 1.5;
 }
-/* Columns depend on the ledger width, including when the detail rail is open. */
 .transaction-ledger {
   container: ledger / inline-size;
 }
@@ -371,7 +369,6 @@
   --error-text: var(--on-pastel);
 }
 
-/* Same native floating menu composition as the public landing, with shared theme tokens. */
 .signed-in-compact-navigation {
   inset: 84px 20px auto auto;
   width: min(260px, calc(100vw - 40px));

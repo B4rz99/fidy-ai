@@ -3,7 +3,6 @@ import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumMemoryTextLength = 2_000;
 
-/** Stable server-generated identity for one current Memory. */
 export const MemoryId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("MemoryId"))
   .annotate({ identifier: "MemoryId" });
@@ -34,7 +33,6 @@ export const MemoryTextInput = Schema.String.pipe(
 );
 export type MemoryTextInput = typeof MemoryTextInput.Type;
 
-/** One current Memory belonging to the User in whose scope it is loaded. */
 export const Memory = Schema.Struct({
   id: MemoryId,
   text: MemoryText,
@@ -45,11 +43,9 @@ export type Memory = typeof Memory.Type;
 
 const MemoryTextPayload = Schema.Struct({ text: MemoryTextInput });
 
-/** Prose the caller explicitly asks Fidy to retain as a durable Memory. */
 export const RememberInput = MemoryTextPayload.annotate({ identifier: "RememberInput" });
 export type RememberInput = typeof RememberInput.Type;
 
-/** Formatting-normalized replacement prose for one current Memory. */
 export const ReviseInput = MemoryTextPayload.annotate({ identifier: "ReviseInput" });
 export type ReviseInput = typeof ReviseInput.Type;
 

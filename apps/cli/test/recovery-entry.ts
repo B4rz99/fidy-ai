@@ -6,8 +6,6 @@ import { RecoveryFailure } from "../src/support-recovery/contract";
 import { runSupportRecovery } from "../src/support-recovery/operations";
 import { makeRecoveryClient } from "../src/support-recovery/runtime";
 
-// Only terminal entry and external Access edge authentication are substituted. The command's
-// encoded request crosses real public/Core Workers and D1, on the existing browser topology.
 const Premise = Schema.fromJsonString(
   Schema.Struct({
     pairingCode: Schema.String,

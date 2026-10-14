@@ -14,7 +14,6 @@ type ResolveDropInput = Readonly<{
 const isOwnEdge = (source: DashboardDragSource, target: DashboardDropTarget): boolean =>
   source.kind === "widget" && target.kind === "widget-edge" && source.widgetId === target.widgetId;
 
-/** Accepts valid Dashboard sources while excluding a Widget's own semantic destinations. */
 export const dashboardTargetAcceptsSource = ({
   source,
   target,
@@ -31,7 +30,7 @@ const existingWidgetGesture = (
     ? { kind: "swap-widgets", widgetId: source.widgetId, withWidgetId: target.widgetId }
     : { kind: "move-widget", widgetId: source.widgetId, target };
 
-/** Translates a completed library interaction into at most one application gesture. */
+/** A completed library interaction emits at most one application gesture. */
 export const resolveDashboardDrop = ({
   canceled,
   makeWidgetId,

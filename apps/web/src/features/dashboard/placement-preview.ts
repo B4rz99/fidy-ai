@@ -9,7 +9,6 @@ type Split = Extract<PlacementLayout, { kind: "split" }>;
 type Child = Split["children"][number];
 const weightPrecision = 1000;
 const integerWeight = (weight: number): bigint => BigInt(Math.round(weight * weightPrecision));
-/** Match canonical same-axis geometry, including its bounded normalization fallback. */
 const flattenSplit = (split: Split): Split => {
   const denominated = split.children.map((child) => ({
     child,
@@ -129,7 +128,7 @@ const projectMove = (
     ? insert(remaining.value, source.value, edit.at)
     : layout;
 };
-/** Projects placement geometry only; financial results remain the last canonical read. */
+/** Financial results remain the last canonical read during placement previews. */
 export const previewDashboardPlacement = ({
   layout,
   edit,

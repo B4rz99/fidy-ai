@@ -24,7 +24,6 @@ type DropdownProps = Readonly<{
   triggerLabel: Option.Option<string>;
 }>;
 
-/** Uses the same keyboard, dismissal, and selection pattern for single-choice controls. */
 export const ChoiceDropdown = ({
   id,
   label,
@@ -67,7 +66,6 @@ export const ChoiceDropdown = ({
   </DropdownMenu>
 );
 
-/** Shared category, filter, and sort popup behavior. */
 export const ChoiceMenuOptions = ({
   value,
   options,
@@ -89,7 +87,7 @@ export const ChoiceMenuOptions = ({
   </DropdownMenuContent>
 );
 
-/** Offers an inline choice without a pill or chevron; selection effects remain with the feature. */
+/** Selection effects belong to the caller. */
 export const InlineChoiceDropdown = ({
   label,
   disabled,

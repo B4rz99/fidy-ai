@@ -45,10 +45,8 @@ export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAd
   return { _tag: "BeginSession", consentBasis: request.currentConsent.value };
 };
 
-/** Production exact-Transcript token threshold that requests Compaction. */
 export const defaultCompactionTriggerTokens = 100_000;
 
-/** Production maximum for one generated CompactedConversation replacement. */
 export const defaultCompactionMaximumTokens = 15_000;
 
 /** Compaction also precedes the exact-entry capacity of a long, low-token Hosted Agent Session. */
@@ -66,7 +64,6 @@ export const terminalPrefixCursor = (
     : Option.fromNullishOr(entries.at(pending < 0 ? -1 : pending - 1)?.sequence);
 };
 
-/** Decide when exact retained continuity should be replaced before the next hosted Turn. */
 export const shouldCompactConversation = ({
   entryCount,
   tokenCount,

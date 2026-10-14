@@ -31,7 +31,6 @@ const inspect = Effect.gen(function* () {
   return workerDriftReport(snapshot.repairPlan.native).join("\n");
 }).pipe(
   Effect.timeout("45 seconds"),
-  // This additional read cannot change the original CLI verdict. Never print foreign failures.
   Effect.catchCause(() =>
     Effect.succeed(
       "Worker drift fields: Core unavailable\nWorker drift fields: Ingress unavailable"

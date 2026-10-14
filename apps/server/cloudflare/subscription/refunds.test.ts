@@ -800,8 +800,6 @@ it.each(["production-environment", "live-private-key", "production-captured-char
         const db = yield* fixture();
         const accepted = yield* startRefund(call(db));
         if (scenario === "production-captured-charge") {
-          // Deliberately inject impossible stored provenance to prove the execution barrier independently
-          // of acceptance and immutable charge snapshots. This is isolated test-fixture corruption only.
           yield* Effect.tryPromise(() =>
             db.batch([
               db.prepare("DROP TRIGGER billing_attempt_snapshot_immutable"),
@@ -887,8 +885,7 @@ it.each([
                 )
                 .bind(attemptId)
                 .run()
-            : // Real SQLite injection happens after the Workflow snapshot read, during claim insertion.
-              db
+            : db
                 .prepare(`CREATE TRIGGER inject_delayed_approval BEFORE INSERT ON refund_submission_claims BEGIN
             INSERT INTO billing_transaction_evidence(transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms)
             SELECT 'delayed-approved-charge',billing_attempt_id,'APPROVED',0,1 FROM refund_attempts WHERE id=NEW.refund_id;

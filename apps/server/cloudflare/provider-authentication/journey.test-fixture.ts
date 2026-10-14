@@ -155,7 +155,6 @@ export const setupHostedWhatsApp = (
     coordinatorFetch: Option.some(options.coordinatorFetch),
   });
 
-/** Model a provider issuing its token after the callback's initial clock sample. */
 export const delayedProviderTokenResponse = ({
   token,
   key,

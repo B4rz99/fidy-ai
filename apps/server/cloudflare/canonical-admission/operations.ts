@@ -634,12 +634,9 @@ const authorizedCall = <E, R>(
   identity: string
 ): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> =>
   Effect.gen(function* () {
-    // Browser work has no commercial charge. Keep its owner's canonical input/refusal contract;
-    // external envelopes alone require reflected preflight before spending a commercial unit.
     if (input.caller._tag === "WebSession") {
       return yield* disclose({ ...input, scopes: [] }, yield* input.work);
     }
-    // A batch derives authority from its decoded children, not a synthetic envelope capability.
     const primaryFailure = yield* primaryScopeFailure(input);
     if (Option.isSome(primaryFailure)) {
       return yield* unadmittedRefusal(input, identity, primaryFailure.value);

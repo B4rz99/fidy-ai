@@ -61,7 +61,6 @@ const budgetSpent = (
     catch: (cause) => new IngestionAuditFailed({ cause }),
   });
 
-/** Private Core Worker bindings statement acceptance needs. */
 export type StatementIngestionEnvironment = Readonly<{ readonly DB: D1Database }> &
   Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket }>>;
 
@@ -75,7 +74,6 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_PAYLOAD_TOO_LARGE = 413;
 const HTTP_TOO_MANY_REQUESTS = 429;
 const HTTP_UNAVAILABLE = 503;
-/** The body bound one canonical statement submission request accepts. */
 
 const maximumAdmissionSweep = 128;
 const noStore = { "cache-control": "no-store" } as const;
@@ -121,7 +119,6 @@ const rateLimited = (): Response =>
     HTTP_TOO_MANY_REQUESTS
   );
 
-/** The statement owner's single message and answer for a spent shared daily canonical budget. */
 export const statementDailyBudgetMessage =
   "Too many statement calls today; retry after the daily budget resets.";
 export const statementDailyBudgetResponse = (): Response =>
@@ -137,7 +134,6 @@ const submissionNotFound = (): Response =>
     HTTP_NOT_FOUND
   );
 
-/** The one HTTP status for a closed canonical refusal code. */
 const refusalStatus = (code: StatementPublicationRefusal["code"]): number => {
   if (code === "paywall_required") return HTTP_PAYWALL;
   if (code === "rate_limited") return HTTP_TOO_MANY_REQUESTS;
@@ -171,7 +167,6 @@ const stagingService = (
     StatementStaging.make({
       bucket,
       database: environment.DB,
-      // One decision instant for the whole call, so staging bounds and the D1 unit cannot disagree.
       nowEpochMs: () => current,
     })
   );
@@ -235,7 +230,6 @@ export const uploadStagedStatement = ({
     if (Result.isFailure(admitted)) {
       return admitted.failure instanceof ResourceAdmissionRefused ? rateLimited() : unavailable();
     }
-    // The claim is held only while this upload is in flight; its lease bounds an interrupted one.
     const staged = yield* Effect.result(
       staging.value.stageStatementBytes({ request, userId: subject.userId }).pipe(
         Effect.ensuring(
@@ -295,12 +289,7 @@ export const sweepExpiredUploadAdmission = ({
     catch: (cause) => new IngestionAuditFailed({ cause }),
   }).pipe(Effect.asVoid);
 
-/**
- * The one answer to a refusal the caller's own live credential decides: the credential refusal,
- * classified against live authority, or this endpoint's canonical unavailable answer. It is this
- * endpoint's seam rather than the transaction boundary's own `refusedCredentialResponse` because an
- * unreadable authority must answer with the ingestion failure contract, not the transaction one.
- */
+/** Classify live-credential refusal; unreadable authority returns the Ingestion unavailable contract. */
 const refusedCredential = ({
   db,
   subject,

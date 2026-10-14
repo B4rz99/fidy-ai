@@ -1,7 +1,3 @@
-// Syntax-level resolution follows local aliases far enough to keep wrappers
-// from laundering an open value contract. It deliberately does not pretend to
-// be a TypeScript type checker.
-
 /** @typedef {import("./ast-types.js").Node} Node */
 /** @typedef {import("./ast-types.js").Program} Program */
 /** @typedef {import("./ast-types.js").TSType} TSType */
@@ -175,8 +171,6 @@ const aliasSubstitutions = (alias, type, base) => {
   return next;
 };
 
-// An alias visit carries the substitution scope and the names on this path;
-// sibling visits must not share a cycle guard or a generic parameter binding.
 /**
  * @param {TSTypeReference} type - Alias application.
  * @param {string} name - Resolved local alias name.

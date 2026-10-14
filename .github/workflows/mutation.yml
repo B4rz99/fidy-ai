@@ -13,18 +13,12 @@ jobs:
     name: Mutation
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # Mutation testing protects trunk weekly on Sundays without extending or
-    # blocking pull-request feedback. GitHub schedules use UTC.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # Stryker's Babel instrumenter needs Node. Bun still installs dependencies
-      # and runs Vitest; only the Stryker process itself runs on Node.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
       - uses: ./.github/actions/bun-install
-      # Stryker rewrites its sandbox tsconfig through the classic TypeScript
-      # compiler API, isolated under tools/mutation from Effect tsgo.
       - name: Install mutation runner
         working-directory: tools/mutation
         run: bash scripts/install-workspace.sh

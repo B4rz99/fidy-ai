@@ -64,7 +64,6 @@ const Snapshot = Schema.Struct({
 });
 const StoredSnapshot = Schema.Struct({ snapshot: Schema.String });
 
-// All names are fixed owner columns. The same ordered projection is read and compared at commit.
 const snapshotSql = `SELECT json_object(
   'submission', json_object('id',s.id,'staging_id',s.staging_id,'source_format',s.source_format,
     'parser_revision',s.parser_revision,'status',s.status,'accepted_rows',s.accepted_rows,'needs_review_rows',s.needs_review_rows),

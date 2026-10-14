@@ -52,8 +52,6 @@ const Snapshot = Schema.Struct({
 });
 const SnapshotRow = Schema.Struct({ snapshot: Schema.fromJsonString(Snapshot) });
 
-// One read and the exact same fixed SQL at commit bind all effective-policy inputs, including
-// absence of a link, the addressed original revision, correction rank and statement-source rank.
 const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
   decisions AS (SELECT * FROM transaction_reconciliation_decisions
     WHERE user_id = ? AND ((state = 'linked' AND
@@ -139,7 +137,6 @@ export const observeOAuthTransactions = (
     const { snapshot } = yield* Schema.decodeUnknownEffect(SnapshotRow)(raw);
     const retained = yield* decodeFacts(snapshot.retained);
     const effective = yield* decodeFacts(snapshot.effective);
-    // Preserve the SQL JSON bytes rather than re-encoding: the guard compares this same projection.
     const encoded = yield* Schema.decodeUnknownEffect(Schema.Struct({ snapshot: Schema.String }))(
       raw
     );

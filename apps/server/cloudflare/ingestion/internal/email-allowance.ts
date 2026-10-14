@@ -92,8 +92,6 @@ export const activateDeferredEmails = ({
     });
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(DeferredEmail))(result.results);
     for (const row of rows) {
-      // Maintenance scheduling is not processing admission: a revoked User must not
-      // monopolize the head of the bounded sweep when the authority unit rolls back.
       yield* Effect.tryPromise({
         try: () =>
           db

@@ -18,7 +18,6 @@ import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 import type { DashboardMutationOperation } from "../contract";
 
-// Fixed identities keep first-edit review/resume stable; WidgetIds are document-local.
 export const oauthDefaultDashboard = (): DashboardDocument =>
   makeDefaultDashboard({
     restaurantCategoryId: categoryIds.restaurantes,

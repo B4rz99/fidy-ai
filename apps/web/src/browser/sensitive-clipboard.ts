@@ -8,7 +8,7 @@ import {
 
 const sensitiveClipboardMinutes = 10;
 
-/** Maximum time Fidy leaves a copied sensitive value in the browser clipboard. */
+/** Expiry interval for copied sensitive values. */
 export const sensitiveClipboardLifetime = Duration.minutes(sensitiveClipboardMinutes);
 
 /**

@@ -1,7 +1,5 @@
 name: React Doctor
 
-# Advisory workflow, not a required merge check: workflow-level path filtering
-# must not leave the required aggregate Pending.
 on:
   pull_request:
     branches:
@@ -22,7 +20,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The scan needs only `contents: read`; the write scopes are how it reports.
 permissions:
   contents: read
   issues: write
@@ -35,7 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        # `scope: changed` needs the merge base; a shallow checkout can't reach it.
         with:
           fetch-depth: 0
       - name: Scan apps/web
@@ -45,10 +41,8 @@ jobs:
           directory: apps/web
           scope: changed
           blocking: error
-          # Pinned, not `latest`: newest release past bunfig.toml's 7-day delay.
           version: "0.9.12"
       - name: Require a perfect React health score
-        # React Doctor intentionally skips PRs with no React-eligible changes.
         if: ${{ always() && steps.react-doctor.outputs.score != '' }}
         env:
           SCORE: ${{ steps.react-doctor.outputs.score }}

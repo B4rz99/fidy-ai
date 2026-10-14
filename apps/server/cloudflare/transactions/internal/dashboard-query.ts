@@ -101,8 +101,6 @@ const searchPage = ({ db, userId, categories, search, limit }: ListInput): D1Pre
       ? ""
       : `AND effective.category_id IN (${categories.map(() => "?").join(",")})`;
   const text = Option.getOrThrow(search).toLocaleLowerCase("es-CO");
-  // Visit only this User's leaves in result order. Global FTS candidates and repeated rowid
-  // MATCH probes both amplify other Users' notes; rare terms can still visit this User's history.
   return db
     .prepare(`SELECT ${selectedColumns}
     FROM dashboard_projection_leaf effective INDEXED BY dashboard_projection_leaf_recent

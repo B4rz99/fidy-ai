@@ -366,7 +366,6 @@ const referenceHarness = (
     if (request.url === "https://api.github.com/repos/test/fidy/git/ref/heads/trunk") {
       body = reference;
     } else if (request.url === "https://api.github.com/repos/test/fidy/commits/trunk") {
-      // The commit is valid but its patches exceed the release response budget.
       body = { sha: revision, files: [{ patch: "x".repeat(200_000) }] };
     } else {
       const isPublic = request.url.endsWith("/prod-ingress/deployments");

@@ -1,6 +1,5 @@
 import { mountChannels } from "./demo-motion";
 
-/** One illustrative transaction, shown through each supported entry point. */
 export const ChannelStory = (): React.JSX.Element => (
   <div
     className="channel-story"

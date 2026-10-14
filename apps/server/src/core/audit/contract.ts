@@ -7,13 +7,11 @@ import { PATId } from "~/core/tokens/contract";
 import { HostedAgentSessionId, TranscriptTurnId } from "~/core/agent/contract";
 import { WebSessionId } from "~/core/web-session/contract";
 
-/** A stable UUID naming one append-only AuditLogEntry. */
 export const AuditLogEntryId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("AuditLogEntryId"))
   .annotate({ identifier: "AuditLogEntryId" });
 export type AuditLogEntryId = typeof AuditLogEntryId.Type;
 
-/** The recorded result of one attributable canonical call. */
 export const AuditOutcome = Schema.Literals(["succeeded", "rejected", "failed"]);
 export type AuditOutcome = typeof AuditOutcome.Type;
 
@@ -56,7 +54,6 @@ export const OAuthRecentActivity = Schema.Array(
 ).check(Schema.isMaxLength(3));
 export type OAuthRecentActivity = typeof OAuthRecentActivity.Type;
 
-/** Maximum retained canonical outcomes disclosed in one PAT activity answer. */
 export const maximumPATActivityEntries = 50;
 
 /** Retained canonical PAT outcomes; no request, credential, attribution, or error prose is exposed. */

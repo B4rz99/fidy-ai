@@ -338,7 +338,6 @@ const AuthorizationProgress = ({ stage }: Readonly<{ stage: Stage }>): JSX.Eleme
   </>
 );
 
-/** Event-driven mounted form. Sensitive drafts and the live challenge remain local until disposal. */
 export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
   const interaction = useDaviplataInteraction(props);
   const [mountForm] = useState<RefCallback<HTMLFormElement>>(

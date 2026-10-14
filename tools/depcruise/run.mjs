@@ -1,4 +1,3 @@
-// Dependency gate: graph rules plus general owner boundaries. No export-source analysis.
 import { loadGraph } from "./graph.mjs";
 import { boundaryViolations } from "./boundaries.mjs";
 

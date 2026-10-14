@@ -28,7 +28,6 @@ const RetrySeconds = Schema.NumberFromString.check(
   Schema.isGreaterThan(0),
   Schema.isLessThanOrEqualTo(maximumDelaySeconds)
 );
-// Retry only a declared refusal: Core has not admitted the mutation yet.
 const admittedRequest = (
   send: () => Promise<APIResponse>
 ): Effect.Effect<APIResponse, Cause.UnknownError> =>
@@ -60,7 +59,7 @@ const acquireFixture = (
         )
       );
       expect(response.status()).toBe(created);
-      // HttpApi reflection erases the types; both selected declarations retain their full codecs.
+      // HttpApi reflection erases types; the selected declarations retain their full codecs.
       const responseSchema = Schema.make<Schema.Codec<FixtureSuccess, Schema.Json>>(
         Schema.Union(Array.from(fixtureOperations[path].success)).ast
       );

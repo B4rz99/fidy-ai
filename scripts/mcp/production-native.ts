@@ -870,8 +870,6 @@ const modelOutputs = (host: NativeHost, body: JsonObject): ReadonlyArray<Schema.
     .flatMap((message) => array(object(message).content ?? []))
     .filter((item) => object(item).type === "tool_result");
 };
-// Only host payload fields contain serialized JSON. Ordinary scalar fields inside a
-// canonical result (labels, UUIDs, notes) must never be interpreted as JSON documents.
 const canonicalPayload = (value: Schema.Json, depth = 0): Option.Option<Schema.Json> => {
   if (depth > maximumResultDepth) return Option.none();
   if (Predicate.isString(value)) {

@@ -258,8 +258,6 @@ const persistedState = (
     });
   });
 
-// The owner seam lends its exact observed guard to the native protected commit; this test does not
-// duplicate the parent canonical unit or claim transport/host interoperability coverage.
 const acceptedCommit = (
   db: D1Database,
   mutations: ReadonlyArray<PreparedCanonicalMutation>

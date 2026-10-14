@@ -6,7 +6,6 @@ import type { HostedContextSection } from "../../../src/shell/hosted-inference/c
 
 import type { ProactiveReplyContext } from "../contract";
 
-/** The semantic values one hosted context orders into its canonical section list. */
 export type HostedContextSectionInput = Readonly<{
   readonly user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
   readonly startedAt: DateTime.Utc;
@@ -16,9 +15,6 @@ export type HostedContextSectionInput = Readonly<{
   readonly proactiveReply: Option.Option<ProactiveReplyContext>;
 }>;
 
-/**
- * The Agent-owned ordering of purpose-bound semantic material within one WorkingContext.
- */
 export const hostedContextSections = (
   input: HostedContextSectionInput
 ): ReadonlyArray<HostedContextSection> => [

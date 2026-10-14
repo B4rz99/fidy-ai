@@ -246,7 +246,6 @@ const makeAuthority = (
 type Action =
   | Readonly<{ type: "send" }>
   | Readonly<{ type: "confirm"; otp: Redacted.Redacted<string> }>;
-// SHA-256 lookup fingerprints only. No spent raw credential or provider-response history is retained.
 const bearerDigest = (
   bearer: Redacted.Redacted<string>,
   signal: AbortSignal

@@ -6,7 +6,6 @@ import { receiveWhatsAppWebhook } from "./runtime";
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 
-// Native ingress fixture observes rejection while the foreign cancel Promise is still pending.
 const probeInterruptedBody = (
   db: D1Database
 ): Promise<

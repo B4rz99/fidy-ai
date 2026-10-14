@@ -81,7 +81,6 @@ const nameFlags = (flags: ReadonlyArray<ScalarFlag>): ReadonlyArray<ScalarFlag> 
   return [];
 };
 
-// Reflection stays on the deliberate encoded JSON document, never a foreign private AST.
 export const deriveFlags = (document: Document): FlagPlan => {
   const flags: ScalarFlag[] = [];
   const structured: { path: ReadonlyArray<string>; required: boolean }[] = [];

@@ -274,7 +274,6 @@ it("keeps canonical review reads independent of retained evidence size before D1
       expect(yield* io(() => response.json())).toMatchObject({
         data: [{ id: "10000000-0000-4000-8000-000000000100", issues: [] }],
       });
-      // This measures actual native D1 results, not SQL text or the final redacted response.
       expect(transferredBytes).toBeLessThan(4096);
       expect(transferredRows).toBe(1);
       expect(

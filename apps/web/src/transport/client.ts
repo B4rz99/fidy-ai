@@ -136,7 +136,7 @@ export {
   HostedTurnProgressRequest,
 };
 
-/** Dedicated browser-only reply-and-receipt channel; never a canonical tool operation. */
+/** Browser-only reply/receipt channel; unavailable as a canonical tool operation. */
 export type HostedTurnClient = AtomHttpApi.AtomHttpApiClient<
   never,
   "@fidy/web/HostedTurnClient",
@@ -201,7 +201,6 @@ export const makeFidyClient = (options: FidyClientOptions): FidyClient =>
     ),
   });
 
-/** Direct authentication transport, separate from product operations because it carries proofs. */
 export type WebAuthClient = AtomHttpApi.AtomHttpApiClient<
   never,
   "@fidy/web/WebAuthClient",

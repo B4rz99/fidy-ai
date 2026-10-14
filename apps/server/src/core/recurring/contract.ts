@@ -12,7 +12,6 @@ export const RecurringSeriesId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("RecurringSeriesId")
 );
 export type RecurringSeriesId = typeof RecurringSeriesId.Type;
-/** Identity of one immutable detector-independent confirmation occurrence. */
 export const RecurringConfirmationId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("RecurringConfirmationId")
 );

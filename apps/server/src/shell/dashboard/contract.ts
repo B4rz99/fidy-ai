@@ -123,7 +123,6 @@ export type DashboardView = typeof DashboardView.Type;
 
 const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 
-/** Canonical call shape for explicit, idempotent Dashboard initialization. */
 export const InitializeDashboardCanonicalInput = Schema.Struct({});
 
 /** A missing document is an observed state, never permission to create or repair it. */
@@ -141,14 +140,11 @@ export class DashboardUninitialized extends Schema.Error<DashboardUninitialized>
   { httpApiStatus: 404 }
 ) {}
 
-/** Canonical call shape for observing an existing Dashboard. */
 export const GetDashboardCanonicalInput = Schema.Struct({});
-/** Canonical call shape for observing a complete existing Dashboard view. */
 export const GetDashboardViewCanonicalInput = Schema.Struct({});
 /** Canonical call shape for a Dashboard edit, shared by individual and batch execution. */
 export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: DashboardEdit });
 
-/** Canonical contracts for the caller's one persistent DashboardDocument and ephemeral view. */
 export const DashboardGroup = HttpApiGroup.make("dashboard")
   .add(
     HttpApiEndpoint.post("initializeDashboard", "/dashboard/initialize", {
@@ -267,5 +263,4 @@ export class DashboardCategoryNotFound extends Data.TaggedError("DashboardCatego
   readonly path: string;
 }> {}
 
-/** Declared canonical failures returned by dashboard operations. */
 export type DashboardApiFailure = NotFound | ValidationFailed | DashboardUninitialized;

@@ -89,8 +89,6 @@ const awaitSyntheticWork = Effect.fn(function* (
     expectedGitRevision: config.RELEASE_GIT_SHA,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
-  // Overrides can fall back after readiness too. Core's identity rejection precedes all
-  // admission/effects; replay the same probe within the existing bound, never other failures.
   let status = yield* Effect.gen(function* () {
     const response = yield* exchangeSmoke({ query: "", headers, body: Option.some(request) });
     return yield* checkSmokeExchange(
@@ -160,7 +158,6 @@ const checkEdge = Effect.fn(function* (
   }
 });
 
-/** Explicitly pinned HTTP invocations; a fallback to stable always fails identity comparison. */
 /** Poll only proof-admitted, identity-only GETs while global routing propagates. */
 export const verifyReadOnlySmokeRouting = Effect.fn(function* (
   env: unknown,
@@ -225,8 +222,6 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
   }
   const config = decoded.value;
   const headers = candidateHeaders(config, config.PUBLIC_VERSION_ID);
-  // Each pairing owns a distinct probe ID. Both must pass before the caller can attest;
-  // Core-first promotion still requires the exact old-public/new-Core pairing.
   yield* Effect.all(
     {
       candidate: awaitSyntheticWork(config, headers, {

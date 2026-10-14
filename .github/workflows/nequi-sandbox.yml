@@ -12,8 +12,6 @@ concurrency:
 
 jobs:
   protocol:
-    # Sandbox secrets already live in the protected production environment. This job
-    # uses no Cloudflare credentials, deploys nothing, and rejects Production Wompi.
     if: github.ref == 'refs/heads/trunk'
     environment: production
     runs-on: ubuntu-latest

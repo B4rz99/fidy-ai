@@ -87,7 +87,6 @@ const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((value) => new Uint8Array(value));
-// The Miniflare fixture owns foreign Promise APIs, not application workflow.
 
 const seedUser = (
   db: D1Database,
@@ -1200,7 +1199,6 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
           capture(0, "5", "COP", "outflow", DateTime.formatIso(before))
         )).status
       ).toBe(201);
-      // Capture rejects future Transactions. Seed that boundary to exercise the canonical GET projection.
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO transactions
@@ -1523,7 +1521,6 @@ it(
           )).status
         ).toBe(503);
         expect(moved).toBe(true);
-        // The next query resumes the new financial revision, without first draining alert work.
         const report = yield* Effect.tryPromise(() =>
           send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
         );
@@ -2647,7 +2644,6 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         )).status
       ).toBe(400);
       expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
-      // A failed retained-state decode also cannot perform or consume pending alert work.
       yield* Effect.tryPromise(() =>
         db.prepare("UPDATE budgets SET cap = 'invalid' WHERE user_id = ?").bind(users[0]).run()
       );

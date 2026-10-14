@@ -14,7 +14,6 @@ import {
   DashboardViewComponent,
 } from "./view";
 
-/** Own the complete read/initialize/read resource within the authenticated Atom registry. */
 export const DashboardFeature = ({
   apiClient,
 }: Readonly<{ apiClient: FidyClient }>): JSX.Element => {
@@ -117,7 +116,6 @@ const CatalogQueryNotice = <E,>({
   );
 };
 
-/** Renders independent query feedback without decomposing canonical states into illegal booleans. */
 const DashboardQueryNotices = <CatalogError, DashboardError>({
   catalog,
   dashboard,
@@ -159,7 +157,6 @@ const DashboardLoadNotice = ({
   }
 };
 
-/** Coordinates canonical Dashboard queries and edits while preserving the last successful canvas. */
 export const DashboardRouteContent = ({
   apiClient,
   onRefresh,

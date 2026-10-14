@@ -83,7 +83,6 @@ const setup = (
           )
           .run()
       );
-      // This pre-User fixture exercises Consent only; no verified association exists yet.
       yield* Effect.tryPromise(() =>
         db
           .prepare("CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)")
@@ -102,7 +101,6 @@ const setup = (
           )
           .run()
       );
-      // Other delivery purposes have no evidence in this pre-User routing fixture.
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
@@ -175,7 +173,6 @@ const setup = (
 
                     WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio,
                     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-                    // Canary bindings: a rejected webhook must not touch these authorities.
                     ...canaryBindings,
                   }),
               },
@@ -425,7 +422,6 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
           send(voiceInbound("wamid.malformed-kapso").replace('"kapso":{}', '"kapso":null'))
         )).status
       ).toBe(429);
-      // The per-User refusal budget bounds repeated expensive provider attempts.
       expect(provider).toHaveBeenCalledTimes(5);
       expect(
         (yield* Effect.tryPromise(() =>
@@ -1092,7 +1088,6 @@ it("recovers a committed pre-send disclosure once without resending a started at
         )
       );
       vi.stubGlobal("fetch", provider);
-      // Represent interruption after the exchange commit but before the send-start claim.
       yield* Effect.tryPromise(() =>
         db
           .prepare(

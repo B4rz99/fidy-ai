@@ -15,7 +15,6 @@ const bindings = (
 ): ReadonlyArray<string | number | Uint8Array> =>
   Option.match(authority, { onNone: () => [], onSome: (value) => value.bindings });
 
-// These aliases belong to the Subscription-owned standing and protected-access queries.
 export const paidAccessEndSql = `MIN(p.ends_at_ms, COALESCE(
   (SELECT MIN(adjustment.ends_at_ms) FROM billing_access_adjustments adjustment WHERE adjustment.attempt_id=p.attempt_id), p.ends_at_ms))
   + CASE WHEN NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id=s.user_id)

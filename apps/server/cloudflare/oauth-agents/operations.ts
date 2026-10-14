@@ -75,7 +75,6 @@ export const executeOAuthRefresh = (
     if (refreshCancelled({ input, current: yield* Clock.currentTimeMillis })) return invalidGrant();
     const committed = yield* Effect.option(commitRotation({ input, grant, issuance }));
     if (Option.isNone(committed)) {
-      // A failed CAS may be another instance's winner. Only a recognized consumed proof can revoke.
       yield* revokeReplay({ input, current: yield* Clock.currentTimeMillis }).pipe(Effect.ignore);
       return invalidGrant();
     }

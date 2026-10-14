@@ -152,7 +152,6 @@ const renderWidget = (
     }
   });
 
-/** Rebuild the recursive view from canonical layout, with one typed result at each leaf. */
 export const renderDashboardView = ({
   document,
   facts,

@@ -93,7 +93,6 @@ export const claimResolutions = (
   input: OperationalAlertDelivery
 ): Effect.Effect<ReadonlyArray<unknown>, Cause.UnknownError> =>
   Effect.gen(function* () {
-    // An unavailable inspection cannot prove absence. Leave the previous firing state intact.
     if (input.alerts.every((alert) => alert.kind !== "inspection_unavailable")) {
       yield* Effect.tryPromise(() =>
         input.db

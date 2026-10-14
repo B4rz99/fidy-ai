@@ -254,8 +254,6 @@ it("requires Money groups in strict ascending Currency order", () => {
     expect(Result.isSuccess(decode(groups))).toBe(true);
   }
 
-  // The reported index is the later of the offending pair, so an ordered prefix
-  // does not shift the correction onto the wrong group.
   const cases = [
     [[encodedGroup("COP"), encodedGroup("COP")], '[1]["currency"]'],
     [[encodedGroup("USD"), encodedGroup("COP")], '[1]["currency"]'],

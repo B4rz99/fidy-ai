@@ -595,7 +595,6 @@ const ContinuationControl = (
     </div>
   );
 };
-/** Owns filters and panel interaction; canonical records remain in the authentication-lifetime registry. */
 export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [searching, onSearchOpen] = useState(false);
   const [tool, setTool] = useState<FilterTool | "closed">("closed");

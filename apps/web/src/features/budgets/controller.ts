@@ -62,7 +62,6 @@ export type BudgetController = Readonly<{
   write: (edit: BudgetEdit) => void;
   refresh: () => void;
 }>;
-/** Own interaction state; financial facts stay in the canonical query resource. */
 export const useBudgetController = (props: WorkspaceProps): BudgetController => {
   const [save] = useState(() => makeBudgetWrite(props.apiClient));
   const submit = useAtomSet(save);

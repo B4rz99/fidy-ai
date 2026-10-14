@@ -1,31 +1,19 @@
 #!/usr/bin/env bun
 
-// Bans first-party lint and Effect language-service suppression directives.
-// This must run outside the linter: a file-scoped directive can silence even
-// the rule intended to catch it. Keep the directive spellings split across
-// strings below so this checker checks itself without an exclusion list.
+// A file-scoped lint directive can silence a linter rule that checks for it; scan independently.
 
 type Suppression = {
   readonly file: string;
   readonly line: number;
-  /** The offending line, trimmed. */
   readonly source: string;
 };
 
 const SUPPRESSION_PATTERN = new RegExp(
   ["(?:ox|es)lint-disable", "@effect" + "-diagnostics(?:-next-line)?\\b"].join("|")
 );
-// These diagnostics have no first-party path that needs an opt-out. Scoped platform
-// boundaries use other, reviewable overrides in tsconfig.base.json.
 const UNJUSTIFIED_DIAGNOSTIC_DISABLED =
   /"(?:asyncFunction|globalFetch|missingPipeableSignature|newPromise|strictBooleanExpressions)"\s*:\s*"off"/;
 
-/**
- * Every extension oxlint will lint — wider than this repo writes today, on
- * purpose. `oxlint .` picks up a `.mts` or a `.vue` file the day it lands, so a
- * directive in one silences real rules from that same day; a list that tracked
- * only the extensions already present would reopen this hole per new file type.
- */
 const LINTED_EXTENSIONS = [
   ".js",
   ".jsx",
@@ -40,20 +28,12 @@ const LINTED_EXTENSIONS = [
   ".astro",
 ];
 
-// A vendored reference checkout: tracked in full, so git lists it, but never
-// built, shipped or edited by us. It is the only entry this list needs —
-// node_modules, dist, build and coverage are gitignored, and
-// `--exclude-standard` never lists an ignored path.
 const NOT_FIRST_PARTY = [".repos/"];
 
 const repoRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
-/**
- * Tracked files plus untracked ones git would not ignore. Include TypeScript
- * configs so a path override cannot silently disable a required diagnostic.
- */
 const checkedFiles = (): readonly string[] => {
   const listed = Bun.spawnSync(
     ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],

@@ -16,7 +16,6 @@ type Authority = Readonly<{
 }>;
 
 const ruleColumns = `id,keyword,category_id AS "categoryId",created_at AS "createdAt",updated_at AS "updatedAt"`;
-// The extra row detects a corrupt overflow instead of silently dropping a capture-time rule.
 const boundedRuleCount = maximumKeywordRulesPerUser + 1;
 
 /** One User's rules in stable creation order, for the capture-time precedence decision. */
@@ -43,7 +42,6 @@ export const keywordRulesFromRows = (rows: unknown): Option.Option<ReadonlyArray
     rules.length <= maximumKeywordRulesPerUser ? Option.some(rules) : Option.none()
   );
 
-/** Decode one owned rule for the canonical mutation response. */
 export const keywordRuleFromRows = (row: unknown): Option.Option<KeywordRule> =>
   Schema.decodeUnknownOption(KeywordRule)(row);
 
@@ -56,7 +54,6 @@ export const keywordRuleQuery = ({
   params: [userId, id],
 });
 
-/** Facts a validated rule write needs before it can be composed into a D1 unit. */
 export type KeywordRuleWrite = Readonly<{
   id: string;
   userId: string;
@@ -67,7 +64,6 @@ export type KeywordRuleWrite = Readonly<{
   authority: Authority;
 }>;
 
-/** Facts a validated rule removal needs before it can be composed into a D1 unit. */
 export type KeywordRuleRemoval = Readonly<{
   id: string;
   userId: string;

@@ -82,12 +82,7 @@ const validateContents = (directory: string, path: string): Promise<void> =>
       }
     });
 
-/**
- * Verifies the complete Production upload tree and its release identity before Cloudflare receives
- * it. The accepted tree is static-only, every browser asset is content-hashed, and the shell
- * references at least one asset present in that tree. It cannot contain source maps, server-shaped
- * paths, or known Secret material.
- */
+/** Rejects non-static, unhashed, secret-bearing or incomplete uploads and invalid release identities. */
 export const validateProductionArtifact = (request: ProductionArtifactRequest): Promise<void> =>
   artifactPaths(request.directory).then((paths) => {
     const pathSet = new Set(paths);

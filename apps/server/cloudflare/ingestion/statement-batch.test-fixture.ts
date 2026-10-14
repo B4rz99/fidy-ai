@@ -1,12 +1,5 @@
 import { Function, Schema } from "effect";
 
-/**
- * Fixtures for statement-ingestion's mixed canonical batches: one committed
- * batch envelope, the child identities and builders, the direct seeds a premise race needs, and the
- * D1 defect seam. This suite owns its runtime, credentials, and call vocabulary.
- */
-
-/** One committed batch envelope before any child output is decoded against its own schema. */
 export const BatchEnvelope = Schema.Struct({
   data: Schema.Struct({
     results: Schema.Array(
@@ -20,7 +13,6 @@ export const BatchEnvelope = Schema.Struct({
   next: Schema.Array(Schema.Unknown),
 });
 
-/** The zero-padded tail a stable batch child identity ends with. */
 const batchCallIdDigits = 12;
 
 /** The callId one batch child carries; every child in a request needs its own. */
@@ -37,7 +29,6 @@ export const correctionCall: {
   input: { params: { id }, payload },
 }));
 
-/** Seeds one retained Transaction directly, so a correction has a premise the unit re-checks. */
 export const seedTransaction = ({
   categoryId,
   db,

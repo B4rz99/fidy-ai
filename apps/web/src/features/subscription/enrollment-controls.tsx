@@ -4,7 +4,6 @@ import { type PreparedEnrollment } from "./enrollment-gateway";
 
 import { type EnrollmentDecisions } from "./enrollment-decisions";
 
-/** Presents the same Wompi disclosures for each reusable-source authorization method. */
 export const EnrollmentConsent = ({
   enrollment,
   decisions,

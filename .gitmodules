@@ -1,5 +1,3 @@
-# Alchemy vendors sibling repositories as gitlinks. Register their prefixed paths so
-# Git tooling can inspect the main checkout without initializing reference-only code.
 [submodule ".repos/alchemy/submodules/distilled"]
 	path = .repos/alchemy/submodules/distilled
 	url = https://github.com/alchemy-run/distilled.git

@@ -132,7 +132,6 @@ const bindUser = (work: Work): Work => ({
 export const readHeldReminderSchedule = (input: Work): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const work = bindUser(input);
-    // The credential-gated query and required Audit commit together, including an absent schedule.
     const results = yield* Effect.tryPromise(() =>
       work.db.batch([
         ...audit({

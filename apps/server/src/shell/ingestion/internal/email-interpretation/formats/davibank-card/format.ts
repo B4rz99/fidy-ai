@@ -9,7 +9,6 @@ import {
   makeInterpretation,
 } from "~/shell/ingestion/internal/email-interpretation/format-support";
 
-/** Evidence-backed DAVIbank Visa Oro purchase notification revision. */
 export const format: NotificationEmailFormat = {
   id: NotificationFormatId.make("davibank-card"),
   revision: InterpretationRevision.make("davibank-card-v1"),

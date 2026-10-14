@@ -258,7 +258,6 @@ it("abandons interrupted pairing sends without retaining reusable proof or chang
       const db = yield* setup();
       yield* seedUser(db, 1);
       yield* seedUser(db, 2);
-      // Leave one expired send observable after the owner's bounded deletion.
       yield* Effect.forEach(
         Array.from({ length: 33 }, (_, index) => index + 1),
         (index) => seedPairingProof(db, index, { expires: now - 600_001, user: 1 }),
@@ -309,7 +308,6 @@ it("abandons interrupted replacement sends without reusable proof, credential re
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
-      // One candidate per User requires distinct Users for the expired backlog.
       yield* Effect.forEach(
         Array.from({ length: 33 }, (_, index) => index + 1),
         (index) => seedReplacement(db, index, { expires: now - 600_001 }),

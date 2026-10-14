@@ -1,6 +1,5 @@
 @import "./dark-palettes.css";
 
-/* Provisional alternatives scoped to the local UI reference, pending a brand decision. */
 .dark[data-dark-palette] {
   --background: var(--preview-canvas);
   --card: var(--preview-surface);
@@ -13,7 +12,6 @@
   --input: var(--muted-foreground);
 }
 
-/* Palette comparison responds immediately, including keyboard selection. */
 .ui-reference [data-slot] {
   transition: none;
 }

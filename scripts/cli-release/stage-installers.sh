@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Stage the canonical installer bytes into the assets-only web artifact.
 set -euo pipefail
 source_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "${1:?Output directory required}"

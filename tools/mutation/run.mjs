@@ -1,19 +1,4 @@
-// Runs the StrykerJS mutation check against the core tree, configured by the
-// server package's stryker.config.mjs.
-//
-// Stryker is spawned from this directory's isolated node_modules so it resolves
-// the classic `typescript` pinned here rather than the root's Effect tsgo build,
-// which it cannot rewrite the sandbox tsconfig with. The configured command runner
-// invokes the server workspace's Bun/Vitest directly, so no local Vitest runner
-// plugin or duplicate Vitest installation is needed.
-//
-// The child inherits this process's cwd (the server package root), so every path
-// in the config is package-root-relative, exactly as the vitest and coverage configs are.
-
-// Node, not Bun, and this is the one tool in the repo that cannot be either:
-// Stryker's Babel instrumenter throws on the Bun runtime before it plants a
-// mutant. The failure it throws there is a stack inside @babel/core with no
-// mention of the runtime, so the check is here to say what actually went wrong.
+// Stryker requires Node for Babel instrumentation and the classic TypeScript compiler API.
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";

@@ -31,8 +31,6 @@ it("keeps the canonical submission input to one bounded staged reference", () =>
   const decoded = decode({ idempotencyKey, reference });
   expect(Result.isSuccess(decoded)).toBe(true);
   if (Result.isSuccess(decoded)) {
-    // Only the retry key and the reference survive decoding: a name, media type, format, or byte
-    // claim sent alongside them is dropped rather than carried into publication.
     expect(Object.keys(decoded.success).sort()).toEqual(["idempotencyKey", "reference"]);
     expect(decoded.success.reference).toEqual(reference);
   }

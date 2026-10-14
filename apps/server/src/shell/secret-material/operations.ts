@@ -30,7 +30,6 @@ const wompiPrefixesByEnvironment = {
   },
 } as const satisfies Readonly<Record<WompiEnvironment, WompiCredentialPrefixes>>;
 
-/** Returns the public credential prefixes for one Wompi environment. */
 export const wompiCredentialPrefixes = (environment: WompiEnvironment): WompiCredentialPrefixes =>
   wompiPrefixesByEnvironment[environment];
 
@@ -41,7 +40,6 @@ const resendApiKey = (): Config.Config<Redacted.Redacted<string>> =>
     requirement: "must be a Resend API key",
   });
 
-/** Resolves the redacted API key used to submit verification email through Resend. */
 export const loadResendEmailDeliveryApiKey = resendApiKey();
 
 const WompiPrivateKey = Schema.String.check(
@@ -50,7 +48,6 @@ const WompiPrivateKey = Schema.String.check(
 const WompiIntegritySecret = Schema.String.check(
   Schema.isPattern(/^test_integrity_[A-Za-z0-9_-]{8,}$|^prod_integrity_[A-Za-z0-9_-]{8,}$/u)
 );
-/** Resolves the redacted private key used for Wompi enrollment and billing requests. */
 export const loadWompiPrivateKey = (
   environment: WompiEnvironment
 ): Config.Config<Redacted.Redacted<string>> =>
@@ -62,7 +59,6 @@ export const loadWompiPrivateKey = (
     requirement: `must be a ${environment} Wompi private key`,
   });
 
-/** Resolves the redacted secret used to sign Wompi transaction integrity material. */
 export const loadWompiIntegritySecret = (
   environment: WompiEnvironment
 ): Config.Config<Redacted.Redacted<string>> =>

@@ -5,11 +5,6 @@ import { User, UserPreferences } from "~/core/identity/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
-/**
- * Canonical stable-User operations. The update payload is the model-derived
- * preference projection, so ServiceMarket cannot become editable through a
- * second hand-written request schema.
- */
 export const IdentityGroup = HttpApiGroup.make("identity").add(
   HttpApiEndpoint.get("getCurrentUser", "/user", {
     success: OperationResponse(User),

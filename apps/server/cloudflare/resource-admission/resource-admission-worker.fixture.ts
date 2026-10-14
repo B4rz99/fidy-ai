@@ -28,9 +28,7 @@ const policy = {
   limit: ResourceAdmissionLimit.make(burstLimitValue),
 } as const;
 
-// Cloudflare module Workers require their fetch handler on a default export.
 export default {
-  // This Miniflare fixture exposes the Promise-native Worker fetch boundary.
   fetch(request: Request, environment: Environment): Promise<Response> {
     const authority = {
       database: environment.DB,

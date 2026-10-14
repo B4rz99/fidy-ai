@@ -1,10 +1,8 @@
 import * as React from "react";
-// Dashboard presentation is already route-lazy.
 // react-doctor-disable-next-line prefer-dynamic-import
 import * as RechartsPrimitive from "recharts";
 import { cn } from "@/ui/class-names";
 
-/** Theme labels and colors consumed by the shadcn ChartContainer source. */
 export type ChartConfig = Readonly<
   Record<string, Readonly<{ label: React.ReactNode; color: string }>>
 >;
@@ -26,7 +24,6 @@ const ChartStyle = ({
   </style>
 );
 
-/** Responsive shadcn chart frame; Recharts remains directly composable inside it. */
 const ChartContainer = ({
   className,
   children,

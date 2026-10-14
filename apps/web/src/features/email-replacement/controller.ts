@@ -12,7 +12,6 @@ import {
   type FidyClient,
 } from "@/transport/client";
 
-/** Renderable states for the transient verified-email replacement interaction. */
 export type EmailReplacementViewState =
   | Readonly<{ _tag: "Editing" }>
   | Readonly<{ _tag: "Requesting" }>
@@ -128,7 +127,6 @@ type EmailReplacementController = Readonly<{
   restart: () => void;
 }>;
 
-/** Owns transient replacement form state and dispatches typed request/completion commands. */
 export const useEmailReplacement = (): EmailReplacementController => {
   const router = useRouter();
   const [state, setState] = useState<EmailReplacementViewState>({ _tag: "Editing" });

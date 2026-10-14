@@ -94,7 +94,6 @@ it.each(["code", "refresh"] as const)(
               .prepare("SELECT CAST(strftime('%s','now') AS INTEGER) * 1000 AS current")
               .first<number>("current")
           )) ?? 0;
-        // A previously prepared unit reaches D1 after its credential has expired.
         yield* wait(
           fixture.db
             .prepare(

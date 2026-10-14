@@ -39,7 +39,6 @@ export type ForwardedEmailEnvironment = Readonly<{
 
 /** Secret-free, versioned identity shared by Queue, Workflow, and the User coordinator. */
 export const StatementWork = Schema.Struct({
-  // Diagnostic continuation is decoded independently and never grants work authority.
   traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   userId: Schema.String.check(Schema.isUUID()),
@@ -54,7 +53,6 @@ export const StatementCoordinatorActivity = Schema.Union([
 
 /** Versioned, secret-free identity from the private forwarded-email Queue. */
 export const ForwardedEmailWork = Schema.Struct({
-  // Diagnostic continuation is decoded independently and never grants work authority.
   traceContext: Schema.optionalKey(Schema.Unknown),
   receiptId: Schema.String.check(Schema.isUUID()),
   userId: Schema.String.check(Schema.isUUID()),

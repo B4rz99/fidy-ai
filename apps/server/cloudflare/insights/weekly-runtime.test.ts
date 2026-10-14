@@ -153,7 +153,6 @@ const providerFetch = vi.fn<(input: Parameters<typeof globalThis.fetch>[0]) => P
     );
   }
 );
-// Effect's Fetch reference retains its default transport. Keep one adapter, reset only its evidence.
 const fakeProvider = (): typeof providerFetch => {
   attempts = 0;
   providerFetch.mockClear();

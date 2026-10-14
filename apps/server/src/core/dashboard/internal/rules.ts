@@ -31,7 +31,6 @@ const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
 type StandardIssue = ReturnType<typeof formatIssues>["issues"][number];
 
-/** An issue with no path names the document itself rather than one of its fields. */
 const toDashboardIssue = (issue: StandardIssue): DashboardIssue => ({
   path:
     Option.getOrThrow(Option.fromNullishOr(issue.path)).length === 0
@@ -40,9 +39,6 @@ const toDashboardIssue = (issue: StandardIssue): DashboardIssue => ({
   message: issue.message,
 });
 
-// The formatter flattens a failure into its leaves, and a real failure always
-// has at least one; the fallback still reports the error itself rather than a
-// fixed blurb if a formatter ever violates that invariant.
 const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardResult => {
   const [issue = { path: Option.none(), message: error.message }, ...rest] = formatIssues(
     error.issue
@@ -50,9 +46,7 @@ const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardRe
   return new InvalidDashboardResult({ issues: [issue, ...rest] });
 };
 
-// Only Type-side checks need re-proving after an edit, so this decodes the Type
-// schema rather than round-tripping through the encoded form. `errors: "all"`
-// is what makes the API's "correct every reported field" instruction true.
+// Revalidate Type-side invariants; collect every field issue for the caller.
 /** Re-prove all decoded document invariants and return field issues for the complete invalid result. */
 export const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
@@ -88,10 +82,8 @@ type WeightedLayoutNode = Readonly<{ node: LayoutNode; weight: bigint }>;
 
 type Expansion = ReadonlyArray<WeightedLayoutNode>;
 
-/** A split child beside the denominator its own child weights are stated against. */
 type DenominatedChild = Readonly<{ child: SplitChild; denominator: bigint }>;
 
-/** The parent's common denominator, and the factor that lifts a nested split's own weights. */
 type ChildScale = Readonly<{ keep: bigint; flatten: bigint }>;
 
 const splitWeightPrecision = 1000;
@@ -100,7 +92,6 @@ const splitWeightPrecision = 1000;
 const splitWeightInteger = (weight: SplitChild["weight"]): bigint =>
   BigInt(Math.round(weight * splitWeightPrecision));
 
-/** Restates one child against the parent's common denominator, flattening same-axis nesting. */
 const expandChild = (child: SplitChild, axis: Axis, scale: ChildScale): Expansion => {
   switch (child.node.kind) {
     case "split":
@@ -516,7 +507,6 @@ export const applyResize = ({
     ? Effect.fail(new RootRegionResize({ widgetIds: edit.widgetIds }))
     : resizeResult(document, edit);
 
-/** The sibling Widget a Placement names, when it names one rather than a document edge. */
 const besideWidgetId = (at: Readonly<Placement>): Option.Option<WidgetId> =>
   Option.liftPredicate(at, isBesidePlacement).pipe(
     Option.map((beside: Readonly<BesidePlacement>) => beside.besideWidget)

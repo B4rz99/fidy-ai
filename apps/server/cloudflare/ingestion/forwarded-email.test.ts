@@ -197,7 +197,6 @@ const setup = Effect.fn(function* () {
       db.prepare(`CREATE TRIGGER ${name} BEFORE ${event} ON ${table} BEGIN SELECT 1; END`).run()
     );
   }
-  // Migration must issue an address to a User whose Consent predates its installation.
   yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(userA).run());
   yield* wait(() =>
     db
@@ -845,8 +844,6 @@ it("refuses finalization after Consent revocation without partial financial writ
         subject: { id: session, userId: userA, digest },
         url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
       });
-      // Ordinary canonical work remains blocked after revocation; the review is durably
-      // recorded for a future authenticated re-consent/data-rights read.
       expect(page.status).toBe(401);
     })
   ));
@@ -1004,7 +1001,6 @@ it("refuses per-User outstanding capacity before storing another object", () =>
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
       const now = yield* Clock.currentTimeMillis;
-      // This is platform capacity evidence: populate the real D1 authority up to the policy bound.
       for (let index = 0; index < 100; index++) {
         yield* wait(() =>
           db

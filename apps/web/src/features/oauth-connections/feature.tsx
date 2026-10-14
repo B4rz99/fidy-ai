@@ -15,7 +15,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/
 import { ManagementPage } from "./management-feature";
 import { OAuthReviewView } from "./view";
 
-/** Session-registry-owned metadata and commands; URL pagination contains only public connection references. */
 export const OAuthManagementFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const after = Option.fromUndefinedOr(search.after);
@@ -139,7 +138,7 @@ const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Elem
     </div>
   );
 };
-/** Public references identify only a fresh-session review, never a credential or post-login destination. */
+/** Public references grant no authority and select no post-login destination. */
 export const OAuthReviewFeature = (): JSX.Element => {
   const params = useParams({ strict: false });
   const requestId = Schema.decodeUnknownOption(OAuthRequestId)(params.requestId);

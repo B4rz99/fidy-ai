@@ -82,7 +82,6 @@ const evidenceQueries = [
 ];
 
 const callerOf = (row: typeof Row.Type): AuditCaller => {
-  // A lifecycle transition may identify a target PAT as well as its acting session.
   if (Option.isSome(row.sessionId)) {
     return { _tag: "WebSession", webSessionId: row.sessionId.value };
   }

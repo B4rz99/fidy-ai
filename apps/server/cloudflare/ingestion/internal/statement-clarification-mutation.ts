@@ -474,7 +474,6 @@ export const prepareHeldStatementReviewDecision = (
   }>
 ): Effect.Effect<CanonicalMutationPreparation> => prepareReviewDecision({ ...input, oauth: false });
 
-/** Canonical credential adapter uses precisely the same decision as the verified hosted adapter. */
 export const prepareStatementReviewDecision = ({
   operation,
   work,

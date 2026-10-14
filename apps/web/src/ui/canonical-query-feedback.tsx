@@ -2,10 +2,7 @@ import type { JSX } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 
-/**
- * Renders safe canonical-query feedback and dispatches retry through the owning atom callback.
- * Copy is supplied by the feature; Cause details never enter this presentation boundary.
- */
+/** Retry belongs to the owning atom; Cause details never enter presentation. */
 export const CanonicalQueryRetry = ({
   description,
   onRetry,

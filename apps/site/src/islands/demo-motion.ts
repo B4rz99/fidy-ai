@@ -12,7 +12,6 @@ const easing = (element: Element): string =>
   getComputedStyle(element).getPropertyValue("--ease-out").trim();
 const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** Settles the demonstration without cancelling the page's native scroll animations. */
 const settle = (root: Element): void => {
   root.getAnimations({ subtree: true }).forEach((animation) => {
     if (typeof CSSAnimation !== "undefined" && animation instanceof CSSAnimation) return;
@@ -35,7 +34,7 @@ const fill = (element: Element, axis: "X" | "Y", delay: number): void => {
   );
 };
 
-/** Reveals the result only after the chat explains it; keyboard selection settles immediately. */
+/** Keyboard selection settles immediately; animated results follow their chat explanation. */
 export const playConversation = ({
   root,
   instant,
@@ -70,7 +69,6 @@ export const playConversation = ({
   if (track !== null) fill(track, "X", resultDelay + previewDuration);
 };
 
-/** Plays once on entry and settles on departure, backgrounding, or preference changes. */
 const mountDemonstration = (root: HTMLElement, play: () => void): (() => void) => {
   let played = false;
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -99,7 +97,6 @@ const mountDemonstration = (root: HTMLElement, play: () => void): (() => void) =
   };
 };
 
-/** Keeps the phone shell stable while each selected conversation owns its animation lifetime. */
 export const mountConversation = (node: HTMLDivElement): (() => void) => {
   const shell = node.closest<HTMLElement>(".demo-shell");
   if (shell === null) return () => {};
@@ -127,14 +124,12 @@ const playPreview = (root: HTMLElement): void => {
     .forEach((element, index) => fill(element, "Y", index * previewStagger));
 };
 
-/** Animates only the illustrative artwork; the feature explanation remains readable. */
 export const mountPreview = (node: HTMLDivElement): (() => void) => {
   const art = node.querySelector<HTMLElement>(".feature-art");
   if (art === null) return () => {};
   return mountDemonstration(art, () => playPreview(art));
 };
 
-/** Explains the shared context once, without running a decorative loop. */
 export const mountChannels = (node: HTMLDivElement): (() => void) =>
   mountDemonstration(node, () => {
     node.querySelectorAll(".channel-card,.channel-connector").forEach((element, index) =>

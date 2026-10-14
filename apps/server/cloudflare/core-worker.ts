@@ -140,7 +140,6 @@ const proactivityMaintenanceInput = (
     : { PROACTIVITY_PAUSE_AFTER: environment.PROACTIVITY_PAUSE_AFTER }),
 });
 
-/** Normalize only the bindings needed by the published scheduled composition. */
 const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput => ({
   DB: environment.DB,
   ...proactivityMaintenanceInput(environment),
@@ -214,7 +213,6 @@ class CoreMaintenanceCoordinator {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
 
-    // Overlapping deliveries share one tick instead of queueing unbounded maintenance work.
     const work = Option.getOrElse(this.active, () => {
       const started = runCoreMaintenance(maintenanceInput(this.environment))
         .pipe(
@@ -269,7 +267,6 @@ export class UserTransactionCoordinator {
   }
 }
 
-/** Compose private HTTP, Queue and schedule entrypoints without acquiring owner implementation. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: makeCoreHttp(telemetry),
   queue: makeCoreQueue(telemetry),
@@ -296,5 +293,4 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
     ),
 });
 
-/** Private service-binding target for canonical execution and bounded topology health evidence. */
 export default makeCoreWorker(cloudflareWorkerTelemetry);

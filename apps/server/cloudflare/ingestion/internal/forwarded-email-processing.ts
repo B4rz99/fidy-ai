@@ -176,7 +176,6 @@ const readMaterial = (
         cause: new Error("Email evidence unavailable"),
       });
     }
-    // MIME limits mirror admission. No embedded reference is fetched or attachment interpreted.
     const parsed = yield* attempt(() =>
       PostalMime.parse(bytes, {
         maxHeadersSize: 16_384,
@@ -333,7 +332,6 @@ const settle = (
         },
       })
     );
-    // A racing revocation or another coordinator cannot commit an orphan result.
     statements.push(
       input.DB.prepare(`INSERT INTO forwarded_email_assertion (id, accepted)
     VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)

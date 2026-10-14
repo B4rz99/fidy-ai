@@ -3,7 +3,6 @@ import { PhoneContent } from "./phone-content";
 import { conversations } from "./conversations";
 import { mountConversation, playConversation } from "./demo-motion";
 
-/** Changes synthetic conversations without changing the phone's dimensions. */
 export const PhoneDemo = (): React.JSX.Element => {
   const [scenario, setScenario] = useState(0);
   return (

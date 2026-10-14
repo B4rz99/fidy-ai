@@ -153,7 +153,6 @@ const useEditor = ({
   return { amount, setAmount, currency, setCurrency, group, onGroup, submit };
 };
 
-/** The side panel edits one cap or configures its group. */
 export const BudgetEditor = ({
   draft,
   month,

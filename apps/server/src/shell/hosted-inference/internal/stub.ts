@@ -8,7 +8,6 @@ import { makeHostedInferenceInternal } from "./inference";
 
 type StubRequest = Parameters<HostedInferenceStubBehavior["generate"]>[0];
 
-/** Builds deterministic inference through the same orchestration used by production adapters. */
 export const makeHostedInferenceStubInternal = (
   behavior: HostedInferenceStubBehavior
 ): HostedInferenceService => {

@@ -906,7 +906,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* A: fast press feedback; hover movement belongs only to precise pointers. */
 .fidy-landing.variant-a {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -968,7 +967,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Reserve enough fixed space for the longest demo; retain overflow as a zoom fallback. */
 .fidy-landing .phone {
   height: 600px;
   display: flex;
@@ -995,7 +993,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Compact demo: keep readable type while reclaiming message spacing. */
 .fidy-landing .chat-body {
   padding: 12px 13px 14px;
 }
@@ -1328,7 +1325,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* One type hierarchy for the selected landing. The miniature phone keeps its accepted scale. */
 .fidy-landing.variant-a {
   --type-hero: 80px;
   --type-heading: 48px;
@@ -2314,7 +2310,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Collapse navigation before labels compete with the launch action. */
 .fidy-landing .main-nav {
   position: relative;
   z-index: 10;
@@ -2370,7 +2365,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Keep action labels and their arrows together; wrap whole actions if needed. */
 .fidy-landing .hero-copy .actions {
   flex-wrap: wrap;
   gap: 16px;
@@ -2404,7 +2398,6 @@ html:has(.fidy-landing) {
   margin: 1em 0;
 }
 
-/* Public-site appearance is independent of the authenticated application's theme. */
 .fidy-landing {
   color-scheme: light dark;
 }
@@ -2423,7 +2416,6 @@ html:has(.fidy-landing) {
   background: #000;
 }
 
-/* Grafito with warm highlights: approved dark palette. */
 .fidy-landing {
   --night-canvas: #141414;
   --night-surface: #202020;
@@ -2486,7 +2478,6 @@ html:has(.fidy-landing) {
   background: light-dark(#f5f4f1, var(--night-raised));
 }
 
-/* Pastel accents retain neutral, high-contrast text in both themes. */
 .fidy-landing {
   --brand-green: #7cb243;
   --pastel-success: #c5dfa5;
@@ -2584,7 +2575,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Let stacked sections use their available width instead of desktop text columns. */
 @media (max-width: 700px) {
   .fidy-landing .hero-copy p,
   .fidy-landing .section-head p,
@@ -2666,7 +2656,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Keep the phone and its decorations in one composition as the viewport changes. */
 .fidy-landing .demo-shell {
   container-type: inline-size;
 }
@@ -2684,7 +2673,6 @@ html:has(.fidy-landing) {
   top: 24px;
 }
 
-/* Pointer opening grows from the menu trigger; keyboard opening stays immediate. */
 .fidy-landing .compact-navigation {
   transform-origin: top right;
   opacity: 0;
@@ -2747,7 +2735,6 @@ html:has(.fidy-landing) {
   transform-origin: bottom;
 }
 
-/* Scroll progress drives gentle entrances and exits; reading stays fully visible. */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     .fidy-landing
@@ -2785,7 +2772,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Keep the primary action with its explanation on compact desktop viewports. */
 @media (min-width: 701px) {
   .fidy-landing .hero {
     padding-block: 40px 56px;
@@ -2873,7 +2859,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Explanatory sequences use transitions so rapid reset/selection retargets cleanly. */
 .fidy-landing .story-value {
   display: grid;
 }
@@ -3086,7 +3071,6 @@ html:has(.fidy-landing) {
   }
 }
 
-/* Static chart geometry remains usable under the site Content Security Policy. */
 .fidy-landing .chart-width-64 {
   width: 64%;
 }

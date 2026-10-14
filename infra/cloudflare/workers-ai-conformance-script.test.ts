@@ -106,7 +106,6 @@ const exercise = Effect.fn(function* (
     `${directory}/scripts/cli-release/command.py`
   );
   yield* fs.writeFileString(`${directory}/infra/cloudflare/scripts/check.sh`, source);
-  // Only the prerequisite and launcher are fixtures. curl, jq and deadline enforcement stay real.
   yield* fs.writeFileString(
     `${directory}/bin/bun`,
     `#!/bin/sh\nexit ${report.prerequisiteFailure ? 23 : 0}\n`

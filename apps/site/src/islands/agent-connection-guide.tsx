@@ -1,4 +1,3 @@
-/** Explains setup, least-privilege access and independent revocation controls. */
 export const AgentConnectionGuide = (): React.JSX.Element => (
   <section className="section wrap connection-guide" id="conectar" aria-labelledby="guia-agentes">
     <div className="section-head">

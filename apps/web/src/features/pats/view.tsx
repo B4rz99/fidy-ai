@@ -316,7 +316,6 @@ const CreationContent = ({
       );
   }
 };
-/** Renders the mounted issuance module without owning its transition protocol. */
 export const ManualPATView = ({
   state,
   actions,

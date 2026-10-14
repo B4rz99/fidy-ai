@@ -74,7 +74,6 @@ export const makeUserCloudflareHostedInference = ({
 }>): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
   constructInference(environment, { db, userId, admittedTurnId });
 
-/** Cloudflare-configured production composition for Memory and hosted Turns. */
 export const cloudflareHostedInferenceLive = ({
   environment,
   db,

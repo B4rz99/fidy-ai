@@ -13,7 +13,6 @@ it("disambiguates siblings, transport containers and reserved options without ac
     }),
     query: Schema.Struct({ id: Schema.Boolean }),
   });
-  // Booleans are sufficient to exercise names independently of string classification.
   const plan = deriveFlags(Schema.toJsonSchemaDocument(schema));
   expect(plan.flags.map((flag) => flag.name)).toEqual([
     "payload-input",

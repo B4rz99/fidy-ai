@@ -11,7 +11,6 @@ export const fixtureNativeHttpClient = Effect.gen(function* () {
   return Context.get(clients, HttpClient.HttpClient);
 });
 
-/** Owner integration tests retain real D1; native object routing is covered by core-schedule.test.ts. */
 const withMaintenanceExecutor = (worker: typeof coreWorker): typeof coreWorker => ({
   ...worker,
   scheduled: (controller, environment) => {
@@ -39,7 +38,6 @@ export const makeFixtureWorker = (telemetry: TelemetryService): typeof coreWorke
 
 export { UserTransactionCoordinator } from "./core-worker";
 
-/** Private test-only trigger: exercises the published scheduler and a native local object binding. */
 export const scheduledFixture = {
   fetch(
     request: Request,

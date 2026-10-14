@@ -91,7 +91,6 @@ const presentSubscription = ({
   ) {
     return refused();
   }
-  // The canonical codec rebuilds a closed JSON response, excluding provider and payment-source ids.
   return Response.json(
     { data: read.decode(results.map((result) => result.results)), next: [] },
     { headers }

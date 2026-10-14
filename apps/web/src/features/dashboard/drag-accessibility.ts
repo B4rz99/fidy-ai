@@ -30,7 +30,6 @@ const targetLabel = (target: DashboardDropTarget): string => {
 const destinationLabel = (target: DashboardDropTarget, ariaLabel: Option.Option<string>): string =>
   Option.getOrElse(ariaLabel, () => targetLabel(target));
 
-/** Localized semantic announcement text, independent of dnd-kit's event object shape. */
 export const dashboardAnnouncementText = {
   started: (sourceData: unknown): Option.Option<string> =>
     Option.map(
@@ -68,7 +67,6 @@ export const dashboardAnnouncementText = {
     }),
 };
 
-/** Localized dnd-kit callbacks delegated to the independently tested semantic text. */
 type AccessibilityOptions = NonNullable<ConstructorParameters<typeof Accessibility>[1]>;
 type DashboardAnnouncements = Required<AccessibilityOptions>["announcements"];
 
@@ -94,5 +92,4 @@ export const dashboardAnnouncements: DashboardAnnouncements = {
     ),
 };
 
-/** Numeric collision ordering where deeper recursive regions win overlapping targets. */
 export const dashboardCollisionPriority = (depth: number): number => depth;

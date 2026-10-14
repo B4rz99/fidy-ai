@@ -14,7 +14,7 @@ import { Button } from "@/ui/components/button";
 import { useHostedConversation } from "./conversation";
 import { VisibleReply } from "./visible-reply";
 
-/** Chat state outlives popup dismissal and navigation, but never the authenticated layout. */
+/** Retains chat through dismissal/navigation; authenticated-layout unmount discards it. */
 export const HostedAgentFeature = (): JSX.Element => {
   const client = useRouter().options.context.hostedTurnClient;
   const [open, setOpen] = useState(false);

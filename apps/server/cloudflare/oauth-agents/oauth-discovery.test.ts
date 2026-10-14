@@ -23,7 +23,6 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 
-// These declarations deliberately have no native query owner yet; this is not an installed-query inventory.
 const uninstalledQueries = new Set([
   "identity.getCurrentUser",
   "transactions.listSourceAttestations",
@@ -36,7 +35,6 @@ const queryTools = operationCatalog.operations.filter(
     !uninstalledQueries.has(id)
 );
 
-// Bound each case's workload while deriving complete coverage from the assembled catalog.
 const queriesPerCase = 8;
 const queryGroups = Array.from(
   { length: Math.ceil(queryTools.length / queriesPerCase) },
@@ -340,8 +338,6 @@ it.each(queryGroups)(
           { query: { q: "mercado" } },
           { params: { id: resourceId } },
         ];
-        // Both Users share only the arranged resource snapshot; credentials and accounting
-        // remain independent. Each catalog operation runs once for each identity.
         for (const current of [fixture, peer]) {
           const token = yield* Schema.decodeUnknownEffect(
             Schema.Struct({ access_token: Schema.String })
@@ -351,7 +347,6 @@ it.each(queryGroups)(
             )
           );
           for (const operation of operations) {
-            // Catalog cases exercise owner behavior, not burst admission.
             vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
             const args = examples.find((example) =>
               Option.isSome(

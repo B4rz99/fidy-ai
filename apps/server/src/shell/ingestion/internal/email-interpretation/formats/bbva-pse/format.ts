@@ -9,7 +9,6 @@ import {
   makeInterpretation,
 } from "~/shell/ingestion/internal/email-interpretation/format-support";
 
-/** Evidence-backed BBVA PSE notification revision. */
 export const format: NotificationEmailFormat = {
   id: NotificationFormatId.make("bbva-pse"),
   revision: InterpretationRevision.make("bbva-pse-v1"),

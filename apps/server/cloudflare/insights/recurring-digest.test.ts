@@ -307,7 +307,6 @@ it("requires every source page, recovers after revision changes, and links the e
           db.prepare("SELECT count(*) AS total FROM recurring_digest_reports").first()
         )
       ).toEqual({ total: 0 });
-      // A real effective fact change invalidates the old bounded traversal.
       yield* Effect.tryPromise(() =>
         db
           .prepare(

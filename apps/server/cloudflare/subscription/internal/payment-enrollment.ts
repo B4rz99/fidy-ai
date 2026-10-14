@@ -199,7 +199,6 @@ export const billingAttemptIdFor = (
 ): Promise<BillingAttemptId> =>
   digest(`billing-attempt-v1:${input.userId}:${input.requestId}`).then((hash) => {
     const bytes = hash.slice(0, uuidByteCount);
-    // The digest supplies the identity; UUID version/variant bits preserve the public ID contract.
     bytes[uuidVersionByte] = ((bytes[uuidVersionByte] ?? 0) & versionMask) | versionBits;
     bytes[uuidVariantByte] = ((bytes[uuidVariantByte] ?? 0) & variantMask) | variantBits;
     const hex = Array.from(bytes, (byte) => byte.toString(hexBase).padStart(2, "0")).join("");
@@ -719,7 +718,6 @@ const finish = ({
         requestId
       ),
     ];
-    // Once D1 starts, settle the atomic unit and its acceptance notification even if delivery is lost.
     const accepted = yield* Effect.gen(function* () {
       const committed = yield* waitFor(() =>
         environment.DB.batch([
@@ -729,7 +727,6 @@ const finish = ({
           ),
         ])
       );
-      // D1 counts the arm and outbox trigger writes alongside the BillingAttempt insertion.
       if ((committed.at(billingInsertResultFromEnd)?.meta.changes ?? 0) === 0) return false;
       environment.onAccepted(attemptId);
       return true;
@@ -868,7 +865,6 @@ const authorizeSourcePost = (
         .first()
     );
     if (live !== null) return true;
-    // No source POST has started: retire this claim as a known refusal, never as ambiguous work.
     yield* waitFor(() =>
       input.db
         .prepare(
@@ -940,8 +936,6 @@ const submit = ({
       });
       return json(presented);
     }
-    // The same PaymentRequestId was handled above; a different action cannot collect
-    // while this User has an attempt without success or confirmed no-charge evidence.
     const blocked = yield* waitFor(() =>
       environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
       WHERE a.user_id = ? AND a.status <> 'succeeded'

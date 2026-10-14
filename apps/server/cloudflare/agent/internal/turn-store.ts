@@ -232,8 +232,6 @@ export const recoverHostedTurn = ({
     const marker = TranscriptEntryId.make(newId());
     const results = yield* Effect.tryPromise(() =>
       db.batch([
-        // A committed owner write and its receipt are atomic. If its response was lost, record
-        // the commit without inventing the unavailable canonical output before interrupting.
         db
           .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, iteration,
@@ -267,7 +265,6 @@ export const recoverHostedTurn = ({
           .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
           .bind(turn.id, userId),
         prepareWhatsAppWorkCleanup({ db, turnId: turn.id, userId, requireTerminal: false }),
-        // A recovered Pending Turn's activity was its start, not this recovery instant.
         db
           .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
       AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?)`)
@@ -290,7 +287,6 @@ const admissionState = (snapshot: HostedTurnSnapshot): HostedAdmissionState => (
   pendingStartedAtMs: Option.map(snapshot.pending, (turn) => turn.started_at_ms),
 });
 
-/** The one session selection used for both preflight and the guarded admission batch. */
 export const selectHostedSession = ({
   snapshot,
   userId,
@@ -353,7 +349,6 @@ export const readHostedContinuity = ({
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
-    // Explicit revocation forbids the next admission, not continuity of an admitted Turn.
     const authority =
       Option.isSome(admittedWhatsAppTurn) && isWhatsAppHosted(subject)
         ? hostedIdentity({ subject, current: now })
@@ -605,8 +600,6 @@ export const commitHostedCompaction = ({
     });
     const nonce = newId();
     const nextRevision = prior.revision + 1;
-    // There is no suspension between this check and dispatching the atomic batch. Once dispatched,
-    // the replacement has entered its non-interruptible commit point; an abort cannot undo success.
     if (signal.aborted) return false;
     return yield* Effect.tryPromise(() =>
       db.batch([
@@ -775,7 +768,6 @@ const prepareChannelAdmission = ({
           : []),
       ];
 
-/** Agent alone projects its live Session and bounded Pending activity into the peer lifecycle unit. */
 const statementSessionActivity = ({
   db,
   userId,
@@ -1114,7 +1106,6 @@ const sweepHostedTranscript = (
     return yield* readHostedRetentionDeadline(db, userId);
   });
 
-// Read remaining evidence deadlines after expiry deletes commit; Pending Turn recovery is separate.
 const readHostedRetentionDeadline = (
   db: D1Database,
   userId: UserId

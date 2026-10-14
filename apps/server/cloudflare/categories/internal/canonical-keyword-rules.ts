@@ -59,9 +59,7 @@ import { ruleOAuthReview } from "./oauth-review";
 import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 
 const HTTP_OK = 200;
-// The audit closes the list unit, so the rule rows sit one before it.
 const auditFromEnd = -2;
-// A keyword, a CategoryId, and the JSON envelope fit well inside one small bounded body.
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 2000,

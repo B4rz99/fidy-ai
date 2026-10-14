@@ -72,7 +72,6 @@ const historyOwner =
             },
     });
 
-// This installed-owner registry selects only canonical catalog entries; it declares no private tool.
 const queryOwners = new Map<string, QueryOwner>([
   ...(
     [
@@ -225,7 +224,6 @@ const queryOwners = new Map<string, QueryOwner>([
   ],
 ]);
 
-/** Look up an installed query adapter only inside canonical dispatch. */
 export const canonicalQueryOwner = (id: string): Option.Option<QueryOwner> =>
   Option.fromUndefinedOr(queryOwners.get(id));
 
@@ -269,7 +267,6 @@ export const canonicalHostedStatementQueryOwner = (
   return Option.none();
 };
 
-/** An installed query adapter may implement only an existing canonical query declaration. */
 const assertCanonicalQueryOwners = (): void => {
   for (const id of queryOwners.keys()) {
     const declaration = operationCatalog.operations.find((operation) => operation.id === id);

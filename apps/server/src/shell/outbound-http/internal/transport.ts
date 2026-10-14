@@ -234,7 +234,6 @@ type ProviderTransport = Readonly<{
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
 
-/** Builds the private raw-client adapter behind the published Outbound HTTP service. */
 export const makeProviderTransport =
   (provider: OutboundHttpProvider) =>
   (client: HttpClient.HttpClient): ProviderTransport => {

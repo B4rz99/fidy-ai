@@ -50,7 +50,6 @@ for (const path of [
               .map((name) => new URL(`../../migrations/${name}`, import.meta.url)),
           })
         );
-        // The session's historical dates separate the two clocks without replacing native time.
         expect(
           yield* Effect.tryPromise(() =>
             db

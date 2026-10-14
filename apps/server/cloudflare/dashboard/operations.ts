@@ -142,12 +142,10 @@ const preparedDashboard = ({
     statements: [
       ...credentialUse(work),
       ...(Option.isSome(initial) ? [initial.value] : []),
-      // A first edit cannot update a competing document it did not validate.
       ...(operation === "dashboard.applyDashboardEdit" && Option.isSome(initial)
         ? [work.db.prepare(dashboardCompletion)]
         : []),
       ...write,
-      // The revision guard must change exactly one row before a success Audit can commit.
       ...(write.length > 0 ? [work.db.prepare(dashboardCompletion)] : []),
       audit({ work, operation, outcome: "accepted" }),
     ],
@@ -226,7 +224,6 @@ export const prepareDashboard = ({
     return preparedDashboard({ work, operation, initial, write, oauthReview });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-/** Present an owner-encoded committed value identically for individual and atomic-batch calls. */
 export const presentDashboard = (
   value: Extract<CommittedMutationValue, { _tag: "Owner" }>
 ): Effect.Effect<Response> =>

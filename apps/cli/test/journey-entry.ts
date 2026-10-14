@@ -1,4 +1,3 @@
-// Broad test composition only. Production main never imports this loopback/native-store fixture.
 import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";

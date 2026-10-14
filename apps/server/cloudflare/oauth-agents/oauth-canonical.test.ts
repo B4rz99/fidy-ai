@@ -104,7 +104,6 @@ it("upgrades retained OAuth Audit evidence into the shared budget and atomically
         })
       );
       expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current }))).toBe(1);
-      // Native fixture rows establish the threshold, including refused work and the excluded envelope.
       yield* wait(
         db.batch([
           fixture.audit("batch-envelope", "operations.executeAtomicBatch"),
@@ -1729,7 +1728,6 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
         auditMigration: true,
       });
       approvalClock.mockRestore();
-      // The grant is deliberately near expiry; issue its single-use code at real database time.
       yield* wait(
         fixture.db.prepare("UPDATE oauth_codes SET expires_at_ms = ?").bind(expiresAt).run()
       );
@@ -1743,7 +1741,6 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
           )).json()
         )
       );
-      // Retained credentials are untrusted authority facts: a longer credential cannot extend its grant.
       yield* wait(
         fixture.db
           .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ?")
@@ -1771,7 +1768,6 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       held.release();
       const response = yield* wait(pending);
       yield* wait(held.settled);
-      // Grant expiry now retires the MCP transport before the held commit can reply.
       expect(yield* wait(response.json())).toMatchObject({
         error: { code: -32603, message: "Internal error" },
       });

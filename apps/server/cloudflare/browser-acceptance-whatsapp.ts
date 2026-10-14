@@ -20,7 +20,6 @@ const Packet = Schema.Struct({
   recipient: Schema.String,
   text: Schema.Struct({ body: Schema.String }),
 });
-/** Substitute only Kapso's external delivery; native ingress and D1 remain real. */
 export const captureWhatsApp = (request: Request): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {

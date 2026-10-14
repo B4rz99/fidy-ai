@@ -3,7 +3,6 @@ import { features } from "./feature-content";
 import { mountIndicator, moveIndicator } from "./tab-indicator";
 import { mountPreview } from "./demo-motion";
 
-/** Offers pointer and roving-keyboard previews with separate detailed feature pages. */
 export const FeatureTabs = (): React.JSX.Element => {
   const [selected, setSelected] = useState(0);
   const [animate, setAnimate] = useState(true);

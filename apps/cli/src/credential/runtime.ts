@@ -144,7 +144,7 @@ const writeGrant = Effect.fn(function* (
   yield* write.pipe(Effect.scoped, Effect.mapError(storageUnavailable));
 });
 
-/** Constructs one locked native/file store. Metadata is bounded, validated, and never contains a bearer. */
+/** Returns a locked store whose bounded metadata contains no bearer. */
 export const makeCredentialStore = Effect.fn(function* (
   directory: string,
   secrets: NativeSecrets = bunSecrets

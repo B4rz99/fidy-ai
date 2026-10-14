@@ -280,7 +280,6 @@ const schemaDocument = (schema: Schema.Top): Schema.Json => {
   return Schema.decodeUnknownSync(Schema.Json)({ ...document.schema, $defs: document.definitions });
 };
 type RegisteredTool = Readonly<{ operation: CatalogOperation; tool: McpSchema.Tool }>;
-// Only immutable catalog metadata is shared; authority is resolved for every request.
 const catalogProjections = new Map<string, ReadonlyArray<RegisteredTool>>();
 const catalogTools = (
   scopes: PATScopes
@@ -577,7 +576,6 @@ const settleOwnerResponses = (owner: ResidentOwner): Promise<OwnerDisposalSettle
       .then(() => owner.drained.promise)
   );
 const completeOwnerDisposal = (registry: ResidentRegistry, owner: ResidentOwner): Promise<void> => {
-  // Initiate SDK interruption before joining callbacks' transfer readiness.
   const native = settleNativeDisposal(owner);
   return settleOwnerResponses(owner).then((responses) =>
     native.then((sdk) => {
@@ -795,7 +793,6 @@ const reserveResidentOwner = (
       if (Option.isNone(idle)) return Option.none();
       yield* Effect.tryPromise(() => disposeOwner(registry, idle.value));
     }
-    // Recheck after asynchronous native disposal; no capacity is released while retiring.
     if (
       registry.closed ||
       registry.owners.size >= maximumResidentOwners ||
@@ -856,7 +853,6 @@ const invokeResidentHandler = (
       signal,
     });
     return yield* Effect.tryPromise(() => {
-      // Same-turn recheck at the actual SDK boundary, after all context/clock preparation.
       if (registry.closed || owner.retiring || Option.isSome(owner.disposal)) {
         return Promise.resolve(Option.none<Response>());
       }
@@ -880,7 +876,6 @@ const transferResidentResponse = (
     const issued = Option.fromNullOr(response.headers.get("mcp-session-id"));
     if (Option.isNone(owner.sessionId)) owner.sessionId = issued;
     if (Option.isNone(owner.sessionId)) owner.retiring = true;
-    // The pre-owned ticket, not the current retirement state, owns this native reply.
     const leased = leasedResponse(owner, response, ticket);
     ticket.transferred = true;
     ticket.settleTransfer();

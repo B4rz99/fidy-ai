@@ -86,8 +86,6 @@ const managedFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   {
     action: "execute",
     actionParameters: {
-      // The Free Managed Ruleset is available on the launch zone's plan. Its defaults provide
-      // non-interactive enforcement; plan-specific overrides are not sent here.
       id: cloudflareFreeManagedRulesetId,
     },
     description: "Execute the Cloudflare Free Managed Ruleset",
@@ -109,8 +107,6 @@ const httpDdosRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
   },
 ];
 
-// The Free plan permits one path-based rule. Static paths and parameterized route prefixes derive
-// from the canonical API; unmatched paths never charge legitimate callers' shared source-IP budget.
 const reservedRateLimitPaths = [
   "/cli/latest.txt",
   "/health",

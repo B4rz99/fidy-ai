@@ -35,7 +35,6 @@ import {
 } from "./contract";
 
 export const pairingMilliseconds = 600_000;
-// One source cannot exhaust this pool under the edge's 60-per-10-second budget.
 const maxPairingsPerWindow = 4000;
 const maxPairingsPerSource = 20;
 const maximumReviewAttempts = 10;

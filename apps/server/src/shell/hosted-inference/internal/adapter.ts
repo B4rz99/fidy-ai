@@ -7,7 +7,6 @@ import type {
   HostedTextToolPolicy,
 } from "~/shell/hosted-inference/contract";
 
-/** Provider-private prompt projection prepared from ordered semantic context. */
 export type HostedPromptProjection = Readonly<{
   prefix: ReadonlyArray<Prompt.MessageEncoded>;
   continuationTail: ReadonlyArray<Prompt.MessageEncoded>;
@@ -15,12 +14,10 @@ export type HostedPromptProjection = Readonly<{
   activeRequest: Readonly<{ _tag: "Absent" }> | Readonly<{ _tag: "Present"; text: string }>;
 }>;
 
-/** Adapter-private executable retaining one exact request and output decoder. */
 export type PreparedStructuredExecution<Output> = Readonly<{
   execute: Effect.Effect<Output, HostedInferenceError>;
 }>;
 
-/** Provider implementation of exact strict structured preparation. */
 export type HostedStructuredAdapter = Readonly<{
   prepare: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     input: Readonly<{
@@ -31,7 +28,6 @@ export type HostedStructuredAdapter = Readonly<{
   ) => Effect.Effect<PreparedStructuredExecution<Output>, HostedInferenceError>;
 }>;
 
-/** Private provider implementation of preparation, execution, and token measurement. */
 export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
   countText: (text: string) => Effect.Effect<number>;
   countTranscript: (entries: ReadonlyArray<TranscriptEntry>) => Effect.Effect<number>;

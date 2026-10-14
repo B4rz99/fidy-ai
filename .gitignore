@@ -1,7 +1,5 @@
-# Dependencies
 node_modules/
 
-# Build outputs
 dist/
 build/
 out/
@@ -13,27 +11,21 @@ apps/web/playwright-report/
 apps/server/cloudflare/browser-acceptance-core-bundle.mjs
 apps/server/cloudflare/.browser-acceptance-core-*/
 
-# TypeScript
 *.tsbuildinfo
 .tsbuild/
 
-# Environment variables
 .env
 .env.local
 .env.*.local
 
-# Test coverage
 coverage/
 
-# Logs
 *.log
 bun-debug.log*
 npm-debug.log*
 
-# macOS
 .DS_Store
 
-# Editors
 .vscode/
 .idea/
 *.swp
@@ -41,7 +33,6 @@ npm-debug.log*
 *~
 *.orig
 
-# Agent / local tooling
 .alchemy/
 .document-parsing-proof/
 .xlsx-work-proof/
@@ -50,15 +41,12 @@ npm-debug.log*
 .claude/settings.local.json
 .npm/
 
-# Mutation testing
 .stryker-tmp/
 reports/
 stryker.log
 
-# Restricted synthetic model evaluation evidence
 .hosted-evaluation.*/
 
-# Astro site
 apps/site/.astro/
 apps/site/test-results/
 apps/site/playwright-report/

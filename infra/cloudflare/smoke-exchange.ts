@@ -128,7 +128,6 @@ export const exchangeSmoke = Effect.fn(
   Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
 );
 
-/** Closed diagnostics expose comparisons, not newly observed identities or provider text. */
 const smokeDiagnostic = (response: SmokeExchange, expectedPublic: SmokeIdentity): string => {
   let versionState = "other";
   if (Option.isNone(response.publicVersion)) versionState = "missing";

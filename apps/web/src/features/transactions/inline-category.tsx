@@ -84,7 +84,6 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
     </div>
   );
 };
-/** Saves a single observed Transaction category without changing the active panel. */
 export const InlineTransactionCategory = ({
   transactions,
   ...props

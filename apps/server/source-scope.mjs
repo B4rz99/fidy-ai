@@ -1,5 +1,3 @@
-// The behavioural source scope shared by the remaining core coverage and quality tools.
-// Test harnesses and process wiring are intentionally outside the measured application source.
 export const CORE_SRC = ["src/core"];
 
 export const SHELL_SRC = ["src/shell"];

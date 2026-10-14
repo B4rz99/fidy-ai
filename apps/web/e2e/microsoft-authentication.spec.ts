@@ -25,8 +25,6 @@ for (const intent of ["signup", "login"] as const) {
       denialAndCancellationJourney({ configuration, page, context, request, intent })
   );
 }
-// The shared controller's lost response, pending redemption and popup refusal are covered
-// by Google journeys. Microsoft keeps its provider-specific success, denial and chat handoff.
 
 for (const existing of [false, true]) {
   playwright.test(

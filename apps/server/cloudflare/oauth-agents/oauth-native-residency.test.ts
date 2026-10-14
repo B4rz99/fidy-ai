@@ -41,7 +41,6 @@ const assertRecovered = (send: () => Promise<Response>): Promise<void> =>
 const responseStatus = (pending: Promise<Response>): Promise<number> =>
   pending.then((response) => response.text().then(() => response.status));
 
-// Native2025 residency: real OAuth/public/Core/User coordinator integration lives at this earned composition.
 describe("native2025 residency integration", () => {
   const databases = isolatedTestDatabases();
   afterAll(() => databases.dispose());
@@ -1082,7 +1081,6 @@ describe("native2025 residency integration", () => {
           yield* wait(() => gate.settled);
           const firstResponse = yield* wait(() => first);
           const queuedResponse = yield* wait(() => queued);
-          // Stock queued-target transport failure is observable; never manufacture successful delivery.
           expect(queuedResponse.status).toBe(500);
           yield* wait(() => firstResponse.text());
           yield* wait(() => queuedResponse.text());
@@ -1253,7 +1251,6 @@ describe("native2025 residency integration", () => {
         const gate = harness.holdRevocation();
         const revocation = harness.revoke();
         let queued: Option.Option<Promise<Schema.Json>> = Option.none();
-        // A cleanup rejection is a test defect, not a normalized protocol response.
         yield* Scope.addFinalizer(
           yield* Scope.Scope,
           Effect.suspend(() => cleanupRevocation(gate, revocation, queued)).pipe(Effect.orDie)
@@ -1273,7 +1270,6 @@ describe("native2025 residency integration", () => {
               return body;
             });
           queued = Option.some(settlement);
-          // Only admission and actual registered SDK callbacks execute this published projection.
           yield* wait(() => callback.waiting.promise);
           expect(callback.starts).toEqual(["retained-MCP-authority", "retained-MCP-authority"]);
           yield* Effect.sleep("10 millis");
@@ -1286,8 +1282,6 @@ describe("native2025 residency integration", () => {
           gate.release.resolve();
           expect((yield* wait(() => revocation)).status).toBe(200);
           yield* wait(() => gate.settled.promise);
-          // Active retirement interrupts the queued native transport after durable revocation.
-          // The financial and lease assertions below still require its callback to settle.
           expect(yield* wait(() => settlement)).toMatchObject({
             error: { code: -32603, message: "Internal error" },
           });
@@ -1701,8 +1695,6 @@ describe("native2025 residency integration", () => {
           request(module, body, session);
         const held: Array<Response> = [];
         const pendingResponses: Array<Promise<Response>> = [];
-        // The held Scope is callback-local, not the SDK layer Scope. Only public dispose completion
-        // witnesses real module shutdown; this is not a proof of arbitrary eviction or crash recovery.
         const evidence = {
           progress,
           cleanupStarted,
@@ -1779,8 +1771,6 @@ describe("native2025 residency integration", () => {
           yield* wait(() => control.text());
           progress.push("control202 settled with callback-local cleanup held");
           yield* module.retireConnections(Option.some(connectionId));
-          // Idle retired owners now close proactively. Refill their seven released slots while
-          // callback-local cleanup still blocks the eighth owner's disposal.
           yield* wait(() => settleRetiredResponses(held.splice(0)));
           for (let index = 0; index < 7; index++) {
             const replacement = yield* wait(() => send(initializeBody));

@@ -16,7 +16,6 @@ export const ConnectionBrowserAdmission = Schema.Struct({
   deadlineMilliseconds: Schema.Int,
 });
 export type ConnectionBrowserAdmission = typeof ConnectionBrowserAdmission.Type;
-/** The canonical product reads owned by Connections. */
 export type ConnectionQueryOperation =
   | "connections.listInstitutions"
   | "connections.listConnections"

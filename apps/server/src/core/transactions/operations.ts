@@ -9,19 +9,7 @@ import {
   type TransactionPairInput,
 } from "./contract";
 import { DateTime, Effect, Equal, Option } from "effect";
-/**
- * Decides whether a movement about to be recorded has actually happened.
- *
- * A Transaction is money that moved (GLOSSARY.md), so `occurredAt` may be any
- * instant up to and including `now`, and nothing after it. The same instant is
- * accepted: a capture that races the clock to the millisecond is a real
- * movement, not a future-dated one.
- *
- * `now` is a parameter rather than a clock read, because core reads no clock
- * (ARCHITECTURE.md §3); the caller supplies the instant it is deciding at, and
- * the same pair always gives the same answer. Both instants are named fields
- * rather than positional arguments, so a call site cannot swap them silently.
- */
+/** Accepts occurredAt up to and including the caller-supplied decision instant. */
 export const checkAlreadyOccurred = (
   occurrence: Readonly<{
     readonly occurredAt: DateTime.Utc;
@@ -58,7 +46,6 @@ export const checkTransactionPeriod = (
     onSome: checkPeriodWidth,
   });
 
-/** Orders one exact pair independently of caller argument order. */
 export const orderTransactionPair = (
   input: TransactionPairInput
 ): Effect.Effect<TransactionPair, SameTransactionPair> => {

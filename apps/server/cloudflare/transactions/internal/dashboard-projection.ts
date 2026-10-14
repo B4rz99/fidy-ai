@@ -13,8 +13,6 @@ import { CategoryId } from "../../../src/core/categories/contract";
 
 const maximumPeriodDays = 32;
 const minutesPerDay = 1440;
-// A Statement input is capped at 5 MiB; even a single amount consuming it must remain exact.
-// This guard bounds corrupt digit positions without introducing a Transaction-history cutoff.
 const maximumAmountDigits = 5_242_880;
 const minuteMs = 60_000;
 const dayMs = 86_400_000;

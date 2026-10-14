@@ -20,7 +20,6 @@ const serverErrorStatusMinimum = 500;
 
 type VerificationEmail = Readonly<{ subject: string; text: string; html: string }>;
 
-/** Fixed replacement projection; the schema-bounded code is its only variable content. */
 const replacementVerificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
   subject: replacementSubject,
   text: `Tu código para cambiar el correo de acceso a Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/settings/email. Este código vence en 10 minutos.\n\nSi no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,

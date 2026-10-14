@@ -1,4 +1,3 @@
-/** Keeps privacy, support and agent setup discoverable across marketing pages. */
 export const Footer = (): React.JSX.Element => (
   <footer className="footer">
     <div className="wrap">

@@ -1,7 +1,5 @@
 {
   "extends": "./tsconfig.base.json",
-  // Repository tooling has no private server-source alias. Server imports use
-  // the package-local alias declared by the server project.
   "include": ["scripts/**/*.ts"],
   "exclude": ["**/node_modules/**", "**/dist/**", "**/build/**"],
   "references": [

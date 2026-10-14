@@ -68,7 +68,6 @@ it.effect(
       ).toMatchObject({
         results: [{ id: 1, observed_at_ms: now }],
       });
-      // A fresh isolate cannot let an older delayed observation overwrite newer evidence.
       yield* burst(makeCoreRejectionObserver(), db, { now: now - 60_000, count: 100 });
       expect((yield* observeCoreRejections({ db, now: now - 1 })).state).toBe("unavailable");
       expect((yield* observeCoreRejections({ db, now: now + 299_999 })).state).toBe("attention");
@@ -110,7 +109,6 @@ it.effect(
       expect(attempts).toBe(1);
       yield* burst(observe, failed, { now: 1_860_000, count: 100 });
       expect(attempts).toBe(2);
-      // Restart explicitly loses the partial local sample; neither observer invents a global total.
       yield* burst(makeCoreRejectionObserver(), db, { now: 1_920_000, count: 99 });
       yield* burst(makeCoreRejectionObserver(), db, { now: 1_920_000, count: 99 });
       expect((yield* observeCoreRejections({ db, now: 1_920_000 })).state).toBe("healthy");

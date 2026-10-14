@@ -19,7 +19,6 @@ import { Button } from "@/ui/components/button";
 import { FidyWordmark } from "@/ui/components/wordmark";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 
-/** Explains the authentication-lifetime transition without exposing or retaining credentials. */
 export const AuthenticationExpired = (): JSX.Element => (
   <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
     <Alert className="max-w-md" variant="destructive">
@@ -184,7 +183,6 @@ const SignedInShell = ({
   );
 };
 
-/** Authenticated route layout whose child server state shares one authentication lifetime. */
 export const SignedInFeature = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {

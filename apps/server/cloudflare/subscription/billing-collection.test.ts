@@ -312,7 +312,6 @@ it("holds verified negative until the retry opportunity and admits a later verif
       expect(create).toHaveBeenCalledTimes(1);
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(1);
-      // A transient lookup failure does not consume the later signed approval hint.
       yield* Effect.tryPromise(() =>
         db
           .prepare(`UPDATE billing_event_candidates
@@ -529,7 +528,6 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(workflow.create).not.toHaveBeenCalled();
       expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
-      // An operator supplies only the provider id as a hint; the Workflow GET authorizes settlement.
       const now = yield* Clock.currentTimeMillis;
       yield* Effect.tryPromise(() =>
         db
@@ -630,7 +628,6 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
       }
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
       expect(create).toHaveBeenCalledTimes(8);
-      // A support-confirmed ID may renew GET without creating another arm or POST.
       const now = yield* Clock.currentTimeMillis;
       yield* Effect.tryPromise(() =>
         db
@@ -973,7 +970,6 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       const secondReference = `fidy-${secondAttempt}`;
       const secondTransaction = "provider-transaction-2";
       yield* verifyProviderTransaction(db, () => transaction("APPROVED"));
-      // A settled attempt releases admission for a separately authorized action.
       yield* Effect.tryPromise(() =>
         db.batch([
           db

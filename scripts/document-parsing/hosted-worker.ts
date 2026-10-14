@@ -18,7 +18,6 @@ class HostedProofCommandFailed extends Data.TaggedError("HostedProofCommandFaile
 }> {}
 export type HostedWorkerProof = Readonly<{ origin: string; token: string }>;
 
-// Wrangler delete also lists legacy Sites KV namespaces, which this proof never creates.
 /** Deletes only an isolated XLSX proof Worker; provider refusals contain numeric codes only. */
 export const deleteProofWorker = Effect.fn(
   function* (name: string) {

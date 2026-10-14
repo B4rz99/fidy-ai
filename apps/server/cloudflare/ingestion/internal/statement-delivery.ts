@@ -8,7 +8,6 @@ import { Cause, Clock, Data, Effect, Exit, Option, Result, Schema } from "effect
 import { StatementCoordinatorActivity, StatementWork } from "../contract";
 import { maximumStatementChunkActivities } from "./statement-processing-limits";
 
-/** Version 1 has no earlier history to migrate; old instances drain before changing activity names. */
 const Work = StatementWork;
 const CoordinatorWork = StatementCoordinatorActivity;
 const OutboxRow = Schema.Struct({
@@ -68,7 +67,6 @@ const attempt = <A>(run: () => PromiseLike<A>): Effect.Effect<A, StatementDelive
     catch: (cause) => new StatementDeliveryUnavailable({ cause }),
   });
 
-/** True only for a structurally valid, versioned statement Queue envelope. */
 export const isStatementExtractionWork = (body: unknown): boolean =>
   Option.isSome(Schema.decodeUnknownOption(Work)(body));
 
@@ -167,7 +165,6 @@ export const receiveStatementExtraction = (
       );
       if (Exit.isFailure(started)) {
         if (Cause.hasInterrupts(started.cause)) return yield* Effect.failCause(started.cause);
-        // A lost create response can still mean a running instance. Confirm before acknowledging.
         yield* attempt(() =>
           input.environment.STATEMENT_EXTRACTION_WORKFLOW.get(work.value.submissionId)
         );
@@ -230,7 +227,6 @@ export const reconcileStatementExtraction = (
       Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
     );
     for (const row of work) {
-      // Rotate even on transient get failure: the next scheduled run can inspect it again.
       yield* attempt(() =>
         input.DB.prepare(`UPDATE statement_ingestion_outbox
         SET last_reconciled_at_ms = ? WHERE submission_id = ? AND user_id = ?`)
@@ -257,7 +253,6 @@ type Activity = <A extends boolean>(
   options: WorkflowStepConfig,
   run: () => Promise<A>
 ) => Promise<A>;
-// Parser and Workflow share a row ceiling; 20,000 rows take at most 625 activities.
 const HTTP_OK = 200;
 const HTTP_ACCEPTED = 202;
 

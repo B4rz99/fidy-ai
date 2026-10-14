@@ -11,7 +11,6 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    // Boundary fixtures own their call history; React workflows live in Playwright.
     clearMocks: true,
     // Vitest 5's failure for unawaited asynchronous assertions is deliberate: assertion failures
     // must remain attached to their owning test.
@@ -22,9 +21,7 @@ export default defineConfig({
       reporter: ["text", "json-summary", "html"],
       // Vitest 5 matches these paths from the apps/web project root, not the workspace root.
       include: ["src/browser/**/*.ts", "src/features/**/*.ts", "src/transport/**/*.ts"],
-      // Keep logic coverage visible; mounted UI orchestration has browser acceptance evidence.
       exclude: ["src/features/browser-login/**", "src/features/provider-authentication/**"],
-      // Preserve the transport boundary's 90% gate independently of browser workflow coverage.
       thresholds: {
         "src/transport/**/*.ts": {
           branches: 90,

@@ -1,3 +1,4 @@
+-- One validated layout per User; every replacement is a compare-and-swap under live authority.
 CREATE TABLE dashboard_documents (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   document_json TEXT NOT NULL,

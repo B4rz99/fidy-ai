@@ -1,3 +1,5 @@
+-- Replace development-only derived generations; captures, receipts and original retention stay intact.
+-- Reprocessing uses the existing bounded same-source reservation protocol.
 DROP TRIGGER statement_materialization_terminal;
 DROP TABLE statement_materialization_parts;
 DROP TABLE statement_materializations;

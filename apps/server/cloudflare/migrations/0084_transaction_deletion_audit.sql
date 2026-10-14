@@ -1,3 +1,4 @@
+-- Preserve historical metadata, external references, and retention/budget guards.
 PRAGMA legacy_alter_table = ON;
 ALTER TABLE transaction_audit RENAME TO transaction_audit_previous;
 CREATE TABLE transaction_audit (

@@ -1,3 +1,5 @@
+-- The evidence capacity is global. Maintain its exact count in the same D1 commit as each
+-- review lifecycle transition, rather than rescanning every pending row for each input row.
 CREATE TABLE statement_review_capacity (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
   pending_count INTEGER NOT NULL CHECK (pending_count BETWEEN 0 AND 5000)

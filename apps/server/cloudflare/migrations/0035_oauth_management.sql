@@ -1,3 +1,4 @@
+-- First-party revocation is distinct from refresh replay and preserves its fresh browser origin.
 CREATE TABLE oauth_user_revocation_consents (
   connection_id TEXT PRIMARY KEY NOT NULL REFERENCES oauth_connections(id),
   user_id TEXT NOT NULL REFERENCES users(id),

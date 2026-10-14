@@ -1,3 +1,5 @@
+-- Routing context is installed only by the server's verified hosted publication adapter.
+-- The deadline tracks Agent's activity projection in the same Agent lifecycle unit.
 CREATE TABLE statement_hosted_origins (
   submission_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

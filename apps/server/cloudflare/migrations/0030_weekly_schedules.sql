@@ -1,3 +1,4 @@
+-- Explicit weekly delivery decisions remain Consent-owned and append-only.
 CREATE TABLE weekly_consent_offers (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),

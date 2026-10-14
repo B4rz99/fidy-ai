@@ -1,3 +1,4 @@
+-- Commercial consumption is separate from security admission and provider spend.
 CREATE TABLE commercial_allowance_consumptions (
   user_id TEXT NOT NULL REFERENCES users(id),
   allowance TEXT NOT NULL CHECK (allowance IN ('forwarded_email','media_submission','hosted_history_turn','canonical_call')),

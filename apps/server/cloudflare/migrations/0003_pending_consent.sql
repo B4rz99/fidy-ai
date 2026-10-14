@@ -1,3 +1,4 @@
+-- Pre-subject disclosure evidence. No stable User, WhatsAppIdentity, or ConsentRecord exists here.
 CREATE TABLE pending_consent_exchanges (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 128),
   portfolio_id TEXT NOT NULL CHECK (length(portfolio_id) BETWEEN 1 AND 128),
@@ -20,6 +21,7 @@ CREATE TABLE pending_consent_exchanges (
 CREATE UNIQUE INDEX pending_consent_one_caller ON pending_consent_exchanges(portfolio_id, bsuid)
   WHERE state IN ('awaiting_delivery', 'outbound_started', 'awaiting_decision');
 
+-- Only a correlated, authenticated Kapso delivered callback may advance the disclosure.
 CREATE TABLE pending_consent_delivery (
   correlation_token TEXT PRIMARY KEY NOT NULL REFERENCES pending_consent_exchanges(correlation_token) ON DELETE CASCADE,
   phone_number_id TEXT NOT NULL CHECK (length(phone_number_id) BETWEEN 1 AND 32),
@@ -46,6 +48,7 @@ END;
 CREATE TRIGGER pending_consent_delivery_no_update BEFORE UPDATE ON pending_consent_delivery
 BEGIN SELECT RAISE(ABORT, 'pending_consent_append_only'); END;
 
+-- One terminal pending decision; neither decision creates a stable User or processes finances.
 CREATE TABLE pending_consent_decisions (
   exchange_id TEXT PRIMARY KEY NOT NULL REFERENCES pending_consent_exchanges(id) ON DELETE CASCADE,
   portfolio_id TEXT NOT NULL,
@@ -68,7 +71,7 @@ WHEN NOT EXISTS (
     AND e.phone_number_id = NEW.phone_number_id AND e.state = 'awaiting_decision' AND e.disclosure_json = NEW.disclosure_json
     AND e.disclosure_message_id = NEW.disclosure_message_id
     AND NEW.decision_message_id <> e.initiating_message_id
-    -- Equal provider timestamps cannot prove reply order.
+    -- Kapso timestamps have second precision: equal timestamps cannot prove reply order.
     AND NEW.occurred_at_ms > e.disclosed_at_ms AND NEW.occurred_at_ms > e.decision_not_before_ms
     AND NEW.occurred_at_ms < e.expires_at_ms
     AND NEW.received_at_ms < e.expires_at_ms

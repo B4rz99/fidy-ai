@@ -1,3 +1,5 @@
+-- Permanent Turn outcomes outlive retained evidence. Only Turns with remaining content or
+-- cleanup receipts belong to this indexed workset; compaction cannot orphan receipt cleanup.
 CREATE INDEX transcript_entries_by_turn ON transcript_entries(user_id, turn_id);
 CREATE INDEX hosted_mutation_commits_retention_user ON hosted_mutation_commits(user_id, turn_id);
 CREATE INDEX hosted_whatsapp_delivery_retention_user ON hosted_whatsapp_delivery(user_id, turn_id);
@@ -19,6 +21,8 @@ FROM (
   UNION SELECT user_id, turn_id FROM hosted_whatsapp_inbound
 ) AS e JOIN hosted_turns AS t ON t.id = e.turn_id AND t.user_id = e.user_id
 WHERE t.status <> 'pending';
+-- Every terminal transition already requires its matching Transcript evidence. Inbound metadata
+-- owns its delivery/outbox children through foreign keys, so it keeps their deadline alive too.
 CREATE TRIGGER hosted_turn_retention_terminal AFTER UPDATE ON hosted_turns
 WHEN OLD.status = 'pending' AND NEW.status <> 'pending'
 BEGIN

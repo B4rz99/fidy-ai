@@ -43,6 +43,8 @@ CREATE TRIGGER connection_identity_immutable BEFORE UPDATE ON connections
 WHEN NEW.id != OLD.id OR NEW.user_id != OLD.user_id OR NEW.institution_id != OLD.institution_id OR NEW.created_at_ms != OLD.created_at_ms
 BEGIN SELECT RAISE(ABORT, 'connection_identity_immutable'); END;
 
+-- Browser, PAT and OAuth Connection work consume the same stable-User Audit budget.
+-- PAT activity answers consume the same stable-User canonical Audit budget.
 DROP VIEW canonical_audit_usage;
 CREATE VIEW canonical_audit_usage AS
 SELECT * FROM (

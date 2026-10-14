@@ -1,3 +1,6 @@
+-- Preserve the authoritative effective-fact policy while forcing the existing UNIQUE(user_id, id)
+-- access path for each pair member. Without statistics SQLite can choose a lifetime-User scan
+-- for the two-id IN join on every Reconciliation pair. This constraint index is declared in 0009.
 DROP VIEW dashboard_effective_source;
 CREATE VIEW dashboard_effective_source AS
 WITH linked_decision AS (
@@ -85,6 +88,9 @@ WITH linked_decision AS (
 )
 SELECT * FROM effective_transaction;
 
+-- Address the two affected primary-key prefixes instead of scanning every retained bucket/digit.
+-- Maximum replacement uses an indexed occurrence range. Bounds preserve SQLite's integer division
+-- toward zero for pre-epoch instants too; exact decimal comparison and digit arithmetic are unchanged.
 DROP TRIGGER dashboard_projection_leaf_delete;
 CREATE TRIGGER dashboard_projection_leaf_delete AFTER DELETE ON dashboard_projection_leaf
 WHEN (SELECT readiness FROM dashboard_projection_state WHERE user_id = OLD.user_id)

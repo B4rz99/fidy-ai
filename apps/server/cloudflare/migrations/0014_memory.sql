@@ -10,7 +10,10 @@ CREATE TABLE memories (
   UNIQUE (user_id, id)
 ) STRICT;
 CREATE INDEX memories_by_user_creation ON memories(user_id, created_at, id);
--- Capacity is the UTF-8 byte length of the LF-joined recall-ordered {id,text} JSON projection.
+-- Aggregate capacity is the exact UTF-8 byte length of the recall-ordered `{id,text}` projection
+-- that the Memory owner counts (15,000 in core/memory/rules.ts). D1 stays the atomic authority so
+-- concurrent writes cannot oversubscribe the bound; the owner preflight produces the typed quota
+-- failure. Order does not change the sum, so the guard counts projected rows directly.
 CREATE TRIGGER memory_capacity_before_insert BEFORE INSERT ON memories
 WHEN (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLOB))), 0)
         FROM memories WHERE user_id = NEW.user_id)
@@ -38,10 +41,13 @@ CREATE TRIGGER memory_audit_no_update BEFORE UPDATE ON memory_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 CREATE TRIGGER memory_audit_no_delete BEFORE DELETE ON memory_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
+-- A skipped guarded Memory audit aborts the complete batch instead of committing a partial effect.
 CREATE TABLE memory_atomic_assertion (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
   accepted INTEGER NOT NULL CHECK (accepted = 1)
 ) STRICT;
+-- Memory joins the shared stable-User canonical work budget (256 entries per UTC day) so multiple
+-- credentials or channels cannot multiply it. Rebuild every trigger to count memory_audit too.
 DROP TRIGGER transaction_audit_daily_budget;
 DROP TRIGGER pat_canonical_daily_budget;
 DROP TRIGGER category_canonical_daily_budget;

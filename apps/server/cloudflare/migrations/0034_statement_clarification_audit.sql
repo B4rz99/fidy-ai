@@ -1,3 +1,4 @@
+-- Preserve Audit's shared budget and retention policy for conversational decisions.
 DROP VIEW IF EXISTS canonical_audit_usage;
 CREATE VIEW canonical_audit_usage AS
 SELECT * FROM (

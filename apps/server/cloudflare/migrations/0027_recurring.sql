@@ -1,3 +1,4 @@
+-- Transaction-owned invalidation is atomic with every change to effective financial facts.
 CREATE TABLE transaction_fact_state (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   revision INTEGER NOT NULL CHECK (revision > 0),
@@ -39,6 +40,7 @@ CREATE TRIGGER transaction_fact_link_delete AFTER DELETE ON transaction_reconcil
 END;
 CREATE TABLE transaction_fact_assertion (id INTEGER PRIMARY KEY CHECK(id = 1), accepted INTEGER NOT NULL CHECK(accepted = 1)) STRICT;
 
+-- A metadata-only round-robin position prevents unavailable Users from starving other pending work.
 CREATE TABLE recurring_dispatch (id INTEGER PRIMARY KEY CHECK(id = 1), last_user TEXT NOT NULL) STRICT;
 INSERT INTO recurring_dispatch VALUES (1, '');
 

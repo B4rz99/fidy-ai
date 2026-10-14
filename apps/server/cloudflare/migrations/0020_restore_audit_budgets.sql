@@ -1,3 +1,7 @@
+-- The forwarding-address migration can be applied after the batch/review migrations on
+-- databases that already recorded those filenames. It rebuilds statement_submission_audit
+-- and reinstalls older budget guards. Restore the complete six-source, batch-aware policy
+-- after every historical migration, regardless of their prior application order.
 DROP TRIGGER statement_audit_daily_budget;
 DROP TRIGGER transaction_audit_daily_budget;
 DROP TRIGGER pat_canonical_daily_budget;

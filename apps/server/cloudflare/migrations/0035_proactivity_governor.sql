@@ -4,6 +4,7 @@ ALTER TABLE weekly_consent_offers ADD COLUMN rejection_id TEXT;
 CREATE UNIQUE INDEX weekly_consent_offer_source ON weekly_consent_offers(user_id,source_id) WHERE source_id IS NOT NULL;
 CREATE TRIGGER weekly_consent_source_immutable BEFORE UPDATE ON weekly_consent_offers WHEN NEW.source_id IS NOT OLD.source_id OR NEW.rejection_id IS NOT OLD.rejection_id BEGIN SELECT RAISE(ABORT,'weekly_disclosure_immutable'); END;
 -- Governor standing is product execution policy, not Consent authority.
+-- Revocation is a new privacy decision, not a rewrite of an already accepted offer.
 CREATE TABLE weekly_consent_revocation_records (
  id TEXT PRIMARY KEY NOT NULL,
  user_id TEXT NOT NULL REFERENCES users(id),

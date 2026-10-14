@@ -3,6 +3,8 @@
 -- https://developers.cloudflare.com/d1/sql-api/foreign-keys/
 PRAGMA defer_foreign_keys = ON;
 
+-- These triggers belong to billing_attempts, but SQLite validates their references
+-- during ALTER TABLE. Restore their exact guards after the original names exist again.
 DROP TRIGGER billing_attempt_requires_claim;
 DROP TRIGGER payment_attempt_method_guard;
 
@@ -52,11 +54,15 @@ INSERT INTO card_payment_sources_daviplata (id, user_id, enrollment_id, wompi_so
 SELECT id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method
 FROM card_payment_sources;
 
+-- Do not rename the original parents: that would rewrite retained child FK targets.
+-- No parent FK has CASCADE/SET NULL/RESTRICT actions or DELETE triggers to run here.
 DROP TABLE card_payment_sources;
 DROP TABLE card_enrollments;
 ALTER TABLE card_enrollments_daviplata RENAME TO card_enrollments;
 ALTER TABLE card_payment_sources_daviplata RENAME TO card_payment_sources;
 
+-- Restore all indexes and triggers owned by the rebuilt tables, unchanged from
+-- 0009/0030. Other tables, views, triggers and foreign keys are not rebuilt.
 CREATE UNIQUE INDEX card_enrollment_active_user ON card_enrollments(user_id)
 WHERE status IN ('preparing', 'prepared', 'creating', 'verifying');
 CREATE UNIQUE INDEX card_enrollment_request ON card_enrollments(user_id, payment_request_id)

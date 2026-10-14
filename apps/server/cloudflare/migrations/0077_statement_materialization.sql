@@ -45,6 +45,7 @@ CREATE TRIGGER statement_materialization_terminal AFTER UPDATE OF status ON stat
 WHEN NEW.status IN ('completed','failed')
 BEGIN DELETE FROM statement_materializations WHERE submission_id=NEW.id AND user_id=NEW.user_id; END;
 
+-- Durable progress is updated with each row receipt, never by rescanning its growing prefix.
 ALTER TABLE statement_submissions ADD COLUMN source_parse_attempts INTEGER NOT NULL DEFAULT 0 CHECK(source_parse_attempts BETWEEN 0 AND 3);
 ALTER TABLE statement_submissions ADD COLUMN processed_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_rows>=0);
 ALTER TABLE statement_submissions ADD COLUMN processed_accepted_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_accepted_rows>=0);

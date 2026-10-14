@@ -1,3 +1,4 @@
+-- Extend the append-only audit vocabulary without losing existing User evidence.
 DROP TRIGGER pat_canonical_daily_budget;
 DROP TRIGGER category_canonical_daily_budget;
 CREATE TABLE transaction_audit_next (

@@ -306,7 +306,7 @@
     "bun-types": "1.4.2",
     "esbuild": "0.28.2",
     "miniflare": "5.20260911.1-alpha",
-    "rolldown": "1.2.12",
+    "rolldown": "1.2.13",
     "typescript": "7.0.2",
     "vitest": "5.0.3",
     "wrangler": "4.148.0"

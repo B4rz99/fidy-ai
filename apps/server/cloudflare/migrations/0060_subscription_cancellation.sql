@@ -1,3 +1,4 @@
+-- Retain refund stops and add a composed read-side fence for ordinary cancellation.
 CREATE TABLE subscription_cancellations (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   paid_attempt_id TEXT NOT NULL REFERENCES billing_paid_periods(attempt_id),

@@ -1,3 +1,4 @@
+-- Insights owns frozen category content and identity-only delivery intent.
 CREATE TABLE proactivity_reports (
  delivery_id TEXT PRIMARY KEY NOT NULL,
  user_id TEXT NOT NULL REFERENCES users(id),

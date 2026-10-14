@@ -1,5 +1,13 @@
+-- Statement submission acceptance: the authoritative row, its extraction outbox identity, its
+-- retention context, and the Free backfill entitlement. Staged bytes stay non-authoritative in
+-- statement_staging_objects; only statement_submissions makes them real (#788, ADR 0028).
+--
+-- The staged source format is sniffed from actual bytes at staging time, so publication never
+-- trusts a caller-supplied name, extension, media type, or length.
 ALTER TABLE statement_staging_objects ADD COLUMN source_format TEXT
   CHECK (source_format IS NULL OR source_format IN ('csv', 'xlsx'));
+-- Durable proof that the object this locator named is gone, so an interrupted cleanup resumes
+-- instead of re-deleting forever and a referenced row can stay in place.
 ALTER TABLE statement_staging_objects ADD COLUMN object_deleted_at_ms INTEGER;
 
 ALTER TABLE statement_submissions ADD COLUMN source_format TEXT
@@ -22,6 +30,7 @@ ALTER TABLE statement_submissions ADD COLUMN needs_review_rows INTEGER;
 -- without a useful outcome is failed as retention-expired and its object is reclaimed.
 ALTER TABLE statement_submissions ADD COLUMN retention_expires_at_ms INTEGER;
 
+-- One submission lifecycle, enforced for every writer rather than only the publication adapter.
 CREATE TRIGGER statement_submission_state_insert BEFORE INSERT ON statement_submissions
 WHEN coalesce((
   NEW.source_format IS NOT NULL AND NEW.parser_revision IS NOT NULL
@@ -62,12 +71,19 @@ WHEN coalesce((
 ), 0) = 0
 BEGIN SELECT RAISE(ABORT, 'statement_submission_state'); END;
 
+-- Bounded cleanup reads only submissions that have outlived their retention without a useful
+-- outcome, so an interrupted extraction cannot hold staged material past its bound.
 CREATE INDEX statement_submissions_retention
   ON statement_submissions(retention_expires_at_ms)
   WHERE status IN ('queued', 'processing');
+-- Admission pressure reads one User's outstanding and rolling-hour submissions.
 CREATE INDEX statement_submissions_user_submitted
   ON statement_submissions(user_id, submitted_at_ms);
 
+-- A canonical read of one submission is attributable like every other canonical call. SQLite cannot
+-- widen a CHECK in place, so the append-only audit table is rebuilt with the read operation, its
+-- bounded not-found outcome, and the two bounded refusal outcomes, preserving every existing row
+-- and both append-only triggers.
 CREATE TABLE statement_submission_audit_next (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -87,6 +103,12 @@ BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 CREATE TRIGGER statement_submission_audit_no_delete BEFORE DELETE ON statement_submission_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 
+-- Statement submission joins the shared 256-entry stable-User daily canonical work budget the other
+-- canonical audit tables share (0011_transaction_corrections.sql, 0014_memory.sql), so multiple
+-- credentials or channels cannot multiply it and an authenticated loop cannot grow an append-only
+-- table without a bound. Every trigger is rebuilt to count all five tables, and the 86400000 day
+-- boundary stays UTC like the rest. The statement marker stays distinct so the adapter can answer a
+-- spent budget as a bounded rate limit.
 CREATE TRIGGER statement_audit_daily_budget BEFORE INSERT ON statement_submission_audit
 WHEN (SELECT COUNT(*) FROM statement_submission_audit WHERE user_id = NEW.user_id
       AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
@@ -193,6 +215,9 @@ CREATE TABLE statement_backfill_entitlements (
   consumed_at_ms INTEGER CHECK (consumed_at_ms IS NULL OR consumed_at_ms >= 0)
 ) STRICT;
 
+-- Bounded, identity-only extraction work published atomically with its submission. Delivery and
+-- settlement belong to the statement extraction Workflow, which reads this identity rather than
+-- any statement content.
 CREATE TABLE statement_ingestion_outbox (
   submission_id TEXT PRIMARY KEY NOT NULL REFERENCES statement_submissions(id),
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -200,6 +225,8 @@ CREATE TABLE statement_ingestion_outbox (
   published_at_ms INTEGER NOT NULL CHECK (published_at_ms >= 0)
 ) STRICT;
 
+-- A skipped guarded publication step aborts the complete D1 unit instead of committing a
+-- submission without its staging promotion, entitlement reservation, Audit, or outbox identity.
 -- The named constraint is the stable refusal marker the adapter classifies a lost unit with.
 CREATE TABLE statement_submission_assertion (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),

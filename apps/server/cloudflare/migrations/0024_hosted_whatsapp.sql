@@ -1,3 +1,7 @@
+-- D1 migrations run in one implicit transaction. Rebuild the two existing CHECK constraints
+-- rather than editing an already-applied migration; FK validation resumes at transaction end.
+-- Dropping the referenced Turn table fires its one ON DELETE CASCADE child even with deferred
+-- checks, so preserve and restore the fenced mutation receipts within this migration.
 PRAGMA defer_foreign_keys=ON;
 DROP TRIGGER transcript_retention_guard;
 DROP TRIGGER hosted_delivery_proposals_no_update;
@@ -81,6 +85,7 @@ CREATE TABLE transcript_entries_next (
          (kind = 'failed' AND text IS NULL AND failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed','DeliveryUnconfirmed')) OR
          (kind = 'interrupted' AND text IS NULL AND failure_reason IS NULL))
 ) STRICT;
+-- The deployed 0016 schema predates tool evidence; the new metadata columns remain NULL for prior entries.
 INSERT INTO transcript_entries_next
   (sequence, id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason)
 SELECT sequence, id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason
@@ -121,6 +126,7 @@ CREATE TABLE hosted_whatsapp_inbound (
 CREATE INDEX hosted_whatsapp_inbound_user ON hosted_whatsapp_inbound(user_id, turn_id);
 CREATE TRIGGER hosted_whatsapp_inbound_no_update BEFORE UPDATE ON hosted_whatsapp_inbound
 BEGIN SELECT RAISE(ABORT, 'hosted_whatsapp_inbound_immutable'); END;
+-- Identity-only outbox is created with the Pending Turn and survives webhook/Queue interruption.
 CREATE TABLE hosted_whatsapp_outbox (
   turn_id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL,
@@ -177,4 +183,5 @@ WHEN NOT EXISTS (SELECT 1 FROM transcript_entries WHERE turn_id = NEW.id AND use
     OR (text = (SELECT text FROM hosted_whatsapp_delivery
       WHERE turn_id = NEW.id AND user_id = NEW.user_id AND state = 'delivered'))))
 BEGIN SELECT RAISE(ABORT, 'hosted_turn_terminal_evidence_required'); END;
+-- The replacement tables and all references are restored before foreign-key checks resume.
 PRAGMA defer_foreign_keys=OFF;

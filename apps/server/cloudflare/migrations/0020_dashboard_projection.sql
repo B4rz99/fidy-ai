@@ -85,6 +85,8 @@ WITH linked_decision AS (
 )
 SELECT * FROM effective_transaction;
 
+-- Completeness is not inferred from a finite page. All canonical writes dirty this marker
+-- before their owner refreshes its effective rows in the same D1 atomic unit.
 CREATE TABLE dashboard_projection_state (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   version INTEGER NOT NULL CHECK(version >= 0),
@@ -113,6 +115,7 @@ CREATE INDEX dashboard_projection_leaf_recent ON dashboard_projection_leaf
 CREATE INDEX dashboard_projection_leaf_category_recent ON dashboard_projection_leaf
   (user_id, category_id, occurred_at DESC, created_at DESC, id DESC);
 CREATE VIRTUAL TABLE dashboard_projection_list_search USING fts5(search_text, tokenize='trigram');
+-- Padded trigrams index one- and two-character searches without changing their substring semantics.
 CREATE TRIGGER dashboard_projection_list_insert AFTER INSERT ON dashboard_projection_leaf
 BEGIN
   INSERT INTO dashboard_projection_list_search(rowid, search_text)
@@ -155,6 +158,7 @@ CREATE TABLE dashboard_projection_digit (
 ) STRICT;
 
 -- One accepted amount is expressed in 1/10000 Currency units without floating-point arithmetic.
+-- Per-position integer digit counts avoid SQLite's imprecise SUM of arbitrary Money amounts.
 CREATE TRIGGER dashboard_projection_leaf_insert AFTER INSERT ON dashboard_projection_leaf
 WHEN (SELECT readiness FROM dashboard_projection_state WHERE user_id = NEW.user_id)
   IN ('ready', 'linking', 'rebuilding')
@@ -252,6 +256,7 @@ CREATE TRIGGER dashboard_projection_decision_update AFTER UPDATE ON transaction_
 BEGIN UPDATE dashboard_projection_state SET readiness = 'linking'
   WHERE user_id = NEW.user_id AND readiness = 'ready'; END;
 
+-- One guarded migration backfill completes before a pre-existing User is marked ready.
 INSERT INTO dashboard_projection_state (user_id, version, readiness)
 SELECT id, 1, 'rebuilding' FROM users;
 INSERT INTO dashboard_projection_leaf
@@ -261,6 +266,12 @@ SELECT user_id, id, amount, currency, direction, category_id, counterparty, note
   occurred_at, created_at, revision FROM dashboard_effective_source;
 UPDATE dashboard_projection_state SET readiness = 'ready' WHERE readiness = 'rebuilding';
 
+-- SQLite cannot share a parameterized refresh subroutine between triggers. Keep the mirrored
+-- leaf column lists in capture, update, Correction, SourceAttestation, link, unlink, and repair
+-- in sync. Focused Dashboard tests exercise capture, correction, and reconciliation refreshes;
+-- owner tests exercise the attestation and ingestion write paths.
+-- Each trigger replaces the old contribution with the current effective relation's contribution.
+-- These triggers run inside the caller's D1 batch: audit refusal and batch rollback undo both.
 CREATE TRIGGER dashboard_projection_capture AFTER INSERT ON transactions
 BEGIN
   INSERT INTO dashboard_projection_leaf

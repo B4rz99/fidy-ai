@@ -1,5 +1,6 @@
 ALTER TABLE pat_audit ADD COLUMN hosted_turn_id TEXT REFERENCES hosted_turns(id);
 
+-- PAT activity answers consume the same stable-User canonical Audit budget.
 DROP VIEW canonical_audit_usage;
 CREATE VIEW canonical_audit_usage AS
 SELECT * FROM (

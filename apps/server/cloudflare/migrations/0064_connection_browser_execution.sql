@@ -1,4 +1,5 @@
 -- Private preparation metadata; grants no institution authority and stores no bank material.
+-- Attempts already carry the immutable original deadline and bounded retention.
 CREATE TABLE connection_authorization_executions (
   attempt_id TEXT PRIMARY KEY NOT NULL REFERENCES connection_attempts(id) ON DELETE CASCADE,
   session_id TEXT NOT NULL REFERENCES web_sessions(id),

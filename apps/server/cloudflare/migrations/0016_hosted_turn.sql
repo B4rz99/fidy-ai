@@ -1,3 +1,5 @@
+-- Hosted Agent Sessions are User-owned. D1 is the sole authority for Turn outcomes and exact
+-- retained Transcript evidence; the per-User DO coordinates execution, not storage.
 CREATE TABLE hosted_agent_sessions (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -49,6 +51,8 @@ CREATE TABLE transcript_entries (
          (kind = 'interrupted' AND text IS NULL AND failure_reason IS NULL))
 ) STRICT;
 CREATE INDEX transcript_entries_by_session ON transcript_entries(user_id, hosted_session_id, sequence);
+-- A reply awaiting browser-visible delivery is not Transcript evidence. It is discarded on
+-- acknowledgment or recovery; only then can the assistant entry become authoritative.
 CREATE TABLE hosted_delivery_proposals (
   turn_id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL,
@@ -61,6 +65,7 @@ CREATE TRIGGER hosted_delivery_proposals_no_update BEFORE UPDATE ON hosted_deliv
 BEGIN SELECT RAISE(ABORT, 'hosted_delivery_immutable'); END;
 CREATE UNIQUE INDEX transcript_one_user ON transcript_entries(turn_id) WHERE kind = 'user';
 CREATE UNIQUE INDEX transcript_one_terminal ON transcript_entries(turn_id) WHERE kind IN ('assistant','failed','interrupted');
+-- A terminal status cannot be committed without its matching exact or metadata-only marker.
 CREATE TRIGGER hosted_turns_terminal_evidence BEFORE UPDATE ON hosted_turns
 WHEN NOT EXISTS (SELECT 1 FROM transcript_entries WHERE turn_id = NEW.id AND user_id = NEW.user_id
   AND occurred_at_ms = NEW.terminal_at_ms
@@ -77,6 +82,8 @@ CREATE TRIGGER transcript_retention_guard BEFORE DELETE ON transcript_entries
 WHEN NOT EXISTS (SELECT 1 FROM hosted_turns WHERE id = OLD.turn_id AND user_id = OLD.user_id
   AND status <> 'pending' AND terminal_at_ms < (unixepoch('now') * 1000 - 2592000000))
 BEGIN SELECT RAISE(ABORT, 'transcript_retention_not_due'); END;
+-- A concurrent Consent withdrawal cannot admit a Turn, even if preflight saw a grant.
+-- At most fifty paid inference attempts per User and UTC day, even across new Sessions.
 CREATE INDEX hosted_turns_by_user_day ON hosted_turns(user_id, started_at_ms);
 CREATE TRIGGER hosted_turn_daily_budget BEFORE INSERT ON hosted_turns
 WHEN (SELECT COUNT(*) FROM hosted_turns WHERE user_id = NEW.user_id

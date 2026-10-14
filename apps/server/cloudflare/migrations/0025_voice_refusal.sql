@@ -1,3 +1,5 @@
+-- One bounded, non-retriable acknowledgement attempt for each unusable authenticated voice message.
+-- Claim before provider I/O: an ambiguous send can lose the reply but cannot duplicate it.
 CREATE TABLE hosted_voice_refusals (
   portfolio_id TEXT NOT NULL,
   message_id TEXT NOT NULL,

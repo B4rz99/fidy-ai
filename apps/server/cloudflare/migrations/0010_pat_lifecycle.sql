@@ -1,10 +1,13 @@
+-- Complete PAT, Consent, and protected-work schema for the initial release.
 -- Apply after 0009_transactions.sql: its audit table and original budget trigger must exist.
+-- Ten-minute source admission retains only a keyed digest of the edge-observed visitor IP.
 CREATE TABLE pat_pairing_admission (
   source_digest BLOB PRIMARY KEY NOT NULL CHECK (length(source_digest) = 32),
   window_start_ms INTEGER NOT NULL,
   started_count INTEGER NOT NULL CHECK (started_count BETWEEN 1 AND 20)
 ) STRICT;
 CREATE INDEX pat_pairing_admission_expiry ON pat_pairing_admission(window_start_ms);
+-- A short-lived private proof joins a public request only after a fresh WebSession reviews it.
 CREATE TABLE pat_pairings (
   id TEXT PRIMARY KEY NOT NULL,
   public_code TEXT NOT NULL UNIQUE,
@@ -86,6 +89,8 @@ CREATE TABLE pat_review_attempts (
 ) STRICT;
 CREATE INDEX pat_review_rate ON pat_review_attempts(session_id,occurred_at_ms);
 CREATE INDEX pat_review_expiry ON pat_review_attempts(occurred_at_ms);
+-- Immutable, symmetric Consent evidence for one formerly granted PAT or unclaimed approval.
+-- The grant reference is unique: repeating a revoke or retrying a scheduled sweep cannot duplicate evidence.
 CREATE TABLE pat_revocation_consents (
   id TEXT PRIMARY KEY NOT NULL,
   grant_consent_id TEXT NOT NULL UNIQUE REFERENCES pat_grant_consents(id),
@@ -105,6 +110,7 @@ CREATE TRIGGER pat_revocation_consents_no_update BEFORE UPDATE ON pat_revocation
 BEGIN SELECT RAISE(ABORT,'consent_append_only'); END;
 CREATE TRIGGER pat_revocation_consents_no_delete BEFORE DELETE ON pat_revocation_consents
 BEGIN SELECT RAISE(ABORT,'consent_append_only'); END;
+-- A User's explicit withdrawal of onboarding Consent is append-only and immediately blocks PAT work.
 CREATE TABLE consent_user_revocations (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
@@ -125,11 +131,15 @@ CREATE TRIGGER consent_user_revocations_no_update BEFORE UPDATE ON consent_user_
 BEGIN SELECT RAISE(ABORT, 'consent_append_only'); END;
 CREATE TRIGGER consent_user_revocations_no_delete BEFORE DELETE ON consent_user_revocations
 BEGIN SELECT RAISE(ABORT, 'consent_append_only'); END;
+-- Index PAT work by User and UTC day for the shared canonical budget.
 CREATE INDEX pat_audit_by_user_day ON pat_audit(user_id, occurred_at_ms);
+-- A one-row assertion forces D1 batch rollback when a guarded PAT lifecycle step
+-- changes no row without throwing (for example, an ignored Consent evidence write).
 CREATE TABLE pat_atomic_assertion (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   accepted INTEGER NOT NULL CHECK (accepted = 1)
 ) STRICT;
+-- Category reads use the same durable User/day budget as browser and PAT Transaction work.
 CREATE TABLE category_audit (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -142,10 +152,12 @@ CREATE TRIGGER category_audit_no_update BEFORE UPDATE ON category_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 CREATE TRIGGER category_audit_no_delete BEFORE DELETE ON category_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
+-- A skipped guarded capture audit aborts the entire Transaction/SourceAttestation D1 batch.
 CREATE TABLE transaction_capture_assertion (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
   accepted INTEGER NOT NULL CHECK (accepted = 1)
 ) STRICT;
+-- PAT metadata listing is canonical work; count it with Category and Transaction work per User/day.
 DROP TRIGGER transaction_audit_daily_budget;
 CREATE TRIGGER transaction_audit_daily_budget BEFORE INSERT ON transaction_audit
 WHEN (SELECT COUNT(*) FROM transaction_audit WHERE user_id = NEW.user_id

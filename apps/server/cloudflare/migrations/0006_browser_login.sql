@@ -1,3 +1,5 @@
+-- A browser-held verifier and an independently authenticated WhatsApp decision must meet before
+-- a WebSession can exist. Public codes are locators, never credentials.
 CREATE TABLE browser_login_pairings (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
   public_code TEXT NOT NULL UNIQUE CHECK (length(public_code) = 9),

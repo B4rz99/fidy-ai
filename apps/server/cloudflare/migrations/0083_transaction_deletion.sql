@@ -1,3 +1,4 @@
+-- Irreversible history removal retains capture and correction evidence.
 ALTER TABLE transactions ADD COLUMN deleted_at_ms INTEGER;
 CREATE TRIGGER deleted_transaction_no_update BEFORE UPDATE ON transactions
 WHEN OLD.deleted_at_ms IS NOT NULL

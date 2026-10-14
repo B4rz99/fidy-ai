@@ -1,3 +1,4 @@
+-- Stable state is born in one D1 batch only after the current mailbox proof is consumed.
 CREATE UNIQUE INDEX onboarding_public_code ON pending_email_enrollments(public_code)
   WHERE public_code IS NOT NULL;
 CREATE TABLE users (
@@ -45,6 +46,7 @@ CREATE TABLE completed_email_enrollments (
   user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
   completed_at_ms INTEGER NOT NULL
 ) STRICT;
+-- A proof cannot be redeemed from an unrelated or superseded pending exchange.
 CREATE TRIGGER onboarding_requires_current_proof BEFORE INSERT ON completed_email_enrollments
 WHEN NOT EXISTS (
   SELECT 1 FROM pending_email_enrollments AS p

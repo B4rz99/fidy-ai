@@ -1,3 +1,5 @@
+-- Keep the original single-attempt column and add a bounded renewal ordinal.
+-- Existing identities, financial terms, provider evidence, and periods remain untouched.
 DROP TRIGGER billing_attempt_requires_claim;
 DROP TRIGGER billing_renewal_snapshot_immutable;
 DROP INDEX billing_weekly_renewal_identity;

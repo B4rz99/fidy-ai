@@ -20,9 +20,14 @@ WHEN NEW.turn_id <> OLD.turn_id OR NEW.user_id <> OLD.user_id OR NEW.media_id <>
     WHERE id = NEW.staging_id AND user_id = NEW.user_id))
 BEGIN SELECT RAISE(ABORT, 'statement_document_immutable'); END;
 
+-- Publication retains only its origin and canonical result. The provider locator and the
+-- private staging reference are no longer needed, including for identity-only Turn recovery.
 CREATE TRIGGER statement_document_published AFTER INSERT ON statement_hosted_origins
 BEGIN DELETE FROM statement_whatsapp_documents WHERE turn_id=NEW.turn_id AND user_id=NEW.user_id; END;
 
+-- Review rows retain their own bounded evidence and the staging digest remains available for
+-- canonical SourceAttestation. The entire uploaded file is unnecessary after machine extraction.
+-- Retire it in the terminal D1 unit so the existing resumable R2 sweep cannot strand published bytes.
 CREATE TRIGGER statement_terminal_material AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status IN ('completed','failed') AND OLD.status IN ('queued','processing')
 BEGIN

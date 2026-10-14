@@ -1,3 +1,4 @@
+-- Retire superseded pre-User mailbox-code signup state.
 DROP TABLE completed_email_enrollments;
 DROP TABLE onboarding_email_outbox;
 DROP TABLE pending_email_enrollments;

@@ -51,6 +51,7 @@ CREATE TABLE oauth_refresh_credentials (
   expires_at_ms INTEGER NOT NULL CHECK (expires_at_ms > issued_at_ms),
   consumed_at_ms INTEGER
 ) STRICT;
+-- Reuse the canonical metadata ledger and its stable-User budget; no OAuth audit stream.
 ALTER TABLE pat_audit ADD COLUMN oauth_connection_id TEXT REFERENCES oauth_connections(id);
 ALTER TABLE pat_audit ADD COLUMN oauth_credential_id TEXT REFERENCES oauth_access_credentials(id);
 CREATE TABLE oauth_atomic_assertion (

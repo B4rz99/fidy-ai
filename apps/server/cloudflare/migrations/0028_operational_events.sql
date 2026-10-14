@@ -6,6 +6,7 @@ CREATE TABLE operational_event_buckets (
   PRIMARY KEY (kind, bucket_ms)
 ) STRICT;
 
+-- A submitted canary is not a pass. Only its actual Queue or Workflow execution writes this row.
 CREATE TABLE operational_health_view (
   operation TEXT PRIMARY KEY NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('healthy', 'attention', 'unavailable')),

@@ -7,6 +7,8 @@ CREATE TABLE email_forwarding_addresses (
   created_at_ms INTEGER NOT NULL
 ) STRICT;
 
+-- One identity for one exact bounded raw delivery at one approved recipient. The receipt is
+-- reserved before R2, and the durable outbox is published only after R2 acknowledges the bytes.
 -- Issuance happens only after verified onboarding commits its stable-User Consent evidence.
 -- The random token is not derived from a mailbox, phone, or provider identifier.
 CREATE TRIGGER issue_forwarding_address AFTER INSERT ON onboarding_consent_records
@@ -20,6 +22,8 @@ BEGIN
   );
 END;
 
+-- Existing verified Users must be able to obtain the same address as newly onboarded Users.
+-- Issuance precedes any Email Worker admission and is once-only for each User.
 INSERT INTO email_forwarding_addresses (id, user_id, local_part, created_at_ms)
 SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
   substr(lower(hex(randomblob(2))), 2, 3) || '-8' ||
@@ -28,6 +32,10 @@ SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
 FROM onboarding_consent_records c
 WHERE NOT EXISTS (SELECT 1 FROM consent_user_revocations r WHERE r.user_id = c.user_id);
 
+-- Extend the existing canonical ingestion Audit table, which already participates in every
+-- shared daily-work budget trigger. Keep all prior evidence and its append-only policy.
+-- The four older canonical budget triggers reference this Audit table by name; remove
+-- them before rebuilding it so SQLite can drop the old table, then restore them below.
 DROP TRIGGER transaction_audit_daily_budget;
 DROP TRIGGER pat_canonical_daily_budget;
 DROP TRIGGER category_canonical_daily_budget;
@@ -35,6 +43,9 @@ DROP TRIGGER memory_canonical_daily_budget;
 DROP TRIGGER statement_submission_audit_no_update;
 DROP TRIGGER statement_submission_audit_no_delete;
 DROP TRIGGER statement_audit_daily_budget;
+-- Later migrations may already have added the review guard when this newly introduced
+-- migration is applied to an existing database. Rebuild that guard after all pending
+-- migrations so the table replacement cannot leave a dangling trigger reference.
 DROP TRIGGER IF EXISTS statement_review_audit_daily_budget;
 CREATE TABLE statement_submission_audit_next (
   id TEXT PRIMARY KEY NOT NULL,
@@ -74,6 +85,8 @@ WHEN (SELECT COUNT(*) FROM statement_submission_audit WHERE user_id = NEW.user_i
       AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000) >= 256
 BEGIN SELECT RAISE(ABORT, 'statement_audit_limit'); END;
 
+-- Recreate the other four budget guards against one shared read-only count projection.
+-- The PAT predicate matches 0015 exactly; PAT administration rows do not consume this budget.
 CREATE VIEW canonical_audit_usage AS
   SELECT user_id, occurred_at_ms FROM statement_submission_audit
   UNION ALL SELECT user_id, occurred_at_ms FROM transaction_audit
@@ -122,6 +135,7 @@ CREATE TABLE forwarded_email_outbox (
 ) STRICT;
 CREATE INDEX forwarded_email_outbox_pending ON forwarded_email_outbox(sent_at_ms);
 
+-- Consent is rechecked at BOTH durable transitions, not just at the advisory envelope lookup.
 CREATE TRIGGER forwarded_email_authority BEFORE INSERT ON forwarded_email_receipts
 WHEN NOT EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = NEW.user_id)
   OR EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = NEW.user_id)
@@ -132,6 +146,7 @@ WHEN NEW.state = 'queued' AND (
   OR EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = NEW.user_id))
 BEGIN SELECT RAISE(ABORT, 'forwarded_email_consent'); END;
 
+-- Enforce limits at the same serialized D1 write that reserves identity; preflight is advisory.
 CREATE TRIGGER forwarded_email_capacity BEFORE INSERT ON forwarded_email_receipts
 WHEN (SELECT count(*) FROM forwarded_email_receipts WHERE state IN ('storing', 'queued')
        AND expires_at_ms > NEW.received_at_ms) >= 1000

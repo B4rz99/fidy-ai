@@ -3,6 +3,7 @@ import { DateTime, Effect, Option } from "effect";
 import { type JSX, useState } from "react";
 import type { ProcessingAuthorization, WebAuthClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
+import { formatPrivacyTime } from "./presentation";
 import { Button } from "@/ui/components/button";
 
 const AuthorizationRecord = ({
@@ -15,7 +16,12 @@ const AuthorizationRecord = ({
   return (
     <section aria-label="Copia de autorización" className="flex flex-col gap-3">
       <p className="break-words">Referencia: {record.reference}</p>
-      <p>Otorgada: {DateTime.formatIso(DateTime.makeUnsafe(record.acceptedAtMs))}</p>
+      <p>
+        Otorgada:{" "}
+        <time dateTime={DateTime.formatIso(DateTime.makeUnsafe(record.acceptedAtMs))}>
+          {formatPrivacyTime(record.acceptedAtMs)}
+        </time>
+      </p>
       <p>Versión del aviso: {record.disclosure.revision}</p>
       <details>
         <summary className="cursor-pointer underline">Ver el aviso que autorizaste</summary>

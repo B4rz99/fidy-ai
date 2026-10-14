@@ -9,6 +9,7 @@ import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Checkbox } from "@/ui/components/checkbox";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
+import { formatPrivacyTime } from "./presentation";
 import { AuthorizationCopy } from "./authorization-copy";
 
 const consentKey = "processing-consent";
@@ -69,7 +70,10 @@ const ConsentReceipt = ({
     <h2 className="text-xl font-semibold">Autorización retirada</h2>
     <p className="break-words">Referencia: {value.withdrawal.reference}</p>
     <p className="break-words">
-      Registrado: {DateTime.formatIso(DateTime.makeUnsafe(value.withdrawal.occurredAtMs))}
+      Registrado:{" "}
+      <time dateTime={DateTime.formatIso(DateTime.makeUnsafe(value.withdrawal.occurredAtMs))}>
+        {formatPrivacyTime(value.withdrawal.occurredAtMs)}
+      </time>
     </p>
     <p>El retiro está registrado. La eliminación de datos requiere una solicitud separada.</p>
   </section>
@@ -170,9 +174,9 @@ const SavedTransactionsLink = (): JSX.Element => (
   <section className="flex flex-col gap-4 border-t pt-6">
     <h2 className="text-xl font-semibold">Tus transacciones guardadas</h2>
     <p>
-      Puedes consultar tus transacciones después de retirar la autorización, sin un plan de pago.
-      Necesitas un inicio de sesión reciente. La vista será de solo lectura y no reactivará el
-      tratamiento.
+      Puedes consultar tus transacciones después de retirar la autorización. Esta consulta es
+      gratuita. Necesitas un inicio de sesión reciente. La vista será de solo lectura y no
+      reactivará el tratamiento.
     </p>
     <div>
       <Button variant="outline" render={<Link to="/app/transactions" />}>

@@ -13,7 +13,7 @@ const ReadOnlyNotice = (): JSX.Element => (
       <AlertTitle>Solo lectura</AlertTitle>
       <AlertDescription>
         Tu autorización está retirada. Puedes consultar tus transacciones guardadas sin reactivar el
-        tratamiento ni contratar un plan. Para solicitar una corrección u otros datos,{" "}
+        tratamiento. Esta consulta es gratuita. Para solicitar una corrección u otros datos,{" "}
         <Link to="/settings/privacy" className="underline">
           contacta a Fidy
         </Link>

@@ -1,0 +1,20 @@
+apps/server/cloudflare/recurring/recurring.test.ts
+  s_6d017cc65783af::t_0532974e5c1ce6 271,273
+  s_6d017cc65783af::t_03d9fab75e8b27 272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "70d865e9be3e127a4e086e46481753254a97c821",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -126,6 +126,29 @@ it.effect("selects the latest chronological lifecycle status rather than array p
   })
 );
 
+it.effect(
+  "accepts delivery tied with sent at provider timestamp precision in either array order",
+  () =>
+    Effect.gen(function* () {
+      for (const statuses of [
+        [status("sent", "1775217960"), status("delivered", "1775217960")],
+        [status("delivered", "1775217960"), status("sent", "1775217960")],
+      ]) {
+        const evidence = yield* decode("whatsapp.message.delivered", statuses);
+        expect(evidence.outcome).toBe("accepted");
+        expect(evidence.correlationToken).toBe(correlationToken);
+        expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
+      }
+      const stale = yield* Effect.flip(
+        decode("whatsapp.message.delivered", [
+          status("delivered", "1775217900"),
+          status("sent", "1775217960"),
+        ])
+      );
+      expect(stale._tag).toBe("InvalidWhatsAppPayload");
+    })
+);
+
 it.effect("projects sent and allowlisted or terminal failed lifecycle evidence", () =>
   Effect.gen(function* () {
     const cases = [

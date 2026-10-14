@@ -153,6 +153,16 @@ it.effect(
           retryAfter: Option.none(),
         }),
         new HostedInferenceError({
+          reason: { _tag: "InvalidOutput", description: "Hosted tool arguments were invalid" },
+          retryable: false,
+          retryAfter: Option.none(),
+        }),
+        new HostedInferenceError({
+          reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
+          retryable: false,
+          retryAfter: Option.none(),
+        }),
+        new HostedInferenceError({
           reason: { _tag: "StructuredOutputExceeded" },
           retryable: false,
           retryAfter: Option.none(),
@@ -174,6 +184,16 @@ it.effect(
       expect(outcomes).toEqual([
         { outcome: "failed", error: Option.some("model_unavailable"), retryable: true },
         { outcome: "failed", error: Option.some("capacity_exceeded"), retryable: false },
+        {
+          outcome: "rejected",
+          error: Option.some("model_tool_arguments_rejected"),
+          retryable: false,
+        },
+        {
+          outcome: "rejected",
+          error: Option.some("model_provider_response_rejected"),
+          retryable: false,
+        },
         { outcome: "rejected", error: Option.some("model_response_rejected"), retryable: false },
       ]);
     })

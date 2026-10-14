@@ -398,6 +398,7 @@ const editAndCheckDashboard = (page: Page): Promise<void> =>
       yield* wait(page.getByRole("button", { name: "Personalizar" }).click());
       yield* wait(
         page
+          .getByRole("region", { name: "Diseño responsivo del tablero" })
           .getByRole("button", { name: /^Renombrar /u })
           .first()
           .click()
@@ -405,7 +406,12 @@ const editAndCheckDashboard = (page: Page): Promise<void> =>
       yield* wait(
         page.getByRole("textbox", { name: "Nuevo nombre del Widget" }).fill("Gastos visibles")
       );
+      const saved = page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/dashboard/edits") && response.status() === successStatus
+      );
       yield* wait(page.getByRole("button", { name: "Guardar nombre del Widget" }).click());
+      yield* wait(saved);
       yield* wait(expect(page.getByText("Gastos visibles").first()).toBeVisible());
       yield* wait(page.reload());
       yield* wait(expect(page.getByText("Gastos visibles").first()).toBeVisible());

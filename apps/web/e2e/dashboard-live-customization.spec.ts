@@ -23,6 +23,7 @@ test("persists Widget renaming and removal through the real Dashboard editor", (
       );
       yield* Effect.tryPromise(() =>
         page
+          .getByRole("region", { name: "Diseño responsivo del tablero" })
           .getByRole("button", { name: /^Renombrar /u })
           .first()
           .click()

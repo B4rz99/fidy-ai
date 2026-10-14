@@ -223,7 +223,7 @@ const setup = Effect.fn(function* () {
     "0034_forwarded_email_deferral",
     "0035_media_submissions",
     "0038_proactivity_consent",
-    "0091_queued_processing_cutoff",
+    "0092_queued_processing_cutoff",
   ]) {
     yield* wait(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })

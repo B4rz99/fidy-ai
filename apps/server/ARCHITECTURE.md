@@ -155,8 +155,7 @@ Contract checks establish freshness; prelaunch compatibility with older revision
 Public MCP ingress accepts only the configured API origin and a matching Host header when present.
 It rejects every present Origin before Core admission under the native-client-only policy; Origin-less
 requests still require OAuth authentication. Production uses the fixed HTTPS API, while local and
-acceptance modes allow only their exact loopback API origins. See the
-[OWASP MCP/CLI review](../../docs/research/owasp-mcp-cli-1247.md) for control evidence and limits.
+acceptance modes allow only their exact loopback API origins.
 
 [ADR 0033](../../docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) defines the installed development
 slice, not launch enablement. `oauth-agents` owns separately identifiable OAuthConnections, fresh

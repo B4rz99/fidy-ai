@@ -140,15 +140,6 @@ Promote a value only when it represents a stable shared decision. Keep semantic 
 
 A legacy-component counter and migration graph were useful for Linear's thousand-PR transition. Fidy has no parallel styled-components estate. The relevant metric here is much smaller: CI violations and justified suppressions. Add richer migration telemetry only if a real migration exists.
 
-## Proposed implementation order
-
-1. **Inventory and policy:** define the approved feature styling vocabulary and the exact exception categories in a short web design-system document.
-2. **Mechanical gate:** add tested Oxlint/repository rules for palette colors, arbitrary colors, visual `dark:` overrides, `space-*`, and dynamic class construction; exempt primitive internals deliberately.
-3. **Current cleanup:** fix existing feature violations and name the dashboard/chart exceptions.
-4. **Theme closure:** reset Tailwind's default color namespace and re-expose only Fidy/shadcn semantic roles needed by the build.
-5. **Component contracts:** enforce “`className` for layout; variants for appearance” at project-owned primitive call sites and add variants when real use cases require them.
-6. **Measure before migration:** record bundle/runtime baselines; reconsider StyleX only against the explicit triggers above.
-
 ## Decision in one sentence
 
 Fidy should become **agent-safe by enforcement while staying Tailwind/shadcn**: close the visual vocabulary, encode the boundary in CI, tighten component contracts, and leave StyleX and a universal `Box` for a future problem that actually requires them.

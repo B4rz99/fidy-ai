@@ -14,9 +14,8 @@ Both supported protocols (`2026-07-28`, `2025-11-25`) execute MCP SDK work in th
 Durable Object. Core authenticates and forwards bounded requests. Moving repeated
 schema/SDK work out of Core fixed the observed Worker CPU exhaustion.
 Application byte, deadline and residency bounds remain enforced; see the
-[native admission contract](../../../cloudflare/mcp/contract.ts),
-[runtime](../../../cloudflare/mcp/runtime.ts) and
-[CPU investigation](../../../../../docs/research/hosted-mcp-free-cpu-990.md).
+[native admission contract](../../../cloudflare/mcp/contract.ts) and
+[runtime](../../../cloudflare/mcp/runtime.ts).
 
 ## User actions and manual checks
 
@@ -49,34 +48,3 @@ the failure cases without exhausting or corrupting the Production fixture:
 
 Run all nine files with `bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents`.
 Canonical financial behavior remains the owning feature's testing responsibility.
-
-## Latest Production verification
-
-**2026-10-07 · revision `63494fd4` · automated synthetic proof.**
-[Evidence](../../../../../docs/research/hosted-mcp-automated-990.evidence.json).
-
-Claude Code 2.1.289 and Codex 0.160.0 passed native OAuth, Category reads, Budget
-creation, a two-Transaction atomic batch, confirmed Budget deletion and natural
-token refresh without extending the seven-day grant. Repeated reads passed 20/20
-and 10/10 respectively. Native cancellation, confirmed deletion, exact restricted
-catalogs (46 tools each), and post-revocation access/refresh refusal
-(401 / 400 `invalid_grant`) all passed. The run observed 137 ingress requests and
-90 Core MCP invocations with zero OAuth/MCP CPU-limit terminations. Cleanup left
-zero active connections, browser sessions or Budgets. Native logouts and private
-profile removal passed.
-
-**Not verified live:** natural seven-day connection expiry, other clients and
-other canonical operations. Provider identity/email approval used a synthetic
-fixture. This proof does not establish every workload or Free-tier quota, or
-authorize real-User launch.
-
-[Cloudflare integration tests](../../../cloudflare/oauth-agents/) passed 205
-tests across all nine files, including all seven permission combinations and exact
-absolute-expiry boundaries. The opt-in
-[native-client harness](../../../../../scripts/mcp/native-confirmation-hosts.ts)
-also passed all six real-client accept, cancel and headless-refusal cases on the
-local public/Core seam. The reusable [Production checks](../../../../../scripts/mcp/README.md)
-passed the complete deployed journey; runner regressions passed 81 tooling tests.
-
-Update this document when behavior or execution changes. Keep only the latest
-verification summary here; detailed evidence lives behind the link.

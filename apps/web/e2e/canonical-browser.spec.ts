@@ -1,5 +1,5 @@
 import { type Cause, Effect } from "effect";
-import { apiOrigin, makeUser, response } from "./http-fixtures";
+import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
@@ -10,15 +10,7 @@ test("an under-scoped Transactions query displays only generic failure copy", ({
   Effect.runPromise(
     Effect.gen(function* () {
       const secret = "other-user-financial-content";
-      yield* wait(
-        page.route(`${apiOrigin}/user`, (route) =>
-          route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: response(makeUser()),
-          })
-        )
-      );
+      yield* wait(installUser(page));
       yield* wait(
         page.route(`${apiOrigin}/categories`, (route) =>
           route.fulfill({ status: 200, contentType: "application/json", body: response([]) })

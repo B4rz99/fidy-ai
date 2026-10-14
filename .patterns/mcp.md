@@ -48,3 +48,10 @@ negotiated protocols, unsupported negotiation, malformed/big bodies, unavailable
 confirmation decline/expiry/replay, client disconnect during streaming and disposal while leased.
 Assert safe protocol failures and no additional operation execution. Source-backed assembly describes
 library mechanics; OAuth authority, canonical admission and residency limits are Fidy policy.
+
+In selected Effect 4.0.2, `McpServer`'s HTTP serialization suppresses the JSON-RPC response for a
+cancelled request; the native HTTP handler settles that completion with an empty 202 response.
+This follows the [MCP cancellation rule](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation)
+that receivers should not send a result for cancelled requests. Test cancellation independently
+from native settlement and public Scope disposal: an HTTP acknowledgement does not establish that
+canonical work, SQL, SDK cleanup or resident capacity has been released.

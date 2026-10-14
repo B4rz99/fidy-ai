@@ -570,10 +570,6 @@ this policy pins the linked artifact, not an inferred final publication status. 
 use 2026. Before replacing an edition, compare changed categories and mitigations, record their
 applicability and disposition, and update affected invariants and evidence together.
 
-The [implementation evidence assessment](docs/research/owasp-implementation-evidence-1260.md)
-records category-specific controls, negative tests, test results and outstanding requirements.
-Its scoped evidence does not establish an ASVS level, eliminate accepted risks, or authorize launch.
-
 ### Risk-to-policy mapping
 
 IDs use the editions above. **Covered** means the named invariant addresses the applicable security

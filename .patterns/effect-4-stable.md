@@ -70,4 +70,5 @@ available at `https://unpkg.com/effect@4.0.1/src/<module>.ts` and
 
 Stable package version does not mean every individual module is upstream marked stable.
 Keep exact pins, owned boundaries, focused behavior tests and the complete release gates.
-See `docs/research/effect-4-stable-integration.md` for verified outcomes and limitations.
+The completed migration’s verification and release evidence is recorded in
+[PR #992](https://github.com/B4rz99/fidy-ai/pull/992#issuecomment-5971693618).

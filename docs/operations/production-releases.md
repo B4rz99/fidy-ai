@@ -474,6 +474,6 @@ Cloudflare and GitHub if exposure is suspected.
 
 The existing edge smoke gate also checks OAuth discovery, malformed bootstrap requests, the exact
 MCP authentication challenge and hostile-Origin refusal. GET probes preserve candidate overrides
-and reserved proof headers. See the [controlled hosted MCP proof](hosted-mcp-release.md) and
-[current evidence](../research/hosted-mcp-release-990.md) before requesting real-user enablement.
+and reserved proof headers. Follow the [controlled hosted MCP proof](hosted-mcp-release.md)
+and collect current evidence before requesting real-user enablement.
 A successful deployment is not host interoperability or launch approval.

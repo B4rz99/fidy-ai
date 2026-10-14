@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { signInThroughCore } from "./real-core-fixture";
@@ -207,6 +207,54 @@ const checkEarlierMonth = (page: Page): Effect.Effect<void, Cause.UnknownError> 
       expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
     );
   });
+
+test("recovers initial load failure and keeps stale budgets read-only until refresh succeeds", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories }));
+      yield* Effect.tryPromise(() => installBudgetReport(page));
+      let unavailable = true;
+      const statusRoute = (route: Route): Promise<void> =>
+        unavailable
+          ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
+          : route.fulfill({ status: 200, contentType: "application/json", body: response(report) });
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/budget-status?**`, statusRoute));
+      yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos cargar tus presupuestos")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(0)
+      );
+      unavailable = false;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).click()
+      );
+      const amount = page.getByLabel("Presupuesto de Vivienda (COP)");
+      yield* Effect.tryPromise(() => expect(amount).toHaveValue("100000"));
+      unavailable = true;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos cargar tus presupuestos")
+      );
+      yield* Effect.tryPromise(() => expect(amount).toHaveValue("100000"));
+      yield* Effect.tryPromise(() => expect(amount).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Mes siguiente" })).toBeDisabled()
+      );
+      unavailable = false;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(amount).toBeEnabled());
+      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
+    })
+  ));
 
 test("saves a monthly cap from the view through real Core and retains it after reload", ({
   page,

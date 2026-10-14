@@ -998,6 +998,56 @@ const executeAdmittedTurn = ({
       );
     const seenCalls = new Set<string>();
     const mutation = { started: false };
+    const handleModelFailure = ({
+      active,
+      cause,
+      iteration,
+      usedCalls,
+    }: Readonly<{
+      active: PreparedHostedText;
+      cause: Cause.Cause<unknown>;
+      iteration: number;
+      usedCalls: number;
+    }>): Effect.Effect<Response, HostedWorkFailure> =>
+      Effect.gen(function* () {
+        const error = Cause.findErrorOption(cause);
+        if (
+          iteration === 1 &&
+          usedCalls === 0 &&
+          Option.exists(
+            error,
+            (failure) =>
+              failure instanceof HostedInferenceError && failure.reason._tag === "InvalidOutput"
+          )
+        ) {
+          const repaired = yield* exitOnAbort(
+            active.recover.pipe(
+              Effect.flatMap((continuation) =>
+                continuation.prepare([
+                  {
+                    _tag: "InvalidOutputFeedback",
+                    description:
+                      "La respuesta no cumplió el formato o los argumentos de las herramientas disponibles. Responde al pedido original usando solo herramientas disponibles y argumentos válidos. No inventes identificadores; consulta los datos necesarios primero.",
+                  },
+                ])
+              )
+            ),
+            signal
+          );
+          if (signal.aborted || (Exit.isFailure(repaired) && Cause.hasInterrupts(repaired.cause))) {
+            return (yield* finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
+          }
+          if (Exit.isSuccess(repaired)) {
+            return yield* executeRound(repaired.value, iteration + 1, usedCalls);
+          }
+        }
+        const timedOut = Option.exists(error, Cause.isTimeoutError);
+        yield* finish({
+          _tag: "Failed",
+          reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
+        });
+        return inferenceRefused(error);
+      });
     const executeRound = (
       active: PreparedHostedText,
       iteration: number,
@@ -1035,13 +1085,12 @@ const executeAdmittedTurn = ({
           return (yield* finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
         }
         if (Exit.isFailure(generated)) {
-          const error = Cause.findErrorOption(generated.cause);
-          const timedOut = Option.exists(error, Cause.isTimeoutError);
-          yield* finish({
-            _tag: "Failed",
-            reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",
+          return yield* handleModelFailure({
+            active,
+            cause: generated.cause,
+            iteration,
+            usedCalls,
           });
-          return inferenceRefused(error);
         }
         if (generated.value.toolCalls.length > 0) {
           const nextCount = usedCalls + generated.value.toolCalls.length;

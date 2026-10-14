@@ -1,0 +1,24 @@
+apps/server/src/shell/channels/whatsapp/internal/kapso-webhook.ts
+  s_6d017cc65783af::t_ed46d6bf5cf8d6 561-568
+apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_6d017cc65783af::t_30229c3a2a8541 148,150-151
+  s_6d017cc65783af::t_cc34af34ce4b2f 129-147,149
+apps/server/src/core/ingestion/FEATURE.md
+  s_6d017cc65783af::t_d9f8aebd66f8f7 7-15,39-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0d1314df0f080a8e5873ec24010447ba4d128a1c",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

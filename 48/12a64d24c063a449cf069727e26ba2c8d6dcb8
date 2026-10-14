@@ -1,0 +1,252 @@
+apps/server/cloudflare/budgets/internal/budget-outcome.ts
+  s_8a4c08d01c58a2::t_b2d37062b133d6 21
+  s_8a4c08d01c58a2::t_2701784ac06e41 16,55
+  s_8a4c08d01c58a2::t_bf7bcda725c75f 27-31,33
+apps/web/src/features/signed-in/feature.tsx
+  s_8a4c08d01c58a2::t_afcceb675e820f 35
+  s_7fad76c9e794dc::t_c99d1bb45bb48b 9
+apps/server/src/shell/budgets/contract.ts
+  s_8a4c08d01c58a2::t_e494585a5e8c91 81
+  s_8a4c08d01c58a2::t_2701784ac06e41 49,104
+apps/web/src/app/routes.ts
+  s_8a4c08d01c58a2::t_afcceb675e820f 137-139,150
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 140-142,147-148,292-297
+  s_8a4c08d01c58a2::t_0a2c4431b6cd07 144-146
+  s_8a4c08d01c58a2::t_940539b8ef5dba 7,9-10,15,143,149
+apps/web/src/ui/components/toggle-group.tsx
+  s_8a4c08d01c58a2::t_b0dd38a4c6bb70 5
+  s_8a4c08d01c58a2::t_37f6067f8c74ae 17-21,26-31,38
+  s_8a4c08d01c58a2::t_b855061887e0ed 22-25,32-36
+apps/web/src/ui/components/financial-summary-card.css
+  s_8a4c08d01c58a2::t_16c6e06b4b340a 1-10
+apps/web/src/transport/client.ts
+  s_8a4c08d01c58a2::t_bc56e583071404 296
+  s_7fad76c9e794dc::t_134d8f46259ca4 52-53
+apps/server/cloudflare/budgets/internal/budget-row.ts
+  s_8a4c08d01c58a2::t_fae1b91fb3ed2b 15,24
+apps/web/src/ui/components/amount-input.tsx
+  s_8a4c08d01c58a2::t_16c6e06b4b340a 1-39
+apps/web/src/ui/reference.tsx
+  s_8a4c08d01c58a2::t_42bb021669202d 332-338,345-347,349-350
+  s_8a4c08d01c58a2::t_4e39bf0277897e 339-344,348
+  s_7fad76c9e794dc::t_afc040cf9b06f1 17-18,331
+apps/server/cloudflare/budgets/contract.ts
+  s_8a4c08d01c58a2::t_b2d37062b133d6 31
+  s_8a4c08d01c58a2::t_943be6cd57e4c0 1
+apps/web/src/features/budgets/editor.tsx
+  s_8a4c08d01c58a2::t_340d989a8322fc 115,117,121,125,129,131,202-221
+  s_8a4c08d01c58a2::t_a2f5b6f9ab6ea7 100,105-113,148-171,183
+  s_8a4c08d01c58a2::t_a5b56a0b8350d3 3-12,200
+  s_8a4c08d01c58a2::t_943be6cd57e4c0 13-99,101-104,114,116,118-120,122,126-128,130,132-147,172-180,182,195-199,201
+  s_8a4c08d01c58a2::t_56dab555419617 1-2,123-124,181,184-194
+apps/web/src/features/budgets/presentation.test.ts
+  s_8a4c08d01c58a2::t_114de1e414956b 53,81-94
+  s_8a4c08d01c58a2::t_e21cfad45d126b 24,30,62,67-71,77-79,96-117
+  s_8a4c08d01c58a2::t_de451aa3233c52 1-23,25-29,31-52,54-61,63-66,72-76,80,95
+apps/web/src/ui/components/workspace-layout.tsx
+  s_8a4c08d01c58a2::t_16c6e06b4b340a 3,28-59
+  s_8a4c08d01c58a2::t_fd1c5a4540de7f 1
+apps/server/contracts/openapi.json
+  s_8a4c08d01c58a2::t_ac6c2d53c777a9 685-689,1020-1044,1057-1058,1329-1336,1349-1356,8015-8017,11837-11855,11868-11886,12469,12495-12502,12763
+  s_8a4c08d01c58a2::t_bc3aa18c387183 13181
+apps/server/cloudflare/budgets/internal/budget-queries.ts
+  s_8a4c08d01c58a2::t_fae1b91fb3ed2b 104
+apps/server/cloudflare/budgets/operations.ts
+  s_8a4c08d01c58a2::t_ad13490711536b 542-543
+  s_8a4c08d01c58a2::t_af1a2df13e90a3 353-359,361
+  s_8a4c08d01c58a2::t_5c78af245c0b07 192,194,327
+  s_8a4c08d01c58a2::t_a2f5b6f9ab6ea7 388
+  s_8a4c08d01c58a2::t_340d989a8322fc 333,338,491-497,504,547,582
+  s_8a4c08d01c58a2::t_b2d37062b133d6 157-158,166-167,318,349-350,372-377,409,412,418,438-443,460-467,473
+  s_8a4c08d01c58a2::t_42cd96280dd212 143
+  s_8a4c08d01c58a2::t_42bb021669202d 58,60,328,411,483,546,581
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 314-317,319,321-323,341,348,352,405-408,410,487-490,499-500,505-508,537-541,544-545,568-576,579-580,589-595
+  s_8a4c08d01c58a2::t_19d7dc5fcb0270 346,498,503,509-512
+  s_8a4c08d01c58a2::t_c2acbb7ac5a4f5 1-5,38,61-62,263-271,300-309,324-326,332,334-337,339-340,342-345,347,351,370,387,501-502,596-597,605,625-628
+apps/web/src/features/budgets/row.tsx
+  s_8a4c08d01c58a2::t_6d2566c075cec1 55,124-139
+  s_8a4c08d01c58a2::t_a5b56a0b8350d3 1-3,5-6,8-39,50,53-54,56,64-69,73-75,78,82-113,119,140
+  s_8a4c08d01c58a2::t_317394f1397743 40-41,51-52,57,77,114
+  s_8a4c08d01c58a2::t_bb92071da8da17 42,60-63,79-81
+  s_8a4c08d01c58a2::t_16c6e06b4b340a 4,7,115-117
+  s_8a4c08d01c58a2::t_9eee29e786c487 48,70-71
+  s_8a4c08d01c58a2::t_4e39bf0277897e 58-59
+  s_8a4c08d01c58a2::t_f5409081e690bd 43-47,49,72,76,118,120-123
+GLOSSARY.md
+  s_8a4c08d01c58a2::t_dda413740db9b9 106-108,111-115
+  s_8a4c08d01c58a2::t_bed91a99a079a1 105,116
+apps/web/src/features/budgets/command.ts
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 8-9,12-37
+  s_8a4c08d01c58a2::t_447a8c1c194675 1-7,10-11
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_8a4c08d01c58a2::t_943be6cd57e4c0 2780-2783,2795-2797,2814-2819,2822-2832,2847-2849
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 2508-2509,2515-2516,2766-2779,2784-2794,2798-2813,2820-2821,2833-2846,2850-2967,3007-3008,3014-3015,3020-3021,3023,3028-3030,3032,3036-3037,3048-3050,3053,3055-3056,3083-3085,3090-3091,3096-3098,3101,3103,3105-3106
+  s_8a4c08d01c58a2::t_0c07c5eb1cca15 2506-2507,2510-2514,2517-2518,2521-2534,2968-3006,3009-3013,3016-3019,3022,3024-3027,3031,3033-3035,3038-3047,3051-3052,3054,3057-3082,3086-3089,3092-3095,3099-3100,3102,3104,3107-3120
+apps/web/src/features/budgets/workspace.tsx
+  s_8a4c08d01c58a2::t_bb92071da8da17 15,39-42,79,81,88,122-140,155,197-208,217,249-251,269,288,298,301,336,352,361-362,408-435,448-476
+  s_8a4c08d01c58a2::t_a2f5b6f9ab6ea7 337-344,387-389
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 5-10,18-31,49-50,58-59,61,65-70,74,77,84,92,107,142-143,146,209-212,270,274,303-311,353,365,398,404-405,436-437
+  s_8a4c08d01c58a2::t_808f3a4f0839cd 159,179,214,219,224-225,260,262,313-332,346
+  s_8a4c08d01c58a2::t_943be6cd57e4c0 55,64,73,100-104,265,272,349,360
+  s_8a4c08d01c58a2::t_afcceb675e820f 4,11-14,16-17,36,93,145,147,257,312,399-401,438
+  s_8a4c08d01c58a2::t_317394f1397743 3,181-195,233-234,275,366,447
+  s_8a4c08d01c58a2::t_340d989a8322fc 295-297,299
+  s_8a4c08d01c58a2::t_af1a2df13e90a3 333-335
+  s_8a4c08d01c58a2::t_b3cfa17e26d699 175,276-283
+  s_8a4c08d01c58a2::t_e5fb07ba7688e3 227-232,242-248,253,367-386,390-397
+  s_8a4c08d01c58a2::t_c88b47a43f5f2a 1-2,32-35,37-38,43-48,51-54,56-57,60,62-63,71-72,75-76,78,80,82-83,85-87,89-91,94-99,105-106,108-121,141,144,148-154,156-158,160-174,176-178,180,196,213,215-216,218,220-223,226,235-241,252,254-256,258-259,261,263-264,266-268,271,273,284-287,289-294,300,302,345,347-348,350-351,354-359,363-364,402-403,406-407,439-446,477
+apps/web/src/features/budgets/feature.tsx
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 18-38,136-138,144-149
+  s_8a4c08d01c58a2::t_ad13490711536b 130
+  s_8a4c08d01c58a2::t_943be6cd57e4c0 3,10,128
+  s_8a4c08d01c58a2::t_42bb021669202d 142-143,150-154
+  s_8a4c08d01c58a2::t_1eb7226e266e37 65,68,81,90-91
+  s_8a4c08d01c58a2::t_9d517f28a73f30 4
+  s_8a4c08d01c58a2::t_afcceb675e820f 127
+  s_8a4c08d01c58a2::t_566d43dfb45cbb 5-6,14-17,40-50,52-62,69-80,82-89,92-123
+  s_8a4c08d01c58a2::t_447a8c1c194675 1,7-9,11-13,39,51,66-67,124-126,129,131-135,140-141,155-156
+  s_8a4c08d01c58a2::t_326d66b464453d 2,63-64,139
+apps/web/src/features/budgets/controller.ts
+  s_8a4c08d01c58a2::t_340d989a8322fc 1-101
+apps/web/src/features/budgets/presentation.ts
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 24-39,41-69,88
+  s_8a4c08d01c58a2::t_447a8c1c194675 1-23,40
+  s_8a4c08d01c58a2::t_38ea2ef4d61054 79,125
+  s_8a4c08d01c58a2::t_37f6067f8c74ae 77-78,123-124
+  s_8a4c08d01c58a2::t_9faed5b0147cec 70-76,80-87,89-122,126-130
+apps/server/src/core/budgets/contract.ts
+  s_8a4c08d01c58a2::t_dda413740db9b9 16-17,24,44,51-54,61-62,315,331
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 19-20,22-23,64,69,79,90-93
+  s_8a4c08d01c58a2::t_b2d37062b133d6 13-15,18,21,65-68
+  s_8a4c08d01c58a2::t_4d85b5cdecfe6a 72-74
+  s_8a4c08d01c58a2::t_af152ced38ab3f 80-89
+  s_8a4c08d01c58a2::t_47fc48bc5cec56 3,59-60,63,70-71,75-78,94,314
+apps/web/src/ui/components/budget-meter.tsx
+  s_8a4c08d01c58a2::t_42cd96280dd212 2
+  s_8a4c08d01c58a2::t_afcceb675e820f 1,3-5,29-31,44
+  s_8a4c08d01c58a2::t_b0dd38a4c6bb70 10,15,23-26
+  s_8a4c08d01c58a2::t_b855061887e0ed 11-14,16,21-22
+  s_8a4c08d01c58a2::t_37f6067f8c74ae 17-20,27-28
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 6-9,32-43
+apps/server/cloudflare/budgets/internal/budgets.ts
+  s_8a4c08d01c58a2::t_42bb021669202d 5-10,150-185,321-333,348-349,353,369-373,406-423
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 230-239,243-244,253-254,262-271,275-277,280-287,290-301,305-307,311-318,334-342,344-346,350-351,374-397,399-402,404
+  s_8a4c08d01c58a2::t_340d989a8322fc 207-209,214,216-219
+  s_8a4c08d01c58a2::t_ad13490711536b 248,252
+  s_8a4c08d01c58a2::t_b2d37062b133d6 343,347,352,354,361,363-368
+  s_8a4c08d01c58a2::t_e494585a5e8c91 261,272-274,278-279,288-289,319,405
+  s_8a4c08d01c58a2::t_8348e87f4c6bee 229,240-242,245-247,249-251,255-260,302-304,308-310
+  s_8a4c08d01c58a2::t_f7b388a41f5af4 1,186,206,320,398
+apps/web/src/ui/components/workspace-responsive.tsx
+  s_8a4c08d01c58a2::t_16c6e06b4b340a 2-25
+  s_8a4c08d01c58a2::t_dbe7e9b24ae56e 1
+apps/web/src/features/budgets/dev-preview.tsx
+  s_8a4c08d01c58a2::t_0a2c4431b6cd07 13
+  s_8a4c08d01c58a2::t_f6147ea5b745de 15-20,31
+  s_8a4c08d01c58a2::t_566d43dfb45cbb 1,4-12,14,21-30,32,34-41,44-46,48-56,61-68
+  s_8a4c08d01c58a2::t_b5c802fc65aab2 57-60
+  s_8a4c08d01c58a2::t_9d517f28a73f30 2-3,33,42-43
+  s_8a4c08d01c58a2::t_6f29c921f72f67 47
+apps/server/src/client.ts
+  s_8a4c08d01c58a2::t_bc56e583071404 185
+  s_7fad76c9e794dc::t_de2fc02b2cdf13 170
+apps/web/src/features/budgets/dev-fixtures.ts
+  s_8a4c08d01c58a2::t_a265b96137b453 19,21
+  s_8a4c08d01c58a2::t_abdc6114c3c8cc 52-55,58-66,78-79
+  s_8a4c08d01c58a2::t_566d43dfb45cbb 8-10,20,22-38,40,43-45,80-81,83,89-90,94-96,98,100-103,135-143,146,155-163,167-168,170-180
+  s_8a4c08d01c58a2::t_ee1ffaccd2cf8d 68,73,82,84-85,144-145,149-152
+  s_8a4c08d01c58a2::t_f6147ea5b745de 164,166
+  s_8a4c08d01c58a2::t_9d517f28a73f30 1,5,12-13,15-18,42,49-51,67,69-72,74-77,87,97,99,147
+  s_8a4c08d01c58a2::t_c6f685fef67cb1 165
+  s_8a4c08d01c58a2::t_0a2c4431b6cd07 11,14,47-48,56-57,91-93,104-134,148,153,169
+  s_8a4c08d01c58a2::t_bc56e583071404 2-4,6-7,39,41,86,88,154
+  s_8a4c08d01c58a2::t_c71f2760b97f50 46
+apps/web/src/features/budgets/layout.css
+  s_8a4c08d01c58a2::t_46c18814a1f961 79
+  s_8a4c08d01c58a2::t_bb92071da8da17 1-78
+apps/web/src/ui/components/workspace-panel.tsx
+  s_8a4c08d01c58a2::t_16c6e06b4b340a 2,6-7,31-33,36-42,47
+  s_8a4c08d01c58a2::t_69a5f929c36586 1
+apps/web/src/features/budgets/summary.tsx
+  s_8a4c08d01c58a2::t_77781310c7c254 26-27,31-35,56-57,62-65,67,74,78,87,91,98,102,112-114,120-158
+  s_8a4c08d01c58a2::t_a5b56a0b8350d3 5,9-13,19,55
+  s_8a4c08d01c58a2::t_4b1e105c216045 41
+  s_8a4c08d01c58a2::t_e21cfad45d126b 44,59-61,68-72,79-85,88,110,115
+  s_8a4c08d01c58a2::t_903235d848cbd1 76-77
+  s_8a4c08d01c58a2::t_38ea2ef4d61054 86,93-94
+  s_8a4c08d01c58a2::t_b855061887e0ed 7,18,24,28-30,43,45-54,75,89-90,95-97,99-101,103-109,111,117-119
+  s_8a4c08d01c58a2::t_ee262d0b318224 1-4,6,8,14-17,20-23,25,36-40,42,58,66,73,92,116,159-163
+apps/web/src/ui/components/financial-summary-card.tsx
+  s_8a4c08d01c58a2::t_16c6e06b4b340a 1-44
+apps/server/cloudflare/d1-test-fixture.ts
+  s_8a4c08d01c58a2::t_e2a4ceafc05307 251-257
+apps/web/e2e/budgets.spec.ts
+  s_8a4c08d01c58a2::t_e21cfad45d126b 128,130-142,149,151,154,156,160,162,166,168,171,173,219,221,227,233-234,236-237,239-240,242,244,246-247,249,251,253-254,256
+  s_8a4c08d01c58a2::t_e5fb07ba7688e3 7
+  s_8a4c08d01c58a2::t_cd153478575fdb 1-6,8-127,129,143-148,150,152-153,155,157-159,161,163-165,167,169-170,172,174-218,220,222-226,228-232,235,238,241,243,245,248,250,252,255,257-295
+apps/web/src/features/budgets/model.ts
+  s_8a4c08d01c58a2::t_42bb021669202d 42-45,50-53,58-61,64-67,71-74
+  s_8a4c08d01c58a2::t_943be6cd57e4c0 3,6-10,12-17,19-21,23-24,26-34,37-40,46-48,54-56,62,68-69,75,77-78
+  s_8a4c08d01c58a2::t_340d989a8322fc 4-5,18,25,76
+  s_8a4c08d01c58a2::t_a5b56a0b8350d3 1-2,11,22,35-36,41,49,57,63,70
+apps/server/cloudflare/budgets/internal/group-currency.ts
+  s_8a4c08d01c58a2::t_af1a2df13e90a3 22,46,60,80,91-94,103,108-109,117,121
+  s_8a4c08d01c58a2::t_a2f5b6f9ab6ea7 12-13,23-24,28-29,36,39-40,50-52,84-90,95-102,104-107,110-116,118-120,125,128
+  s_8a4c08d01c58a2::t_88fe515ca1b448 1-11,14-21,25-27,30-35,37-38,41-45,47-49,53-59,61-79,81-83,122-124,126-127,129-170
+.oxlintrc.json
+  s_8a4c08d01c58a2::t_ee99638d13fc10 76-78,316
+apps/server/.dependency-cruiser.mjs
+  s_7fad76c9e794dc::t_f09dc28a122156 197
+apps/server/ARCHITECTURE.md
+  s_8a4c08d01c58a2::t_161649b47af052 570-577
+apps/server/cloudflare/budgets/internal/monthly-cash-flow.ts
+  s_8a4c08d01c58a2::t_6b7c114ac8c1f1 1-53
+apps/server/cloudflare/canonical-operations/internal/GUARD-INVENTORY.md
+  s_8a4c08d01c58a2::t_70addbcbfcd5e8 14
+apps/server/cloudflare/migrations/0089_budget_month_plans.sql
+  s_8a4c08d01c58a2::t_786ccb4cb05bc3 1-16
+apps/server/cloudflare/migrations/0090_budget_group_currencies.sql
+  s_8a4c08d01c58a2::t_fb33dec5c4b133 1-18
+apps/web/ARCHITECTURE.md
+  s_7fad76c9e794dc::t_0b5d198a9ae575 248-252
+apps/web/src/app/access-page.tsx
+  s_8a4c08d01c58a2::t_1ce2cca20ce821 22
+apps/web/src/ui/components/button-variants.ts
+  s_7fad76c9e794dc::t_294425bf7e2374 13,21
+apps/web/src/ui/components/input.tsx
+  s_8a4c08d01c58a2::t_8f6c17e9e1c764 1,7-17,23,27-31
+apps/web/src/ui/components/searchable-choice-dropdown.tsx
+  s_8a4c08d01c58a2::t_797bb95c29da59 1-89
+apps/web/src/ui/financial-reference.tsx
+  s_8a4c08d01c58a2::t_69b1d879cb76a5 1-83
+apps/web/src/ui/workspace-reference.tsx
+  s_8a4c08d01c58a2::t_cc5dcad9a0103b 98
+DESIGN.md
+  s_8a4c08d01c58a2::t_7cf43509f33033 452-467,536-549
+apps/web/src/features/transactions/workspace.tsx
+  s_8a4c08d01c58a2::t_1e05a30dc6f765 489
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4812a64d24c063a449cf069727e26ba2c8d6dcb8",
+  "prompts": {},
+  "sessions": {
+    "s_7fad76c9e794dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1387b-3310-7a30-9546-3e9c8dc12e3a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8a4c08d01c58a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13242-05f1-7a43-8ea7-1fe876e3b7bb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -5,10 +5,10 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import type { Cause, Scope } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import { signInBudgetThroughCore } from "./real-core-fixture";
+import { browserSessionHeaders, signInBudgetThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
-const { api, app } = browserAcceptanceTopology();
+const { api } = browserAcceptanceTopology();
 const ok = 200;
 const created = 201;
 const notFound = 404;
@@ -55,7 +55,9 @@ const acquireFixture = (
   Effect.acquireRelease(
     Effect.gen(function* () {
       const response = yield* admittedRequest(() =>
-        page.request.post(`${api}/${path}`, { headers: { origin: app }, data })
+        browserSessionHeaders(page.request).then((headers) =>
+          page.request.post(`${api}/${path}`, { headers, data })
+        )
       );
       expect(response.status()).toBe(created);
       // HttpApi reflection erases the types; both selected declarations retain their full codecs.
@@ -68,7 +70,9 @@ const acquireFixture = (
     }),
     (id) =>
       admittedRequest(() =>
-        page.request.delete(`${api}/${path}/${id}`, { headers: { origin: app } })
+        browserSessionHeaders(page.request).then((headers) =>
+          page.request.delete(`${api}/${path}/${id}`, { headers })
+        )
       ).pipe(
         Effect.tap((response) =>
           Effect.sync(() => expect([ok, notFound]).toContain(response.status()))
@@ -94,10 +98,12 @@ const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cau
       { amount: "70", message: /Excedido por.*10,00/u },
     ]) {
       const response = yield* admittedRequest(() =>
-        page.request.put(`${api}/budgets/${budgetId}`, {
-          headers: { origin: app },
-          data: { categoryId, cap: { amount: update.amount, currency: "COP" } },
-        })
+        browserSessionHeaders(page.request).then((headers) =>
+          page.request.put(`${api}/budgets/${budgetId}`, {
+            headers,
+            data: { categoryId, cap: { amount: update.amount, currency: "COP" } },
+          })
+        )
       );
       expect(response.status()).toBe(ok);
       yield* Effect.tryPromise(() => page.reload());
@@ -109,7 +115,9 @@ const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cau
       );
     }
     const deleted = yield* admittedRequest(() =>
-      page.request.delete(`${api}/budgets/${budgetId}`, { headers: { origin: app } })
+      browserSessionHeaders(page.request).then((headers) =>
+        page.request.delete(`${api}/budgets/${budgetId}`, { headers })
+      )
     );
     expect(deleted.status()).toBe(ok);
     yield* Effect.tryPromise(() => page.reload());

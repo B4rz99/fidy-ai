@@ -2,7 +2,7 @@
 
 Use when changing MCP ingress, tool registration, protocol negotiation or native confirmation.
 Import `McpServer`, `McpSchema` and `McpProtocol` from `effect/ai`; HTTP assembly uses
-`HttpRouter` from `effect/http`. Selected Effect 4.0.1 sources:
+`HttpRouter` from `effect/http`. Selected Effect 4.0.2 sources:
 `node_modules/effect/src/ai/{McpServer,McpSchema,McpProtocol}.ts`. Verify `layerHttp`,
 `McpServer.addTool`, `McpRequestContext`, `InputRequired` and the selected protocol adapters.
 
@@ -48,3 +48,10 @@ negotiated protocols, unsupported negotiation, malformed/big bodies, unavailable
 confirmation decline/expiry/replay, client disconnect during streaming and disposal while leased.
 Assert safe protocol failures and no additional operation execution. Source-backed assembly describes
 library mechanics; OAuth authority, canonical admission and residency limits are Fidy policy.
+
+In the selected 4.0.2 SDK, a cancelled stateful request with no emitted JSON-RPC reply settles as an
+empty HTTP 202. `McpServer.ts` suppresses cancelled replies and its pre-response handler maps an
+empty 200 to 202. Residency tests assert that response separately from SQL settlement and public
+Scope disposal; a 202 does not prove mutation completion or release admission capacity. Newer
+upstream [#8888](https://github.com/Effect-TS/effect/pull/8888) uses an empty SSE response instead;
+that behavior is outside the pinned 4.0.2 release.

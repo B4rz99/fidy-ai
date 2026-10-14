@@ -47,41 +47,6 @@
       "manifest": "package.json",
       "reason": "0.48.0 still introduces 1,378 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-10 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
       "until": "2026-10-17T00:00:00Z"
-    },
-    {
-      "name": "effect",
-      "reason": "Effect 4.0.2 changes HttpApiClient response-mode inference: Response becomes distributive and EndpointMethod defaults to decoded-only. Installing the coordinated family on 2026-10-14 produces 20 TypeScript errors and 13 type-aware lint errors in the existing browser-login/provider-authentication controllers, whose AtomHttpApi wrappers widen response modes. Retain the coherent 4.0.1 family until those wrapper types are migrated or upstream fixes inference; rerun typecheck, type-aware lint, authentication/browser tests and the full release gate before updating together. No diagnostics are suppressed.",
-      "until": "2026-10-24T00:00:00Z"
-    },
-    {
-      "name": "@effect/platform-bun",
-      "reason": "Effect 4.0.2 changes HttpApiClient response-mode inference: Response becomes distributive and EndpointMethod defaults to decoded-only. Installing the coordinated family on 2026-10-14 produces 20 TypeScript errors and 13 type-aware lint errors in the existing browser-login/provider-authentication controllers, whose AtomHttpApi wrappers widen response modes. Retain the coherent 4.0.1 family until those wrapper types are migrated or upstream fixes inference; rerun typecheck, type-aware lint, authentication/browser tests and the full release gate before updating together. No diagnostics are suppressed.",
-      "until": "2026-10-24T00:00:00Z"
-    },
-    {
-      "name": "@effect/platform-node",
-      "reason": "Effect 4.0.2 changes HttpApiClient response-mode inference: Response becomes distributive and EndpointMethod defaults to decoded-only. Installing the coordinated family on 2026-10-14 produces 20 TypeScript errors and 13 type-aware lint errors in the existing browser-login/provider-authentication controllers, whose AtomHttpApi wrappers widen response modes. Retain the coherent 4.0.1 family until those wrapper types are migrated or upstream fixes inference; rerun typecheck, type-aware lint, authentication/browser tests and the full release gate before updating together. No diagnostics are suppressed.",
-      "until": "2026-10-24T00:00:00Z"
-    },
-    {
-      "name": "@effect/platform-browser",
-      "reason": "Effect 4.0.2 changes HttpApiClient response-mode inference: Response becomes distributive and EndpointMethod defaults to decoded-only. Installing the coordinated family on 2026-10-14 produces 20 TypeScript errors and 13 type-aware lint errors in the existing browser-login/provider-authentication controllers, whose AtomHttpApi wrappers widen response modes. Retain the coherent 4.0.1 family until those wrapper types are migrated or upstream fixes inference; rerun typecheck, type-aware lint, authentication/browser tests and the full release gate before updating together. No diagnostics are suppressed.",
-      "until": "2026-10-24T00:00:00Z"
-    },
-    {
-      "name": "@effect/sql-d1",
-      "reason": "Effect 4.0.2 changes HttpApiClient response-mode inference: Response becomes distributive and EndpointMethod defaults to decoded-only. Installing the coordinated family on 2026-10-14 produces 20 TypeScript errors and 13 type-aware lint errors in the existing browser-login/provider-authentication controllers, whose AtomHttpApi wrappers widen response modes. Retain the coherent 4.0.1 family until those wrapper types are migrated or upstream fixes inference; rerun typecheck, type-aware lint, authentication/browser tests and the full release gate before updating together. No diagnostics are suppressed.",
-      "until": "2026-10-24T00:00:00Z"
-    },
-    {
-      "name": "@effect/atom-react",
-      "reason": "Effect 4.0.2 changes HttpApiClient response-mode inference: Response becomes distributive and EndpointMethod defaults to decoded-only. Installing the coordinated family on 2026-10-14 produces 20 TypeScript errors and 13 type-aware lint errors in the existing browser-login/provider-authentication controllers, whose AtomHttpApi wrappers widen response modes. Retain the coherent 4.0.1 family until those wrapper types are migrated or upstream fixes inference; rerun typecheck, type-aware lint, authentication/browser tests and the full release gate before updating together. No diagnostics are suppressed.",
-      "until": "2026-10-24T00:00:00Z"
-    },
-    {
-      "name": "@effect/vitest",
-      "reason": "Effect 4.0.2 changes HttpApiClient response-mode inference: Response becomes distributive and EndpointMethod defaults to decoded-only. Installing the coordinated family on 2026-10-14 produces 20 TypeScript errors and 13 type-aware lint errors in the existing browser-login/provider-authentication controllers, whose AtomHttpApi wrappers widen response modes. Retain the coherent 4.0.1 family until those wrapper types are migrated or upstream fixes inference; rerun typecheck, type-aware lint, authentication/browser tests and the full release gate before updating together. No diagnostics are suppressed.",
-      "until": "2026-10-24T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": [

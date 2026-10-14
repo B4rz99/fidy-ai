@@ -12,7 +12,7 @@ ingestion are separate capabilities and are not covered by this map.
 | Capture clear rows               | Mapping, exact Money/Currency, source dates, SourceAttestation, durable chunks and recovery without duplicate capture       | Live capture pending                                                                                                                                 |
 | Review uncertain rows            | Bounded evidence, persisted accounting, same-conversation clarification, resolve/skip/abandon and evidence erasure          | XLSX clarification delivered. Skip confirmation blocked by delivery callbacks; QA grant and WhatsApp belong to different Users (isolation confirmed) |
 | Enforce authority and budgets    | User isolation, hosted-only submission, request/spend/outstanding limits, Free backfill reservation and settlement          | Unauthenticated reads/submission return 401; missing submission returns `not_found`; read-only CLI excludes submission                               |
-| Recover and expire work          | Queue/Workflow replay, terminal failure, staged-object reclamation and preservation of live work                            | Failure reply delivered; live expiry erases both XLSX review rows’ original evidence; interrupted-work recovery not induced                                                                                  |
+| Recover and expire work          | Queue/Workflow replay, terminal failure, staged-object reclamation and preservation of live work                            | Failure reply delivered; live expiry erases both XLSX review rows’ original evidence; interrupted-work recovery not induced                          |
 
 ## Evidence and reruns
 

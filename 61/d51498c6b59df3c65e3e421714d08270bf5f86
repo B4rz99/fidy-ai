@@ -1,0 +1,27 @@
+apps/server/src/core/ingestion/FEATURE.md
+  s_6d017cc65783af::t_b41b75d96ceef4 7-15,43-56
+apps/site/package.json
+  s_6d017cc65783af::t_d94f59f5c170db 16
+bun.lock
+  s_6d017cc65783af::t_612e0be8c450d1 78,1090
+tools/astro/bun.lock
+  s_6d017cc65783af::t_38598443f0e8b0 8,42
+tools/astro/package.json
+  s_6d017cc65783af::t_fda999f3c8c3d2 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "61d51498c6b59df3c65e3e421714d08270bf5f86",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

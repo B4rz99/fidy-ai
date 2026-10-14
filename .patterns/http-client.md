@@ -1,6 +1,6 @@
 # Outbound HTTP clients (v4)
 
-Use for provider and first-party outbound transports. Import from `effect/http`. Selected Effect 4.0.1 sources are
+Use for provider and first-party outbound transports. Import from `effect/http`. Selected Effect 4.0.2 sources are
 `node_modules/effect/src/http/{FetchHttpClient,HttpClient,HttpClientRequest,HttpClientResponse,HttpIncomingMessage,Headers}.ts`.
 Search the named combinators when changing adapter policy.
 
@@ -46,7 +46,7 @@ Ordinary interruption aborts the request; `withScope` ties its controller to an 
 Consume streamed bodies inside their owning lifetime. Local cancellation cannot retract a remote
 side effect.
 
-In selected Effect 4.0.1, `HttpClientResponse.stream` delegates to `Stream.fromReadableStream`.
+In selected Effect 4.0.2, `HttpClientResponse.stream` delegates to `Stream.fromReadableStream`.
 Its `Channel.readableStreamToPullUnsafe` finalizer awaits `reader.cancel().catch(...)` and does
 not call `releaseLock()`. A native cancellation Promise that never settles can therefore stall
 scope closure after overflow, timeout or interruption. `releaseLockOnEnd: true` chooses only
@@ -99,7 +99,7 @@ The default client tracer records URLs and selected headers. Extend `Headers.Cur
 for custom secret headers and narrow `HttpClient.TracerHeaderFilter`; non-secret headers can still
 contain personal data. Select controls deliberately:
 
-| Requirement                                                                     | Effect 4.0.1 control                                                                    |
+| Requirement                                                                     | Effect 4.0.2 control                                                                    |
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Suppress automatic HTTP spans and their URL/header metadata                     | Provide `HttpClient.TracerDisabledWhen` with the appropriate request predicate          |
 | Keep approved automatic HTTP spans but suppress injected outgoing trace headers | Provide `HttpClient.TracerPropagationEnabled` with `false`                              |

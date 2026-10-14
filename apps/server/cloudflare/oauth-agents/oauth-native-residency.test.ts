@@ -1081,9 +1081,9 @@ describe("native2025 residency integration", () => {
           yield* wait(() => gate.settled);
           const firstResponse = yield* wait(() => first);
           const queuedResponse = yield* wait(() => queued);
-          expect(queuedResponse.status).toBe(500);
+          expect(queuedResponse.status).toBe(202);
           yield* wait(() => firstResponse.text());
-          yield* wait(() => queuedResponse.text());
+          expect(yield* wait(() => queuedResponse.text())).toBe("");
           const thirdResponse = yield* wait(() => third);
           expect(thirdResponse.status).toBe(201);
           yield* wait(() => thirdResponse.text());
@@ -1144,16 +1144,14 @@ describe("native2025 residency integration", () => {
   ): Effect.Effect<void, Cause.UnknownError> =>
     Effect.gen(function* () {
       const response = yield* wait(() => input.response);
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(202);
       input.progress.push(
-        "genuine late native target500 received; body deliberately unread until public disposal completes"
+        "native cancellation202 received; public disposal must still settle before response consumption"
       );
       yield* wait(() => input.disposal);
-      input.progress.push(
-        "public disposal completed with late target500 body still unread by caller"
-      );
-      yield* wait(() => response.text());
-      input.progress.push("late native target500 body completion verified after public disposal");
+      input.progress.push("public disposal completed before cancellation response consumption");
+      expect(yield* wait(() => response.text())).toBe("");
+      input.progress.push("empty native cancellation response verified after public disposal");
     });
   const saveSdkDisposalEvidence = (
     input: SdkDisposalEvidence,
@@ -1826,7 +1824,7 @@ describe("native2025 residency integration", () => {
           expect(yield* Deferred.isDone(cleanupFinished)).toBe(true);
           expect(yield* Deferred.isDone(disposalFinished)).toBe(true);
           progress.push(
-            "cleanup completed, genuine target500/body settled, published disposal completed"
+            "cleanup completed, empty cancellation202 settled, published disposal completed"
           );
           const freshModule = makeMcpResidency(config);
           modules.push(freshModule);
@@ -1845,7 +1843,7 @@ describe("native2025 residency integration", () => {
             "published dispose started; admission closed503; disposal unfinished while cleanup held"
           );
           expect(progress).toContain(
-            "cleanup completed, genuine target500/body settled, published disposal completed"
+            "cleanup completed, empty cancellation202 settled, published disposal completed"
           );
           expect(
             yield* wait(() =>

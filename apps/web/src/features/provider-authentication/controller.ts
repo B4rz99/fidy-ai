@@ -5,10 +5,10 @@ import { Cause, type Context, Effect, Option, Redacted, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
-import type { AuthenticationProvider, WebAuthClient } from "@/transport/client";
+import type { AuthenticationProvider, WebAuthClient, WebAuthSuccess } from "@/transport/client";
 
 type Client = Context.Service.Shape<WebAuthClient>;
-type Pairing = Effect.Success<ReturnType<Client["browserLogin"]["startPairing"]>>;
+type Pairing = WebAuthSuccess<"browserLogin", "startPairing">;
 type CommandError =
   | Effect.Error<ReturnType<Client["browserLogin"]["startPairing"]>>
   | Effect.Error<ReturnType<Client["providerAuthentication"]["start"]>>

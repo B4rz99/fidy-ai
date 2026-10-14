@@ -13,6 +13,7 @@ import {
   OAuthRequestId,
   PATPairingPublicCode,
   type WebAuthClient,
+  type WebAuthSuccess,
 } from "@/transport/client";
 
 export const invalidPairingMessage = "Esta vinculación ya no es válida. Inicia de nuevo." as const;
@@ -64,12 +65,8 @@ const pollTimeoutMilliseconds = 15_000;
 const invalidState = { _tag: "Invalid" } as const satisfies BrowserLoginPairingViewState;
 
 type DirectWebAuthClient = Context.Service.Shape<WebAuthClient>;
-type StartedPairing = Effect.Success<
-  ReturnType<DirectWebAuthClient["browserLogin"]["startPairing"]>
->;
-type RedeemResult = Effect.Success<
-  ReturnType<DirectWebAuthClient["browserLogin"]["redeemPairing"]>
->;
+type StartedPairing = WebAuthSuccess<"browserLogin", "startPairing">;
+type RedeemResult = WebAuthSuccess<"browserLogin", "redeemPairing">;
 type PollAttempt = PollFailure | Readonly<{ _tag: "Success"; value: RedeemResult }>;
 
 const requestPairingPoll = (

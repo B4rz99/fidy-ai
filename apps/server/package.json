@@ -285,9 +285,9 @@
     "test:memory": "bun --bun vitest run --config vitest.config.ts src/shell/memory --coverage.enabled=false"
   },
   "dependencies": {
-    "@effect/sql-d1": "4.0.1",
+    "@effect/sql-d1": "4.0.2",
     "csv-parse": "7.0.3",
-    "effect": "4.0.1",
+    "effect": "4.0.2",
     "fflate": "0.8.3",
     "jose": "6.2.12",
     "mupdf": "1.28.1",
@@ -298,9 +298,9 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261007.1",
-    "@effect/platform-bun": "4.0.1",
-    "@effect/platform-node": "4.0.1",
-    "@effect/vitest": "4.0.1",
+    "@effect/platform-bun": "4.0.2",
+    "@effect/platform-node": "4.0.2",
+    "@effect/vitest": "4.0.2",
     "@vitest/coverage-istanbul": "5.0.3",
     "bun-types": "1.4.2",
     "esbuild": "0.28.2",

@@ -5484,6 +5484,12 @@ it("compacts a long session of short Turns before its exact-entry capacity is re
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .bind(users[0], now() - 1_000, now() - 1_000 + 604_800_000)
+          .run()
+      );
       const awaited27 = yield* Effect.tryPromise(() => subject(0));
       const awaited28 = yield* Effect.tryPromise(() => inference(() => Promise.resolve(reply())));
       const first = yield* Effect.tryPromise(() =>
@@ -6331,81 +6337,135 @@ it("serializes concurrent requests at the per-User coordinator and admits two di
     })
   ));
 
-it("checks the durable daily allowance before provider preparation or new evidence", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => setup());
-      let calls = 0;
-      const model = yield* Effect.tryPromise(() =>
-        inference(() => {
-          calls++;
-          return Promise.resolve(reply());
-        })
-      );
-      const awaited42 = yield* Effect.tryPromise(() => subject(0));
-      const first = yield* Effect.tryPromise(() =>
-        completeHostedTurn({
+it.each([
+  { standing: "Free", limit: 10, trial: false },
+  { standing: "Trial", limit: 50, trial: true },
+])(
+  "checks the $standing daily allowance before provider preparation or new evidence",
+  ({ limit, trial }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        if (trial) {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+              .bind(users[0], now() - 1_000, now() - 1_000 + 604_800_000)
+              .run()
+          );
+        }
+        let calls = 0;
+        const model = yield* Effect.tryPromise(() =>
+          inference(() => {
+            calls++;
+            return Promise.resolve(reply());
+          })
+        );
+        const awaited42 = yield* Effect.tryPromise(() => subject(0));
+        const first = yield* Effect.tryPromise(() =>
+          completeHostedTurn({
+            db,
+            subject: awaited42,
+            text: TranscriptText.make("Initial"),
+            inference: model,
+            deliver: browserHostedDelivery,
+            signal: makeAbortController().signal,
+          })
+        );
+        yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, first));
+        const session = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT hosted_session_id FROM hosted_turns WHERE user_id = ?")
+            .bind(users[0])
+            .first<{ hosted_session_id: string }>()
+        );
+        if (session === null) throw Error("missing Hosted Agent Session");
+        const timestamp = now();
+        const terminalTurnStatements = (index: number): D1PreparedStatement[] => {
+          const turn = newId();
+          return [
+            db
+              .prepare(
+                "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
+              )
+              .bind(turn, users[0], session.hosted_session_id, timestamp),
+            db
+              .prepare(
+                "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, ?)"
+              )
+              .bind(
+                newId(),
+                users[0],
+                session.hosted_session_id,
+                turn,
+                timestamp,
+                `Budget ${index}`
+              ),
+            db
+              .prepare(
+                "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason) VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')"
+              )
+              .bind(newId(), users[0], session.hosted_session_id, turn, timestamp),
+            db
+              .prepare(
+                "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
+              )
+              .bind(timestamp, turn),
+          ];
+        };
+        yield* Effect.tryPromise(() =>
+          db.batch(
+            Array.from({ length: limit - 2 }, (_, index) => index).flatMap(terminalTurnStatements)
+          )
+        );
+        const awaited43 = yield* Effect.tryPromise(() => subject(0));
+        const last = yield* Effect.tryPromise(() =>
+          completeHostedTurn({
+            db,
+            subject: awaited43,
+            text: TranscriptText.make("Last allowed"),
+            inference: model,
+            deliver: browserHostedDelivery,
+            signal: makeAbortController().signal,
+          })
+        );
+        yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, last));
+        const callsBeforeRefusal = calls;
+        const entriesBeforeRefusal = yield* Effect.tryPromise(() => retained(db, users[0]));
+        const overQuota = yield* Effect.tryPromise(() =>
+          completeHostedTurn({
+            db,
+            subject: awaited43,
+            text: TranscriptText.make("Over quota"),
+            inference: model,
+            deliver: browserHostedDelivery,
+            signal: makeAbortController().signal,
+          })
+        );
+        expect(overQuota.status).toBe(429);
+        expect(calls).toBe(callsBeforeRefusal);
+        const exhausted = yield* readHostedSnapshot({ db, subject: awaited43, now: now() });
+        if (Option.isNone(exhausted)) return yield* Effect.die("missing fixture authority");
+        const bypass = yield* admitHostedTurn({
           db,
-          subject: awaited42,
-          text: TranscriptText.make("Initial"),
-          inference: model,
-          deliver: browserHostedDelivery,
-          signal: makeAbortController().signal,
-        })
-      );
-      yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, first));
-      const session = yield* Effect.tryPromise(() =>
-        db
-          .prepare("SELECT hosted_session_id FROM hosted_turns WHERE user_id = ?")
-          .bind(users[0])
-          .first<{ hosted_session_id: string }>()
-      );
-      if (session === null) throw Error("missing Hosted Agent Session");
-      const timestamp = now();
-      const terminalTurnStatements = (index: number): D1PreparedStatement[] => {
-        const turn = newId();
-        return [
-          db
-            .prepare(
-              "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
-            )
-            .bind(turn, users[0], session.hosted_session_id, timestamp),
-          db
-            .prepare(
-              "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, ?)"
-            )
-            .bind(newId(), users[0], session.hosted_session_id, turn, timestamp, `Budget ${index}`),
-          db
-            .prepare(
-              "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason) VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')"
-            )
-            .bind(newId(), users[0], session.hosted_session_id, turn, timestamp),
-          db
-            .prepare(
-              "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
-            )
-            .bind(timestamp, turn),
-        ];
-      };
-      yield* Effect.tryPromise(() =>
-        db.batch(Array.from({ length: 49 }, (_, index) => index).flatMap(terminalTurnStatements))
-      );
-      const awaited43 = yield* Effect.tryPromise(() => subject(0));
-      const overQuota = yield* Effect.tryPromise(() =>
-        completeHostedTurn({
-          db,
-          subject: awaited43,
-          text: TranscriptText.make("Over quota"),
-          inference: model,
-          deliver: browserHostedDelivery,
-          signal: makeAbortController().signal,
-        })
-      );
-      expect(overQuota.status).toBe(429);
-      expect(calls).toBe(1);
-      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toHaveLength(100);
-    })
-  ));
+          channel: { _tag: "Browser", subject: awaited43 },
+          selection: selectHostedSession({
+            snapshot: exhausted.value,
+            userId: UserId.make(users[0]),
+            now: now(),
+          }),
+          text: TranscriptText.make("Bypass preflight"),
+          now: now(),
+          id: TranscriptTurnId.make(newId()),
+        });
+        expect(bypass).toEqual(Option.none());
+
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toEqual(
+          entriesBeforeRefusal.results
+        );
+      })
+    )
+);
 
 it("refuses stale credentials and cross-User proofs before retaining or sending context", () =>
   Effect.runPromise(

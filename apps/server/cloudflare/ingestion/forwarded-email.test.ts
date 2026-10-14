@@ -257,7 +257,7 @@ it.effect("reevaluates upgrades fairly even when an older revoked User fills a s
     for (const userId of [userA, userB]) {
       yield* wait(() =>
         db.batch(
-          Array.from({ length: 50 }, (_, index) =>
+          Array.from({ length: 30 }, (_, index) =>
             db
               .prepare(
                 "INSERT INTO commercial_allowance_consumptions VALUES (?,'forwarded_email',?,?,?,1)"
@@ -312,12 +312,12 @@ it.effect("reevaluates upgrades fairly even when an older revoked User fills a s
           .bind(userA)
           .first()
       )
-    ).toEqual({ total: 50 });
+    ).toEqual({ total: 30 });
   })
 );
 
 it.effect(
-  "defers the 51st unique Free email, keeps exact replay uncharged, and activates it in the new Bogotá month",
+  "defers the 31st unique Free email, keeps exact replay uncharged, and activates it in the new Bogotá month",
   () =>
     Effect.gen(function* () {
       const current = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-07-20T12:00:00Z"));
@@ -326,7 +326,7 @@ it.effect(
       const period = allowancePeriod(DateTime.makeUnsafe(current));
       yield* wait(() =>
         db.batch(
-          Array.from({ length: 49 }, (_, index) =>
+          Array.from({ length: 29 }, (_, index) =>
             db
               .prepare(
                 "INSERT INTO commercial_allowance_consumptions VALUES (?,'forwarded_email',?,?,?,1)"
@@ -366,7 +366,7 @@ it.effect(
             .bind(userA)
             .first()
         )
-      ).toEqual({ total: 50 });
+      ).toEqual({ total: 30 });
       yield* dispatchForwardedEmail(env);
       expect(jobs).toHaveLength(1);
       yield* TestClock.setTime(DateTime.toEpochMillis(period.resetsAt));

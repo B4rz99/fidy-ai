@@ -3,6 +3,7 @@ import { Cause, Effect, Exit, Option } from "effect";
 import {
   HostedInferenceError,
   type HostedInferenceFailureReason,
+  type HostedInvalidOutputDescription,
 } from "../../../src/shell/hosted-inference/contract";
 import type {
   DeclaredOutcome,
@@ -38,6 +39,18 @@ const modelFailureCodes: Readonly<
   StructuredOutputTimedOut: "timeout",
 };
 
+const invalidOutputFailureCodes: Partial<
+  Readonly<Record<HostedInvalidOutputDescription, TelemetryCode<"error">>>
+> = {
+  "Hosted tool arguments were invalid": "model_tool_arguments_rejected",
+  "Hosted provider response was invalid": "model_provider_response_rejected",
+};
+
+const modelFailureCode = (reason: HostedInferenceFailureReason): TelemetryCode<"error"> =>
+  reason._tag === "InvalidOutput"
+    ? (invalidOutputFailureCodes[reason.description] ?? modelFailureCodes.InvalidOutput)
+    : modelFailureCodes[reason._tag];
+
 const classifiedModelFailure = (cause: Cause.Cause<unknown>): DeclaredOutcome => {
   const error = Cause.findErrorOption(cause);
   if (Option.exists(error, Cause.isTimeoutError)) {
@@ -47,8 +60,10 @@ const classifiedModelFailure = (cause: Cause.Cause<unknown>): DeclaredOutcome =>
     return { outcome: "failed", error: Option.some("operational_failure"), retryable: false };
   }
   const failure = error.value;
-  const code = modelFailureCodes[failure.reason._tag];
-  return code === "model_response_rejected" || code === "authentication_failed"
+  const code = modelFailureCode(failure.reason);
+  return failure.reason._tag === "InvalidOutput" ||
+    code === "model_response_rejected" ||
+    code === "authentication_failed"
     ? { outcome: "rejected", error: Option.some(code), retryable: false }
     : { outcome: "failed", error: Option.some(code), retryable: failure.retryable };
 };

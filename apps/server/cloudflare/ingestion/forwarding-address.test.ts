@@ -145,7 +145,7 @@ it("issues unpredictable User-specific addresses at verified Consent and returns
       if (Option.isNone(query)) return;
       expect(query.value.status).toBe(200);
       expect(yield* wait(() => query.value.json())).toMatchObject({
-        data: { address: { address: body.data.address }, remainingThisMonth: 50 },
+        data: { address: { address: body.data.address }, remainingThisMonth: 30 },
       });
       expect(
         (yield* wait(() =>

@@ -12,7 +12,7 @@ export type AllowanceKind = typeof AllowanceKind.Type;
 
 /** Commercial Free entitlements; security admission policy is independent. */
 export const freeAllowanceLimits: Readonly<Record<AllowanceKind, number>> = {
-  forwarded_email: 50,
+  forwarded_email: 30,
   media_submission: 2,
   hosted_history_turn: 2,
   canonical_call: 50,

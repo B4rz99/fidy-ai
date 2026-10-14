@@ -278,6 +278,7 @@ export const canonicalAdmissionMigrationNames = (
       "0072_disclosure_transport",
       "0073_admission_retention",
       "0032_commercial_allowances",
+      "0091_free_email_allowance",
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",
       "0035_media_submissions",

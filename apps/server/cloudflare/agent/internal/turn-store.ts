@@ -1,3 +1,4 @@
+import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { loadsSavedHistory } from "./history-allowance";
 import { prepareConsumption, quotaFailure } from "../../quotas/operations";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
@@ -76,7 +77,8 @@ const maximumRetainedEntries = 200;
 const maximumRetentionRows = 100;
 const maximumCurrentMemories = 100;
 const millisecondsPerDay = 86_400_000;
-const maximumDailyTurns = 50;
+const freeDailyTurns = 10;
+const proDailyTurns = 50;
 const receiptBytes = 32;
 const hexRadix = 16;
 export { deliveryAcknowledgmentWindowMs } from "../contract";
@@ -182,22 +184,23 @@ export const readHostedSnapshot = ({
         .first()
     );
     const day = Math.floor(now / millisecondsPerDay) * millisecondsPerDay;
+    const pro = activeProUserCondition({ userId, nowEpochMs: now });
     const budget = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT COUNT(*) AS used FROM hosted_turns
+        .prepare(`SELECT COUNT(*) AS used, CASE WHEN ${pro.sql} THEN ${proDailyTurns} ELSE ${freeDailyTurns} END AS maximum FROM hosted_turns
     WHERE user_id = ? AND started_at_ms >= ? AND started_at_ms < ?`)
-        .bind(subject.userId, day, day + millisecondsPerDay)
+        .bind(...pro.params, subject.userId, day, day + millisecondsPerDay)
         .first()
     );
     const budgetRow = Option.flatMap(
       Option.fromNullishOr(budget),
-      Schema.decodeUnknownOption(Schema.Struct({ used: Schema.Int }))
+      Schema.decodeUnknownOption(Schema.Struct({ used: Schema.Int, maximum: Schema.Int }))
     );
     return Option.some({
       user: user.value,
       consentBasis: standing.basis,
       revoked: standing._tag === "Revoked",
-      capacityAvailable: Option.exists(budgetRow, (row) => row.used < maximumDailyTurns),
+      capacityAvailable: Option.exists(budgetRow, (row) => row.used < row.maximum),
       session:
         sessionRaw === null
           ? Option.none()
@@ -830,13 +833,27 @@ export const admitHostedTurn = ({
           )
           .bind(selection.id, subject.userId);
     const channelStatements = prepareChannelAdmission({ db, channel, id, now });
+    const pro = activeProUserCondition({ userId: subject.userId, nowEpochMs: now });
+    const day = Math.floor(now / millisecondsPerDay) * millisecondsPerDay;
     const results = yield* Effect.tryPromise(() =>
       db.batch([
         createSession,
         db
           .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
-      SELECT ?, userId, ?, ?, 'pending' FROM (${authority.sql})`)
-          .bind(id, selection.id, now, ...authority.params),
+      SELECT ?, userId, ?, ?, 'pending' FROM (${authority.sql})
+      WHERE (SELECT COUNT(*) FROM hosted_turns WHERE user_id = ?
+        AND started_at_ms >= ? AND started_at_ms < ?)
+        < CASE WHEN ${pro.sql} THEN ${proDailyTurns} ELSE ${freeDailyTurns} END`)
+          .bind(
+            id,
+            selection.id,
+            now,
+            ...authority.params,
+            subject.userId,
+            day,
+            day + millisecondsPerDay,
+            ...pro.params
+          ),
         db
           .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)

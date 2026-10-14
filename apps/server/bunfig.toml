@@ -1,4 +1,3 @@
 [install]
 linker = "hoisted"
-# Keep the server package on the repository's seven-day supply-chain delay.
 minimumReleaseAge = 604800

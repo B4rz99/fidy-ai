@@ -1,6 +1,3 @@
--- Reversible Reconciliation decisions over two retained Transactions, plus the private member
--- index that makes one Transaction belong to at most one linked pair. No decision rewrites or
--- removes either original Transaction or its SourceAttestations.
 CREATE TABLE transaction_reconciliation_decisions (
   user_id TEXT NOT NULL REFERENCES users(id),
   first_transaction_id TEXT NOT NULL,
@@ -19,7 +16,6 @@ CREATE TABLE transaction_reconciliation_decisions (
     OR (state = 'keep-separate' AND visible_transaction_id IS NULL)
   )
 ) STRICT;
--- The primary key is the atomic one-pair-per-Transaction gate; a second link cannot commit a member.
 CREATE TABLE transaction_reconciliation_members (
   user_id TEXT NOT NULL,
   transaction_id TEXT NOT NULL,
@@ -31,10 +27,7 @@ CREATE TABLE transaction_reconciliation_members (
     REFERENCES transaction_reconciliation_decisions(user_id, first_transaction_id, second_transaction_id),
   CHECK (transaction_id IN (first_transaction_id, second_transaction_id))
 ) STRICT;
--- The effective relation's statement-source rank reads one Transaction's attestations on every
--- projected row; without this index that EXISTS scans the attestation table.
 CREATE INDEX source_attestations_by_transaction ON source_attestations(user_id, transaction_id);
--- Extend the append-only Transaction audit vocabulary to the two Reconciliation mutations.
 DROP TRIGGER pat_canonical_daily_budget;
 DROP TRIGGER category_canonical_daily_budget;
 CREATE TABLE transaction_audit_next (

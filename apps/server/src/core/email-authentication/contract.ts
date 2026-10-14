@@ -4,7 +4,6 @@ const maximumEmailAddressLength = 254;
 const mailboxGrammar =
   /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/u;
 
-/** Public canonical mailbox checks shared by slices that own email-shaped values. */
 export const canonicalEmailAddressChecks = [
   Schema.isNonEmpty(),
   Schema.isLowercased(),
@@ -42,7 +41,6 @@ export const EmailVerificationCode = Schema.String.check(
   .annotate({ identifier: "EmailVerificationCode" });
 export type EmailVerificationCode = typeof EmailVerificationCode.Type;
 
-/** Closed selector for the fixed content of one EmailAuthentication proof delivery. */
 export const EmailProofPurpose = Schema.Literals([
   "credential-replacement",
   "browser-pairing-approval",
@@ -55,10 +53,8 @@ export const maximumEmailDeliveryGenerations = 5;
 /** Fixed public delay attached to every non-enumerating email-login start response. */
 export const browserPairingEmailRetryAfterSeconds = 60;
 
-/** Persistence action selected for one locked replacement-workflow request. */
 export type EmailReplacementRequestDecision = "Start" | "ReplaceExpired" | "UseExisting" | "Reject";
 
-/** Exhaustive result of comparing one submitted proof with locked enrollment state. */
 export type ProofAttemptDecision =
   | Readonly<{ _tag: "Accept" }>
   | Readonly<{ _tag: "Wrong"; wrongAttempts: number }>

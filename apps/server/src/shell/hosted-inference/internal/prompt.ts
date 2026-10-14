@@ -24,7 +24,7 @@ const memoryBalanceFraming =
   `como afirmación de su fuente. Ni Memory ni Transactions son una consulta institucional de saldo; ` +
   `nunca digas que tienes acceso a saldos bancarios porque estén registrados allí. `;
 
-/** Builds the provider system framing: assistant identity, explicit User context, and categories. @internal */
+/** @internal */
 export const systemPromptInternal = ({
   serviceMarket,
   locale,
@@ -85,7 +85,7 @@ export const systemPromptInternal = ({
   `Cuando el Usuario responda con un comando CONFIRMAR emitido por el host, vuelve a proponer ` +
   `una sola vez exactamente la operación y los argumentos mostrados en el desafío.`;
 
-/** Builds the provider framing that fixes the instant for omitted Transaction times. @internal */
+/** @internal */
 export const turnPromptInternal = (occurredAt: DateTime.Utc): string =>
   `El turno comenzó en ${DateTime.formatIso(occurredAt)}. Usa este instante como valor ` +
   `predeterminado cuando el Usuario no indique cuándo ocurrió una Transaction.`;
@@ -153,7 +153,7 @@ const exactTranscriptMessage = (entry: TranscriptEntry): Prompt.MessageEncoded =
   }
 };
 
-/** Projects exact Transcript evidence to provider-neutral Effect AI messages. @internal */
+/** @internal */
 export const exactTranscriptPromptInternal = (
   entries: ReadonlyArray<TranscriptEntry>
 ): ReadonlyArray<Prompt.MessageEncoded> => entries.map(exactTranscriptMessage);
@@ -275,7 +275,7 @@ const suppliedEvidenceInventory = (
   };
 };
 
-/** Converts Agent-ordered semantic sections to private provider prompt fragments. @internal */
+/** @internal */
 export const projectHostedTextContextInternal = (
   context: HostedTextContext
 ): HostedPromptProjection => {
@@ -303,11 +303,11 @@ export const projectHostedTextContextInternal = (
   };
 };
 
-/** Provider system instruction for the structured Compaction projection. @internal */
+/** @internal */
 export const hostedStructuredCompactionInstruction =
   "Replace the prior compacted conversation and exact transcript with one faithful concise conversation record.";
 
-/** Converts Agent-owned compaction evidence to private provider messages. @internal */
+/** @internal */
 export const projectHostedStructuredContextInternal = (
   input: HostedStructuredContext
 ): ReadonlyArray<Prompt.MessageEncoded> => [
@@ -326,7 +326,7 @@ const startupHostedAgentSessionId = "00000000-0000-4000-8000-000000000001";
 const startupUuidHexRadix = 16;
 const startupUuidSuffixLength = 12;
 
-/** Builds deterministic synthetic Transcript evidence for startup validation. @internal */
+/** @internal */
 export const makeStartupTranscriptInternal = (
   input: Readonly<{
     entries: ReadonlyArray<Readonly<{ text: string }>>;

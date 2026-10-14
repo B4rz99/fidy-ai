@@ -8,7 +8,6 @@ export const CanonicalOperationId = Schema.String.check(
   .annotate({ identifier: "CanonicalOperationId" });
 export type CanonicalOperationId = typeof CanonicalOperationId.Type;
 
-/** One credential-neutral capability enforced by canonical operation policy. */
 export const CanonicalCapability = Schema.Literals(["read", "write", "dashboard"]).annotate({
   identifier: "CanonicalCapability",
 });
@@ -27,7 +26,6 @@ export const allCanonicalCapabilities: CanonicalCapabilities = CanonicalCapabili
   "dashboard",
 ]);
 
-/** Translates the public PAT scope vocabulary at the authentication edge. */
 export const canonicalCapabilitiesFromPATScopes = (
   scopes: ReadonlyArray<CanonicalCapability>
 ): CanonicalCapabilities => CanonicalCapabilities.make([...scopes]);

@@ -214,8 +214,6 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
           fetch: (incoming): Promise<Response> => {
             const request = incoming instanceof Request ? incoming : new Request(incoming);
             if (new URL(request.url).pathname === "/oauth-mcp") mcpHandoffCount += 1;
-            // Delivery-fault tests compose the published residency with the real canonical
-            // HTTP boundary, so faults affect SDK result decoding without patching internals.
             if (admitsCanonicalFault(request, queryResponseIntercept)) {
               return deliverCanonicalFault({
                 name,
@@ -279,7 +277,6 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
           LOCAL_CANONICAL_READ_BEARER: "",
           PAT_ADMISSION_KEY: "test-only-source-admission-key-32-bytes",
           RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
-          // A service binding consumes the forwarded request; it does not tee its body.
           CORE: {
             fetch: (incoming) => {
               const forwarded = incoming instanceof Request ? incoming : new Request(incoming);

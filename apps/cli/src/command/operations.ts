@@ -88,7 +88,6 @@ const runLogin = Effect.fn(function* (
   return yield* dependencies.emit({ _tag: "LoggedIn", grant });
 });
 
-/** Spanish presentation over local access and the one deep pairing operation; no domain commands. */
 export const runCommand = Effect.fn(function* (
   input: unknown,
   dependencies: CommandDependencies,
@@ -124,7 +123,7 @@ const escapeTerminalControls = (text: string): string =>
     (character) => `\\u${character.charCodeAt(0).toString(hexadecimalRadix).padStart(4, "0")}`
   );
 
-/** Projects through the safe output schema; JSON escaping also protects human terminal output. */
+/** JSON escaping protects human output from terminal and bidi controls. */
 export const formatOutput = Effect.fn(function* (output: PublicOutput, json: boolean) {
   const text = escapeTerminalControls(yield* Schema.encodeEffect(outputCodec)(output));
   return json ? `${text}\n` : `${messages[output._tag]}\n${text}\n`;

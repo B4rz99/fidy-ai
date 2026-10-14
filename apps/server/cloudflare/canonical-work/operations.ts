@@ -41,11 +41,9 @@ import {
 import type { AuthorizedPAT } from "../tokens/contract";
 import { newId } from "../secret-material/operations";
 
-/** Wrap one rejected dependency promise so the failure channel stays typed. */
 export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
   new TransactionBoundaryFailure({ cause });
 
-/** True when the caller is an authorized PAT rather than a WebSession. */
 export const isPATCaller = (subject: QueryCaller): subject is AuthorizedPAT => "patId" in subject;
 /** Distinguish OAuth authority without granting browser or PAT lifecycle privileges. */
 export const isOAuthCaller = (subject: QueryCaller): subject is OAuthCaller =>
@@ -53,7 +51,7 @@ export const isOAuthCaller = (subject: QueryCaller): subject is OAuthCaller =>
 /** The exact User-owned agent capability; a WebSession carries none. */
 export const callerScope = (subject: QueryCaller): Option.Option<CanonicalCapability> =>
   isPATCaller(subject) || isOAuthCaller(subject) ? subject.requiredScope : Option.none();
-/** Restore the exact authority one canonical child is executed and audited under: a PAT scope. */
+/** Execute and audit one child under its exact PAT or OAuth capability; preserve browser authority unchanged. */
 export const childCaller = <Caller extends QueryCaller>({
   subject,
   requiredScope,
@@ -64,14 +62,7 @@ export const childCaller = <Caller extends QueryCaller>({
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
 
-/**
- * One accepted canonical PAT AuditLogEntry and the PAT use it accounts for, in the guard-chained
- * order the unit requires: the AuditLogEntry immediately follows the owner write it attests
- * (`afterOwnerWrite`), and the PAT use immediately follows the AuditLogEntry that accounts for it.
- * One minted audit identity binds the pair. This is the one place the pairing is decided, so every
- * canonical unit that commits a PAT call — a Transaction batch child or a statement publication —
- * orders and accounts for it the same way.
- */
+/** Chain the accepted PAT Audit immediately after its owner write and PAT use immediately after that Audit. Both share one audit identity. */
 export const acceptedPATAccountability = ({
   afterOwnerWrite,
   authority,
@@ -269,11 +260,6 @@ const limited = (): Response =>
     message: "Manual Transaction budget exhausted.",
   });
 
-/**
- * The one decision table for a closed refusal outcome: the canonical failure code every batch
- * child reports and the body the individual caller receives. A new outcome cannot be added
- * without answering both here.
- */
 const refusalOutcomes: Readonly<
   Record<TransactionRefusal["outcome"], Readonly<{ code: ErrorCode; response: () => Response }>>
 > = {
@@ -282,18 +268,15 @@ const refusalOutcomes: Readonly<
   resource_limit: { code: "rate_limited", response: limited },
 };
 
-/** Map one already-recorded Transaction refusal to its canonical individual response. */
 export const refusedTransactionResponse = (refusal: TransactionRefusal): Response =>
   refusalOutcomes[refusal.outcome].response();
 
-/** The canonical daily-write-budget refusal every Transaction entry point shares. */
 export const rateLimitedTransactionResponse = (): Response => {
   const response = limited();
   response.headers.set("retry-after", "1");
   return response;
 };
 
-/** The canonical failure code one already-recorded Transaction refusal is reported as. */
 export const refusalFailureCode = (outcome: TransactionRefusal["outcome"]): ErrorCode =>
   refusalOutcomes[outcome].code;
 
@@ -466,7 +449,6 @@ export const refusedPATWork = (
   input: Readonly<{ db: D1Database; userId: string }>
 ): Promise<Response> => Effect.runPromise(refusedBearerWork(input));
 
-/** The canonical unauthenticated response every Transaction entry point shares. */
 export const unauthenticatedTransaction = (): Response =>
   transactionFailure({
     code: "unauthenticated",
@@ -493,7 +475,6 @@ export const refusedCredentialResponse = ({
     : Effect.succeed(unauthenticatedTransaction())
   ).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/** Narrow a live authority to its PAT credential for statement accountability. */
 export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>
   authority.table === "pats";
 /** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
@@ -578,7 +559,6 @@ export const auditLimitRefusal = (): CanonicalMutationRefusal => ({
   respond: () => Effect.succeed(transactionUnavailable()),
 });
 
-/** Build one owner refusal as the preparation every executor maps to its canonical response. */
 export const refusedPreparation = (
   refusal: CanonicalMutationRefusal
 ): CanonicalMutationPreparation => ({
@@ -586,15 +566,12 @@ export const refusedPreparation = (
   refusal,
 });
 
-/** Build the closed preparation failure for a dependency defect the executor classifies. */
 export const failedPreparation = (): CanonicalMutationPreparation => ({ _tag: "Failed" });
 
-/** Build the decided refusal for a credential the owner proved dead or scopeless. */
 export const credentialRefusedPreparation = (): CanonicalMutationPreparation => ({
   _tag: "CredentialRefused",
 });
 
-/** Build the decided answer for an owner read that cannot decide this mutation. */
 export const unavailablePreparation = (): CanonicalMutationPreparation => ({
   _tag: "Unavailable",
 });

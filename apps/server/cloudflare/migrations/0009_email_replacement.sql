@@ -1,5 +1,3 @@
--- One current candidate per User. A fresh browser session is required again at redemption.
--- Work identity, not the mailbox or code, is the only Queue/Workflow payload.
 CREATE TABLE email_replacements (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   work_id TEXT NOT NULL UNIQUE CHECK (length(work_id) = 36),
@@ -17,7 +15,6 @@ CREATE TABLE email_replacements (
   CHECK ((state IN ('sending', 'awaiting_proof') AND public_code IS NOT NULL AND proof_digest IS NOT NULL AND proof_expires_at_ms IS NOT NULL)
     OR (state NOT IN ('sending', 'awaiting_proof') AND public_code IS NULL AND proof_digest IS NULL AND proof_expires_at_ms IS NULL))
 ) STRICT;
--- Admission survives rejected codes and candidate supersession for the User, not a proof generation.
 CREATE TABLE email_replacement_limits (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   window_started_at_ms INTEGER NOT NULL,
@@ -29,7 +26,6 @@ CREATE TABLE email_replacement_outbox (
   created_at_ms INTEGER NOT NULL,
   last_attempt_at_ms INTEGER
 ) STRICT;
--- The same audit table records both account-security mutations without storing either mailbox.
 CREATE TABLE email_replacement_audit (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),

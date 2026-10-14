@@ -23,7 +23,6 @@ jobs:
     if: github.ref == 'refs/heads/trunk'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The Production environment allows only protected trunk; this guard is defense in depth.
     environment: production
     env:
       ALCHEMY_PROFILE: ci

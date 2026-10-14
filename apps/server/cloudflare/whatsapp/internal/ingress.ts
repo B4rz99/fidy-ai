@@ -139,7 +139,6 @@ const sendVoiceRefusal = (
       ),
       Effect.withSpan("whatsapp.voice.refusal")
     );
-    // An ambiguous send is never replayed: the claim precedes provider I/O.
     const settled = yield* attempt(() =>
       environment.DB.prepare(`UPDATE hosted_voice_refusals SET outcome = ?
         WHERE portfolio_id = ? AND message_id = ? AND user_id = ? AND outcome = 'started'`)

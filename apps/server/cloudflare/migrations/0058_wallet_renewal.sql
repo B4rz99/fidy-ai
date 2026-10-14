@@ -1,4 +1,3 @@
--- Admit retained wallet sources through the same immutable automatic renewal claim as card.
 DROP TRIGGER billing_attempt_requires_claim;
 CREATE TRIGGER billing_attempt_requires_claim BEFORE INSERT ON billing_attempts
 WHEN NEW.status <> 'pending' OR NEW.finalized_at_ms IS NOT NULL

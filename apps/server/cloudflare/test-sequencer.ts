@@ -21,7 +21,6 @@ export class CloudflareTestSequencer {
   }
 
   sort(files: TestSpecification[]): Promise<TestSpecification[]> {
-    // Start long files first so a late long file cannot leave the other process idle.
     const ordered = cloudflareTestShards({
       files: files.map((file) => file.moduleId),
       cloudflareRoot: new URL("./", import.meta.url).pathname,

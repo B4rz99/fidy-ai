@@ -1,5 +1,3 @@
--- Audit owns this metadata-only accounting projection. Recurring browser calls use the existing
--- credential evidence store, but must consume the same stable-User budget as their PAT equivalent.
 DROP VIEW IF EXISTS canonical_audit_usage;
 CREATE VIEW canonical_audit_usage AS
 SELECT * FROM (

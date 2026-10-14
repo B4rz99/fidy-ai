@@ -262,7 +262,6 @@ it("retains statement ownership and expiry guards while acknowledging confirmed 
         create: ({ id } = {}) => {
           expect(id).toBe(identity(9));
           creates += 1;
-          // Creation succeeded remotely, but both deliveries lose its response.
           return unused();
         },
         get: (id) => {

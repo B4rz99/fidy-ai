@@ -1,4 +1,3 @@
-/** Opens the first-party account signup and returning-login surface. */
 export const LaunchButton = ({
   dark,
   arrow,

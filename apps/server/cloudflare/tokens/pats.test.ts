@@ -51,7 +51,6 @@ const dig = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
-// Tests cross real Miniflare, D1, and Worker Promise boundaries; keep their rejections in Effect.
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 const awaitPromise = <A>(
   promise: PromiseLike<A> | A
@@ -2965,7 +2964,6 @@ it("gates every declared canonical path by live PAT and exact operation scope be
     Effect.gen(function* () {
       vi.useFakeTimers({ toFake: ["Date"] });
       const { db, send: unpacedSend, sessions } = yield* awaitPromise(setup());
-      // This exercises capability boundaries, independently of the request-protection burst.
       const send = (input: Send): Promise<Response> => {
         vi.setSystemTime(clock() + 1000);
         return unpacedSend(input);

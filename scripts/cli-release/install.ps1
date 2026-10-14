@@ -1,4 +1,3 @@
-# Installs a versioned release for the current user and adds its directory to user PATH.
 param([string]$Version = '')
 $ErrorActionPreference = 'Stop'
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'This release supports Windows x64.' }

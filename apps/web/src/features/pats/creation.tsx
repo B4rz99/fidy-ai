@@ -16,7 +16,6 @@ const FreshPATCreation = (
   const issuance = usePATIssuance(props);
   return <ManualPATView {...issuance} />;
 };
-/** Owns manual issuance and same-User continuation for this mounted disclosure lifetime. */
 export const ManualPATCreation = ({
   resuming,
   ...props

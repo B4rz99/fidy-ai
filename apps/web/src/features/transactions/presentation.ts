@@ -2,7 +2,6 @@ import type { CanonicalSuccess } from "@/transport/client";
 import { DateTime, Option } from "effect";
 import { formatMoney } from "@/transport/money";
 
-/** Canonical values remain derived from FidyApi rather than redeclared by the browser. */
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
 export type Transaction = CanonicalSuccess<"transactions.listTransactions">["data"][number];
@@ -31,7 +30,6 @@ export const deriveCurrentMonthPeriod = ({
   };
 };
 
-/** Presentation-only projection consumed by both desktop and mobile Transaction views. */
 export type TransactionListRow = Readonly<{
   id: string;
   categoryId: string;
@@ -126,7 +124,7 @@ export const presentTransactionRows = ({
   }));
 };
 
-/** Presents the month while retaining the exact IANA zone used to derive its query bounds. */
+/** Retains the exact IANA zone used for the month’s query bounds. */
 export const presentPeriod = ({
   locale,
   period: { from, timeZone },

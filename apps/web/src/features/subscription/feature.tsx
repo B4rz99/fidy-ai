@@ -58,7 +58,6 @@ import {
 } from "./enrollment-gateway";
 import { isAwaitingPaymentStatus, paymentStatusRefreshDelay } from "./payment-status";
 
-/** Exhaustive rendering state for the authenticated Subscription offer page. */
 export type SubscriptionOffersPageState =
   | Readonly<{ _tag: "Initial" }>
   | Readonly<{ _tag: "Loading" }>
@@ -1211,7 +1210,6 @@ const SubscriptionOffersContent = ({
   }
 };
 
-/** Renders Subscription offers and the direct-browser card enrollment boundary. */
 export const SubscriptionOffersView = ({
   state,
   gateway,
@@ -1256,7 +1254,6 @@ type StandingViewState =
   | Readonly<{ _tag: "Failure" }>
   | Readonly<{ _tag: "Ready"; standing: SubscriptionStatus }>;
 
-/** Render the closed Subscription standing projection independently of offer loading. */
 export const SubscriptionStandingView = ({
   state,
   onRetry,
@@ -1350,7 +1347,6 @@ const StandingAndOffers = ({ children }: Readonly<{ children: JSX.Element }>): J
   </>
 );
 
-/** Authenticated route that displays offers and invokes only the direct enrollment transport. */
 export const SubscriptionOffersFeature = (): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();

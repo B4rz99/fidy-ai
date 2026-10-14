@@ -30,8 +30,7 @@ const playwrightTimeout = 90_000;
 const journeyBudget = 40_000;
 const cleanupBudget = 5_000;
 const teardownReserve = 20_000;
-// This single-test file is evaluated before fixture setup: charging all time since load
-// conservatively includes setup without using Playwright's private timeout manager.
+// File evaluation precedes fixture setup, so this deadline also charges setup time.
 const loadedAt = performance.now();
 type Complete = (
   args: ReadonlyArray<string>
@@ -236,7 +235,6 @@ const cliJourney = Effect.fn(function* ({
     );
     return yield* complete([group, operation, "--input", path]);
   });
-  // Registered before children: their kill-and-await finalizers run before native cleanup.
   yield* Effect.addFinalizer(() =>
     cleanupJourney(complete(["logout"]), complete(["cleanup"]), cleanupBudget)
   );

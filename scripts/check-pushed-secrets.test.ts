@@ -37,8 +37,6 @@ const fixture = Effect.fnUntraced(function* () {
   });
   const base = yield* commit("base.txt", "base\n");
   const bin = `${root}/bin`;
-  // Exercise the hook's real Git traversal with an inert marker instead of requiring
-  // installed scanners or placing credential-shaped values in test history.
   yield* writeFixture(
     `${bin}/gitleaks`,
     `#!/usr/bin/env bash

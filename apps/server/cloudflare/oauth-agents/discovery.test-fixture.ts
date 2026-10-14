@@ -57,7 +57,6 @@ const sensitiveWriteDiscovery = [
 ];
 const writeDiscovery = [...ordinaryWriteDiscovery, ...sensitiveWriteDiscovery];
 const dashboardDiscovery = ["dashboard.initializeDashboard", "dashboard.applyDashboardEdit"];
-// The wrapper is visible for every grant; execution authorizes each child separately.
 const batchDiscovery = ["operations.executeAtomicBatch"];
 
 export const sensitiveDiscovery: ReadonlySet<string> = new Set([
@@ -66,7 +65,6 @@ export const sensitiveDiscovery: ReadonlySet<string> = new Set([
   ...batchDiscovery,
 ]);
 
-// These declarations may occur in authorized continuations but have no installed MCP owner.
 const additionalReadDeclarations = [
   "identity.getCurrentUser",
   "transactions.listSourceAttestations",

@@ -104,7 +104,7 @@ const PreselectedApproval = ({
     />
   );
 };
-/** Dedicated browser approval. Public links select a request; only an explicit click grants access. */
+/** Public links select a request; only an explicit approval click grants access. */
 export const CLIConnectionFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const code = Schema.decodeUnknownOption(PATPairingPublicCode)(search.cliCode);

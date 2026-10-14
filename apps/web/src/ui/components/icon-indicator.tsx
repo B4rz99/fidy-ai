@@ -39,7 +39,6 @@ export const IconIndicator = ({
   </span>
 );
 
-/** Income and spending retain explicit direction icons; normal spending is not an error state. */
 export const DirectionIndicator = ({ inflow }: Readonly<{ inflow: boolean }>): JSX.Element => (
   <IconIndicator
     icon={inflow ? ArrowDownLeft01Icon : ArrowUpRight01Icon}

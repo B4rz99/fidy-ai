@@ -16,7 +16,6 @@ import {
   requireDaviplataSandboxPolicy,
 } from "./daviplata-sandbox.test-fixture";
 
-// Synthetic transport premises, not recorded Sandbox responses or approved endpoint configuration.
 const policy = {
   sendUrl: "https://sandbox.wompi.co/synthetic-test/send",
   confirmUrl: "https://sandbox.wompi.co/synthetic-test/confirm",

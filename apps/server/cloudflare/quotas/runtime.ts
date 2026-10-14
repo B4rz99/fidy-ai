@@ -1,8 +1,7 @@
 import { Effect } from "effect";
 import { QuotaRetentionUnavailable } from "./contract";
 
-// Consumption identities outlive both a commercial month and the ninety-day ingestion lifetime.
-const consumptionLifetimeMs = 8_035_200_000; // Ninety-three days.
+const consumptionLifetimeMs = 8_035_200_000;
 const retentionBatchSize = 1024;
 
 /** Remove only obsolete consumption identities in bounded ticks, independently of User activity. Current-month usage and all retained ingestion/replay deduplication proofs remain intact. */

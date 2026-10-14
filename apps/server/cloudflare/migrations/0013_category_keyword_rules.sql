@@ -12,13 +12,10 @@ CREATE TABLE keyword_rules (
   UNIQUE (user_id, normalized_keyword)
 ) STRICT;
 CREATE INDEX keyword_rules_by_user ON keyword_rules(user_id, created_at, id);
--- The bounded set is a stable-User guarantee. Core decides the same 100-rule maximum; this
--- trigger remains the atomic authority under concurrent creation.
 CREATE TRIGGER keyword_rule_capacity BEFORE INSERT ON keyword_rules
 WHEN (SELECT COUNT(*) FROM keyword_rules WHERE user_id = NEW.user_id) >= 100
 BEGIN SELECT RAISE(ABORT, 'keyword_rule_limit'); END;
--- SQLite cannot alter a CHECK constraint. Rebuild the append-only Category audit so keyword-rule
--- mutations are attributable without discarding existing Category read evidence.
+-- ALTER TABLE cannot modify an existing CHECK constraint.
 DROP TRIGGER transaction_audit_daily_budget;
 DROP TRIGGER pat_canonical_daily_budget;
 DROP TRIGGER category_canonical_daily_budget;
@@ -79,8 +76,6 @@ WHEN (SELECT COUNT(*) FROM transaction_audit WHERE user_id = NEW.user_id
       AND occurred_at_ms >= (NEW.occurred_at_ms / 86400000) * 86400000
       AND occurred_at_ms < ((NEW.occurred_at_ms / 86400000) + 1) * 86400000) >= 256
 BEGIN SELECT RAISE(ABORT, 'transaction_audit_limit'); END;
--- A skipped guarded rule audit aborts the whole keyword-rule D1 batch instead of committing
--- a rule change without its accountability evidence.
 CREATE TABLE category_mutation_assertion (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
   accepted INTEGER NOT NULL CHECK (accepted = 1)

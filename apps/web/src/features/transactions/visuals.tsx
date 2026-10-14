@@ -27,7 +27,6 @@ const categoryVisual = (label: string): CategoryIllustration => {
   if (/ingreso|salario/.test(normalized)) return { icon: Briefcase01Icon, tone: "sage" };
   return { icon: CreditCardIcon, tone: "peach" };
 };
-/** Category illustrations convey presentation only; canonical category identity stays unchanged. */
 export const CategoryVisual = ({
   label,
   bubble,

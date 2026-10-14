@@ -159,7 +159,7 @@ const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX
   );
 };
 
-/** Only a public locator enters navigation; the server independently establishes same-User authority. */
+/** Navigation accepts only a public locator; the server verifies same-User authority. */
 export const ConnectionContinuationFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const attempt = Schema.decodeUnknownOption(ConnectionAttemptReference)(search.attempt);

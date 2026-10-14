@@ -269,7 +269,6 @@ it.effect(
       yield* evaluate(db);
       expect((yield* read()).series).toHaveLength(0);
     }),
-  // Eleven public requests require admission pacing before the real D1 lifecycle work.
   { timeout: 30_000 }
 );
 
@@ -1091,8 +1090,6 @@ it.effect("rejects 129 proposed series before publishing any current result", ()
   })
 );
 
-// Arrange retained identities from one genuinely confirmed pattern, with distinct matching facts
-// and immutable confirmation IDs. The separate acceptance case exercises all 128 detections.
 const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
   Effect.gen(function* () {
     yield* seedPatterns(db, 1);

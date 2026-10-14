@@ -84,7 +84,6 @@ export const makeCoreRejectionObserver = (): ((
     Effect.suspend(() => {
       if (!observedRefusal(boundary, status)) return Effect.void;
       const observedAtMs = Math.floor(now / minuteMs) * minuteMs;
-      // A clock rollback never reopens an already admitted minute.
       if (observedAtMs < minute) return Effect.void;
       if (observedAtMs > minute) {
         minute = observedAtMs;

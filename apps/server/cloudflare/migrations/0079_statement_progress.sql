@@ -1,6 +1,3 @@
--- 0077 initialized progress once. Validate that initialization, including already-processing
--- submissions, in one linear pass over receipts. A gap, foreign owner or disagreement aborts
--- this migration; normal retry never reconstructs history. Each submission is capped at 20,000.
 INSERT INTO statement_submission_assertion (id, accepted)
 SELECT 1, CASE WHEN NOT EXISTS (
   SELECT 1 FROM statement_submissions s LEFT JOIN (
@@ -20,8 +17,6 @@ CREATE TRIGGER statement_progress_initial BEFORE INSERT ON statement_submissions
 WHEN NEW.processed_rows<>0 OR NEW.processed_accepted_rows<>0 OR NEW.processed_review_rows<>0
 BEGIN SELECT RAISE(ABORT,'statement_progress_initial'); END;
 
--- Immutable receipts and ordered insertion prove the prefix. Only its newest indexed receipt
--- is needed to validate an increment; state-only updates must conserve the validated counts.
 CREATE TRIGGER statement_progress_conservation BEFORE UPDATE ON statement_submissions
 WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id
   OR NEW.processed_rows NOT BETWEEN 0 AND 20000

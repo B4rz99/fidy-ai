@@ -1,6 +1,5 @@
 import { CategoryLabel, categoryIds } from "~/core/categories/contract";
 
-/** Seed-ready Colombian Categories in presentation order. */
 export const categoryRows = [
   {
     id: categoryIds.restaurantes,

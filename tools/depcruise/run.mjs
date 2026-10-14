@@ -1,14 +1,4 @@
-// Runs the module-graph gate defined in the current package's `.dependency-cruiser.mjs`.
-//
-// Not the `depcruise` binary, for two reasons. The cruiser reads .ts sources
-// and the tsconfig `paths` aliases through the classic TypeScript compiler API,
-// which the root's Effect tsgo `typescript` build does not expose — so it is
-// resolved from this directory's isolated install, the same arrangement
-// tools/mutation uses and for the same reason. And when that API is missing the
-// cruiser does not fail: it cruises zero modules, reports no violations and
-// exits 0. A gate that enforces nothing while looking green is the exact
-// failure this repo already had once, so `assertCruisedSomething` below turns
-// it into an error.
+// The dependency-cruiser needs the classic TypeScript compiler API; tsgo exposes no JS API.
 
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -36,9 +26,6 @@ const sourceFiles = (directory) =>
     return /\.[cm]?[jt]sx?$/u.test(entry.name) ? [path] : [];
   });
 if (repositoryConsumers) {
-  // Git includes every application and repository source file, including root configurations and
-  // untracked probes. The checked-in upstream reference checkouts are not product source; ignored
-  // generated output and installed dependencies also never become independent graph roots.
   const repositorySources = execFileSync(
     "git",
     [
@@ -58,8 +45,6 @@ if (repositoryConsumers) {
   sourceRoots.push(...repositorySources);
 }
 
-// The cruiser resolves every path against the cwd, and the reported module
-// names are what the rule patterns match, so both must be package-root-relative.
 process.chdir(packageRoot);
 
 const ruleSet = await extractDepcruiseConfig(resolve(packageRoot, ".dependency-cruiser.mjs"));
@@ -82,10 +67,6 @@ const cruiseReport = async (options) => {
   return output;
 };
 
-/**
- * The tripwire. A cruise that found no modules cannot have found a violation
- * either, so a green run means nothing until this has passed.
- */
 /** @param {import("dependency-cruiser").ICruiseResult} report - Cruised module graph. */
 const assertCruisedSomething = (report) => {
   if (report.summary.totalCruised > 0) return;

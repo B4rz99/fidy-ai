@@ -343,8 +343,6 @@ test("native Dashboard supports keyboard resize and cancellation without another
     Effect.gen(function* () {
       const edits: Array<unknown> = [];
       yield* install(page, edits);
-      // Hold the canonical reread so the test observes the pending render before retrying
-      // input. Capturing the POST alone precedes the disabled-controls render.
       const refresh = Promise.withResolvers<void>();
       yield* Effect.tryPromise(() =>
         page.route(

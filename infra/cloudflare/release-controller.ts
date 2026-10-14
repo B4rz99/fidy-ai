@@ -98,7 +98,6 @@ const observeCommitted = Effect.fn(function* (
   }).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 }));
 });
 
-/** Write once and confirm exact routing, including when the accepted-write response was lost. */
 const deployExact = Effect.fn(function* (
   port: ReleasePort,
   name: string,
@@ -121,14 +120,12 @@ const deployExact = Effect.fn(function* (
     reported.id === previous.id
       ? yield* observeCommitted(port, name, { versions, previousId: previous.id })
       : reported;
-  // Retry the read only; never repeat a traffic-changing request.
   yield* requireDeployment(port, name, { id: result.id, versions }).pipe(
     Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 })
   );
   return result;
 });
 
-/** Capture only unambiguous, fully stable Worker deployments before Alchemy changes anything. */
 const captureRelease = Effect.fn(function* (
   port: ReleasePort,
   input: {
@@ -162,7 +159,6 @@ const captureRelease = Effect.fn(function* (
   return snapshot;
 });
 
-/** After Alchemy uploads, install the exact receipt IDs without giving them normal traffic. */
 const stageRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,
@@ -201,13 +197,11 @@ const stageRelease = Effect.fn(function* (
   });
 });
 
-/** Called only after both smoke pairings pass. Core goes first; a failed second write is compensated when safe. */
 const restoreCore = Effect.fn(function* (
   port: ReleasePort,
   input: { release: StagedRelease; publicStaged: Deployment; corePromoted: Deployment }
 ) {
   const { snapshot } = input.release;
-  // An ambiguous Cloudflare failure could have committed. Never restore Core below new public code.
   const observedPublic = yield* port
     .current(snapshot.public.name)
     .pipe(Effect.catch(() => Effect.void));
@@ -277,8 +271,6 @@ const promoteRelease = Effect.fn(function* (
   ]).pipe(
     Effect.catchCauseIf(
       (cause) => !Cause.hasInterrupts(cause),
-      // A lost response or stale read can hide a committed Core write. Only restore
-      // after observing exactly the tested middle pair; never overwrite an unknown pair.
       () => restoreAmbiguousCore(port, release, publicStaged)
     )
   );
@@ -298,7 +290,6 @@ const promoteRelease = Effect.fn(function* (
   return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
 });
 
-/** Incident recovery never retains the incompatible Core in a split or reopens public admission. */
 const isolateRelease = Effect.fn(function* (
   port: ReleasePort,
   snapshot: ReleaseSnapshot,
@@ -333,7 +324,6 @@ const isolateRelease = Effect.fn(function* (
   return { publicVersionId, coreVersionId, publicDeployment, coreDeployment };
 });
 
-/** Cleanup is allowed only for the exact pair already promoted by this release. */
 const verifyRetirement = Effect.fn(function* (
   port: ReleasePort,
   input: {

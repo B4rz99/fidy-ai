@@ -1,11 +1,6 @@
--- Category refusals need a distinct outcome so an aborted batch never records them as success.
 ALTER TABLE category_audit ADD COLUMN outcome TEXT NOT NULL DEFAULT 'success'
   CHECK (outcome IN ('success', 'validation_failed'));
 
--- One indexed assertion per child; the operation is bound alongside the slot by the unit.
--- A CHECK constraint, not a trigger message, distinguishes an actual failed completion from an
--- unrelated trigger that happens to raise text resembling a child's marker. Successful assertions
--- reuse their bounded slots instead of accumulating per-call state.
 CREATE TABLE canonical_child_guard (
   child_index INTEGER PRIMARY KEY NOT NULL CHECK (child_index BETWEEN 0 AND 11),
   operation TEXT NOT NULL,

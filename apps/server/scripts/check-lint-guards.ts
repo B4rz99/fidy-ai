@@ -138,7 +138,6 @@ try {
     probeFiles.map(({ path, source }) => Bun.write(`${serverRoot}${path}`, source))
   );
 
-  // Keep each probe's path and rule assertion, but construct the type-aware lint program once.
   const result = Bun.spawnSync(
     [
       "bunx",

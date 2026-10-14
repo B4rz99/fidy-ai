@@ -82,7 +82,6 @@ const request = (index: number, path = "/transactions", body?: object): Request 
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-/** The Transaction capture facts one test submits, with partial overrides for a single case. */
 const TestTransactionPayload = Schema.Struct({
   money: Schema.Struct({ amount: Schema.String, currency: Schema.String }),
   direction: Schema.String,
@@ -99,7 +98,6 @@ const input = (changes: Partial<TestTransactionPayload> = {}): TestTransactionPa
   occurredAt: "2025-01-10T12:00:00.000Z",
   ...changes,
 });
-/** The coordination environment a test DO instance runs with: D1 plus the hosted-inference seam. */
 type CoordinatorTestEnvironment = ConstructorParameters<typeof UserTransactionCoordinator>[1];
 const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => ({
   DB: db,
@@ -174,7 +172,6 @@ afterAll(() => databases.dispose());
 const setup = (platform = false, userCount = 2): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      // Every test starts its own deterministic PAT sequence instead of inheriting module order.
       seededPATSequence = 0;
       const db = platform
         ? yield* fromTestPromise(() => platformDatabase())
@@ -296,7 +293,6 @@ const BatchResult = Schema.Struct({
   }),
   next: Schema.Array(Schema.Unknown),
 });
-/** One committed batch envelope before any child output is decoded against its own schema. */
 const BatchEnvelope = Schema.Struct({
   data: Schema.Struct({
     results: Schema.Array(
@@ -498,7 +494,6 @@ const retainedTransactionDefaults = {
   userDecisions: "{}",
 } as const;
 
-/** Insert one retained Transaction directly, so a test controls exactly what the pair policy reads. */
 const seedRetainedTransaction = ({
   db,
   userId,
@@ -556,7 +551,6 @@ const DecisionStateRow = Schema.Struct({
 });
 const MemberRow = Schema.Struct({ id: Schema.String });
 
-/** The Reconciliation facts one link or unlink outcome left in D1. */
 const reconciliationState = (
   db: D1Database,
   userId: string
@@ -1120,8 +1114,6 @@ effectIt.effect(
         Effect.exit
       );
       expect(Exit.isFailure(exit)).toBe(true);
-      // Request cancellation rejects the public reply before the independently owned User work
-      // settles. The public alarm joins that serialized work before checking its durable outcome.
       yield* fromTestPromise(settle);
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
@@ -2345,13 +2337,10 @@ it("derives each effective fact group from the member the Transaction policy sel
       const effective = listed[0];
       if (effective === undefined) throw new Error("Missing effective Transaction");
       expect(listed).toHaveLength(1);
-      // The later-created member explicitly decided Category and Counterparty, so those groups come
-      // from it; notes and occurrence were never decided, so they stay with the visible member.
       expect(effective.categoryId).toBe(suppressedCategory);
       expect(Option.getOrNull(effective.counterparty)).toBe("Dos");
       expect(Option.getOrNull(effective.notes)).toBe("visible");
       expect(DateTime.formatIso(effective.occurredAt)).toBe("2025-01-05T12:00:00.000Z");
-      // Correcting both members at the same instant leaves the greater id authoritative for Money.
       yield* fromTestPromise(() =>
         Promise.all(
           [visible, suppressed].map((transactionId, index) =>
@@ -3039,7 +3028,6 @@ it("bounds authenticated audit growth atomically per stable User at the public b
           })
         );
       expect((yield* fromTestPromise(() => call(0))).status).toBe(429);
-      // The expensive history batch must not run once this User is admitted no further reads.
       const cheapDb: D1Database = {
         prepare: (sql) => {
           if (/FROM\s+transactions\b/iu.test(sql)) throw new Error("History query must not run");
@@ -3814,7 +3802,6 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
       );
       const parsed = yield* transactionInput(request(0, "/transactions", input()));
       if (Option.isNone(session) || Option.isNone(parsed)) throw new Error("fixture invalid");
-      // The hosted-inference configuration cannot build a service; only Memory work may miss it.
       const coordinator = new UserTransactionCoordinator(
         {
           id: { name: session.value.userId },
@@ -4109,7 +4096,6 @@ it("aborts the D1 unit and attributes the child when a guarded correction change
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("transactions.updateTransaction");
-      // The earlier capture must not survive a guard that aborts at commit time, not after it.
       expect(
         yield* fromTestPromise(() =>
           countRows(
@@ -4876,7 +4862,6 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
         )
       ).pipe(Effect.orDie);
       expect(rules.data.map(({ keyword }) => keyword)).toEqual(["Panadería"]);
-      // Every owner's success AuditLogEntry committed once, together with its owner write.
       expect(
         yield* fromTestPromise(() =>
           countRows(
@@ -4904,7 +4889,6 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
           )
         )
       ).toBe(1);
-      // No child state leaked to another User.
       const neighborTransactions = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => send(1, "/transactions").then((value) => value.json()))
       ).pipe(Effect.orDie);
@@ -4991,7 +4975,6 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(3);
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
-      // The late trigger rolls back every earlier owner write and every owner success Audit.
       expect(
         yield* fromTestPromise(() =>
           countRows(
@@ -6188,7 +6171,6 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
       expect(
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
       ).toBe(0);
-      // The trigger, not just the read, excludes these rows when the daily budget is full.
       for (let chunk = 0; chunk < 4; chunk++) {
         yield* fromTestPromise(() =>
           db
@@ -6212,8 +6194,6 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
           )
         )
       ).toBe(5);
-      // An independent daily envelope cap bounds storage even though refusals do not spend
-      // canonical child-work capacity. Its trigger counts both session and PAT rows.
       for (let chunk = 0; chunk < 5; chunk++) {
         yield* fromTestPromise(() =>
           db
@@ -6999,8 +6979,6 @@ const mixedLoadScenarios = (
         })),
       ];
 
-// Opt-in characterization uses the real public/Core adapters and native SQLite coordinator.
-// Every scenario starts isolated state; wall time includes local transport and admission.
 it.runIf(loadMeasurement || growthMeasurement)(
   "measures sustained mixed public requests and hot-User coordination",
   () =>

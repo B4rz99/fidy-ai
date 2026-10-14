@@ -2,7 +2,6 @@ import type { ProactivityDeliveryWork, ProactivityEnvironment } from "../insight
 import { Data, type Effect, type Option } from "effect";
 import type { PlatformMaintenanceInput } from "../runtime/contract";
 
-/** Closed metadata for the published owner activities assembled by Maintenance. */
 export type ScheduledOperation =
   | "provider.authenticationRetention"
   | "recovery.retention"

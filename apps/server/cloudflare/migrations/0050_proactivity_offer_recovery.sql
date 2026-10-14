@@ -1,4 +1,3 @@
--- Retain the exact report identity so only never-started expired disclosures can be recovered.
 ALTER TABLE proactivity_offer_requests ADD COLUMN delivery_id TEXT;
 UPDATE proactivity_offer_requests AS q SET delivery_id=(
  SELECT r.delivery_id FROM proactivity_reports AS r

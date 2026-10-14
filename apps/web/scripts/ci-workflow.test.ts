@@ -41,7 +41,6 @@ describe("pull-request checks workflow policy", () => {
       browserJob.indexOf("- name: Install Chromium system dependencies"),
       browserJob.indexOf("- name: Static-shell browser validation")
     );
-    // Both system dependencies and missing binaries must be repaired on warm caches too.
     expect(installation).not.toContain("if:");
     expect(bunInstallAction).not.toContain("restore-keys:");
   });

@@ -91,7 +91,6 @@ export const revokeConnections = (
       commitRevocation({ ...input, all, reason, guard, owned, selection })
     );
     if (Option.isSome(accepted)) return oauthResponse({ body: { revoked: true }, status: 200 });
-    // A missing owned identity is a refusal, not success or another User's metadata.
     const exists = yield* dbWork(() =>
       input.db
         .prepare(`SELECT 1 FROM (${owned.sql}) WHERE ${guard.sql}`)

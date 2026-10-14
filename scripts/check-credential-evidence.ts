@@ -5,13 +5,6 @@ import traverse, { type NodePath } from "@babel/traverse";
 import * as Babel from "@babel/types";
 import { Effect, Option } from "effect";
 
-/**
- * Every production redacted credential must have one focused test proving its adapter path keeps the
- * secret out of failures, logs, and model context. Direct reads and the shared `configuredSecret`
- * loader carry the same obligation, and the pairing is stated
- * here rather than inferred, so adding a credential without that evidence fails the gate instead of
- * shipping unproven. The scan rejects any non-literal loader use rather than skipping it.
- */
 type CredentialEvidence = Readonly<{
   configuration: string;
   testFile: string;
@@ -336,7 +329,6 @@ const propertyKeyName = (property: Babel.ObjectProperty): Option.Option<string> 
   return Option.none();
 };
 
-/** One loader whose call sites name a configured credential literally enough to enumerate. */
 type CredentialLoader = Readonly<{
   readonly call: string;
   readonly moduleSuffix: string;
@@ -355,19 +347,16 @@ const credentialLoaderCalls: ReadonlySet<string> = new Set(
   credentialLoaders.map((loader) => loader.call)
 );
 
-/** The loaders' local import bindings, so an aliased import cannot hide a configured Secret. */
 type CredentialLoaderBindings = Readonly<{
   readonly names: ReadonlyMap<string, CredentialLoader>;
   readonly namespaces: ReadonlyMap<string, CredentialLoader>;
 }>;
 
-/** The binding maps while an import declaration is recorded, before they become read-only. */
 type MutableCredentialLoaderBindings = Readonly<{
   readonly names: Map<string, CredentialLoader>;
   readonly namespaces: Map<string, CredentialLoader>;
 }>;
 
-/** Records the local import bindings of a loader, so an aliased import cannot hide a Secret. */
 const recordCredentialImport = (
   specifier: Babel.ImportDeclaration["specifiers"][number],
   loader: CredentialLoader,
@@ -413,7 +402,6 @@ const loaderForCallee = (
   return loader.call === tail ? Option.some(loader) : Option.none();
 };
 
-/** Unwraps the literal argument wrappers the gate can see through (`as const`, parentheses). */
 const configurationObject = (
   node: Option.Option<Babel.Node>
 ): Option.Option<Babel.ObjectExpression> => {
@@ -477,7 +465,6 @@ const configuredSecretNamesFromCall = (
   return configurationObjectNames(declaration.value, loader.value);
 };
 
-/** True when the identifier is a local binding imported from one of the loader modules. */
 const isLoaderImport = (path: NodePath<Babel.Identifier>): boolean => {
   const specifier = path.parentPath;
   const declaration = specifier.parentPath;
@@ -491,7 +478,6 @@ const isLoaderImport = (path: NodePath<Babel.Identifier>): boolean => {
   );
 };
 
-/** A declaration site names the binding; only its uses must satisfy the call-shape rules. */
 const isBindingDeclaration = (path: NodePath<Babel.Identifier>): boolean => {
   const declarator = path.parentPath;
   return declarator.isVariableDeclarator() && declarator.node.id === path.node;
@@ -508,7 +494,6 @@ const isLoaderMember = (member: Babel.MemberExpression, call: string): boolean =
   return member.property.name === call;
 };
 
-/** The `x.loader(…)` member call a namespace import is allowed to use. */
 const loaderMemberCall = (
   path: NodePath<Babel.Identifier>,
   call: string
@@ -557,11 +542,6 @@ const isAllowedCredentialLoaderUse = (
   return isNamespacedCallProperty(path, bindings);
 };
 
-/**
- * Fails closed on every other use of a loader binding: only a direct call (or a namespaced call of
- * a namespace import) can be enumerated, so aliasing, `.call`, optional calls, and barrel imports
- * are rejected instead of silently skipping their credential.
- */
 const assertCredentialLoaderUse = (
   path: NodePath<Babel.Identifier>,
   bindings: CredentialLoaderBindings
@@ -615,7 +595,6 @@ const readConfiguredSecrets = Effect.fn("CredentialEvidenceGate.readConfiguredSe
   }
 );
 
-/** Problems, not exceptions: the run reports every unproven credential at once rather than the first. */
 const testProblems = Effect.fn("CredentialEvidenceGate.testProblems")(function* (
   credential: CredentialEvidence
 ) {

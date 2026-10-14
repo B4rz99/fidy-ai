@@ -1,4 +1,3 @@
--- WhatsApp owns one-shot claims and authenticated delivery evidence, not reports.
 CREATE TABLE proactivity_whatsapp_claims (
  user_id TEXT NOT NULL REFERENCES users(id),
  delivery_id TEXT NOT NULL,

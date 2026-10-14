@@ -12,25 +12,21 @@ const maximumFilteredCategories = 16;
 const maximumWidgetsPerDashboard = 24;
 const maximumLayoutDepth = 8;
 
-/** Stable identity of one widget inside the User's DashboardDocument. */
 export const WidgetId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("WidgetId"))
   .annotate({ identifier: "WidgetId" });
 export type WidgetId = typeof WidgetId.Type;
 
-/** User-visible heading for their one dashboard. */
 export const DashboardTitle = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumDashboardLabelLength)
 );
 export type DashboardTitle = typeof DashboardTitle.Type;
 
-/** Optional user-visible heading for one widget. */
 export const WidgetTitle = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumDashboardLabelLength)
 );
 export type WidgetTitle = typeof WidgetTitle.Type;
 
-/** Closed relative periods accepted by dashboard widgets. */
 export const DashboardPeriod = Schema.Literals([
   "this-week",
   "this-month",
@@ -136,7 +132,6 @@ export const CustomMetricWidget = Schema.Struct({
 }).annotate({ identifier: "CustomMetricWidget" });
 export type CustomMetricWidget = typeof CustomMetricWidget.Type;
 
-/** Closed set of dashboard widgets. Additional variants are added at this one seam. */
 export const Widget = Schema.Union([
   SpendingChartWidget,
   BudgetBarWidget,
@@ -189,7 +184,6 @@ export const SplitWeight = Schema.Finite.check(
   .annotate({ identifier: "SplitWeight" });
 export type SplitWeight = typeof SplitWeight.Type;
 
-/** Terminal region of the one recursive Dashboard layout grammar. */
 export type LayoutLeaf<Leaf> = Readonly<{
   readonly kind: "leaf";
   readonly widget: Leaf;
@@ -212,7 +206,6 @@ export type LayoutSplit<Leaf, Weight = SplitWeight> = Readonly<{
   ];
 }>;
 
-/** One recursive grammar parameterized by its leaf value and decoded/encoded weight. */
 export type LayoutNodeFor<Leaf, Weight = SplitWeight> =
   | LayoutLeaf<Leaf>
   | LayoutSplit<Leaf, Weight>;
@@ -229,10 +222,6 @@ type LayoutNodeSchema<Leaf extends Schema.Top> = Schema.Codec<
   Leaf["EncodingServices"]
 >;
 
-/**
- * Builds the shared recursive layout codec. DashboardDocument and DashboardView instantiate this
- * grammar with different closed leaf schemas; neither owns a parallel layout implementation.
- */
 export const makeLayoutNodeSchema = <Leaf extends Schema.Top>(
   input: LayoutSchemaInput<Leaf>
 ): LayoutNodeSchema<Leaf> => {
@@ -257,13 +246,10 @@ export const makeLayoutNodeSchema = <Leaf extends Schema.Top>(
   return Schema.make(node.ast);
 };
 
-/** Recursive persisted layout instantiated from the shared grammar. */
 export const LayoutNode = makeLayoutNodeSchema({ leaf: () => Widget, identifier: "LayoutNode" });
 /** Recursive Dashboard layout whose in-order leaves define mobile order. */
 export type LayoutNode = typeof LayoutNode.Type;
-/** Terminal persisted layout region containing exactly one Widget. */
 export type LeafNode = Extract<LayoutNode, { readonly kind: "leaf" }>;
-/** Canonical persisted split region. */
 export type SplitNode = Extract<LayoutNode, { readonly kind: "split" }>;
 
 const DashboardDocumentShape = Schema.Struct({
@@ -272,7 +258,6 @@ const DashboardDocumentShape = Schema.Struct({
 });
 type DashboardDocumentShape = typeof DashboardDocumentShape.Type;
 
-/** One structural DashboardDocument violation at an exact nested path. */
 export type DashboardStructureIssue = Readonly<{
   readonly path: ReadonlyArray<string | number>;
   readonly issue: string;
@@ -355,7 +340,6 @@ export const DashboardDocument = DashboardDocumentShape.check(validDocumentStruc
 });
 export type DashboardDocument = typeof DashboardDocument.Type;
 
-/** Stable identity of one built-in direct-launch catalog preset. */
 export const CatalogPresetId = Schema.Literals([
   "monthly-spending",
   "restaurant-budget-cop",
@@ -368,7 +352,6 @@ const CatalogText = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumCatalogTextLength)
 );
 
-/** One named direct-launch preset carrying a complete Widget template. */
 export const DashboardCatalogEntry = Schema.Struct({
   id: CatalogPresetId,
   name: CatalogText,
@@ -386,7 +369,6 @@ export const DashboardCatalog = Schema.Tuple([
 ]);
 export type DashboardCatalog = typeof DashboardCatalog.Type;
 
-/** Edit replacing only the User-visible dashboard heading. */
 export const SetTitle = Schema.Struct({
   op: Schema.tag("set-title"),
   title: DashboardTitle,
@@ -400,7 +382,6 @@ const BesidePlacement = Schema.Struct({
 }).annotate({ identifier: "BesidePlacement" });
 export type BesidePlacement = typeof BesidePlacement.Type;
 
-/** Whether a Placement names a sibling Widget rather than a document edge. */
 export const isBesidePlacement = Schema.is(BesidePlacement);
 
 /** Root or sibling-relative destination accepted by add and move edits. */
@@ -430,7 +411,6 @@ export const MoveWidget = Schema.Struct({
 }).annotate({ identifier: "MoveWidget" });
 export type MoveWidget = typeof MoveWidget.Type;
 
-/** Edit exchanging the layout positions of two existing Widgets. */
 export const SwapWidgets = Schema.Struct({
   op: Schema.tag("swap-widgets"),
   widgetId: WidgetId,
@@ -444,7 +424,6 @@ export const LayoutRegionSelector = Schema.TupleWithRest(Schema.Tuple([WidgetId]
   .annotate({ identifier: "LayoutRegionSelector" });
 export type LayoutRegionSelector = typeof LayoutRegionSelector.Type;
 
-/** Common exact shares supported by recursive Dashboard region resizing. */
 export const LayoutRegionRatio = Schema.Literals([
   "one-quarter",
   "one-third",
@@ -474,7 +453,6 @@ export const UpdateWidget = Schema.Struct({
 }).annotate({ identifier: "UpdateWidget" });
 export type UpdateWidget = typeof UpdateWidget.Type;
 
-/** Shared edit vocabulary decoded identically for every dashboard client. */
 export const DashboardEdit = Schema.Union([
   SetTitle,
   AddWidget,
@@ -495,19 +473,16 @@ export type DashboardCategoryReference = Readonly<{
   readonly field: "categoryId" | `categories.${number}`;
 }>;
 
-/** One actionable invariant violation found by the complete-document validation gate. */
 export type DashboardIssue = Readonly<{
   /** `None` when the violation is about the document as a whole. */
   readonly path: Option.Option<string>;
   readonly message: string;
 }>;
 
-/** The transformed aggregate failed its complete second validation gate. */
 export class InvalidDashboardResult extends Data.TaggedError("InvalidDashboardResult")<{
   readonly issues: readonly [DashboardIssue, ...Array<DashboardIssue>];
 }> {}
 
-/** The edit or its placement references no Widget in the latest document. */
 export class WidgetNotFound extends Data.TaggedError("WidgetNotFound")<{
   readonly widgetId: WidgetId;
   readonly role: "edit-target" | "placement-target";
@@ -523,7 +498,6 @@ export class RegionNotFound extends Data.TaggedError("RegionNotFound")<{
   readonly widgetIds: LayoutRegionSelector;
 }> {}
 
-/** A move cannot use its own Widget as the sibling destination. */
 export class SelfPlacement extends Data.TaggedError("SelfPlacement")<{
   readonly widgetId: WidgetId;
 }> {}
@@ -533,12 +507,10 @@ export class LastWidgetRemoval extends Data.TaggedError("LastWidgetRemoval")<{
   readonly widgetId: WidgetId;
 }> {}
 
-/** An added Widget must introduce an identity absent from the latest document. */
 export class DuplicateWidgetId extends Data.TaggedError("DuplicateWidgetId")<{
   readonly widgetId: WidgetId;
 }> {}
 
-/** Closed set of pure failures returned by one atomic Dashboard edit. */
 export type DashboardFailure =
   | InvalidDashboardResult
   | WidgetNotFound
@@ -548,13 +520,11 @@ export type DashboardFailure =
   | LastWidgetRemoval
   | DuplicateWidgetId;
 
-/** Minimal exact aggregate published to Dashboard core decisions by Transaction ownership. */
 export type DashboardDirectionalAmountFact = Readonly<{
   direction: Direction;
   money: ReadonlyMoney;
 }>;
 
-/** Minimal exact aggregate required to finalize one configured custom metric. */
 export type DashboardMetricFact =
   | Readonly<{
       aggregation: Exclude<MoneyAggregation, "average">;
@@ -579,7 +549,6 @@ const LocalCalendarDate = Schema.String.check(
   Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u)
 );
 const LocalCalendarMonth = Schema.String.check(Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])$/u));
-/** One validated Category or local-calendar key for a Dashboard spending bucket. */
 export const DashboardBucket = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("category"), category: Category }),
   Schema.Struct({ kind: Schema.Literal("day"), date: LocalCalendarDate }),
@@ -595,14 +564,12 @@ export const DashboardChartBucket = Schema.Struct({
 });
 export type DashboardChartBucket = typeof DashboardChartBucket.Type;
 
-/** Read-only interpretation of a Transaction-owner aggregate. */
 export type ProjectedContribution = Readonly<
   Omit<EffectiveTransactionAggregate, "sum" | "maximum"> & {
     sum: ReadonlyMoney;
     maximum: ReadonlyMoney;
   }
 >;
-/** One chart bucket or whole-period interval of exact Transaction-owner contributions. */
 export type ProjectedRange = Readonly<{
   key: string;
   contributions: ReadonlyArray<ProjectedContribution>;

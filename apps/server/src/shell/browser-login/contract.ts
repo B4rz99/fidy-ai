@@ -176,7 +176,6 @@ export const AuthenticatedBrowserLoginPairing = Schema.Struct({
 }).annotate({ identifier: "AuthenticatedBrowserLoginPairing", httpApiStatus: 200 });
 export type AuthenticatedBrowserLoginPairing = typeof AuthenticatedBrowserLoginPairing.Type;
 
-/** Direct-browser login operations derived into server routes and one credential-bearing client. */
 export const BrowserLoginWebAuthGroup = HttpApiGroup.make("browserLogin")
   .add(
     HttpApiEndpoint.post("startPairing", "/web/pairings", {

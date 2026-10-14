@@ -124,7 +124,6 @@ const retainedState = Effect.fnUntraced(function* (db: D1Database) {
   );
 });
 
-// Rebuilds must retain dependent SQL authority, not merely today's seeded rows.
 const retainedSchema = Effect.fnUntraced(function* (db: D1Database) {
   const schema = yield* Effect.tryPromise(() =>
     db

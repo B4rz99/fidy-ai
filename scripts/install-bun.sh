@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Retained release archives and digests pin the approved experimental Secrets runtime.
 set -euo pipefail
 platform="$(uname -s)"
 architecture="$(uname -m)"

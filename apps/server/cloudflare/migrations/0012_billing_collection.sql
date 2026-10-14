@@ -1,4 +1,3 @@
--- The arm and publication intent are created in the same D1 transaction as the BillingAttempt.
 -- A sent arm is NEVER rearmed: an interrupted POST is ambiguous until verified evidence arrives.
 CREATE TABLE billing_collection_arms (
   attempt_id TEXT PRIMARY KEY REFERENCES billing_attempts(id),
@@ -66,7 +65,6 @@ CREATE TRIGGER billing_no_charge_immutable_update BEFORE UPDATE ON billing_no_ch
 BEGIN SELECT RAISE(ABORT, 'billing_no_charge_immutable'); END;
 CREATE TRIGGER billing_no_charge_immutable_delete BEFORE DELETE ON billing_no_charge_confirmations
 BEGIN SELECT RAISE(ABORT, 'billing_no_charge_immutable'); END;
--- The admission decision and BillingAttempt insertion share the D1 atomic unit.
 CREATE TRIGGER billing_attempt_user_collection_guard BEFORE INSERT ON billing_attempts
 WHEN EXISTS (SELECT 1 FROM billing_attempts AS prior
   WHERE prior.user_id = NEW.user_id AND prior.status <> 'succeeded'
@@ -85,7 +83,6 @@ CREATE TRIGGER billing_evidence_approval_monotonic BEFORE UPDATE ON billing_tran
 WHEN OLD.status = 'APPROVED' AND NEW.status <> 'APPROVED'
 BEGIN SELECT RAISE(ABORT, 'billing_evidence_approval_immutable'); END;
 
--- Success can correct a previous negative, but no later event may revoke a verified approval.
 DROP TRIGGER billing_attempt_terminal_monotonic;
 CREATE TRIGGER billing_attempt_terminal_monotonic BEFORE UPDATE ON billing_attempts
 WHEN (OLD.status = 'succeeded' AND NEW.status <> 'succeeded')

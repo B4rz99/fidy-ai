@@ -1,4 +1,3 @@
--- One positive monthly Budget per stable User, Category and Currency; revision never changes Currency.
 CREATE TABLE budgets (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -11,15 +10,12 @@ CREATE TABLE budgets (
   UNIQUE(user_id, id)
 ) STRICT;
 CREATE INDEX budgets_by_user ON budgets(user_id, currency, category_id);
--- Required reconciliation intent commits with each movement, correction, or Budget change.
--- Versioned work prevents an overlapping writer from disappearing behind a completed drain.
 CREATE TABLE budget_reconciliation_work (
   user_id TEXT NOT NULL REFERENCES users(id),
   occurred_at TEXT NOT NULL,
   version INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY(user_id, occurred_at)
 ) STRICT;
--- A monotone per-User revision rejects a paged report that overlaps a financial mutation.
 CREATE TABLE budget_user_versions (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   revision INTEGER NOT NULL CHECK(revision >= 1)
@@ -68,7 +64,6 @@ BEGIN INSERT INTO budget_user_versions (user_id, revision) VALUES (OLD.user_id, 
   ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1;
   DELETE FROM budget_reconciliation_work WHERE user_id = OLD.user_id
     AND NOT EXISTS (SELECT 1 FROM budgets WHERE user_id = OLD.user_id); END;
--- One bounded cursor per Budget/month at the exact financial-fact revision it summarized.
 CREATE TABLE budget_report_progress (
   user_id TEXT NOT NULL,
   budget_id TEXT NOT NULL,
@@ -97,7 +92,6 @@ CREATE TABLE budget_month_latches (
   FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE,
   CHECK(reached_100 = 0 OR reached_80 = 1)
 ) STRICT;
--- A unique pending occurrence per threshold is the delivery/outbox latch; duplicates never emit.
 CREATE TABLE budget_threshold_alerts (
   user_id TEXT NOT NULL,
   budget_id TEXT NOT NULL,

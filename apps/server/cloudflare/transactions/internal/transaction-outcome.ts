@@ -233,8 +233,6 @@ export const findTransactionValue = ({
       return Option.map(found, (transaction) => ({ _tag: "Transaction" as const, transaction }));
     }
     if (outcome.readback._tag === "EffectiveTransaction") {
-      // The effective Transaction is presented from its link, not from the stored row, so this
-      // read is the whole readback: the row it pairs with is not read at all.
       const presentation = yield* Effect.tryPromise(() =>
         findTransactionPresentation({ db, userId, id: outcome.transactionId })
       ).pipe(Effect.orElseSucceed(() => Option.none<TransactionPresentation>()));
@@ -372,12 +370,7 @@ const unlinkPremiseRefusal = ({
 
 const RevisionRow = Schema.Struct({ revision: Schema.Int });
 
-/**
- * The refusal one correction child reports when its observed revision can no longer satisfy its
- * guard, or none while the guard can still commit. `repeated` is true when an earlier child already
- * observed the same revision of the same Transaction: the earlier child advanced the revision
- * inside the unit, so this child owns the aborted guard.
- */
+/** None means the observed correction revision still holds. repeated means an earlier child used the same Transaction revision, so this child owns the aborted guard. */
 const observedRevisionRefusal = ({
   db,
   userId,

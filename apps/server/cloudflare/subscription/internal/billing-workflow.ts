@@ -43,20 +43,16 @@ import {
 } from "../contract";
 
 const CollectionMessage = Schema.Struct({
-  // Diagnostic continuation is decoded independently and never grants work authority.
   traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   attemptId: BillingAttemptId,
 });
 const LookupWork = Schema.Struct({
-  // Diagnostic continuation is decoded independently and never grants work authority.
   traceContext: Schema.optionalKey(Schema.Unknown),
   version: Schema.Literal(1),
   kind: Schema.Literal("lookup"),
   transactionId: WompiTransactionId,
 });
-// Version 1 is new: no legacy payload migration. D1 is authoritative after Workflow history expires.
-// Three days fits Workers Free and Paid; expired execution IDs never rearm a sent mutation.
 const workflowRetention = { successRetention: "3 days", errorRetention: "3 days" } as const;
 type CollectionQueue = Readonly<{
   send: (work: typeof CollectionMessage.Type) => Promise<unknown>;
@@ -289,7 +285,6 @@ export const receiveBillingCollection = (
         )
       );
       if (Exit.isFailure(started)) {
-        // A failed create may have succeeded remotely. Confirm the deterministic instance before ack.
         yield* attempt(() =>
           input.environment.BILLING_COLLECTION_WORKFLOW.get(collection.attemptId)
         );
@@ -481,7 +476,6 @@ export const receiveWompiBillingEvent = (
       )
     );
     if (Exit.isFailure(retained)) return new Response(null, { status: 503 });
-    // The durable hint is looked up by a named Workflow Activity, never from the ingress handler.
     return new Response(null, { status: 200 });
   });
 
@@ -564,7 +558,7 @@ const collect = (
         requireFinalization: false,
       })
     ) {
-      return; // POST alone is not settlement evidence; a mismatched response cannot select another User.
+      return;
     }
     const candidate = created.value.transactionId;
     yield* attempt(() =>
@@ -661,8 +655,6 @@ const offerBillingLookup = (
       )
     );
     const id = `billing-lookup-v1-${fingerprint}-${Math.floor(now / candidateCooldownMs)}`;
-    // Reserve the bounded lookup in D1 before the Activity can make outbound I/O.
-    // A failed or ambiguous handoff consumes its reservation; support can renew a confirmed hint.
     const recorded = yield* attempt(() =>
       db.batch([
         db

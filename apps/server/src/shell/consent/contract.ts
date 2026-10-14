@@ -7,7 +7,6 @@ import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { type PATGrantSelection, type PairingGrantSelection } from "~/shell/tokens/contract";
 import { type FreshSessionSubject } from "~/shell/web-session/contract";
 
-/** Additional launch opt-in categories, each independent of the weekly summary grant. */
 export const ProactivityOptInKind = Schema.Literals([
   "budget-threshold",
   "manual-entry-reminder",

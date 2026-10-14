@@ -25,11 +25,9 @@ await Effect.runPromise(
     if (compiled.exitCode !== 0) {
       throw new Error(`Core acceptance fixture failed to compile: ${compiled.stderr.toString()}`);
     }
-    // Parallel previews must only observe complete bundles. Keep the rename on one filesystem.
     yield* fs.rename(temporaryBundle, coreBundle.pathname);
   }).pipe(Effect.scoped, Effect.provide(BunFileSystem.layer))
 );
-// A sibling declaration re-exports core-worker.ts types for this exact compiled artifact.
 const coreModule = await import("./browser-acceptance-core-bundle.mjs");
 if (
   typeof coreModule.makeCoreWorker !== "function" ||

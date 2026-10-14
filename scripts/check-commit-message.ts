@@ -1,20 +1,11 @@
 #!/usr/bin/env bun
 
-// The convention is parsed from CODING_STANDARDS.md's marked lists. The commit-msg
-// hook, pre-push hook, and PR-title check share this source instead of duplicating it.
-//
-// Parsing is strict on purpose. A missing marker or an empty table throws
-// rather than falling back to "allow everything", because a silently permissive
-// hook is worse than a broken one.
-
 import { Option } from "effect";
 
 const TYPES_MARKER = "<!-- commit-types -->";
 
 const HEADER_PATTERN = /^([a-z]+)\(([a-z0-9-]+)\): #[1-9][0-9]* (.+)$/;
 
-// A data row of a scope table: the scope in a code span, then its "when to use"
-// cell. The header and separator rows carry no code span, so they never match.
 const SCOPE_ROW_PATTERN = /^\|\s*`([a-z0-9-]+)`\s*\|\s*(\S[^|]*?)\s*\|$/;
 
 const HEADER_SHAPE_ERROR = "Commit header must follow format: type(scope): #123 message";
@@ -56,7 +47,6 @@ export type CommitConvention = {
 
 const CONVENTION_SOURCE = new URL("../CODING_STANDARDS.md", import.meta.url);
 
-// Order matters: it is the order scopes are printed in, slices first.
 const SCOPE_SECTIONS: readonly ScopeSection[] = [
   {
     marker: "<!-- commit-scopes:slices -->",
@@ -70,7 +60,6 @@ const SCOPE_SECTIONS: readonly ScopeSection[] = [
 
 const isBlank = (line: string): boolean => line.trim().length === 0;
 
-/** The first run of non-blank lines after a marker: the list or table it labels. */
 const blockAfter = (markdown: string, marker: string): readonly string[] => {
   const marked = markdown.indexOf(marker);
 

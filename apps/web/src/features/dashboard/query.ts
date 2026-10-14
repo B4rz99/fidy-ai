@@ -11,10 +11,8 @@ type DashboardLoad = Readonly<{
   >;
 }>;
 
-/** Opening the Dashboard explicitly composes observation, safe initialization, and a fresh read.
- * Only declared absence permits initialization. Its failure and the second read propagate;
- * refreshing never retries initialization recursively or interprets unavailability as absence.
- * Phase is workflow feedback, not a command or a second owner of the server result.
+/** Only declared absence permits initialization. Initialization and reread failures propagate;
+ * refresh never treats unavailability as absence or recursively initializes.
  */
 const loadDashboard = Effect.fnUntraced(function* (
   apiClient: FidyClient,
@@ -31,7 +29,6 @@ const loadDashboard = Effect.fnUntraced(function* (
         return yield* client.dashboard.getDashboardView();
       })
     ),
-    // Preserve AtomHttpApi's boundary-defect classification for this composed query.
     Effect.catchIf(
       (error) => Schema.isSchemaError(error) || HttpClientError.isHttpClientError(error),
       Effect.die

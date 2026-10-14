@@ -18,8 +18,6 @@ const maximumGlobalAttempts = 50_000;
 const maximumUserSpend = 32_000_000;
 const maximumGlobalSpend = 512_000_000;
 const oneUnit = ResourceAdmissionUnits.make(1);
-// Byte length conservatively bounds ordinary prompt tokens; output is reserved at max_tokens.
-// These are resource-spend ceilings, never commercial Free allowances.
 export const workersAiPolicies = ResourceAdmissionPolicies.make([
   {
     dimension: "stable_user",

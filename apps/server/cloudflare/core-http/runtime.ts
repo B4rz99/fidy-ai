@@ -19,7 +19,6 @@ const rejectionBoundary = (request: Request): CoreRejectionBoundary => {
     : "http";
 };
 
-/** Construct private HTTP assembly with one bounded Work span and post-commit publication lifetime. */
 export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
   return (request, environment, context) =>

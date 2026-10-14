@@ -186,7 +186,6 @@ const submitVoid = (
           .run()
       );
       if (claim.meta.changes === 1) {
-        // Lost delivery is reconciled by GET; neither Queue nor Workflow retries can repeat this PUT.
         yield* input.http
           .execute({ _tag: "WompiVoidPaymentSource", sourceId: input.source.wompi_source_id })
           .pipe(Effect.ignore);

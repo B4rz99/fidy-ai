@@ -1,4 +1,3 @@
-/** Retargets a single underline; layout coordinates also support wrapped mobile tabs. */
 export const moveIndicator = ({
   tab,
   instant,
@@ -13,7 +12,7 @@ export const moveIndicator = ({
   indicator.style.transform = `translate(${tab.offsetLeft}px, ${tab.offsetTop + tab.offsetHeight - 3}px) scaleX(${tab.offsetWidth})`;
 };
 
-/** Repositions immediately after resizing and releases the observer on unmount. */
+/** Resize repositions immediately; unmount releases the observer. */
 export const mountIndicator = (list: HTMLDivElement): (() => void) => {
   const position = (): void => {
     const active = list.querySelector<HTMLButtonElement>('[aria-selected="true"]');

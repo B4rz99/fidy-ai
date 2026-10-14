@@ -906,8 +906,6 @@ it.each(
           let posts = 0;
           let status: keyof typeof recordedTransactions = "PENDING";
           let providerSourceId = 3891;
-          // Wompi's retained source-payment fixtures are method-neutral. Substitute the
-          // dynamic attempt identity, calendar amount/date, and the deliberate hostile source only.
           const providerResponse = (observedStatus: keyof typeof recordedTransactions): Response =>
             Response.json({
               data: {

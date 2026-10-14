@@ -217,7 +217,6 @@ const recoverBuilding = (
     ) {
       return true;
     }
-    // Idempotent cleanup: lost responses and failed deletes consume no parse reservation.
     yield* foreign(() =>
       input.DB.prepare(`DELETE FROM statement_materialization_parts WHERE submission_id=?
         AND EXISTS(SELECT 1 FROM statement_materializations WHERE submission_id=? AND user_id=? AND state='building')`)
@@ -519,7 +518,6 @@ const readSource = (input: SourceInput): Effect.Effect<ParsedStatement, Failure>
           })
       )
     );
-    // A header-only source cannot produce a conserved Transaction or review outcome.
     if (parsed.sourceFormat !== input.sourceFormat || parsed.rows.length === 0) {
       return yield* failed();
     }

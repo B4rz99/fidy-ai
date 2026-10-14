@@ -10,12 +10,6 @@ const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url))
   .replace(/\/$/u, "");
 const entrypoint = "src/client.ts";
 
-/**
- * The browser seam is intentionally an allowlist of source and dependency modules. Published slice
- * declarations and the dedicated enrollment or hosted Turn declaration are admitted explicitly; every
- * other input must be admitted deliberately so a server implementation cannot enter the client
- * graph under a new filename or package.
- */
 const safeSource = [
   /^src\/client\.ts$/u,
   /^src\/shell\/(?:identity|categories|transactions|subscription|tokens|budgets|dashboard|insights|recurring|connections|public-http|schema-codecs|browser-login|recovery|ingestion|web-session|web-authentication|provider-authentication|oauth-agents|memory|quotas)\/contract\.ts$/u,
@@ -28,7 +22,6 @@ const safeSource = [
   /^src\/shell\/partial-input\/contract\.ts$/u,
   /^src\/shell\/authorization\/runtime\.ts$/u,
   /^src\/shell\/canonical-operations\/contract\.ts$/u,
-  // Access decisions are pure and shared with server execution; no client-owned policy copy.
   /^src\/shell\/canonical-policy\/operations\.ts$/u,
 ] as const;
 

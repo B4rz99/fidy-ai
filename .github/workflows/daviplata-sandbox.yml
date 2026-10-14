@@ -12,8 +12,6 @@ concurrency:
 
 jobs:
   protocol:
-    # The existing protected environment holds Sandbox Wompi secrets. No Cloudflare
-    # credentials are supplied, nothing deploys, and Production Wompi is rejected.
     if: github.ref == 'refs/heads/trunk'
     environment: production
     runs-on: ubuntu-latest

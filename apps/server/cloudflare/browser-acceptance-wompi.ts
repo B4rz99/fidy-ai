@@ -3,7 +3,6 @@ import { db, firstCardSourceId, firstDaviplataSourceId, sourceId } from "./brows
 
 export const providerPublicKey = `pub_test_${"f1d7c0de".repeat(3)}`;
 export const providerPrivateKey = `prv_test_${"f1d7c0de".repeat(3)}`;
-// Reviewed synthetic fixture coordinates only; never real provider configuration or CORS evidence.
 export const syntheticDaviplataSendUrl = "https://sandbox.wompi.co/fidy-synthetic-daviplata/send";
 export const syntheticDaviplataConfirmUrl =
   "https://sandbox.wompi.co/fidy-synthetic-daviplata/confirm";

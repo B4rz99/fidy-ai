@@ -6,25 +6,21 @@ import { UtcTimestamp } from "~/core/_shared/time";
 import { TrialPeriod, UserId } from "~/core/identity/contract";
 import { AccessTier } from "~/core/access-tier/contract";
 
-/** Stable identity of one immutable set of Subscription price terms. */
 export const PriceId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PriceId"))
   .annotate({ identifier: "PriceId" });
 export type PriceId = typeof PriceId.Type;
 
-/** The canonical public web destination where a User can start a Pro Subscription. */
 export const UpgradeDestination = Schema.Struct({
   url: Schema.URLFromString,
 }).annotate({ identifier: "UpgradeDestination" });
 export type UpgradeDestination = typeof UpgradeDestination.Type;
 
-/** Exact Subscription billing cadences offered at launch. */
 export const BillingPeriod = Schema.Literals(["weekly", "monthly", "yearly"]).annotate({
   identifier: "BillingPeriod",
 });
 export type BillingPeriod = typeof BillingPeriod.Type;
 
-/** Minimal consumer tax fact approved for the launch offers. */
 export const TaxTreatment = Schema.Literal("not-taxable").annotate({
   identifier: "TaxTreatment",
 });
@@ -112,7 +108,6 @@ export const SubscriptionOffers = Schema.Tuple([Price, Price, Price])
   .annotate({ identifier: "SubscriptionOffers" });
 export type SubscriptionOffers = typeof SubscriptionOffers.Type;
 
-/** Stable identity of one ongoing paid Subscription. */
 export const SubscriptionId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("SubscriptionId"))
   .annotate({ identifier: "SubscriptionId" });
@@ -194,7 +189,6 @@ export const SubscriptionStatus = Schema.Struct({
 }).annotate({ identifier: "SubscriptionStatus" });
 export type SubscriptionStatus = typeof SubscriptionStatus.Type;
 
-/** Payment authorization mechanism, independent of the card issuer. */
 export const EnrollmentMethod = Schema.Literals(["card", "nequi", "daviplata"]).annotate({
   identifier: "EnrollmentMethod",
 });
@@ -228,7 +222,6 @@ const boundedEvidenceText = Schema.String.check(
   Schema.isMaxLength(maximumEnrollmentEvidenceCharacters)
 );
 
-/** Stable identity of one short-lived payment-enrollment intent. */
 export const PaymentEnrollmentId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PaymentEnrollmentId"))
   .annotate({ identifier: "PaymentEnrollmentId" });
@@ -364,7 +357,6 @@ export const PaymentEnrollment = Schema.Union([
 ]).annotate({ identifier: "PaymentEnrollment" });
 export type PaymentEnrollment = typeof PaymentEnrollment.Type;
 
-/** Closed result of the one-click browser payment action. */
 export const PaymentSubmission = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("payment-pending"),

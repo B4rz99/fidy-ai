@@ -71,7 +71,6 @@ it.each(["held", "throws", "rejects"])(
         const exit = yield* Effect.tryPromise(() => pending);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
-          // Retain fn stack annotations in the expected whole Exit, not just its interruption tag.
           deepStrictEqual(
             exit,
             Exit.failCause(Cause.annotate(Cause.interrupt(), Cause.annotations(exit.cause)))

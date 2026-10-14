@@ -76,8 +76,6 @@ const clearPage = ({
   const key = table === "dashboard_projection_leaf" ? "id" : "rowid";
   return db
     .batch([
-      // No digit or bucket subtraction is performed during clearing; concurrent writes continue
-      // to refresh leaves and are included when the canonical effective source is replayed.
       db
         .prepare(`DELETE FROM ${table} WHERE user_id = ? AND ${key} IN
       (SELECT ${key} FROM ${table} WHERE user_id = ? ORDER BY ${key} LIMIT ${pageSize})`)

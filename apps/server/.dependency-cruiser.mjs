@@ -1,27 +1,3 @@
-// The module-graph gate. `bun run lint:deps` runs it, `bun run verify` and CI
-// run it too — a rule a tool could enforce, but no tool runs, is not a standard
-// (CODING_STANDARDS.md).
-//
-// oxlint holds the per-file rules; the rules here are the ones that are about
-// the graph rather than about a file. The dividing line is whether the target
-// can be written in terms of the source: "a core slice may import a sibling only
-// through published contracts" needs one relational rule with a back-reference, where oxlint's
-// deny-pattern-only `no-restricted-imports` would need an override block per
-// slice enumerating every other slice, rotting on the next slice added.
-//
-// The core-to-shell fence is deliberately stated in both tools. It is the one
-// rule the whole two-tree shape rests on, and each tool catches it in a
-// different place: oxlint at the import statement as you type, this at the
-// resolved graph, including a hop that launders itself through a re-export.
-//
-// Every rule's `comment` is what the reporter prints when it fires, so each one
-// explains the reason rather than restating the pattern.
-//
-// `tools/depcruise/run.mjs` is the entry point, not the `depcruise` binary: the
-// cruiser needs the classic TypeScript compiler API, which the root's Effect
-// tsgo `typescript` build does not expose, and without it it cruises zero
-// modules and still exits 0.
-
 /** @type {import("dependency-cruiser").IConfiguration} */
 export default {
   forbidden: [
@@ -89,7 +65,6 @@ export default {
         path: "^(src|cloudflare|scripts|tools)/",
         pathNot: [
           "^cloudflare/core-worker\\.ts$",
-          // The isolated Queue proof constructs the real native consumer with synthetic bindings.
           "^cloudflare/queue/recovery-worker\\.fixture\\.ts$",
           "\\.test\\.ts$",
           "(?:runtime|harness)\\.ts$",
@@ -107,11 +82,8 @@ export default {
         pathNot: [
           "\\.test\\.ts$",
           "^cloudflare/oauth-agents/oauth-ingress\\.test-fixture\\.ts$",
-          // Performance fixtures observe the real Core request composition.
           "^cloudflare/canonical-request-observer\\.test-fixture\\.ts$",
-          // Native scheduler journeys compose the real Core root with private test bindings.
           "^cloudflare/core-worker\\.test-fixture\\.ts$",
-          // Both provider journeys compose the real Public/Core Worker boundary.
           "^cloudflare/provider-authentication/journey\\.test-fixture\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
@@ -197,17 +169,13 @@ export default {
           "^src/core/(browser-login|budgets|categories|dashboard|email-authentication|identity|ingestion|insights|recovery|subscription|tokens)/contract\\.ts$",
 
           "^src/core/tokens/operations\\.ts$",
-          // Pure Transaction query values own canonical browser continuation decoding.
           "^src/core/transactions/contract\\.ts$",
-          // Pure Shared Kernel currency definitions support exact browser presentation.
           "^src/core/_shared/money\\.ts$",
           "^src/core/_shared/context\\.ts$",
           "^src/shell/api\\.ts$",
-          // Pure opaque trace receipts are diagnostic metadata; exporter/runtime code stays private.
           "^src/shell/observability/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/(agent|canonical-operations|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
-          // Pure shared access decisions are deliberate CLI/browser discovery authority (#970).
           "^src/shell/canonical-policy/operations\\.ts$",
         ],
       },
@@ -1473,9 +1441,6 @@ export default {
       },
     },
     {
-      // The package-level facade is the only browser-facing source allowed to reach shell modules
-      // from outside the server tree. The web package depends on `src/client.ts`; it must
-      // not know whether the canonical declaration currently lives under shell/.
       name: "browser-client-seam-bypass",
       severity: "error",
       comment:
@@ -1489,9 +1454,6 @@ export default {
       to: { path: "^src/shell/" },
     },
     {
-      // Keep the facade narrow even while the dependency graph is being assembled: the transitive
-      // browser build performs the stronger allowlist check below, while this catches a direct
-      // accidental import before a build has to explain it.
       name: "browser-client-facade-imports-server-code",
       severity: "error",
       comment:
@@ -1503,13 +1465,11 @@ export default {
         path: "^src/shell/",
         pathNot: [
           "^src/shell/api\\.ts$",
-          // Pure opaque trace receipts are diagnostic metadata; exporter/runtime code stays private.
           "^src/shell/observability/contract\\.ts$",
           "^src/shell/agent/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/canonical-operations/contract\\.ts$",
           "^src/shell/canonical-policy/operations\\.ts$",
-          // Canonical ordered-batch schemas and pure child projection, with no execution authority (#971).
           "^src/shell/operations/contract\\.ts$",
           "^src/shell/(connections|dashboard|oauth-agents|public-http|quotas|schema-codecs|tokens|subscription|web-authentication)/contract\\.ts$",
           "^src/shell/email-authentication/(contract|path)\\.ts$",
@@ -1552,19 +1512,6 @@ export default {
       from: { path: "^(src|cloudflare|scripts|tools)/" },
       to: { circular: true },
     },
-    // The next two rules are exact complements, and both hang off the same
-    // capture: `$1` is the importing file's own directory, trailing slash and
-    // all. `^(src/|src/.*/)` rather than a pattern per tree depth, because a
-    // pattern per depth is how `src/main.ts`, `src/shell/api.ts` and
-    // `src/shell/http.ts` came to sit outside both rules while the pair read as
-    // complete — the earlier `^src/(core|shell)/([^/]+)/` needed two levels
-    // below `src/` and quietly exempted everything shallower. Written as an
-    // alternation because `(.*/)?` says the same thing and the cruiser rejects
-    // it as an unsafe regex.
-    //
-    // "Its directory" is the directory the file is in, not the subtree beneath
-    // it: an import that descends into a child directory crosses a boundary
-    // like any other, and is aliased like any other.
     {
       name: "same-directory-import-is-aliased",
       severity: "error",
@@ -1600,8 +1547,6 @@ export default {
         "every importer depend on every re-export, and turn a directory into a cycle waiting " +
         "to happen. Import the defining module directly.",
       from: { path: "^(src|scripts|tools)/" },
-      // `pathNot` rather than an `^src/` prefix on `path`: anchoring the whole
-      // thing needs `(.*/)?`, which the cruiser rejects as an unsafe regex.
       to: {
         path: "/index\\.(ts|mts|cts|js|mjs|cjs)$",
         pathNot: "(^|.*/)node_modules/",
@@ -1611,9 +1556,6 @@ export default {
   options: {
     doNotFollow: { path: "node_modules" },
     tsConfig: { fileName: "tsconfig.dependencies.json" },
-    // Type-only imports are still edges: `import type { TransactionFailure }`
-    // is core knowledge reaching shell, and erasing at compile time does not
-    // make it less of an architectural arrow.
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {
       exportsFields: ["exports"],

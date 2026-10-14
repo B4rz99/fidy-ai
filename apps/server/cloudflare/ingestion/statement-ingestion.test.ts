@@ -787,13 +787,8 @@ const batch = (runtime: Runtime, index: number, calls: ReadonlyArray<object>): P
     })
   );
 
-/** The bearer token one agent credential is issued with. */
 const agentToken = (fill: string): string => `fin_${fill.repeat(8)}_${fill.repeat(43)}`;
 
-/**
- * Issues one PAT row directly, the file's only PAT builder: both the individual agent submission and
- * the in-batch scope test read their credentials from here, so a column change lands once.
- */
 const issuePat = (
   input: Readonly<{
     current: number;
@@ -850,7 +845,6 @@ const FailureResponse = Schema.Struct({
   error: Schema.Struct({ code: Schema.String, message: Schema.String }),
   next: Schema.Array(Schema.Unknown),
 });
-/** One rejected atomic batch, before its child-specific failure details are asserted. */
 const BatchRejection = Schema.Struct({
   error: Schema.Struct({
     code: Schema.String,
@@ -905,19 +899,11 @@ type StagedBody = Readonly<{ body: string; staged: StagedData }>;
 /** Reads one staging response body as text, keeping the raw spelling for content-leak scans. */
 const stagedBodyOf = (response: Response): Promise<string> => response.text();
 
-/** Decodes one staging acknowledgement out of its preserved body text. */
 const stagedWithBody = (body: string): StagedBody => ({
   body,
   staged: Schema.decodeSync(Schema.fromJsonString(StagedResponse))(body).data,
 });
 
-/**
- * The rows a composed turn publishes: both children's domain state, the submission, the
- * Free-backfill reservation, the bounded outbox identity, and both audit trails. A turn that
- * published nothing left every one of them at zero, which is what the two assertions below state
- * from this one list. A staging row and a PAT row are not here: both pre-exist and a turn moves or
- * extends them, so their unchanged state is asserted where it is read.
- */
 const canonicalStateTables = [
   "transactions",
   "transaction_audit",
@@ -927,7 +913,6 @@ const canonicalStateTables = [
   "statement_backfill_entitlements",
 ] as const;
 
-/** The one assertion for the rows a canonical turn left behind, stated once per named table. */
 const expectCanonicalState = (
   db: D1Database,
   expected: Partial<Record<(typeof canonicalStateTables)[number], number>>
@@ -995,7 +980,6 @@ const stagedObjectKeys = (runtime: Runtime): Promise<ReadonlyArray<string>> =>
     .list({ prefix: "staging/statement/v1/" })
     .then((result) => result.objects.map(({ key }) => key));
 
-/** Seeds one submission row directly, to isolate admission bounds and retention from publication. */
 const seedSubmission = (
   runtime: Runtime,
   input: Readonly<{
@@ -1126,7 +1110,6 @@ it(
         expect(staged.sourceFormat).toBe("csv");
         expect(staged.byteLength).toBe(statementBytes().byteLength);
         const [objectKey] = yield* fromTestPromise(() => stagedObjectKeys(runtime));
-        // The opaque locator stays server-only: it is neither the staging id nor content-derived.
         expect(objectKey?.startsWith("staging/statement/v1/")).toBe(true);
         expect(Object.values(staged)).not.toContain(objectKey);
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
@@ -1155,8 +1138,6 @@ it(
         const foreign = yield* fromTestPromise(() => getSubmission(runtime, 1, published.id));
         expect(foreign.status).toBe(404);
 
-        // One authoritative row and one attributable audit row per canonical call: the publication,
-        // its replay, and each read (success for the owner, not-found for the foreign caller).
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
         const audits = yield* fromTestPromise(() =>
           runtime.db
@@ -2576,8 +2557,6 @@ it("shows committed review rows only to their User through the canonical read", 
             .first()
         )
       ).toEqual({ count: 1 });
-      // The cron can be delayed; a read must still suppress overdue raw evidence without
-      // relying on a successful storage sweep. Clone the valid row with an expired deadline.
       const overdueDeadline = (yield* Clock.currentTimeMillis) - 1_000;
       yield* fromTestPromise(() =>
         runtime.db
@@ -2867,7 +2846,6 @@ it(
         );
         expect(tooLarge.status).toBe(413);
 
-        // A PDF claim is refused because of its actual signature, not a declared media type.
         const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
         const unsupported = yield* fromTestPromise(() =>
           stageFixture(runtime, { body: pdf, index: 0 })
@@ -2875,8 +2853,6 @@ it(
         expect(unsupported.status).toBe(400);
         expect(yield* fromTestPromise(() => failureCode(unsupported))).toBe("validation_failed");
 
-        // Password-protected Office files are OLE containers, not supported XLSX ZIPs. Refuse
-        // them before staging: this path never accepts or persists a decryption password.
         const protectedOffice = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
         const protectedResult = yield* fromTestPromise(() =>
           stageFixture(runtime, { body: protectedOffice, index: 0 })
@@ -2917,7 +2893,6 @@ it(
             })
           )
         );
-        // Byte staging is private to verified WhatsApp document admission.
         const withBearer = yield* fromTestPromise(() =>
           uploadWithBearer(runtime, {
             body: statementBytes(),
@@ -3037,8 +3012,6 @@ it(
           statement_submissions: 0,
           statement_ingestion_outbox: 0,
         });
-        // Both refusals stay attributable through metadata-only audit rows, and neither creates
-        // authoritative state: a foreign caller's miss and the owner's tampered reference.
         const refusals = yield* fromTestPromise(() =>
           runtime.db
             .prepare(
@@ -3059,7 +3032,6 @@ it(
             outcome: "validation_failed",
           },
         ]);
-        // The real owner can still publish the untouched material.
         const owned = yield* fromTestPromise(() =>
           publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000906",
@@ -3188,7 +3160,6 @@ it(
         expect(refused.status).toBe(429);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("rate_limited");
 
-        // A flood of refused uploads consumes attempt pressure, not R2 work capacity.
         for (let attempted = 3; attempted < 40; attempted += 1) {
           const denied = yield* fromTestPromise(() =>
             stageFixture(runtime, { body: statementBytes(), index: 0 })
@@ -3206,7 +3177,6 @@ it(
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_staging_objects"))).toBe(
           2
         );
-        // The refused request is durable pressure, but has no R2 work grant or staged bytes.
         const pressure = yield* fromTestPromise(() =>
           scalar<{ total: number }>(
             runtime.db,
@@ -3258,7 +3228,6 @@ it(
         expect(yield* fromTestPromise(() => failureCode(paywalled))).toBe("paywall_required");
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
 
-        // A queued submission past its retention bound fails visibly and frees its material.
         const expired = yield* fromTestPromise(() =>
           runtime.db
             .prepare(
@@ -3301,7 +3270,6 @@ it(
         );
         expect(Option.isNone(entitlement.consumed_at_ms)).toBe(true);
         expect(Option.isNone(entitlement.submission_id)).toBe(true);
-        // The failed submission's own material is reclaimed; the User's next staged file is not.
         const reclaimed = yield* fromTestPromise(() =>
           firstRow(
             runtime.db,
@@ -3351,7 +3319,6 @@ it(
           )
         );
 
-        // An extraction that started but never produced an outcome cannot outlive retention either.
         const submissionState = yield* fromTestPromise(() =>
           firstRow(
             runtime.db,
@@ -3407,7 +3374,6 @@ it(
         expect(yield* fromTestPromise(() => failureCode(outstanding))).toBe("validation_failed");
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(5);
 
-        // Pro standing skips the Free allowance but never the submission pressure bounds.
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
@@ -3562,8 +3528,6 @@ it(
         expect(refused.status).toBe(429);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("rate_limited");
 
-        // The same spent budget refuses canonical publication, while byte staging stays open:
-        // the budget bounds canonical work, not the non-authoritative transport that feeds it.
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
         const submitted = yield* fromTestPromise(() =>
           publishFixture(runtime, {
@@ -3594,9 +3558,6 @@ it(
         const idempotencyKey = lostRaceIdempotencyKey;
         const { staged: winner } = yield* fromTestPromise(() => stageOne(runtime));
         const { staged: loser } = yield* fromTestPromise(() => stageOne(runtime));
-        // The winner commits after the losing call has read "no submission for this key" and before
-        // its own conditional D1 unit runs, so only that unit can attribute the loss. One canonical
-        // call remains one refusal: the unit's recorded refusal is answered without a second write.
         const database = competingWriteDb(runtime.db, () =>
           publishFixture(runtime, { index: 0, idempotencyKey, reference: winner }).then(
             (response) => response.text()
@@ -3662,8 +3623,6 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
-        // The size premises are measured independently of the guard under test: each child is
-        // below the individual 4,096-byte bound, while their shared body exceeds 12 × 4,096 bytes.
         const padding = "x".repeat(3_890);
         const calls = Array.from({ length: 12 }, (_, index) => ({
           callId: batchCallId(index + 1),
@@ -3680,8 +3639,6 @@ it(
         expect(refused.status).toBe(400);
         const failure = yield* fromTestPromise(() => failureOf(refused));
         expect(failure.error.code).toBe("validation_failed");
-        // The aggregate bound is a request-shape refusal, not a child failure contract: it names no
-        // child, so no failedCallIndex is fabricated and no child is admitted.
         expect(failure.error.message).toBe("Invalid atomic batch input.");
         yield* Effect.tryPromise(() => expect(batchRejectionOf(refused)).rejects.toThrow());
         yield* expectCanonicalState(runtime.db, {
@@ -3708,8 +3665,6 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
         const current = yield* Clock.currentTimeMillis;
-        // The session is live for dispatch and every preparation read; it dies only when the
-        // publication unit is about to run, so only the unit's own live-authority guard can see it.
         const database = competingWriteDb(runtime.db, () =>
           runtime.db
             .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
@@ -3725,8 +3680,6 @@ it(
         expect(refused.status).toBe(401);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("unauthenticated");
 
-        // The dead credential refused the whole unit: no submission, no outbox, no audit row of
-        // any outcome, and the staged material never became authoritative.
         yield* expectCanonicalState(runtime.db, {
           statement_submissions: 0,
           statement_ingestion_outbox: 0,

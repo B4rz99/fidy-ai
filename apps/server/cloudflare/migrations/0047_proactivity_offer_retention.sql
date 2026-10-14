@@ -1,4 +1,3 @@
--- Frozen disclosure delivery identity survives independent expiry of undecided legal offers.
 CREATE TABLE proactivity_message_events_retained AS SELECT * FROM proactivity_message_events;
 CREATE TABLE proactivity_outbox_retained AS SELECT * FROM proactivity_outbox;
 DROP TABLE proactivity_message_events;

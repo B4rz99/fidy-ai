@@ -132,7 +132,6 @@ const cashFlowExpenses = (
       )
     ),
   }));
-/** Local presentation-only fixtures; no command is authorized by this boundary. */
 export const previewProps = ({
   props,
   dataset,

@@ -5,7 +5,6 @@ import { MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/** The four proactive decisions committed by the MVP specification. */
 export const InsightKind = Schema.Literals([
   "budget-threshold",
   "new-recurring-series",
@@ -100,7 +99,6 @@ export const DeliveryEvidenceInput = InsightDeliveryAttempt.mapFields(
 ).annotate({ identifier: "DeliveryEvidenceInput" });
 export type DeliveryEvidenceInput = typeof DeliveryEvidenceInput.Type;
 
-/** The asked-for occurrence is absent from this User's InsightEvent stream. */
 export class InsightNotFound extends Data.TaggedError("InsightNotFound")<{
   readonly insightEventId: InsightEventId;
 }> {}
@@ -112,7 +110,6 @@ export class InvalidInsightTransition extends Data.TaggedError("InvalidInsightTr
   readonly allowedTargets: ReadonlyArray<InsightLifecycleState>;
 }> {}
 
-/** Every caller-actionable failure raised by the insights core. */
 export type InsightFailure = InsightNotFound | InvalidInsightTransition;
 
 /** A start-inclusive, end-exclusive financial reporting interval. */

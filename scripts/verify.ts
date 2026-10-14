@@ -87,7 +87,6 @@ const checks: Array<Check> = [
     env: Bun.env,
   },
   rootCheck("static", "Lint suppressions", ["bun", "run", "lint:suppressions"]),
-  // Type-aware Oxlint also runs the ordinary rules; do not lint the same workspace twice.
   rootCheck("static", "oxlint type-aware", ["bun", "run", "lint:type-aware"]),
   rootCheck("static", "Format", ["bun", "run", "format:check"]),
   rootCheck("static", "Project-reference build", ["bun", "run", "typecheck"]),
@@ -126,7 +125,6 @@ const checks: Array<Check> = [
   rootCheck("unit", "CLI behavior tests", ["bun", "run", "--cwd", "apps/cli", "test"]),
   rootCheck("builds", "Portable web build", ["bun", "run", "build"]),
   rootCheck("builds", "Worker document parsing proof", ["bun", "run", "check:document-parsing"]),
-  // Preserve the core tier's proof that business decisions need no platform services.
   {
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),
   },
@@ -195,8 +193,6 @@ const checks: Array<Check> = [
     "apps/server",
     "test:memory",
   ]),
-  // Coverage executes the whole web suite, including scripts/production-workflow.test.ts and
-  // scripts/cloudflare-adapter.test.ts; separate uninstrumented runs duplicate that evidence.
   rootCheck("unit", "Web tests and Istanbul coverage", [
     "bun",
     "run",
@@ -259,7 +255,6 @@ if (
 const selectedChecks = checks.filter(
   ({ group, env }) =>
     groupIsSelected(group) &&
-    // The CLI journey has one test and its own topology; run it only on the first runner.
     (env.CLI_ACCEPTANCE_MODE !== "cli" ||
       Bun.env.BROWSER_TEST_SHARD === undefined ||
       Bun.env.BROWSER_TEST_SHARD.startsWith("1/"))
@@ -297,8 +292,6 @@ const runCheck = (check: Check): Effect.Effect<void> =>
 await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
-    // Browser journeys own separate ports, build outputs, Users and native databases.
-    // Overlap their real polling waits on this runner; each suite keeps its worker limit.
     return Effect.forEach(groupChecks, runCheck, {
       concurrency: group === "browser" ? 2 : 1,
       discard: true,

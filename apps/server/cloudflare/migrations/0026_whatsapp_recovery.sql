@@ -1,5 +1,3 @@
--- A signed callback can outrun or outlive the HTTP send response. The correlation token
--- was committed before the call; the first authenticated message id fences later evidence.
 DROP TRIGGER pending_consent_delivery_requires_attempt;
 CREATE TRIGGER pending_consent_delivery_requires_attempt BEFORE INSERT ON pending_consent_delivery
 WHEN NOT EXISTS (
@@ -27,8 +25,6 @@ CREATE TABLE hosted_whatsapp_windows (
 ) STRICT;
 CREATE INDEX hosted_whatsapp_windows_expiry ON hosted_whatsapp_windows(closes_at_ms);
 
--- Preserve the ambiguity of attempts created by the previous release. New proposals remain
--- pre-send until the irreversible boundary is explicitly claimed.
 ALTER TABLE hosted_whatsapp_delivery ADD COLUMN send_started_at_ms INTEGER;
 UPDATE hosted_whatsapp_delivery SET send_started_at_ms = proposed_at_ms
   WHERE state IN ('sending', 'accepted', 'ambiguous', 'delivered', 'unconfirmed');

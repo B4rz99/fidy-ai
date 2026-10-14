@@ -3,7 +3,7 @@ import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { AuditLogEntry } from "~/core/audit/contract";
-/** The closed canonical vocabulary shared with credential accountability. */
+
 export type AuditCredentialOperation =
   | "connections.listInstitutions"
   | "connections.listConnections"
@@ -93,7 +93,6 @@ type LegacySessionOperation = Exclude<
 type AcceptedOutcome = "accepted" | "rejected";
 type LegacyOutcome = "success" | "not_found" | "validation_failed" | "resource_limit";
 
-/** Session evidence preserves each operation owner's closed decision vocabulary. */
 type SessionDecision =
   | Readonly<{ operation: LegacySessionOperation; outcome: LegacyOutcome }>
   | Readonly<{ operation: CategoryOperation; outcome: "success" | "validation_failed" }>
@@ -220,7 +219,6 @@ export const AuditPublicationEvidence = AuditLogEntry.mapFields(Struct.omit(["ca
 });
 export type AuditPublicationEvidence = typeof AuditPublicationEvidence.Type;
 
-/** Attributable evidence returned through the canonical metadata-only model. */
 export { AuditLogEntry };
 
 /** Exact same-User browser or admitted hosted-Turn proof for a PAT activity answer; never a PAT or OAuth credential. */

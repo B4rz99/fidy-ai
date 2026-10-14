@@ -40,7 +40,6 @@ const resolvedTarget = (
   event: Pick<DragEndEvent, "operation">
 ): Option.Option<DashboardDropTarget> => decodeDashboardDropTarget(event.operation.target?.data);
 
-/** Keeps hover feedback local and emits one closed gesture at completion. */
 export const DashboardDragProvider = ({
   children,
   onGesture,
@@ -80,7 +79,6 @@ export const DashboardDragProvider = ({
   );
 };
 
-/** Visible, focusable activator for one existing or catalog Widget. */
 export const DashboardDragHandle = ({
   disabled,
   label,
@@ -135,7 +133,6 @@ type DashboardDropZoneProps = Readonly<{
   target: DashboardDropTarget;
 }>;
 
-/** Geometry-only destination; semantic data remains in the adapter. */
 export const DashboardDropZone = ({
   depth,
   disabled,

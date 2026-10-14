@@ -84,7 +84,6 @@ describe("PR check selection", () => {
     ]) {
       expect(selectedJobs([path]), path).toEqual(allJobs);
     }
-    // Markdown under application trees may be an ingestion fixture, not documentation.
     expect(selectedJobs(["apps/server/tools/fixtures/message.md"])).toContain("unit");
   });
 
@@ -164,7 +163,6 @@ describe("PR check selection", () => {
       .then((plan) => {
         expect(plan).toContain("cloudflare-adapters=true\n");
         expect(plan).toContain("browser=true\n");
-        // A two-dot comparison would wrongly attribute trunk's package.json to this PR.
         expect(plan).toContain("security-sca=false\n");
       });
   });

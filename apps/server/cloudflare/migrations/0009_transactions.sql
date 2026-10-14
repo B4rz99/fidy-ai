@@ -1,4 +1,3 @@
--- D1 is the only authority for normalized Transactions and append-only capture/accountability.
 CREATE TABLE transactions (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -14,7 +13,6 @@ CREATE TABLE transactions (
 ) STRICT;
 CREATE INDEX transactions_by_user_occurrence ON transactions(user_id, occurred_at DESC, created_at DESC, id DESC);
 CREATE INDEX transactions_by_user_creation ON transactions(user_id, created_at);
--- A stable-User, UTC-day write budget keeps manual capture bounded across all Worker instances.
 CREATE TRIGGER transaction_manual_daily_budget BEFORE INSERT ON transactions
 WHEN (SELECT COUNT(*) FROM transactions
       WHERE user_id = NEW.user_id
@@ -45,8 +43,6 @@ CREATE TABLE transaction_audit (
   outcome TEXT NOT NULL CHECK (outcome IN ('success', 'not_found', 'validation_failed', 'resource_limit')),
   occurred_at_ms INTEGER NOT NULL
 ) STRICT;
--- Admission is stable-User scoped and atomic with the audit/creation batch. A refused call
--- cannot grow storage or leave a partially inserted Transaction behind.
 CREATE INDEX transaction_audit_by_user_day ON transaction_audit(user_id, occurred_at_ms);
 CREATE TRIGGER transaction_audit_daily_budget BEFORE INSERT ON transaction_audit
 WHEN (SELECT COUNT(*) FROM transaction_audit

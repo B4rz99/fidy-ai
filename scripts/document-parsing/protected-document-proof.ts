@@ -31,7 +31,6 @@ const startWorker = (options: ProofOptions): Bun.Subprocess<"pipe", "ignore", "p
     { cwd: options.infrastructureRoot, stderr: "pipe", stdout: "ignore" }
   );
 
-/** Bundles the pinned candidate and verifies its known workerd startup failure. */
 export const runProtectedDocumentProof = (options: ProofOptions): Promise<number> =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -46,7 +46,6 @@ const workerCrypto = Crypto.make({
 const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
 const digestLength = 32;
 const emailCooldownMilliseconds = 60_000;
-// Conservative launch send budgets follow the verified User across disposable pairings.
 const emailAdmissionWindowMilliseconds = 3_600_000;
 const emailUserRequestsPerWindow = 5;
 const emailGlobalRequestsPerWindow = 1_000;
@@ -107,7 +106,6 @@ const readProof = <A, Encoded>(
   );
 };
 
-// Charge only a proof admitted by this batch; no-op retries consume neither budget.
 const prepareEmailAdmission = (
   db: D1Database,
   current: number,
@@ -160,7 +158,6 @@ const startPairingEmailIntent = ({
       subject: { sql: "SELECT ? AS pairingId", params: [proof.pairingId] },
       current,
     });
-    // The proof generation and outbox identity commit together; an unknown mailbox has no effect.
     yield* attempt(() =>
       db.batch([
         db

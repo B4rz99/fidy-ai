@@ -2,7 +2,6 @@ import { Effect, Schema } from "effect";
 import { encodeJson, readJson, requireCheck } from "./production-fixture";
 import type { NativeHost } from "./production-native";
 
-// Worked permission expectation owned by this verifier, independent of server registration.
 const expectedReadWriteTools = [
   "budgets.getBudget",
   "budgets.getBudgetStatus",

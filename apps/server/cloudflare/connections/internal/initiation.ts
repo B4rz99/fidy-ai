@@ -105,7 +105,6 @@ export const initiationStatements = (
         ...authority.bindings,
         subject.userId
       ),
-    // A reused attempt or Active Connection still proves exactly one guarded owner row before Audit.
     db
       .prepare(`UPDATE connections SET state = state WHERE user_id = ? AND institution_id = 'bancolombia' AND ${live}
       AND (state = 'Active' OR (state = 'Connecting' AND EXISTS (SELECT 1 FROM connection_attempts a WHERE a.user_id = connections.user_id AND a.connection_id = connections.id AND a.status = 'pending' AND a.expires_at_ms > ?)))`)

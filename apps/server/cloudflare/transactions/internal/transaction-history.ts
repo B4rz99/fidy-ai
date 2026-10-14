@@ -38,7 +38,6 @@ import {
   transactionId as uuid,
 } from "../../canonical-work/operations";
 
-/** The canonical stored-Transaction encoding every Transaction adapter returns. */
 export const TransactionOutput = Schema.toCodecJson(Transaction);
 const Row = Schema.Struct({
   id: TransactionId,
@@ -94,7 +93,6 @@ type Subject = QueryCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
-    // History callers select a single record by id or list when id is absent.
     | Readonly<{ search: false; id: Option.Option<string> }>
   );
 

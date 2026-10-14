@@ -1,5 +1,3 @@
--- Extend only the existing metadata-only evidence vocabulary. Preserve retained evidence,
--- append-only guards, daily budget and the Audit owner's policy-bound retention path.
 CREATE TABLE dashboard_audit_initialization (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),

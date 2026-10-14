@@ -1,12 +1,8 @@
--- A failed Queue offer leaves the authoritative intent in place. Cooldown claims bound repeated
--- delivery attempts across concurrent scheduled Workers; Workflow identity is the submission id.
 ALTER TABLE statement_ingestion_outbox ADD COLUMN last_attempt_at_ms INTEGER
   CHECK (last_attempt_at_ms IS NULL OR last_attempt_at_ms >= 0);
 CREATE INDEX statement_ingestion_outbox_attempt
   ON statement_ingestion_outbox(last_attempt_at_ms, published_at_ms, submission_id);
 
--- Canonical review reads need their own true operation identity without rewriting the historical
--- submission audit. Include them in the same stable-User daily work budget as every other call.
 CREATE TABLE statement_review_audit (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -20,10 +16,6 @@ BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 CREATE TRIGGER statement_review_audit_no_delete BEFORE DELETE ON statement_review_audit
 BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 
--- Deliberately spell out the aggregate in each table's BEFORE INSERT trigger. SQLite cannot
--- parameterize NEW.user_id/time through a shared view or trigger body, and a cross-User aggregate
--- view would scan unrelated audits on every write. Keep all six sources identical when extending
--- this daily budget; insertion in any table must count writes from every other table.
 DROP TRIGGER statement_audit_daily_budget;
 CREATE TRIGGER statement_audit_daily_budget BEFORE INSERT ON statement_submission_audit
 WHEN (

@@ -55,7 +55,6 @@ const suggestionCaller = (subject: TransactionCaller): SuggestedOperationCaller 
       }
     : { accessCaller: { _tag: "WebSession", fresh: false }, tier: "free" };
 
-/** Serve one declared keyword-rule failure with the status its own declaration carries. */
 const declareFailure = (failure: ReturnType<typeof toApiFailure>): Response =>
   failure._tag === "NotFound"
     ? new Response(JSON.stringify(Schema.encodeSync(Schema.toCodecJson(NotFound))(failure)), {
@@ -70,7 +69,6 @@ const declareFailure = (failure: ReturnType<typeof toApiFailure>): Response =>
         }
       );
 
-/** The declared unavailable body this owner answers when no conflict explains an aborted unit. */
 export const keywordRuleUnavailable = (): Response =>
   new Response(JSON.stringify({ status: "unavailable" }), {
     headers: keywordRuleJsonHeaders,
@@ -244,7 +242,6 @@ const missingCategoryFailure = ({
   Effect.gen(function* () {
     if (outcome.operation === "categories.deleteKeywordRule") return Option.none<CategoryFailure>();
     const categoryId = outcome.categoryId;
-    // An unreadable Category never explains an abort: only a Category we proved absent is blamed.
     const exists = yield* findExistingCategory({ db, categoryId });
     return Option.getOrElse(exists, () => true)
       ? Option.none<CategoryFailure>()
@@ -357,8 +354,6 @@ export const keywordRuleAbortFailure = ({
       Effect.orElseSucceed(() => Option.none<ReadonlyArray<KeywordRule>>())
     );
     if (Option.isNone(rules)) return Option.none<CategoryFailure>();
-    // The retained rows include writes undone by rollback. Reconstruct prior rule changes
-    // before testing a conflict; a rule deleted earlier cannot be a duplicate here.
     const prior = new Map(earlier.map((change) => [change.ruleId, change]));
     const projected = rules.value.flatMap((rule) => {
       const change = prior.get(rule.id);
@@ -371,7 +366,6 @@ export const keywordRuleAbortFailure = ({
       !projected.some((rule) => rule.id === outcome.ruleId) &&
       prior.get(outcome.ruleId)?.operation === "categories.createKeywordRule"
     ) {
-      // A rule created earlier was never in retained rows; absence after rollback proves nothing.
       return Option.none<CategoryFailure>();
     }
     return yield* validateKeywordRuleChange({ rules: projected, change: outcome });
@@ -405,7 +399,6 @@ export const findKeywordRuleValue = ({
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
 
-/** The rule owner supplies readback, conflict replay, and its own trigger refusals. */
 export const keywordRuleOutcome = (outcome: KeywordRuleOutcome): OwnerOutcome => ({
   _tag: "Owner",
   operation: outcome.operation,

@@ -3,12 +3,9 @@ import { keywordRulesFromRows, keywordRulesQuery } from "./keyword-rules";
 import { type CategoryId, type KeywordRule } from "../../../src/core/categories/contract";
 import { Effect, Option } from "effect";
 
-/** The status a declared `ValidationFailed` keyword-rule refusal answers with. */
 export const HTTP_BAD_REQUEST = 400;
-/** The status a declared `NotFound` keyword-rule refusal answers with. */
 export const HTTP_NOT_FOUND = 404;
 
-/** The one JSON response header set every keyword-rule route and refusal answers with. */
 export const keywordRuleJsonHeaders = {
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8",

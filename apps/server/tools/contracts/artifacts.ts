@@ -14,7 +14,6 @@ const OperationPolicyManifest = Schema.Struct({
 });
 export type OperationPolicyManifest = typeof OperationPolicyManifest.Type;
 
-/** Generated evidence used to identify the exact canonical API shipped with a release. */
 export type ContractArtifacts = {
   readonly openapi: JsonObject;
   readonly operationPolicy: OperationPolicyManifest;
@@ -53,7 +52,6 @@ export const asJsonObject = (input: JsonInput): JsonObject => {
   }
 };
 
-/** Stable JSON representation for generated artifacts and release identities. */
 export const canonicalJson = (value: unknown): string => JSON.stringify(asJsonValue({ value }));
 
 /** Returns the lowercase SHA-256 identity of the canonical API and operation policy. */

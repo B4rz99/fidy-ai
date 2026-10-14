@@ -79,8 +79,6 @@ type StoredExchange = typeof PendingExchangeRow.Type & {
 };
 
 const dayMs = 86_400_000;
-// Initiation must become ineligible before its receipt-based exchange expires, even
-// when Kapso's signed event clock leads our receipt clock by its full tolerance.
 export const maxKapsoFutureSkewMs = Duration.toMillis(
   Duration.minutes(maxWhatsAppFutureTimestampMinutes)
 );
@@ -209,7 +207,6 @@ const afterDeliveryState = (
 const hasNoDelivery = (row: typeof PendingExchangeRow.Type): boolean =>
   row.disclosed_at_ms === null && row.decision_not_before_ms === null;
 
-/** Reconcile D1's flat row with the server-owned lifecycle before any domain decision. */
 const reconcileExchange = (
   row: typeof PendingExchangeRow.Type
 ): Effect.Effect<StoredExchange, void> => {
@@ -562,7 +559,6 @@ const runDisclosureAttempt = <R>({
         (failure) => failure.deliveryCertainty === "rejected"
       )
     ) {
-      // A confirmed rejection may admit a new authenticated greeting; never retry this message.
       const rejectedAt = yield* Clock.currentTimeMillis;
       yield* attempt(() =>
         db
@@ -603,7 +599,6 @@ const sendRecoveredDisclosure = (
         correlationToken: candidate.correlation_token,
       }),
     });
-    // Once claimed, a callback may reconcile the attempt; this loop never resends it.
   });
 
 /** Resume only exchanges whose irreversible provider boundary was never claimed. */
@@ -651,7 +646,6 @@ const sendExchange = (
       }),
     });
     if (!claimed) return answer(HTTP_UNAVAILABLE);
-    // Synchronous send acceptance is never disclosure delivery. A lifecycle callback must prove it.
     return answer(HTTP_OK);
   }).pipe(Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE))));
 
@@ -664,7 +658,6 @@ const priorExchangeResponse = (
     message: ingressMessage(input),
   });
   if (verdict === "new") return Option.none();
-  // Outbound started is never retried: a lost provider response may have sent the disclosure.
   return Option.some(answer(verdict === "replay" ? HTTP_OK : HTTP_CONFLICT));
 };
 

@@ -109,7 +109,6 @@ export const unavailablePairingJourney = ({
           redirectSubject(configuration, `pairing-retry-${configuration.provider}`, route)
         )
       );
-      // Exercise real Ingress/Core/D1, then replace only the response delivered to the browser.
       let starts = 0;
       yield* Effect.tryPromise(() =>
         page.route("**/web/pairings", (route) => {
@@ -240,7 +239,6 @@ export const stalledProviderJourney = ({
       if (outcome === "cancel") {
         yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
       }
-      // The web-auth transport deadline is ten seconds, even while a status body is withheld.
       yield* Effect.tryPromise(() => page.clock.runFor(advancePastRequestDeadline));
       const message =
         outcome === "timeout"
@@ -259,7 +257,6 @@ export const stalledProviderJourney = ({
     })
   );
 
-// Provider UI is the only substituted edge; completion and Browser Login run through real Core/D1.
 const redirectSubject = (
   configuration: ProviderJourneyConfiguration,
   subject: string,
@@ -321,7 +318,6 @@ const returningSessionPolicies = (
     const blocked = yield* Effect.tryPromise(() =>
       boundSessionRequests(context.request).get("https://127.0.0.1:4174/transactions")
     );
-    // The probe now supplies Origin and session binding, so it reaches Core Consent admission.
     expect(blocked.status()).toBe(unauthorizedStatus);
     expect(yield* Effect.tryPromise(() => blocked.json())).toMatchObject({
       error: { code: "unauthenticated" },
@@ -818,7 +814,6 @@ export const whatsappAssociationJourney = ({
     })
   );
 
-/** Recovery uses the pre-issued proof without calling either provider or requiring a mailbox. */
 const providerRecoveryJourney = Effect.fn(function* ({
   page,
   context,
@@ -919,7 +914,6 @@ const verifyHandoffEntry = ({
     ).toContain(`handoff=${handoffReference}`);
   });
 
-/** Native Core/D1 freshness refusal, provider completion, draft restoration and issuance. */
 const reauthenticatePATJourney = Effect.fn(function* (
   configuration: ProviderJourneyConfiguration,
   { page, request }: Pick<ProviderJourney, "page" | "request">

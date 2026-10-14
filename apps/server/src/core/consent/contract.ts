@@ -14,13 +14,11 @@ import { PATId } from "~/core/tokens/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { WebSessionId } from "~/core/web-session/contract";
 
-/** Stable identity of one temporary pre-User disclosure exchange. */
 export const PendingConsentExchangeId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PendingConsentExchangeId"))
   .annotate({ identifier: "PendingConsentExchangeId" });
 export type PendingConsentExchangeId = typeof PendingConsentExchangeId.Type;
 
-/** Stable identity of one append-only ConsentRecord. */
 export const ConsentRecordId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ConsentRecordId"))
   .annotate({ identifier: "ConsentRecordId" });
@@ -59,7 +57,6 @@ const legalFact = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumLegalFactLength)
 );
 
-/** Stable HTTPS location of a source-controlled policy revision. */
 export const PolicyUrl = Schema.String.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumPolicyUrlLength),
@@ -113,14 +110,12 @@ export const ConsentEvent = Schema.Union([
 ]);
 export type ConsentEvent = typeof ConsentEvent.Type;
 
-/** Provider-qualified disclosure and decision messages for one channel-mediated decision. */
 export const ProviderQualifiedMessages = Schema.TaggedStruct("ProviderQualifiedMessages", {
   disclosureMessage: ProviderMessageEvidence,
   decisionMessage: ProviderMessageEvidence,
 }).annotate({ identifier: "ProviderQualifiedMessages" });
 export type ProviderQualifiedMessages = typeof ProviderQualifiedMessages.Type;
 
-/** Closed evidence for the channel or policy that produced one Consent decision. */
 export const ConsentDecisionEvidence = Schema.Union([
   ProviderQualifiedMessages,
   Schema.TaggedStruct("AuthenticatedWeb", {
@@ -173,7 +168,6 @@ export const PendingConsentExchange = Schema.Union([
 ]);
 export type PendingConsentExchange = typeof PendingConsentExchange.Type;
 
-/** A consent reply decoded from either free text or an explicit channel choice. */
 export const ConsentInboundContent = Schema.Union([
   Schema.TaggedStruct("Text", { text: Schema.NonEmptyString }),
   Schema.TaggedStruct("Choice", {
@@ -182,7 +176,6 @@ export const ConsentInboundContent = Schema.Union([
 ]);
 export type ConsentInboundContent = typeof ConsentInboundContent.Type;
 
-/** The only three outcomes allowed before the consent gate performs any effect. */
 export type ConsentReplyDecision =
   | Readonly<{ readonly _tag: "Accepted" }>
   | Readonly<{ readonly _tag: "Declined" }>
@@ -260,7 +253,6 @@ export const PATRevocationOrigin = Schema.Literals([
 ]);
 export type PATRevocationOrigin = typeof PATRevocationOrigin.Type;
 
-/** Attribution preserved by each terminal PAT grant transition. */
 export type PATRevocationDisclosure<Origin extends PATRevocationOrigin = PATRevocationOrigin> =
   Readonly<{ revision: string; text: string }> &
     {

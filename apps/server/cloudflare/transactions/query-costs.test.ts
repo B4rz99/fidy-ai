@@ -495,7 +495,6 @@ it("upgrades populated projection buckets without changing pre-epoch boundaries 
         const after = (yield* fromTestPromise(() => aggregateSnapshot(db))).map(
           (result) => result.results
         );
-        // Rebuild the same remaining leaves using unchanged insert arithmetic as an independent oracle.
         yield* fromTestPromise(() =>
           db
             .prepare(

@@ -1,4 +1,3 @@
--- A single verified physical message may settle both threshold events.
 DROP TRIGGER insight_delivery_attempts_no_update;
 DROP TRIGGER insight_delivery_attempts_no_delete;
 ALTER TABLE insight_delivery_attempts RENAME TO insight_delivery_attempts_pre_group;

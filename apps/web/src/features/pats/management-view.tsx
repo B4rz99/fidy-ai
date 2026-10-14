@@ -21,20 +21,17 @@ import {
 import { formatPATDate } from "./presentation";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 
-/** Terminal callbacks for revoking one PAT selected by its safe short id. */
 export type RevokeActivePATCommand = Readonly<{
   shortId: TokenShortId;
   onRevoked: () => void;
   onFailed: () => void;
 }>;
 
-/** Terminal callbacks for revoking every active or claimable PAT authorization. */
 export type RevokeAllActivePATsCommand = Readonly<{
   onRevoked: (revokedCount: number) => void;
   onFailed: () => void;
 }>;
 
-/** Query state derived by the owning typed HttpApi atom. */
 export type ActivePATManagementState =
   | Readonly<{ _tag: "Initial" }>
   | Readonly<{ _tag: "Loading" }>
@@ -386,7 +383,7 @@ const PATQueryContent = ({
   );
 };
 
-/** Renders active-only PAT metadata and explicit one/all revocation flows without bearer access. */
+/** Shows active-only metadata; revocation flows receive no bearer. */
 export const ActivePATManagementView = ({
   state,
   revokeOne,

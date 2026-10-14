@@ -25,7 +25,6 @@ export const LastFourDigits = Schema.String.check(Schema.isPattern(/^[0-9]{4}$/u
   .annotate({ identifier: "LastFourDigits" });
 export type LastFourDigits = typeof LastFourDigits.Type;
 
-/** Stable, source-format identity retained with deterministic notification interpretation. */
 export const NotificationFormatId = Schema.String.check(
   Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
   Schema.isMaxLength(maxHintTextCodePoints)
@@ -34,7 +33,6 @@ export const NotificationFormatId = Schema.String.check(
   .annotate({ identifier: "NotificationFormatId" });
 export type NotificationFormatId = typeof NotificationFormatId.Type;
 
-/** Whether Currency was explicit or supplied by one sealed format-revision rule. */
 export const NotificationCurrencyBasis = Schema.Literals(["explicit", "format-cop-default-v1"]);
 export type NotificationCurrencyBasis = typeof NotificationCurrencyBasis.Type;
 
@@ -91,11 +89,8 @@ const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
 const maximumCounterpartyLength = 120;
 
-// Money itself permits zero. A Transaction is specifically a movement, so the
-// owning model adds positivity while retaining Money's exact-decimal and
-// Currency rules. The nested path makes the correction actionable at the API
-// validation seam. `mapFields` drops struct checks, so the create input below
-// reapplies this one shared decision after deriving its fields.
+// Transaction Money must be positive. mapFields drops struct checks, so derived
+// create input reapplies this filter.
 const positiveTransactionMoney = Schema.makeFilter<{
   readonly money: { readonly amount: Readonly<BigDecimal.BigDecimal> };
 }>((transaction) =>
@@ -104,13 +99,7 @@ const positiveTransactionMoney = Schema.makeFilter<{
     : { path: ["money", "amount"], issue: "Transaction Money must be greater than zero" }
 );
 
-/**
- * A closed pair rather than a sign on `Amount`, so "how much" and "which way"
- * stay separate questions: an amount cannot be silently negated, arithmetic on
- * a history has to say which direction it is summing, and a third kind of
- * movement — a transfer between the user's own accounts, say — would be a
- * domain decision that fails the build everywhere until it is answered.
- */
+/** Inflow or outflow direction, independent of the non-negative Money amount. */
 export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
   description:
     "Which way the money moved, seen from the user: `outflow` is money leaving them, " +
@@ -143,14 +132,12 @@ export type CompletePeriodAggregates = Readonly<{
   periods: readonly [PeriodAggregates, PeriodAggregates];
 }>;
 
-/** A user-recognizable person or organization explicitly identified on the other side. */
 export const Counterparty = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumCounterpartyLength)
 );
 export type Counterparty = typeof Counterparty.Type;
 
-/** Named so the derived documents carry one definition each rather than a copy per payload. */
 const OccurredAt = UtcTimestamp.pipe(
   Schema.annotateEncoded({
     identifier: "TransactionOccurredAt",
@@ -172,16 +159,8 @@ const CreatedAt = UtcTimestamp.pipe(
 );
 
 /**
- * One movement of money — how much, which way, who with, and when it happened
- * (GLOSSARY.md). This is the canonical shape of the entity: the input schema,
- * the row schema and the transport schemas are all derived from it, so a field added
- * here reaches every one of them and a field added anywhere else is a parallel
- * definition (ARCHITECTURE.md §4).
- *
- * `occurredAt` is when the money moved and `createdAt` is when fidy learned of
- * it. Both are ISO date-times, so their descriptions are the only thing telling
- * them apart — which is why `UtcTimestamp` carries none of its own. `id` is
- * undescribed on purpose: a UUID named `id` already says what it means.
+ * One completed Money movement. occurredAt is when Money moved; createdAt is
+ * when Fidy learned of it.
  */
 export const Transaction = Schema.Struct({
   id: TransactionId,
@@ -232,12 +211,7 @@ export type TransactionPairInput = typeof TransactionPairInput.Type;
 const IndependentPresentationMetadata = Schema.Struct({
   kind: Schema.Literal("independent"),
 });
-/**
- * How one requested id maps to the visible identity of a linked pair: the visible member itself,
- * or the member the caller did not request, named by `requestedId`. `suppressed-member` is the
- * established contract literal for that second case; it is unrelated to SourceAttestation evidence
- * suppression, and renaming it is a coordinated contract change rather than a local edit.
- */
+/** How a requested member maps to the visible identity of its linked pair. */
 const LinkedPresentationMetadata = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("visible-member"),
@@ -272,15 +246,8 @@ export const RestoredTransactionPair = Schema.Struct({
 export type RestoredTransactionPair = typeof RestoredTransactionPair.Type;
 
 /**
- * What a caller supplies to record a Transaction: the canonical shape minus the
- * two fields it does not own. `id` and `createdAt` are both assigned at insert,
- * so sending them would be naming a record's identity and claiming when fidy
- * learned of it.
- *
- * Derived from `Transaction` rather than declared beside it, so a field added
- * to the canonical shape reaches the input without anyone remembering and the
- * two cannot drift (ARCHITECTURE.md §4). There is no owner to send either:
- * ownership is the context the call runs in, not a field (ARCHITECTURE.md §5).
+ * Caller-supplied Transaction facts. Persistence assigns id and createdAt;
+ * ownership comes from the authenticated call context.
  */
 export const CreateTransactionInput = Transaction.mapFields(
   Function.flow(
@@ -320,7 +287,6 @@ export const TransactionExtraction = Transaction.mapFields(
   .annotate({ identifier: "TransactionExtraction" });
 export type TransactionExtraction = typeof TransactionExtraction.Type;
 
-/** The constrained values from which every Transaction history filter is composed. */
 export const TransactionQueryValues = Schema.Struct({
   from: UtcTimestamp,
   to: UtcTimestamp,
@@ -359,26 +325,12 @@ export const TransactionQuery = Schema.Struct({
 }).annotate({ identifier: "TransactionQuery" });
 export type TransactionQuery = typeof TransactionQuery.Type;
 
-/**
- * The asked-for transaction is not in this user's history.
- *
- * Carries the id so the shell can name it back to the caller. It deliberately
- * does not distinguish "no such row" from "somebody else's row": the caller may
- * not learn which ids exist outside their own history (ARCHITECTURE.md §5), and
- * a failure that told them apart would be exactly that leak.
- */
+/** Missing and foreign Transaction identities produce the same failure. */
 export class TransactionNotFound extends Data.TaggedError("TransactionNotFound")<{
   readonly transactionId: TransactionId;
 }> {}
 
-/**
- * The movement being recorded is dated after the moment it was recorded, so it
- * has not happened yet and is not a Transaction (GLOSSARY.md).
- *
- * Carries both instants because only the pair explains the failure: the caller
- * needs to know what it sent and what the product considered "now" to correct
- * the value — a clock skew and a typo look identical from one of them alone.
- */
+/** The movement is after now; both instants identify the caller correction. */
 export class TransactionNotYetOccurred extends Data.TaggedError("TransactionNotYetOccurred")<{
   readonly occurredAt: DateTime.Utc;
   readonly now: DateTime.Utc;
@@ -390,7 +342,6 @@ export class InvalidTransactionPeriod extends Data.TaggedError("InvalidTransacti
   readonly to: DateTime.Utc;
 }> {}
 
-/** Identifies the repeated Transaction once rather than echoing indistinguishable pair positions. */
 export class SameTransactionPair extends Data.TaggedError("SameTransactionPair")<{
   readonly transactionId: TransactionId;
 }> {}
@@ -400,16 +351,7 @@ export class IneligibleTransactionPair extends Data.TaggedError("IneligibleTrans
   readonly reason: "different-currency" | "different-amount" | "incompatible-direction";
 }> {}
 
-/**
- * Every way an operation on transactions can fail for a reason its caller could
- * act on. Infrastructure that no caller can respond to — a dead connection, a
- * row the model rejects — is a defect and is absent from this union by design.
- *
- * Carries no status, no code, no message: how a failure reaches the API response is
- * decided once per slice in `shell/transactions/operations.ts`, which maps this
- * union exhaustively. Widening it without extending that mapping fails the
- * build (ARCHITECTURE.md §6).
- */
+/** Caller-actionable Transaction failures; infrastructure failures remain defects. */
 export type TransactionFailure =
   | IneligibleTransactionPair
   | InvalidTransactionPeriod

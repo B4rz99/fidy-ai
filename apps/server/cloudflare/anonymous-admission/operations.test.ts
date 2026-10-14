@@ -19,7 +19,6 @@ it.effect(
       browserOrigin: "https://app.fidyapp.com",
       admissionKey,
     }).pipe(
-      // Fixed HMAC-SHA256 vector independently produced by Node's crypto implementation.
       Effect.map((value) =>
         expect(value).toBe("2eea6d81082ac0ab24b3694acf738bdea4155622f325ba3fc904e6f00eca50d8")
       )

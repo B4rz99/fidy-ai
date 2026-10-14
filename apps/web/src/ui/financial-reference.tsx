@@ -9,7 +9,6 @@ const currencies = ["COP", "EUR", "JPY", "KWD", "USD", "AED"].map((value) => ({
   value,
   label: value,
 }));
-/** Local financial presentation examples; formatted values have no domain behavior. */
 export const FinancialReference = (): JSX.Element => {
   const [amount, setAmount] = useState("9876543210.99");
   const [currency, setCurrency] = useState("COP");

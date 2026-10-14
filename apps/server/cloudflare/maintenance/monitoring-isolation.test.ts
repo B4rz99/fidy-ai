@@ -108,7 +108,6 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
       } finally {
         held.resolve({ metadata: { metrics: { backlogCount: 1, backlogBytes: 34 } } });
       }
-      // A late accepted offer still cannot prove that its Queue consumer or Workflow ran.
       expect(
         yield* Effect.tryPromise(() => db.prepare("SELECT * FROM operational_canary").all())
       ).toMatchObject({ results: [] });
@@ -308,8 +307,6 @@ it.each([
           });
         },
       };
-      // Operator delivery is intentionally unconfigured; health evidence must still commit
-      // before that independent scheduled failure, without any live provider request.
       const outcome = yield* Effect.exit(
         Effect.tryPromise(() =>
           coreWorker.scheduled(

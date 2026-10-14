@@ -1,4 +1,3 @@
--- Weekly automatic renewal has its own origin; browser payment claims retain their existing guards.
 ALTER TABLE billing_attempts ADD COLUMN previous_paid_attempt_id TEXT REFERENCES billing_paid_periods(attempt_id);
 ALTER TABLE billing_attempts ADD COLUMN period_starts_at_ms INTEGER;
 ALTER TABLE billing_attempts ADD COLUMN period_ends_at_ms INTEGER;
@@ -51,7 +50,6 @@ WHEN EXISTS (SELECT 1 FROM billing_attempts a WHERE a.id = NEW.attempt_id
     (NEW.starts_at_ms <> a.period_starts_at_ms OR NEW.ends_at_ms <> a.period_ends_at_ms
       OR NEW.renewal_anchor_ms <> a.period_ends_at_ms))
 BEGIN SELECT RAISE(ABORT, 'billing_renewal_period_mismatch'); END;
--- Publishing a replacement changes only presentation selection, never immutable historical Price terms.
 DROP TRIGGER subscription_prices_immutable;
 CREATE TRIGGER subscription_prices_immutable BEFORE UPDATE ON subscription_prices
 WHEN NEW.id <> OLD.id OR NEW.amount <> OLD.amount OR NEW.currency <> OLD.currency

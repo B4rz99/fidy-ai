@@ -1,4 +1,3 @@
-// Test-only Bun process ownership, shared by native conformance and browser acceptance.
 import { Data, Effect, Option, type Scope } from "effect";
 
 export class ProcessUnavailable extends Data.TaggedError("ProcessUnavailable")<{}> {}

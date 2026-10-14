@@ -1,4 +1,3 @@
--- Bound maintenance discovery to the oldest metadata instead of scanning retained histories.
 CREATE INDEX transaction_audit_retention ON transaction_audit(occurred_at_ms, id, user_id);
 CREATE INDEX pat_audit_retention ON pat_audit(occurred_at_ms, id, user_id);
 CREATE INDEX category_audit_retention ON category_audit(occurred_at_ms, id, user_id);

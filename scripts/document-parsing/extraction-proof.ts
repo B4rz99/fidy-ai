@@ -335,7 +335,6 @@ const runtimeProof = (options: ProofOptions): Effect.Effect<RuntimeProof, ProofE
     })
   );
 
-/** Builds the extraction proof and, when authorized, runs the bounded workerd probes. */
 export const runExtractionProof = (options: ProofOptions): Promise<ExtractionProof> =>
   Effect.runPromise(
     Effect.gen(function* () {

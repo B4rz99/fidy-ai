@@ -3,7 +3,6 @@ import { Effect, Option } from "effect";
 import { verifiedWompiEventHint } from "./internal/wompi-event";
 
 const secret = "prod_events_OcHnIzeBl5socpwByQ4hA52Em3USQ93Z";
-// SHA-256 of the ordered Wompi example values, timestamp and separate events secret.
 const checksum = "5A18EC5E8FDB7DF463E9F94774CBA8F583BA21BD04A09CEFF2EA68A4BC0AEFBE";
 const event = {
   event: "transaction.updated",

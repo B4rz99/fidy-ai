@@ -240,7 +240,6 @@ export const completeEmailReplacement = ({
     Effect.gen(function* () {
       const input = yield* attempt(() => readProof(request, CompleteEmailReplacementPayload));
       if (Option.isNone(input)) {
-        // No successful credential transition can follow malformed input, even if audit fails.
         yield* Effect.exit(recordMalformedInput(request, db));
         return invalid();
       }
@@ -306,8 +305,6 @@ const redeemProof = (
         );
         return false;
       }
-      // Both writes are in one D1 transaction. An expired session, superseded credential or
-      // competing candidate UNIQUE claim leaves the existing mailbox authoritative.
       const committed = yield* Effect.exit(
         attempt(() =>
           commitReplacement(db, {

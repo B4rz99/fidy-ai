@@ -1,5 +1,4 @@
--- SQLite cannot alter a CHECK constraint. Rebuild the audit table so already-migrated
--- databases accept the new operation without discarding capture and browsing history.
+-- ALTER TABLE cannot modify an existing CHECK constraint.
 DROP TRIGGER pat_canonical_daily_budget;
 DROP TRIGGER category_canonical_daily_budget;
 CREATE TABLE transaction_audit_next (
@@ -59,7 +58,6 @@ BEGIN SELECT RAISE(ABORT, 'audit_append_only'); END;
 -- Revision is the compare-and-swap authority for one normalized movement.
 ALTER TABLE transactions ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0);
 ALTER TABLE transactions ADD COLUMN user_decisions TEXT NOT NULL DEFAULT '{}';
--- Provider refreshes cannot replace explicitly decided fields without an explicit revisioned correction.
 CREATE TRIGGER transaction_user_decisions BEFORE UPDATE ON transactions
 WHEN EXISTS (
   SELECT 1 FROM json_each(OLD.user_decisions)

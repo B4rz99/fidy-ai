@@ -1,4 +1,3 @@
-// Resolved ownership, rather than a migration list, closes every present and future server module.
 import { dirname, relative, resolve } from "node:path";
 
 const trio = /\/(contract|operations|runtime)\.ts$/u;
@@ -6,18 +5,14 @@ const serverModule = /^(?:src\/(?:core|shell)|cloudflare)\//u;
 const sharedKernel = /^src\/core\/_shared\/(?:money|context|time)\.ts$/u;
 const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 
-// These are application entrypoints, not owner implementations or an escape for a filename suffix.
 const compositionRoots = new Set([
   "src/client.ts",
   "cloudflare/core-worker.ts",
-  // Native scheduler journeys share private object transport while retaining real owner D1 work.
-  // The test-support direction rule still forbids every production import of this composition.
   "cloudflare/core-worker.test-fixture.ts",
   "cloudflare/public-worker.ts",
   "cloudflare/operational-canary-workflow.ts",
   "cloudflare/ingestion/email-worker.ts",
   "cloudflare/ai/workers-ai-conformance-worker.ts",
-  // Private synthetic evaluation assembles real inference behind a finite local budget.
   "cloudflare/ai/workers-ai-evaluation-worker.ts",
   "cloudflare/coordinator-test-harness.ts",
   "cloudflare/browser-acceptance-core-module.ts",
@@ -27,12 +22,8 @@ const compositionRoots = new Set([
   "cloudflare/browser-acceptance-core-bundle.d.mts",
   "cloudflare/browser-acceptance-core-bundle.mjs",
   "tools/email-formats/generate-runtime.ts",
-  // These suites construct real cross-owner D1/DO/Workflow compositions. Ordinary owner tests
-  // have no such role; a new broad composition must be named and reviewed here.
   "cloudflare/maintenance/admission-retention.test.ts",
-  // Fault injection runs the actual Core maintenance composition against an isolated D1.
   "cloudflare/maintenance/monitoring-isolation.test.ts",
-  // Measures real full maintenance beside owner-private indexed History in isolated D1.
   "cloudflare/transactions/performance.test.ts",
   "cloudflare/agent/hosted-turn.test.ts",
   "cloudflare/budgets/budgets.test.ts",
@@ -43,11 +34,7 @@ const compositionRoots = new Set([
   "cloudflare/ingestion/forwarded-email.test.ts",
   "cloudflare/ingestion/statement-ingestion.test.ts",
   "cloudflare/insights/insight-store.test.ts",
-  // WeeklySummary integration composes real Consent, Identity, Transactions, Insights,
-  // channel claims and Agent Transcript owners; no production module imports this fixture.
   "cloudflare/weekly-summary.test-fixture.ts",
-  // Budget/reminder integration composes real migrated Identity/Consent/Insights standing;
-  // each run owns an isolated database, and production cannot import this fixture.
   "cloudflare/proactivity.test-fixture.ts",
   "cloudflare/agent/proactive-transcript.test.ts",
   "cloudflare/whatsapp/insight-delivery.test.ts",
@@ -55,16 +42,11 @@ const compositionRoots = new Set([
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/onboarding/browser-authentication.test.ts",
-  // Native chat ingress, provider approval and Consent expiry compose real owner runtimes.
   "cloudflare/provider-authentication/whatsapp.test.ts",
-  // Real public/Core proof routing and protected standing share the enrollment D1/Workflow.
   "cloudflare/subscription/payment-enrollment.test.ts",
-  // Public/Core billing-support proof verifies the independent operator authority boundary.
   "cloudflare/subscription/refund-support.test.ts",
-  // Correction isolation constructs the actual User coordinator with migrated D1 persistence.
   "cloudflare/subscription/refunds.test.ts",
   "cloudflare/tokens/pats.test.ts",
-  // OAuth suites compose real public/Core ingress, canonical owners and User coordination.
   "cloudflare/oauth-agents/oauth-ingress.test-fixture.ts",
   "cloudflare/oauth-agents/oauth-ingress.test.ts",
   "cloudflare/oauth-agents/oauth-confirmation.test.ts",
@@ -76,13 +58,10 @@ const compositionRoots = new Set([
   "cloudflare/oauth-agents/oauth-native-residency.test.ts",
   "cloudflare/transactions/transactions.test.ts",
   "cloudflare/audit/internal/audit.test.ts",
-  // Real predecessor upgrade and mixed browser/PAT/hosted Audit observation.
   "cloudflare/audit/internal/reminder-audit-migration.test.ts",
-  // Installed canonical/hosted reminder calls plus published attributable Audit observation.
   "cloudflare/insights/reminder-canonical.test.ts",
 ]);
 const testRunner = new Set([
-  // Opt-in measurement runner composes the native test config; it is never production authority.
   "../../scripts/infra-performance/vitest.config.ts",
   "cloudflare/vitest.config.ts",
   "cloudflare/test-sequencer.ts",
@@ -94,7 +73,6 @@ const sharedTestSupport = new Set([
   "src/shell/testing/crypto-harness.ts",
   "src/shell/outbound-http/testing.ts",
   "cloudflare/d1-test-fixture.ts",
-  // Synthetic complete environment shared only by maintenance and contention measurements.
   "cloudflare/maintenance-performance.test-fixture.ts",
   "cloudflare/d1-migration-test-worker.fixture.ts",
   "cloudflare/coordinator-test-harness.ts",

@@ -1,5 +1,4 @@
 -- Caller-reported external identifiers cannot reserve another User's provider namespace.
--- Preserve immutable primary delivery evidence while qualifying its uniqueness by User.
 DROP TRIGGER insight_delivery_attempts_no_update;
 DROP TRIGGER insight_delivery_attempts_no_delete;
 ALTER TABLE insight_delivery_attempts RENAME TO insight_delivery_attempts_previous;

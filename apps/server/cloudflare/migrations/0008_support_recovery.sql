@@ -1,8 +1,6 @@
 ALTER TABLE backup_recovery_credentials ADD COLUMN consumed_at_ms INTEGER;
 ALTER TABLE backup_recovery_credentials ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
 
--- A case is attributable only after an Access-authenticated operator presents a pre-issued
--- BackupRecoveryCode with a current digest. D1 owns the single-use transition and audit record.
 CREATE TABLE support_recovery_cases (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),

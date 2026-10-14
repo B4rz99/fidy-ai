@@ -3,7 +3,6 @@ import { browserAcceptanceTopologies } from "../server/cloudflare/browser-accept
 const topology = browserAcceptanceTopologies.oauth;
 const { defineConfig } = await import("@playwright/test");
 
-/** Isolated built-web/Core OAuth journeys do not borrow another worktree's acceptance servers. */
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "oauth-review.spec.ts",

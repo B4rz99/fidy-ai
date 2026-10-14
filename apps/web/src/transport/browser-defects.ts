@@ -26,9 +26,7 @@ export const makeBrowserDefectReporter = (): ((error: BrowserDefect) => void) =>
           error,
         })
       );
-    } catch {
-      // A missing diagnostic sink cannot affect application work.
-    }
+    } catch {}
   };
 };
 

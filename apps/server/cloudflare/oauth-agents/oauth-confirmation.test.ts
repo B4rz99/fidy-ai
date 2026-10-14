@@ -339,8 +339,6 @@ it("resumes the original legacy native tool call after server-requested form acc
         })
       );
       const session = initialized.headers.get("mcp-session-id") ?? "";
-      // Codex's legacy transport consumes the initialization frame and cancels that HTTP body;
-      // this completed response must not retire the independently retained native session.
       const initializedReader = Option.getOrThrow(Option.fromNullOr(initialized.body)).getReader();
       yield* wait(initializedReader.read());
       yield* wait(initializedReader.cancel());
@@ -361,9 +359,6 @@ it("resumes the original legacy native tool call after server-requested form acc
       );
       expect(notified.status).toBe(202);
       yield* wait(notified.text());
-      // Arrange native D1 and initialization with live timers, then own only this
-      // transport's JS timers. Advancing crosses its five-second deadline while
-      // the native form and original request are still outstanding.
       vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       const invoked = yield* wait(
         fixture.send("/mcp", {

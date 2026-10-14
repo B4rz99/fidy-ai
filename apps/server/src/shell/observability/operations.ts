@@ -98,7 +98,6 @@ const firstRedirectStatus = 300;
 const firstClientErrorStatus = 400;
 const firstServerErrorStatus = 500;
 
-/** Projects an allowed HTTP status into its bounded status-class coordinate. */
 export const projectHttpStatusClass = (status: TelemetryHttpStatus): TelemetryHttpStatusClass => {
   if (status < firstSuccessStatus) return "1xx";
   if (status < firstRedirectStatus) return "2xx";
@@ -128,7 +127,6 @@ export const projectExternalHttpResponse = (status: number): ExternalHttpRespons
     onSome: (value) => ({ "http.response.status_class": projectHttpStatusClass(value) }),
   });
 
-/** Projects transport completion into its closed outcome coordinate. */
 export const projectExternalHttpOutcome = (
   outcome: TelemetryTransportOutcome
 ): ExternalHttpOutcomeAttributes => ({ "fidy.transport_outcome": outcome });

@@ -23,7 +23,6 @@ const secondGroupEnd = 12;
 const thirdGroupEnd = 16;
 const fourthGroupEnd = 20;
 
-/** Generates one schema-decoded browser Widget identity for a canonical add operation. */
 export const freshWidgetId = (): WidgetId => {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(uuidOctets));
   const versionOctet = Schema.decodeUnknownSync(Schema.Int)(bytes[uuidVersionOctet]);
@@ -36,7 +35,6 @@ export const freshWidgetId = (): WidgetId => {
   );
 };
 
-/** One decoded preset returned by the canonical Dashboard catalog query. */
 export type DashboardCatalogEntry =
   CanonicalSuccess<"dashboard.listDashboardCatalog">["data"][number];
 

@@ -30,19 +30,16 @@ export const ResourceAdmissionGrantId = Schema.NonEmptyString.check(
   .annotate({ identifier: "ResourceAdmissionGrantId" });
 export type ResourceAdmissionGrantId = typeof ResourceAdmissionGrantId.Type;
 
-/** Positive safe integer count used by an installed admission policy. */
 export const ResourceAdmissionLimit = Schema.Int.check(Schema.isGreaterThan(0))
   .pipe(Schema.brand("ResourceAdmissionLimit"))
   .annotate({ identifier: "ResourceAdmissionLimit" });
 export type ResourceAdmissionLimit = typeof ResourceAdmissionLimit.Type;
 
-/** Positive safe integer amount charged by one admission attempt. */
 export const ResourceAdmissionUnits = Schema.Int.check(Schema.isGreaterThan(0))
   .pipe(Schema.brand("ResourceAdmissionUnits"))
   .annotate({ identifier: "ResourceAdmissionUnits" });
 export type ResourceAdmissionUnits = typeof ResourceAdmissionUnits.Type;
 
-/** Positive safe integer duration used to derive a window or safety lease. */
 export const ResourceAdmissionDurationMs = Schema.Int.check(Schema.isGreaterThan(0))
   .pipe(Schema.brand("ResourceAdmissionDurationMs"))
   .annotate({ identifier: "ResourceAdmissionDurationMs" });

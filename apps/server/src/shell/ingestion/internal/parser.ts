@@ -39,7 +39,6 @@ const delimiterFor = (text: string): string => {
     { delimiter: ",", count: 0 },
     { delimiter: "\t", count: 0 },
   ];
-  // Keep the existing first-physical-line scoring and tie order without allocating fields.
   for (const character of text) {
     if (character === "\r" || character === "\n") break;
     for (const candidate of candidates) {

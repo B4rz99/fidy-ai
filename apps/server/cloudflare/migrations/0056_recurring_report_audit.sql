@@ -1,4 +1,3 @@
--- Canonical reminder access shares Insights accountability. A hosted Turn is not a WebSession.
 CREATE TABLE insight_audit_next (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),

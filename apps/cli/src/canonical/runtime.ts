@@ -5,8 +5,7 @@ import { makeProtectedClient } from "../direct-client/runtime";
 import { CliFailure, apiOrigin } from "../credential/contract";
 import type { CanonicalClient, CanonicalClientFactory } from "./contract";
 
-// Erase decoded value types on the declaration, where assignability is checked. Generated
-// methods still encode through the original endpoint schemas before executing any request.
+// HttpApiClient validates these erased request fields through the original endpoint codecs.
 type CanonicalEndpoint = HttpApiEndpoint.ConstraintRequest & {
   readonly "~Params": Schema.ConstraintCodec<unknown, unknown>;
   readonly "~Query": Schema.ConstraintCodec<unknown, unknown>;

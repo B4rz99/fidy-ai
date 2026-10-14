@@ -34,8 +34,6 @@ const canonicalEditEffect = Effect.fn("dashboard.applyCanonicalEdit")(function* 
   edit: CanonicalDashboardEdit
 ) {
   const client = yield* apiClient;
-  // The generated client accepts each tagged payload member separately; narrowing here preserves
-  // exhaustive operation coverage without weakening the canonical input type.
   switch (edit.op) {
     case "set-title":
       return yield* client.dashboard.applyDashboardEdit({ payload: edit });

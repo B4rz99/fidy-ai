@@ -55,7 +55,6 @@ const workflow = (db: D1Database): Workflow => ({
   deleteBatch: unavailable,
 });
 const consume = makeCoreQueue(makeWorkerTelemetry(() => undefined));
-// Isolated test runtime: native Queue redelivery, real Core owner checks, synthetic Workflow handoff.
 export default {
   fetch: (_request: Request, environment: Environment): Promise<Response> =>
     Effect.runPromise(

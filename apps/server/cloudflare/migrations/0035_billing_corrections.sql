@@ -1,4 +1,3 @@
--- Corrections are append-only history beside successful collection, never charge rewrites.
 CREATE TABLE subscription_identities (
   user_id TEXT PRIMARY KEY REFERENCES users(id),
   id TEXT NOT NULL UNIQUE CHECK (length(id) = 36)
@@ -33,7 +32,6 @@ CREATE TABLE refund_attempts (
 ) STRICT;
 CREATE INDEX refunds_by_charge ON refund_attempts(billing_attempt_id,status);
 CREATE INDEX refunds_by_user ON refund_attempts(user_id,created_at_ms);
--- D1, not a read-then-write calculation, serializes the reservation with all concurrent requests.
 CREATE TRIGGER refund_reservation_guard BEFORE INSERT ON refund_attempts
 WHEN NOT EXISTS (SELECT 1 FROM billing_attempts a
   JOIN subscription_identities s ON s.user_id=a.user_id
@@ -110,7 +108,6 @@ CREATE TRIGGER refund_evidence_immutable BEFORE UPDATE ON refund_outcome_evidenc
 BEGIN SELECT RAISE(ABORT, 'refund_evidence_immutable'); END;
 CREATE TRIGGER refund_evidence_no_delete BEFORE DELETE ON refund_outcome_evidence
 BEGIN SELECT RAISE(ABORT, 'refund_evidence_immutable'); END;
--- Only this paid period loses access. Newer unrelated periods and independent TrialPeriods survive.
 CREATE TABLE billing_access_adjustments (
   refund_id TEXT PRIMARY KEY REFERENCES refund_attempts(id),
   attempt_id TEXT NOT NULL REFERENCES billing_paid_periods(attempt_id),
@@ -147,7 +144,6 @@ CREATE TRIGGER subscription_renewal_stop_immutable BEFORE UPDATE ON subscription
 BEGIN SELECT RAISE(ABORT, 'subscription_renewal_stop_immutable'); END;
 CREATE TRIGGER subscription_renewal_stop_no_delete BEFORE DELETE ON subscription_renewal_stops
 BEGIN SELECT RAISE(ABORT, 'subscription_renewal_stop_immutable'); END;
--- Late/replayed charge settlement must not resurrect an automatic renewal already stopped.
 CREATE TRIGGER billing_followup_refund_stop BEFORE INSERT ON billing_followup_outbox
 WHEN EXISTS (SELECT 1 FROM subscription_renewal_stops s JOIN billing_attempts a ON a.user_id=s.user_id
  WHERE a.id=NEW.attempt_id)

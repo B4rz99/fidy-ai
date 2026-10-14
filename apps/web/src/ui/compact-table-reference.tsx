@@ -14,7 +14,6 @@ const examples = [
   { name: "Agente de prueba", created: "09-10-2026", used: "Nunca" },
 ];
 
-/** Synthetic metadata demonstrates compact density and contained scrolling. */
 export const CompactTableReference = (): JSX.Element => (
   <section aria-labelledby="compact-table-heading" className="flex min-w-0 flex-col gap-4">
     <h2 id="compact-table-heading" className="text-2xl font-semibold tracking-tight">

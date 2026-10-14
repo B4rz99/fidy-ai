@@ -63,7 +63,6 @@ const RoutedApplication = (): JSX.Element => {
   );
 };
 
-/** Composes the production browser application from Vite's validated API-origin configuration. */
 export const WebApplication = (): JSX.Element => (
   <SessionRegistryProvider>
     <RoutedApplication />

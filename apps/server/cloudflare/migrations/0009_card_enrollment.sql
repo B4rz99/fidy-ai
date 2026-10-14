@@ -1,5 +1,3 @@
--- Private, User-owned card enrollment state. No card fields or transient Wompi tokens are stored.
--- Price rows are immutable once published; a later change receives a new Price identity.
 CREATE TABLE subscription_prices (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
   amount TEXT NOT NULL,
@@ -30,7 +28,6 @@ CREATE TABLE card_enrollments (
   billing_email TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('preparing', 'prepared', 'creating', 'available', 'refused', 'expired', 'verifying')),
   payment_source_mode TEXT NOT NULL CHECK (payment_source_mode IN ('create', 'reuse')),
-  -- Safe displayed evidence only; fresh provider acceptance tokens are never retained here.
   contracts_json TEXT NOT NULL,
   disclosure_json TEXT NOT NULL,
   prepared_at_ms INTEGER NOT NULL,
@@ -47,8 +44,6 @@ CREATE TABLE card_enrollments (
 -- Only one claim can pass from prepared; retries must observe its existing state.
 CREATE UNIQUE INDEX card_enrollment_active_user ON card_enrollments(user_id)
 WHERE status IN ('preparing', 'prepared', 'creating', 'verifying');
--- The reservation and rate limit are both enforced at INSERT, including concurrent callers
--- and provider failures that never reach a ready enrollment.
 CREATE TRIGGER card_enrollment_preparation_limit BEFORE INSERT ON card_enrollments
 WHEN (SELECT count(*) FROM card_enrollments WHERE user_id = NEW.user_id
   AND prepared_at_ms > NEW.prepared_at_ms - 3600000) >= 12
@@ -83,7 +78,6 @@ BEGIN SELECT RAISE(ABORT, 'card_source_invalid_claim'); END;
 CREATE TRIGGER card_source_immutable BEFORE UPDATE ON card_payment_sources
 BEGIN SELECT RAISE(ABORT, 'card_source_immutable'); END;
 
--- Snapshot fields never change when the published Price or User context changes.
 CREATE TABLE billing_attempts (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
   user_id TEXT NOT NULL REFERENCES users(id),

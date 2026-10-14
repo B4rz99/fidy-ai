@@ -39,16 +39,9 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(PATsGroup)
   .add(RecoveryGroup);
 
-// The child union is reflected before the batch group exists, so queries and recursive batches are
-// absent by construction. The live dispatch layer checks registry completeness at startup.
 const ordinaryOperationCatalog = makeOperationCatalog(OrdinaryFidyApi);
 const OperationsGroup = makeOperationsGroup(ordinaryOperationCatalog);
 
-/**
- * The whole canonical API: every slice's operations under one definition, each of them behind the
- * validation, authorization, and telemetry seams. This is the single declaration the server, typed
- * client, and OpenAPI spec derive from, so a future operation cannot bypass those boundaries.
- */
 export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)
   // `.middleware` after `.add`, and not the other way round: it attaches to the operations already
   // assembled, so a group added below this line would silently skip every API-wide guard.
@@ -67,18 +60,12 @@ export const operationCatalog = makeOperationCatalog(FidyApi);
 
 type ApiGroups<Api> = Api extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;
 
-/** Public type projection used by browser adapters without re-declaring operation groups. */
 export type FidyApiGroups = ApiGroups<typeof FidyApi>;
 
 type GroupOperationIds<Group> = Group extends HttpApiGroup.Constraint
   ? `${HttpApiGroup.Identifier<Group>}.${HttpApiGroup.Endpoints<Group>["identifier"]}`
   : never;
 
-/**
- * Every group-qualified canonical operation identifier derived from the assembled API. A new slice
- * or operation widens the union, while a rename fails at every site that names the old identity.
- * This cross-slice identity lives beside assembly because suggested operations may target any slice.
- */
 export type OperationId = GroupOperationIds<ApiGroups<typeof FidyApi>>;
 
 bindOperationCatalog(operationCatalog);

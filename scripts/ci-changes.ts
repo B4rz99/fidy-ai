@@ -55,13 +55,10 @@ const isDependencyInput = (path: string): boolean =>
   );
 
 const checksForPath = (path: string): ReadonlyArray<ConditionalJob> => {
-  // Prose is still formatted and policy-checked by the unconditional workspace gate.
   if (isProse(path)) return [];
   if (isDependencyInput(path)) return conditionalJobs;
   const scanner = Object.entries(scannerPaths).find(([scannerPath]) => scannerPath === path);
   if (scanner !== undefined) return scanner[1];
-  // Shared tooling, workflow definitions, executable evidence, and new packages
-  // have no narrower ownership guarantee.
   return ownedPaths.find(({ prefix }) => path.startsWith(prefix))?.jobs ?? conditionalJobs;
 };
 

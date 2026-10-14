@@ -89,11 +89,7 @@ const makeRevokeAllActivePATsCommand = (
     { concurrent: false }
   );
 
-/**
- * Coordinates authenticated PAT management and manual issuance.
- * The pairing path never receives a bearer; manual bearers remain confined to the mounted view,
- * with explicit non-fatal clipboard access and bounded clearing.
- */
+/** Pairing never receives a bearer; manual disclosure expires with the mounted view. */
 export const PATManagementFeature = ({
   children,
 }: Pick<PATManagementContentProps, "children">): JSX.Element => {

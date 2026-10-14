@@ -1,6 +1,5 @@
 import type { DisclosureSnapshot } from "~/core/consent/contract";
 
-/** Exact aviso de privacidad sent before Fidy creates a User. */
 const CURRENT_DISCLOSURE_TEXT = `Soy Fidy. Antes de crear tu cuenta necesito tu autorización previa, expresa e informada para tratar tus datos personales.
 
 Política completa: https://app.fidyapp.com/politica

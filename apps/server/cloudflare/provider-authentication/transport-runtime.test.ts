@@ -8,8 +8,6 @@ import {
   makeMicrosoftOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
 
-// Substitute the provider response after workerd validates the actual fetch options.
-// Node/Bun fetch mocks accept redirect modes that Workers rejects before network I/O.
 const providerWorker = `export default { async fetch(request) {
   const input = await request.json();
   try {

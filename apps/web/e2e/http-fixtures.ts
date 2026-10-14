@@ -12,7 +12,6 @@ const defaultUser = {
 };
 
 type UserFixture = typeof defaultUser;
-/** A browser-safe User response with scenario-specific fields overridden at the call site. */
 export const makeUser = (overrides: Partial<UserFixture> = {}): UserFixture => ({
   ...defaultUser,
   ...overrides,

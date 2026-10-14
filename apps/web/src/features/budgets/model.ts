@@ -33,12 +33,12 @@ export type BudgetEdit = Readonly<{
   groupCurrency: Option.Option<string>;
 }>;
 const monthLabelLength = 7;
-/** One local calendar label; amounts and status continue to come from the canonical report. */
+/** Local calendar label; financial values remain canonical report facts. */
 export const currentBudgetMonth = (user: CurrentUser): string =>
   DateTime.formatIsoDate(
     DateTime.setZone(DateTime.nowUnsafe(), DateTime.zoneMakeNamedUnsafe(user.timeZone))
   ).slice(0, monthLabelLength);
-/** Move by calendar months without introducing host-zone date arithmetic. */
+/** Moves calendar months without using the host time zone. */
 export const monthShift = ({
   month,
   offset,
@@ -46,7 +46,6 @@ export const monthShift = ({
   DateTime.formatIsoDateUtc(
     DateTime.add(DateTime.makeUnsafe(`${month}-01T00:00:00Z`), { months: offset })
   ).slice(0, monthLabelLength);
-/** Locale controls the displayed calendar heading. */
 export const monthTitle = ({
   month,
   user,
@@ -54,7 +53,6 @@ export const monthTitle = ({
   new Intl.DateTimeFormat(user.locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(
     DateTime.makeUnsafe(`${month}-01T00:00:00Z`).epochMilliseconds
   );
-/** Resolve the canonical category identity against this complete category projection. */
 export const categoryFor = ({
   categories,
   id,

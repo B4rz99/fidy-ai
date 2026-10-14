@@ -1,7 +1,6 @@
 import type { JSX } from "react";
 import { CalendarField } from "@/ui/components/calendar-field";
 
-/** Opens the shared calendar directly from the ledger header. */
 export const TransactionDateFilter = (
   props: Readonly<{
     value: string;

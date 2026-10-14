@@ -108,7 +108,6 @@ const setup = (current: number): Effect.Effect<Fixture, TestFailure, Scope.Scope
       alg: "RS256",
       use: "sig",
     };
-    // Only the foreign key-fetch boundary is substituted; Jose still verifies the real signature.
     vi.spyOn(globalThis, "fetch").mockImplementation((input): Promise<Response> => {
       expect(fetchUrl(input)).toBe(`${config.CLOUDFLARE_ACCESS_ISSUER}/cdn-cgi/access/certs`);
       return Promise.resolve(Response.json({ keys: [jwk] }));
@@ -385,8 +384,6 @@ it.each(["owning Effect", "native Request"])(
         const exit = yield* Fiber.await(pending);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
-          // Owner and body cancellation can contribute separate interruption reasons.
-          // Every reason must still be an interruption, without a failure or defect.
           expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true);
         }
         expect(cancelStarted).toBe(true);
@@ -400,7 +397,6 @@ it.each(["owning Effect", "native Request"])(
               .first()
           )
         ).toEqual({ state: "pending_approval", user_id: null });
-        // The operator admission completed before body acquisition; cancellation must not undo it.
         expect(
           yield* wait(() =>
             fixture.db

@@ -1,11 +1,9 @@
--- Charge expensive pre-admission generation even when a request aborts before a Turn exists.
 CREATE TABLE hosted_compaction_attempts (
   user_id TEXT NOT NULL REFERENCES users(id),
   day_ms INTEGER NOT NULL,
   used INTEGER NOT NULL CHECK (used BETWEEN 1 AND 3),
   PRIMARY KEY (user_id, day_ms)
 ) STRICT;
--- One replacement per Hosted Agent Session. The nonce fences stale and concurrent attempts.
 CREATE TABLE hosted_compacted_conversations (
   user_id TEXT NOT NULL,
   hosted_session_id TEXT NOT NULL,
@@ -17,7 +15,6 @@ CREATE TABLE hosted_compacted_conversations (
   PRIMARY KEY (user_id, hosted_session_id),
   FOREIGN KEY (user_id, hosted_session_id) REFERENCES hosted_agent_sessions(user_id, id)
 ) STRICT;
--- Compaction, unlike retention, removes only an exact terminal prefix backed by a committed replacement.
 DROP TRIGGER transcript_retention_guard;
 CREATE TRIGGER transcript_retention_guard BEFORE DELETE ON transcript_entries
 WHEN NOT EXISTS (SELECT 1 FROM hosted_turns WHERE id = OLD.turn_id AND user_id = OLD.user_id

@@ -1,4 +1,3 @@
--- Resource admission is security and spend protection, not commercial allowance accounting.
 CREATE TABLE resource_admission_grants (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 128),
   admitted_at_epoch_ms INTEGER NOT NULL CHECK (admitted_at_epoch_ms >= 0),

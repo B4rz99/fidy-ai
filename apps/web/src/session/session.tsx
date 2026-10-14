@@ -16,12 +16,7 @@ type SessionRegistryProviderProps = Readonly<{
   readonly children: ReactNode;
 }>;
 
-/**
- * Provides session transitions and isolates Atom state to one authentication lifetime. Calling
- * `replaceAuthenticationLifetime` remounts the registry, making cached server state from the prior
- * lifetime unavailable across login, logout, and explicit pairing-restart transitions. Canonical
- * authentication expiry joins this same interface in #241.
- */
+/** Replacing the authentication lifetime makes prior cached server state unavailable. */
 export const SessionRegistryProvider = ({
   children,
 }: SessionRegistryProviderProps): React.JSX.Element => {

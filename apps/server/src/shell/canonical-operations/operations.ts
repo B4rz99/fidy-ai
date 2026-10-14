@@ -42,12 +42,7 @@ export type SuggestedOperationCandidate<Id extends OperationId = OperationId> =
       } & CandidateArgs<Id>
     : never;
 
-/**
- * Constructs one handler proposal. The operation id selects its argument type,
- * so a renamed operation or an argument unknown to that target is a compile
- * error at the proposal site; runtime schema validation remains the checkpoint's
- * responsibility because model- or database-derived values are still untrusted.
- */
+/** Constructs typed suggested arguments; runtime checkpointing still validates untrusted values. */
 export const suggestOperation = <Id extends OperationId>(
   candidate: SuggestedOperationCandidate<Id>
 ): SuggestedOperationCandidate<Id> => candidate;
@@ -148,7 +143,6 @@ export type HostedOperationBinding = Readonly<{
   readonly wireName: HostedOperationWireName;
 }>;
 
-/** Encodes a canonical operation id as one provider-safe toolkit wire name. */
 export const encodeHostedOperationWireName = (
   operation: CanonicalOperationId
 ): HostedOperationWireName => HostedOperationWireName.make(operation.replaceAll(".", "__"));

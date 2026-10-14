@@ -47,19 +47,14 @@ if grep --fixed-strings --quiet 'Plan: no changes' "$log_file"; then
 fi
 
 if grep --fixed-strings --quiet 'Plan:' "$log_file"; then
-  # Never print a raw drift plan: attributes can contain Secret-backed values.
   resources=$(grep --extended-regexp --only-matching \
     '\[[[:alnum:]_-]+\] (create|update|replace|delete)' "$log_file" | sort -u || true)
   echo 'Production Cloudflare topology drift inspection failed: category=drift_detected' >&2
-  # Take an additional dry-run snapshot for diagnostics only; never repair or change this verdict.
   python3 "$command_owner" --timeout 120 -- bun inspect-worker-drift.ts >>"$log_file" 2>&1 || true
-  # Emit only closed field names produced by the read-only field projector. Never values,
-  # unknown keys, or raw provider lines, even when the inspection is not an explicit dispatch.
   grep --extended-regexp --only-matching \
     'Worker drift fields: (Core|Ingress) (accountId|workerId|workerName|namespace|logpush|url|urls|domain|tags|durableObjectNamespaces|routes|crons|tailConsumers|streamingTailConsumers|hash|affinityZoneIds|versionOf|versionId|deploymentId|other|unavailable)(,(accountId|workerId|workerName|namespace|logpush|url|urls|domain|tags|durableObjectNamespaces|routes|crons|tailConsumers|streamingTailConsumers|hash|affinityZoneIds|versionOf|versionId|deploymentId|other|unavailable))*$' \
     "$log_file" >&2 || true
   if [[ "${1:-}" == inspect ]]; then
-    # Emit only allowlisted resource categories and whether other resources are involved.
     if [[ -z "$resources" ]]; then
       echo 'Drift resource categories: unavailable' >&2
     else

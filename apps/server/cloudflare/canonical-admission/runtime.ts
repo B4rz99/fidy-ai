@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { CanonicalAdmissionUnavailable } from "./contract";
 
 const retentionBatchSize = 1024;
-const acceptanceLifetimeMs = 8_035_200_000; // Ninety-three days.
+const acceptanceLifetimeMs = 8_035_200_000;
 const refilledBucketIdleMs = 60_000;
 
 /** Expire response bodies at their replay deadline and obsolete admission metadata independently of caller activity. Each tick is bounded; live claims and unrefilled request buckets survive. */

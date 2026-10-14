@@ -1,7 +1,3 @@
-// Median passed-file costs from complete green Linux runs 38347174706,
-// 38347619527 and 38348015187. Multiple samples dampen single-run contention.
-// Mixed-revision scheduling estimates, not controlled performance benchmarks.
-// Tiny and newly discovered files keep a one-second floor. Shards and workers are unchanged.
 const estimatedSeconds: Readonly<Record<string, number>> = {
   "oauth-agents/oauth-confirmation.test.ts": 94.3,
   "oauth-agents/oauth-ingress.test.ts": 80.9,

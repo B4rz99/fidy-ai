@@ -11,7 +11,6 @@ const supportsScrollMotion = (): boolean =>
   typeof CSS.supports === "function" &&
   CSS.supports("animation-timeline: view()");
 
-/** Animates a finite entrance, respecting the current reduced-motion preference. */
 export const enter = ({
   element,
   duration,
@@ -40,7 +39,6 @@ export const enter = ({
   );
 };
 
-/** Gives the decorative coin one flip without changing its layout or resting angle. */
 const flipCoin = (root: Element): void => {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   root
@@ -54,7 +52,6 @@ const flipCoin = (root: Element): void => {
     );
 };
 
-/** Reveals each marketing group once, without delaying its interactions. */
 const revealSection = (target: Element): void => {
   if (target.matches(".agent-system")) {
     target.querySelectorAll(".agent-entry").forEach((card, index) =>
@@ -80,7 +77,7 @@ const revealSection = (target: Element): void => {
   }
 };
 
-/** Owns browser animation resources for one mounted landing, including Strict Mode cleanup. */
+/** Owns mounted browser animations; cleanup also supports Strict Mode replay. */
 export const mountMotion = (root: HTMLDivElement): (() => void) => {
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
   const cancel = (): void =>

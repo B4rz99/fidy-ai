@@ -15,10 +15,8 @@ import {
   type WebAuthClient,
 } from "@/transport/client";
 
-/** Generic browser copy for every terminal pairing refusal. */
 export const invalidPairingMessage = "Esta vinculación ya no es válida. Inicia de nuevo." as const;
 
-/** Irreducible interaction states rendered by the browser-pairing surface. */
 export type BrowserLoginPairingViewState =
   | Readonly<{ _tag: "Idle" }>
   | Readonly<{ _tag: "Starting" }>
@@ -361,7 +359,6 @@ const makeBrowserLoginPairingController = (
   } as const;
 };
 
-/** The complete browser-pairing interface consumed by its rendering surface. */
 export type BrowserLoginPairing = Readonly<{
   state: BrowserLoginPairingViewState;
   start: () => void;

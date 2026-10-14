@@ -1,7 +1,6 @@
 import type { CanonicalSuccess } from "@/transport/client";
 import { formatMoney } from "@/transport/money";
 
-/** Offers returned by subscription.listSubscriptionOffers. */
 export type SubscriptionOffers = CanonicalSuccess<"subscription.listSubscriptionOffers">["data"];
 export type SubscriptionOffer = SubscriptionOffers[number];
 export type PriceId = SubscriptionOffer["id"];
@@ -17,7 +16,6 @@ const periodPresentation: Readonly<
   yearly: { selectionLabel: "anual", billingUnit: "año" },
 };
 
-/** Presentation-only projection of one canonical Price. */
 export type SubscriptionOfferPresentation = Readonly<{
   id: PriceId;
   selectionLabel: string;
@@ -27,7 +25,6 @@ export type SubscriptionOfferPresentation = Readonly<{
   cancellationText: string;
 }>;
 
-/** Converts server-owned semantic terms into Spanish Colombia display copy. */
 export const presentSubscriptionOffer = (
   offer: SubscriptionOffer
 ): SubscriptionOfferPresentation => {

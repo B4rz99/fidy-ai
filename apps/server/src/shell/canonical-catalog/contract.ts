@@ -31,7 +31,6 @@ export type CatalogOperation = {
   readonly partialInput: Option.Option<PartialInputSchema>;
 };
 
-/** The assembled canonical-operation facts derived from one HttpApi definition. */
 export type OperationCatalog = {
   readonly operations: ReadonlyArray<CatalogOperation>;
   readonly byId: ReadonlyMap<string, CatalogOperation>;
@@ -148,9 +147,7 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         failure: asOperationSchema(
           unionSchema([...errors.values()].flatMap((schemas) => [...schemas]))
         ),
-        // Access policy must be an explicit choice on each canonical operation;
-        // unlike descriptive OpenAPI metadata, group defaults could silently
-        // authorize a newly added operation with a policy nobody reviewed.
+        // Access policy must be explicit on each canonical operation.
         policy: getOperationPolicy(endpoint),
         atomicBatchEligible: Context.get(mergedAnnotations, AtomicBatchEligible),
         partialInput: requestInput(endpoint),
@@ -181,7 +178,6 @@ export const bindOperationCatalog = (catalog: OperationCatalog): void => {
   boundCatalog = Option.some(catalog);
 };
 
-/** Reads the catalog after `api.ts` has bound the assembled canonical API. */
 export const getBoundOperationCatalog = (): OperationCatalog =>
   Option.getOrThrowWith(
     boundCatalog,

@@ -69,7 +69,6 @@ const projectCurrentUser = ({
       subject: { id: session.id, userId: subject, digest },
       current: observedAt,
     });
-    // Settle the started Audit before cancellation can release this workflow.
     const recorded = yield* attempt(() =>
       db
         .prepare(

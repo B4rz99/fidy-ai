@@ -92,7 +92,6 @@ it("bounds proof-bearing polling across changing sources without consuming or ch
       );
       expect(state).toEqual({ state: "pending" });
       expect(yield* Effect.tryPromise(() => count(db, "users"))).toBe(0);
-      // Expire accounting at the platform seam without altering the proof's own lifetime.
       yield* Effect.tryPromise(() =>
         db
           .prepare(

@@ -19,8 +19,6 @@ const disableBroadcastChannel = (): void => {
 };
 const resourceLimitedStatus = 429;
 const exhaustCanonicalBurst = Effect.fn(function* (other: Page, binding: string) {
-  // Exhaust the current User's real admission burst before the direct probe. The
-  // stale-session assertions must remain valid while browser activity is paced.
   let sawResourceRefusal = false;
   const maximumBurstProbes = 20;
   for (let attempt = 0; attempt < maximumBurstProbes; attempt++) {
@@ -64,11 +62,9 @@ const expectSessionUnchanged = Effect.fn(function* (other: Page, binding: string
   );
 });
 
-// This exercises real public ingress, shared HttpOnly cookies, and independently mounted app owners.
 test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      // A missed cross-tab notification must not defeat the server's immutable session binding.
       yield* Effect.tryPromise(() => page.addInitScript(disableBroadcastChannel));
       yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
       const bootstrap = yield* Effect.tryPromise(() =>
@@ -112,7 +108,6 @@ test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Old session private draft", { exact: true })).not.toBeVisible()
       );
-      // A prior session cannot log out the newly selected User either.
       const logout = yield* Effect.tryPromise(() =>
         page.request.post(`${apiOrigin}/web/session/logout`, {
           headers: { origin: new URL(page.url()).origin, "Fidy-Session-Binding": first.binding },

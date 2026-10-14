@@ -29,7 +29,6 @@ const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((value) => new Uint8Array(value));
-// The Miniflare fixture owns foreign Promise APIs, not application workflow.
 const seedUser = (
   db: D1Database,
   input: Readonly<{
@@ -394,7 +393,6 @@ it.each(["expired", "stale-session", "revoked-session", "disabled-institution"] 
           send(db, request(0, "/web/connections/begin", "POST", { attempt }))
         );
         expect(refused.status).toBe(condition === "revoked-session" ? 401 : 404);
-        // Persistence is the approved D1 atomicity seam: no partial attempt consumption or execution.
         expect(
           yield* Effect.tryPromise(() => db.prepare("SELECT status FROM connection_attempts").all())
         ).toMatchObject({ results: [{ status: "pending" }] });
@@ -735,7 +733,6 @@ it("isolates ready and prepared browser review from a different User holding the
           phase,
         });
       }
-      // Audit is an approved D1 seam: foreign review must never record accepted access.
       expect(
         yield* Effect.tryPromise(() =>
           db
@@ -894,7 +891,6 @@ it("returns an Active association without starting another attempt", () =>
         db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
       );
       const original = yield* Effect.tryPromise(() => start(db));
-      // Trusted authorization fixture models the later browser owner; initiation cannot activate.
       yield* Effect.tryPromise(() =>
         db
           .prepare(
@@ -1234,7 +1230,6 @@ it("removes expired attempts after their bounded retention while retaining the s
       const original = yield* Effect.tryPromise(() => start(db));
       if (original.type !== "continue_in_browser") throw new Error("Expected browser continuation");
       vi.setSystemTime(original.continuation.expiresAt.epochMilliseconds + 86400000);
-      // A trusted returning-browser fixture keeps the live credential separate from expired attempt state.
       yield* Effect.tryPromise(() =>
         db
           .prepare("UPDATE web_sessions SET idle_expires_at_ms = ? WHERE user_id = ?")
@@ -1313,7 +1308,6 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
             }
           )
           .catch(() => undefined);
-      // Other owners have incomplete schemas in this focused fixture; their failures cannot skip retention.
       vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds + 86400000 - 1);
       yield* Effect.tryPromise(tick);
       expect(

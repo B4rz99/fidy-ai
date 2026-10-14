@@ -1,5 +1,3 @@
--- Email approval is bound to one still-pending pairing and one verified credential revision.
--- Only a digest of the delivered proof is retained; the outbox carries no mailbox or proof.
 CREATE TABLE browser_pairing_email_proofs (
   pairing_id TEXT PRIMARY KEY NOT NULL REFERENCES browser_login_pairings(id) ON DELETE CASCADE,
   work_id TEXT NOT NULL UNIQUE CHECK (length(work_id) = 36),

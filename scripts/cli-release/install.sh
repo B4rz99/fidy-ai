@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Installs only a versioned, checksum-verified Fidy release into the user's bin directory.
 set -euo pipefail
 [[ $# -le 1 ]] || { echo 'Usage: bash install.sh [VERSION]' >&2; exit 1; }
 version="${1:-}"
@@ -51,7 +50,6 @@ cp "$temporary_directory/extracted/fidy" "$staged_executable"
 chmod 755 "$staged_executable"
 mv -f "$staged_executable" "$install_directory/fidy"
 staged_executable=''
-# Each supported shell receives an idempotent user-only configuration entry.
 configure_path() {
   local config="$1" entry="$2"
   mkdir -p "$(dirname "$config")"

@@ -56,7 +56,6 @@ const recallPolicy = operationPolicy({
 const retainedMemoryParams = (): Schema.Struct<{ readonly id: typeof MemoryId }> =>
   Schema.Struct({ id: MemoryId });
 
-/** Canonical durable Memory lifecycle and deterministic retrieval for the caller. */
 export const MemoryGroup = HttpApiGroup.make("memory")
   .add(
     HttpApiEndpoint.post("remember", "/memories", {
@@ -120,7 +119,6 @@ export const memoryOperationIds = [
 
 /** Explicit browser credential proof for one User-owned Memory call. */
 export type BrowserMemorySubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
-/** Every operation whose durable Memory work is attributable to a stable User. */
 export type MemoryAuditOperation = MemoryOperationId;
 /** Closed outcome vocabulary for one audited Memory call. */
 export type MemoryAuditOutcome = "success" | "not_found" | "validation_failed" | "resource_limit";

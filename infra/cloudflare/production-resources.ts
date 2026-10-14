@@ -35,7 +35,6 @@ const ProviderRefusal = Schema.Struct({
   code: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999999 }))),
 });
 
-/** Only known provider categories and numeric API codes may leave the apply boundary. */
 export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
   const details = new Set<string>();
   for (const reason of cause.reasons.slice(0, maximumRefusalReasons)) {
@@ -53,7 +52,6 @@ export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
 
 const requireResourceCompatibility = Effect.fn(function* (phase: typeof Phase.Type) {
   if (phase === "retire") {
-    // Recheck after planning, immediately before the first destructive operation.
     yield* releaseCommand({
       args: ["bun", "production-release.ts", "verify-retirement"],
       lifetime: "read-only",
@@ -68,7 +66,6 @@ const requireResourceCompatibility = Effect.fn(function* (phase: typeof Phase.Ty
     );
   }
   if (phase === "upload") {
-    // Recheck live immutable Worker versions after planning, before any D1 migration can run.
     yield* releaseCommand({
       args: ["bun", "production-release.ts", "verify-retention-migration"],
       lifetime: "read-only",
@@ -84,7 +81,6 @@ const requireResourceCompatibility = Effect.fn(function* (phase: typeof Phase.Ty
   }
 });
 
-// Alchemy keeps pending deletions in its state; retirement never reconciles the verified resources.
 const releaseResources = Effect.fn(function* (phase: typeof Phase.Type) {
   const actions = yield* Config.String("GITHUB_ACTIONS").pipe(Config.withDefault(""));
   const ref = yield* Config.String("GITHUB_REF").pipe(Config.withDefault(""));

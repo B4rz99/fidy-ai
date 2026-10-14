@@ -56,7 +56,6 @@ BEGIN SELECT RAISE(ABORT, 'email_review_append_only'); END;
 CREATE TRIGGER forwarded_email_review_no_delete BEFORE DELETE ON forwarded_email_needs_review
 BEGIN SELECT RAISE(ABORT, 'email_review_append_only'); END;
 
--- Rebuild immutable attestations to add a closed forwarded-email source kind.
 DROP TRIGGER source_attestation_no_update;
 DROP TRIGGER source_attestation_no_delete;
 CREATE TABLE source_attestations_next (
@@ -126,7 +125,6 @@ BEGIN SELECT RAISE(ABORT, 'sample_append_only'); END;
 CREATE TRIGGER anonymized_email_sample_no_delete BEFORE DELETE ON anonymized_email_samples
 BEGIN SELECT RAISE(ABORT, 'sample_append_only'); END;
 
--- Terminal outcomes release outstanding capacity; raw bytes still expire on their original date.
 DROP TRIGGER forwarded_email_capacity;
 CREATE TRIGGER forwarded_email_capacity BEFORE INSERT ON forwarded_email_receipts
 WHEN (SELECT count(*) FROM forwarded_email_receipts r WHERE r.state IN ('storing', 'queued')

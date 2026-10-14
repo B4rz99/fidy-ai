@@ -178,10 +178,6 @@ class D1BatchFailure extends Data.TaggedError("D1BatchFailure")<{
   readonly cause: unknown;
 }> {}
 
-/**
- * This primitive deliberately adds no nested span: the caller's bounded Work span owns admission
- * latency and outcome, avoiding duplicate traces without safe subject attributes at this SQL seam.
- */
 const executeBatch = (
   database: D1Database,
   statements: ReadonlyArray<D1PreparedStatement>

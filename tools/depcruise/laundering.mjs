@@ -1,5 +1,3 @@
-// Bounded syntactic guard, not a proof of semantic encapsulation. Code review must also apply
-// the public-surface rule in root ARCHITECTURE.md.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
@@ -611,8 +609,6 @@ const propagateVariable = (context, declaration) => {
       ? []
       : [...valueOrigins(context, declaration.initializer)];
   if (ts.isIdentifier(declaration.name)) origins.push(...writtenOrigins(context, declaration.name));
-  // Local annotations are implementation details; inferred call results do not inherit private
-  // provenance. An outward variable's explicit annotation is part of its published signature.
   if (declaration.type !== undefined && ts.isSourceFile(declaration.parent.parent.parent)) {
     origins.push(
       ...typeOrigins(context, declaration.type, isCallable(context, declaration.initializer))
@@ -918,7 +914,6 @@ const bindSources = (modules, packageRoot, readSource) => {
   sources.set(intrinsics.fileName, intrinsics);
   const options = { noResolve: true, noLib: true, types: [] };
   const host = ts.createCompilerHost(options);
-  // The cruiser already resolved every edge. Bind lexical symbols without reading a second graph.
   host.getSourceFile = (path) => sources.get(path);
   const checker = ts.createProgram([...sources.keys()], options, host).getTypeChecker();
   return { sources, checker, intrinsics };

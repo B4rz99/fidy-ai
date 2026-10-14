@@ -14,7 +14,6 @@ import {
   useRef,
   useState,
 } from "react";
-// Dashboard presentation is already route-lazy.
 // react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -834,7 +833,6 @@ const ResponsiveLayout = ({
   );
 };
 
-/** Editing capabilities supplied by the route controller to the Dashboard canvas. */
 export type DashboardEditor = Readonly<{
   catalog: ReadonlyArray<DashboardCatalogEntry>;
   error: Option.Option<DashboardEditorError>;
@@ -1018,7 +1016,6 @@ const EditableDashboardTitle = ({
   );
 };
 
-/** Responsive projection of one schema-decoded canonical Dashboard view. */
 export const DashboardViewComponent = ({
   editor,
   view,
@@ -1110,7 +1107,6 @@ const DashboardError = ({
   </main>
 );
 
-/** Dashboard chunk projection for the query started by the lightweight route interface. */
 export const DashboardRouteContent = ({
   onRefresh,
   result,

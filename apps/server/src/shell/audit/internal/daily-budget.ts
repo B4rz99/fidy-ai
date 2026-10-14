@@ -38,7 +38,6 @@ export const auditDayBindings = ({
   return Array.from({ length: 7 }).flatMap(() => [userId, start, start + utcDayMilliseconds]);
 };
 
-/** How many canonical audit rows one User has committed in the UTC day containing `current`. */
 export const dailyAuditCount = ({
   db,
   userId,
@@ -74,7 +73,6 @@ export const browserBudgetGuard = ({
   };
 };
 
-/** True while the User's shared daily canonical-work budget is already spent. */
 export const dailyAuditExhausted = ({
   db,
   userId,

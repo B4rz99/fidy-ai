@@ -175,6 +175,5 @@ export const calculateBudgetStatus: (
   } satisfies BudgetStatus;
 });
 
-/** Whether a decoded projection exactly describes one positive cap and its spending. */
 export const hasExactBudgetProgress = (progress: BudgetProgressFact): boolean =>
   Schema.is(BudgetProgress)(progress);

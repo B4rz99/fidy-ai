@@ -173,13 +173,11 @@ export const decideMediaAdmission = (
   };
 };
 
-/** Stable provider-retrieval reason preserved in durable failure and review evidence. */
 export type ForwardedEmailProviderFailureReason =
   | "provider-unavailable"
   | "invalid-provider-response"
   | "resource-limit";
 
-/** Preserves the visible review issue for one terminal provider retrieval failure. */
 export const describeForwardedEmailProviderFailure = (
   reason: ForwardedEmailProviderFailureReason
 ): Readonly<{ path: ""; message: string }> => ({
@@ -211,7 +209,6 @@ export const decideDeferredForwardedEmailActivation: DecideDeferredForwardedEmai
   };
 };
 
-/** Reports how many additional emails the User may admit in the current month. */
 export const forwardedEmailAllowanceRemaining = (input: {
   readonly access: AccessTier;
   readonly consumed: number;

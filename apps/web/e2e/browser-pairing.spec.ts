@@ -601,11 +601,9 @@ test("honors server slowdown before showing the generic terminal refusal", ({ pa
       yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
       yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
       yield* wait(expect.poll(() => pendingRoutes.length).toBe(1));
-      // Pause timer execution, not just the displayed wall time. runFor executes every due timer.
       yield* wait(
         page.clock.pauseAt((yield* Clock.currentTimeMillis) + minimumPollIntervalMilliseconds)
       );
-      // A request is deliberately left in flight; advancing time must not overlap or replace it.
       yield* wait(page.clock.runFor(pendingRequestAdvanceMilliseconds));
       expect(events).toEqual(["start", "redeem-1"]);
       yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());

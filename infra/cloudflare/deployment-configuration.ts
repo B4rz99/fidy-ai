@@ -33,13 +33,11 @@ export class InvalidDeploymentConfiguration extends Data.TaggedError(
 
 export type StateBackend = "cloudflare" | "local" | "memory";
 
-/** Keeps provider discovery and unsupported remote stages away from remote state. */
 export const resolveStateBackend = (input: TopologyModeInput): StateBackend => {
   if (input.development) return "local";
   return input.stage === "production" ? "cloudflare" : "memory";
 };
 
-/** Resolves the only two topology modes before resources are created. */
 export const resolveTopologyMode = (
   input: TopologyModeInput
 ): Result.Result<"development" | "production", InvalidDeploymentConfiguration> => {
@@ -51,7 +49,6 @@ export const resolveTopologyMode = (
 const isReleaseIdentity = (value: string, pattern: RegExp): boolean =>
   pattern.test(value) && !zeroValuePattern.test(value);
 
-/** Resolves bounded release metadata for an already selected topology mode. */
 export const resolveDeploymentConfiguration = (
   input: DeploymentConfigurationInput
 ): Result.Result<ReleaseMetadata, InvalidDeploymentConfiguration> => {

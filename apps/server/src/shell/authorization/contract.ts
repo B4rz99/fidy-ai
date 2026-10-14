@@ -40,7 +40,6 @@ type CanonicalAuthority =
       fresh: boolean;
     }>;
 
-/** Credential-neutral authority facts supplied to every canonical implementation. */
 export type CanonicalCaller = Readonly<{
   subjectUserId: UserId;
   capabilities: CanonicalCapabilities;
@@ -67,7 +66,6 @@ export type ChildOperationAuditService = Readonly<{
   record: (evidence: ChildAuditEvidence) => Effect.Effect<void>;
 }>;
 
-/** Provides the request-scoped recorder used to include child outcomes in the audit result. */
 export class ChildOperationAudit extends Context.Service<
   ChildOperationAudit,
   ChildOperationAuditService
@@ -85,10 +83,8 @@ export const agentBearerSecurity = HttpApiSecurity.bearer.pipe(
 );
 
 /**
- * Declares WebSession-or-PAT authorization for canonical operations. The framework supplies the
- * request parsing context; runtime assembly supplies cryptography and the database gateway. PAT is
- * attempted first so a presented cookie is the final alternative and its declared Consent or
- * caller-policy rejection cannot be replaced by a missing-bearer authentication error.
+ * WebSession-or-PAT authorization. PAT is attempted first, preserving the final
+ * cookie alternative's Consent or caller-policy refusal.
  *
  * @effect-expect-leaking Crypto | HttpServerRequest | ParsedSearchParams | RouteContext | SqlClient
  */

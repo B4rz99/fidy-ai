@@ -3,7 +3,6 @@ import { UserId } from "~/core/identity/contract";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-/** Stable identity of one User-authorized Personal Access Token grant. */
 export const PATId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PATId"))
   .annotate({ identifier: "PATId" });
@@ -27,7 +26,6 @@ export type PATScope = typeof PATScope.Type;
 export const PATScopes = Schema.UniqueArray(PATScope).check(Schema.isNonEmpty());
 export type PATScopes = typeof PATScopes.Type;
 
-/** Maximum normalized length accepted for a PAT recipient label. */
 export const recipientLabelLimit = 80;
 
 /** Counts Unicode code points in recipient display metadata. */
@@ -121,7 +119,6 @@ export const patBearerPrefix = "fin_";
 export const patShortIdLength = 8;
 const patShortIdPattern = `[a-z0-9]{${patShortIdLength}}`;
 const bearerSecretPattern = "[A-Za-z0-9_-]{32,}";
-/** Human-readable notation for the one opaque bearer encoding. */
 export const TokenBearerFormat = `${patBearerPrefix}<short-id>_<secret>`;
 
 /** Random bytes a caller must draw for one bearer secret before encoding it. */
@@ -249,13 +246,11 @@ export const ActivePATList = Schema.Struct({
 }).annotate({ identifier: "ActivePATList" });
 export type ActivePATList = typeof ActivePATList.Type;
 
-/** One safe acknowledgement of a selected PAT revocation. */
 export const RevokedPAT = Schema.Struct({ shortId: TokenShortId }).annotate({
   identifier: "RevokedPAT",
 });
 export type RevokedPAT = typeof RevokedPAT.Type;
 
-/** Bounded acknowledgement for an all-PAT revocation. */
 export const RevokedPATCount = Schema.Struct({
   revokedCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 }).annotate({
@@ -274,9 +269,7 @@ export const IssuedPAT = Schema.Struct({
 }).annotate({ identifier: "IssuedPAT" });
 export type IssuedPAT = typeof IssuedPAT.Type;
 
-/** Every persisted bearer grant accepted by canonical TokenAuthorization. */
 export const TokenGrant = PAT;
-/** Decoded persisted bearer grant accepted by canonical TokenAuthorization. */
 export type TokenGrant = PAT;
 
 /** The authenticated PAT facts produced by bearer lookup at the HTTP edge. */
@@ -393,7 +386,6 @@ export const ApprovedPATPairing = Schema.Struct({
 }).annotate({ identifier: "ApprovedPATPairing" });
 export type ApprovedPATPairing = typeof ApprovedPATPairing.Type;
 
-/** The one authoritative persisted PATPairing lifecycle. */
 export const PATPairingLifecycle = Schema.Literals([
   "pending_approval",
   "approved_awaiting_claim",

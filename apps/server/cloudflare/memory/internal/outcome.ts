@@ -85,7 +85,6 @@ export const memoryRateLimited = (): Response =>
     message: memoryBudgetMessage,
   });
 
-/** The canonical individual response for one decided Memory refusal outcome. */
 const memoryRejectionResponse = (outcome: MemoryRefusalOutcome): Response => {
   switch (outcome) {
     case "not_found":
@@ -265,12 +264,7 @@ export const findOwnedMemory = ({
     Effect.orElseSucceed(() => Option.none())
   );
 
-/**
- * Read one committed Memory child's canonical value: the stored row for a remember or revise, and
- * the removed id for a forget whose row the unit already proved gone. The stored read reuses the
- * owner's published single-row projection; the guarded write and its completion assertion already
- * proved the caller's authority, so the readback stays unguarded.
- */
+/** Read the committed Memory for remember/revise or the proved removed id for forget. The caller must have committed the guarded write and its completion assertion first. */
 export const findMemoryValue = ({
   db,
   userId,

@@ -132,7 +132,6 @@ const operationValidationRefusal = (
   operation: CatalogOperation,
   input: Schema.Json
 ): Option.Option<Response> => {
-  // Mutation owners classify their own invalid material; only the batch envelope is admitted here.
   if (operation.policy.kind === "mutation" && operation.id !== atomicBatchOperation) {
     return Option.none();
   }
@@ -203,8 +202,6 @@ const executeOAuthWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
       ({ id, policy }) => id === input.operation && policy.access._tag === "UserOwnedAgentScoped"
     );
     if (operation === undefined) return transactionUnavailable();
-    // Native continuation shares its original admitted envelope; the intent owner still refuses
-    // replayed decisions instead of disclosing a cached sensitive success.
     const sensitive = sensitiveOAuthWork(input, operation);
     const reference = confirmationReference(input, sensitive);
     const response = yield* admitCanonicalOperation({
@@ -316,11 +313,6 @@ const executeOAuthOwnedWork = (input: OAuthCanonicalWork): Effect.Effect<Respons
     return yield* checkpointOAuthResponse({ response, caller: caller.value });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/**
- * The hosted-inference service non-Memory work runs under: every method dies. Only the Memory
- * capacity policy consumes hosted inference, and it provisions the real service itself, so a
- * consumer appearing anywhere else fails closed instead of deciding without inference.
- */
 const unreachableHostedInference = HostedInference.of({
   countText: () => Effect.die("Hosted inference reached without Memory work"),
   countTranscript: () => Effect.die("Hosted inference reached without Memory work"),
@@ -346,7 +338,6 @@ const retryStatementPreparation = (
 ): Effect.Effect<CanonicalMutationPreparation> =>
   adapter.prepare(input).pipe(Effect.provideService(HostedInference, unreachableHostedInference));
 
-/** Execute one catalog call through its owner adapter and the shared mutation unit. */
 const executeCall = (
   input: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Call" }> }>
 ): Effect.Effect<Response, never, HostedInference> => {
@@ -362,8 +353,6 @@ const executeCall = (
     if (catalogOperation === undefined) return transactionUnavailable();
     const decodedInput = Schema.decodeUnknownOption(catalogOperation.input)(work.input);
     if (Option.isNone(decodedInput)) {
-      // The call cannot be decoded against the operation it names, so the owner adapter answers for
-      // it under its own input classification and no write is attempted.
       return yield* executeSingleCanonicalMutation({
         db,
         subject,
@@ -452,7 +441,6 @@ const executeWork = (
       input.work._tag === "Call"
         ? affectsBudget(input.work.operation)
         : input.work.calls.some((child) => Option.exists(rawOperation(child), affectsBudget));
-    // Drain committed work before a later correction can lower spending below a reached mark.
     if (
       budgetWork &&
       !(yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId }))
@@ -486,7 +474,6 @@ const executeWork = (
         })
       : executeCall({ ...input, work });
     if (result.ok && budgetWork) {
-      // Atomic D1 triggers retain versioned work even when this best-effort drain is interrupted.
       yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId });
     }
     return result;
@@ -573,7 +560,6 @@ export const installedHostedStatementOperations = (): ReadonlyArray<CatalogOpera
       Option.isSome(canonicalHostedStatementQueryOwner(id))
   );
 
-/** Installed canonical operations retain their declaration identity, policy and codecs. */
 export const installedCanonicalOperations = (): ReadonlyArray<CatalogOperation> =>
   operationCatalog.operations.filter(({ id, policy }) =>
     policy.kind === "query"
@@ -655,7 +641,6 @@ const invokeQueryOwner = ({
         })
       ).pipe((effect) => observeCanonicalResponse(effect, operation.id))
     );
-    // Caller deadlines remain interruptions, never owner defects or validation refusals.
     if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
       return yield* Effect.failCause(result.cause);
     }

@@ -202,7 +202,6 @@ const attemptGeneration = (
   }>
 ): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
-    // Discovery-attempt metadata rotates even when the User coordinator or resource admission is unavailable.
     yield* noteWeeklyScheduleEvaluation({
       db: input.environment.DB,
       ...input.schedule,
@@ -330,7 +329,6 @@ export const startProactivityWorkflow = (
         status.status === "terminated" ||
         status.status === "complete"
       ) {
-        // Domain one-shot claims survive Workflow restart: started sends reconcile, never resend.
         const recovery = yield* runActivity({
           coordinator: input.coordinator,
           work: { kind: "proactivity-recover", version: 1, userId: work.userId, work },

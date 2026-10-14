@@ -23,7 +23,6 @@ export const hostedInitialTextContext = (text: string): HostedInitialTextContext
     activeRequest: { _tag: "Present", text },
   });
 
-/** Invoke the admitted Effect owner from the native binding-shaped historical fixtures. */
 export const makeAdmittedWorkersAiRun =
   ({
     run,

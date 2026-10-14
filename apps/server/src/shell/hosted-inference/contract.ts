@@ -98,7 +98,6 @@ export type HostedTextContinuation = Readonly<{
 }> &
   Brand.Brand<"HostedTextContinuation">;
 
-/** Provider-neutral structured generation purpose. */
 export type HostedStructuredPurpose = "conversation-compaction";
 
 /** Domain schema and semantic context for one strict structured generation. */
@@ -217,7 +216,6 @@ export type HostedTextResult = Readonly<{
   continuation: HostedTextContinuation;
 }>;
 
-/** Provider-neutral hosted inference interface shared by live turns and startup validation. */
 export type HostedInferenceService = Readonly<{
   /** Counts one canonical plain-text aggregate using provider-owned tokenization. */
   countText: (text: string) => Effect.Effect<number>;

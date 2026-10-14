@@ -25,7 +25,6 @@ import {
   prepareUpdateKeywordRule as updateRule,
 } from "./internal/canonical-keyword-rules";
 
-/** Require the current public metadata for a stable id; absence is a typed CategoryNotFound. */
 export const requireCategory = (
   input: Readonly<{ db: D1Database; categoryId: CategoryId }>
 ): Effect.Effect<Category, CategoryNotFound | CategoriesUnavailable> => requiredCategory(input);
@@ -47,7 +46,6 @@ export const executeProtectedCategories: typeof readProtectedCategories = (input
 /** List the caller's bounded keyword instructions under their live credential. */
 export const listOwnKeywordRules: typeof readOwnKeywordRules = (input) =>
   readOwnKeywordRules(input);
-/** Decode the bounded public rule payload without granting mutation authority. */
 export const keywordRuleInput: typeof decodeRuleInput = (input) => decodeRuleInput(input);
 /** Decode a retained rule's stable public path identity. */
 export const keywordRuleIdFromPath: typeof decodeRuleId = (input) => decodeRuleId(input);
@@ -61,7 +59,6 @@ export const prepareCreateKeywordRule: typeof createRule = (input) => createRule
 export const prepareUpdateKeywordRule: typeof updateRule = (input) => updateRule(input);
 /** Prepare one owned rule removal, affecting only future capture. */
 export const prepareDeleteKeywordRule: typeof deleteRule = (input) => deleteRule(input);
-/** Classify an aborted Category mutation using the same owner policy as preparation. */
 export const keywordRuleGuardFailure: typeof classifyRuleGuardFailure = (input) =>
   classifyRuleGuardFailure(input);
 

@@ -1,5 +1,3 @@
--- Add shared authority to the existing physical tables. Their historical names remain
--- private storage details, so preceding Workers and retained collection work keep resolving them.
 ALTER TABLE card_enrollments ADD COLUMN method TEXT NOT NULL DEFAULT 'card'
   CHECK (method IN ('card', 'nequi'));
 ALTER TABLE card_payment_sources ADD COLUMN method TEXT NOT NULL DEFAULT 'card'
@@ -33,7 +31,6 @@ WHEN NOT EXISTS (SELECT 1 FROM card_enrollments AS e
     AND NOT EXISTS (SELECT 1 FROM billing_attempts AS prior
       WHERE prior.payment_source_id = s.id AND prior.wompi_environment <> NEW.wompi_environment))
 BEGIN SELECT RAISE(ABORT, 'payment_attempt_method_mismatch'); END;
--- A failed live-credential/Consent check aborts the entire owner commit.
 CREATE TABLE payment_commit_guards (
   enrollment_id TEXT PRIMARY KEY NOT NULL,
   allowed INTEGER NOT NULL CHECK (allowed = 1)

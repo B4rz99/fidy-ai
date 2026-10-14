@@ -225,8 +225,6 @@ tester.run(
   }
 );
 
-// Exercise the real lint config as well as the isolated rule: a new source file
-// must not escape merely because the old built-in rule was replaced.
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 const testProbe = join(workspaceRoot, `apps/web/src/.lint-test-probe-${process.pid}.test.tsx`);
 try {
@@ -264,7 +262,6 @@ try {
   unlinkSync(probeFile);
 }
 
-// Verify the configured design policy through the same Oxlint command CI runs.
 const designProbe = join(workspaceRoot, "apps/web/src/app/.lint-design-probe.tsx");
 const designCases = [
   { expression: '<div className="bg-blue-500" />', rule: "no-raw-colors" },
@@ -306,12 +303,8 @@ try {
   unlinkSync(designProbe);
 }
 
-// Run the source guard in an isolated workspace so guidance is exercised without a probe file
-// racing the repository's other static checks.
 const isolatedRoot = mkdtempSync(join(tmpdir(), "fidy-symbol-guidance-"));
 try {
-  // The copied guard decodes with Effect before scanning. Keep its installed dependency
-  // available without allowing isolated source probes to race the real checkout.
   symlinkSync(join(workspaceRoot, "node_modules"), join(isolatedRoot, "node_modules"), "dir");
   for (const directory of [
     "apps/server/scripts",

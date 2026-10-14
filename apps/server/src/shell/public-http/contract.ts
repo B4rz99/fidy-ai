@@ -90,11 +90,7 @@ export const SuggestedOperation = Schema.suspend(() => {
   .annotate({ identifier: "SuggestedOperation" });
 export type SuggestedOperation = typeof SuggestedOperation.Type;
 
-/**
- * The `next` field, declared once. Both success and error responses carry it on the same terms —
- * at most three suggested operations, possibly none — so a failure is as navigable
- * as a success; every declared error class reuses this schema rather than restating it.
- */
+/** At most three suggested canonical operations, possibly none, on success and failure. */
 export const NextOperations = Schema.Array(SuggestedOperation)
   .check(Schema.isMaxLength(3))
   .annotate({
@@ -131,22 +127,11 @@ export const CanonicalRetryAfterBody = Schema.Struct({
 });
 
 /**
- * Every code an error response may carry, for every slice. Closed on purpose:
- * a calling agent can branch on this set and know it has covered the space, and
- * a new slice reuses a code rather than inventing a synonym for it.
- *
- * Four are declared ahead of the slices that raise them — `scope_missing`,
- * `paywall_required`, `rate_limited` and `quota_exhausted` wait on tokens,
- * billing and rate limiting. They are spelled now because the set is published
- * to agents as the space to cover: a code arriving later is a change to every
- * caller that had already covered it. The spec (GitHub issue #1) names all
- * four, and names them exactly this way — `paywall_required`, not
- * `payment_required`, because it is the Paywall the caller has met (GLOSSARY.md)
- * and the string is the contract.
- *
- * `unauthenticated`, `consent_required`, and `user_action_required` are repository additions to
- * the spec's open-ended list: callers distinguish an unknown bearer, missing hosted Consent, and
- * explicit revocation that only the User can resolve on a Fidy-owned surface.
+ * Closed canonical error vocabulary shared by every slice. Callers may branch
+ * exhaustively on these codes; slices reuse the published meanings.
+ * unauthenticated means unresolved credentials, consent_required means no
+ * current onboarding grant, and user_action_required means explicit revocation
+ * requiring the User to return to a Fidy-owned surface.
  */
 export const ErrorCode = Schema.Literals([
   "validation_failed",
@@ -169,20 +154,10 @@ export const CanonicalRejectedFailure = Schema.Struct({
 });
 export type CanonicalRejectedFailure = typeof CanonicalRejectedFailure.Type;
 
-/** Recognizes the declared canonical-rejection protocol without inspecting arbitrary objects. */
 export const isCanonicalRejectedFailure = Schema.is(CanonicalRejectedFailure);
 
-// The vocabulary an agent is handed, rendered from the set itself: spelling the
-// codes out again in the prose would be a second copy of a closed set, drifting
-// the moment one is added (ARCHITECTURE.md §4).
 const codeVocabulary = ErrorCode.literals.map((code) => `\`${code}\``).join(", ");
 
-/**
- * The body of an error response: the code, and a message addressed to the
- * calling agent — why it failed and what to do about it, in a sentence or two.
- * The code is pinned per error class so the derived spec advertises exactly
- * which one a given status carries.
- */
 const detail = <Code extends ErrorCode>(
   code: Code
 ): Schema.Struct<{
@@ -204,17 +179,6 @@ const detail = <Code extends ErrorCode>(
   });
 
 export const FieldIssue = Schema.Struct({
-  /**
-   * `optionalKey` rather than `optional`: absence is the key not being there.
-   * `optional` is `optionalKey(UndefinedOr(...))`, which publishes `null` in an
-   * `anyOf` beside the string — a second spelling of absence, in the one field
-   * whose point is that there is only one (CODING_STANDARDS.md, never `null`).
-   * Losing the `anyOf` also lifts the description a level, to where every other
-   * refined field in the spec carries it.
-   *
-   * `NonEmptyString` closes the third spelling: a present but empty path would
-   * be a value standing in for the lack of one.
-   */
   path: Schema.optionalKey(
     Schema.NonEmptyString.annotate({
       description:
@@ -228,17 +192,6 @@ export const FieldIssue = Schema.Struct({
   }),
 }).annotate({ identifier: "FieldIssue" });
 
-/**
- * The `{ error, next }` pair every API failure carries, declared once so the
- * classes below differ only in the detail they hand it.
- *
- * Returns struct *fields*, not a schema, so the result cannot be piped or
- * annotated: its one use is the first argument to `Schema.Error`, which
- * takes fields or a struct and normalises either. `OperationResponse` on the success
- * side has to return a schema because its results are piped through
- * `HttpApiSchema.status`; a failure takes its status from the annotation
- * argument of the same `ErrorClass` call instead, so it never needs to be one.
- */
 const errorResponse = <Tag extends string, Detail extends Schema.Top>(
   tag: Tag,
   error: Detail
@@ -275,15 +228,7 @@ export class QuotaExhausted extends Schema.Error<QuotaExhausted>("QuotaExhausted
   { httpApiStatus: 429 }
 ) {}
 
-/**
- * API failures are schema-backed tagged errors. Their `_tag` supports selective
- * in-process handling but is omitted during encoding because `code` is the
- * caller-facing discriminator an agent can enumerate (ARCHITECTURE.md §6).
- *
- * The request did not satisfy the operation's input schema. Carries whatever the
- * gate could attribute to individual values rather than the parser's own
- * rendering of the failure.
- */
+/** Invalid input with attributable field issues; encoding omits the internal _tag. */
 export class ValidationFailed extends Schema.Error<ValidationFailed>(validationFailedTag)(
   errorResponse(
     validationFailedTag,
@@ -344,10 +289,7 @@ export class PaywallRequired extends Schema.Error<PaywallRequired>(paywallRequir
   }
 ) {}
 
-/**
- * The record the caller asked for is not theirs to see. Slices raise this
- * through their own mapper, which supplies a message naming what was missing.
- */
+/** Missing and foreign records share the same caller-visible failure. */
 export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
   errorResponse(notFoundTag, detail("not_found")),
   { httpApiStatus: 404 }
@@ -414,37 +356,27 @@ export class ValidationGate extends HttpApiMiddleware.Service<ValidationGate>()(
   { error: ValidationFailed }
 ) {}
 
-/** The response status carried by a successful read. */
 export const okStatus = 200;
 
-/** The response status a canonical operation declares when it creates a record. */
 export const createdStatus = 201;
 
 /** The response status for durable work accepted for asynchronous processing. */
 export const acceptedStatus = 202;
 
-/** The status a caller receives when it presented no usable credential. */
 export const unauthorizedStatus = 401;
 
-/** The status a caller receives when its credential does not reach the resource. */
 export const forbiddenStatus = 403;
 
-/** The status a server returns when it gave up waiting for the request. */
 export const requestTimeoutStatus = 408;
 
-/** The status a server returns when the request conflicted with concurrent state. */
 export const conflictStatus = 409;
 
-/** The status a server returns when the caller exceeded a rate limit. */
 export const tooManyRequestsStatus = 429;
 
-/** Lowest status in the range that blames the server rather than the caller. */
 export const firstServerErrorStatus = 500;
 
-/** The status returned when a required server dependency is unavailable. */
 export const serviceUnavailableStatus = 503;
 
-/** Highest status in the range that blames the server rather than the caller. */
 export const lastServerErrorStatus = 599;
 
 /**

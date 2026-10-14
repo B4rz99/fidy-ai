@@ -397,7 +397,6 @@ const BudgetGroup = ({
     </section>
   );
 };
-/** Monthly table, summary, and editor share the signed-in application's workspace controls. */
 export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
   const controller = useBudgetController(props);
   const groups = workspaceGroups(props);

@@ -30,7 +30,6 @@ const snapshot = (
     Effect.flatMap(Schema.decodeUnknownEffect(Cost))
   );
 
-// Only method, normalized route, status and row counters leave the fixture.
 type RequestObserver = Readonly<{
   count: () => number;
   report: (scenario: string, before: typeof Cost.Type, after: typeof Cost.Type) => void;
@@ -241,7 +240,6 @@ test("measures authenticated navigation, pending payment, visibility and settlem
       const submitting = page.waitForResponse("**/web/subscription/payment-enrollments/submit");
       yield* wait(page.getByRole("button", { name: "Activar Pro" }).click());
       expect((yield* wait(submitting)).status()).toBe(successStatus);
-      // Finish setup responses before starting the marginal polling window.
       yield* wait(page.waitForResponse("**/web/subscription/billing-attempts/*"));
       observed.report("payment-setup-and-first-poll", paymentSetupBefore, yield* snapshot(request));
       const pendingBefore = yield* snapshot(request);

@@ -3,7 +3,6 @@
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
-    // This project types the Oxlint plugin against its own API, not Effect code.
     "plugins": []
   },
   "include": ["*.js", "*.d.ts"]

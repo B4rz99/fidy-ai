@@ -1,4 +1,3 @@
--- Extend the existing category path while retaining all predecessor evidence and identities.
 PRAGMA defer_foreign_keys = ON;
 CREATE TABLE proactivity_consent_offers_next (
   id TEXT PRIMARY KEY NOT NULL,

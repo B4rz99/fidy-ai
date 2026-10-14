@@ -301,7 +301,6 @@ const EmptyReference = (): JSX.Element => (
   </Card>
 );
 
-/** Local design reference composed from the same tokens and primitives as the application. */
 export const UIReference = (): JSX.Element => {
   const [theme, setTheme] = useState<Theme>("dark");
   const [darkPalette, setDarkPalette] = useState<DarkPalette>("graphite");

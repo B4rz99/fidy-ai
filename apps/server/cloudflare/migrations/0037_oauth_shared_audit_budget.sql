@@ -1,5 +1,3 @@
--- Fully attributed OAuth work consumes the same stable-User, half-open UTC-day Audit budget.
--- Preserve PAT management exceptions and the separately bounded atomic-batch envelope.
 DROP VIEW canonical_audit_usage;
 CREATE VIEW canonical_audit_usage AS
 SELECT * FROM (

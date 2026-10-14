@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { installBrowserDefectListeners, reportBrowserDefect } from "@/transport/browser-defects";
 import { WebApplication } from "./application";
 
-/** Mounts the application with bounded page-lifetime and React root diagnostics. */
 export const mountWebApplication = (root: Element): void => {
   const disposeDefectListeners = installBrowserDefectListeners(window);
   if (import.meta.env.DEV) import.meta.hot.dispose(disposeDefectListeners);

@@ -2,7 +2,6 @@ import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { TranscriptText, TranscriptTurnId } from "~/core/agent/contract";
 
-/** The browser-only, cookie-authenticated hosted Turn channel is not a canonical tool operation. */
 export const HostedTurnRequest = Schema.Struct({ text: TranscriptText });
 export const HostedTurnReceipt = Schema.Struct({
   turnId: TranscriptTurnId,

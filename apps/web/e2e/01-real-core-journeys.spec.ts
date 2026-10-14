@@ -32,7 +32,6 @@ const RetrySeconds = Schema.NumberFromString.check(
   Schema.isLessThanOrEqualTo(maximumProbeDelaySeconds)
 );
 
-// Playwright owns these promises; each call is made at its point in the test Effect.
 const fromPlaywright = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const continueAfterDelay = (route: Route): Promise<void> =>
@@ -61,7 +60,6 @@ const SessionProbeWire = Schema.Struct({
   body: Schema.String,
   retryAfter: Schema.OptionFromNullOr(Schema.String),
 });
-// Headers.get is raw browser wire input; the driver decodes absence into Option before pacing.
 const fetchWithSession = ({
   url,
   headers,
@@ -129,7 +127,6 @@ const assertUnderScopedBrowser = (
 ): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      // A PAT does not authenticate the browser shell; its refusal is forwarded as-is to the UI.
       const refused = yield* probeCanonicalRequest(() =>
         request.get(`${api}/transactions`, {
           headers: {
@@ -148,7 +145,6 @@ const assertUnderScopedBrowser = (
       const runProbe = Effect.runPromiseWith(yield* Effect.context<never>());
       yield* fromPlaywright(
         page.route(`${api}/transactions?*`, (route) =>
-          // Replay this UI query with only the CLI bearer: browser WebSessions have no reduced scope.
           runProbe(
             probeCanonicalRequest(() =>
               request.get(route.request().url(), {
@@ -501,7 +497,6 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
   );
   yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
   yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
-  // Read the real Core reply before releasing it to the navigating browser.
   const submission = Promise.withResolvers<EnrollmentSubmission>();
   yield* fromPlaywright(observeEnrollmentSubmission(page, submission));
   yield* fromPlaywright(page.getByRole("button", { name: "Activar Pro" }).click());
@@ -723,7 +718,6 @@ const assertDaviplataProviderRequest = (route: Route, step: DaviplataFixtureStep
       : { code: "574829" }
   );
 };
-// Intercepted synthetic replies do not prove real Wompi merchant activation or browser CORS.
 const installDaviplataProviderRoutes = (
   page: Page,
   calls: Array<DaviplataFixtureStep>
@@ -803,7 +797,6 @@ const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
   const { enrollmentId } = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Struct({ enrollmentId: PaymentEnrollmentId }))
   )(submitted.request().postData());
-  // Navigation can release the browser response body; this authenticated read owns its response.
   const enrollment = yield* fromPlaywright(
     boundSessionRequests(page.request).get(
       `${api}/web/subscription/payment-enrollments/${enrollmentId}`,

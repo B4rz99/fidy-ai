@@ -1,7 +1,6 @@
 import { Clock, Effect } from "effect";
 import { StatementProcessingUnavailable } from "../contract";
 
-// The per-minute sweep clears the entire globally admitted raw-evidence capacity.
 export const maximumRetainedReviewEvidence = 5_000;
 
 /** Expire raw review material while retaining the item, classification and accounting. */

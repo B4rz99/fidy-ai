@@ -1,4 +1,3 @@
--- The public integration test checks this baseline against the canonical launch taxonomy.
 CREATE TABLE categories (
   id TEXT PRIMARY KEY NOT NULL,
   label TEXT NOT NULL,

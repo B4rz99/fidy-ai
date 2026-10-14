@@ -296,9 +296,7 @@ const cancelBody = (body: Readonly<{ cancel: () => Promise<void> }>): Effect.Eff
   Effect.sync(() => {
     try {
       body.cancel().catch(() => undefined);
-    } catch {
-      // Hostile cancellation cannot prevent the response owner from settling.
-    }
+    } catch {}
   });
 
 const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
@@ -592,7 +590,6 @@ type ConfiguredWorkersAi = Readonly<{
   model: ApprovedWorkersAiModel;
 }>;
 
-/** Builds provider-owned counting and one-shot request execution from decoded native inputs. */
 export const makeWorkersAiInferenceServiceInternal = ({
   run,
   model,

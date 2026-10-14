@@ -59,9 +59,7 @@ export const readBoundedWompiResponse = (
     const releaseReader = (): void => {
       try {
         reader.releaseLock();
-      } catch {
-        // Cancellation may still own the reader until its promise settles.
-      }
+      } catch {}
     };
     const cancelAndRelease = (): void => {
       reader.cancel().catch(() => undefined);

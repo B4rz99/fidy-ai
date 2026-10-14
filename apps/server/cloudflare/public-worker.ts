@@ -385,7 +385,6 @@ const forwardsSession = (request: Request, path: string): boolean =>
   memoryPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
 
-/** Declared canonical paths that accept either the browser cookie or a PAT bearer. */
 const credentialPath = (path: string): boolean => transactionPath(path) || memoryPath(path);
 const credentialBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
   credentialPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
@@ -594,13 +593,11 @@ const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): b
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);
-/** The cookie-admitted atomic-batch route, recognized through the canonical catalog. */
 const atomicBatchPath = (path: string): boolean =>
   Option.exists(
     canonicalOperation({ method: "POST", path }),
     (operation) => operation.id === atomicBatchOperation
   );
-/** Declared paths that may be admitted by the browser session cookie instead of a PAT. */
 const cookieAdmittedPath = (path: string): boolean =>
   transactionPath(path) ||
   atomicBatchPath(path) ||
@@ -777,8 +774,6 @@ const routeOwnedRequest = (
   }
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
-    // Public correlation claims never cross the private service binding. Only this active span
-    // supplies continuation, independently of credentials and admission decisions.
     forwarded.headers.delete(workerInternalTraceHeader);
     const trace = yield* telemetry.captureDurableContext;
     if (Option.isSome(trace)) {
@@ -817,7 +812,6 @@ const fetchEffect = (
   telemetry: TelemetryService
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    // The pinned runner evaluates synchronously before registering its external abort signal.
     if (request.signal.aborted) return yield* Effect.interrupt;
     const browserOrigin = resolveBrowserOrigin(environment.BROWSER_ORIGIN);
     if (Option.isNone(browserOrigin)) {
@@ -869,7 +863,6 @@ const fetchEffect = (
     Effect.map((response) => annotateSmokeVersion(response, request, environment))
   );
 
-/** Builds the internet-facing ingress with one telemetry service for each request Work span. */
 export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => ({
   fetch: (request, environment) =>
     Effect.runPromise(

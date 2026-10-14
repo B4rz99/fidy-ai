@@ -40,7 +40,6 @@ const awaitProviderVerification = (
 ): Effect.Effect<void, "rejected" | "cancelled"> =>
   Effect.gen(function* () {
     for (;;) {
-      // Read status after observing closure: a response already in flight may predate completion.
       const popupClosed = input.popup.closed;
       const result = yield* providerClient(client, input.provider)
         .status({
@@ -332,7 +331,6 @@ export const useProviderAuthentication = ({
   };
 };
 
-/** Closes the provider popup from the clean first-party return URL. */
 export const closeProviderReturn = (node: Parameters<RefCallback<HTMLElement>>[0]): void => {
   if (node === null) return;
   window.close();

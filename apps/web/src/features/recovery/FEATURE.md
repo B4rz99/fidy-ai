@@ -1,5 +1,9 @@
 # Backup recovery code
 
+Rebased verification, 2026-10-14, baseline `a387f50fb5`: all 23 onboarding Worker/D1 checks passed, including rotation, old-code refusal, replacement redemption for the same User, and single-use replay refusal. The restored rotation/logout fixture now sends the browser session-binding header required by current trunk. The initial 401 was a fixture mismatch, not evidence that production rotation fails. Production recovery credential replacement and real operator delivery remain deferred.
+
+Audit continuation, 2026-10-12, base `8d57b9f42a2`: the complete actual Worker/D1 onboarding suite passed all 20 checks after joining rotation and recovery into one lifecycle regression. It issues an isolated initial code, rotates under fresh authority, logs out through the public operation, refuses the preceding code without approving the pairing, accepts the replacement under verified operator authority, refuses concurrent/replayed consumption, and redeems the browser-private pairing into a live session for the same User. This closes the local old-code/replacement-login gap. Operator signing-key delivery is a controlled external fixture; production credential rotation and real operator/provider recovery remain unverified. No production recovery credential was changed.
+
 Broad non-AI audit, 2026-10-12, baseline `9aafe8db54`: the full 449-check web suite and 99-check ordinary browser suite passed, including the dedicated real local Core/D1 disclosure journey and recovery sign-in journeys. The further onboarding/PAT/OAuth Worker/D1 run passed 303 checks, with rotation and refusal coverage. These aggregate counts include adjacent features. No production recovery proof was rotated; physical provider recovery and production credential replacement remain deferred rather than treated as local passes.
 
 Capability and verification map for `/settings/recovery`. Product requirements remain in GitHub issues.
@@ -27,5 +31,5 @@ The final regression uses a separately seeded disclosure User and proof so it ca
 ```sh
 bun run --cwd apps/web test src/features/recovery
 BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser recovery-live-disclosure.spec.ts --workers=1 --timeout=120000
-bun run --cwd apps/server test:cloudflare cloudflare/onboarding/browser-authentication.test.ts --maxWorkers=1 --testNamePattern='rotates the backup recovery|refuses recovery rotation'
+bun run --cwd apps/server test:cloudflare cloudflare/onboarding/browser-authentication.test.ts --maxWorkers=1 --testNamePattern='rotates the backup recovery|refuses recovery rotation|rejects the old recovery code'
 ```

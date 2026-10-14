@@ -1,0 +1,19 @@
+apps/server/cloudflare/ingestion/forwarding-address.test.ts
+  s_8692a8e3f01e05::t_458680cf7d520e 148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71264d9d17983537dec8faab28272f74b91347d0",
+  "prompts": {},
+  "sessions": {
+    "s_8692a8e3f01e05": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13c38-1e3f-7d60-bcbe-359b82bc673d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

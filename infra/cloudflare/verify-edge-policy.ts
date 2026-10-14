@@ -35,7 +35,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // #1262 expands refusal observation to exact callback and MCP boundaries; authority and edge rules are unchanged.
 // Public Astro site owns the apex; app legal/feature redirects and installer handoffs are static.
 // Both static response policies and the Astro CSP configuration are covered by this manifest.
-const expectedEdgePolicyDigest = "85a3c2a4f2883782420fb167ebd7763e636afffd2504e088304939628c738d10";
+// #1291 wires existing Proactivity configuration with disabled defaults; routing and authority are unchanged.
+const expectedEdgePolicyDigest = "314aacf8fc1c22cd27a9bc5e9088c854c026b07ffa1196b2ae915e212e91b8a2";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

@@ -208,6 +208,7 @@ const setup = Effect.fn(function* () {
     "0017_forwarded_email",
     "0018_forwarded_email_processing",
     "0032_commercial_allowances",
+    "0091_free_email_allowance",
     "0034_forwarded_email_deferral",
     "0035_media_submissions",
     "0038_proactivity_consent",

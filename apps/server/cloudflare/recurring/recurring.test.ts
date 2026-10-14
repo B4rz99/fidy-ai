@@ -5,6 +5,7 @@ import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { Money } from "../../src/core/_shared/money";
 import { RecurringSeriesPage } from "../../src/core/recurring/contract";
+import { Transaction } from "../../src/core/transactions/contract";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   evaluateRecurringSeries,
@@ -179,6 +180,96 @@ const evaluate = (db: D1Database, steps = 6): Effect.Effect<void> =>
       yield* evaluateRecurringSeries({ db, userId }).pipe(Effect.orDie);
     }
   });
+
+it.effect(
+  "public capture, correction and deletion invalidate and repair the same historical pattern",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const bearer = "2".repeat(43);
+      const tokenDigest = new Uint8Array(
+        yield* fromPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer)))
+      );
+      yield* fromPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET token_digest=? WHERE id=?")
+          .bind(tokenDigest, sessionId)
+          .run()
+      );
+      const request = (path: string, method = "GET", payload?: unknown): Effect.Effect<Response> =>
+        fromPromise(() => Bun.sleep(1000)).pipe(
+          Effect.andThen(
+            fromPromise(() =>
+              sendPublic({
+                db,
+                request: new Request(`https://api.fidyapp.com${path}`, {
+                  method,
+                  headers: {
+                    origin: "https://app.fidyapp.com",
+                    "content-type": "application/json",
+                    "Fidy-Session-Binding": sessionId,
+                    cookie: `__Host-fidy_session=${bearer}`,
+                  },
+                  ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+                }),
+              })
+            )
+          )
+        );
+      const read = (): Effect.Effect<typeof RecurringSeriesPage.Type> =>
+        Effect.gen(function* () {
+          const response = yield* request("/recurring-series");
+          expect(response.status).toBe(200);
+          return (yield* Schema.decodeUnknownEffect(
+            Schema.toCodecJson(Schema.Struct({ data: RecurringSeriesPage }))
+          )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data;
+        });
+      const created: Array<Transaction> = [];
+      for (const month of [1, 2, 3]) {
+        const response = yield* request("/transactions", "POST", {
+          money: { amount: "30000.25", currency: "COP" },
+          counterparty: "Netflix",
+          direction: "outflow",
+          categoryId: "10000000-0000-4000-8000-000000000016",
+          occurredAt: `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`,
+        });
+        expect(response.status).toBe(201);
+        created.push(
+          (yield* Schema.decodeUnknownEffect(
+            Schema.toCodecJson(Schema.Struct({ data: Transaction }))
+          )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data
+        );
+      }
+      yield* evaluate(db);
+      const initial = yield* read();
+      expect(initial.evaluation.kind).toBe("current");
+      expect(initial.series).toHaveLength(1);
+      const original = initial.series[0];
+      const middle = created[1];
+      if (original === undefined || middle === undefined) {
+        return yield* Effect.die("Missing captured pattern");
+      }
+      const correction = yield* request(`/transactions/${middle.id}`, "PUT", {
+        expectedRevision: 0,
+        changes: { counterparty: null },
+      });
+      expect(correction.status).toBe(200);
+      expect((yield* read()).evaluation.kind).toBe("updating");
+      yield* evaluate(db);
+      expect((yield* read()).series).toHaveLength(0);
+      const restored = yield* request(`/transactions/${middle.id}`, "PUT", {
+        expectedRevision: 1,
+        changes: { counterparty: "Netflix" },
+      });
+      expect(restored.status).toBe(200);
+      yield* evaluate(db);
+      expect((yield* read()).series).toEqual([original]);
+      const deleted = yield* request(`/transactions/${middle.id}`, "DELETE");
+      expect(deleted.status).toBe(200);
+      yield* evaluate(db);
+      expect((yield* read()).series).toHaveLength(0);
+    })
+);
 
 it.effect("serves the same canonical result through public HTTP and hosted query execution", () =>
   Effect.gen(function* () {

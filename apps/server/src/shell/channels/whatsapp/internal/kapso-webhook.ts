@@ -558,7 +558,14 @@ const projectReceiptEvent = Effect.fn(function* (
       DateTime.Order(time, times[index] ?? time) > 0 ? candidate : index,
     0
   );
-  if (raw.message.kapso.statuses[newest]?.status !== lifecycleStatus(eventName)) {
+  // Provider timestamps have second precision; tied receipts have no array-order authority.
+  if (
+    !raw.message.kapso.statuses.some(
+      (status, index) =>
+        status.status === lifecycleStatus(eventName) &&
+        DateTime.Order(times[index] ?? receivedAt, times[newest] ?? receivedAt) === 0
+    )
+  ) {
     return yield* invalidKapsoInvariant("event/status mismatch");
   }
   return Option.some({ ...latest.value, businessPhoneNumberId: raw.phone_number_id });

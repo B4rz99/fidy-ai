@@ -268,7 +268,9 @@ it.effect(
       expect(deleted.status).toBe(200);
       yield* evaluate(db);
       expect((yield* read()).series).toHaveLength(0);
-    })
+    }),
+  // Eleven public requests require admission pacing before the real D1 lifecycle work.
+  { timeout: 30_000 }
 );
 
 it.effect("serves the same canonical result through public HTTP and hosted query execution", () =>

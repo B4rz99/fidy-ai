@@ -96,6 +96,8 @@ const checks: Array<Check> = [
   rootCheck("static", "Oxlint plugin JS types", ["bun", "run", "typecheck:oxlint"]),
   rootCheck("static", "Dependency cruiser JS types", ["bun", "run", "typecheck:depcruise"]),
   rootCheck("static", "Module graph", ["bun", "run", "lint:deps"]),
+  rootCheck("static", "Published interfaces", ["bun", "run", "check:publication"]),
+  rootCheck("static", "Architecture tests", ["bun", "run", "test:architecture"]),
   rootCheck("static", "Browser client graph", ["bun", "run", "check:browser-client"]),
   rootCheck("static", "Web policy integrity", ["bun", "run", "check:policy"]),
   rootCheck("static", "Shadcn output integrity", ["bun", "run", "check:shadcn"]),

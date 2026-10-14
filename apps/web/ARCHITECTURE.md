@@ -245,3 +245,8 @@ metadata, scopes and fixed lifetime before an explicit approval click. Only the 
 bearer. Browser pairing and provider login preserve this allowlisted destination/code; no arbitrary
 return URL, private verifier or bearer is placed in navigation state. Without a code, the page offers
 the manual fallback for another device. Authentication registry replacement owns pending work.
+The signed-in `/app/budgets` workspace keys its canonical queries by User, time zone, and selected month. `budgets.getBudgetStatus` supplies historical spending and applied caps; `budgets.listBudgets` supplies existing identities when assigning a category in an earlier month. Category labels come from the canonical category query. Editing uses the same canonical create/update contracts, including a single guarded collection rename and a versioned group Currency setting; uncertain acknowledgements lock writes until an explicit refresh. Interaction state owns only drafts and save feedback. Exact Money totals remain separated by Currency, and the shared workspace panel becomes a sheet for editing on phones.
+
+Category editors inherit their group Currency; only group settings or a new group expose the Currency selector. Decimal amount controls refuse non-numeric input before submission.
+
+The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.

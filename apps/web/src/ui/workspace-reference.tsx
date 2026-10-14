@@ -95,6 +95,7 @@ export const WorkspaceReference = (): JSX.Element => {
         />
       </WorkspaceHeader>
       <WorkspaceColumns
+        variant="default"
         panel={
           <WorkspacePanel
             open={false}

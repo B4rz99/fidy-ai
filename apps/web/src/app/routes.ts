@@ -4,11 +4,15 @@ import {
 } from "@/features/provider-authentication/feature";
 import { Option, Schema } from "effect";
 import {
+  BudgetMonth,
   ConnectionAttemptReference,
+  type FidyClient,
+  type HostedTurnClient,
   OAuthConnectionListQuery,
   OAuthRequestId,
   PATPairingPublicCode,
   ProviderHandoffSearch,
+  type WebAuthClient,
 } from "@/transport/client";
 import { type JSX, Suspense, createElement, lazy } from "react";
 import {
@@ -20,7 +24,6 @@ import {
   redirect,
   useRouter,
 } from "@tanstack/react-router";
-import type { FidyClient, HostedTurnClient, WebAuthClient } from "@/transport/client";
 import { RouteFailure } from "./route-failure";
 
 type WebRouterContext = Readonly<{
@@ -130,6 +133,20 @@ const transactionsRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/transactions",
   component: TransactionListFeature,
+});
+const budgetsRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/budgets",
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        month: Schema.optionalKey(BudgetMonth),
+        data: Schema.optionalKey(
+          Schema.Literals(["demo", "worst", "empty", "one", "full", "many"])
+        ),
+      })
+    )(search),
+  component: lazyRouteComponent(() => import("@/features/budgets/feature"), "BudgetsFeature"),
 });
 const recurringDigestRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -272,7 +289,12 @@ const routeTree = rootRoute.addChildren([
   connectionContinuationRoute,
   subscriptionOffersRoute,
   authenticatedRoute.addChildren([
-    signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, transactionsRoute]),
+    signedInRoute.addChildren([
+      signedInIndexRoute,
+      dashboardRoute,
+      transactionsRoute,
+      budgetsRoute,
+    ]),
     accessManagementRoute,
     patManagementRoute,
     oauthManagementRoute,

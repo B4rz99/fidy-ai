@@ -101,7 +101,7 @@ const statusParameters = (url: URL): Option.Option<typeof BudgetStatusQueryParam
   const keys = [...url.searchParams.keys()];
   if (
     keys.length !== new Set(keys).size ||
-    keys.some((key) => !["categoryId", "currency", "timeZone"].includes(key))
+    keys.some((key) => !["categoryId", "currency", "timeZone", "month"].includes(key))
   ) {
     return Option.none();
   }

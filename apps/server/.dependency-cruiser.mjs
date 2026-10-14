@@ -194,7 +194,7 @@ export default {
       to: {
         path: "^src/",
         pathNot: [
-          "^src/core/(browser-login|categories|dashboard|email-authentication|identity|ingestion|insights|recovery|subscription|tokens)/contract\\.ts$",
+          "^src/core/(browser-login|budgets|categories|dashboard|email-authentication|identity|ingestion|insights|recovery|subscription|tokens)/contract\\.ts$",
 
           "^src/core/tokens/operations\\.ts$",
           // Pure Transaction query values own canonical browser continuation decoding.

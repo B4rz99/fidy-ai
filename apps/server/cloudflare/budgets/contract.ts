@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect";
+import { Data, type Option, Schema } from "effect";
 import { BudgetCrossing } from "../../src/core/budgets/contract";
 import { ConsentRecordId } from "../../src/core/consent/contract";
 import type { AppliedBudgetMonth, BudgetId } from "../../src/core/budgets/contract";
@@ -28,6 +28,7 @@ export type BudgetOutcome = Readonly<{
   _tag: "Budget";
   operation: "budgets.createBudget" | "budgets.updateBudget" | "budgets.deleteBudget";
   budgetId: BudgetId;
+  month: Option.Option<string>;
 }>;
 
 /** The canonical reads implemented by the Budget owner for every authorized caller surface. */

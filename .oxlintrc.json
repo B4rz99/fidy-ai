@@ -73,7 +73,9 @@
     "import/extensions": [
       "error",
       "never",
-      { "pattern": { "mjs": "always", "css": "always", "html": "always", "astro": "always" } }
+      {
+        "pattern": { "mjs": "always", "css": "always", "html": "always", "astro": "always" }
+      }
     ],
     "no-void": "error",
     "curly": ["error", "multi-line"],
@@ -311,7 +313,7 @@
       "files": [
         "scripts/mcp/production-browser.ts",
         "apps/web/src/ui/class-names.ts",
-        "apps/web/src/ui/components/{alert,badge,button,calendar,checkbox,dropdown-menu,empty,input,popover,progress,toggle-group}.tsx",
+        "apps/web/src/ui/components/{alert,badge,button,calendar,checkbox,dropdown-menu,empty,input,popover,progress,searchable-choice-dropdown,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
         "apps/web/{playwright,vite,vitest}.config.ts",
         "apps/site/{astro,playwright}.config.ts",

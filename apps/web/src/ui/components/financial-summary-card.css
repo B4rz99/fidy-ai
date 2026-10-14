@@ -1,0 +1,10 @@
+.financial-summary-card {
+  container-type: inline-size;
+  min-width: 0;
+}
+.financial-summary-card p {
+  overflow-wrap: anywhere;
+}
+.financial-summary-amount {
+  white-space: nowrap;
+}

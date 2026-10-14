@@ -1,0 +1,295 @@
+import type { Page } from "@playwright/test";
+import { type Cause, Effect } from "effect";
+import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
+import { signInThroughCore } from "./real-core-fixture";
+import { playwright } from "./playwright-runtime";
+
+const { AxeBuilder } = await import("@axe-core/playwright");
+const { expect, test } = playwright;
+const categories = [
+  { id: "24000000-0000-4000-8000-000000000301", label: "Vivienda" },
+  { id: "24000000-0000-4000-8000-000000000302", label: "Restaurantes" },
+  { id: "24000000-0000-4000-8000-000000000303", label: "Mercado" },
+];
+const period = {
+  from: "2026-10-01T05:00:00Z",
+  to: "2026-11-01T05:00:00Z",
+  timeZone: "America/Bogota",
+};
+const budget = ({
+  index,
+  amount,
+  currency,
+  groupName,
+}: Readonly<{ index: number; amount: string; currency: string; groupName: string }>): object => ({
+  id: `24000000-0000-4000-8000-00000000031${index}`,
+  categoryId: categories[index]?.id,
+  cap: { amount, currency },
+  groupName,
+  createdAt: "2026-10-01T12:00:00Z",
+  updatedAt: "2026-10-01T12:00:00Z",
+});
+const report = {
+  period,
+  initialized: true,
+  cashFlow: {
+    income: [{ amount: "300000", currency: "COP" }],
+    expenses: [
+      { amount: "130000", currency: "COP" },
+      { amount: "10.1", currency: "USD" },
+    ],
+  },
+  statuses: [
+    {
+      budget: budget({ index: 0, amount: "100000", currency: "COP", groupName: "Hogar" }),
+      spent: { amount: "130000", currency: "COP" },
+      period,
+      type: "over",
+      overBy: { amount: "30000", currency: "COP" },
+    },
+    {
+      budget: budget({ index: 1, amount: "50.25", currency: "USD", groupName: "Alimentación" }),
+      spent: { amount: "10.1", currency: "USD" },
+      period,
+      type: "under",
+      remaining: { amount: "40.15", currency: "USD" },
+    },
+  ],
+};
+
+const fitsViewport = (): boolean => document.documentElement.scrollWidth <= window.innerWidth;
+const installBudgetReport = (page: Page): Promise<unknown> =>
+  page
+    .route(`${apiOrigin}/budget-status?**`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: response(report) })
+    )
+    .then(() =>
+      page.route(`${apiOrigin}/budgets`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: response(report.statuses.map((status) => status.budget)),
+        })
+      )
+    );
+const installLostAcknowledgement = ({
+  page,
+  edits,
+}: Readonly<{ page: Page; edits: { count: number } }>): Promise<unknown> =>
+  page.route(`${apiOrigin}/budgets/*`, (route) => {
+    edits.count += 1;
+    return route.abort("failed");
+  });
+
+const checkAccessibility = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+    expect(
+      result.violations.filter(({ impact }) => impact === "serious" || impact === "critical")
+    ).toEqual([]);
+  });
+
+const checkAmountEntry = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const input = page.getByLabel("Presupuesto de Vivienda (COP)");
+    yield* Effect.tryPromise(() => input.pressSequentially("abc"));
+    yield* Effect.tryPromise(() => expect(input).toHaveValue("100000"));
+    yield* Effect.tryPromise(() => input.fill("12abc34"));
+    yield* Effect.tryPromise(() => expect(input).toHaveValue("100000"));
+  });
+
+const checkSummaryViews = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Ingresos", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Resumen COP" })).toContainText("300.000")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("heading", { name: "Gastos", exact: true })).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Resumen", exact: true }).click()
+    );
+  });
+
+test("shows grouped currency totals and prevents replay after a lost save acknowledgement", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories }));
+      const edits = { count: 0 };
+      yield* Effect.tryPromise(() => installBudgetReport(page));
+      yield* Effect.tryPromise(() => installLostAcknowledgement({ page, edits }));
+      yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Resumen del mes" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "USD", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Resumen USD" })).toContainText("40,15")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "COP", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Resumen COP" })).toContainText("excedido")
+      );
+      yield* checkSummaryViews(page);
+      yield* checkAmountEntry(page);
+
+      const input = page.getByLabel("Presupuesto de Vivienda (COP)");
+      yield* Effect.tryPromise(() => input.fill("150000"));
+      yield* Effect.tryPromise(() => input.press("Enter"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar el guardado")
+      );
+      yield* Effect.tryPromise(() => expect(input).toBeDisabled());
+      expect(edits.count).toBe(1);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(input).toHaveValue("100000"));
+      yield* checkAccessibility(page);
+      yield* Effect.tryPromise(() => expect(input).toBeEnabled());
+      yield* Effect.tryPromise(() =>
+        page.screenshot({ path: "/tmp/fidy-budgets-desktop.png", fullPage: true })
+      );
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+      expect(yield* Effect.tryPromise(() => page.evaluate(fitsViewport))).toBe(true);
+      yield* checkAccessibility(page);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Configurar Vivienda" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
+      yield* checkAccessibility(page);
+      yield* Effect.tryPromise(() =>
+        page.screenshot({ path: "/tmp/fidy-budgets-mobile.png", fullPage: true })
+      );
+    })
+  ));
+
+const checkEarlierMonth = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-09"));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Aún no tienes presupuestos.", { exact: false })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page
+        .locator("section")
+        .filter({ has: page.getByRole("heading", { name: "Alimentación", exact: true }) })
+        .first()
+        .locator("details > summary")
+        .click()
+    );
+    yield* Effect.tryPromise(() =>
+      page
+        .getByText("Restaurantes", { exact: true })
+        .locator("..")
+        .getByRole("button", { name: "Asignar presupuesto" })
+        .click()
+    );
+    yield* Effect.tryPromise(() => page.getByLabel("Presupuesto", { exact: true }).fill("300000"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar presupuesto" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("300000")
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
+    );
+  });
+
+test("saves a monthly cap from the view through real Core and retains it after reload", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Presupuestos", exact: true })).toBeVisible()
+      );
+      const group = page
+        .locator("section")
+        .filter({ has: page.getByRole("heading", { name: "Alimentación", exact: true }) })
+        .first();
+      yield* Effect.tryPromise(() => group.locator("details > summary").click());
+      yield* Effect.tryPromise(() =>
+        page
+          .getByText("Restaurantes", { exact: true })
+          .locator("..")
+          .getByRole("button", { name: "Asignar presupuesto" })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Presupuesto", { exact: true }).fill("500000")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar presupuesto" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
+      );
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Configurar grupo Alimentación" }).click()
+      );
+      yield* Effect.tryPromise(() => page.getByLabel("Grupo", { exact: true }).fill("Comida"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar presupuesto" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Comida", exact: true })).toBeVisible()
+      );
+      yield* checkEarlierMonth(page);
+      yield* checkGroupCurrency(page);
+    })
+  ));
+
+const checkGroupCurrency = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-11"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Configurar grupo Comida" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("combobox", { name: "Moneda del grupo", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => page.getByRole("option", { name: "USD", exact: true }).click());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar presupuesto" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Presupuesto de Restaurantes (USD)")).toHaveValue("500000")
+    );
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Presupuesto de Restaurantes (USD)")).toHaveValue("500000")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Configurar Restaurantes" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Moneda del grupo: USD", { exact: true })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("combobox", { name: "Moneda del grupo", exact: true })).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
+    );
+  });

@@ -503,6 +503,7 @@ const WorkspaceContent = ({
   const locked = panelLocked(panel);
   return (
     <WorkspaceColumns
+      variant="default"
       panel={
         <WorkspacePanel
           {...props}

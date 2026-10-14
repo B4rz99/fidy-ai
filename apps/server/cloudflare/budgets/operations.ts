@@ -1,4 +1,9 @@
 import {
+  acceptsGroupCapPrecision,
+  acceptsGroupCurrency,
+  prepareGroupCurrency,
+} from "./internal/group-currency";
+import {
   type BudgetCrossingRead,
   BudgetCrossingUnavailable,
   type BudgetOutcome,
@@ -30,6 +35,7 @@ import {
   transactionNoStore,
   transactionUnavailable,
 } from "../canonical-work/operations";
+import { readMonthlyCashFlow } from "./internal/monthly-cash-flow";
 import { recordBudgetCall } from "./internal/budget-audit";
 import { budgetFromRow } from "./internal/budget-row";
 import {
@@ -37,8 +43,6 @@ import {
   type CanonicalMutationRefusal,
   type GuardRefusalWork,
 } from "../canonical-operations/contract";
-import { prepareCategoryReference } from "../categories/operations";
-import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { type OAuthMutationReview } from "../oauth-confirmation/contract";
 import { recordLivePATUse } from "../../src/shell/tokens/operations";
 import { budgetOutcome, findOwnedBudget } from "./internal/budget-outcome";
@@ -51,7 +55,11 @@ import {
   budgetAudit,
   budgetCommitGuards,
   categoryExists,
+  createBudgetStatement,
   findConflict,
+  prepareBudgetMonthUpdate,
+  prepareMonthlyCap,
+  prepareMonthlyPlan,
   reviewBudget,
   updateBudgetStatement,
 } from "./internal/budgets";
@@ -132,6 +140,7 @@ const budgetGuardRefusal =
       db,
       userId: subject.userId,
       id: outcome.budgetId,
+      month: outcome.month,
     }).pipe(
       Effect.map((owned) => refusal(Option.isNone(owned) ? "not_found" : "validation_failed")),
       Effect.orElseSucceed(() => refusal("validation_failed"))
@@ -145,6 +154,8 @@ const statements = ({
   write,
   current,
   oauthReview,
+  before,
+  after,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
@@ -152,6 +163,8 @@ const statements = ({
   write: D1PreparedStatement;
   current: number;
   oauthReview: Option.Option<OAuthMutationReview>;
+  before: ReadonlyArray<D1PreparedStatement>;
+  after: ReadonlyArray<D1PreparedStatement>;
 }>): CanonicalMutationPreparation => ({
   _tag: "Prepared",
   mutation: {
@@ -176,7 +189,9 @@ const statements = ({
             db.prepare(sql).bind(...params)
           )
         : []),
+      ...before,
       write,
+      ...after,
       budgetAudit({ db, subject, operation: outcome.operation, current }),
     ],
   },
@@ -245,6 +260,15 @@ const checkedBudgetWrite = ({
     return Option.none();
   });
 
+const refuseInvalidBudget = (
+  input: Readonly<{
+    db: D1Database;
+    subject: TransactionCaller;
+    current: number;
+    operation: "budgets.createBudget" | "budgets.updateBudget";
+  }>
+): CanonicalMutationPreparation => refuseBudget({ ...input, code: "validation_failed" });
+
 /**
  * Prepare one positive cap for a known Category under live caller authority. The canonical User
  * unit commits these guarded writes with its accountability evidence or commits none of them.
@@ -273,37 +297,68 @@ export const prepareCreateBudget = ({
       operation: "budgets.createBudget",
     });
     if (Option.isSome(rejected)) return rejected.value;
-    const authority = callerAuthority({ subject, current });
-    const instant = DateTime.formatIso(DateTime.makeUnsafe(current));
+    if (
+      !(yield* acceptsGroupCurrency({
+        db,
+        userId: subject.userId,
+        payload,
+        existing: Option.none(),
+      }))
+    ) {
+      return refuseInvalidBudget({ db, subject, current, operation: "budgets.createBudget" });
+    }
     return statements({
       db,
       subject,
       current,
-      outcome: { _tag: "Budget", operation: "budgets.createBudget", budgetId: id },
+      outcome: {
+        _tag: "Budget",
+        operation: "budgets.createBudget",
+        budgetId: id,
+        month: Option.fromUndefinedOr(payload.month),
+      },
       oauthReview: Option.none(),
-      write: prepareCategoryReference({
-        db,
-        categoryId: payload.categoryId,
-        statement: {
-          sql: `INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at)
-          SELECT ?, user_id, ?, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}
-          AND EXISTS (SELECT 1 FROM category_reference)`,
-          params: [
-            id,
-            payload.categoryId,
-            payload.cap.currency,
-            encodeMoneyAmount(payload.cap.amount),
-            instant,
-            instant,
-            ...authority.bindings,
-          ],
-        },
-      }),
+      before: [
+        ...(payload.month === undefined
+          ? []
+          : prepareMonthlyPlan({ db, subject, current, month: payload.month })),
+        ...prepareGroupCurrency({ db, subject, current, payload }),
+      ],
+      after: prepareMonthlyCap({ db, subject, current, id, payload }),
+      write: createBudgetStatement({ db, subject, current, id, payload }),
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
+type BudgetUpdatePreparation = Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  id: BudgetId;
+  payload: UpdateBudgetInput;
+  current: number;
+}>;
+
+const acceptsBudgetUpdate = ({
+  db,
+  subject,
+  id,
+  payload,
+}: BudgetUpdatePreparation): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const planned = yield* findOwnedBudget({
+      db,
+      userId: subject.userId,
+      id,
+      month: Option.fromUndefinedOr(payload.month),
+    });
+    if (Option.isNone(planned)) return false;
+    return (
+      (yield* acceptsGroupCurrency({ db, userId: subject.userId, payload, existing: planned })) &&
+      (yield* acceptsGroupCapPrecision({ db, userId: subject.userId, payload }))
+    );
+  }).pipe(Effect.orElseSucceed(() => false));
+
 /**
- * Prepare a caller-owned Category/cap revision. Currency and ownership cannot change; commit-time
+ * Prepare a caller-owned Category/cap revision. Group currency is versioned explicitly; commit-time
  * guards recheck Category existence, uniqueness, and authority without reopening monthly marks.
  */
 export const prepareUpdateBudget = ({
@@ -312,15 +367,14 @@ export const prepareUpdateBudget = ({
   id,
   payload,
   current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  id: BudgetId;
-  payload: UpdateBudgetInput;
-  current: number;
-}>): Effect.Effect<CanonicalMutationPreparation> =>
+}: BudgetUpdatePreparation): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
-    const existing = yield* findOwnedBudget({ db, userId: subject.userId, id });
+    const existing = yield* findOwnedBudget({
+      db,
+      userId: subject.userId,
+      id,
+      month: Option.none(),
+    });
     if (Option.isNone(existing)) {
       return refuseBudget({
         db,
@@ -330,14 +384,8 @@ export const prepareUpdateBudget = ({
         code: "not_found",
       });
     }
-    if (existing.value.cap.currency !== payload.cap.currency) {
-      return refuseBudget({
-        db,
-        subject,
-        current,
-        operation: "budgets.updateBudget",
-        code: "validation_failed",
-      });
+    if (!(yield* acceptsBudgetUpdate({ db, subject, id, payload, current }))) {
+      return refuseInvalidBudget({ db, subject, current, operation: "budgets.updateBudget" });
     }
     const rejected = yield* checkedBudgetWrite({
       db,
@@ -354,12 +402,20 @@ export const prepareUpdateBudget = ({
       db,
       subject,
       current,
-      outcome: { _tag: "Budget", operation: "budgets.updateBudget", budgetId: id },
+      outcome: {
+        _tag: "Budget",
+        operation: "budgets.updateBudget",
+        budgetId: id,
+        month: Option.fromUndefinedOr(payload.month),
+      },
+      before: prepareBudgetMonthUpdate({ db, subject, current, id, payload }),
+      after: [],
       oauthReview: yield* reviewBudget({
         db,
         userId: subject.userId,
         budget: existing.value,
         action: "Cambiar",
+        groupCategoryIds: Option.fromUndefinedOr(payload.groupCategoryIds),
       }),
       write: updateBudgetStatement({ db, subject, current, id, payload }),
     });
@@ -379,7 +435,12 @@ export const prepareDeleteBudget = ({
 }>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     if (!(yield* authorityReady({ db, subject, current }))) return credentialRefusedPreparation();
-    const existing = yield* findOwnedBudget({ db, userId: subject.userId, id });
+    const existing = yield* findOwnedBudget({
+      db,
+      userId: subject.userId,
+      id,
+      month: Option.none(),
+    });
     if (Option.isNone(existing)) {
       return refusedPreparation(
         budgetRefusal({
@@ -396,12 +457,20 @@ export const prepareDeleteBudget = ({
       db,
       subject,
       current,
-      outcome: { _tag: "Budget", operation: "budgets.deleteBudget", budgetId: id },
+      outcome: {
+        _tag: "Budget",
+        operation: "budgets.deleteBudget",
+        budgetId: id,
+        month: Option.none(),
+      },
+      before: [],
+      after: [],
       oauthReview: yield* reviewBudget({
         db,
         userId: subject.userId,
         budget: existing.value,
         action: "Eliminar",
+        groupCategoryIds: Option.none(),
       }),
       write: db
         .prepare(`DELETE FROM budgets WHERE user_id = ? AND id = ?
@@ -411,8 +480,35 @@ export const prepareDeleteBudget = ({
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
 const maximumBudgetCount = 128;
+const monthLabelLength = 7;
 
 const maximumReportPages = 8;
+
+const readPlannedCaps = ({
+  db,
+  userId,
+  month,
+  includeInactive,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  month: string;
+  includeInactive: boolean;
+}>): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
+  Effect.gen(function* () {
+    const rows = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT b.id,b.category_id,
+      COALESCE((SELECT g.currency FROM budget_group_currencies g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
+      COALESCE((SELECT p.cap FROM budget_month_caps p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
+      b.created_at,b.updated_at,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
+      ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`)
+        .bind(month, month, userId, includeInactive ? 1 : 0, month)
+        .all()
+    );
+    if (rows.results.length > maximumBudgetCount) return Option.none<ReadonlyArray<Budget>>();
+    return Option.some(yield* Effect.forEach(rows.results, budgetFromRow));
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const respond = <A>(schema: Schema.Codec<A, Schema.Json>, data: A): Response =>
   Response.json(
@@ -438,19 +534,17 @@ export const readBudgetCaps = ({
   Option.Option<ReadonlyArray<Budget>>
 > =>
   Effect.gen(function* () {
-    const result = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT id, category_id, currency, cap, created_at, updated_at
-      FROM budgets WHERE user_id = ? ORDER BY currency, category_id LIMIT ${maximumBudgetCount + 1}`)
-        .bind(userId)
-        .all()
-    );
-    if (result.results.length > maximumBudgetCount) return Option.none<ReadonlyArray<Budget>>();
-    const budgets: Array<Budget> = [];
-    for (const raw of result.results) {
-      budgets.push(yield* budgetFromRow(raw));
-    }
-    return Option.some(budgets);
+    const context = yield* readUserContext({
+      db,
+      userId: UserId.make(userId),
+      authority: Option.none(),
+    });
+    if (Option.isNone(context)) return Option.none<ReadonlyArray<Budget>>();
+    const now = yield* DateTime.now;
+    const month = DateTime.formatIsoDate(
+      DateTime.setZone(now, DateTime.zoneMakeNamedUnsafe(context.value.timeZone))
+    ).slice(0, monthLabelLength);
+    return yield* readPlannedCaps({ db, userId, month, includeInactive: true });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /**
@@ -471,17 +565,36 @@ export const readBudgetSpending = ({
 }>): Effect.Effect<Option.Option<BudgetStatusReport>> =>
   Effect.gen(function* () {
     const period = deriveCurrentBudgetMonth({
-      now,
+      now:
+        query.month === undefined
+          ? now
+          : DateTime.toUtc(
+              DateTime.makeZonedUnsafe(`${query.month}-01T00:00:00Z`, {
+                timeZone: query.timeZone,
+                adjustForTimeZone: true,
+              })
+            ),
       timeZone: query.timeZone,
     });
-    const budgets = yield* readBudgetCaps({ db, userId });
+    const month = DateTime.formatIsoDate(
+      DateTime.setZone(period.from, DateTime.zoneMakeNamedUnsafe(query.timeZone))
+    ).slice(0, monthLabelLength);
+    const budgets = yield* readPlannedCaps({ db, userId, month, includeInactive: false });
     if (Option.isNone(budgets)) return Option.none<BudgetStatusReport>();
     const selected = budgets.value.filter(
       (budget) =>
         (query.categoryId === undefined || budget.categoryId === query.categoryId) &&
         (query.currency === undefined || budget.cap.currency === query.currency)
     );
-    if (selected.length === 0) return Option.some({ period, statuses: [] });
+    const initialized =
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT 1 FROM budget_plan_months WHERE user_id=? AND month=?")
+          .bind(userId, month)
+          .first()
+      )) !== null;
+    const cashFlow = yield* readMonthlyCashFlow({ db, userId, period, query });
+    if (Option.isNone(cashFlow)) return Option.none<BudgetStatusReport>();
     const pageQuota = yield* Ref.make(maximumReportPages);
     const statuses: Array<BudgetStatusReport["statuses"][number]> = [];
     for (const budget of selected) {
@@ -489,7 +602,7 @@ export const readBudgetSpending = ({
       if (Option.isNone(spent)) return Option.none<BudgetStatusReport>();
       statuses.push(yield* calculateBudgetStatus({ budget, spent: spent.value, period }));
     }
-    return Option.some({ period, statuses });
+    return Option.some({ period, statuses, initialized, cashFlow: cashFlow.value });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const readAuthorizedBudget = ({
@@ -509,16 +622,10 @@ const readAuthorizedBudget = ({
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (operation === "budgets.getBudget") {
-      const raw = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT id, category_id, currency, cap, created_at, updated_at
-      FROM budgets WHERE user_id = ? AND id = ?`)
-          .bind(subject.userId, Option.getOrThrow(id))
-          .first()
-      );
-      if (raw === null) return missing();
-      const found = yield* budgetFromRow(raw);
-      return respond(Schema.toCodecJson(Budget), found);
+      const budgets = yield* readBudgetCaps({ db, userId: subject.userId });
+      if (Option.isNone(budgets)) return transactionUnavailable();
+      const found = budgets.value.find((budget) => budget.id === Option.getOrThrow(id));
+      return found === undefined ? missing() : respond(Schema.toCodecJson(Budget), found);
     }
     if (operation === "budgets.listBudgets") {
       const all = yield* readBudgetCaps({ db, userId: subject.userId });

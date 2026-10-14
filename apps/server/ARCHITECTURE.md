@@ -567,3 +567,11 @@ User and Portfolio/BSUID uniqueness refuse established conflicts. Existing Users
 Consent exchange expiry cascades transient handoffs and attempts while copied legal evidence persists.
 The real public/Core/D1 suite verifies decisions, conflicts and atomicity; the built-browser fixture
 substitutes only external provider/Kapso responses. Live WhatsApp and deployed provider evidence remain gates.
+
+## Monthly budget planning
+
+Budget queries remain observational. An explicit month on a canonical Budget write freezes that User's inherited category caps in `budget_month_caps`, together with the `budget_plan_months` marker, cap edit, and Audit in one guarded D1 batch. Saved month amounts remain fixed; unsaved months preview the latest prior plan without rollover. A budget begins in its explicitly selected creation month and can be assigned to an earlier month through its existing identity. Legacy writes without a month retain the baseline-cap behavior. Current cap reads project the applied current plan, while historical spending uses the requested half-open calendar period in the supplied IANA zone.
+
+Group labels organize categories across months. A group rename explicitly selects Category identities, updates only the caller's Budgets, and captures the selected collection's revision for OAuth review. Each named group owns one Currency in `budget_group_currencies`, versioned from a selected month in the same canonical D1 unit as its caps and Audit. Category caps project that inherited Currency. Changes retain nominal amounts, preserve earlier month Currency, and reject incompatible precision in affected retained caps. Currency revisions invalidate Budget projections and group confirmation evidence. The browser never combines currencies or converts Money to floating-point values for totals.
+
+Budget status reports include observed monthly income and expenses from Transactions’ published exact aggregate projection. The same requested half-open period, caller ownership, and optional category/currency filters apply to that cash flow, including when no caps match.

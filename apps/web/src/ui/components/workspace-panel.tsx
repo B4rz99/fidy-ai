@@ -1,6 +1,9 @@
-import { useSyncExternalStore } from "react";
+import { Option } from "effect";
+import { useContext, useSyncExternalStore } from "react";
 import type { JSX, ReactNode } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./sheet";
+
+import { WorkspaceDesktop } from "./workspace-responsive";
 
 const desktopQuery = "(min-width: 1280px)";
 const isDesktop = (): boolean => window.matchMedia(desktopQuery).matches;
@@ -25,15 +28,23 @@ export const WorkspacePanel = ({
   title: string;
   description: string;
 }>): JSX.Element => {
-  const desktop = useSyncExternalStore(subscribe, isDesktop);
+  const viewportDesktop = useSyncExternalStore(subscribe, isDesktop);
+  const containerDesktop = useContext(WorkspaceDesktop);
+  const desktop = Option.getOrElse(containerDesktop, () => viewportDesktop);
   if (desktop) {
     return (
-      <aside className="self-stretch border-l bg-card p-6 xl:sticky xl:top-0 xl:min-h-[calc(100svh-72px)]">
+      <aside
+        className={
+          Option.isNone(containerDesktop)
+            ? "self-stretch border-l bg-card p-6 xl:sticky xl:top-0 xl:min-h-[calc(100svh-72px)]"
+            : "min-w-0 self-stretch border-l bg-card p-6"
+        }
+      >
         {children}
       </aside>
     );
   }
-  if (!open) return <aside className="border-t bg-card p-5">{children}</aside>;
+  if (!open) return <aside className="min-w-0 border-t bg-card p-5">{children}</aside>;
   return (
     <Sheet
       open={open}

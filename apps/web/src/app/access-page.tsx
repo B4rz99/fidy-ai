@@ -19,6 +19,7 @@ export const AccessManagementPage = (): JSX.Element => (
           {null}
         </WorkspaceHeader>
         <WorkspaceColumns
+          variant="default"
           panel={
             <aside className="min-w-0 border-t bg-card p-5 xl:border-t-0 xl:border-l">
               {creation}

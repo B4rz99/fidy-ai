@@ -116,7 +116,7 @@ const PrivacyExplanation = (): JSX.Element => (
     </p>
     <p>
       Esto no elimina tus datos, cancela la renovación de tu suscripción ni revoca por separado un
-      token o una conexión bancaria.
+      token.
     </p>
   </>
 );

@@ -1,0 +1,28 @@
+apps/server/src/shell/ingestion/internal/parser.ts
+  s_6d017cc65783af::t_686920409c9c16 42,46-50
+  s_6d017cc65783af::t_0ccc806d7e325e 43-45
+apps/server/src/shell/ingestion/parser.test.ts
+  s_6d017cc65783af::t_ec849b0241fcf0 56-98
+apps/server/src/core/ingestion/FEATURE.md
+  s_6d017cc65783af::t_fbfd0c8e543a1f 1-45
+apps/server/src/shell/ingestion/internal/whatsapp-media.ts
+  s_6d017cc65783af::t_696e017d9888d8 20
+apps/server/src/shell/ingestion/whatsapp-media.test.ts
+  s_6d017cc65783af::t_72989ae28aa730 19-39,147-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0158e97bdd2c1a47ef65fa2d735fd6c443ffeae1",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

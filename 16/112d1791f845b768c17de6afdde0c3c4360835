@@ -1,0 +1,22 @@
+apps/web/e2e/budget-widget.spec.ts
+  s_6d017cc65783af::t_d7c1f598ec721d 58-60,73-75,101-106,118-120
+  s_6d017cc65783af::t_7f6f5c52fbd87f 8,11
+infra/cloudflare/verify-edge-policy.ts
+  s_6d017cc65783af::t_3e989f1ec81e70 38-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "16112d1791f845b768c17de6afdde0c3c4360835",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

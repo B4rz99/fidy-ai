@@ -12,6 +12,8 @@ import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { executeProtectedCategories } from "./operations";
+import { KeywordRuleResponse, ListKeywordRulesResponse } from "../../src/shell/categories/contract";
+import { CreateTransactionResponse } from "../../src/shell/transactions/contract";
 
 const sessionBinding = (session: string): string =>
   `40000000-0000-4000-8000-00000000000${session.split("=")[1]?.[0] ?? "0"}`;
@@ -361,6 +363,114 @@ const storedCategory = (
 
 afterAll(() => databases.dispose());
 
+it("applies a replaced keyword and Category only to future matching captures", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { send, sessions } = yield* awaitPromise(setup());
+      const session = sessions[0];
+      const original = (yield* decodeJson(
+        Schema.toCodecJson(KeywordRuleResponse),
+        yield* awaitPromise(createRule({ send, session, keyword: "Rappi" }))
+      )).data;
+      const updated = yield* awaitPromise(
+        send({
+          path: `/category-keyword-rules/${original.id}`,
+          method: "PUT",
+          session,
+          payload: { keyword: "Éxito", categoryId: mercado },
+        })
+      );
+      expect(updated.status).toBe(200);
+      expect(
+        (yield* decodeJson(Schema.toCodecJson(KeywordRuleResponse), updated)).data
+      ).toMatchObject({
+        id: original.id,
+        keyword: "Éxito",
+        categoryId: mercado,
+        createdAt: original.createdAt,
+      });
+      const matched = yield* decodeJson(
+        Schema.toCodecJson(CreateTransactionResponse),
+        yield* awaitPromise(capture({ send, session, counterparty: "EXITO supermercado" }))
+      );
+      expect(matched.data.categoryId).toBe(mercado);
+      const retired = yield* decodeJson(
+        Schema.toCodecJson(CreateTransactionResponse),
+        yield* awaitPromise(capture({ send, session, counterparty: "Rappi" }))
+      );
+      expect(retired.data.categoryId).toBe(otros);
+    })
+  ));
+
+it("preserves a rule and its capture behavior when replacement conflicts or names an unknown Category", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { send, sessions } = yield* awaitPromise(setup());
+      const session = sessions[0];
+      const original = (yield* decodeJson(
+        Schema.toCodecJson(KeywordRuleResponse),
+        yield* awaitPromise(createRule({ send, session, keyword: "Rappi" }))
+      )).data;
+      expect((yield* awaitPromise(createRule({ send, session, keyword: "Éxito" }))).status).toBe(
+        201
+      );
+      for (const replacement of [
+        { keyword: "EXITO", categoryId: mercado, status: 400 },
+        { keyword: "Farmacia", categoryId: foreignCategory, status: 404 },
+      ]) {
+        const refused = yield* awaitPromise(
+          send({
+            path: `/category-keyword-rules/${original.id}`,
+            method: "PUT",
+            session,
+            payload: { keyword: replacement.keyword, categoryId: replacement.categoryId },
+          })
+        );
+        expect(refused.status).toBe(replacement.status);
+        const retained = yield* decodeJson(
+          Schema.toCodecJson(ListKeywordRulesResponse),
+          yield* awaitPromise(send({ path: "/category-keyword-rules", method: "GET", session }))
+        );
+        expect(retained.data.find((rule) => rule.id === original.id)).toEqual(original);
+      }
+      const captured = yield* decodeJson(
+        Schema.toCodecJson(CreateTransactionResponse),
+        yield* awaitPromise(capture({ send, session, counterparty: "Rappi" }))
+      );
+      expect(captured.data.categoryId).toBe(domicilios);
+    })
+  ));
+
+it("retains exactly one normalized keyword when concurrent creates compete", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { send, sessions } = yield* awaitPromise(setup());
+      const session = sessions[0];
+      const responses = yield* awaitPromise(
+        Promise.all([
+          createRule({ send, session, keyword: "Éxito", categoryId: mercado }),
+          createRule({ send, session, keyword: "EXITO", categoryId: transporte }),
+        ])
+      );
+      expect(
+        responses.map((response) => response.status).sort((left, right) => left - right)
+      ).toEqual([201, 400]);
+      const accepted = responses.find((response) => response.status === 201);
+      if (accepted === undefined) throw new Error("No accepted keyword rule");
+      const winner = (yield* decodeJson(Schema.toCodecJson(KeywordRuleResponse), accepted)).data;
+      const retained = yield* decodeJson(
+        Schema.toCodecJson(ListKeywordRulesResponse),
+        yield* awaitPromise(send({ path: "/category-keyword-rules", method: "GET", session }))
+      );
+      expect(retained.data).toEqual([winner]);
+      const captured = yield* decodeJson(
+        Schema.toCodecJson(CreateTransactionResponse),
+        yield* awaitPromise(capture({ send, session, counterparty: "Exito" }))
+      );
+      expect(captured.data.categoryId).toBe(winner.categoryId);
+    })
+  ));
+
 it("lists and creates rules for exactly one User through the derived canonical contract", () =>
   runTest(
     Effect.gen(function* () {
@@ -443,7 +553,7 @@ it("rejects an unknown Category, an oversized keyword, and a malformed body with
     })
   ));
 
-it("refuses the hundred-and-first retained rule while every earlier rule stays stored", () =>
+it("refuses excess rules but allows replacement at capacity and reuses a deleted slot", () =>
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
@@ -471,7 +581,52 @@ it("refuses the hundred-and-first retained rule while every earlier rule stays s
         createRule({ send, session: sessions[0], keyword: "demasiada" })
       );
       expect(refused.status).toBe(400);
-      expect(yield* ruleCount(db, userA)).toBe(100);
+      const retained = (yield* decodeJson(
+        Schema.toCodecJson(ListKeywordRulesResponse),
+        yield* awaitPromise(
+          send({ path: "/category-keyword-rules", method: "GET", session: sessions[0] })
+        )
+      )).data;
+      expect(retained).toHaveLength(100);
+      const first = retained[0];
+      if (first === undefined) throw new Error("Missing retained keyword rule");
+      const replaced = yield* awaitPromise(
+        send({
+          path: `/category-keyword-rules/${first.id}`,
+          method: "PUT",
+          session: sessions[0],
+          payload: { keyword: "reemplazada", categoryId: mercado },
+        })
+      );
+      expect(replaced.status).toBe(200);
+      expect(
+        (yield* decodeJson(Schema.toCodecJson(KeywordRuleResponse), replaced)).data
+      ).toMatchObject({
+        id: first.id,
+        keyword: "reemplazada",
+        categoryId: mercado,
+      });
+      expect(
+        (yield* awaitPromise(
+          send({
+            path: `/category-keyword-rules/${first.id}`,
+            method: "DELETE",
+            session: sessions[0],
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* awaitPromise(createRule({ send, session: sessions[0], keyword: "nueva" }))).status
+      ).toBe(201);
+      const afterReuse = (yield* decodeJson(
+        Schema.toCodecJson(ListKeywordRulesResponse),
+        yield* awaitPromise(
+          send({ path: "/category-keyword-rules", method: "GET", session: sessions[0] })
+        )
+      )).data;
+      expect(afterReuse).toHaveLength(100);
+      expect(afterReuse.some((rule) => rule.id === first.id)).toBe(false);
+      expect(afterReuse.some((rule) => rule.keyword === "nueva")).toBe(true);
     })
   ));
 

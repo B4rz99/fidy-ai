@@ -36,6 +36,8 @@ jobs:
       RECOVERY_OPERATOR_EMAIL: ${{ vars.RECOVERY_OPERATOR_EMAIL }}
       CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
       SMOKE_PROOF: ${{ secrets.SMOKE_PROOF }}
+      PROACTIVITY_ENABLED: ${{ vars.PROACTIVITY_ENABLED || 'disabled' }}
+      PROACTIVITY_TEMPLATE_JSON: ${{ vars.PROACTIVITY_TEMPLATE_JSON }}
     steps:
       - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

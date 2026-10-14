@@ -119,11 +119,11 @@ it.effect(
         yield* TestClock.adjust("5 seconds");
         yield* Fiber.join(fiber);
         expect(opened).toEqual(
-          noBrowser ? [] : ["https://fidyapp.com/connect/cli?cliCode=BCDF-GHJK"]
+          noBrowser ? [] : ["https://app.fidyapp.com/connect/cli?cliCode=BCDF-GHJK"]
         );
         expect(emitted[0]).toMatchObject({
           publicCode: "BCDF-GHJK",
-          approvalUrl: "https://fidyapp.com/connect/cli?cliCode=BCDF-GHJK",
+          approvalUrl: "https://app.fidyapp.com/connect/cli?cliCode=BCDF-GHJK",
         });
         const encoded = yield* Schema.encodeEffect(
           Schema.fromJsonString(Schema.Array(PublicOutput))

@@ -27,7 +27,7 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 const signInWithIdentity = (
   { page, request }: SignInFixture,
-  identity: "primary" | "firstCard" | "dashboard" | "pagination" | "access"
+  identity: "primary" | "firstCard" | "dashboard" | "budget" | "pagination" | "access"
 ): Promise<void> =>
   page.clock
     .install()
@@ -108,6 +108,9 @@ export const signInFirstCardThroughCore = (input: SignInFixture): Promise<void> 
 /** Dashboard mutations have their own User so concurrent enrollment cannot reset its document. */
 export const signInDashboardThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, "dashboard");
+/** Budget mutations have their own User so they cannot change another journey's Widget data. */
+export const signInBudgetThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, "budget");
 /** Independent retained history spanning more than one canonical page. */
 export const signInPaginationThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, "pagination");

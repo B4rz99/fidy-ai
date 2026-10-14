@@ -22,6 +22,7 @@ const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 export const pairingUserId = "24000000-0000-4000-8000-000000000321";
 export const dashboardUserId = "24000000-0000-4000-8000-000000000351";
+export const budgetUserId = "24000000-0000-4000-8000-000000000371";
 export const accessUserId = "24000000-0000-4000-8000-000000000361";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 const now = Effect.runSync(Clock.currentTimeMillis);
@@ -91,6 +92,13 @@ await seedIdentity({
   bsuid: "CO.Dashboard",
   email: "tablero@example.com",
   consentId: "24000000-0000-4000-8000-000000000352",
+});
+// Budget spending and cap changes must not affect concurrent Dashboard journeys.
+await seedIdentity({
+  userId: budgetUserId,
+  bsuid: "CO.Budget",
+  email: "presupuesto@example.com",
+  consentId: "24000000-0000-4000-8000-000000000372",
 });
 // History continuation has its own User so parallel mutation journeys cannot alter its pages.
 await seedIdentity({

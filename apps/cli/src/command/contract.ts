@@ -9,7 +9,7 @@ export const PublicOutput = Schema.Union([
     managementUrl: Schema.Literal(managementUrl),
     approvalUrl: Schema.String.check(
       Schema.isPattern(
-        /^https:\/\/fidyapp\.com\/connect\/cli\?cliCode=[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u
+        /^https:\/\/app\.fidyapp\.com\/connect\/cli\?cliCode=[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u
       )
     ),
   }),

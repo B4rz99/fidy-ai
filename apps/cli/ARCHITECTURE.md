@@ -199,7 +199,7 @@ is not necessarily completed asynchronous work. Hosted confirmation metadata nev
 browser or hosted-session authority.
 
 Both fresh and saved access are bound to the fixed production API origin. There is no API-origin
-argument or environment override. Approval uses `https://fidyapp.com/connect/cli?cliCode=PUBLIC-CODE`.
+argument or environment override. Approval uses `https://app.fidyapp.com/connect/cli?cliCode=PUBLIC-CODE`.
 Only the server-decoded public request identity enters this fixed-origin URL; proof and PAT never
 enter URLs, browser state or arguments. Human login attempts to open the system browser once with
 an argument-vector child (no shell), a five-second deadline and scoped process cleanup. Failure

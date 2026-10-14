@@ -313,6 +313,12 @@ export default Alchemy.Stack(
         WEEKLY_QUESTION_TEMPLATE_JSON: yield* Config.String("WEEKLY_QUESTION_TEMPLATE_JSON").pipe(
           Config.withDefault("")
         ),
+        PROACTIVITY_ENABLED: yield* Config.String("PROACTIVITY_ENABLED").pipe(
+          Config.withDefault("disabled")
+        ),
+        PROACTIVITY_TEMPLATE_JSON: yield* Config.String("PROACTIVITY_TEMPLATE_JSON").pipe(
+          Config.withDefault("")
+        ),
         PROACTIVITY_ASK_AFTER: yield* Config.String("PROACTIVITY_ASK_AFTER").pipe(
           Config.withDefault("4")
         ),

@@ -916,6 +916,60 @@ it("creates a positive User-owned Budget and never reveals it to another User", 
     })
   ));
 
+it("combines Category and Currency filters without including other Budgets or Users", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const otherCategory = "10000000-0000-4000-8000-000000000001";
+      for (const { categoryId, currency } of [
+        { categoryId: category, currency: "COP" },
+        { categoryId: category, currency: "USD" },
+        { categoryId: otherCategory, currency: "COP" },
+      ]) {
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(
+              db,
+              request(0, "/budgets", "POST", {
+                categoryId,
+                cap: { amount: "100", currency },
+              })
+            )
+          )).status
+        ).toBe(201);
+      }
+      const foreign = yield* Effect.tryPromise(() =>
+        send(db, request(1, "/budgets", "POST", payload()))
+      );
+      expect(foreign.status).toBe(201);
+      const foreignBudget = yield* Schema.decodeUnknownEffect(Created)(
+        yield* Effect.tryPromise(() => foreign.json())
+      );
+      for (const selection of [
+        { query: `categoryId=${category}`, expected: [`${category}:COP`, `${category}:USD`] },
+        { query: "currency=COP", expected: [`${category}:COP`, `${otherCategory}:COP`] },
+        { query: `categoryId=${category}&currency=COP`, expected: [`${category}:COP`] },
+        { query: `categoryId=${otherCategory}&currency=USD`, expected: [] },
+      ]) {
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, `/budget-status?timeZone=America%2FBogota&${selection.query}`))
+        );
+        expect(response.status).toBe(200);
+        const report = yield* Schema.decodeUnknownEffect(Report)(
+          yield* Effect.tryPromise(() => response.json())
+        );
+        expect(report.data.statuses.map(({ budget }) => budget.id)).not.toContain(
+          foreignBudget.data.id
+        );
+        expect(
+          report.data.statuses
+            .map(({ budget }) => `${budget.categoryId}:${budget.cap.currency}`)
+            .sort()
+        ).toEqual(selection.expected.toSorted());
+      }
+    })
+  ));
+
 it("revises a Budget without changing Currency and deletes only its owner's Budget", () =>
   Effect.runPromise(
     Effect.gen(function* () {

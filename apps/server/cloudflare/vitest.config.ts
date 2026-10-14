@@ -13,7 +13,7 @@ export default defineConfig({
     sequence: { sequencer: CloudflareTestSequencer },
     pool: "forks",
     fileParallelism: true,
-    maxWorkers: 3,
+    maxWorkers: 1,
     testTimeout: 15_000,
     silent: "passed-only",
   },

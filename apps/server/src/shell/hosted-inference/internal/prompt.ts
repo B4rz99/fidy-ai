@@ -253,23 +253,15 @@ const projectSection = (section: HostedContextSection): ReadonlyArray<Prompt.Mes
 const suppliedEvidenceInventory = (
   sections: ReadonlyArray<HostedContextSection>
 ): Prompt.SystemMessageEncoded => {
+  const count = (source: HostedContextSection["_tag"]): number =>
+    sections.filter(({ _tag }) => _tag === source).length;
   const evidenceCounts = {
-    Memory: 0,
-    CompactedConversation: 0,
-    Transcript: 0,
-    ProactiveReply: 0,
-    ToolResult: 0,
+    Memory: count("Memory"),
+    CompactedConversation: count("CompactedConversation"),
+    Transcript: count("Transcript"),
+    ProactiveReply: count("ProactiveReply"),
+    ToolResult: count("ToolResult"),
   };
-  for (const section of sections) {
-    switch (section._tag) {
-      case "Memory":
-      case "CompactedConversation":
-      case "Transcript":
-      case "ProactiveReply":
-      case "ToolResult":
-        evidenceCounts[section._tag] += 1;
-    }
-  }
   return {
     role: "system",
     content:

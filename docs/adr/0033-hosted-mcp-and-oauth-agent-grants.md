@@ -12,9 +12,8 @@ The User selected hosted Streamable HTTP MCP and first-party browser authorizati
 Fidy connector or PAT copy/paste. OAuth is a distinct authority path. PATs and Hosted Agent
 Sessions retain their existing meanings, scopes, expiration and Consent timing.
 
-The [compatibility report](../research/hosted-mcp-interoperability-977.md) records exact versions,
-source references, reproducible fixtures, successful synthetic exchanges and failures. This decision
-accepts the architecture, **not** security or launch certification. The revised compatibility slice
+The compatibility investigation in [#977](https://github.com/B4rz99/fidy-ai/issues/977)
+informed this decision. This decision accepts the architecture, **not** security or launch certification. The revised compatibility slice
 passes for Claude Code 2.1.288 and Codex 0.160.0. Codex 0.144.1 is unsupported because its
 callback drops issuer evidence; upgrading the tested host resolves this without weakening issuer
 validation. Claude's earlier reconnect failure was a local profile-path mismatch. No production
@@ -23,10 +22,8 @@ work or launch enablement is authorized by this ADR.
 
 The User subsequently selected **Claude Code and Codex only**. Pi and OpenCode are no longer
 supported targets; no adapter extension is required or approved for this slice. Earlier Pi findings
-remain historical evidence, not current scope. The
-[native confirmation report](../research/oauth-native-confirmation-988.md) records synthetic native
-form accept/cancel journeys for Claude Code **2.1.289** and Codex **0.160.0**. Real canonical/Core/D1
-confirmation is now implemented by #988. The [pinned-host implementation evidence](../../scripts/mcp/native-confirmation-hosts.evidence.json)
+remain historical evidence, not current scope. Real canonical/Core/D1 confirmation is
+implemented by [#988](https://github.com/B4rz99/fidy-ai/issues/988). The [pinned-host implementation evidence](../../scripts/mcp/native-confirmation-hosts.evidence.json)
 records real public ingress/coordinator/Core/native D1 accept, cancel and headless refusal for both
 hosts, with Codex CLI and daemon pinned to **0.160.0**. Canned loopback model responses and
 a disposable grant isolate confirmation; they do not verify production onboarding or human presence.

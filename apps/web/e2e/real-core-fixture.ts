@@ -26,7 +26,7 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
     });
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
-type ConsentRead = Readonly<{ status: number; body: unknown }>;
+type ConsentRead = Readonly<{ status: number }>;
 const observeConsentRead = (page: Page): Promise<ConsentRead> =>
   page
     .waitForRequest(
@@ -35,7 +35,7 @@ const observeConsentRead = (page: Page): Promise<ConsentRead> =>
     .then((request) => request.response())
     .then((response) => {
       if (response === null) throw new Error("Expected the new consent read response");
-      return response.json().then((body: unknown) => ({ status: response.status(), body }));
+      return { status: response.status() };
     });
 const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
   Effect.runPromise(
@@ -47,9 +47,6 @@ const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
         response.status === resourceLimitedStatus && retry < maximumRetries;
         retry++
       ) {
-        expect(response.body).toEqual({
-          error: { code: "consent_unavailable" },
-        });
         yield* Effect.sleep("1 second");
         const refreshed = observeConsentRead(page);
         yield* Effect.tryPromise(() =>

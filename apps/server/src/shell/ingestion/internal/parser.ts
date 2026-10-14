@@ -39,7 +39,15 @@ const delimiterFor = (text: string): string => {
     { delimiter: ",", count: 0 },
     { delimiter: "\t", count: 0 },
   ];
-  for (const character of text) {
+  let quoted = false;
+  const headerStart = Math.max(0, text.search(/[^\uFEFF\r\n]/u));
+  for (let index = headerStart; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (quoted) continue;
     if (character === "\r" || character === "\n") break;
     for (const candidate of candidates) {
       if (character === candidate.delimiter) candidate.count += 1;

@@ -53,6 +53,49 @@ it.effect("preserves CSV records and multiline physical line positions", () =>
   })
 );
 
+it.effect("ignores delimiters inside quoted CSV headers", () =>
+  Effect.gen(function* () {
+    for (const fixture of [
+      {
+        text: 'fecha,valor,"descripcion;detalle;nota"\n2026-08-01,-100,Cafe\n',
+        heading: "descripcion;detalle;nota",
+      },
+      {
+        text: 'fecha;valor;"descripcion,detalle,nota"\n2026-08-01;-100;Cafe\n',
+        heading: "descripcion,detalle,nota",
+      },
+      {
+        text: 'fecha\tvalor\t"descripcion;detalle;nota"\n2026-08-01\t-100\tCafe\n',
+        heading: "descripcion;detalle;nota",
+      },
+      {
+        text: '"fecha\n;,;",valor,descripcion\n2026-08-01,-100,Cafe\n',
+        heading: "descripcion",
+      },
+      {
+        text: 'fecha,valor,"descripcion "";detalle;nota"""\n2026-08-01,-100,Cafe\n',
+        heading: 'descripcion ";detalle;nota"',
+      },
+    ]) {
+      const parsed = yield* parseStatementFile(new TextEncoder().encode(fixture.text));
+      expect(parsed.headers[2]).toBe(fixture.heading);
+      expect(parsed.headers).toHaveLength(3);
+      expect(parsed.rows[0]?.fields).toEqual(["2026-08-01", "-100", "Cafe"]);
+    }
+  })
+);
+
+it.effect("detects CSV headers after empty leading lines and a UTF-8 BOM", () =>
+  Effect.gen(function* () {
+    const parsed = yield* parseStatementFile(
+      new TextEncoder().encode("\uFEFF\r\n\r\nfecha,valor,descripcion\r\n2026-08-01,-100,Cafe\r\n")
+    );
+    expect(parsed.headers).toEqual(["fecha", "valor", "descripcion"]);
+    expect(parsed.rows[0]?.fields).toEqual(["2026-08-01", "-100", "Cafe"]);
+    expect(parsed.rows[0]?.evidence).toMatchObject({ startLine: 4, endLine: 4 });
+  })
+);
+
 it.effect("sniffs CSV delimiters and rejects malformed or hostile bounds", () =>
   Effect.gen(function* () {
     const comma = yield* parseStatementFile(new TextEncoder().encode("A,B\n1,2"));

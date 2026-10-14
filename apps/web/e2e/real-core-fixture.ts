@@ -8,6 +8,7 @@ import { playwright } from "./playwright-runtime";
 const { expect } = playwright;
 
 const successStatus = 200;
+const resourceLimitedStatus = 429;
 const noContentStatus = 204;
 const pairingTimeoutMilliseconds = 15_000;
 const firstPollMilliseconds = 5_000;
@@ -25,9 +26,47 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
     });
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
+type ConsentRead = Readonly<{ status: number }>;
+const observeConsentRead = (page: Page): Promise<ConsentRead> =>
+  page
+    .waitForRequest(
+      (request) => request.url().endsWith("/web/consent") && request.method() === "GET"
+    )
+    .then((request) => request.response())
+    .then((response) => {
+      if (response === null) throw new Error("Expected the new consent read response");
+      return { status: response.status() };
+    });
+const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let response = first;
+      const maximumRetries = 6;
+      for (
+        let retry = 0;
+        response.status === resourceLimitedStatus && retry < maximumRetries;
+        retry++
+      ) {
+        yield* Effect.sleep("1 second");
+        const refreshed = observeConsentRead(page);
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Reintentar", exact: true }).click()
+        );
+        response = yield* Effect.tryPromise(() => refreshed);
+      }
+      expect(response.status).toBe(successStatus);
+    }).pipe(Effect.timeout("15 seconds"))
+  );
+export const reloadTransactionsThroughCore = (page: Page): Promise<void> => {
+  const consent = observeConsentRead(page);
+  return page
+    .reload()
+    .then(() => consent)
+    .then((response) => confirmConsentRead(page, response));
+};
 const signInWithIdentity = (
   { page, request }: SignInFixture,
-  identity: "primary" | "firstCard" | "dashboard" | "budget" | "pagination" | "access"
+  identity: "primary" | "firstCard" | "dashboard" | "budget" | "pagination" | "access" | "privacy"
 ): Promise<void> =>
   page.clock
     .install()
@@ -37,16 +76,22 @@ const signInWithIdentity = (
     .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&${identity}=true`))
     .then((approval) => {
       expect(approval.status()).toBe(noContentStatus);
+      const consent = observeConsentRead(page);
       const redemption = page.waitForResponse("**/web/pairings/redeem");
-      return page.clock.fastForward(firstPollMilliseconds).then(() => redemption);
+      return page.clock
+        .fastForward(firstPollMilliseconds)
+        .then(() => redemption)
+        .then((response) => {
+          expect(response.status()).toBe(successStatus);
+          return consent;
+        });
     })
-    .then((redemption) => {
-      expect(redemption.status()).toBe(successStatus);
-      return expect(page).toHaveURL(/\/app\/transactions$/u, {
-        timeout: pairingTimeoutMilliseconds,
-      });
-    })
-    .then(() => page.clock.setSystemTime(Effect.runSync(Clock.currentTimeMillis)));
+    .then((consent) =>
+      expect(page)
+        .toHaveURL(/\/app\/transactions$/u, { timeout: pairingTimeoutMilliseconds })
+        .then(() => page.clock.setSystemTime(Effect.runSync(Clock.currentTimeMillis)))
+        .then(() => confirmConsentRead(page, consent))
+    );
 
 /** Real public email pairing; the loopback fixture only delivers the synthetic proof. */
 export const signInWithVerifiedEmailThroughCore = ({
@@ -176,3 +221,7 @@ export const probeCanonicalRequest = (
     }
     return yield* Effect.tryPromise(() => send());
   }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
+
+/** Independent expired-trial User for irreversible processing-withdrawal acceptance. */
+export const signInPrivacyThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, "privacy");

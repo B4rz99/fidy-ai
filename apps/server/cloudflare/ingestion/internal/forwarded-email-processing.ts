@@ -1,5 +1,5 @@
 import type { NotificationEmailOutcome } from "../../../src/shell/ingestion/contract";
-import { prepareConsentAction } from "../../consent/operations";
+import { prepareQueuedConsentAction } from "../../consent/operations";
 import { fallbackCaptureCategory } from "../../../src/core/categories/operations";
 import { Clock, Data, DateTime, Effect, Option, type PlatformError, Schema } from "effect";
 import PostalMime from "postal-mime";
@@ -95,10 +95,10 @@ const findOwnedReceipt = (
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const raw = yield* attempt(() =>
-      prepareConsentAction({
+      prepareQueuedConsentAction({
         db: input.DB,
-        subject: { _tag: "Owner", column: "r.user_id" },
-        requirement: "active",
+        userId: input.userId,
+        queued: { sql: activeSource, params: [input.receiptId, input.userId, current] },
         statement: {
           sql: `SELECT r.id, r.object_key, r.delivery_digest, r.byte_length,
             r.received_at_ms, r.expires_at_ms, r.time_zone FROM forwarded_email_receipts r
@@ -206,6 +206,7 @@ const acceptedStatements = (
     if (material.interpretation._tag !== "Interpreted") return [];
     const { extraction, evidence: interpreted } = material.interpretation;
     return yield* prepareNotificationEmailCapture({
+      queuedAdmission: Option.some({ sql: activeSource, params: guard }),
       db: input.DB,
       userId: input.userId,
       transactionId: id,
@@ -236,10 +237,10 @@ const acceptedStatements = (
 const reviewStatement = (settlement: Settlement): D1PreparedStatement => {
   const { input, receipt, material, id, now, guard } = settlement;
   if (material.interpretation._tag !== "NeedsReview") throw new Error("Expected review decision");
-  return prepareConsentAction({
+  return prepareQueuedConsentAction({
     db: input.DB,
-    subject: { _tag: "User", userId: input.userId },
-    requirement: "active",
+    userId: input.userId,
+    queued: { sql: activeSource, params: guard },
     statement: {
       sql: `INSERT INTO forwarded_email_needs_review
     (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
@@ -262,10 +263,10 @@ const sampleStatement = (
   sampleId: string,
   html: string
 ): D1PreparedStatement =>
-  prepareConsentAction({
+  prepareQueuedConsentAction({
     db: settlement.input.DB,
-    subject: { _tag: "User", userId: settlement.input.userId },
-    requirement: "active",
+    userId: settlement.input.userId,
+    queued: { sql: activeSource, params: settlement.guard },
     statement: {
       sql: `INSERT INTO anonymized_email_samples
       (id, service_market, source_format, source_provider, parser_revision,
@@ -313,10 +314,10 @@ const settle = (
       statements.push(sampleStatement(settlement, sampleId, material.html.value));
     }
     statements.push(
-      prepareConsentAction({
+      prepareQueuedConsentAction({
         db: input.DB,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
+        userId: input.userId,
+        queued: { sql: activeSource, params: settlement.guard },
         statement: {
           sql: `INSERT INTO forwarded_email_outcomes
     (receipt_id, user_id, outcome, transaction_id, review_id, completed_at_ms)

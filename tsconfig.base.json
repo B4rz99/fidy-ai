@@ -117,7 +117,10 @@
               "./scripts/mcp/production-checks.test.ts",
               "./scripts/mcp/production-catalog.test.ts",
               "./scripts/mcp/production-cleanup.test.ts",
-              "./scripts/mcp/production-native.test.ts"
+              "./scripts/mcp/production-native.test.ts",
+              "./scripts/titular-requests/main.ts",
+              "./scripts/titular-requests/runtime.test.ts",
+              "./apps/web/e2e/titular-case-fixture.ts"
             ],
             "options": {
               "diagnosticSeverity": {

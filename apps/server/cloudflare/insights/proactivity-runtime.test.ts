@@ -33,7 +33,7 @@ import {
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
 import {
-  type InsightUnavailable,
+  InsightUnavailable,
   ProactivityActivity,
   type ProactivityDeliveryWork,
   type ProactivityEnvironment,
@@ -626,16 +626,19 @@ it("refuses approved-template drift between a deferred staging and the irreversi
 type RefusalCase = Readonly<{
   name: string;
   withdraw: boolean;
+  revokeCategory: boolean;
   reassociate: boolean;
   at: Option.Option<number>;
   environment: Partial<ProactivityEnvironment>;
   coordinatorUser: (typeof proactivityTestUsers)[number];
   workUser: (typeof proactivityTestUsers)[number];
   expectedStatus: 200 | 503;
-  expectedState: "ready" | "expired";
+  expectedState: "ready" | "expired" | "started";
+  expectedCalls: number;
 }>;
 const refused = {
   withdraw: false,
+  revokeCategory: false,
   reassociate: false,
   at: Option.none<number>(),
   environment: {},
@@ -643,6 +646,7 @@ const refused = {
   workUser: proactivityTestUsers[0],
   expectedStatus: 503,
   expectedState: "ready",
+  expectedCalls: 0,
 } as const;
 const refusalCases: ReadonlyArray<RefusalCase> = [
   { ...refused, name: "foreign subject", coordinatorUser: proactivityTestUsers[1] },
@@ -652,7 +656,15 @@ const refusalCases: ReadonlyArray<RefusalCase> = [
     coordinatorUser: proactivityTestUsers[1],
     workUser: proactivityTestUsers[1],
   },
-  { ...refused, name: "withdrawal", withdraw: true },
+  {
+    ...refused,
+    name: "withdrawal",
+    withdraw: true,
+    expectedStatus: 200,
+    expectedCalls: 1,
+    expectedState: "started",
+  },
+  { ...refused, name: "category withdrawal", revokeCategory: true, expectedStatus: 200 },
   { ...refused, name: "unapproved template", environment: { PROACTIVITY_TEMPLATE_JSON: "{}" } },
   { ...refused, name: "disabled channel", environment: { PROACTIVITY_ENABLED: "disabled" } },
   {
@@ -664,8 +676,87 @@ const refusalCases: ReadonlyArray<RefusalCase> = [
   },
   { ...refused, name: "reassociation", reassociate: true, expectedStatus: 200 },
 ];
+const revokeScenarioCategory = (
+  input: Readonly<{
+    db: D1Database;
+    scenario: RefusalCase;
+    caller: (typeof proactivityTestCallers)[number];
+    now: DateTime.Utc;
+  }>
+): Effect.Effect<void, InsightUnavailable | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    if (!input.scenario.revokeCategory) return;
+    const grant = yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(
+          "SELECT offer_id FROM proactivity_consent_records WHERE user_id=? AND kind='manual-entry-reminder' AND grant_id IS NULL"
+        )
+        .bind(proactivityTestUsers[0])
+        .first<{ offer_id: string }>()
+    );
+    if (grant === null) return yield* Effect.die("Expected category grant");
+    yield* recordProactivityDecision({
+      ...input,
+      userId: proactivityTestUsers[0],
+      kind: "manual-entry-reminder",
+      choice: `proactivity:manual-entry-reminder:${grant.offer_id}:revoke`,
+      decisionMessageId: "revoke-queued-category",
+    });
+  });
+
+const executeDeliveryScenario = (
+  input: Readonly<{
+    db: D1Database;
+    environment: ProactivityEnvironment;
+    scenario: RefusalCase;
+    work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
+    now: DateTime.Utc;
+  }>
+): Effect.Effect<number, InsightUnavailable> =>
+  Effect.gen(function* () {
+    const { db, environment, scenario, work, now } = input;
+    if (!scenario.withdraw) {
+      const coordinator = makeProactivityCoordinator({
+        environment,
+        userId: scenario.coordinatorUser,
+      });
+      return (yield* Effect.tryPromise(() => coordinator.fetch(workRequest(work)))).status;
+    }
+    const execution = { environment, userId: scenario.coordinatorUser, work, now };
+    yield* executeProactivityWork(execution).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
+    );
+    yield* executeProactivityWork(execution).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
+    );
+    yield* executeProactivityWork({
+      ...execution,
+      now: DateTime.add(now, { days: 1 }),
+      work: { kind: "proactivity-generate", version: 1, userId: scenario.workUser },
+    });
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+          )
+          .bind(scenario.workUser, work.id)
+          .first()
+      )
+    ).toEqual({ state: "accepted" });
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT count(*) AS n FROM proactivity_outbox WHERE user_id=?")
+          .bind(scenario.workUser)
+          .first()
+      )
+    ).toEqual({ n: 1 });
+    return 200;
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
 it.each(refusalCases)(
-  "category delivery refuses $name without an irreversible claim or provider call",
+  "category delivery preserves queued cutoff and independent $name restrictions",
   (scenario) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -694,6 +785,7 @@ it.each(refusalCases)(
             }),
           ])
         );
+        yield* revokeScenarioCategory({ db, scenario, caller, now });
         if (scenario.withdraw === true) yield* withdrawTestProcessingConsent(db);
         if (scenario.reassociate === true) {
           yield* Effect.tryPromise(() =>
@@ -713,22 +805,15 @@ it.each(refusalCases)(
         );
         vi.stubGlobal("fetch", provider);
         const environment = { ...configuration(db), ...scenario.environment };
-        const coordinator = makeProactivityCoordinator({
-          environment,
-          userId: scenario.coordinatorUser,
-        });
-        const response = yield* Effect.tryPromise(() =>
-          coordinator.fetch(
-            workRequest({
-              kind: "proactivity-delivery",
-              version: 1,
-              userId: scenario.workUser,
-              id: generated.id,
-            })
-          )
-        );
-        expect(response.status).toBe(scenario.expectedStatus);
-        expect(provider).not.toHaveBeenCalled();
+        const work = {
+          kind: "proactivity-delivery",
+          version: 1,
+          userId: scenario.workUser,
+          id: generated.id,
+        } as const;
+        const status = yield* executeDeliveryScenario({ db, environment, scenario, work, now });
+        expect(status).toBe(scenario.expectedStatus);
+        expect(provider).toHaveBeenCalledTimes(scenario.expectedCalls);
         expect(
           yield* Effect.tryPromise(() =>
             db
@@ -737,7 +822,7 @@ it.each(refusalCases)(
               )
               .first()
           )
-        ).toEqual({ n: 0 });
+        ).toEqual({ n: scenario.expectedCalls });
         expect(
           yield* Effect.tryPromise(() =>
             db

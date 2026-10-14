@@ -10,7 +10,12 @@ import {
   type WhatsAppProviderMessageId,
 } from "../../../src/shell/channels/whatsapp/contract";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { prepareConsentAction, prepareWeeklyConsentAction } from "../../consent/operations";
+import {
+  prepareConsentAction,
+  prepareQueuedConsentAction,
+  prepareQueuedWeeklyConsentAction,
+  prepareWeeklyConsentAction,
+} from "../../consent/operations";
 import { whatsAppIdentityQuery } from "../../identity/operations";
 import { newId } from "../../secret-material/operations";
 import {
@@ -42,7 +47,34 @@ export type QuestionStart = Readonly<{
   id: string;
   now: DateTime.Utc;
   guard: OwnedStatement;
+  /** Some projects user_id for the exact same-User unfinished, unexpired native item originally admitted under active Consent; None requires current Consent. */
+  queuedAdmission: Option.Option<OwnedStatement>;
 }>;
+const questionAction = (
+  input: QuestionStart,
+  statement: OwnedStatement,
+  grant: Option.Option<ConsentRecordId>
+): D1PreparedStatement =>
+  Option.match(grant, {
+    onNone: () =>
+      Option.match(input.queuedAdmission, {
+        onNone: () =>
+          prepareConsentAction({
+            db: input.db,
+            subject: { _tag: "User", userId: input.userId },
+            requirement: "active",
+            statement,
+          }),
+        onSome: (queued) => prepareQueuedConsentAction({ ...input, queued, statement }),
+      }),
+    onSome: (grantId) =>
+      Option.match(input.queuedAdmission, {
+        onNone: () => prepareWeeklyConsentAction({ ...input, grantId, statement }),
+        onSome: (queued) =>
+          prepareQueuedWeeklyConsentAction({ ...input, queued, grantId, statement }),
+      }),
+  });
+
 export const stageWeeklyQuestion = (
   input: QuestionStart &
     Readonly<{
@@ -60,11 +92,9 @@ export const stageWeeklyQuestion = (
     );
     const association = whatsAppIdentityQuery({ userId: input.userId, ...input.recipient });
     const result = yield* Effect.tryPromise(() =>
-      prepareConsentAction({
-        db: input.db,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement: {
+      questionAction(
+        input,
+        {
           sql: `INSERT INTO weekly_governor_questions(id,user_id,offer_id,grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,offer_json,time_zone) SELECT ?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,? WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND NOT EXISTS (SELECT 1 FROM weekly_governor_questions WHERE user_id=? AND id=?)`,
           params: [
             input.id,
@@ -86,7 +116,8 @@ export const stageWeeklyQuestion = (
             input.id,
           ],
         },
-      }).run()
+        Option.none()
+      ).run()
     );
     return result.meta.changes === 1;
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
@@ -96,29 +127,18 @@ const readQuestionForClaim = (input: QuestionStart): Effect.Effect<unknown, What
     const predicate = `FROM weekly_governor_questions AS q WHERE q.user_id=? AND q.id=? AND q.state='ready' AND EXISTS (${input.guard.sql}) AND EXISTS (SELECT 1 FROM whatsapp_identities AS i WHERE i.user_id=q.user_id AND i.portfolio_id=q.portfolio_id AND i.bsuid=q.bsuid)`;
     const params = [input.userId, input.id, ...input.guard.params];
     const raw = yield* Effect.tryPromise(() =>
-      prepareConsentAction({
-        db: input.db,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement: { sql: `SELECT q.grant_id ${predicate}`, params },
-      }).first()
+      questionAction(
+        input,
+        { sql: `SELECT q.grant_id ${predicate}`, params },
+        Option.none()
+      ).first()
     );
     if (raw === null) return null;
     const metadata = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ grant_id: Schema.OptionFromNullOr(ConsentRecordId) })
     )(raw);
     const statement = { sql: `SELECT q.* ${predicate}`, params };
-    const authorized = Option.match(metadata.grant_id, {
-      onNone: () =>
-        prepareConsentAction({
-          db: input.db,
-          subject: { _tag: "User", userId: input.userId },
-          requirement: "active",
-          statement,
-        }),
-      onSome: (grantId) =>
-        prepareWeeklyConsentAction({ db: input.db, userId: input.userId, grantId, statement }),
-    });
+    const authorized = questionAction(input, statement, metadata.grant_id);
     return yield* Effect.tryPromise(() => authorized.first());
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
@@ -190,19 +210,7 @@ const prepareQuestionClaim = (
       ...association.params,
     ],
   };
-  return Option.isSome(row.grant_id)
-    ? prepareWeeklyConsentAction({
-        db: input.db,
-        userId: input.userId,
-        grantId: row.grant_id.value,
-        statement,
-      })
-    : prepareConsentAction({
-        db: input.db,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement,
-      });
+  return questionAction(input, statement, row.grant_id);
 };
 
 export const recordWeeklyQuestionSend = (

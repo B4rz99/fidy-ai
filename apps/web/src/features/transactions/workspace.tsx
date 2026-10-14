@@ -31,16 +31,19 @@ import {
 type WorkspaceProps = Readonly<{
   apiClient: FidyClient;
   categories: ReadonlyArray<Category>;
-  currentUser: CurrentUser;
+  currentUser: Pick<CurrentUser, "locale" | "timeZone">;
   transactions: ReadonlyArray<Transaction>;
   period: Readonly<{ monthLabel: string; timeZone: string }>;
   queryNotice: ReactNode;
   onRefresh: () => void;
-  editable: boolean;
   continuation: HistoryState["continuation"];
   onMore: () => void;
   onRetryMore: () => void;
-}>;
+}> &
+  (
+    | Readonly<{ readOnly: true; editable: false }>
+    | Readonly<{ readOnly: false; editable: boolean }>
+  );
 type WorkspaceFilters = Readonly<{
   search: string;
   direction: string;
@@ -362,7 +365,9 @@ const WorkspaceHeader = ({
   onSearchOpen,
   date,
   onDate,
+  readOnly,
 }: Readonly<{
+  readOnly: boolean;
   onTool: (tool: FilterTool) => void;
   search: string;
   searching: boolean;
@@ -401,9 +406,11 @@ const WorkspaceHeader = ({
     <Button variant="ghost" disabled={disabled} onClick={onRefresh}>
       Actualizar transacciones
     </Button>
-    <Button disabled={disabled} onClick={onCapture}>
-      + Registrar
-    </Button>
+    {readOnly ? null : (
+      <Button disabled={disabled} onClick={onCapture}>
+        + Registrar
+      </Button>
+    )}
   </PageHeader>
 );
 const renderResponsivePanel = (
@@ -412,7 +419,11 @@ const renderResponsivePanel = (
   controls: Readonly<{ locked: boolean; onPanel: (panel: TransactionPanel) => void }>
 ): JSX.Element => (
   <ResponsiveWorkspacePanel
-    description="Revisa o registra una transacción."
+    description={
+      panel._tag === "Capture"
+        ? "Registra una transacción."
+        : "Revisa los detalles de una transacción."
+    }
     open={panel._tag !== "Summary" && !(panel._tag === "Bulk" && panel.stage === "selecting")}
     locked={controls.locked}
     title={panelTitle(panel)}
@@ -463,20 +474,23 @@ const renderCategoryCell = (
   row: React.ComponentProps<typeof InlineTransactionCategory>["row"],
   disabled: boolean,
   props: WorkspaceProps
-): JSX.Element => (
-  <InlineTransactionCategory
-    row={row}
-    disabled={disabled}
-    apiClient={props.apiClient}
-    transactions={props.transactions}
-    categories={props.categories}
-    onRefresh={props.onRefresh}
-    onSaved={() => {
-      toast.success("Categoría guardada");
-      props.onRefresh();
-    }}
-  />
-);
+): JSX.Element =>
+  props.readOnly === true ? (
+    <span>{row.categoryLabel}</span>
+  ) : (
+    <InlineTransactionCategory
+      row={row}
+      disabled={disabled}
+      apiClient={props.apiClient}
+      transactions={props.transactions}
+      categories={props.categories}
+      onRefresh={props.onRefresh}
+      onSaved={() => {
+        toast.success("Categoría guardada");
+        props.onRefresh();
+      }}
+    />
+  );
 const ledgerDisabled = (panel: TransactionPanel): boolean =>
   panelLocked(panel) ||
   (panelEditing(panel) && panel._tag !== "Detail") ||
@@ -525,6 +539,7 @@ const WorkspaceContent = ({
             disabled={locked}
           />
         }
+        readOnly={props.readOnly === true}
         canEdit={props.editable}
         onEdit={() => onPanel(selectionPanel(panel))}
         selection={bulkSelection(panel, onPanel)}
@@ -561,7 +576,7 @@ const ContinuationControl = (
       element === null ||
       props.continuation !== "available" ||
       props.editing ||
-      !props.editable
+      (!props.editable && props.readOnly !== true)
     ) {
       return;
     }
@@ -584,7 +599,7 @@ const ContinuationControl = (
       {props.continuation === "failure" ? (
         <Button
           variant="outline"
-          disabled={props.editing || !props.editable}
+          disabled={props.editing || (!props.editable && props.readOnly !== true)}
           onClick={props.onRetryMore}
         >
           {continuationLabels[props.continuation]}
@@ -628,7 +643,8 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
           onDate={(date) => onFilters({ ...filters, date })}
           onTool={(next) => setTool(tool === next ? "closed" : next)}
           period={props.period}
-          disabled={editing || !props.editable}
+          disabled={editing || (!props.editable && props.readOnly !== true)}
+          readOnly={props.readOnly === true}
           onCapture={() => onPanel({ _tag: "Capture", status: "idle" })}
           onRefresh={props.onRefresh}
         />

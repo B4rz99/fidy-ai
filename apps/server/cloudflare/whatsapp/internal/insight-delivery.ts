@@ -13,7 +13,12 @@ import {
 } from "../../../src/shell/channels/whatsapp/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { prepareConsentAction, prepareWeeklyConsentAction } from "../../consent/operations";
+import {
+  prepareConsentAction,
+  prepareQueuedConsentAction,
+  prepareQueuedWeeklyConsentAction,
+  prepareWeeklyConsentAction,
+} from "../../consent/operations";
 import { whatsAppIdentityQuery } from "../../identity/operations";
 import { hostedTranscriptRetentionMs } from "../../agent/contract";
 import { newId } from "../../secret-material/operations";
@@ -57,6 +62,15 @@ const maximumFutureClockDriftMs = Duration.toMillis(
 );
 type InsightDeliveryFailure = Cause.UnknownError | Schema.SchemaError | InsightTemplateUnavailable;
 
+const deliveryAction = (
+  input: InsightWhatsAppStart,
+  statement: OwnedStatement
+): D1PreparedStatement =>
+  Option.match(input.queuedAdmission, {
+    onNone: () => prepareWeeklyConsentAction({ ...input, statement }),
+    onSome: (queued) => prepareQueuedWeeklyConsentAction({ ...input, queued, statement }),
+  });
+
 /** Prepare authenticated routing in the caller's atomic inbound/decision unit, under its exact current association. */
 export const prepareInsightRecipient = (
   input: Readonly<{
@@ -82,25 +96,41 @@ export const prepareInsightRecipient = (
       ...association.params
     );
 };
-export const findInsightRecipient = (
-  input: Readonly<{ db: D1Database; userId: UserId }>
+const readRecipient = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    queuedAdmission: Option.Option<OwnedStatement>;
+  }>
 ): Effect.Effect<Option.Option<InsightRecipient>, InsightDeliveryFailure> =>
   Effect.gen(function* () {
-    const row = yield* Effect.tryPromise(() =>
-      prepareConsentAction({
-        ...input,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement: {
-          sql: "SELECT portfolio_id AS portfolioId,bsuid,business_phone_number_id AS businessPhoneNumberId FROM insight_whatsapp_routes WHERE user_id = ?",
-          params: [input.userId],
-        },
-      }).first()
-    );
+    const statement = {
+      sql: "SELECT portfolio_id AS portfolioId,bsuid,business_phone_number_id AS businessPhoneNumberId FROM insight_whatsapp_routes WHERE user_id = ?",
+      params: [input.userId],
+    };
+    const prepared = Option.match(input.queuedAdmission, {
+      onNone: () =>
+        prepareConsentAction({
+          ...input,
+          subject: { _tag: "User", userId: input.userId },
+          requirement: "active",
+          statement,
+        }),
+      onSome: (queued) => prepareQueuedConsentAction({ ...input, queued, statement }),
+    });
+    const row = yield* Effect.tryPromise(() => prepared.first());
     return row === null
       ? Option.none()
       : Option.some(yield* Schema.decodeUnknownEffect(InsightRecipient)(row));
   });
+export const findInsightRecipient = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<InsightRecipient>, InsightDeliveryFailure> =>
+  readRecipient({ ...input, queuedAdmission: Option.none() });
+export const findQueuedInsightRecipient = (
+  input: Readonly<{ db: D1Database; userId: UserId; queued: OwnedStatement }>
+): Effect.Effect<Option.Option<InsightRecipient>, InsightDeliveryFailure> =>
+  readRecipient({ ...input, queuedAdmission: Option.some(input.queued) });
 /** Freeze the exact complete prepared body before claiming any provider call. */
 export const stageInsightDelivery = (
   input: InsightWhatsAppStage
@@ -122,29 +152,24 @@ export const stageInsightDelivery = (
     }
     const association = whatsAppIdentityQuery({ ...input.recipient, userId: input.userId });
     const result = yield* Effect.tryPromise(() =>
-      prepareWeeklyConsentAction({
-        db: input.db,
-        userId: input.userId,
-        grantId: input.grantId,
-        statement: {
-          sql: `INSERT INTO insight_whatsapp_claims(user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state)
+      deliveryAction(input, {
+        sql: `INSERT INTO insight_whatsapp_claims(user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state)
  SELECT ?,?,?,?,?,?,?,?,?,?,?,'staged' WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
-          params: [
-            input.userId,
-            input.insightEventId,
-            HostedDeliveryCorrelationToken.make(newId()),
-            input.recipient.portfolioId,
-            input.recipient.bsuid,
-            input.recipient.businessPhoneNumberId,
-            serialized,
-            prepared.text,
-            DateTime.toEpochMillis(input.scheduledAt),
-            DateTime.toEpochMillis(input.expiresAt),
-            input.timeZone,
-            ...input.guard.params,
-            ...association.params,
-          ],
-        },
+        params: [
+          input.userId,
+          input.insightEventId,
+          HostedDeliveryCorrelationToken.make(newId()),
+          input.recipient.portfolioId,
+          input.recipient.bsuid,
+          input.recipient.businessPhoneNumberId,
+          serialized,
+          prepared.text,
+          DateTime.toEpochMillis(input.scheduledAt),
+          DateTime.toEpochMillis(input.expiresAt),
+          input.timeZone,
+          ...input.guard.params,
+          ...association.params,
+        ],
       }).run()
     );
     return result.meta.changes === 1;
@@ -159,21 +184,16 @@ const claimSend = (
     bsuid: row.bsuid,
   });
   return Effect.tryPromise(() =>
-    prepareWeeklyConsentAction({
-      db: input.db,
-      userId: input.userId,
-      grantId: input.grantId,
-      statement: {
-        sql: `UPDATE insight_whatsapp_claims SET state='sending',send_started_at_ms=? WHERE user_id=? AND insight_event_id=? AND state='staged' AND correlation_token=? AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
-        params: [
-          DateTime.toEpochMillis(input.now),
-          input.userId,
-          input.insightEventId,
-          row.correlation_token,
-          ...input.guard.params,
-          ...association.params,
-        ],
-      },
+    deliveryAction(input, {
+      sql: `UPDATE insight_whatsapp_claims SET state='sending',send_started_at_ms=? WHERE user_id=? AND insight_event_id=? AND state='staged' AND correlation_token=? AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
+      params: [
+        DateTime.toEpochMillis(input.now),
+        input.userId,
+        input.insightEventId,
+        row.correlation_token,
+        ...input.guard.params,
+        ...association.params,
+      ],
     }).run()
   ).pipe(Effect.map((result) => result.meta.changes === 1));
 };
@@ -184,14 +204,9 @@ export const startInsightSend = (
 ): Effect.Effect<InsightWhatsAppClaim, InsightDeliveryFailure> =>
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
-      prepareWeeklyConsentAction({
-        db: input.db,
-        userId: input.userId,
-        grantId: input.grantId,
-        statement: {
-          sql: `SELECT * FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='staged' AND EXISTS (${input.guard.sql})`,
-          params: [input.userId, input.insightEventId, ...input.guard.params],
-        },
+      deliveryAction(input, {
+        sql: `SELECT * FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='staged' AND EXISTS (${input.guard.sql})`,
+        params: [input.userId, input.insightEventId, ...input.guard.params],
       }).first()
     );
     if (raw === null) {

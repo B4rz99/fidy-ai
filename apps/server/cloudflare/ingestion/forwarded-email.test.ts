@@ -7,7 +7,7 @@ import { TestClock } from "effect/testing";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { applyTestMigration, isolatedTestStorage } from "../d1-test-fixture";
-import { afterAll, expect } from "vitest";
+import { afterAll, afterEach, expect, vi } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
 import { runEmailMaintenance } from "../maintenance/runtime";
 import { EmailScheduleUnavailable } from "../maintenance/contract";
@@ -28,8 +28,19 @@ const localB = "b".repeat(32);
 const raw = new TextEncoder().encode(
   "From: bank@example.test\r\nTo: other@example.test\r\nSubject: Compra\r\n\r\nPago confirmado"
 );
+const financialEmailBytes = (): Uint8Array<ArrayBuffer> => {
+  const html = `<!doctype html><html><body>
+    <p>DAVIbank te notifica que realizaste con tu tarjeta Visa Oro la siguiente transacción o compra recurrente:</p>
+    <table><tr><td>Comercio</td><td>COMERCIO FICTICIO</td></tr>
+    <tr><td>Monto</td><td>12,500</td></tr><tr><td>Fecha</td><td>2026/01/15</td></tr>
+    <tr><td>Hora</td><td>10:15:30</td></tr></table></body></html>`;
+  return new TextEncoder().encode(
+    `From: bank@example.test\r\nTo: ${localA}@fidyapp.com\r\nSubject: Compra\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`
+  );
+};
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
+afterEach(() => vi.restoreAllMocks());
 
 it.live("still offers another User's current email when expired-byte deletion fails", () =>
   Effect.gen(function* () {
@@ -212,6 +223,7 @@ const setup = Effect.fn(function* () {
     "0034_forwarded_email_deferral",
     "0035_media_submissions",
     "0038_proactivity_consent",
+    "0092_queued_processing_cutoff",
   ]) {
     yield* wait(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
@@ -454,21 +466,14 @@ it("rejects an unapproved envelope even when MIME names a known User, without re
     })
   ));
 
-it("settles a bounded known email into one Transaction and one immutable attestation on replay", () =>
+it("finishes a previously queued financial email after withdrawal with one Transaction and immutable attestation on replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
-      const html = `<!doctype html><html><body>
-        <p>DAVIbank te notifica que realizaste con tu tarjeta Visa Oro la siguiente transacción o compra recurrente:</p>
-        <table><tr><td>Comercio</td><td>COMERCIO FICTICIO</td></tr>
-        <tr><td>Monto</td><td>12,500</td></tr><tr><td>Fecha</td><td>2026/01/15</td></tr>
-        <tr><td>Hora</td><td>10:15:30</td></tr></table></body></html>`;
       yield* wait(() =>
         db.prepare("UPDATE users SET time_zone = 'America/Lima' WHERE id = ?").bind(userA).run()
       );
-      const bytes = new TextEncoder().encode(
-        `From: bank@example.test\r\nTo: ${localA}@fidyapp.com\r\nSubject: Compra\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`
-      );
+      const bytes = financialEmailBytes();
       yield* wait(() => emailWorker.email(delivery(undefined, bytes).message, env));
       const receipt = yield* wait(() =>
         db
@@ -478,6 +483,9 @@ it("settles a bounded known email into one Transaction and one immutable attesta
       );
       expect(receipt).not.toBeNull();
       if (receipt === null) return;
+      yield* wait(() =>
+        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+      );
       yield* wait(() => emailWorker.scheduled(undefined, env));
       const coordinator = coordinatorFor(db, bucket, userA);
       let acknowledgements = 0;
@@ -785,7 +793,83 @@ it("shows only the owner's pending forwarded email in the canonical review page"
     })
   ));
 
-it("refuses finalization after Consent revocation without partial financial writes", () =>
+it.each(["before-processing", "during-processing"] as const)(
+  "refuses expired queued email %s without reading or committing unauthorized material",
+  (boundary) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { env, db, bucket, jobs } = yield* setup();
+        yield* wait(() =>
+          emailWorker.email(delivery(undefined, financialEmailBytes()).message, env)
+        );
+        yield* wait(() => emailWorker.scheduled(undefined, env));
+        const job = jobs[0];
+        if (job === undefined) return yield* Effect.die("Expected queued email");
+        yield* wait(() =>
+          db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+        );
+        const receipt = yield* wait(() =>
+          db
+            .prepare("SELECT expires_at_ms FROM forwarded_email_receipts WHERE id=? AND user_id=?")
+            .bind(job.receiptId, userA)
+            .first<{ expires_at_ms: number }>()
+        );
+        if (receipt === null) return yield* Effect.die("Expected admitted receipt");
+        const expire = (): void => {
+          vi.spyOn(Date, "now").mockReturnValue(receipt.expires_at_ms);
+        };
+        const originalGet = bucket.get.bind(bucket);
+        const reads = vi.spyOn(bucket, "get");
+        if (boundary === "before-processing") {
+          expire();
+        } else {
+          reads.mockImplementationOnce((key, options) =>
+            originalGet(key, options).then((object) => {
+              expire();
+              return object;
+            })
+          );
+        }
+        const observedBucket = new Proxy(bucket, {
+          get: (target, key): unknown => (key === "get" ? reads : Reflect.get(target, key)),
+        });
+        const coordinator = coordinatorFor(db, observedBucket, userA);
+        let acknowledged = false;
+        const outcome = yield* Effect.exit(
+          wait(() =>
+            receiveForwardedEmailWork({
+              messages: [
+                {
+                  body: job,
+                  ack: (): void => {
+                    acknowledged = true;
+                  },
+                },
+              ],
+              coordinator: { getByName: (): Pick<Fetcher, "fetch"> => coordinator },
+            })
+          )
+        );
+        expect(reads).toHaveBeenCalledTimes(boundary === "before-processing" ? 0 : 1);
+        expect(outcome._tag).toBe(boundary === "before-processing" ? "Success" : "Failure");
+        expect(acknowledged).toBe(boundary === "before-processing");
+        expect(
+          yield* wait(() =>
+            db
+              .prepare(`SELECT
+        (SELECT count(*) FROM transactions) AS transactions,
+        (SELECT count(*) FROM source_attestations) AS attestations,
+        (SELECT count(*) FROM anonymized_email_samples) AS samples,
+        (SELECT count(*) FROM forwarded_email_needs_review) AS reviews,
+        (SELECT count(*) FROM forwarded_email_outcomes) AS outcomes`)
+              .first()
+          )
+        ).toEqual({ transactions: 0, attestations: 0, samples: 0, reviews: 0, outcomes: 0 });
+      })
+    )
+);
+
+it("finishes previously queued email after withdrawal while ordinary access stays blocked", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
@@ -811,19 +895,19 @@ it("refuses finalization after Consent revocation without partial financial writ
       expect(
         (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
           .results
-      ).toHaveLength(0);
+      ).toHaveLength(1);
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_needs_review").all())).results
-      ).toHaveLength(0);
+      ).toHaveLength(1);
       yield* wait(() => emailWorker.scheduled(undefined, env));
-      expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
+      expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
       const review = yield* wait(() =>
         db
           .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
           .bind(userA)
           .first<{ reason: string }>()
       );
-      expect(review?.reason).toBe("consent-revoked");
+      expect(review?.reason).toBe("unsupported-content");
       expect(
         (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
           .results
@@ -946,7 +1030,7 @@ it("rejects revoked Consent without reading or retaining a User's email", () =>
     })
   ));
 
-it("does not dispatch queued identity after Consent is revoked", () =>
+it("dispatches previously queued email after Consent withdrawal", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, jobs } = yield* setup();
@@ -955,7 +1039,7 @@ it("does not dispatch queued identity after Consent is revoked", () =>
         db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
       );
       yield* wait(() => emailWorker.scheduled(undefined, env));
-      expect(jobs).toHaveLength(0);
+      expect(jobs).toHaveLength(1);
     })
   ));
 

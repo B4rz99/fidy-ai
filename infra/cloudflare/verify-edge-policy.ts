@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "3605bc5129226bd90921355ef2911f158d90ded46f578c8ab43bc218ac7666cb";
+const expectedEdgePolicyDigest = "6ecb91ebccd5df9b3137d1c3c33a9ff99fe9131a57b1509d45997f3016b31384";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
@@ -25,6 +25,12 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/bancolombia-sandbox/internal/public-key.ts",
       import.meta.url
     )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/processing-consent/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/processing-consent/runtime.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/contract.ts", import.meta.url)

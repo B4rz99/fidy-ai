@@ -10,6 +10,7 @@ import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { Effect, Option } from "effect";
 import type {
   BudgetContributionCursor,
+  PrivacyTransactionsRead,
   RecurringFactPage,
   RecurringFactSnapshot,
   RecurringFactsUnavailable,
@@ -29,6 +30,7 @@ import type {
 import {
   browseTransactions as ownerBrowseTransactions,
   findTransaction as ownerFindCapturedTransaction,
+  readPrivacyTransactions as ownerReadPrivacyTransactions,
 } from "./internal/transaction-history";
 import {
   correctionInput as ownerCorrectionInput,
@@ -104,6 +106,10 @@ export const prepareFactRevisionProjection = (
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
 export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>
   ownerBrowseTransactions(...args);
+
+/** Return bounded same-User financial history for an explicit Titular access request; every page requires fresh browser proof and atomic Audit, never renewed processing Consent. */
+export const readPrivacyTransactions = (input: PrivacyTransactionsRead): Effect.Effect<Response> =>
+  ownerReadPrivacyTransactions(input);
 
 /** Decode a bounded correction without treating omitted facts as explicit decisions. */
 export const correctionInput: typeof ownerCorrectionInput = (...args) =>
@@ -184,9 +190,11 @@ export const prepareStatementCapture: typeof ownerPrepareStatementCapture = (inp
 
 /**
  * Prepare one notification-email Transaction and its captured evidence for the caller's existing
- * User-coordinated outcome batch. Both writes recheck current Consent and a live source query
- * projecting the same user_id. Malformed evidence fails before writes; commit both with the unique
- * source outcome and its assertion. Category assignment remains with the caller.
+ * User-coordinated outcome batch. Both writes recheck a live same-User source query. Without
+ * queuedAdmission they require current Consent. For bounded continuation after withdrawal, the
+ * caller must supply the exact same-User unfinished, unexpired native admission originally queued
+ * under active Consent. Malformed evidence fails before writes; commit both with the unique source
+ * outcome and its assertion. Category assignment remains with the caller.
  */
 export const prepareNotificationEmailCapture: typeof ownerPrepareNotificationEmailCapture = (
   input

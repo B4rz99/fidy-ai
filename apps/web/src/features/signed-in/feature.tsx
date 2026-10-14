@@ -8,8 +8,8 @@ import {
   Settings01Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
-import { Link, Outlet, useRouter } from "@tanstack/react-router";
-import { Cause, Effect } from "effect";
+import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
+import { Cause, Effect, Option } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 import type { ComponentProps, JSX, MouseEvent } from "react";
@@ -34,6 +34,7 @@ const navigationLinks = [
   { to: "/app/budgets", label: "Presupuestos", icon: Wallet01Icon },
 ] as const;
 const settingsLinks = [
+  { to: "/settings/privacy", label: "Privacidad" },
   { to: "/settings/email", label: "Correo" },
   { to: "/settings/access", label: "Accesos" },
   { to: "/settings/recovery", label: "Recuperación" },
@@ -41,28 +42,12 @@ const settingsLinks = [
 const dismissCompactNavigation = (event: MouseEvent<HTMLAnchorElement>): void => {
   event.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
 };
-const SignedInNavigation = ({
-  onLogout,
-  loggingOut,
-}: Readonly<{
-  onLogout: () => void;
-  loggingOut: boolean;
-}>): JSX.Element => (
-  <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
-    {navigationLinks.map((link) => (
-      <Link
-        key={link.to}
-        to={link.to}
-        search={{}}
-        onClick={dismissCompactNavigation}
-        className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
-        activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
-      >
-        <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
-        {link.label}
-      </Link>
-    ))}
-    <details className="shrink-0">
+const SettingsNavigation = (): JSX.Element => {
+  const inSettings = useRouterState({
+    select: (state) => state.location.pathname.startsWith("/settings/"),
+  });
+  return (
+    <details className="shrink-0" open={inSettings}>
       <summary className="flex min-h-12 cursor-pointer list-none items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted">
         <HugeiconsIcon icon={Settings01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
         Ajustes
@@ -82,17 +67,62 @@ const SignedInNavigation = ({
         ))}
       </div>
     </details>
-    <Button
-      className="justify-start md:mt-auto"
-      disabled={loggingOut}
-      onClick={onLogout}
-      type="button"
-      variant="ghost"
-    >
-      {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
-    </Button>
-  </nav>
-);
+  );
+};
+
+const SignedInNavigation = ({
+  onLogout,
+  loggingOut,
+}: Readonly<{
+  onLogout: () => void;
+  loggingOut: boolean;
+}>): JSX.Element => {
+  const { authentication } = useSession();
+  const client = useRouter().options.context.webAuthClient;
+  const [binding] = useState(() => client.query("browserSession", "binding", {}));
+  const session = useAtomValue(binding);
+  const signedIn =
+    authentication !== "expired" &&
+    AsyncResult.isSuccess(session) &&
+    Option.isSome(Option.fromNullishOr(session.value.binding));
+  return (
+    <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
+      {navigationLinks.map((link) => (
+        <Link
+          key={link.to}
+          to={link.to}
+          search={{}}
+          onClick={dismissCompactNavigation}
+          className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
+          activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
+        >
+          <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+          {link.label}
+        </Link>
+      ))}
+      <SettingsNavigation />
+      {signedIn ? (
+        <Button
+          className="justify-start md:mt-auto"
+          disabled={loggingOut}
+          onClick={onLogout}
+          type="button"
+          variant="ghost"
+        >
+          {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+        </Button>
+      ) : (
+        <Button
+          className="justify-start md:mt-auto"
+          variant="ghost"
+          render={<Link to="/auth/pair" />}
+        >
+          Iniciar sesión
+        </Button>
+      )}
+    </nav>
+  );
+};
 
 const CompactNavigation = ({
   loggingOut,
@@ -128,7 +158,8 @@ const CompactNavigation = ({
   </>
 );
 
-const SignedInShell = ({
+/** Shared application navigation; privacy routes can retain it independently of product access. */
+export const ApplicationShell = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const router = useRouter();
@@ -183,13 +214,19 @@ const SignedInShell = ({
   );
 };
 
-export const SignedInFeature = ({
+/** Refuses expired authentication without adding navigation around an already composed application shell. */
+export const SignedInContent = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const { authentication } = useSession();
-  return authentication === "expired" ? (
-    <AuthenticationExpired />
-  ) : (
-    <SignedInShell>{children}</SignedInShell>
-  );
+  return authentication === "expired" ? <AuthenticationExpired /> : <>{children}</>;
 };
+
+/** Authenticated route layout whose child server state shares one authentication lifetime. */
+export const SignedInFeature = ({
+  children,
+}: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => (
+  <SignedInContent>
+    <ApplicationShell>{children}</ApplicationShell>
+  </SignedInContent>
+);

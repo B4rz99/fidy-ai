@@ -1,9 +1,11 @@
+import { protectQueuedStatement } from "./internal/queued-work";
 import { DisclosureSnapshot } from "../../src/core/consent/contract";
+import { consentResponse, withdrawProcessingConsent } from "./internal/browser";
 import * as proactivity from "./internal/proactivity-consent";
 import type { ProactivityOptInKind } from "../../src/shell/consent/contract";
 import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
-import { type Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   type ConsentEgressAction,
   type ConsentEgressRefused,
@@ -11,7 +13,9 @@ import {
   type ConsentStanding,
   type ConsentStatus,
   type ConsentUnavailable,
+  ConsentWithdrawalAdmission,
   type OnboardingConsentInput,
+  type QueuedConsentAction,
 } from "./contract";
 import { performEgress } from "./internal/egress";
 import { onboardingEvidence, revocationEvidence } from "./internal/evidence";
@@ -20,12 +24,14 @@ import { loadStanding, loadStatus } from "./internal/standing";
 import { withdrawalProjection } from "./internal/withdrawal-projection";
 import {
   createOffer,
+  createQueuedOffer,
   discloseOffer,
   findGrant,
   guardedAction,
   hasChoiceReceipt,
   latestRejection,
   prepareDecision,
+  queuedAction,
 } from "./internal/weekly-consent";
 import type {
   PreparedProactivityConsentDecision,
@@ -41,6 +47,24 @@ import type {
 } from "./contract";
 import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/contract";
 import type { UserId } from "../../src/core/identity/contract";
+
+const unavailableStatus = 503;
+
+/** Settle an authenticated withdrawal only under the intended User's existing coordinator. */
+export const executeConsentWithdrawal = (
+  input: Readonly<{
+    db: D1Database;
+    candidate: unknown;
+    userId: string;
+    signal: AbortSignal;
+  }>
+): Effect.Effect<Response> => {
+  const admission = Schema.decodeUnknownOption(ConsentWithdrawalAdmission)(input.candidate);
+  if (Option.isNone(admission) || admission.value.userId !== input.userId) {
+    return Effect.succeed(consentResponse(unavailableStatus));
+  }
+  return withdrawProcessingConsent({ ...input, admission: admission.value });
+};
 
 /** Decode only a complete qualified category choice; a category identity carries no decision authority. */
 export const readProactivityConsentChoiceKind: typeof proactivity.choiceKind = (choice) =>
@@ -95,6 +119,14 @@ export const prepareProactivityConsentAction = (
   input: ProactivityConsentAction
 ): D1PreparedStatement => proactivity.guardedAction(input);
 
+/** Finish one exact queued delivery while retaining its independently live category grant. */
+export const prepareQueuedProactivityConsentAction = (
+  input: ProactivityConsentAction & Readonly<{ queued: QueuedConsentAction["queued"] }>
+): D1PreparedStatement => proactivity.queuedAction(input);
+export const prepareQueuedWeeklyConsentAction = (
+  input: WeeklyConsentAction & Readonly<{ queued: QueuedConsentAction["queued"] }>
+): D1PreparedStatement => queuedAction(input);
+
 /** Recognize an already applied qualified privacy choice without starting another operation. */
 export const hasWeeklyConsentChoiceReceipt: typeof hasChoiceReceipt = (input) =>
   hasChoiceReceipt(input);
@@ -127,6 +159,12 @@ export const findWeeklyConsentGrant = (
 /** Add current processing Consent and this exact live weekly grant to a caller-owned atomic action. */
 export const prepareWeeklyConsentAction = (input: WeeklyConsentAction): D1PreparedStatement =>
   guardedAction(input);
+
+/** Continue a queued governor question; later acceptance still requires active processing Consent. */
+export const createQueuedWeeklyGovernorConsentOffer = (
+  input: WeeklyConsentContext &
+    Readonly<{ request: WeeklyConsentOfferRequest; queued: QueuedConsentAction["queued"] }>
+): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> => createQueuedOffer(input);
 
 /**
  * Read the exact historical Consent basis for the explicit User. This is admission evidence,
@@ -170,6 +208,12 @@ export const prepareConsentAction = (
   input: ConsentProtectedStatement & Readonly<{ db: D1Database }>
 ): D1PreparedStatement => {
   const statement = protectConsentStatement(input);
+  return input.db.prepare(statement.sql).bind(...statement.params);
+};
+
+/** Finish only the owner's exact previously admitted queue item after whole-processing withdrawal. Native item lifetime, terminal-state, category and credential restrictions remain the owner's responsibility; this grants no new work authority. */
+export const prepareQueuedConsentAction = (input: QueuedConsentAction): D1PreparedStatement => {
+  const statement = protectQueuedStatement(input);
   return input.db.prepare(statement.sql).bind(...statement.params);
 };
 

@@ -3,7 +3,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { NotificationEmailSourceAttestation } from "../../../src/core/source-attestation/contract";
 import { NotificationInterpretationEvidence } from "../../../src/core/transactions/contract";
 import { encodeMoneyAmount } from "../../../src/core/_shared/money";
-import { prepareConsentAction } from "../../consent/operations";
+import { prepareConsentAction, prepareQueuedConsentAction } from "../../consent/operations";
 import type { NotificationEmailCaptureInput, StatementCaptureInput } from "../contract";
 
 /** Decode the installed Transaction admission trigger from a native D1 batch failure. */
@@ -92,17 +92,35 @@ const messageCodec = Schema.fromJsonString(
   NotificationEmailSourceAttestation.fields.messageEvidence
 );
 
+const prepareEmailAction = (
+  input: NotificationEmailCaptureInput,
+  statement: OwnedStatement
+): D1PreparedStatement =>
+  Option.match(input.queuedAdmission, {
+    onNone: () =>
+      prepareConsentAction({
+        db: input.db,
+        subject: { _tag: "User", userId: input.userId },
+        requirement: "active",
+        statement,
+      }),
+    onSome: (queued) =>
+      prepareQueuedConsentAction({ db: input.db, userId: input.userId, queued, statement }),
+  });
+
 /**
  * Prepare one notification-email Transaction and its immutable evidence for the caller's outcome
- * batch under the User coordinator. Both writes require current Consent and the same User's live
- * source eligibility at commit. Provider and deterministic evidence retain their captured revision;
- * malformed evidence fails before any write. Category assignment remains the caller's decision.
+ * batch under the User coordinator. Both writes recheck same-User source eligibility at commit.
+ * Without queuedAdmission they require current Consent; continuation instead rechecks the caller's
+ * exact unfinished, unexpired native queue item and historical Consent. The caller must prove its
+ * admission under active Consent. Evidence retains its captured revision; malformed evidence fails
+ * before any write. Category assignment remains the caller's decision.
  */
 export const prepareNotificationEmailCapture = (
   input: NotificationEmailCaptureInput
 ): Effect.Effect<ReadonlyArray<D1PreparedStatement>, Schema.SchemaError> =>
   Effect.gen(function* () {
-    const { db, userId, transactionId, attestation } = input;
+    const { userId, transactionId, attestation } = input;
     const guard = sourceAuthority(input);
     const evidence = yield* Schema.encodeUnknownEffect(interpretationCodec)({
       ...input.interpretation,
@@ -112,40 +130,30 @@ export const prepareNotificationEmailCapture = (
       attestation.messageEvidence
     );
     return [
-      prepareConsentAction({
-        db,
-        subject: { _tag: "User", userId },
-        requirement: "active",
-        statement: transactionStatement(input, attestation.createdAt),
-      }),
-      prepareConsentAction({
-        db,
-        subject: { _tag: "User", userId },
-        requirement: "active",
-        statement: {
-          sql: `INSERT INTO source_attestations
+      prepareEmailAction(input, transactionStatement(input, attestation.createdAt)),
+      prepareEmailAction(input, {
+        sql: `INSERT INTO source_attestations
             (id, user_id, transaction_id, kind, service_market, locale, time_zone,
              interpretation_revision, created_at, received_email_id, message_content_sha256,
              source_format, message_evidence, deterministic_interpretation, extractor_revision)
             SELECT ?, ?, ?, 'notification-email', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}`,
-          params: [
-            attestation.id,
-            userId,
-            transactionId,
-            attestation.serviceMarket,
-            attestation.locale,
-            attestation.timeZone,
-            attestation.interpretationRevision,
-            attestation.createdAt,
-            attestation.receivedEmailId,
-            attestation.messageContentSha256,
-            attestation.sourceFormat,
-            messageEvidence,
-            evidence,
-            attestation.extractorRevision,
-            ...guard.params,
-          ],
-        },
+        params: [
+          attestation.id,
+          userId,
+          transactionId,
+          attestation.serviceMarket,
+          attestation.locale,
+          attestation.timeZone,
+          attestation.interpretationRevision,
+          attestation.createdAt,
+          attestation.receivedEmailId,
+          attestation.messageContentSha256,
+          attestation.sourceFormat,
+          messageEvidence,
+          evidence,
+          attestation.extractorRevision,
+          ...guard.params,
+        ],
       }),
     ];
   });

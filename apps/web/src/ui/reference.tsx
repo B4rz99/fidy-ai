@@ -161,6 +161,10 @@ const ActionReference = (): JSX.Element => (
         <Button variant="outline" disabled>
           Acción no disponible
         </Button>
+        <Button variant="destructive">Retirar autorización</Button>
+        <Button variant="destructive" disabled>
+          Retirar autorización
+        </Button>
       </div>
       <p className="text-sm text-muted-foreground">
         Ejemplos visuales: estos botones no registran transacciones.

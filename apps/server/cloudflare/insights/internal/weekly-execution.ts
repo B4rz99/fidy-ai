@@ -1,3 +1,4 @@
+import { continueQueuedDelivery, queuedDeliveryQuery } from "./queued-delivery";
 import { Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { type UserId } from "../../../src/core/identity/contract";
 import { type ConsentRecordId } from "../../../src/core/consent/contract";
@@ -17,10 +18,18 @@ import {
   type WhatsAppSendFailed,
   type WhatsAppSentMessage,
 } from "../../../src/shell/channels/whatsapp/contract";
-import { type InsightWhatsAppSendResult } from "../../whatsapp/contract";
-import { createWeeklyGovernorConsentOffer, findWeeklyConsentGrant } from "../../consent/operations";
 import {
-  findInsightRecipient,
+  type InsightWhatsAppClaim,
+  type InsightWhatsAppSendResult,
+  type InsightWhatsAppStart,
+} from "../../whatsapp/contract";
+import {
+  createQueuedWeeklyGovernorConsentOffer,
+  type createWeeklyGovernorConsentOffer,
+  findWeeklyConsentGrant,
+} from "../../consent/operations";
+import {
+  findQueuedInsightRecipient,
   recordInsightSend,
   recordWeeklyQuestionSend,
   stageInsightDelivery,
@@ -35,7 +44,7 @@ import {
   type ProactivityEnvironment,
   WeeklyThresholdConfiguration,
 } from "../contract";
-import { findReport, materialize, weeklyReportDeliveryQuery } from "./weekly-generation";
+import { findQueuedReport, materialize, weeklyReportDeliveryQuery } from "./weekly-generation";
 import { findInsight } from "./insight-store";
 import {
   findQuestionOrigin,
@@ -91,14 +100,32 @@ const summaryOutcome = (sent: SendEvidence): InsightWhatsAppSendResult["outcome"
     ? { kind: "accepted", providerMessageId: sent.providerMessageId.value }
     : { kind: sent.certainty === "rejected" ? "rejected" : "ambiguous" };
 
+const sendSummaryClaim = (
+  input: InsightWhatsAppStart & Readonly<{ sender: InsightTemplateSender }>,
+  claim: InsightWhatsAppClaim
+): Effect.Effect<void, InsightUnavailable> =>
+  Effect.gen(function* () {
+    if (claim._tag !== "Ready") return;
+    const sent = sendEvidence(yield* Effect.exit(input.sender.send(claim.request)));
+    yield* recordInsightSend({
+      ...input,
+      correlationToken: claim.correlationToken,
+      outcome: summaryOutcome(sent),
+    });
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
 const deliverSummary = (
   input: Execution & Readonly<{ work: Extract<ProactivityActivity, { kind: "weekly-summary" }> }>
 ): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     const { db, userId, work, now, senders } = input;
-    const report = yield* findReport({ db, userId, id: work.insightEventId });
+    if (!(yield* continueQueuedDelivery({ db, userId, work, now: now.epochMilliseconds }))) {
+      return { _tag: "Done" } as const;
+    }
+    const queued = queuedDeliveryQuery({ userId, work, now: now.epochMilliseconds });
+    const report = yield* findQueuedReport({ db, userId, id: work.insightEventId, queued });
     const occurrence = yield* findInsight({ db, userId, id: work.insightEventId });
-    const recipient = yield* findInsightRecipient({ db, userId });
+    const recipient = yield* findQueuedInsightRecipient({ db, userId, queued });
     if (Option.isNone(report) || Option.isNone(occurrence) || Option.isNone(recipient)) {
       return yield* new InsightUnavailable();
     }
@@ -110,6 +137,7 @@ const deliverSummary = (
       grantId: report.value.consentGrantId,
       now,
       guard,
+      queuedAdmission: Option.some(queued),
     };
     yield* stageInsightDelivery({
       ...scope,
@@ -121,21 +149,21 @@ const deliverSummary = (
       sender: senders.summary,
     });
     yield* admitWeeklyResource({ db, userId, now, phase: "send" });
-    const claim = yield* startInsightSend(scope);
+    const sendAt = yield* DateTime.now;
+    const claim = yield* startInsightSend({
+      ...scope,
+      now: sendAt,
+      queuedAdmission: Option.some(
+        queuedDeliveryQuery({ userId, work, now: sendAt.epochMilliseconds })
+      ),
+    });
     if (claim._tag === "Deferred") {
       return {
         _tag: "Deferred",
         nextEligibleAtMs: claim.nextEligibleAt.epochMilliseconds,
       } as const;
     }
-    if (claim._tag === "Ready") {
-      const sent = sendEvidence(yield* Effect.exit(senders.summary.send(claim.request)));
-      yield* recordInsightSend({
-        ...scope,
-        correlationToken: claim.correlationToken,
-        outcome: summaryOutcome(sent),
-      });
-    }
+    yield* sendSummaryClaim({ ...scope, sender: senders.summary }, claim);
     yield* settleDeliveryWork({
       db,
       work,
@@ -208,7 +236,8 @@ const deliverQuestion = (
     ) {
       return yield* finishQuestion({ db, work, state: "expired" });
     }
-    const recipient = yield* findInsightRecipient({ db, userId });
+    const queued = queuedDeliveryQuery({ userId, work, now: now.epochMilliseconds });
+    const recipient = yield* findQueuedInsightRecipient({ db, userId, queued });
     if (Option.isNone(recipient)) {
       return yield* finishQuestion({ db, work, state: "refused" });
     }
@@ -233,7 +262,7 @@ const deliverQuestion = (
       now,
     };
     const request = questionRequest({ id: work.id, ...origin.value });
-    const offer = yield* createWeeklyGovernorConsentOffer({ ...context, request });
+    const offer = yield* createQueuedWeeklyGovernorConsentOffer({ ...context, request, queued });
     if (Option.isNone(offer)) {
       return yield* finishQuestion({ db, work, state: "refused" });
     }
@@ -244,6 +273,7 @@ const deliverQuestion = (
       id: work.id,
       now,
       guard,
+      queuedAdmission: Option.some(queued),
       offer: offer.value,
       grantId: Option.map(grant, (record) => record.id),
       recipient: recipient.value,
@@ -260,7 +290,17 @@ const sendQuestionClaim = (
     const { db, userId, work, now, senders } = input;
     const guard = questionIntentQuery({ userId, id: work.id });
     yield* admitWeeklyResource({ db, userId, now, phase: "send" });
-    const claim = yield* startWeeklyQuestion({ db, userId, id: work.id, now, guard });
+    const sendAt = yield* DateTime.now;
+    const claim = yield* startWeeklyQuestion({
+      db,
+      userId,
+      id: work.id,
+      now: sendAt,
+      guard,
+      queuedAdmission: Option.some(
+        queuedDeliveryQuery({ userId, work, now: sendAt.epochMilliseconds })
+      ),
+    });
     if (claim._tag === "Deferred") return claim;
     if (claim._tag === "Ready") {
       const sent = sendEvidence(yield* Effect.exit(senders.question.send(claim.request)));

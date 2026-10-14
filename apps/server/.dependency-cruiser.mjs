@@ -42,7 +42,7 @@ export default {
           "^src/shell/api\\.ts$",
           "^src/shell/observability/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
-          "^src/shell/(agent|canonical-operations|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
+          "^src/shell/(agent|canonical-operations|processing-consent|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
           "^src/shell/canonical-policy/operations\\.ts$",
         ],
       },

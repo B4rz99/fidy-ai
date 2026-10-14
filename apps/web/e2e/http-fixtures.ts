@@ -28,6 +28,15 @@ export const installUser = (page: Page): Promise<void> =>
         body: response(makeUser()),
       })
     )
+    .then(() =>
+      page.route(`${apiOrigin}/web/consent`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "Granted", withdrawal: null }),
+        })
+      )
+    )
     .then(() => {});
 
 export const installCategories = ({

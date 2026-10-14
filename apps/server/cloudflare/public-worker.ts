@@ -8,6 +8,7 @@ import {
   providerPaths,
 } from "../src/shell/provider-authentication/contract";
 import { oauthPaths } from "../src/shell/oauth-agents/contract";
+import { processingConsentTransport } from "../src/shell/processing-consent/runtime";
 import { connectionBrowserTransport } from "../src/shell/connections/runtime";
 import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
 import { deriveAnonymousSource } from "./anonymous-admission/operations";
@@ -299,10 +300,11 @@ const ownedPaths = new Set<string>([
 ]);
 const oauthPath = (path: string): boolean =>
   Object.values(oauthPaths).some((owned) => owned === path);
-const connectionBrowserPath = (path: string): boolean =>
-  Option.isSome(connectionBrowserTransport(path));
+const dedicatedBrowserPath = (path: string): boolean =>
+  Option.isSome(connectionBrowserTransport(path)) ||
+  Option.isSome(processingConsentTransport(path));
 const ownedPath = (path: string): boolean =>
-  connectionBrowserPath(path) ||
+  dedicatedBrowserPath(path) ||
   oauthPath(path) ||
   ownedPaths.has(path) ||
   refundSupportPath(path) ||
@@ -324,8 +326,10 @@ const oauthMethods = (path: string): ReadonlyArray<string> => {
     : ["GET"];
 };
 const specialMethods = (path: string): Option.Option<ReadonlyArray<string>> => {
-  const connection = connectionBrowserTransport(path);
-  if (Option.isSome(connection)) return Option.some([connection.value.method]);
+  const browserTransport = connectionBrowserTransport(path).pipe(
+    Option.orElse(() => processingConsentTransport(path))
+  );
+  if (Option.isSome(browserTransport)) return Option.some([browserTransport.value.method]);
   if (oauthPath(path)) return Option.some(oauthMethods(path));
   if (refundSupportPath(path)) return Option.some(refundMethods(path));
   return paymentEnrollmentTransport(path).pipe(Option.map((transport) => [transport.method]));
@@ -443,11 +447,16 @@ const oauthHeaders = (request: Request, path: string): Headers => {
   return headers;
 };
 const specialForwardedHeaders = (request: Request, path: string): Option.Option<Headers> => {
-  const connection = connectionBrowserTransport(path);
-  if (Option.isSome(connection)) {
+  const browserTransport = connectionBrowserTransport(path).pipe(
+    Option.orElse(() => processingConsentTransport(path))
+  );
+  if (Option.isSome(browserTransport)) {
     return Option.some(
       new Headers(
-        connection.value.forwardedHeaders.map((name) => [name, request.headers.get(name) ?? ""])
+        browserTransport.value.forwardedHeaders.map((name) => [
+          name,
+          request.headers.get(name) ?? "",
+        ])
       )
     );
   }
@@ -503,7 +512,7 @@ const preservesCoreQuery = (path: string): boolean =>
   transactionPath(path) ||
   canonicalRoute(path) ||
   path === smokePath ||
-  connectionBrowserPath(path) ||
+  dedicatedBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
 const forwardSmokeVersionOverride = (
@@ -576,7 +585,7 @@ const coreRequest = (
   });
 
 const hasPreflight = (path: string): boolean =>
-  connectionBrowserPath(path) ||
+  dedicatedBrowserPath(path) ||
   oauthBrowserPath(path) ||
   preflightPaths.has(path) ||
   enrollmentPath(path) ||
@@ -614,7 +623,7 @@ const oauthBrowserPath = (path: string): boolean =>
     oauthPaths.revokeAll,
   ].some((owned) => owned === path);
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
-  connectionBrowserPath(path) ||
+  dedicatedBrowserPath(path) ||
   oauthBrowserPath(path) ||
   sessionPaths.has(path) ||
   enrollmentPath(path) ||

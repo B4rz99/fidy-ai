@@ -5,7 +5,7 @@ import { ConsentRecordId } from "../../../src/core/consent/contract";
 import { type UserId } from "../../../src/core/identity/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { prepareConsentAction } from "../../consent/operations";
+import { prepareConsentAction, prepareQueuedConsentAction } from "../../consent/operations";
 import { InsightUnavailable, ProactivityReport } from "../contract";
 
 const Row = Schema.Struct({
@@ -52,19 +52,29 @@ const decodeReport = (row: typeof Row.Type): Effect.Effect<ProactivityReport, In
       grantId: row.consent_grant_id.value,
     });
   });
-export const findReport = (
-  input: Readonly<{ db: D1Database; userId: UserId; id: string }>
+const readReport = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    id: string;
+    queuedAdmission: Option.Option<OwnedStatement>;
+  }>
 ): Effect.Effect<Option.Option<ProactivityReport>, InsightUnavailable> =>
   Effect.gen(function* () {
+    const statement: OwnedStatement = {
+      sql: "SELECT delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone FROM proactivity_reports WHERE user_id=? AND delivery_id=?",
+      params: [input.userId, input.id],
+    };
     const raw = yield* Effect.tryPromise(() =>
-      prepareConsentAction({
-        db: input.db,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement: {
-          sql: "SELECT delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone FROM proactivity_reports WHERE user_id=? AND delivery_id=?",
-          params: [input.userId, input.id],
-        },
+      Option.match(input.queuedAdmission, {
+        onNone: () =>
+          prepareConsentAction({
+            db: input.db,
+            subject: { _tag: "User", userId: input.userId },
+            requirement: "active",
+            statement,
+          }),
+        onSome: (queued) => prepareQueuedConsentAction({ ...input, queued, statement }),
       }).first()
     );
     if (raw === null) return Option.none();
@@ -110,3 +120,12 @@ export const transcriptOccurrenceQuery = (
   sql: `SELECT v.user_id,(SELECT l.insight_event_id FROM proactivity_message_events AS l WHERE l.user_id=v.user_id AND l.delivery_id=v.delivery_id AND l.insight_event_id=v.delivery_id) AS insight_event_id,v.delivered_at_ms,v.text FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND EXISTS (SELECT 1 FROM proactivity_message_events WHERE user_id=v.user_id AND delivery_id=v.delivery_id)`,
   params: [...input.proof.params, input.userId, input.id],
 });
+
+export const findReport = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: string }>
+): Effect.Effect<Option.Option<ProactivityReport>, InsightUnavailable> =>
+  readReport({ ...input, queuedAdmission: Option.none() });
+export const findQueuedReport = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: string; queued: OwnedStatement }>
+): Effect.Effect<Option.Option<ProactivityReport>, InsightUnavailable> =>
+  readReport({ ...input, queuedAdmission: Option.some(input.queued) });

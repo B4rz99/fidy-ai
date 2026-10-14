@@ -1,3 +1,5 @@
+import { protectQueuedStatement } from "./queued-work";
+import type { QueuedConsentAction } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import {
   ConsentRecord,
@@ -115,6 +117,20 @@ export const guardedAction = (input: ProactivityConsentAction): D1PreparedStatem
     },
   });
   return input.db.prepare(guarded.sql).bind(...guarded.params);
+};
+
+/** Category revocation still wins over historical processing Consent. */
+export const queuedAction = (
+  input: ProactivityConsentAction & Readonly<{ queued: QueuedConsentAction["queued"] }>
+): D1PreparedStatement => {
+  const statement = protectQueuedStatement({
+    ...input,
+    statement: {
+      sql: `${input.statement.sql} AND EXISTS (${liveGrant} AND g.id=?)`,
+      params: [...input.statement.params, input.userId, input.kind, input.grantId],
+    },
+  });
+  return input.db.prepare(statement.sql).bind(...statement.params);
 };
 
 const channelAction = (

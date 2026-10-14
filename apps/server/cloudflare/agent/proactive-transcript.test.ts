@@ -92,6 +92,7 @@ const deliveredFixture = (
       expiresAt: report.expiresAt,
       timeZone: schedule.timeZone,
       now: work.now,
+      queuedAdmission: Option.none(),
       guard: weeklyReportDeliveryQuery({ userId: work.userId, insightEventId: generated.id }),
       sender,
     };

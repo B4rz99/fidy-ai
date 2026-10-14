@@ -17,6 +17,7 @@ import {
   fixtureUserId,
   paginationUserId,
   pairingUserId,
+  privacyUserId,
 } from "./browser-acceptance-seed";
 import { observeBrowserCost } from "./browser-cost/operations";
 import {
@@ -389,6 +390,7 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
 const approvedFixtureUser = (parameters: URLSearchParams): string => {
+  if (parameters.get("privacy") === "true") return privacyUserId;
   if (parameters.get("access") === "true") return accessUserId;
   if (parameters.get("dashboard") === "true") return dashboardUserId;
   if (parameters.get("budget") === "true") return budgetUserId;

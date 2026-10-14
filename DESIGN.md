@@ -313,6 +313,8 @@ not a replacement for its label. Focus has a visible contrasting outline.
 
 Loading preserves the control's dimensions and identifies the action in progress.
 Disabled controls remain readable and explain unavailable actions when necessary.
+Disabled destructive buttons retain the shared coral fill and use the muted disabled label;
+they remain non-interactive until their prerequisite is met.
 On failure, keep entered values and offer a useful correction or retry. Confirm
 success only after the operation succeeds. Empty states explain what is missing and
 offer the next relevant action; they are distinct from loading and network failure.

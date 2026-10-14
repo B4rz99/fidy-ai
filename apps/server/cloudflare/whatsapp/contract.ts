@@ -27,13 +27,15 @@ import { type InsightEventId } from "../../src/core/insights/contract";
 import type { ProactivityTemplateSender } from "../../src/shell/channels/whatsapp/contract";
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
-/** Owner-supplied live report guard and captured grant; never Queue or request authority. */
+/** Owner-supplied report and category guards. Some queuedAdmission projects user_id for the exact unfinished, unexpired native item admitted under active Consent; None requires current Consent. A transport payload grants no authority. */
 export type ProactivityChannelScope = Readonly<{
   db: D1Database;
   userId: UserId;
   id: string;
   now: DateTime.Utc;
   guard: OwnedStatement;
+  /** Some projects user_id for the exact same-User unfinished, unexpired native item originally admitted under active Consent; None requires current Consent. */
+  queuedAdmission: Option.Option<OwnedStatement>;
 }> &
   (
     | Readonly<{
@@ -86,6 +88,8 @@ export type InsightWhatsAppStage = Readonly<{
   timeZone: IanaTimeZone;
   now: DateTime.Utc;
   guard: OwnedStatement;
+  /** Some projects user_id for the exact same-User unfinished, unexpired native item originally admitted under active Consent; None requires current Consent. */
+  queuedAdmission: Option.Option<OwnedStatement>;
   sender: InsightTemplateSender;
 }>;
 /** Claim once under current purpose, recipient, temporal and caller-owned resource authority. */
@@ -96,6 +100,8 @@ export type InsightWhatsAppStart = Readonly<{
   grantId: ConsentRecordId;
   now: DateTime.Utc;
   guard: OwnedStatement;
+  /** Some projects user_id for the exact same-User unfinished, unexpired native item originally admitted under active Consent; None requires current Consent. */
+  queuedAdmission: Option.Option<OwnedStatement>;
 }>;
 /** Ready data is transient provider work; it never enters a Queue or Workflow result/history. */
 export type InsightWhatsAppClaim =

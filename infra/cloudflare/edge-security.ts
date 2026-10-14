@@ -3,6 +3,7 @@ import {
   microsoftProviderPaths,
   providerPaths,
 } from "../../apps/server/src/shell/provider-authentication/contract";
+import { ProcessingConsentGroup } from "../../apps/server/src/shell/processing-consent/contract";
 import { connectionBrowserPaths } from "../../apps/server/src/shell/connections/contract";
 import { oauthPaths } from "../../apps/server/src/shell/oauth-agents/contract";
 import { operationCatalog } from "@fidy/server/canonical-catalog";
@@ -114,6 +115,7 @@ const reservedRateLimitPaths = [
   ...Object.values(providerPaths),
   ...Object.values(microsoftProviderPaths),
   ...Object.values(connectionBrowserPaths),
+  ...Object.values(ProcessingConsentGroup.endpoints).map((endpoint) => endpoint.path),
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
   "/web/pairings",

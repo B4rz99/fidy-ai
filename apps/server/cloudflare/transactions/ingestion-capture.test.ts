@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { afterAll, expect } from "vitest";
 import { CategoryId } from "../../src/core/categories/contract";
 import {
@@ -127,6 +127,7 @@ const prepareEmail = (
   const statement = captureInput(db, userA);
   return prepareNotificationEmailCapture({
     ...statement,
+    queuedAdmission: Option.none(),
     attestation: {
       id: attestationId,
       serviceMarket: "CO",

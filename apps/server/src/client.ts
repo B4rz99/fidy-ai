@@ -183,3 +183,9 @@ export {
   browserSessionBindingPath,
 } from "~/shell/web-authentication/contract";
 export { Budget, BudgetStatusReport } from "~/core/budgets/contract";
+
+export type {
+  ProcessingConsentStatus,
+  ProcessingAuthorization,
+  PrivacyTransactionPage,
+} from "~/shell/processing-consent/contract";

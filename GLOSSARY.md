@@ -300,6 +300,14 @@ agents do not receive or manage Hosted Agent Sessions.
 _Avoid_: Conversation (the retained conversation crosses Hosted Agent Sessions), WhatsApp service
 window, PAT session, external-agent session.
 
+**Queued processing work**:
+One exact same-User durable item admitted under active Processing Consent, with its original expiry,
+unfinished state and replay protection. Withdrawal permits that queued or running item to finish;
+it prevents new admissions and future scheduled occurrences. A Queue/Workflow payload, preflight,
+subject-lock waiter or recurring schedule is not durable admission. Independent category Consent,
+recipient identity, credential restrictions and security limits remain required.
+_Avoid_: Queue message as permission, grandfathered schedule, perpetual processing grant.
+
 **Turn**:
 One admitted User request and its serialized hosted attempt within one Hosted Agent Session. It is Pending
 after complete hosted preflight succeeds and the exact User entry is retained; it becomes Completed

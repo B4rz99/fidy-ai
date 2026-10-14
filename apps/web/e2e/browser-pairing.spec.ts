@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
-import { makeUser, response } from "./http-fixtures";
+import { installUser } from "./http-fixtures";
 import { boundSessionRequests, visiblePairingCode } from "./real-core-fixture";
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
@@ -74,15 +74,7 @@ const installStartAndLogoutRoutes = (page: Page, fixture: PairingApiFixture): Pr
           )
         )
       );
-      yield* wait(
-        page.route("**/user", (route) =>
-          route.fulfill({
-            contentType: "application/json",
-            status: successStatus,
-            body: response(makeUser()),
-          })
-        )
-      );
+      yield* wait(installUser(page));
       yield* wait(installCanonicalProductRoutes(page));
       yield* wait(
         page.route("**/web/session/binding", (route) =>

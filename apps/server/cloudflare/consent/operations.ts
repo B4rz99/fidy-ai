@@ -1,9 +1,10 @@
 import { DisclosureSnapshot } from "../../src/core/consent/contract";
+import { consentResponse, withdrawProcessingConsent } from "./internal/browser";
 import * as proactivity from "./internal/proactivity-consent";
 import type { ProactivityOptInKind } from "../../src/shell/consent/contract";
 import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
-import { type Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   type ConsentEgressAction,
   type ConsentEgressRefused,
@@ -11,6 +12,7 @@ import {
   type ConsentStanding,
   type ConsentStatus,
   type ConsentUnavailable,
+  ConsentWithdrawalAdmission,
   type OnboardingConsentInput,
 } from "./contract";
 import { performEgress } from "./internal/egress";
@@ -41,6 +43,24 @@ import type {
 } from "./contract";
 import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/contract";
 import type { UserId } from "../../src/core/identity/contract";
+
+const unavailableStatus = 503;
+
+/** Settle an authenticated withdrawal only under the intended User's existing coordinator. */
+export const executeConsentWithdrawal = (
+  input: Readonly<{
+    db: D1Database;
+    candidate: unknown;
+    userId: string;
+    signal: AbortSignal;
+  }>
+): Effect.Effect<Response> => {
+  const admission = Schema.decodeUnknownOption(ConsentWithdrawalAdmission)(input.candidate);
+  if (Option.isNone(admission) || admission.value.userId !== input.userId) {
+    return Effect.succeed(consentResponse(unavailableStatus));
+  }
+  return withdrawProcessingConsent({ ...input, admission: admission.value });
+};
 
 /** Decode only a complete qualified category choice; a category identity carries no decision authority. */
 export const readProactivityConsentChoiceKind: typeof proactivity.choiceKind = (choice) =>

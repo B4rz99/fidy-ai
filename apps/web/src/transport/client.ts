@@ -294,3 +294,5 @@ export { ProviderHandoffSearch } from "@fidy/server/client";
 
 export { ManualPATReauthenticationRequired, User } from "@fidy/server/client";
 export { Budget, Category, BudgetStatusReport } from "@fidy/server/client";
+
+export type { ProcessingConsentStatus, ProcessingAuthorization } from "@fidy/server/client";

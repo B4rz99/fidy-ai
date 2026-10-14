@@ -78,6 +78,16 @@ Outbound HTTP bounds every provider response to 4 KiB, permits at most two expli
 reviewed GitHub release destinations and exports only closed provider telemetry. Failure returns 503; it never invents a default or accesses private Core. Request cancellation owns
 the upstream read. The route shares the edge's source-IP request bound.
 
+### Operator request register
+
+`scripts/titular-requests` is a local manual operator ledger, separate from canonical User state.
+It persists bounded UUID references and workflow observations in private SQLite outside Git, under
+the owning POSIX OS User. It cannot authenticate a Titular, query Core, send a response, withdraw
+Consent or erase product data. Commands compare revisions and atomically commit history and projection;
+replay returns the original receipt. Live verification, evidence storage, calendar/classification,
+retention, safe delivery and operator approval remain gates in the
+[procedure](../../docs/operations/titular-requests-1273.md).
+
 ### Connection browser preparation
 
 The portable Connections runtime derives browser transport identity and methods from its declared
@@ -230,6 +240,11 @@ fixed token/JWKS destinations; Maintenance expires protocol state. See the
 [Microsoft evidence](../../docs/operations/microsoft-authentication.md).
 
 Consent owns current standing and append-only evidence. A standing read is not cached authorization.
+The Processing Consent browser declaration supplies cookie-only status and explicit withdrawal
+at `/web/consent` and `/web/consent/withdraw`, outside canonical operations and agent tools.
+Private Core authenticates without requiring Consent or a paid plan; withdrawal enters the
+existing User coordinator and atomically rechecks live credential proof with Consent and Audit.
+Repeated withdrawal returns the original receipt. These controls remain reachable after withdrawal.
 Ordinary protected work checks current Consent. An exact Pending hosted Turn retains its admitted
 Consent basis for bounded completion; revocation prevents the next Turn. Model egress still passes
 through the Consent-owned boundary, and PAT work retains its per-call guard.

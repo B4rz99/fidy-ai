@@ -184,6 +184,16 @@ const accessManagementRoute = createRoute({
     )(search),
   component: AccessManagementPage,
 });
+const privacyLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "privacy-layout",
+  component: lazyRouteComponent(() => import("@/features/signed-in/feature"), "ApplicationShell"),
+});
+const privacyRoute = createRoute({
+  getParentRoute: () => privacyLayoutRoute,
+  path: "/settings/privacy",
+  component: lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature"),
+});
 const emailReplacementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/email",
@@ -288,6 +298,7 @@ const routeTree = rootRoute.addChildren([
   oauthReviewRoute,
   connectionContinuationRoute,
   subscriptionOffersRoute,
+  privacyLayoutRoute.addChildren([privacyRoute]),
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([
       signedInIndexRoute,

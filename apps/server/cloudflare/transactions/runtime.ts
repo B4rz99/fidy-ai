@@ -1,5 +1,6 @@
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
+import { executeConsentWithdrawal } from "../consent/operations";
 import { executeConnectionBrowserAdmission } from "../connections/operations";
 import {
   executeRefundSupportAdmission,
@@ -394,6 +395,19 @@ const privateOwnerActivity = (
         userId: input.userId,
         candidate: input.candidate,
         environment: input.environment.WOMPI_ENVIRONMENT ?? "",
+      })
+    );
+  }
+  if (
+    input.request.method === "POST" &&
+    new URL(input.request.url).pathname === "/consent-withdraw"
+  ) {
+    return Option.some(
+      executeConsentWithdrawal({
+        db: input.environment.DB,
+        candidate: input.candidate,
+        userId: input.userId,
+        signal: input.request.signal,
       })
     );
   }

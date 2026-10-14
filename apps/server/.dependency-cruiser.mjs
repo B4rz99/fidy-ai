@@ -206,7 +206,7 @@ export default {
           // Pure opaque trace receipts are diagnostic metadata; exporter/runtime code stays private.
           "^src/shell/observability/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
-          "^src/shell/(agent|canonical-operations|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
+          "^src/shell/(agent|canonical-operations|processing-consent|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication)/contract\\.ts$",
           // Pure shared access decisions are deliberate CLI/browser discovery authority (#970).
           "^src/shell/canonical-policy/operations\\.ts$",
         ],
@@ -1511,7 +1511,7 @@ export default {
           "^src/shell/canonical-policy/operations\\.ts$",
           // Canonical ordered-batch schemas and pure child projection, with no execution authority (#971).
           "^src/shell/operations/contract\\.ts$",
-          "^src/shell/(connections|dashboard|oauth-agents|public-http|quotas|schema-codecs|tokens|subscription|web-authentication)/contract\\.ts$",
+          "^src/shell/(processing-consent|connections|dashboard|oauth-agents|public-http|quotas|schema-codecs|tokens|subscription|web-authentication)/contract\\.ts$",
           "^src/shell/email-authentication/(contract|path)\\.ts$",
         ],
       },

@@ -36,7 +36,9 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Public Astro site owns the apex; app legal/feature redirects and installer handoffs are static.
 // Both static response policies and the Astro CSP configuration are covered by this manifest.
 // #1291 wires existing Proactivity configuration with disabled defaults; routing and authority are unchanged.
-const expectedEdgePolicyDigest = "314aacf8fc1c22cd27a9bc5e9088c854c026b07ffa1196b2ae915e212e91b8a2";
+// Includes #1273 cookie-only Processing Consent controls, declaration-derived edge path limits,
+// and no new public database binding, external provider authority or production bank access.
+const expectedEdgePolicyDigest = "1e1ea39dc32f1abeb8eef6e29aace3e097d182bb16d052c660204a27a23c6a52";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
@@ -59,6 +61,12 @@ const securityArtifacts = [
       "../../apps/server/cloudflare/bancolombia-sandbox/internal/public-key.ts",
       import.meta.url
     )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/processing-consent/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/processing-consent/runtime.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/contract.ts", import.meta.url)

@@ -1,4 +1,5 @@
 import { BrowserSessionGroup } from "~/shell/web-session/contract";
+import { ProcessingConsentGroup } from "~/shell/processing-consent/contract";
 import { ProviderAuthenticationGroup } from "~/shell/provider-authentication/contract";
 import { OAuthConnectionsGroup, OAuthReviewGroup } from "~/shell/oauth-agents/contract";
 import { HttpApi, OpenApi } from "effect/http-api";
@@ -56,6 +57,7 @@ export { BrowserPairingEmailAuthenticationWebAuthGroup } from "~/shell/email-aut
 export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserLoginWebAuthGroup)
   .add(BrowserSessionGroup)
+  .add(ProcessingConsentGroup)
   .add(ProviderAuthenticationGroup)
   .add(OAuthReviewGroup)
   .add(OAuthConnectionsGroup)

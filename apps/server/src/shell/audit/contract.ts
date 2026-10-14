@@ -5,6 +5,7 @@ import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { AuditLogEntry } from "~/core/audit/contract";
 /** The closed canonical vocabulary shared with credential accountability. */
 export type AuditCredentialOperation =
+  | "consent.withdraw"
   | "connections.listInstitutions"
   | "connections.listConnections"
   | "connections.getConnection"
@@ -83,7 +84,7 @@ export type AuditAuthority =
 
 type AcceptedSessionOperation = Extract<
   AuditCredentialOperation,
-  `${"connections" | "budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
+  `${"consent" | "connections" | "budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
 >;
 type CategoryOperation = Extract<AuditCredentialOperation, `categories.${string}`>;
 type LegacySessionOperation = Exclude<

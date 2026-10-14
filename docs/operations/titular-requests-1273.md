@@ -1,0 +1,173 @@
+# Titular requests — operator procedure for #1273
+
+Status: implementation and procedure draft, dated 2026-10-14. FIDY S.A.S. must review the
+classification, verification, calendar, retention and response procedure before using this with
+live requests. The local register is working software; it is not legal signoff, a production
+privacy authority, or proof that the published inbox has been operated. Keep #1273 open until the
+live acceptance evidence and withdrawal cutoff below have been reviewed.
+
+## Intake and storage
+
+Use the published `obarboza@fidyapp.com` channel. Intake is free; never require a purchase, a new
+User, a login or renewed Consent to receive a request. Preserve the original received instant,
+request scope and correspondence in restricted evidence storage. Acknowledge with an opaque case
+reference and the responsible operator. A receipt is not proof of claimant identity.
+
+Run `bun run titular:requests /absolute/private/directory` with one JSON request on stdin.
+Use an encrypted managed operator volume, outside every Git repository and shared/synced public
+folder. The tool requires POSIX ownership, a 0700 directory and 0600 database, refuses links and
+foreign databases, and keeps at most 1,000 cases / 20,000 history entries / approximately 20 MiB.
+It fails closed when capacity or platform requirements are unavailable. Windows is unsupported.
+The command has no server credentials, provider connections, product database access or delivery
+capability. No telemetry is needed: its work is local, and failures return only closed classes.
+
+The register stores UUID references, request type, requester class, received time, accountable
+owner, revisions and workflow facts. Keep the UUID-to-evidence mapping private. Do not place email
+addresses, names, identity documents, financial records, government identifiers, passwords, recovery
+codes, PATs, cookies, URLs, message bodies or arbitrary notes in its metadata. Unknown fields are
+rejected before opening storage. The tool accepts at most 4 KiB within ten seconds; do not pipe
+original correspondence into it. Input files and backups need the same restrictions as the register.
+It is a manual ledger; recording verification, an owner result or delivery references does not
+perform or authorize any of those effects.
+
+Example using disposable references only:
+
+```json
+{
+  "operation": "Apply",
+  "command": {
+    "action": "Receive",
+    "commandId": "20000000-0000-4000-8000-000000000001",
+    "caseId": "10000000-0000-4000-8000-000000000001",
+    "ownerRef": "20000000-0000-4000-8000-000000000002",
+    "requestRef": "20000000-0000-4000-8000-000000000003",
+    "scopeRef": "20000000-0000-4000-8000-000000000018",
+    "requester": "NonUser",
+    "kind": "Access",
+    "receivedAtMs": 1791565200000
+  }
+}
+```
+
+Create fresh UUIDs for real command/case/evidence references in the approved private system. Each
+subsequent command supplies the case's last observed `revision`. Read it with
+`{"operation":"Read","caseId":"…"}`. Retrying the _identical_ commandId and command returns its
+original receipt without new history. A changed command with that id, or a stale revision, refuses.
+After losing output, reread the case or replay the original command; never invent a new command id
+until the actual result is understood. Local history and the case projection commit together.
+
+## Classification and deadlines
+
+The general statutory baseline is [Ley 1581/2012, Articles 13–16](https://cancilleria.gov.co/normograma/compilacion/docs/ley_1581_2012.htm).
+Access, proof of authorization and use explanation are consultations. Correction and complaints are
+claims. Have the reviewer confirm how the actual withdrawal/erasure request and any special data
+regime fit before treating the software's conservative claim target as the applicable legal deadline.
+A shorter special period takes precedence.
+
+Consultations have a ten-working-day response period and at most five additional working days
+with reasons and a communicated response date. Claims have fifteen working days from the day after
+receipt and at most eight additional working days. An incomplete claim needs a completion request
+within five days; two months without the requested completion leads to an abandonment review.
+Incompetent recipients transfer and notify within two working days. A complete claim needs the
+applicable “reclamo en trámite” annotation within two working days, retained until resolution.
+Exhaustion of the consultation/claim procedure precedes the Article 16 SIC complaint route.
+
+The calculator supplies **provisional internal targets**, not a legal determination. It uses the
+Bogotá receipt date, counts Saturdays conservatively, excludes Sundays and national holidays, and
+counts the consultation receipt day when working. [Ley 51/1983, Article 1](https://cancilleria.gov.co/sites/default/files/Normograma/docs/ley_0051_1983.htm)
+provides holiday observances, including Monday transfers and Easter-relative days. This avoids
+assuming that every Saturday is excluded; the Fidy reviewer must confirm its business-day treatment.
+Only 2026–2027 are supplied. Unknown calendar coverage triggers review, never an invented deadline.
+Verification/completeness does not silently reset or suspend the original internal response target.
+
+Monitor open cases every working day. `RequestCompletion` and `RecordCompletion` retain evidence
+and their occurrence instants. Track the two-month completion review and the claim annotation
+separately in restricted evidence; the register does not alter canonical User records or automatically
+abandon a request. `Extend` requires notice/reason references, one explicit later response date
+within the cap, and recording before the original target expires. It cannot extend twice. Confirm
+that the notice was actually delivered; a UUID is not delivery evidence by itself. Escalate incomplete
+scope, unverified identity, missing calendar coverage, approaching/overdue targets, failed delivery or
+missing owner capability to the accountable owner and legal reviewer. Never postpone silently.
+
+## Identity and purpose verification
+
+Keep intake, verification and product authority distinct. Record a verification artifact only after
+its reviewer checks the evidence, subject binding, requested purpose, scope and safe response
+destination. The artifact must identify the actual method, verifier, time, conclusion and limitations;
+only its opaque reference enters `RecordVerification`. An operator assertion, caller-supplied email,
+phone number or financial facts cannot establish authority.
+
+- **User:** use an existing authenticated same-User browser and its ordinary proof mechanisms.
+  After withdrawal, the privacy status/receipt transport remains available with a live WebSession.
+  Do not ask the User to send their cookie, PAT, browser-private verifier or BackupRecoveryCode
+  into correspondence or the case ledger. The separate support-recovery procedure keeps its
+  own proof requirements and cannot fabricate a privacy authorization.
+- **Non-User Titular:** do not create a User. The reviewer must establish the subject's entitlement
+  to the particular held material and lawful request authority through an approved purpose-specific
+  method. Receiving an email or recognizing claimed facts is insufficient. The exact alternate
+  method and restricted evidence system remain a live-use review gate; this draft does not invent
+  a verification credential or accept identity documents into the ordinary register.
+- **Representative:** establish both the principal's request authority and the representative's
+  independently verified, scope-limited mandate through the reviewed procedure. A forwarded
+  email, an uploaded unsigned statement or the representative's own login is insufficient.
+
+If established User proofs are lost, keep the rights request open and escalate the alternate Titular
+verification path; do not claim that inability to recover ordinary login removes privacy rights.
+Neither alternate privacy verification nor case metadata creates a WebSession or changes User identity.
+Do not disclose whether another person's User, records or credentials exist during verification.
+
+## Scoped action and response
+
+For access/correction, obtain the actual scoped result through the applicable owner and its real
+proofs; record the restricted result reference with `RecordOwnerResult`. A case entry cannot authorize
+a direct D1 query, a foreign-User operation or a canonical call after its Consent basis has ended.
+If the necessary privacy-purpose owner authority is not executable, escalate that capability gap;
+do not substitute operator access or call an empty result completed access.
+
+For withdrawal, have the proven User use `/settings/privacy`. Its same-User public/Core/coordinator
+path rechecks live authority and commits Consent evidence and Audit atomically. Record only the
+verified durable receipt reference with `RecordWithdrawal`. Operator-assisted intake cannot bypass
+this proof. Withdrawal, individual access revocation, Subscription cancellation and physical erasure
+are distinct. Existing already-admitted Pending Turns may finish; do not promise a stricter cutoff
+without the required legal/architecture approval and implemented enforcement.
+
+For erasure, prepare a tracked #1274 handoff containing the verified request-authority reference,
+scope reference, explicit withdrawal outcome (recorded receipt, not requested, pending or unavailable),
+responsible owner and a safe case reference. Store that package privately and use `ReferErasure` for
+its opaque reference. The register never deletes customer data and always reports `not-performed`.
+Lawful holds, residual basis, provider suppression and deletion evidence belong to the erasure owner;
+a handoff must not be represented as completed deletion.
+
+Prepare the minimized response in restricted storage. `PrepareResponse` requires recorded verification
+and the relevant owner result, withdrawal receipt or erasure handoff. Deliver only through the
+reviewed destination bound to the verified requester; do not attach personal data to a newly supplied
+address merely because it appears in the original email. Use `DeliveryFailed` or `DeliveryUncertain`
+when the outcome is unresolved. Neither closes the response. `RecordResponse` requires an independently
+checked delivery receipt reference; a sent request or transport acknowledgement alone is not confirmed
+receipt. Generic intake/completion notices can be sent without disclosing held personal data and are
+recorded separately from the final scoped response.
+
+## Dry run and live-use gates
+
+The focused register suite exercises real private files/SQLite, intake without a User, stable replay,
+rejected personal fields/unsafe permissions/links, storage rollback, scoped workflow prerequisites,
+ambiguous delivery, erasure handoff and deadline/extension bounds. Run:
+
+```sh
+bun --bun node_modules/vitest/vitest.mjs run --config scripts/vitest.config.ts scripts/titular-requests/runtime.test.ts
+```
+
+[Disposable CLI evidence](titular-requests-dry-run-1273.json) records a separate executable register
+run. It is simulated intake and manual-fact recording, not an actual privacy-purpose owner export,
+published-inbox exercise or verified human operator demonstration. The existing browser/native
+withdrawal evidence is in [processing withdrawal](processing-withdrawal-1273.md).
+
+Before live use: approve the actual verification/representative method, evidence store, operator
+identity mapping, calendar/classification and special-regime rules, case/evidence retention and
+lawful-hold procedure, safe delivery destination, executable scoped privacy-purpose access/correction,
+and exact withdrawal cutoff. Register capacity does not establish a retention period. Do not retain
+live cases indefinitely while waiting for that decision. Perform an operator-led published-channel
+dry run with disposable data, including failed destination and ambiguous completion, and retain
+its verified minimal receipt. Stage/promote the browser/server release through the normal reviewed
+production workflow separately. This implementation authorizes no deployment, live disclosure,
+customer erasure, external notification or closure of #1273.

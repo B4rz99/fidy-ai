@@ -1,6 +1,8 @@
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
+import { processingConsentTransport } from "../../../src/shell/processing-consent/runtime";
+import { handleProcessingConsentRequest } from "../../consent/runtime";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
 import { handleConnectionBrowserRequest } from "../../connections/runtime";
 import type { HttpClient } from "effect/http";
@@ -515,8 +517,12 @@ const reconciliationOperation = (
   return Option.none();
 };
 
+const privacyOrConnectionPath = (path: string): boolean =>
+  Option.isSome(processingConsentTransport(path)) ||
+  Option.isSome(connectionBrowserTransport(path));
+
 const ownedCorePath = (path: string): boolean =>
-  Option.isSome(connectionBrowserTransport(path)) ||
+  privacyOrConnectionPath(path) ||
   ownsProviderAuthenticationPath(path) ||
   refundSupportRoute(path) ||
   enrollmentCorePath(path) ||
@@ -1504,6 +1510,26 @@ const smokeResponse = (
     )
   );
 
+const dedicatedBrowserResponse = (
+  request: Request,
+  environment: CoreHttpEnvironment,
+  path: string
+): Option.Option<Effect.Effect<Response>> => {
+  const input = {
+    coordinator: environment.USER_TRANSACTION_COORDINATOR,
+    request,
+    db: environment.DB,
+    browserOrigin: environment.BROWSER_ORIGIN,
+  };
+  if (Option.isSome(processingConsentTransport(path))) {
+    return Option.some(handleProcessingConsentRequest(input));
+  }
+  if (Option.isSome(connectionBrowserTransport(path))) {
+    return Option.some(handleConnectionBrowserRequest(input));
+  }
+  return Option.none();
+};
+
 const reservedCoreResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
@@ -1512,15 +1538,9 @@ const reservedCoreResponse = (
   if (!ownedCorePath(path)) {
     return Option.some(Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND)));
   }
-  if (Option.isSome(connectionBrowserTransport(path))) {
-    return Option.some(
-      handleConnectionBrowserRequest({
-        coordinator: environment.USER_TRANSACTION_COORDINATOR,
-        request,
-        db: environment.DB,
-        browserOrigin: environment.BROWSER_ORIGIN,
-      })
-    );
+  const browser = dedicatedBrowserResponse(request, environment, path);
+  if (Option.isSome(browser)) {
+    return browser;
   }
   if (
     [providerPaths.complete, microsoftProviderPaths.complete].some((owned) => owned === path) &&

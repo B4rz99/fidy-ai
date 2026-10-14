@@ -27,7 +27,7 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 const signInWithIdentity = (
   { page, request }: SignInFixture,
-  identity: "primary" | "firstCard" | "dashboard" | "budget" | "pagination" | "access"
+  identity: "primary" | "firstCard" | "dashboard" | "budget" | "pagination" | "access" | "privacy"
 ): Promise<void> =>
   page.clock
     .install()
@@ -180,3 +180,7 @@ export const probeCanonicalRequest = (
     }
     return yield* Effect.tryPromise(() => send());
   }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
+
+/** Independent expired-trial User for irreversible processing-withdrawal acceptance. */
+export const signInPrivacyThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, "privacy");

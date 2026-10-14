@@ -5,8 +5,22 @@ import {
 } from "../../src/shell/consent/contract";
 import { Data, type DateTime, type Effect, type Option, Schema } from "effect";
 import { ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
-import type { UserId, WhatsAppCallerReference } from "../../src/core/identity/contract";
+import { UserId, type WhatsAppCallerReference } from "../../src/core/identity/contract";
+import { WebSessionId } from "../../src/core/web-session/contract";
+
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
+
+const digestLength = 32;
+
+/** Short-lived private withdrawal admission, rechecked against the coordinator User and live credential. */
+export const ConsentWithdrawalAdmission = Schema.Struct({
+  userId: UserId,
+  sessionId: WebSessionId,
+  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))).check(
+    Schema.isBetweenLength(digestLength, digestLength)
+  ),
+  deadlineMilliseconds: Schema.Int,
+});
 
 /** Established authenticated native channel and explicit category, never model or PAT decision authority. */
 export type ProactivityConsentContext = Readonly<{

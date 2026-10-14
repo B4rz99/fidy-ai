@@ -13,6 +13,7 @@ import type {
 } from "~/shell/audit/contract";
 
 const sessionDestinations = new Map([
+  ["consent", "pat_audit"],
   ["transactions", "transaction_audit"],
   ["operations", "transaction_audit"],
   ["categories", "category_audit"],

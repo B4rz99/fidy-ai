@@ -8,7 +8,7 @@ import {
   Settings01Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
-import { Link, Outlet, useRouter } from "@tanstack/react-router";
+import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
@@ -35,6 +35,7 @@ const navigationLinks = [
   { to: "/app/budgets", label: "Presupuestos", icon: Wallet01Icon },
 ] as const;
 const settingsLinks = [
+  { to: "/settings/privacy", label: "Privacidad" },
   { to: "/settings/email", label: "Correo" },
   { to: "/settings/access", label: "Accesos" },
   { to: "/settings/recovery", label: "Recuperación" },
@@ -42,28 +43,12 @@ const settingsLinks = [
 const dismissCompactNavigation = (event: MouseEvent<HTMLAnchorElement>): void => {
   event.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
 };
-const SignedInNavigation = ({
-  onLogout,
-  loggingOut,
-}: Readonly<{
-  onLogout: () => void;
-  loggingOut: boolean;
-}>): JSX.Element => (
-  <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
-    {navigationLinks.map((link) => (
-      <Link
-        key={link.to}
-        to={link.to}
-        search={{}}
-        onClick={dismissCompactNavigation}
-        className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
-        activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
-      >
-        <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
-        {link.label}
-      </Link>
-    ))}
-    <details className="shrink-0">
+const SettingsNavigation = (): JSX.Element => {
+  const inSettings = useRouterState({
+    select: (state) => state.location.pathname.startsWith("/settings/"),
+  });
+  return (
+    <details className="shrink-0" open={inSettings}>
       <summary className="flex min-h-12 cursor-pointer list-none items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted">
         <HugeiconsIcon icon={Settings01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
         Ajustes
@@ -83,17 +68,55 @@ const SignedInNavigation = ({
         ))}
       </div>
     </details>
-    <Button
-      className="justify-start md:mt-auto"
-      disabled={loggingOut}
-      onClick={onLogout}
-      type="button"
-      variant="ghost"
-    >
-      {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
-    </Button>
-  </nav>
-);
+  );
+};
+
+const SignedInNavigation = ({
+  onLogout,
+  loggingOut,
+}: Readonly<{
+  onLogout: () => void;
+  loggingOut: boolean;
+}>): JSX.Element => {
+  const { authentication } = useSession();
+  return (
+    <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
+      {navigationLinks.map((link) => (
+        <Link
+          key={link.to}
+          to={link.to}
+          search={{}}
+          onClick={dismissCompactNavigation}
+          className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
+          activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
+        >
+          <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
+          {link.label}
+        </Link>
+      ))}
+      <SettingsNavigation />
+      {authentication === "signed-in" ? (
+        <Button
+          className="justify-start md:mt-auto"
+          disabled={loggingOut}
+          onClick={onLogout}
+          type="button"
+          variant="ghost"
+        >
+          {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+        </Button>
+      ) : (
+        <Button
+          className="justify-start md:mt-auto"
+          variant="ghost"
+          render={<Link to="/auth/pair" />}
+        >
+          Iniciar sesión
+        </Button>
+      )}
+    </nav>
+  );
+};
 
 const CompactNavigation = ({
   loggingOut,
@@ -129,7 +152,8 @@ const CompactNavigation = ({
   </>
 );
 
-const SignedInShell = ({
+/** Shared application navigation; privacy routes can retain it independently of product access. */
+export const ApplicationShell = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const router = useRouter();
@@ -192,6 +216,6 @@ export const SignedInFeature = ({
   return authentication === "expired" ? (
     <AuthenticationExpired />
   ) : (
-    <SignedInShell>{children}</SignedInShell>
+    <ApplicationShell>{children}</ApplicationShell>
   );
 };

@@ -1,4 +1,6 @@
-import { Clock, DateTime, Effect } from "effect";
+import { Clock, DateTime, Effect, Schema } from "effect";
+import { DisclosureSnapshot } from "../src/shell/consent/contract";
+import { currentDisclosureFor } from "../src/shell/consent/operations";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
@@ -23,6 +25,7 @@ const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 export const pairingUserId = "24000000-0000-4000-8000-000000000321";
 export const dashboardUserId = "24000000-0000-4000-8000-000000000351";
 export const budgetUserId = "24000000-0000-4000-8000-000000000371";
+export const privacyUserId = "24000000-0000-4000-8000-000000000381";
 export const accessUserId = "24000000-0000-4000-8000-000000000361";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 const now = Effect.runSync(Clock.currentTimeMillis);
@@ -74,7 +77,7 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
       .bind(
         identity.consentId,
         identity.userId,
-        "{}",
+        Schema.encodeSync(Schema.fromJsonString(DisclosureSnapshot))(currentDisclosureFor()),
         identity.disclosure,
         identity.decision,
         identity.createdAtMs,
@@ -87,6 +90,13 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+await seedIdentity({
+  userId: privacyUserId,
+  bsuid: "CO.Privacy",
+  email: "privacidad@example.com",
+  consentId: "24000000-0000-4000-8000-000000000382",
+  createdAtMs: now - expiredTrialAgeMs,
+});
 await seedIdentity({
   userId: dashboardUserId,
   bsuid: "CO.Dashboard",

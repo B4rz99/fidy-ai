@@ -136,6 +136,21 @@ Security-sensitive browser actions use the server-established fresh-session requ
 completion use the canonical typed client with no-store requests. Neither value enters a URL, browser
 storage, or application-wide state.
 
+`/settings/privacy` independently reads Processing Consent and records explicit authenticated
+withdrawal through the server-declared browser client. It remains accessible without ordinary
+canonical work and exposes the public rights contact without login. Its route composes the shared
+ApplicationShell without the ordinary access-expiry guard or Hosted Agent, preserving the sidebar
+and compact navigation after withdrawal or session expiry. WorkspaceHeader and WorkspaceColumns
+align the controls and rights-contact panel with the existing settings layout. The authentication registry
+owns status and command state; uncertain withdrawal requires an explicit status reread before
+another confirmed attempt. The durable receipt survives reload. Copy distinguishes withdrawal
+from access to the exact saved authorization: an explicit “Consultar prueba” action reads the
+same-User historical disclosure, record reference and acceptance instant through the cookie-only
+privacy transport, including after withdrawal. The record is inert text and grants no new Consent.
+The browser never keeps this evidence beyond its authentication registry lifetime. Copy distinguishes withdrawal
+from erasure, Subscription cancellation and individual access revocation, and discloses that an
+already-admitted request may finish. See [scope and remaining review](../../docs/operations/processing-withdrawal-1273.md).
+
 ### OAuth connection approval and management UX
 
 The independent `oauth-connections` feature implements ADR 0033's approval slice. After established fresh sign-in, one concise Spanish screen shows the claimed

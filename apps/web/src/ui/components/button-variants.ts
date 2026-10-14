@@ -14,7 +14,7 @@ export const buttonVariants = cva(
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-ring",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-ring disabled:bg-destructive",
         link: "text-foreground underline underline-offset-4 hover:text-muted-foreground",
       },
       size: {

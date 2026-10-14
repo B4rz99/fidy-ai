@@ -7,6 +7,7 @@ import {
   boundSessionRequests,
   browserSessionHeaders,
   probeCanonicalRequest,
+  reloadTransactionsThroughCore,
   signInFirstCardThroughCore,
   signInFirstDaviplataThroughCore,
   signInThroughCore,
@@ -342,7 +343,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
         })
       );
       expect(captured.status()).toBe(created);
-      yield* fromPlaywright(page.goto("/app/transactions"));
+      yield* fromPlaywright(reloadTransactionsThroughCore(page));
       yield* fromPlaywright(expect(page.getByText("La Cocina real").first()).toBeVisible());
       yield* fromPlaywright(
         expect(page.getByText("Restaurantes").filter({ visible: true }).first()).toBeVisible()
@@ -383,7 +384,7 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
         })
       );
       yield* fromPlaywright(page.route(`${api}/transactions?*`, continueAfterDelay));
-      yield* fromPlaywright(page.goto("/app/transactions"));
+      yield* fromPlaywright(reloadTransactionsThroughCore(page));
       yield* fromPlaywright(
         expect(
           page.getByRole("region", {
@@ -543,7 +544,7 @@ test("submits reused-source Subscription enrollment through real public and Core
       expect(yield* fromPlaywright(settled.json())).toMatchObject({
         status: "succeeded",
       });
-      const standing = yield* fromPlaywright(
+      const standing = yield* probeCanonicalRequest(() =>
         boundSessionRequests(page.request).get(`${api}/subscription/status`, {
           headers: {
             origin: "https://127.0.0.1:4173",

@@ -1,0 +1,53 @@
+apps/server/src/core/categories/FEATURE.md
+  s_6d017cc65783af::t_3e2961855c8255 18-22,47
+  s_6d017cc65783af::t_90024061d0dccd 1-6,15-17,23-25,27-33,45-46,48
+  s_6d017cc65783af::t_a2803ee5db7c83 7-14,26,34-44
+apps/cli/src/command/contract.ts
+  s_6d017cc65783af::t_0b0018e2371591 12
+.env.example
+  s_6d017cc65783af::t_dbbc7f554a58b8 13-17
+.github/workflows/production.yml
+  s_6d017cc65783af::t_dee03ab700e52a 39-40
+apps/cli/ARCHITECTURE.md
+  s_6d017cc65783af::t_38d8417a187fb1 202
+apps/cli/src/command/internal/presentation.ts
+  s_6d017cc65783af::t_d44d79a6f43578 12,15
+apps/cli/src/command/operations.test.ts
+  s_6d017cc65783af::t_53a5e0683ddd0a 122,126
+apps/cli/src/credential/contract.ts
+  s_6d017cc65783af::t_ad3c0b75ad462c 5
+apps/cli/src/login/contract.ts
+  s_6d017cc65783af::t_5dd72813e92d6a 10
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_6d017cc65783af::t_cb56b7487aa9b2 13,398
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_6d017cc65783af::t_4acf2908d80ea7 25,96-102
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_6d017cc65783af::t_34e21117acc7e7 919-972
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  s_6d017cc65783af::t_2dbf0f67dc532a 15-16,366-473,556,584-629
+apps/server/src/core/budgets/FEATURE.md
+  s_6d017cc65783af::t_c72c3b630ecd67 1-61
+apps/web/e2e/budget-widget.spec.ts
+  s_6d017cc65783af::t_fa2aceb79b6624 1-149
+apps/web/e2e/real-core-fixture.ts
+  s_6d017cc65783af::t_915bfa06110aed 30,111-113
+infra/cloudflare/alchemy.run.ts
+  s_6d017cc65783af::t_fca9e1e215c577 316-321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd24b5694c36e3c39e36708eb81f5500e9facc96",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

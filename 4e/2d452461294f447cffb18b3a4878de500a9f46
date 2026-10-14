@@ -1,0 +1,25 @@
+apps/site/package.json
+  s_8692a8e3f01e05::t_f0244497a05cd3 16
+tools/astro/package.json
+  s_8692a8e3f01e05::t_f0244497a05cd3 8
+bun.lock
+  s_8692a8e3f01e05::t_a2dacee7aa3522 78,1090
+tools/astro/bun.lock
+  s_8692a8e3f01e05::t_746d32dd22de8c 8,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e2d452461294f447cffb18b3a4878de500a9f46",
+  "prompts": {},
+  "sessions": {
+    "s_8692a8e3f01e05": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13c38-1e3f-7d60-bcbe-359b82bc673d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# Public upstream examples in the generated Effect subtree squash commit, before .repos/ prefixing.
+a4c7df4a0a282f68c4ea6bea5f3a7e999d1cf671:packages/effect/src/Config.ts:generic-api-key:1464
+a4c7df4a0a282f68c4ea6bea5f3a7e999d1cf671:packages/platform/node/test/NodeHttpServer.test.ts:generic-api-key:1284

@@ -1,4 +1,5 @@
 import { executeStatementExtraction, statementRetention } from "../ingestion/runtime";
+import { executeConsentWithdrawal } from "../consent/operations";
 import { makeAgentRetention, makeAgentService } from "./runtime";
 import { AgentUnavailable } from "./contract";
 import { confirmationOutage } from "./statement-recovery.test-fixture";
@@ -5710,6 +5711,69 @@ it("never retains invalid output as an assistant reply and records delivery fail
         { status: "failed", kind: "user", text: "Delivery" },
         { status: "failed", kind: "failed", text: null, marker: "DeliveryFailed" },
       ]);
+    })
+  ));
+
+it("finishes an already-running Turn after authenticated withdrawal but refuses the next Turn", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const caller = yield* Effect.tryPromise(() => subject(0));
+      const runWithdrawal = Effect.runPromiseWith(yield* Effect.context<never>());
+      const run = vi.fn(() =>
+        runWithdrawal(
+          Effect.gen(function* () {
+            const withdrawal = yield* executeConsentWithdrawal({
+              db,
+              userId: caller.userId,
+              candidate: {
+                userId: caller.userId,
+                sessionId: caller.id,
+                digest: Array.from(caller.digest),
+                deadlineMilliseconds: (yield* Clock.currentTimeMillis) + 5000,
+              },
+              signal: makeAbortController().signal,
+            });
+            expect(withdrawal.status).toBe(200);
+            expect(yield* Effect.tryPromise(withdrawal.json.bind(withdrawal))).toMatchObject({
+              status: "Revoked",
+            });
+            return reply("Finish the running request");
+          })
+        )
+      );
+      const model = yield* Effect.tryPromise(() => inference(run));
+      const finished = yield* Effect.tryPromise(() =>
+        completeHostedTurn({
+          db,
+          subject: caller,
+          text: TranscriptText.make("Already running"),
+          inference: model,
+          deliver: browserHostedDelivery,
+          signal: makeAbortController().signal,
+        })
+      );
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, finished))).toBe(
+        "Finish the running request"
+      );
+      const before = (yield* Effect.tryPromise(() => retained(db, users[0]))).results;
+      expect(before).toMatchObject([
+        { status: "completed", kind: "user" },
+        { status: "completed", kind: "assistant" },
+      ]);
+      const refused = yield* Effect.tryPromise(() =>
+        completeHostedTurn({
+          db,
+          subject: caller,
+          text: TranscriptText.make("Waiting request"),
+          inference: model,
+          deliver: browserHostedDelivery,
+          signal: makeAbortController().signal,
+        })
+      );
+      expect(refused.status).toBe(403);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toEqual(before);
     })
   ));
 

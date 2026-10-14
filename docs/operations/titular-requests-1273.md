@@ -128,8 +128,10 @@ For withdrawal, have the proven User use `/settings/privacy`. Its same-User publ
 path rechecks live authority and commits Consent evidence and Audit atomically. Record only the
 verified durable receipt reference with `RecordWithdrawal`. Operator-assisted intake cannot bypass
 this proof. Withdrawal, individual access revocation, Subscription cancellation and physical erasure
-are distinct. Existing already-admitted Pending Turns may finish; do not promise a stricter cutoff
-without the required legal/architecture approval and implemented enforcement.
+are distinct. The product owner selected on 2026-10-14 that an already-running admitted Turn may
+finish, while waiting and new consent-dependent work cannot start after withdrawal commits.
+Queued material does not inherit that Turn's historical basis. The legal review remains open;
+do not present the product decision as legal approval.
 
 For erasure, prepare a tracked #1274 handoff containing the verified request-authority reference,
 scope reference, explicit withdrawal outcome (recorded receipt, not requested, pending or unavailable),
@@ -171,3 +173,28 @@ dry run with disposable data, including failed destination and ambiguous complet
 its verified minimal receipt. Stage/promote the browser/server release through the normal reviewed
 production workflow separately. This implementation authorizes no deployment, live disclosure,
 customer erasure, external notification or closure of #1273.
+
+## Prepared mailbox transport rehearsal (not sent)
+
+The signed-in published mailbox was reachable on 2026-10-14. No rehearsal message has been sent.
+After operator authorization, send this synthetic request from `obarboza@fidyapp.com` to the same
+address, verify it appears in the inbox, then reply in that exact thread and verify receipt.
+Self-mail proves mailbox transport only: it does not establish requester identity, representative
+authority, safe disclosure of customer data or the full operator acceptance criterion.
+
+Request subject: `FIDY TEST #1273 — synthetic rights-channel rehearsal`
+
+Request body:
+
+> Prueba técnica con datos ficticios. Solicito confirmar la recepción de este mensaje de prueba
+> por el canal publicado de Fidy. No solicito acceso a datos personales, retiro de autorización
+> ni eliminación de datos de ningún cliente. Referencia: TEST-1273-MAILBOX-01.
+
+Reply body:
+
+> Recibimos el mensaje de prueba TEST-1273-MAILBOX-01 por el canal publicado de Fidy.
+> Esta respuesta verifica únicamente el transporte del correo. No se consultaron datos de clientes,
+> no se retiró ninguna autorización y no se realizó eliminación de datos.
+
+Record confirmed delivery only after observing the reply in the intended inbox. A failed send or
+uncertain receipt remains failed or uncertain; do not mark the rehearsal complete from a draft.

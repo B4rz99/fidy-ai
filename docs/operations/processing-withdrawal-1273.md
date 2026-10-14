@@ -29,6 +29,19 @@ authoritative status before a fresh confirmed attempt.
 
 ## Current cutoff and remaining review
 
+The product owner selected this cutoff on 2026-10-14: when authenticated withdrawal commits,
+no waiting or new consent-dependent work may start. An already-running, admitted hosted Turn
+may finish under its existing bounded basis; withdrawal does not extend that Turn or authorize
+its replay as a new Turn. Unstarted queued Ingestion and scheduled work require current Consent
+at their native action. Privacy requests and necessary security controls remain available.
+This is the product decision, not a record of legal approval or a promise of physical erasure.
+
+The native hosted regression withdraws through the authenticated Consent owner during model
+execution, proves the admitted reply can complete, and proves the next Turn is refused before
+another model call or Transcript append. Existing native tests cover abandoned Pending recovery,
+queued email dispatch, prepared publication and due reminder refusal. Receipt of queued material
+is not admission to a hosted Turn.
+
 Ordinary consent-dependent actions and later hosted Turn admission recheck withdrawn standing.
 The existing architecture allows an already-admitted Pending hosted Turn to retain its bounded
 historical basis and finish after withdrawal. The UI states that limitation. See

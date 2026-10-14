@@ -107,7 +107,8 @@ const PrivacyExplanation = (): JSX.Element => (
     <h2 className="text-xl font-semibold">Retirar autorización</h2>
     <p>
       Retirar tu autorización detiene nuevas acciones que dependan de ella, incluido el acceso de
-      tus agentes. Las solicitudes que Fidy ya admitió pueden terminar después del retiro.
+      tus agentes. La solicitud que ya esté en ejecución puede terminar después del retiro. Las
+      solicitudes en espera no comenzarán.
     </p>
     <p>
       Esto no elimina tus datos, cancela la renovación de tu suscripción ni revoca por separado un

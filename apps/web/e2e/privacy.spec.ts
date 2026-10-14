@@ -11,11 +11,13 @@ const unauthenticatedStatus = 401;
 const verifyTransactionAccess = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const response = page.waitForResponse(
-        (value) =>
-          value.url() === `${apiOrigin}/web/privacy/transactions` &&
-          value.request().method() === "POST"
-      );
+      const response = page
+        .waitForResponse(
+          (value) =>
+            value.url() === `${apiOrigin}/web/privacy/transactions` &&
+            value.request().method() === "POST"
+        )
+        .then((value): Promise<unknown> => value.json());
       yield* Effect.tryPromise(() =>
         page.getByRole("link", { name: "Ver mis transacciones", exact: true }).click()
       );
@@ -55,9 +57,7 @@ const verifyTransactionAccess = (page: Page): Promise<void> =>
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Referencia de consulta:", { exact: false })).toHaveCount(0)
       );
-      const payload = yield* Effect.tryPromise(() => response).pipe(
-        Effect.flatMap((value) => Effect.tryPromise((): Promise<unknown> => value.json()))
-      );
+      const payload = yield* Effect.tryPromise(() => response);
       const { reference: ownerResultRef } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ reference: Schema.String.check(Schema.isUUID()) })
       )(payload);

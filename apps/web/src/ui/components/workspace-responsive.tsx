@@ -12,14 +12,23 @@ export const useWorkspaceSize = (): Readonly<{
   const [desktop, setDesktop] = useState(false);
   const measure = useCallback<RefCallback<HTMLDivElement>>((node) => {
     if (node === null) return;
-    const update = (): void => {
-      const textSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-      setDesktop(node.getBoundingClientRect().width >= railBreakpoint * textSize);
-    };
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    update();
-    return (): void => observer.disconnect();
+    return observeWorkspace(node, setDesktop);
   }, []);
   return { desktop, measure };
+};
+
+const observeWorkspace = (
+  node: HTMLDivElement,
+  onSize: (desktop: boolean) => void
+): (() => void) => {
+  const update = (): void => {
+    const textSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    onSize(node.getBoundingClientRect().width >= railBreakpoint * textSize);
+  };
+  const observer = new ResizeObserver(update);
+  observer.observe(node);
+  update();
+  return (): void => {
+    observer.disconnect();
+  };
 };

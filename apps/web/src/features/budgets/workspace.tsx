@@ -467,11 +467,10 @@ const GroupFigures = ({
 const workspaceGroups = (props: WorkspaceProps): ReadonlyArray<string> => [
   ...new Set([
     ...props.report.statuses.map((status) => groupFor({ status, categories: props.categories })),
-    ...props.categories
-      .filter(
-        (category) =>
-          !props.report.statuses.some((status) => status.budget.categoryId === category.id)
-      )
-      .map((category) => defaultBudgetGroup(category.label)),
+    ...props.categories.flatMap((category) =>
+      props.report.statuses.some((status) => status.budget.categoryId === category.id)
+        ? []
+        : [defaultBudgetGroup(category.label)]
+    ),
   ]),
 ];

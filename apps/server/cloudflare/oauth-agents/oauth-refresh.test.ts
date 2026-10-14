@@ -653,7 +653,9 @@ it("fences later Promise-owned query units at the supplied Clock deadline while 
       const time = DateTime.formatIso(DateTime.makeUnsafe(current));
       yield* wait(
         fixture.db
-          .prepare("INSERT INTO budgets VALUES (?, ?, ?, 'COP', '1000', ?, ?)")
+          .prepare(
+            "INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at) VALUES (?, ?, ?, 'COP', '1000', ?, ?)"
+          )
           .bind(
             "30000000-0000-4000-8000-000000000001",
             caller.value.subject.userId,

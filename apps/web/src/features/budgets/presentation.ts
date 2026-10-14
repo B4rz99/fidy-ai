@@ -97,19 +97,19 @@ export const summaryFigures = ({
     .sort()
     .map((currency) => {
       const income = BigDecimal.sumAll(
-        report.cashFlow.income
-          .filter((money) => money.currency === currency)
-          .map((money) => money.amount)
+        report.cashFlow.income.flatMap((money) =>
+          money.currency === currency ? [money.amount] : []
+        )
       );
       const expenses = BigDecimal.sumAll(
-        report.cashFlow.expenses
-          .filter((money) => money.currency === currency)
-          .map((money) => money.amount)
+        report.cashFlow.expenses.flatMap((money) =>
+          money.currency === currency ? [money.amount] : []
+        )
       );
       const cap = BigDecimal.sumAll(
-        report.statuses
-          .filter((status) => status.budget.cap.currency === currency)
-          .map((status) => status.budget.cap.amount)
+        report.statuses.flatMap((status) =>
+          status.budget.cap.currency === currency ? [status.budget.cap.amount] : []
+        )
       );
       const remaining = BigDecimal.subtract(cap, expenses);
       const format = (amount: BigDecimal.BigDecimal): string =>

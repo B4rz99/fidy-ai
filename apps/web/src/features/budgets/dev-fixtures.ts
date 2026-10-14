@@ -127,9 +127,9 @@ const cashFlowExpenses = (
   [...new Set(statuses.map((status) => status.spent.currency))].map((currency) => ({
     currency,
     amount: BigDecimal.sumAll(
-      statuses
-        .filter((status) => status.spent.currency === currency)
-        .map((status) => status.spent.amount)
+      statuses.flatMap((status) =>
+        status.spent.currency === currency ? [status.spent.amount] : []
+      )
     ),
   }));
 /** Local presentation-only fixtures; no command is authorized by this boundary. */

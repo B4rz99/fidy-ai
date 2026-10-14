@@ -48,7 +48,11 @@ const pauseBudgetRead = (
       const method: unknown = Reflect.get(target, key);
       if (!Predicate.isFunction(method)) return method;
       return (...args: unknown[]): unknown => {
-        if (key === "all" && sql.includes("FROM budgets WHERE") && gate.scheduled.length === 0) {
+        if (
+          key === "all" &&
+          /FROM budgets(?: b)? WHERE/u.test(sql) &&
+          gate.scheduled.length === 0
+        ) {
           gate.scheduled.push("held");
           gate.waiting.resolve();
           return gate.release.promise

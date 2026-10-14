@@ -68,7 +68,7 @@ export const useBudgetController = (props: WorkspaceProps): BudgetController => 
   const submit = useAtomSet(save);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [draft, setDraft] = useState(Option.none<BudgetDraft>());
+  const [draft, setDraft] = useState(() => Option.none<BudgetDraft>());
   const disabled = !props.editable || saveState === "saving" || saveState === "uncertain";
   const callbacks = {
     onSaved: (): void => {

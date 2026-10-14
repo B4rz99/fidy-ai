@@ -34,3 +34,5 @@ bun run --cwd apps/web test src/features/budgets/presentation.test.ts
 bun run --cwd apps/server test:core src/core/budgets --coverage.enabled=false
 bun run --cwd apps/server test:cloudflare cloudflare/budgets/budgets.test.ts --maxWorkers=1
 ```
+
+Production read-only observation, 2026-10-14: the signed-in account loaded the empty October plan, expanded Alimentación, opened and cancelled the Restaurantes editor, loaded November and returned to the current month. No cap was saved. This verifies navigation and cancellation for an empty plan; populated production calculations and writes remain separate checks.

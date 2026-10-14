@@ -16,6 +16,12 @@ The first write materializes the selected month's inherited plan. Caps are month
 
 ## Verified on 2026-10-14
 
+Additional audit on Effect 4.0.2: the built-browser uncertain-save journey now checks both possible outcomes. The existing check rereads the unchanged cap; the new check rereads a committed COP 150,000 cap after losing its acknowledgement, updates the remaining total to COP 20,000, unlocks editing, and confirms that blurring the unchanged recovered input does not submit a second mutation. This is controlled HTTP evidence for browser recovery, not a production write or a simulated D1 commit.
+
+A production-build fixture with 1,000 caps across 16 groups verifies that large reports start collapsed, the summary includes every cap, expanding a group exposes all 63 of its Categories including the final Category, and the 390px page does not overflow horizontally. It proves reachability and aggregation, not representative production latency or physical touch behavior. The fixtures remain inside the browser tests and are not shipped as production fallback data.
+
+Effect 4.0.2 rerun at `30f585ceb1a811a97c523251ea6bd0bee13fc07f`: all seven deletion/Budget/Widget built-browser checks passed in 46.2 seconds, including the three Budget journeys and actual local Core/D1 Widget persistence. Production readback after capturing the fictional COP 1 Restaurantes expense showed COP 0 received income, COP 0 planned expenses, COP 1 spent and COP 1 exceeded in the October summary, with no cap configured. This establishes live uncapped expense aggregation; production cap creation/editing and cross-month inheritance remain unverified. No production Budget cap was saved. After the approved fixture deletion, navigating back to October displayed “Todavía no hay actividad este mes” instead of the COP 1 expense summary. No production Budget cap was changed.
+
 Baseline: `a387f50fb5`. Three production-build browser journeys passed in `e2e/budgets.spec.ts`:
 
 - Controlled HTTP figures in COP and USD, exact decimal entry, lost save acknowledgement, disabled controls, explicit refresh without replay, summary switching, desktop/mobile layout and zero serious or critical Axe findings at the checked states. The 390px layout had no document overflow; desktop and mobile screenshots were inspected separately.
@@ -25,6 +31,10 @@ Baseline: `a387f50fb5`. Three production-build browser journeys passed in `e2e/b
 The actual Core/D1 Dashboard Budget Widget journey also passed, including cap updates and canonical Budget deletion with widget Currency isolation. The Budget and Transaction Worker/D1 files passed in the selected three-file run; onboarding passed separately after its fixture binding was corrected. All 16 pure Budget checks and three exact-Money presentation checks passed. The targeted pure Core invocation failed the global whole-Core coverage threshold because unrelated Core files were not selected; this is not a whole-Core coverage pass.
 
 These local persisted and controlled-HTTP journeys do not establish a populated production monthly plan, physical touch behavior, or production latency under large reports. Production writes and cleanup remain separate checks; no production Budget was changed in this audit.
+
+Latest focused verification, 2026-10-14: all 11 built-browser checks across `access-management.spec.ts`, `access-native-pagination.spec.ts` and `budgets.spec.ts` passed in 1.3 minutes on Effect 4.0.2. This includes actual local Core/D1 cap persistence and 26-connection continuation, alongside controlled browser recovery and identity-handoff checks. All six PAT draft/exact-Money unit checks passed. Web type checking and ordinary/type-aware lint for the changed browser specs passed. No new production token, MCP connection or Budget cap was created during this continuation.
+
+The current Budget Worker/D1 file passed all 37 checks in 18.58 seconds when run alone. An earlier run overlapped the browser Core harness and ended with 36 passes and a 15-second timeout in the update/delete ownership check; the complete isolated rerun passed without changing code or increasing timeouts. This is local platform evidence for persistence, ownership, reconciliation and group Currency boundaries, not production load evidence.
 
 ## Rerun
 

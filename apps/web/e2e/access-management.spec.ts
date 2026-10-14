@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
-import { Effect } from "effect";
-import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
+import { Clock, Duration, Effect } from "effect";
+import { apiOrigin, installCategories, installUser, makeUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
@@ -80,6 +80,62 @@ const installEmptyHistory = (page: Page): ReturnType<Page["route"]> =>
   page.route(`${apiOrigin}/transactions**`, (route) =>
     route.fulfill({ contentType: "application/json", body: response([]) })
   );
+
+const checkIdentityResume = Effect.fn(function* (page: Page, sameUser: boolean) {
+  yield* Effect.tryPromise(() => installAccess(page));
+  let mutations = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/pats`, (route) => {
+      if (route.request().method() !== "GET") mutations += 1;
+      return route.fulfill({
+        contentType: "application/json",
+        body: response({ pats: [token] }),
+      });
+    })
+  );
+  const expiresAt = (yield* Clock.currentTimeMillis) + Duration.toMillis(Duration.minutes(1));
+  yield* Effect.tryPromise(() =>
+    page.addInitScript(
+      ({ userId, expiresAt }) => {
+        window.sessionStorage.setItem(
+          "fidy:pat-identity-confirmation",
+          JSON.stringify({
+            version: 1,
+            userId,
+            expiresAt,
+            draft: { recipientLabel: "Retained review", scopes: ["read"], lifetimeDays: 7 },
+          })
+        );
+      },
+      {
+        expiresAt,
+        userId: sameUser ? makeUser().id : "24000000-0000-4000-8000-000000000242",
+      }
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/settings/access?resume=pat"));
+  const review = page.getByRole("region", { name: "Revisión del token" });
+  if (sameUser) {
+    yield* Effect.tryPromise(() => expect(review).toContainText("Retained review"));
+    yield* Effect.tryPromise(() => expect(review).toContainText("7 días"));
+  } else {
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("")
+    );
+    yield* Effect.tryPromise(() => expect(review).toHaveCount(0));
+  }
+  expect(
+    yield* Effect.tryPromise(() =>
+      page.evaluate(() => window.sessionStorage.getItem("fidy:pat-identity-confirmation"))
+    )
+  ).toBeNull();
+  expect(mutations).toBe(0);
+});
+for (const sameUser of [true, false]) {
+  test(`identity confirmation ${sameUser ? "restores the same User's review" : "discards another User's draft"} without issuing a token`, ({
+    page,
+  }) => Effect.runPromise(checkIdentityResume(page, sameUser)));
+}
 
 test("Accesos displays token and MCP metadata without horizontal overflow", ({ page }) =>
   Effect.runPromise(

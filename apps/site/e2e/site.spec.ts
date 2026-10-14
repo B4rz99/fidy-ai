@@ -92,6 +92,22 @@ test("hydrates demos and preserves appearance without browser errors", async ({ 
   expect(errors).toEqual([]);
 });
 
+// Reduced motion still has finite fades; audit resting colors after entrance motion.
+const settleEntranceMotion = async (): Promise<void> => {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await Promise.all(
+    document
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation.timeline instanceof DocumentTimeline &&
+          animation.effect?.getTiming().iterations !== Infinity
+      )
+      .map((animation) => animation.finished.catch(() => undefined))
+  );
+};
+
 for (const path of publicPaths) {
   test(`keeps rendered public content accessible and CSP compatible: ${path}`, async ({ page }) => {
     const errors: string[] = [];
@@ -100,6 +116,7 @@ for (const path of publicPaths) {
     });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(path);
+    await page.evaluate(settleEntranceMotion);
     const results = await new AxeBuilder({ page }).analyze();
     expect(
       results.violations.filter(({ impact }) => impact === "serious" || impact === "critical")

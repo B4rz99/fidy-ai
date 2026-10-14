@@ -5,6 +5,7 @@ import type { JSX } from "react";
 import { Option, Schema } from "effect";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
 import { formatMoney } from "@/transport/money";
 
@@ -19,7 +20,7 @@ const UnavailableReport = ({
     onRetry={onRetry}
     waiting={waiting}
     title="Informe no disponible"
-    description="Inicia sesión con tu usuario de Fidy para consultar este informe. Si ya lo hiciste, vuelve a intentar."
+    description="No pudimos consultar este informe. Comprueba que abriste el enlace original con la cuenta que lo recibió."
     retryLabel="Reintentar"
     retryingLabel="Reintentando…"
   />
@@ -31,7 +32,14 @@ export const RecurringDigestFeature = (): JSX.Element => {
   const router = useRouter();
   const params = Schema.decodeUnknownOption(RecurringDigestReportParams)({ id });
   if (Option.isNone(params)) {
-    return <UnavailableReport onRetry={() => undefined} waiting={false} />;
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Enlace no válido</AlertTitle>
+        <AlertDescription>
+          Abre el enlace original del informe que recibiste de Fidy.
+        </AlertDescription>
+      </Alert>
+    );
   }
   return (
     <RecurringDigestReportView apiClient={router.options.context.apiClient} params={params.value} />
@@ -74,7 +82,7 @@ const RecurringDigestReportView = ({
             <li key={item.confirmationId} className="flex flex-wrap justify-between gap-2">
               <span>{item.counterparty} · mensual</span>
               <span className="font-medium tabular-nums">
-                {formatMoney({ locale: report.locale, money: item.money })}
+                {formatMoney({ locale: report.locale, money: item.money })} {item.money.currency}
               </span>
             </li>
           ))}

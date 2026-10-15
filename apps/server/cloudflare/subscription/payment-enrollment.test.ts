@@ -1847,7 +1847,9 @@ it
           integritySecret: loadWompiIntegritySecret("sandbox"),
           sendUrl: Config.String("WOMPI_DAVIPLATA_OTP_SEND_URL").pipe(Config.option),
           confirmUrl: Config.String("WOMPI_DAVIPLATA_OTP_CONFIRM_URL").pipe(Config.option),
-        }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        }).pipe(
+          Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "configuration" }))
+        );
         const policy = yield* requireDaviplataSandboxPolicy(provider);
         const fixture = yield* fromTestPromise(setup);
         const environment = {
@@ -1869,10 +1871,12 @@ it
             }),
           })
         );
-        if (prepared.status !== 200) return yield* new DaviplataSandboxProofFailure();
+        if (prepared.status !== 200) {
+          return yield* new DaviplataSandboxProofFailure({ stage: "preparation" });
+        }
         const enrollment = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
           yield* fromTestPromise(() => prepared.json())
-        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "enrollment" })));
         yield* requireDaviplataSandboxEnrollment({ enrollment, policy });
         const authorization = yield* authorizeDaviplataSandbox({
           outbound,
@@ -1899,10 +1903,12 @@ it
             }),
           })
         );
-        if (response.status !== 200) return yield* new DaviplataSandboxProofFailure();
+        if (response.status !== 200) {
+          return yield* new DaviplataSandboxProofFailure({ stage: "submission" });
+        }
         let submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
           yield* fromTestPromise(() => response.json())
-        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "submission" })));
         for (let poll = 0; poll < 7 && submitted.status === "source-verifying"; poll++) {
           yield* Effect.sleep("4 seconds");
           const observed = yield* fromTestPromise(() =>
@@ -1917,24 +1923,35 @@ it
               }),
             })
           );
-          if (observed.status !== 200) return yield* new DaviplataSandboxProofFailure();
+          if (observed.status !== 200) {
+            return yield* new DaviplataSandboxProofFailure({ stage: "source-recovery" });
+          }
           submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
             yield* fromTestPromise(() => observed.json())
-          ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+          ).pipe(
+            Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "source-recovery" }))
+          );
         }
         if (submitted.status !== "payment-pending") {
-          return yield* new DaviplataSandboxProofFailure();
+          return yield* new DaviplataSandboxProofFailure({ stage: "source-unavailable" });
         }
         yield* proveSandboxSettlement({
           environment,
           request: fixture.request,
           attemptId: submitted.billingAttempt.id,
           outcome: scenario.outcome,
-        });
+        }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "settlement" })));
       }).pipe(
         Effect.catchCauseIf(
           (cause) => !Cause.hasInterrupts(cause),
-          () => Effect.fail(new DaviplataSandboxProofFailure())
+          (cause) =>
+            Effect.fail(
+              Cause.findErrorOption(cause).pipe(
+                Option.filter((error) => error instanceof DaviplataSandboxProofFailure),
+                Option.map((error) => new DaviplataSandboxProofFailure({ stage: error.stage })),
+                Option.getOrElse(() => new DaviplataSandboxProofFailure({ stage: "unexpected" }))
+              )
+            )
         )
       )
     ),

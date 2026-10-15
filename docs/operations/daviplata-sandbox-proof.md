@@ -82,7 +82,11 @@ errors, and live payloads never enter assertion diffs. The job summary records o
 completed scenarios and evidence scope.
 
 After reviewed configuration and merge, an authorized operator may run the protected workflow and
-record its successful run link and revision here. **No run is currently linked.** Credentials stay in the protected workflow. Source revocation/replacement, recovery and
+record its successful run link and revision here. The [first protected run](https://github.com/B4rz99/fidy-ai/actions/runs/38788575817) at
+`84db84ee2a19bb34a2c8cb435733afa07d8340b5` failed all four cases on 2026-10-15. Its original
+redaction erased the failing step, so it proves no completed OTP/source/settlement journey. The
+proof now retains only fixed step names and still discards provider values and underlying errors;
+a fresh run is required. Credentials stay in the protected workflow. Source revocation/replacement, recovery and
 automatic-renewal execution remain separate work.
 
 ## Primary references

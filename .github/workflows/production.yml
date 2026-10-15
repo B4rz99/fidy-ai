@@ -36,6 +36,9 @@ jobs:
       SMOKE_PROOF: ${{ secrets.SMOKE_PROOF }}
       PROACTIVITY_ENABLED: ${{ vars.PROACTIVITY_ENABLED || 'disabled' }}
       PROACTIVITY_TEMPLATE_JSON: ${{ vars.PROACTIVITY_TEMPLATE_JSON }}
+      WOMPI_DAVIPLATA_ACTIVATED: ${{ vars.WOMPI_DAVIPLATA_ACTIVATED || 'disabled' }}
+      WOMPI_DAVIPLATA_OTP_SEND_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_SEND_URL }}
+      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_CONFIRM_URL }}
     steps:
       - name: Check out the exact trunk revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

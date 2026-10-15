@@ -64,6 +64,15 @@ export const reloadTransactionsThroughCore = (page: Page): Promise<void> => {
     .then(() => consent)
     .then((response) => confirmConsentRead(page, response));
 };
+
+/** Upgrade checks Consent before requesting payment data; honor only explicit pressure refusals. */
+export const openUpgradeThroughCore = (page: Page): Promise<void> => {
+  const consent = observeConsentRead(page);
+  return page
+    .goto("/upgrade")
+    .then(() => consent)
+    .then((response) => confirmConsentRead(page, response));
+};
 const signInWithIdentity = (
   { page, request }: SignInFixture,
   identity:

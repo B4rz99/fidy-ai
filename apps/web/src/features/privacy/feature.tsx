@@ -11,6 +11,7 @@ import { Checkbox } from "@/ui/components/checkbox";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { formatPrivacyTime } from "./presentation";
 import { AuthorizationCopy } from "./authorization-copy";
+import { ConsentRenewal } from "./renewal";
 
 const consentKey = "processing-consent";
 
@@ -82,9 +83,11 @@ const ConsentReceipt = ({
 const ConsentContent = ({
   status,
   children,
+  client,
 }: Readonly<{
   status: CanonicalQueryState<ProcessingConsentStatus, unknown>;
   children: JSX.Element;
+  client: WebAuthClient;
 }>): JSX.Element => {
   if (status._tag === "Initial") {
     return <output>Consultando autorización…</output>;
@@ -98,12 +101,22 @@ const ConsentContent = ({
     );
   }
   if (status.value.status === "Revoked") {
-    return <ConsentReceipt value={status.value} />;
+    return (
+      <>
+        <ConsentReceipt value={status.value} />
+        <ConsentRenewal client={client} withdrawalReference={status.value.withdrawal.reference} />
+      </>
+    );
   }
   if (status.value.status === "Missing") {
     return <p>No hay una autorización registrada para retirar.</p>;
   }
-  return children;
+  return (
+    <>
+      <output>Tu autorización está vigente.</output>
+      {children}
+    </>
+  );
 };
 
 const PrivacyExplanation = (): JSX.Element => (
@@ -213,7 +226,7 @@ export const PrivacyFeature = (): JSX.Element => {
         refresh();
       }}
     >
-      <ConsentContent status={status}>
+      <ConsentContent status={status} client={client}>
         <WithdrawalChoice
           disabled={busy || attempted}
           waiting={result.waiting}

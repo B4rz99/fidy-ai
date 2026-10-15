@@ -1,6 +1,6 @@
 import { type Cause, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInPrivacyThroughCore } from "./real-core-fixture";
+import { signInPrivacyThroughCore, signInThroughCore } from "./real-core-fixture";
 import type { Page, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
 import { exerciseTitularCase } from "./titular-case-fixture";
@@ -8,6 +8,8 @@ import { exerciseTitularCase } from "./titular-case-fixture";
 const { AxeBuilder } = await import("@axe-core/playwright");
 const { expect, test } = playwright;
 const unauthenticatedStatus = 401;
+const successStatus = 200;
+const unavailableResponse = (route: Route): Promise<void> => route.fulfill({ status: 503 });
 
 const verifyAccessibility = (page: Page): Promise<void> =>
   Effect.runPromise(
@@ -150,6 +152,75 @@ const verifyWithdrawnUpgrade = (page: Page): Promise<void> =>
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/privacy$/));
     })
   );
+
+const verifyRenewal = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const renew = page.getByRole("button", { name: "Renovar autorización", exact: true });
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar aviso", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(renew).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("region", { name: "Renovar autorización" }).getByRole("checkbox").check()
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/consent/renew`, (route) => route.fulfill({ status: 503 }), {
+          times: 1,
+        })
+      );
+      yield* Effect.tryPromise(() => renew.click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar la renovación")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Constancia de retiro" })).toBeVisible()
+      );
+      const response = page.waitForResponse(
+        (value) => value.url().endsWith("/web/consent/renew") && value.request().method() === "POST"
+      );
+      yield* Effect.tryPromise(() => renew.click());
+      expect((yield* Effect.tryPromise(() => response)).status()).toBe(successStatus);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Tu autorización está vigente.", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Retirar autorización", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Tu autorización está retirada", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("link", { name: "Iniciar sesión", exact: true })).toHaveCount(0)
+      );
+    })
+  );
+
+test("a withdrawn User explicitly renews the saved authorization through real Core and can open Upgrade", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/consent/authorization`, unavailableResponse, { times: 1 })
+      );
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Retirar autorización", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Constancia de retiro" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => verifyRenewal(page));
+    })
+  ));
 
 test("an expired-trial User withdraws through real Core and can recover the same receipt after ordinary access stops", ({
   page,

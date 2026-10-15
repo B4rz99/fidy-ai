@@ -7,6 +7,7 @@ import { Data, type DateTime, type Effect, type Option, Schema } from "effect";
 import { ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
 import { UserId, type WhatsAppCallerReference } from "../../src/core/identity/contract";
 import { WebSessionId } from "../../src/core/web-session/contract";
+import { ProcessingConsentRenewal } from "../../src/shell/processing-consent/contract";
 
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
@@ -28,6 +29,12 @@ export const ConsentWithdrawalAdmission = Schema.Struct({
     Schema.isBetweenLength(digestLength, digestLength)
   ),
   deadlineMilliseconds: Schema.Int,
+});
+
+/** Private fresh-browser admission bound to the exact disclosed withdrawal. */
+export const ConsentRenewalAdmission = Schema.Struct({
+  ...ConsentWithdrawalAdmission.fields,
+  renewal: ProcessingConsentRenewal,
 });
 
 /** Established authenticated native channel and explicit category, never model or PAT decision authority. */

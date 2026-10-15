@@ -1,6 +1,6 @@
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
-import { executeConsentWithdrawal } from "../consent/operations";
+import { executeConsentRenewal, executeConsentWithdrawal } from "../consent/operations";
 import { executeConnectionBrowserAdmission } from "../connections/operations";
 import {
   executeRefundSupportAdmission,
@@ -364,6 +364,10 @@ const privateConnectionActivity = (
     })
   );
 };
+const consentActivities = new Map([
+  ["/consent-renew", executeConsentRenewal],
+  ["/consent-withdraw", executeConsentWithdrawal],
+]);
 const privateOwnerActivity = (
   input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
@@ -398,12 +402,10 @@ const privateOwnerActivity = (
       })
     );
   }
-  if (
-    input.request.method === "POST" &&
-    new URL(input.request.url).pathname === "/consent-withdraw"
-  ) {
+  const consentActivity = consentActivities.get(new URL(input.request.url).pathname);
+  if (input.request.method === "POST" && consentActivity !== undefined) {
     return Option.some(
-      executeConsentWithdrawal({
+      consentActivity({
         db: input.environment.DB,
         candidate: input.candidate,
         userId: input.userId,

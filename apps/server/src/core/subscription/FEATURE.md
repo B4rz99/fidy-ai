@@ -108,8 +108,9 @@ Subscription queries or enrollment controls. A withdrawn User sees the withdrawa
 link instead of a sign-in prompt, including after reload; no Subscription/payment requests are
 sent. A failed Consent check stays closed and can be retried; a browser without a session still
 gets sign-in guidance. Production payment testing on the second QA account is blocked by its
-withdrawn Consent. Processing Consent renewal is not implemented: returning login and repeated
-signup preserve the withdrawal. No historical withdrawal or grant was edited to unblock testing.
+withdrawn Consent. Explicit Processing Consent renewal is implemented in Privacy and verified locally;
+returning login and repeated signup still preserve withdrawal. Live renewal and the approved Sandbox
+payment/cancellation await deployment recovery. No historical withdrawal or grant was edited to unblock testing.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

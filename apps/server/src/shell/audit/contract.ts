@@ -6,6 +6,7 @@ import { AuditLogEntry } from "~/core/audit/contract";
 
 export type AuditCredentialOperation =
   | "consent.withdraw"
+  | "consent.renew"
   | "privacy.transactions"
   | "connections.listInstitutions"
   | "connections.listConnections"

@@ -23,7 +23,7 @@ const SecretText = Schema.String.check(
   Schema.isMaxLength(maximumSecretLength)
 );
 const TokenId = Schema.String.check(
-  Schema.isPattern(/^daviplata_(?:devtest|devint|prod)_[A-Za-z0-9_]+$/u),
+  Schema.isPattern(/^daviplata_(?:test|devtest|devint|prod)_[A-Za-z0-9_]+$/u),
   Schema.isMaxLength(maximumSecretLength)
 );
 const InitialResponse = Schema.Struct({
@@ -96,7 +96,7 @@ const isSandboxOtpEndpoint = (url: string, origin: string, allowAction: boolean)
   origin === "https://sandbox.wompi.co" &&
   (url === sandboxOtpEndpoint ||
     (allowAction &&
-      /^https:\/\/api-sandbox\.wompi\.co\/v1\/webhook_events\/daviplata_response\/sandbox\?token=daviplata_(?:devtest|devint)_[A-Za-z0-9_]{1,200}&operation=(?:RESEND_OTP|VALIDATE_OTP_API)$/u.test(
+      /^https:\/\/api-sandbox\.wompi\.co\/v1\/webhook_events\/daviplata_response\/sandbox\?token=daviplata_(?:test|devtest|devint)_[A-Za-z0-9_]{1,200}&operation=(?:RESEND_OTP|VALIDATE_OTP_API)$/u.test(
         url
       )));
 const checkEndpoint = (
@@ -450,10 +450,12 @@ const initialize = (
       signal: authority.signal,
     });
     const data = response.data;
-    const prefix = input.publicKey.startsWith("pub_prod_") ? "daviplata_prod_" : "daviplata_dev";
+    const environmentPattern = input.publicKey.startsWith("pub_prod_")
+      ? /^daviplata_prod_/u
+      : /^daviplata_(?:test|devtest|devint)_/u;
     if (
       authority.signal.aborted ||
-      !Redacted.value(data.id).startsWith(prefix) ||
+      !environmentPattern.test(Redacted.value(data.id)) ||
       data.url_services.code_otp_send !==
         otpEndpoint(input.policy.sendUrl, Redacted.value(data.id), "send") ||
       data.url_services.code_otp_validate !==

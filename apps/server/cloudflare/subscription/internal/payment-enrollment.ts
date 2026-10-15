@@ -150,7 +150,7 @@ const submittedToken = (
 };
 
 const walletTokenPatterns = {
-  sandbox: { nequi: /^nequi_test_/u, daviplata: /^daviplata_(?:devtest|devint)_/u },
+  sandbox: { nequi: /^nequi_test_/u, daviplata: /^daviplata_(?:test|devtest|devint)_/u },
   production: { nequi: /^nequi_prod_/u, daviplata: /^daviplata_prod_/u },
 } as const;
 

@@ -782,13 +782,13 @@ it.effect(
         yield* outbound.execute({
           _tag: "WompiDaviplataSandboxOtp",
           step,
-          authorizationId: Redacted.make("daviplata_devtest_synthetic"),
+          authorizationId: Redacted.make("daviplata_test_synthetic"),
           token: Redacted.make("synthetic-service-bearer"),
         });
       }
       expect(urls).toEqual([
-        "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_synthetic&operation=RESEND_OTP",
-        "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_synthetic&operation=VALIDATE_OTP_API",
+        "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_test_synthetic&operation=RESEND_OTP",
+        "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_test_synthetic&operation=VALIDATE_OTP_API",
       ]);
     })
 );

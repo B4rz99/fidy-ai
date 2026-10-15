@@ -103,6 +103,25 @@ const verifyAuthorizationRecovery = (page: Page): Promise<void> =>
     })
   );
 
+const verifyRefusalRecovery = (page: Page, original: string): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos autorizar esta acción.")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Revisar privacidad", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/privacy$/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Constancia de retiro" })).toHaveText(original, {
+          useInnerText: true,
+        })
+      );
+    })
+  );
+
 test("an expired-trial User withdraws through real Core and can recover the same receipt after ordinary access stops", ({
   page,
   request,
@@ -154,6 +173,7 @@ test("an expired-trial User withdraws through real Core and can recover the same
         })
       );
       expect(response.status()).toBe(unauthenticatedStatus);
+      yield* Effect.tryPromise(() => verifyRefusalRecovery(page, original));
     })
   ));
 
@@ -231,7 +251,7 @@ test("privacy retains application navigation and the public contact when the ses
         expect(page.getByRole("link", { name: "obarboza@fidyapp.com" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Sesión vencida" })).toHaveCount(0)
+        expect(page.getByText("Acceso no autorizado", { exact: true })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 853 }));
       yield* Effect.tryPromise(() =>

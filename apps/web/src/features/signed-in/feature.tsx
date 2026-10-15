@@ -19,11 +19,23 @@ import { Button } from "@/ui/components/button";
 import { FidyWordmark } from "@/ui/components/wordmark";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 
-export const AuthenticationExpired = (): JSX.Element => (
+export const AccessRefused = (): JSX.Element => (
   <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
     <Alert className="max-w-md" variant="destructive">
-      <AlertTitle>Sesión vencida</AlertTitle>
-      <AlertDescription>Tu sesión venció. Inicia sesión de nuevo.</AlertDescription>
+      <AlertTitle>Acceso no autorizado</AlertTitle>
+      <AlertDescription>
+        <p>No pudimos autorizar esta acción.</p>
+        <p>
+          Si retiraste tu autorización de tratamiento, puedes consultar tus datos desde Privacidad.
+          En otro caso, intenta iniciar sesión de nuevo.
+        </p>
+        <Link to="/settings/privacy" className="underline">
+          Revisar privacidad
+        </Link>
+        <Link to="/auth/pair" className="underline">
+          Iniciar sesión
+        </Link>
+      </AlertDescription>
     </Alert>
   </main>
 );
@@ -219,7 +231,7 @@ export const SignedInContent = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const { authentication } = useSession();
-  return authentication === "expired" ? <AuthenticationExpired /> : <>{children}</>;
+  return authentication === "expired" ? <AccessRefused /> : <>{children}</>;
 };
 
 /** Authenticated route layout whose child server state shares one authentication lifetime. */

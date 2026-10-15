@@ -6,7 +6,7 @@ import { type JSX, useState } from "react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import type { ProcessingConsentStatus } from "@/transport/client";
 import { Button } from "@/ui/components/button";
-import { AuthenticationExpired, SignedInContent } from "@/features/signed-in/feature";
+import { AccessRefused, SignedInContent } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
 import { HostedAgentFeature } from "@/features/agent/feature";
 import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
@@ -41,7 +41,7 @@ export const TransactionsPage = (): JSX.Element => {
         onSuccess: ({ value }) => Option.isNone(Option.fromNullishOr(value.binding)),
       }))
   ) {
-    return <AuthenticationExpired />;
+    return <AccessRefused />;
   }
   const consent = currentConsent(status);
   if (Option.isSome(consent)) {

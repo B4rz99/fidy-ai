@@ -291,7 +291,7 @@ const returningSessionPolicies = (
     );
     yield* Effect.tryPromise(() => page.reload());
     yield* Effect.tryPromise(() =>
-      expect(page.getByText("Sesión vencida", { exact: true })).toBeVisible()
+      expect(page.getByText("Acceso no autorizado", { exact: true })).toBeVisible()
     );
     yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
     yield* Effect.tryPromise(() =>
@@ -943,7 +943,7 @@ const reauthenticatePATJourney = Effect.fn(function* (
     expect(page.getByText("Confirma tu identidad", { exact: true })).toBeVisible()
   );
   yield* Effect.tryPromise(() =>
-    expect(page.getByText("Sesión vencida", { exact: true })).toHaveCount(0)
+    expect(page.getByText("Acceso no autorizado", { exact: true })).toHaveCount(0)
   );
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("heading", { name: "Tokens activos", exact: true })).toBeVisible()

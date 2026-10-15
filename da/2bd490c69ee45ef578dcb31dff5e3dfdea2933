@@ -1,0 +1,53 @@
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_86ebfbd531f1a5 25-29
+  s_6d017cc65783af::t_512baa8b791574 30-34,60-66,82
+docs/operations/daviplata-sandbox-proof.md
+  s_6d017cc65783af::t_512baa8b791574 12-20
+  s_6d017cc65783af::t_9d1492f1f24008 7,21-24,37-38,43-50,53,66,85
+.github/workflows/daviplata-sandbox.yml
+  s_6d017cc65783af::t_7ea2fec1340cb7 34-35
+apps/server/cloudflare/browser-acceptance-wompi.ts
+  s_6d017cc65783af::t_12032fbe96d197 6-7,9
+apps/server/cloudflare/subscription/daviplata-sandbox.test-fixture.ts
+  s_6d017cc65783af::t_29eee7172deea0 26-30,93-101,124,127-129,136,149
+apps/server/cloudflare/subscription/daviplata-sandbox.test.ts
+  s_6d017cc65783af::t_f17a8b63d7352c 19-20,44-45,55,71,161
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_6d017cc65783af::t_59e1f45945b964 235-241
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_6d017cc65783af::t_813a579d9fe22b 600-607
+apps/server/src/core/subscription/contract.ts
+  s_6d017cc65783af::t_6d557fd6ef749b 204-206,209
+apps/server/src/shell/outbound-http/contract.ts
+  s_6d017cc65783af::t_afbb45d287c33e 83
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_6d017cc65783af::t_0eed5da9b9520a 153-155,161-164,191-197,201-202
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_6d017cc65783af::t_5c11d29db19b2b 87,93,188,194,759-835
+apps/web/cloudflare/production/_headers
+  s_6d017cc65783af::t_b201ab4908d28b 2
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_6d017cc65783af::t_62e45a8cf854d9 669-671
+apps/web/e2e/static-shell.spec.ts
+  s_6d017cc65783af::t_a33cf84431efc5 32
+apps/web/src/transport/wompi-daviplata.test.ts
+  s_6d017cc65783af::t_4948e84c3961e2 484-577
+apps/web/src/transport/wompi-daviplata.ts
+  s_6d017cc65783af::t_32b85f4f3f2c5f 88-101,104-105,109,147,371-375,457-460
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da2bd490c69ee45ef578dcb31dff5e3dfdea2933",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

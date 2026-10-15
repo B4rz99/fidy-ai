@@ -1,3 +1,7 @@
+import { withErasureRecovery } from "../erasure/runtime";
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
@@ -412,14 +416,14 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
 > {
   run(event: WorkflowEvent<ProactivityDeliveryWork>, step: WorkflowStep): Promise<void> {
     return captureWorkflowFailure({
-      db: this.env.DB,
+      db: withErasureRecovery(this.env).DB,
       work: observeWorkerPromise(
         () =>
           runProactivityWorkflow({
             coordinator: this.env.USER_TRANSACTION_COORDINATOR,
             payload: event.payload,
             step,
-            environment: this.env,
+            environment: withErasureRecovery(this.env),
           }),
         {
           environment: workerRelease(this.env),
@@ -431,3 +435,6 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
     });
   }
 }
+
+export const makeInsightsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

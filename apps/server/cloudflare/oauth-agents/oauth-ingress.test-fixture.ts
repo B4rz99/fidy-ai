@@ -85,7 +85,14 @@ const fetchCoordinator = (
   let coordinator = input.coordinators.get(input.name);
   if (coordinator === undefined) {
     coordinator = new UserTransactionCoordinator(
-      { id: { name: input.name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+      {
+        id: { name: input.name },
+        storage: {
+          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+          deleteAlarm: (): Promise<void> => Promise.resolve(),
+          setAlarm: (): Promise<void> => Promise.resolve(),
+        },
+      },
       input.environment
     );
     input.coordinators.set(input.name, coordinator);

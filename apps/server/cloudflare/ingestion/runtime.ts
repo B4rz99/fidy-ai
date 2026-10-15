@@ -1,5 +1,11 @@
+import { withErasureRecovery } from "../erasure/runtime";
+import { originalKeys } from "./internal/erasure-originals";
+
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureOriginals, makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureOriginals, ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Crypto, Effect } from "effect";
+import { Crypto, Effect, type Option } from "effect";
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
 import {
   cloudflareWorkerTelemetry,
@@ -95,7 +101,7 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
           parent: workTraceParent(event.payload),
         }
       ),
-      db: this.env.DB,
+      db: withErasureRecovery(this.env).DB,
     });
   }
 }
@@ -126,3 +132,15 @@ export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) 
 
 /** Clear expired personal review evidence while retaining classification and conserved accounting. */
 export const expireStatementReviewEvidence: typeof expireReview = (input) => expireReview(input);
+
+export const makeIngestionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const makeIngestionErasureOriginals = (
+  input: Readonly<{
+    db: D1Database;
+    email: Option.Option<R2Bucket>;
+    statement: Option.Option<R2Bucket>;
+    retained: Option.Option<R2Bucket>;
+  }>
+): ErasureOriginals => makeErasureOriginals({ ...input, keys: originalKeys });

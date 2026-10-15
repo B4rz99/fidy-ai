@@ -92,7 +92,7 @@ const resolvePatAdmissionKey = (development: boolean): typeof patAdmissionKey =>
     : patAdmissionKey;
 
 const resolveAccessConfig = Effect.fn(function* (development: boolean) {
-  if (development) return { issuer: "", audience: "" };
+  if (development) return { issuer: "", audience: "", erasureAudience: "" };
   const issuer = yield* accessIssuer;
   const operatorEmail = yield* recoveryOperatorEmail;
   const identity = yield* Cloudflare.Access.IdentityProvider("RecoveryIdentity", {
@@ -121,7 +121,25 @@ const resolveAccessConfig = Effect.fn(function* (development: boolean) {
       },
     ],
   });
-  return { issuer, audience: application.aud };
+  const erasureApplication = yield* Cloudflare.Access.Application("TitularErasureAccess", {
+    type: "self_hosted",
+    name: "Fidy Titular erasure",
+    domain: "api.fidyapp.com/internal/titular-erasure",
+    sessionDuration: "15m",
+    appLauncherVisible: false,
+    allowedIdps: [identity.identityProviderId],
+    autoRedirectToIdentity: true,
+    policies: [
+      {
+        name: "titular-erasure-operator",
+        decision: "allow",
+        precedence: 1,
+        sessionDuration: "15m",
+        include: [{ email: { email: "obarboza@fidyapp.com" } }],
+      },
+    ],
+  });
+  return { issuer, audience: application.aud, erasureAudience: erasureApplication.aud };
 });
 
 const resolveBrowserOrigin = (production: boolean): string =>
@@ -214,6 +232,7 @@ export default Alchemy.Stack(
     });
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
     const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
+    const erasureBucket = yield* Cloudflare.R2.Bucket("TitularErasureBucket");
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
     yield* Cloudflare.Worker("ForwardedEmail", {
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
@@ -223,6 +242,8 @@ export default Alchemy.Stack(
       env: {
         DB: database,
         EMAIL_BUCKET: emailBucket,
+        ERASURE_BUCKET: erasureBucket,
+        ERASURE_REQUIRED: "true",
         EMAIL_QUEUE: emailQueue,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
@@ -295,6 +316,8 @@ export default Alchemy.Stack(
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
+        ERASURE_BUCKET: erasureBucket,
+        ERASURE_REQUIRED: "true",
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
         HOSTED_WHATSAPP_QUEUE: hostedWhatsAppQueue,
@@ -340,6 +363,7 @@ export default Alchemy.Stack(
         BILLING_COLLECTION_QUEUE: billingCollectionQueue,
         BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
         BILLING_REFUND_WORKFLOW: billingRefundWorkflow,
+        ERASURE_SUPPORT_AUDIENCE: accessConfig.erasureAudience,
         BILLING_SUPPORT_AUDIENCE: yield* Config.String("BILLING_SUPPORT_AUDIENCE").pipe(
           Config.withDefault("")
         ),

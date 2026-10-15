@@ -40,7 +40,14 @@ export const makeProactivityCoordinator = ({
   userId,
 }: Readonly<{ environment: ProactivityEnvironment; userId: UserId }>): ProactivityCoordinator =>
   new UserTransactionCoordinator(
-    { id: { name: userId }, storage: { setAlarm: () => Promise.resolve() } },
+    {
+      id: { name: userId },
+      storage: {
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+        setAlarm: () => Promise.resolve(),
+      },
+    },
     {
       ...environment,
       AI: { run: () => Promise.reject(new Error("Inference unavailable")) },

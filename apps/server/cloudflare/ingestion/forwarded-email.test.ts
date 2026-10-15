@@ -224,6 +224,7 @@ const setup = Effect.fn(function* () {
     "0035_media_submissions",
     "0038_proactivity_consent",
     "0092_queued_processing_cutoff",
+    "0093_titular_erasure",
   ]) {
     yield* wait(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
@@ -409,7 +410,14 @@ const coordinatorFor = (
   userId: string
 ): UserTransactionCoordinator =>
   new UserTransactionCoordinator(
-    { id: { name: userId }, storage: { setAlarm: () => Promise.resolve() } },
+    {
+      id: { name: userId },
+      storage: {
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+        setAlarm: () => Promise.resolve(),
+      },
+    },
     {
       DB: db,
       EMAIL_BUCKET: bucket,
@@ -1054,17 +1062,16 @@ it("refuses publication when Consent is revoked after reservation and cleans pri
           put: (
             key: string,
             bytes: Uint8Array,
-            options: { customMetadata: { purpose: string } }
-          ): Promise<void> =>
-            bucket
-              .put(key, bytes, options)
-              .then(() =>
-                db
-                  .prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)")
-                  .bind(userA)
-                  .run()
-              )
-              .then(() => undefined),
+            options: R2PutOptions
+          ): ReturnType<R2Bucket["put"]> =>
+            bucket.put(key, bytes, options).then((stored) => {
+              if (options.customMetadata?.purpose !== "forwarded-email") return stored;
+              return db
+                .prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)")
+                .bind(userA)
+                .run()
+                .then(() => stored);
+            }),
           delete: (key: string): Promise<void> => bucket.delete(key),
         },
       };
@@ -1427,11 +1434,8 @@ it("keeps retention failure visible and retries private deletion without duplica
       );
       const unavailableBucket = {
         ...bucket,
-        put: (
-          key: string,
-          bytes: Uint8Array,
-          options: { customMetadata: { purpose: string } }
-        ): Promise<unknown> => bucket.put(key, bytes, options),
+        put: (key: string, bytes: Uint8Array, options: R2PutOptions): Promise<unknown> =>
+          bucket.put(key, bytes, options),
         delete: (_key: string): Promise<never> => Promise.reject(new Error("R2 unavailable")),
       };
       yield* Effect.exit(

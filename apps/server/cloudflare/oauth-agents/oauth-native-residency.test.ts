@@ -242,7 +242,15 @@ describe("native2025 residency integration", () => {
               let owner = coordinators.get(name);
               if (owner === undefined) {
                 owner = new UserTransactionCoordinator(
-                  { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+                  {
+                    id: { name },
+                    storage: {
+                      getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+                        Promise.resolve(null),
+                      deleteAlarm: (): Promise<void> => Promise.resolve(),
+                      setAlarm: (): Promise<void> => Promise.resolve(),
+                    },
+                  },
                   environment
                 );
                 coordinators.set(name, owner);

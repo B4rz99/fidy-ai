@@ -192,7 +192,15 @@ const send = (
                 let coordinator = coordinators.get(name);
                 if (coordinator === undefined) {
                   coordinator = new UserTransactionCoordinator(
-                    { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+                    {
+                      id: { name },
+                      storage: {
+                        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+                          Promise.resolve(null),
+                        deleteAlarm: (): Promise<void> => Promise.resolve(),
+                        setAlarm: (): Promise<void> => Promise.resolve(),
+                      },
+                    },
                     {
                       DB: db,
                       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },

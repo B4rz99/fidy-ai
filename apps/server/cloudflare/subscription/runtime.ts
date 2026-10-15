@@ -1,3 +1,7 @@
+import { withErasureRecovery } from "../erasure/runtime";
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
 import { type WompiBindings } from "./contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -147,11 +151,11 @@ export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void>
 export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
     return captureWorkflowFailure({
-      db: this.env.DB,
+      db: withErasureRecovery(this.env).DB,
       work: observeWorkerPromise(
         () =>
           runRefundWorkflow({
-            environment: this.env,
+            environment: withErasureRecovery(this.env),
             payload: event.payload,
             activity: (name, options, activity) => step.do(name, options, activity),
           }),
@@ -205,7 +209,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
       work: observeWorkerPromise(
         () =>
           runBillingCollectionWorkflow({
-            environment: this.env,
+            environment: withErasureRecovery(this.env),
             payload: event.payload,
             activity: (name, options, activity) => step.do(name, options, activity),
           }),
@@ -216,7 +220,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
           parent: workTraceParent(event.payload),
         }
       ),
-      db: this.env.DB,
+      db: withErasureRecovery(this.env).DB,
     });
   }
 }
@@ -260,3 +264,6 @@ export const dispatchBillingPriceNotices = (
 export const dispatchSubscriptionCancellations = (
   input: SubscriptionCancellationDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchCancellations(input);
+
+export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

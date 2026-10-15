@@ -1,0 +1,100 @@
+import type { ErasureProjection } from "../../erasure-store/contract";
+
+export const projections: ReadonlyArray<ErasureProjection> = [
+  {
+    id: "completed_provider_authentications",
+    dataClass: "credentials",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM completed_provider_authentications r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM completed_provider_authentications r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM completed_provider_authentications r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM completed_provider_authentications AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+  {
+    id: "provider_authentication_attempts",
+    dataClass: "credentials",
+    dependencies: ["completed_provider_authentications"],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM provider_authentication_attempts r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM provider_authentication_attempts r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM provider_authentication_attempts r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM provider_authentication_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+  {
+    id: "provider_credentials",
+    dataClass: "credentials",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM provider_credentials r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM provider_credentials r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM provider_credentials r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM provider_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+  {
+    id: "whatsapp_provider_handoffs",
+    dataClass: "credentials",
+    dependencies: ["provider_authentication_attempts"],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM whatsapp_provider_handoffs r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?)",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM whatsapp_provider_handoffs r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?)",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM whatsapp_provider_handoffs r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?)",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM whatsapp_provider_handoffs AS r WHERE EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=r.pairing_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+];

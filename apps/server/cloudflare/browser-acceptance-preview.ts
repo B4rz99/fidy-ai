@@ -448,7 +448,14 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
   const existing = coordinators.get(name);
   if (existing !== undefined) return existing;
   const coordinator = new UserTransactionCoordinator(
-    { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+    {
+      id: { name },
+      storage: {
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+        setAlarm: (): Promise<void> => Promise.resolve(),
+      },
+    },
     coreEnvironment
   );
   const fetcher = {

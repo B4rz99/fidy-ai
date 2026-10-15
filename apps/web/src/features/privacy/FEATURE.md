@@ -23,6 +23,20 @@ The browser derives its contract from `apps/server/src/shell/processing-consent/
 no D1 binding. Saved disclosure is inert text, not renewed processing authority. Evidence stays in
 the authentication registry rather than browser persistence.
 
+## Whole-User erasure — #1274
+
+`erasure-request.tsx` records one fresh-cookie, explicit confirmation for the same User through the
+server-declared `processingConsent.erase` endpoint. It displays review pending, never completed
+deletion. Reload and explicit retry reuse the same server intention; no erasure UUID, provider
+reference, raw error or operator controls are shown. Support remains accessible without login.
+The existing register/handoff, dedicated operator Access, current owner inventory and resumable
+D1/R2/User-coordinator disposition are described in
+[the erasure procedure](../../../../../docs/operations/titular-erasure-1274.md).
+
+The production-built local browser test exercises real public ingress/Core/D1, confirms disabled
+submission until explicit choice, records HTTP 202, refuses a false deletion claim and verifies the
+identical response on retry. This is local evidence; no Production erasure was performed.
+
 ## Evidence — 2026-10-14
 
 - All 53 Consent/onboarding Worker tests passed against isolated local D1. They include two-User

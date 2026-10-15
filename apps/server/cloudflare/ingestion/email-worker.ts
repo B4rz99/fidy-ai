@@ -1,3 +1,4 @@
+import { withErasureRecovery } from "../erasure/runtime";
 import { Effect } from "effect";
 import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
@@ -17,7 +18,7 @@ type EmailWorker = Readonly<{
 /** Compose the native Email entrypoints with narrow Ingestion and Maintenance authorities. */
 export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
   email: (message, environment) =>
-    receiveForwardedEmail({ message, environment }).pipe(
+    receiveForwardedEmail({ message, environment: withErasureRecovery(environment) }).pipe(
       observeWorkerExecution({
         telemetry,
         environment: workerRelease(environment),
@@ -26,7 +27,7 @@ export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
       Effect.runPromise
     ),
   scheduled: (_controller, environment) =>
-    runEmailMaintenance(environment).pipe(
+    runEmailMaintenance(withErasureRecovery(environment)).pipe(
       observeWorkerExecution({
         telemetry,
         environment: workerRelease(environment),

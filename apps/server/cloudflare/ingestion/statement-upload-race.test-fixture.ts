@@ -92,6 +92,10 @@ export const delayedUpload = (
     get: (target, property): unknown =>
       property === "put"
         ? (...args: Parameters<R2Bucket["put"]>): ReturnType<R2Bucket["put"]> => {
+            const purpose = args[2]?.customMetadata?.["purpose"];
+            if (purpose === "private-object-placeholder" || purpose === "private-object-erased") {
+              return target.put(...args);
+            }
             const write = release.promise.then(() => target.put(...args));
             write.then(() => settled.resolve(), settled.reject);
             entered.resolve();

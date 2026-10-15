@@ -1,3 +1,7 @@
+import { handleErasureRequest } from "../erasure/runtime";
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
 import {
@@ -121,10 +125,7 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
       authenticateWebSession({
         ...input,
         current,
-        freshness:
-          transport.value.operation === "transactions" || transport.value.operation === "renew"
-            ? "fresh"
-            : "live",
+        freshness: ["transactions", "erase", "renew"].includes(transport.value.operation) ? "fresh" : "live",
       })
     );
     if (Option.isNone(subject)) {
@@ -135,6 +136,7 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
       userId: subject.value.userId,
       refused: (response) => Effect.succeed(consentResponse(response.status)),
       work: {
+        erase: handleErasureRequest(input),
         status: readProcessingConsent({ ...input, subject: subject.value }),
         authorization: readProcessingAuthorization({ ...input, subject: subject.value }),
         transactions: readTransactions(input, subject.value),
@@ -152,3 +154,6 @@ export const sweepProactivityConsentOffers = (
     const nowEpochMs = yield* Clock.currentTimeMillis;
     yield* sweepOffers({ db, nowEpochMs });
   });
+
+export const makeConsentErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

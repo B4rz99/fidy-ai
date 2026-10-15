@@ -1,0 +1,25 @@
+apps/web/e2e/browser-pairing.spec.ts
+  s_6d017cc65783af::t_12ed0c353802f8 5
+  s_6d017cc65783af::t_3ab110e6882ff0 6-9,440
+apps/web/e2e/real-core-fixture.ts
+  s_6d017cc65783af::t_12ed0c353802f8 67-72
+  s_6d017cc65783af::t_5a2732b40a426e 73-75
+apps/web/e2e/product-journeys.spec.ts
+  s_6d017cc65783af::t_cf664e0a8f14a6 59-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1eaf18a984f0a5403c959c31a7c371804a5cf2c0",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

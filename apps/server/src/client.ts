@@ -189,3 +189,13 @@ export type {
   ProcessingAuthorization,
   PrivacyTransactionPage,
 } from "~/shell/processing-consent/contract";
+
+export {
+  RecurringCommand,
+  RecurringEdit,
+  RecurringPlanInput,
+  RecurringFilters,
+  RecurringPlanId,
+  RecurringDate,
+  RecurringMonth,
+} from "~/core/recurring-plans/contract";

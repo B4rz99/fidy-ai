@@ -75,7 +75,11 @@ const SheetContent = ({
 );
 
 const SheetHeader = ({ className, ...props }: React.ComponentProps<"div">): React.JSX.Element => (
-  <div data-slot="sheet-header" className={cn("flex flex-col gap-0.5 p-4", className)} {...props} />
+  <div
+    data-slot="sheet-header"
+    className={cn("flex min-w-0 flex-col gap-0.5 p-4 pe-12", className)}
+    {...props}
+  />
 );
 
 const SheetFooter = ({ className, ...props }: React.ComponentProps<"div">): React.JSX.Element => (
@@ -89,7 +93,10 @@ const SheetFooter = ({ className, ...props }: React.ComponentProps<"div">): Reac
 const SheetTitle = ({ className, ...props }: SheetPrimitive.Title.Props): React.JSX.Element => (
   <SheetPrimitive.Title
     data-slot="sheet-title"
-    className={cn("font-heading text-base font-medium text-foreground", className)}
+    className={cn(
+      "font-heading min-w-0 text-base font-medium text-foreground [overflow-wrap:anywhere]",
+      className
+    )}
     {...props}
   />
 );

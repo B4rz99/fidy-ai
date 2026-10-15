@@ -41,15 +41,22 @@ export const ChoiceDropdown = ({
       aria-label={label}
       render={
         <Button
+          contentLayout="wrap"
           type="button"
           variant="outline"
+          focusAppearance="subtle"
           disabled={disabled}
           className={cn(width === "full" && "w-full")}
         />
       }
     >
       {leading}
-      <span className={cn(width === "full" && "flex-1 text-left")}>
+      <span
+        className={cn(
+          "min-w-0 whitespace-normal [overflow-wrap:anywhere]",
+          width === "full" && "flex-1 text-left"
+        )}
+      >
         {Option.getOrElse(
           triggerLabel,
           () => options.find((option) => option.value === value)?.label ?? ""
@@ -71,7 +78,7 @@ export const ChoiceMenuOptions = ({
   options,
   onChange,
 }: Pick<DropdownProps, "value" | "options" | "onChange">): JSX.Element => (
-  <DropdownMenuContent align="start" className="min-w-56">
+  <DropdownMenuContent align="start" className="min-w-0 max-w-(--available-width)">
     <DropdownMenuRadioGroup
       value={value}
       onValueChange={(next: unknown) => {
@@ -80,7 +87,7 @@ export const ChoiceMenuOptions = ({
     >
       {options.map((option) => (
         <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
-          {option.label}
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{option.label}</span>
         </DropdownMenuRadioItem>
       ))}
     </DropdownMenuRadioGroup>
@@ -106,12 +113,12 @@ export const InlineChoiceDropdown = ({
         <button
           type="button"
           aria-label={label}
-          className="flex min-h-11 w-full items-center gap-2 rounded-md py-1 text-left outline-none transition-colors enabled:cursor-pointer enabled:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-muted"
+          className="flex min-h-11 w-full items-center gap-2 rounded-md py-1 text-left outline-none transition-colors enabled:cursor-pointer enabled:hover:bg-muted focus-visible:bg-muted focus-visible:underline focus-visible:underline-offset-4 aria-expanded:bg-muted"
         />
       }
     >
       {leading}
-      <span className="min-w-0 break-words">{children}</span>
+      <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{children}</span>
     </DropdownMenuTrigger>
     <ChoiceMenuOptions value={value} options={options} onChange={onChange} />
   </DropdownMenu>

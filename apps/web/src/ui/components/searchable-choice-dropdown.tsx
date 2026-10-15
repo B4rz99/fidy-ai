@@ -42,6 +42,7 @@ export const SearchableChoiceDropdown = ({
         <Button
           type="button"
           variant="outline"
+          focusAppearance="subtle"
           disabled={disabled}
           className={cn(width === "full" && "w-full")}
         />

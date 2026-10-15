@@ -176,3 +176,7 @@ atomically creates all new-User records and the initial WhatsAppIdentity, or add
 to an existing provider User. Established associations refuse replacement. Browser Login retains sole
 WebSession ownership. Superseded mailbox-code signup has been removed under #1093; optional
 mailbox login/replacement requires independently established VerifiedEmailCredential authority.
+
+Recurring planning is a separate User-maintained expectation model from historical charge
+pattern detection. Its server-owned schedules and tracking are shared by web and authorized
+agents; no planning action moves Money. See [ADR 0036](docs/adr/0036-recurring-planning.md).

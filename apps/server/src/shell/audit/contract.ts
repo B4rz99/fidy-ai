@@ -45,6 +45,8 @@ export type AuditCredentialOperation =
   | "insights.markInsightRead"
   | "insights.dismissInsight"
   | "recurring.listRecurringSeries"
+  | "recurringPlans.getRecurringWorkspace"
+  | "recurringPlans.applyRecurringEdit"
   | "memory.forget"
   | "memory.recall"
   | "memory.remember"
@@ -83,10 +85,13 @@ export type AuditAuthority =
     }>
   | OAuthAuthority;
 
-type AcceptedSessionOperation = Extract<
-  AuditCredentialOperation,
-  `${"consent" | "privacy" | "connections" | "budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
->;
+type AcceptedSessionOperation =
+  | "recurringPlans.getRecurringWorkspace"
+  | "recurringPlans.applyRecurringEdit"
+  | Extract<
+      AuditCredentialOperation,
+      `${"consent" | "privacy" | "connections" | "budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
+    >;
 type CategoryOperation = Extract<AuditCredentialOperation, `categories.${string}`>;
 type LegacySessionOperation = Exclude<
   AuditCredentialOperation,

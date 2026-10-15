@@ -8,11 +8,13 @@ const Button = ({
   className,
   variant = "default",
   size = "default",
+  focusAppearance = "ring",
+  contentLayout,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>): React.JSX.Element => (
   <ButtonPrimitive
     data-slot="button"
-    className={cn(buttonVariants({ variant, size, className }))}
+    className={cn(buttonVariants({ variant, size, focusAppearance, contentLayout, className }))}
     {...props}
   />
 );

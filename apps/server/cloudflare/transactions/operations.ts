@@ -1,3 +1,7 @@
+import {
+  effectiveHistoryPage,
+  effectiveTransactionRelation,
+} from "./internal/effective-transaction";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
   findSnapshot,
@@ -7,7 +11,7 @@ import {
 } from "./internal/recurring-query";
 import type { UserId } from "../../src/core/identity/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import type { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type {
   BudgetContributionCursor,
   PrivacyTransactionsRead,
@@ -25,9 +29,11 @@ import {
 } from "./internal/dashboard-projection";
 import type {
   CompletePeriodAggregates,
+  Transaction,
   TransactionPeriod,
 } from "../../src/core/transactions/contract";
 import {
+  decodeTransactionRow,
   browseTransactions as ownerBrowseTransactions,
   findTransaction as ownerFindCapturedTransaction,
   readPrivacyTransactions as ownerReadPrivacyTransactions,
@@ -219,3 +225,77 @@ export const prepareDeletion: typeof ownerPrepareDeletion = (input) => ownerPrep
 export const statementCaptureCapacityExceeded: typeof ownerStatementCaptureCapacityExceeded = (
   cause
 ) => ownerStatementCaptureCapacityExceeded(cause);
+
+const PlanningMonthRow = Schema.Struct({
+  month: Schema.String.check(Schema.isPattern(/^20[0-9]{2}-(?:0[1-9]|1[0-2])$/u)),
+});
+const maximumSelection = 128;
+const maximumMonths = 1200;
+/** Bounded same-User effective facts. The canonical coordinator owns live authority and serializes reads. */
+export const readPlanningTransactions = ({
+  db,
+  userId,
+  selection,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  selection:
+    | Readonly<{ kind: "ids"; ids: ReadonlyArray<string> }>
+    | Readonly<{ kind: "range"; from: string; through: string }>;
+}>): Effect.Effect<
+  Option.Option<Readonly<{ transactions: ReadonlyArray<Transaction>; complete: boolean }>>
+> =>
+  Effect.gen(function* () {
+    if (selection.kind === "ids" && selection.ids.length === 0) {
+      return Option.some({ transactions: [], complete: true });
+    }
+    if (selection.kind === "ids" && selection.ids.length > maximumSelection) return Option.none();
+    const selected =
+      selection.kind === "ids"
+        ? {
+            where: `user_id = ? AND id IN (${selection.ids.map(() => "?").join(",")})`,
+            bindings: [userId, ...selection.ids],
+          }
+        : {
+            where: "user_id = ? AND occurred_at >= ? AND occurred_at < ?",
+            bindings: [userId, selection.from, selection.through],
+          };
+    const query = effectiveHistoryPage({ userId, ...selected, limit: maximumSelection + 1 });
+    const rows = yield* Effect.tryPromise(() =>
+      db
+        .prepare(query.sql)
+        .bind(...query.bindings)
+        .all()
+    );
+    const transactions = Option.all(
+      rows.results.slice(0, maximumSelection).map(decodeTransactionRow)
+    );
+    return Option.map(transactions, (facts) => ({
+      transactions: facts,
+      complete: rows.results.length <= maximumSelection,
+    }));
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+/** Complete bounded month identities, without transferring financial facts to a peer. */
+export const readPlanningTransactionMonths = ({
+  db,
+  userId,
+  from,
+  through,
+}: Readonly<{ db: D1Database; userId: string; from: string; through: string }>): Effect.Effect<
+  Option.Option<ReadonlyArray<string>>
+> =>
+  Effect.gen(function* () {
+    const relation = effectiveTransactionRelation(userId);
+    const rows = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`WITH ${relation.sql}
+    SELECT DISTINCT substr(occurred_at, 1, 7) AS month FROM effective_transaction
+    WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ? ORDER BY month LIMIT 1201`)
+        .bind(...relation.bindings, userId, from, through)
+        .all()
+    );
+    const decoded = yield* Schema.decodeUnknownEffect(Schema.Array(PlanningMonthRow))(rows.results);
+    if (decoded.length > maximumMonths) return Option.none();
+    return Option.some(decoded.map((row) => row.month));
+  }).pipe(Effect.orElseSucceed(() => Option.none()));

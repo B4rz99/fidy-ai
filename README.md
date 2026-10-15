@@ -40,6 +40,11 @@ sender and connection admission before inbound routing can be enabled. Receipt/i
 not yet an executable capture path, and hosted MCP/OAuth access remains a design rather than a live
 integration.
 
+## Local browser testing
+
+On macOS, run `bun run dev:browser setup` once, then `bun run dev:browser` for a persistent
+HTTPS app and real local API with synthetic test accounts. See [setup and login](docs/guides/local-browser.md).
+
 ## Technical foundation
 
 Fidy is a TypeScript monorepo built around Effect and Schema. Domain decisions are separated from

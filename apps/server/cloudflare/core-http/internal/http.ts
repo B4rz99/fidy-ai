@@ -1,3 +1,4 @@
+import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
@@ -1317,6 +1318,31 @@ const connectInstitutionResponse = (
     });
   }).pipe(Effect.orElseSucceed(unavailable));
 
+const recurringBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 16384,
+  deadlineMilliseconds: 2000,
+});
+const recurringEditResponse = (
+  input: Parameters<typeof connectInstitutionResponse>[0]
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const payload = yield* boundedJsonBody({
+      request: input.request,
+      policy: recurringBodyPolicy,
+      schema: Schema.toCodecJson(RecurringCommand),
+    }).pipe(Effect.orElseSucceed(() => Option.none()));
+    const wire = Option.isSome(payload)
+      ? yield* Schema.encodeEffect(Schema.toCodecJson(RecurringCommand))(payload.value)
+      : {};
+    return yield* sendToCoordinator({
+      environment: input.environment,
+      subject: input.subject,
+      work: ownerCall(CanonicalOperationId.make("recurringPlans.applyRecurringEdit"), {
+        payload: wire,
+      }),
+    });
+  }).pipe(Effect.orElseSucceed(unavailable));
+
 const executeCanonicalWork = (
   input: Readonly<{
     request: Request;
@@ -1338,6 +1364,7 @@ const executeCanonicalWork = (
         sendToCoordinator({ environment, subject, work }).pipe(Effect.orElseSucceed(unavailable)),
     });
   }
+  if (operation.id === "recurringPlans.applyRecurringEdit") return recurringEditResponse(input);
   if (operation.id === "connections.connectInstitution") return connectInstitutionResponse(input);
   const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
   const otherOwner = Option.orElse(budgetResponse(input), () =>

@@ -334,6 +334,7 @@ it.each(queryGroups)(
         const examples: ReadonlyArray<Schema.Json> = [
           {},
           { query: {} },
+          { query: { month: "2026-10" } },
           { query: { timeZone: "America/Bogota" } },
           { query: { q: "mercado" } },
           { params: { id: resourceId } },

@@ -66,7 +66,17 @@ export const reloadTransactionsThroughCore = (page: Page): Promise<void> => {
 };
 const signInWithIdentity = (
   { page, request }: SignInFixture,
-  identity: "primary" | "firstCard" | "dashboard" | "budget" | "pagination" | "access" | "privacy"
+  identity:
+    | "primary"
+    | "firstCard"
+    | "dashboard"
+    | "budget"
+    | "pagination"
+    | "access"
+    | "privacy"
+    | "recurring"
+    | "recurringSummary"
+    | "recurringRecovery"
 ): Promise<void> =>
   page.clock
     .install()
@@ -225,3 +235,9 @@ export const probeCanonicalRequest = (
 /** Independent expired-trial User for irreversible processing-withdrawal acceptance. */
 export const signInPrivacyThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, "privacy");
+
+/** Each recurring journey has independent planning data and canonical admission limits. */
+export const signInRecurringThroughCore = (
+  input: SignInFixture &
+    Readonly<{ identity: "recurring" | "recurringSummary" | "recurringRecovery" }>
+): Promise<void> => signInWithIdentity(input, input.identity);

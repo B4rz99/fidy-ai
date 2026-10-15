@@ -12,6 +12,7 @@ import {
   OAuthRequestId,
   PATPairingPublicCode,
   ProviderHandoffSearch,
+  RecurringMonth,
   type WebAuthClient,
 } from "@/transport/client";
 import { type JSX, Suspense, createElement, lazy } from "react";
@@ -142,6 +143,20 @@ const budgetsRoute = createRoute({
       })
     )(search),
   component: lazyRouteComponent(() => import("@/features/budgets/feature"), "BudgetsFeature"),
+});
+const recurringPlansRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/recurring",
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        month: Schema.optionalKey(RecurringMonth),
+        recurringData: Schema.optionalKey(
+          Schema.Literals(["demo", "worst", "empty", "one", "many", "stale"])
+        ),
+      })
+    )(search),
+  component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringFeature"),
 });
 const recurringDigestRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -300,7 +315,12 @@ const routeTree = rootRoute.addChildren([
   subscriptionOffersRoute,
   independentApplicationRoute.addChildren([privacyRoute, transactionsRoute]),
   authenticatedRoute.addChildren([
-    signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, budgetsRoute]),
+    signedInRoute.addChildren([
+      signedInIndexRoute,
+      dashboardRoute,
+      budgetsRoute,
+      recurringPlansRoute,
+    ]),
     accessManagementRoute,
     patManagementRoute,
     oauthManagementRoute,

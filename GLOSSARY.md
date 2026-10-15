@@ -114,6 +114,14 @@ Budget amount; the group owns one Currency, versioned from an explicitly selecte
 months retain their recorded Currency. Changing Currency preserves nominal amounts without conversion.
 _Avoid_: Account, shared cap, envelope.
 
+**RecurringPlan**:
+A User-maintained expectation of recurring income, expense, or transfer in one Currency, with a chosen local schedule and optional expected Money. A plan is independent of detected historical evidence and does not authorize a payment or service cancellation.
+_Avoid_: Subscription, active RecurringSeries, recurring Transaction.
+
+**RecurringOccurrence**:
+One expected date under a RecurringPlan, retaining its identity through exceptions and tracking decisions. Its fulfillment records actual Money and associations with effective Transactions without becoming a Transaction itself.
+_Avoid_: Bill, overdue payment, Reconciliation.
+
 **RecurringSeries**:
 A historical repeating-charge pattern detected from comparable Transaction Money in one Currency
 and an explicit Counterparty. It does not establish that the charge is still active or cancelled.

@@ -26,6 +26,7 @@ const sessionDestinations = new Map([
   ["quota", "pat_audit"],
   ["connections", "pat_audit"],
   ["recurring", "pat_audit"],
+  ["recurringPlans", "pat_audit"],
 ]);
 const sessionDestination = (operation: AuditCredentialOperation): string => {
   const owner = operation.split(".")[0];
@@ -224,7 +225,8 @@ export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatem
   const pat = authorityCaller(authority);
   const table = destination(operation, pat);
   const credential =
-    authority.table === "hosted_turns" && table === "insight_audit"
+    authority.table === "hosted_turns" &&
+    (table === "insight_audit" || operation.startsWith("recurringPlans."))
       ? ["hosted_turn_id"]
       : credentialColumn(table, pat);
   const recordedOutcome = outcomeColumns(table, outcome);

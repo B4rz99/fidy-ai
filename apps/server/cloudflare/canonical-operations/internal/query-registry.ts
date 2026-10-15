@@ -1,3 +1,4 @@
+import { browseRecurringPlans } from "../../recurring-plans/operations";
 import { browseConnections } from "../../connections/operations";
 import { PATActivityParams } from "../../../src/shell/tokens/contract";
 import { RecurringDigestReportParams } from "../../../src/core/insights/contract";
@@ -73,6 +74,7 @@ const historyOwner =
     });
 
 const queryOwners = new Map<string, QueryOwner>([
+  ["recurringPlans.getRecurringWorkspace", browseRecurringPlans],
   ...(
     [
       "connections.listInstitutions",

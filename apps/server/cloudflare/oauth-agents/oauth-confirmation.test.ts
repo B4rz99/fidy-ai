@@ -738,6 +738,7 @@ it.each([1, 2] as const)(
 );
 
 const nativeOwnerJourneys = [
+  "recurringPlans.applyRecurringEdit",
   "categories.updateKeywordRule",
   "categories.deleteKeywordRule",
   "memory.revise",
@@ -781,7 +782,7 @@ const insightJourneyArgs = (
       : ownerArgs({ params: { id } });
   });
 
-const ownerJourneyArgs = (
+const otherOwnerJourneyArgs = (
   fixture: NativeFixture,
   name: NativeOwnerJourney
 ): Effect.Effect<Schema.Json, TestFailure> =>
@@ -911,3 +912,28 @@ it.skipIf(Option.isNone(nativeHostBridgeFile))(
   () => Effect.runPromise(runNativeHostFixture(pendingBudgetDeletion)),
   600000
 );
+
+const ownerJourneyArgs = (
+  fixture: NativeFixture,
+  name: NativeOwnerJourney
+): Effect.Effect<Schema.Json, TestFailure> =>
+  name === "recurringPlans.applyRecurringEdit"
+    ? Effect.succeed({
+        payload: {
+          expectedRevision: 0,
+          edit: {
+            kind: "create",
+            id: "40000000-0000-4000-8000-000000000124",
+            plan: {
+              name: "Arriendo",
+              kind: "expense",
+              currency: "COP",
+              amountMode: "unknown",
+              frequency: "monthly",
+              firstDate: "2026-10-31",
+              timeZone: "America/Bogota",
+            },
+          },
+        },
+      })
+    : otherOwnerJourneyArgs(fixture, name);

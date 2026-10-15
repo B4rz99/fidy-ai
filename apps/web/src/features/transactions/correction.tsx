@@ -12,7 +12,7 @@ import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import type { Category, Transaction } from "./presentation";
 
 import { CalendarField } from "@/ui/components/calendar-field";
-import { CategoryVisual } from "./visuals";
+import { CategoryVisual } from "@/ui/components/category-visual";
 import { DirectionIndicator } from "@/ui/components/icon-indicator";
 import type { CorrectionStatus } from "./panel-state";
 

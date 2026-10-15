@@ -31,7 +31,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { RecordToolbar } from "@/ui/components/workspace-layout";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
-import { CategoryVisual } from "./visuals";
+import { CategoryVisual } from "@/ui/components/category-visual";
 import { DirectionIndicator } from "@/ui/components/icon-indicator";
 import { formatMoney } from "@/transport/money";
 import type { TransactionListRow } from "./presentation";

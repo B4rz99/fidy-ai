@@ -25,6 +25,9 @@ export const budgetUserId = "24000000-0000-4000-8000-000000000371";
 export const privacyUserId = "24000000-0000-4000-8000-000000000381";
 export const accessUserId = "24000000-0000-4000-8000-000000000361";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
+export const recurringUserId = "24000000-0000-4000-8000-000000000401";
+export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
+export const recurringRecoveryUserId = "24000000-0000-4000-8000-000000000421";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
 const expiredTrialAgeMs = 691_200_000;
@@ -87,6 +90,24 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+await seedIdentity({
+  userId: recurringUserId,
+  bsuid: "CO.Recurring",
+  email: "recurrentes@example.com",
+  consentId: "24000000-0000-4000-8000-000000000402",
+});
+await seedIdentity({
+  userId: recurringSummaryUserId,
+  bsuid: "CO.RecurringSummary",
+  email: "resumen-recurrentes@example.com",
+  consentId: "24000000-0000-4000-8000-000000000412",
+});
+await seedIdentity({
+  userId: recurringRecoveryUserId,
+  bsuid: "CO.RecurringRecovery",
+  email: "recuperacion-recurrentes@example.com",
+  consentId: "24000000-0000-4000-8000-000000000422",
+});
 await seedIdentity({
   userId: privacyUserId,
   bsuid: "CO.Privacy",

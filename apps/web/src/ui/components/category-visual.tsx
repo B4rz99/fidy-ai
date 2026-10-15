@@ -9,7 +9,7 @@ import {
   ShoppingCart01Icon,
 } from "@hugeicons/core-free-icons";
 import type { ComponentProps, JSX } from "react";
-import { IconIndicator } from "@/ui/components/icon-indicator";
+import { IconIndicator } from "./icon-indicator";
 
 type CategoryIllustration = Readonly<{
   icon: ComponentProps<typeof HugeiconsIcon>["icon"];

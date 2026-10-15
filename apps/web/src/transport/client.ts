@@ -311,3 +311,12 @@ export type {
   ProcessingAuthorization,
   PrivacyTransactionPage,
 } from "@fidy/server/client";
+export {
+  RecurringCommand,
+  RecurringEdit,
+  RecurringPlanInput,
+  RecurringFilters,
+  RecurringPlanId,
+  RecurringDate,
+  RecurringMonth,
+} from "@fidy/server/client";

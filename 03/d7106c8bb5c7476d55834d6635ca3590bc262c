@@ -1,0 +1,23 @@
+.github/workflows/production.yml
+  s_6d017cc65783af::t_1e12119abdb26c 39-41
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_ace6c7ffbcf7d7 57,60-61,68-72,101-102
+docs/operations/daviplata-sandbox-proof.md
+  s_6d017cc65783af::t_a7a231b5d881af 7-8,54-57,101-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "03d7106c8bb5c7476d55834d6635ca3590bc262c",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

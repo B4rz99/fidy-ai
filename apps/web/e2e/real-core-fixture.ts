@@ -74,6 +74,7 @@ const signInWithIdentity = (
     | "pagination"
     | "access"
     | "privacy"
+    | "privacyRenewal"
     | "recurring"
     | "recurringSummary"
     | "recurringRecovery"
@@ -235,6 +236,10 @@ export const probeCanonicalRequest = (
 /** Independent expired-trial User for irreversible processing-withdrawal acceptance. */
 export const signInPrivacyThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, "privacy");
+
+/** Independent renewal identity keeps withdrawal isolated from parallel browser journeys. */
+export const signInPrivacyRenewalThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, "privacyRenewal");
 
 /** Each recurring journey has independent planning data and canonical admission limits. */
 export const signInRecurringThroughCore = (

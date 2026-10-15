@@ -1,6 +1,6 @@
 import { type Cause, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInPrivacyThroughCore, signInThroughCore } from "./real-core-fixture";
+import { signInPrivacyRenewalThroughCore, signInPrivacyThroughCore } from "./real-core-fixture";
 import type { Page, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
 import { exerciseTitularCase } from "./titular-case-fixture";
@@ -206,7 +206,7 @@ test("a withdrawn User explicitly renews the saved authorization through real Co
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => signInPrivacyRenewalThroughCore({ page, request }));
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/web/consent/authorization`, unavailableResponse, { times: 1 })

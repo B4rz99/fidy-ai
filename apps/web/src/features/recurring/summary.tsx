@@ -41,11 +41,11 @@ export const Summary = ({ view }: Readonly<{ view: Workspace }>): JSX.Element =>
         <h3 className="text-sm font-medium">
           {kind === "transfer" ? transferLabel(view.occurrences) : label}
         </h3>
-        {view.summary
-          .filter((group) => group.kind === kind)
-          .map((group) => (
+        {view.summary.map((group) =>
+          group.kind === kind ? (
             <SummaryAmounts key={group.currency} group={group} label={label} />
-          ))}
+          ) : null
+        )}
         {view.summary.some((group) => group.kind === kind) ? null : (
           <p className="text-xs text-muted-foreground">Sin recurrentes este mes</p>
         )}

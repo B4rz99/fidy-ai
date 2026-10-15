@@ -128,7 +128,7 @@ const CalendarGrid = ({
   );
 };
 export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
-  const [selected, setSelected] = useState<Option.Option<string>>(Option.none());
+  const [selected, setSelected] = useState<Option.Option<string>>(() => Option.none());
   const agenda = (date: string): void => setSelected(Option.some(date));
   const openItem = (item: Occurrence): void => {
     setSelected(Option.none());

@@ -4,11 +4,11 @@ Capability and verification map for `/app/budgets`. Product requirements remain 
 
 ## Behaviour and owners
 
-`feature.tsx` reads the authenticated User, selected monthly Budget report, Categories and Budgets through canonical queries. The current month uses the User's time zone; explicit month navigation uses calendar months. Reads do not initialize a plan. An initial failure displays retry feedback. A failed refresh retains existing figures but disables editing until a successful reread.
+`feature.tsx` reads the authenticated User and selects the router month; `controller.ts` owns the monthly Budget report, Categories and Budgets through canonical queries. The current month uses the User's time zone; explicit month navigation uses calendar months. Reads do not initialize a plan. An initial failure displays retry feedback. A failed refresh retains existing figures but disables editing until a successful reread.
 
 `workspace.tsx`, `row.tsx` and `editor.tsx` present grouped monthly caps, Category expenses and remaining Money. Amount edits commit on explicit submission; invalid or unsupported precision is rejected. Categories without caps remain available for assignment. The desktop editor is a side panel and the mobile editor a Sheet. Large reports initially collapse groups rather than truncate records.
 
-`controller.ts` and `command.ts` serialize canonical writes. Pending writes lock editing and month navigation. A known refusal reports failure; an uncertain response blocks further writes until explicit refresh. Refresh rereads canonical state and discards unsent drafts instead of replaying the mutation.
+`controller.ts` owns canonical write construction, synchronous write admission, outcomes and query refresh. Presentation invokes Budget editing actions without assembling writes or coordinating reset identities. Pending writes lock editing and month navigation. A known refusal reports failure; an uncertain response blocks further writes until explicit refresh. Refresh rereads canonical state and discards unsent drafts instead of replaying the mutation.
 
 The first write materializes the selected month's inherited plan. Caps are month-specific, while group names organize Categories across months. Group Currency changes affect later plans without rewriting previously frozen Money. No implicit Currency conversion occurs.
 

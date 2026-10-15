@@ -63,7 +63,7 @@
     "bun-types": "1.4.2",
     "effect": "4.0.2",
     "istanbul-lib-coverage": "3.2.2",
-    "lefthook": "2.2.0",
+    "lefthook": "2.2.1",
     "oxfmt": "0.72.0",
     "oxlint": "1.87.0",
     "oxlint-tsgolint": "7.0.2003",

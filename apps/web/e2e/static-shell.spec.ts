@@ -29,7 +29,7 @@ test("serves the checked-in security policy on SPA fallbacks", ({ request }) =>
       expect(yield* wait(shell.text())).toContain('id="root"');
       expect(shell.headers()["cache-control"]).toBe("no-cache");
       expect(shell.headers()["content-security-policy"]).toContain(
-        "connect-src https://127.0.0.1:4174 https://sandbox.wompi.co https://production.wompi.co;"
+        "connect-src https://127.0.0.1:4174 https://sandbox.wompi.co https://production.wompi.co https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox;"
       );
       expect(shell.headers()["x-frame-options"]).toBe("DENY");
       expect(shell.headers()["referrer-policy"]).toBe("no-referrer");

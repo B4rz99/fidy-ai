@@ -604,7 +604,7 @@ const captureFidyBodies = (page: Page, bodies: Array<string>): void => {
   });
 };
 
-test("tokenizes a first card outside Fidy and enrolls through real public and Core routes", ({
+test("tokenizes a first card without an email-login credential through real public and Core routes", ({
   page,
   request,
 }) =>
@@ -625,6 +625,8 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
           .click()
       );
       yield* fromPlaywright(expect(page.getByLabel("Número de tarjeta")).toBeVisible());
+      yield* fromPlaywright(expect(page.getByLabel("Correo de facturación")).toHaveValue(""));
+      yield* fromPlaywright(page.getByLabel("Correo de facturación").fill("tarjeta@example.com"));
       yield* fromPlaywright(page.getByLabel("Número de tarjeta").fill(cardNumber));
       yield* fromPlaywright(page.getByLabel("Vencimiento").fill("122028"));
       yield* fromPlaywright(page.getByLabel("CVC").fill("123"));
@@ -664,8 +666,9 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
 type DaviplataFixtureStep = "tokenize" | "send" | "confirm";
 const daviplataFixtureUrls: Readonly<Record<DaviplataFixtureStep, string>> = {
   tokenize: "https://sandbox.wompi.co/v1/tokens/daviplata",
-  send: "https://sandbox.wompi.co/fidy-synthetic-daviplata/send",
-  confirm: "https://sandbox.wompi.co/fidy-synthetic-daviplata/confirm",
+  send: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_acceptance&operation=RESEND_OTP",
+  confirm:
+    "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_acceptance&operation=VALIDATE_OTP_API",
 };
 const daviplataAuthorization = "daviplata_devtest_acceptance";
 const daviplataServiceBearers = {

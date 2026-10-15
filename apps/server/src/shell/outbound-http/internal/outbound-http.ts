@@ -150,15 +150,18 @@ const nequiSandboxTokenRequest = (
         )
       );
 
+const daviplataSandboxEndpoint =
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+
 const sandboxOtpPolicy = (config: WompiTransportConfig): Option.Option<DaviplataOtpPolicy> =>
   config.environment !== "sandbox"
     ? Option.none()
     : config.daviplataSandboxPolicy.pipe(
         Option.flatMap(Schema.decodeUnknownOption(DaviplataOtpPolicy)),
-        Option.filter(
-          (policy) =>
-            policy.sendUrl.startsWith(`${wompiSandboxOrigin}/`) &&
-            policy.confirmUrl.startsWith(`${wompiSandboxOrigin}/`)
+        Option.filter((policy) =>
+          [policy.sendUrl, policy.confirmUrl].every(
+            (url) => url.startsWith(`${wompiSandboxOrigin}/`) || url === daviplataSandboxEndpoint
+          )
         )
       );
 
@@ -185,11 +188,20 @@ const daviplataSandboxRequest = (
           )
         );
       }
+      const endpoint = request.step === "send" ? policy.sendUrl : policy.confirmUrl;
+      const id = Redacted.value(request.authorizationId);
+      if (!/^daviplata_(?:test|devtest|devint)_[A-Za-z0-9_]{1,200}$/u.test(id)) {
+        return rejectRequest();
+      }
+      const url =
+        endpoint === daviplataSandboxEndpoint
+          ? `${endpoint}?token=${id}&operation=${request.step === "send" ? "RESEND_OTP" : "VALIDATE_OTP_API"}`
+          : endpoint;
       const headers = { authorization: `Bearer ${Redacted.value(request.token)}` };
       return Effect.succeed(
         request.step === "send"
-          ? HttpClientRequest.post(policy.sendUrl, { headers })
-          : jsonRequest(policy.confirmUrl, JSON.stringify({ code: "574829" }), headers)
+          ? HttpClientRequest.post(url, { headers })
+          : jsonRequest(url, JSON.stringify({ code: "574829" }), headers)
       );
     },
   });

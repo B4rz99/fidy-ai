@@ -74,7 +74,7 @@ const Session = Schema.Struct({
   session_id: Schema.String,
   user_id: UserId,
   timeZone: UserContext.fields.timeZone,
-  email_address: BillingEmail,
+  email_address: Schema.NullOr(BillingEmail),
 });
 const PriceRow = Schema.Struct({
   id: Price.fields.id,
@@ -93,7 +93,7 @@ const EnrollmentRow = Schema.Struct({
   id: PaymentEnrollmentId,
   user_id: UserId,
   price_id: Price.fields.id,
-  billing_email: BillingEmail,
+  billing_email: Schema.Union([BillingEmail, Schema.Literal("")]),
   method: EnrollmentMethod,
   wompi_environment: Schema.NullOr(WompiEnvironment),
   payment_source_mode: Schema.Literals(["create", "reuse"]),
@@ -150,7 +150,7 @@ const submittedToken = (
 };
 
 const walletTokenPatterns = {
-  sandbox: { nequi: /^nequi_test_/u, daviplata: /^daviplata_(?:devtest|devint)_/u },
+  sandbox: { nequi: /^nequi_test_/u, daviplata: /^daviplata_(?:test|devtest|devint)_/u },
   production: { nequi: /^nequi_prod_/u, daviplata: /^daviplata_prod_/u },
 } as const;
 
@@ -232,9 +232,13 @@ const daviplataPolicy = (
     environment.WOMPI_ENVIRONMENT === "sandbox"
       ? "https://sandbox.wompi.co/"
       : "https://production.wompi.co/";
-  return Option.filter(
-    policy,
-    (value) => value.sendUrl.startsWith(origin) && value.confirmUrl.startsWith(origin)
+  return Option.filter(policy, (value) =>
+    [value.sendUrl, value.confirmUrl].every(
+      (url) =>
+        url.startsWith(origin) ||
+        (environment.WOMPI_ENVIRONMENT === "sandbox" &&
+          url === "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox")
+    )
   );
 };
 
@@ -273,7 +277,7 @@ const authority = (
         statement: {
           sql: `SELECT s.id AS session_id, s.userId AS user_id, u.timeZone, v.emailAddress AS email_address FROM (${session.sql}) AS s
             JOIN identity_user_context AS u ON u.userId = s.userId
-            JOIN (${email.sql}) AS v ON v.userId = s.userId WHERE 1 = 1`,
+            LEFT JOIN (${email.sql}) AS v ON v.userId = s.userId WHERE 1 = 1`,
           params: [...session.params, ...email.params],
         },
         subject: { _tag: "User", userId: subject.value.userId },
@@ -528,7 +532,7 @@ const prepare = ({
           enrollmentId,
           session.user_id,
           selected.value.id,
-          session.email_address,
+          session.email_address ?? "",
           body.value.method,
           environment.WOMPI_ENVIRONMENT,
           now,
@@ -567,7 +571,9 @@ const prepare = ({
     );
     const inserted = yield* waitFor(() =>
       environment.DB.prepare(`UPDATE card_enrollments
-    SET status = 'prepared', payment_source_mode = ?, contracts_json = ?, disclosure_json = ?
+    SET status = 'prepared', payment_source_mode = ?,
+      billing_email = COALESCE((SELECT billing_email FROM card_payment_sources WHERE user_id = card_enrollments.user_id AND method = card_enrollments.method), billing_email),
+      contracts_json = ?, disclosure_json = ?
     WHERE id = ? AND user_id = ? AND status = 'preparing'`)
         .bind(
           source === null ? "create" : "reuse",
@@ -965,7 +971,7 @@ const submit = ({
     if (
       row.value.status !== "prepared" ||
       row.value.payment_source_mode !== input.paymentSourceMode ||
-      row.value.billing_email !== input.billingEmail
+      (row.value.payment_source_mode === "reuse" && row.value.billing_email !== input.billingEmail)
     ) {
       return invalid();
     }

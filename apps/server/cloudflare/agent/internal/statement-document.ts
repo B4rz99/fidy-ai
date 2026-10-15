@@ -1,5 +1,5 @@
 import type { HostedSubject } from "./hosted-authority";
-import { type Cause, Crypto, Data, DateTime, Effect, Option, PlatformError, Schema } from "effect";
+import { type Cause, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   CanonicalToolCallEntry,
   CanonicalToolEvidence,
@@ -15,18 +15,13 @@ import { StatementNeedsReviewItem } from "../../../src/core/ingestion/contract";
 import { StagedStatementBytes, StatementSubmission } from "../../../src/shell/ingestion/contract";
 import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import type { WhatsAppBusinessPhoneNumberId } from "../../../src/shell/channels/whatsapp/contract";
-import { readWhatsAppStatementMedia } from "../../../src/shell/ingestion/operations";
 import {
   executeHostedStatementCall,
   executeHostedStatementQuery,
 } from "../../canonical-operations/operations";
 import {
-  readHeldStatementDocument,
-  readHeldStatementDocumentReference,
   readHeldStatementDocumentSubmission,
-  releaseHeldStatementDocumentUpload,
-  stageHeldStatementDocument,
-  withHeldStatementDocumentUpload,
+  recoverHeldStatementDocument,
 } from "../../ingestion/operations";
 import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import { newId } from "../../secret-material/operations";
@@ -47,23 +42,6 @@ const uncertainDocument = (): StatementDocumentRefused =>
   new StatementDocumentRefused({ reason: "uncertain" });
 const PublicationRefusal = Schema.Struct({ error: Schema.Struct({ code: Schema.String }) });
 
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((value) => new Uint8Array(value)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
 const SubmissionResponse = Schema.Struct({ data: Schema.toCodecJson(StatementSubmission) });
 const ReviewResponse = Schema.Struct({
   data: Schema.Array(Schema.toCodecJson(StatementNeedsReviewItem)),
@@ -77,48 +55,6 @@ type DocumentWork = Readonly<{
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
   current: number;
 }>;
-const documentReference = (
-  work: DocumentWork
-): Effect.Effect<StagedStatementBytes, StatementDocumentRefused> =>
-  Effect.gen(function* () {
-    const retained = yield* readHeldStatementDocumentReference(work).pipe(
-      Effect.mapError(uncertainDocument)
-    );
-    if (Option.isSome(retained)) {
-      yield* releaseHeldStatementDocumentUpload(work).pipe(Effect.mapError(uncertainDocument));
-      return retained.value;
-    }
-    const mediaId = yield* readHeldStatementDocument(work).pipe(Effect.mapError(uncertainDocument));
-    if (Option.isNone(mediaId)) return yield* uncertainDocument();
-    return yield* withHeldStatementDocumentUpload({
-      ...work,
-      work: (grant) =>
-        Effect.gen(function* () {
-          const media = yield* readWhatsAppStatementMedia({ ...work, mediaId: mediaId.value }).pipe(
-            Effect.provideService(Crypto.Crypto, workerCrypto),
-            Effect.mapError(() => new StatementDocumentRefused({ reason: "media-unavailable" }))
-          );
-          return yield* stageHeldStatementDocument({ ...work, grant, bytes: media.bytes }).pipe(
-            Effect.mapError(
-              (failure) =>
-                new StatementDocumentRefused({
-                  reason:
-                    failure._tag === "StatementStagingFailed" ? "invalid-material" : "uncertain",
-                })
-            )
-          );
-        }),
-    }).pipe(
-      Effect.mapError((failure) =>
-        failure instanceof StatementDocumentRefused
-          ? failure
-          : new StatementDocumentRefused({
-              reason: failure._tag === "ResourceAdmissionRefused" ? "rate-limited" : "uncertain",
-            })
-      )
-    );
-  });
-
 const readSubmission = ({
   work,
   id,
@@ -266,7 +202,9 @@ const publishNewDocument = (
   work: DocumentWork
 ): Effect.Effect<StatementSubmission, StatementDocumentRefused> =>
   Effect.gen(function* () {
-    const held = yield* documentReference(work);
+    const held = yield* recoverHeldStatementDocument(work).pipe(
+      Effect.mapError((failure) => new StatementDocumentRefused({ reason: failure.reason }))
+    );
     const reference = yield* Schema.encodeEffect(Schema.toCodecJson(StagedStatementBytes))(held);
     const input = yield* Schema.decodeEffect(CanonicalToolEvidence)({
       payload: { idempotencyKey: work.caller.turnId, reference },

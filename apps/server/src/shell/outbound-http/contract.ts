@@ -80,6 +80,7 @@ export type OutboundHttpRequest =
   | Readonly<{
       readonly _tag: "WompiDaviplataSandboxOtp";
       readonly step: "send" | "confirm";
+      readonly authorizationId: Redacted.Redacted<string>;
       readonly token: Redacted.Redacted<string>;
     }>
   | Readonly<{ readonly _tag: "WompiNequiApproval"; readonly token: Redacted.Redacted<string> }>

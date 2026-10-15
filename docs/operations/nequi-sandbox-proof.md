@@ -4,10 +4,16 @@ Issue: [#231](https://github.com/B4rz99/fidy-ai/issues/231).
 
 ## Status and launch boundary
 
-The implementation has synthetic adapter, browser-lifetime and native D1 tests. **A successful real
-Sandbox proof has not yet been recorded.** Existing Actions secrets establish configuration, not
-merchant eligibility or reusable-source behavior. This document is not Production or onboarding
-approval; remaining native-platform launch proofs belong to #920.
+**Real Sandbox protocol proof passed:** [Actions run 38672345124](https://github.com/B4rz99/fidy-ai/actions/runs/38672345124),
+revision `20889fa3d90d8f86c09ddce0cc790c8bb6ac761c`, completed 2026-10-14 at 21:49 Bogotá.
+All four selected cases executed: weekly, monthly and yearly approved first payments, and a
+declined weekly first payment. Each approved case verified the reusable NEQUI source and matching
+settlement. The declined case reached the bounded failure decision without granting paid access.
+The other 67 cases in that test file were excluded by the workflow's test-name filter.
+
+The implementation also has synthetic adapter, browser-lifetime and native D1 tests. This result
+does not establish Production merchant eligibility, deployed callback delivery, automatic renewal
+or native Queue/Workflow recovery. Remaining native-platform launch proofs belong to #920.
 
 The manual `Nequi Sandbox protocol proof` workflow runs only a reviewed `trunk` revision, under the
 existing protected `production` environment that holds the Wompi Sandbox secrets. It has no
@@ -34,15 +40,15 @@ replayed. Any unsupported tokenization, unavailable source, ambiguous creation o
 payment fails the proof. Do not change the expected outcome or retry a financial POST to get a green
 run. Investigate merchant support and provider semantics before treating the feature as launch-ready.
 
-After a reviewed merge, dispatch `.github/workflows/nequi-sandbox.yml` through Actions. Record the
-successful run link and revision here before claiming issue acceptance. No successful run is
-currently linked.
+For a rerun after reviewed changes, dispatch `.github/workflows/nequi-sandbox.yml` on `trunk`
+through Actions and record its successful run link and revision here. The linked evidence above
+establishes only the four selected Sandbox protocol scenarios.
 
 ## Provider references
 
 - [Reusable payment sources](https://docs.wompi.co/docs/colombia/fuentes-de-pago/)
 - [Sandbox test data](https://docs.wompi.co/docs/colombia/datos-de-prueba-en-sandbox/)
 
-These references motivate the requests; the real workflow must establish actual reusable Nequi
-Sandbox behavior and eligibility. Source management/replacement and automatic-renewal execution
-remain separate work.
+These references motivate the requests; the linked run establishes the selected reusable Nequi
+Sandbox scenarios. Source management/replacement and automatic-renewal execution remain separate
+work.

@@ -84,11 +84,13 @@ it.effect(
           {
             _tag: "WompiDaviplataSandboxOtp",
             step: "send",
+            authorizationId: Redacted.make("daviplata_devtest_synthetic"),
             token: Redacted.make("synthetic-service-token"),
           },
           {
             _tag: "WompiDaviplataSandboxOtp",
             step: "confirm",
+            authorizationId: Redacted.make("daviplata_devtest_synthetic"),
             token: Redacted.make("synthetic-confirm-token"),
           },
         ] as const) {
@@ -183,11 +185,13 @@ it.effect(
       yield* outbound.execute({
         _tag: "WompiDaviplataSandboxOtp",
         step: "send",
+        authorizationId: Redacted.make("daviplata_devtest_synthetic"),
         token: Redacted.make("synthetic-send-bearer"),
       });
       yield* outbound.execute({
         _tag: "WompiDaviplataSandboxOtp",
         step: "confirm",
+        authorizationId: Redacted.make("daviplata_devtest_synthetic"),
         token: Redacted.make("synthetic-confirm-bearer"),
       });
       expect(observed).toEqual([
@@ -750,5 +754,82 @@ it.effect("projects a hostile response-stream failure without its coordinates", 
     expect(failure.reason).toBe("response-body-failed");
     expect(rendered).not.toContain("stream-private-sentinel");
     expect(rendered).not.toContain("credential-private-sentinel");
+  })
+);
+it.effect(
+  "binds real Sandbox DaviPlata OTP requests to the reviewed endpoint and authorization",
+  () =>
+    Effect.gen(function* () {
+      const urls: Array<string> = [];
+      const httpClient = HttpClient.make((request) => {
+        urls.push(request.url);
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+      });
+      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const outbound = makeWompiOutboundHttp({
+        environment: "sandbox",
+        publicKey: "pub_test_synthetic_only",
+        privateKey: Redacted.make("synthetic-private-key"),
+        integritySecret: Redacted.make("synthetic-integrity-secret"),
+        httpClient,
+        crypto,
+        daviplataSandboxPolicy: Option.some({
+          sendUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
+          confirmUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
+        }),
+      });
+      for (const step of ["send", "confirm"] as const) {
+        yield* outbound.execute({
+          _tag: "WompiDaviplataSandboxOtp",
+          step,
+          authorizationId: Redacted.make("daviplata_test_synthetic"),
+          token: Redacted.make("synthetic-service-bearer"),
+        });
+      }
+      expect(urls).toEqual([
+        "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_test_synthetic&operation=RESEND_OTP",
+        "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_test_synthetic&operation=VALIDATE_OTP_API",
+      ]);
+    })
+);
+
+it.effect("refuses malformed DaviPlata authorization IDs before any OTP egress", () =>
+  Effect.gen(function* () {
+    let calls = 0;
+    const httpClient = HttpClient.make((request) => {
+      calls += 1;
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+    });
+    const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+    const outbound = makeWompiOutboundHttp({
+      environment: "sandbox",
+      publicKey: "pub_test_synthetic_only",
+      privateKey: Redacted.make("synthetic-private-key"),
+      integritySecret: Redacted.make("synthetic-integrity-secret"),
+      httpClient,
+      crypto,
+      daviplataSandboxPolicy: Option.some({
+        sendUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
+        confirmUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
+      }),
+    });
+    for (const authorizationId of [
+      "",
+      "daviplata_prod_synthetic",
+      "daviplata_devtest_x&operation=OTHER",
+      "daviplata_devtest_" + "x".repeat(201),
+    ]) {
+      const outcome = yield* Effect.exit(
+        outbound.execute({
+          _tag: "WompiDaviplataSandboxOtp",
+          step: "send",
+          authorizationId: Redacted.make(authorizationId),
+          token: Redacted.make("synthetic-secret"),
+        })
+      );
+      expect(Exit.isFailure(outcome)).toBe(true);
+      expect(String(outcome)).not.toContain("synthetic-secret");
+    }
+    expect(calls).toBe(0);
   })
 );

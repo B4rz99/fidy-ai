@@ -432,6 +432,9 @@ Agent constructs one deep service inside the existing User coordinator. It priva
 Compaction, confirmation, bounded inference, canonical execution, delivery, and terminalization.
 A soft HTTP deadline cannot release serialization before owner settlement or durable recovery.
 Progress observation does not start a second Turn or bypass canonical tool policy.
+Inference owns format feedback and one-shot repair preparation through `repairInvalidOutput`;
+Agent decides first-round eligibility and charges the subsequent execution to the original Turn
+deadline and iteration budget. Repair never executes canonical tools or delivers a reply.
 
 WhatsApp recovery restores that soft response lifecycle only after rechecking the exact Pending
 Turn, User and current channel association. Its original model deadline is unchanged. A Queue
@@ -471,6 +474,11 @@ then asks for clarification in that conversation. Canonical resolution, skipping
 settle capture, SourceAttestation, evidence erasure, entitlement and Audit atomically. The lifetime
 Free grant is consumed by the first captured Transaction; zero-capture terminal extraction releases
 the reservation. Partial capture preserves consumption.
+
+Ingestion's `recoverHeldStatementDocument` operation owns retained-reference recovery, upload
+admission, bounded media retrieval, staging and lease cleanup. Agent receives only the staged
+reference or a closed refusal; it retains canonical publication, commit recovery and Transcript
+evidence. Upload grants and staging primitives remain private to Ingestion.
 
 Clarification requires live same-session, same-channel authority and exact confirmation. Expired or
 abandoned origins cannot resume. Public review queries retain metadata only; purpose-bound row

@@ -31,8 +31,8 @@ jobs:
           WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
           WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
           WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
-          WOMPI_DAVIPLATA_OTP_SEND_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_SEND_URL }}
-          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_CONFIRM_URL }}
+          WOMPI_DAVIPLATA_OTP_SEND_URL: https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox
+          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox
         run: bun run --cwd apps/server test:cloudflare subscription/payment-enrollment.test.ts -t 'proves Sandbox DaviPlata'
       - name: Record minimized proof scope
         if: success()

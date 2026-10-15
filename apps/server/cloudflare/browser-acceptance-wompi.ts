@@ -3,9 +3,10 @@ import { db, firstCardSourceId, firstDaviplataSourceId, sourceId } from "./brows
 
 export const providerPublicKey = `pub_test_${"f1d7c0de".repeat(3)}`;
 export const providerPrivateKey = `prv_test_${"f1d7c0de".repeat(3)}`;
-export const syntheticDaviplataSendUrl = "https://sandbox.wompi.co/fidy-synthetic-daviplata/send";
+export const syntheticDaviplataSendUrl =
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
 export const syntheticDaviplataConfirmUrl =
-  "https://sandbox.wompi.co/fidy-synthetic-daviplata/confirm";
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
 const syntheticDaviplataToken = "daviplata_devtest_acceptance";
 const daviplataApprovalResponse = (request: Request): Response => {
   if (request.method !== "GET") return new Response(null, { status: 405 });

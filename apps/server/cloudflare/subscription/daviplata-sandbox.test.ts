@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Effect, Exit, Option, Redacted } from "effect";
+import { Effect, Exit, Option, Redacted, Schema } from "effect";
 import { expect, it } from "vitest";
 import {
   type OutboundHttpService,
@@ -16,10 +16,8 @@ import {
   requireDaviplataSandboxPolicy,
 } from "./daviplata-sandbox.test-fixture";
 
-const policy = {
-  sendUrl: "https://sandbox.wompi.co/synthetic-test/send",
-  confirmUrl: "https://sandbox.wompi.co/synthetic-test/confirm",
-};
+const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+const policy = { sendUrl: endpoint, confirmUrl: endpoint };
 const outboundFor = (
   handler: Parameters<typeof makeTestOutboundTransport>[0]
 ): OutboundHttpService =>
@@ -35,6 +33,7 @@ const outboundFor = (
 
 type ProtocolPremise = Readonly<{
   name: string;
+  failureStage: DaviplataSandboxProofFailure["stage"];
   sendUrl: string;
   confirmUrl: string;
   wrongIdentityAt: number;
@@ -43,7 +42,9 @@ type ProtocolPremise = Readonly<{
 }>;
 const ordinary: ProtocolPremise = {
   name: "ordinary",
-  ...policy,
+  failureStage: "destinations",
+  sendUrl: endpoint + "?token=daviplata_devtest_synthetic&operation=RESEND_OTP",
+  confirmUrl: endpoint + "?token=daviplata_devtest_synthetic&operation=VALIDATE_OTP_API",
   wrongIdentityAt: 0,
   malformedAt: 0,
   stopAt: 3,
@@ -53,7 +54,7 @@ const syntheticBody = (step: number, premise: ProtocolPremise): string => {
   if (step === 1) {
     return JSON.stringify({
       data: {
-        id: "synthetic-authorization",
+        id: "daviplata_devtest_synthetic",
         status: "PENDING",
         url_services: {
           token: "synthetic-send-bearer",
@@ -69,7 +70,7 @@ const syntheticBody = (step: number, premise: ProtocolPremise): string => {
         PK:
           step === premise.wrongIdentityAt
             ? "synthetic-foreign-authorization"
-            : "synthetic-authorization",
+            : "daviplata_devtest_synthetic",
         status: step === 2 ? "PENDING" : "APPROVED",
       },
       authorization: { access_token: "synthetic-confirm-bearer" },
@@ -108,13 +109,13 @@ it.each([
     Effect.gen(function* () {
       assert.deepStrictEqual(
         yield* Effect.exit(requireDaviplataSandboxPolicy(input)),
-        Exit.fail(new DaviplataSandboxProofFailure())
+        Exit.fail(new DaviplataSandboxProofFailure({ stage: "policy" }))
       );
     })
   )
 );
 
-it.each([
+it.each<ProtocolPremise>([
   { ...ordinary, name: "send destination", sendUrl: `${policy.sendUrl}/unreviewed`, stopAt: 1 },
   {
     ...ordinary,
@@ -122,9 +123,26 @@ it.each([
     confirmUrl: `${policy.confirmUrl}/unreviewed`,
     stopAt: 1,
   },
-  { ...ordinary, name: "send identity", wrongIdentityAt: 2, stopAt: 2 },
-  { ...ordinary, name: "confirm identity", wrongIdentityAt: 3 },
-  { ...ordinary, name: "malformed response", malformedAt: 1, stopAt: 1 },
+  {
+    ...ordinary,
+    name: "send identity",
+    failureStage: "otp-send-identity",
+    wrongIdentityAt: 2,
+    stopAt: 2,
+  },
+  {
+    ...ordinary,
+    name: "confirm identity",
+    failureStage: "otp-confirm-identity",
+    wrongIdentityAt: 3,
+  },
+  {
+    ...ordinary,
+    name: "malformed response",
+    failureStage: "tokenization-response",
+    malformedAt: 1,
+    stopAt: 1,
+  },
 ])(
   "rejects $name substitution before releasing further authority and without replaying a POST",
   (premise) =>
@@ -139,7 +157,7 @@ it.each([
         });
         assert.deepStrictEqual(
           yield* Effect.exit(authorizeDaviplataSandbox({ outbound, policy, outcome: "approved" })),
-          Exit.fail(new DaviplataSandboxProofFailure())
+          Exit.fail(new DaviplataSandboxProofFailure({ stage: premise.failureStage }))
         );
         expect(requests).toBe(premise.stopAt);
       })
@@ -159,12 +177,44 @@ it("rotates the synthetic one-use service bearer and confirms the same reusable 
         );
       });
       const token = yield* authorizeDaviplataSandbox({ outbound, policy, outcome: "declined" });
-      expect(Redacted.value(token)).toBe("synthetic-authorization");
+      expect(Redacted.value(token)).toBe("daviplata_devtest_synthetic");
       expect(requests).toBe(3);
       expect(authorization).toEqual([
         "Bearer pub_test_synthetic_only",
         "Bearer synthetic-send-bearer",
         "Bearer synthetic-confirm-bearer",
       ]);
+    })
+  ));
+
+it("identifies a failed OTP-send response without retaining provider content or replaying the request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let requests = 0;
+      const outbound = outboundFor((request) => {
+        requests += 1;
+        return Effect.succeed(
+          testOutboundTransportResponse(
+            request,
+            new Response(
+              requests === 2
+                ? JSON.stringify({ private: "synthetic-provider-secret" })
+                : syntheticBody(requests, ordinary)
+            )
+          )
+        );
+      });
+      const failure = yield* authorizeDaviplataSandbox({
+        outbound,
+        policy,
+        outcome: "approved",
+      }).pipe(Effect.flip);
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(failure);
+      const projected = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(encoded);
+      expect(projected).toEqual({
+        _tag: "DaviplataSandboxProofFailure",
+        stage: "otp-send-response",
+      });
+      expect(requests).toBe(2);
     })
   ));

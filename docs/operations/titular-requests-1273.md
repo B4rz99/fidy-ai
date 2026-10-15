@@ -1,10 +1,11 @@
 # Titular requests — operator procedure for #1273
 
-Status: implementation procedure, dated 2026-10-14. The product owner reported that legal
+Status: released procedure; production and live rehearsal verified through 2026-10-15. The product owner reported that legal
 review of the procedure is approved and confirmed the withdrawal cutoff below. This records the
 owner's confirmation; it is not an independent legal opinion or production acceptance evidence.
 The owner of `obarboza@fidyapp.com` is the sole operator, with no backup. The local register is
-working software; deployment and a full live operator rehearsal remain separate release evidence.
+working software; production and live operator evidence are recorded below. Exceptional requester
+entitlement remains an explicit follow-up in [#1326](https://github.com/B4rz99/fidy-ai/issues/1326).
 
 ## Intake and storage
 
@@ -222,12 +223,11 @@ sufficient entitlement to the particular requested material and accredited repre
 summarized in [Decreto 1074/2015, Article 2.2.2.25.4.1](https://cancilleria.gov.co/sites/default/files/Normograma/docs/decreto_1074_2015_pr025.htm).
 This distinction does not introduce a Bancolombia OAuth requirement or a new ID-checking service.
 
-Remaining release evidence is concrete: promote the reviewed browser/server/migration through the
-normal production workflow, configure the actual private operator storage, and run a disposable
-end-to-end case through the published channel, existing proof, supported scoped result and verified
-response, including failed delivery and uncertain completion. Local integration tests and self-mail
-are recorded below; they do not claim production release, a live claimant's completed request,
-customer erasure, or closure of #1273.
+Release evidence distinguishes the deployed product, restricted operator storage, live scoped
+delivery and disposable failure tests. The records below do not claim customer erasure or new
+entitlement for exceptional requester classes. The product owner approved retaining the existing
+supported proofs; [#1326](https://github.com/B4rz99/fidy-ai/issues/1326) carries forward the exceptional
+entitlement portion of #1273 acceptance criterion 2 rather than treating that capability as complete.
 
 ## Completed mailbox transport rehearsal
 
@@ -265,4 +265,49 @@ without fabricating intake or verification. The restricted evidence directory co
 receipt. This setup creates no backup destination or automatic retention/deletion job; apply the
 approved operator retention procedure to actual evidence and restrict any future backup equally.
 
-Production release and the complete published-channel rehearsal are still pending.
+## Production release — 2026-10-14
+
+[PR #1306](https://github.com/B4rz99/fidy-ai/pull/1306) was squash-merged as
+`d4fc73a4ff31c10ca7eeba37c13bbc298a369455`. All attached CI checks passed, including Required Checks;
+independent Standards, Security and Spec reviews reported no findings. The new cutoff is migration
+`0092_queued_processing_cutoff.sql`, following the unchanged upstream Free email allowance migration.
+
+[Deploy Production](https://github.com/B4rz99/fidy-ai/actions/runs/38645913719) succeeded with candidate
+and intermediate-pair native smoke tests, promotion, normal-traffic checks, public topology and
+unauthorized-edge probes, and drift checks. API health, app metadata and public-site metadata were
+independently read after promotion and reported the exact merged revision. These are dated release
+observations, not assertions about whichever revision is currently deployed.
+
+## Live scoped operator rehearsal — 2026-10-15
+
+The published inbox contained a separate QA consultation received on 2026-10-14 at 20:13
+America/Bogota and acknowledged at 20:16. Its scope was the saved authorization copy and existing
+withdrawal evidence; it excluded correction, erasure, renewed Consent and Transaction export.
+The original received time was retained conservatively at the start of the displayed minute.
+
+On 2026-10-15, the requester established the existing production Fidy login. The production
+`Consultar prueba` control returned the actual saved authorization reference, acceptance date,
+notice version and accepted notice. The notice was expanded and the result visibly delivered in
+that same authenticated browser. Successful execution exercised the owner's live same-User proof
+requirement; mailbox identity was not substituted for that authority. After `Verificar autorización`,
+the page offered withdrawal and showed no withdrawal receipt. No new withdrawal was requested or
+performed merely to create a rehearsal receipt; the withdrawal success/refusal evidence remains
+the native and built-browser evidence linked above.
+
+The real private CLI recorded intake, scope, sole owner, verification, the actual Consent-owner
+result, prepared response and independently observed browser delivery. The case ended with delivery
+`Confirmed`, revision 4 and stable replay of the final command. Its metadata contains opaque UUID
+references only. Correspondence mapping, verification limitations and the visual delivery witness
+remain in the restricted evidence directory, with a retention review scheduled for 2026-11-14.
+No personal proof reference, correspondence address, screenshot or account record is published here.
+
+A non-disclosing follow-up was sent in the original request thread on 2026-10-15 at 13:16
+America/Bogota and its sent state was observed. It included no personal result or attachment.
+Recipient-inbox receipt of that notice was not independently observed; the confirmed scoped delivery
+is the result witnessed in the authenticated Fidy browser, not an inferred email delivery.
+
+The native private-register suite was rerun on 2026-10-15: all 11 tests passed, including failed and
+uncertain delivery remaining unresolved, invalid prerequisites, storage safety and replay. These
+failure paths use disposable cases; no actual transport failure or uncertain claimant completion
+was fabricated in the successful live case. The authorization-copy result demonstrates scoped
+access to the Consent owner's data; it does not claim a Transaction export or completed correction.

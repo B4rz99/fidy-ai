@@ -1,5 +1,4 @@
 import { DateTime, Option } from "effect";
-import type { FidyClient } from "@/transport/client";
 import {
   type Budget,
   type BudgetReport,
@@ -10,14 +9,12 @@ import {
 } from "./presentation";
 
 export type WorkspaceProps = Readonly<{
-  apiClient: FidyClient;
   user: CurrentUser;
   month: string;
   report: BudgetReport;
   categories: ReadonlyArray<Category>;
   budgets: ReadonlyArray<Budget>;
-  onRefresh: () => void;
-  editable: boolean;
+  editing: BudgetEditing;
 }>;
 export type SaveState = "idle" | "saving" | "saved" | "failed" | "uncertain";
 export type BudgetDraft = Readonly<{
@@ -31,6 +28,20 @@ export type BudgetEdit = Readonly<{
   currency: string;
   groupName: string;
   groupCurrency: Option.Option<string>;
+}>;
+export type BudgetEditing = Readonly<{
+  saveState: SaveState;
+  disabled: boolean;
+  draft: Option.Option<BudgetDraft>;
+  write: (edit: BudgetEdit) => void;
+  refresh: () => void;
+  closeEditor: () => void;
+  assignCategory: (category: Category) => void;
+  configureCategory: (status: BudgetStatus) => void;
+  configureGroup: (group: string) => void;
+  saveRow: (status: BudgetStatus, amount: string) => void;
+  freezePlan: () => void;
+  rowKey: (status: BudgetStatus) => string;
 }>;
 const monthLabelLength = 7;
 /** Local calendar label; financial values remain canonical report facts. */

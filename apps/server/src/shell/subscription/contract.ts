@@ -211,7 +211,7 @@ export const SubmitPaymentEnrollmentPayload = Schema.Union([
     paymentSourceMode: Schema.Literal("create"),
     ...SubmitBase,
     daviplataToken: Schema.RedactedFromValue(
-      TokenText.check(Schema.isPattern(/^daviplata_(?:devtest|devint|prod)_[A-Za-z0-9_-]+$/u))
+      TokenText.check(Schema.isPattern(/^daviplata_(?:test|devtest|devint|prod)_[A-Za-z0-9_-]+$/u))
     ),
   }),
   Schema.Struct({ paymentSourceMode: Schema.Literal("reuse"), ...SubmitBase }),

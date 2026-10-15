@@ -9,6 +9,7 @@ import { useRouter } from "@tanstack/react-router";
 import { Cause, Data, Effect, Array as EffectArray, Option, Predicate, Redacted } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { makeEnrollmentCommand } from "./enrollment-command";
+import { SubscriptionConsentBoundary } from "./consent-boundary";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
@@ -1347,7 +1348,7 @@ const StandingAndOffers = ({ children }: Readonly<{ children: JSX.Element }>): J
   </>
 );
 
-export const SubscriptionOffersFeature = (): JSX.Element => {
+const AuthorizedSubscriptionOffers = (): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
   const enrollmentClient = useSubscriptionEnrollmentClient();
@@ -1401,3 +1402,9 @@ export const SubscriptionOffersFeature = (): JSX.Element => {
       );
   }
 };
+
+export const SubscriptionOffersFeature = (): JSX.Element => (
+  <SubscriptionConsentBoundary>
+    <AuthorizedSubscriptionOffers />
+  </SubscriptionConsentBoundary>
+);

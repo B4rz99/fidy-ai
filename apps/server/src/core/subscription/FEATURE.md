@@ -103,6 +103,14 @@ and isolated deployed Queue/Workflow/callback recovery evidence before
 claiming the entire payment lifecycle is verified. Real charges, live refunds, recurring debit
 authorization and changing existing subscriptions are excluded from this audit.
 
+The subsequent Upgrade regression checks cookie-only Processing Consent before mounting ordinary
+Subscription queries or enrollment controls. A withdrawn User sees the withdrawal and a Privacy
+link instead of a sign-in prompt, including after reload; no Subscription/payment requests are
+sent. A failed Consent check stays closed and can be retried; a browser without a session still
+gets sign-in guidance. Production payment testing on the second QA account is blocked by its
+withdrawn Consent. Processing Consent renewal is not implemented: returning login and repeated
+signup preserve the withdrawal. No historical withdrawal or grant was edited to unblock testing.
+
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and

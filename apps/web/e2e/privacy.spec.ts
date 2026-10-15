@@ -122,6 +122,35 @@ const verifyRefusalRecovery = (page: Page, original: string): Promise<void> =>
     })
   );
 
+const verifyWithdrawnUpgrade = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const enrollmentRequests: Array<string> = [];
+      page.on("request", (request) => {
+        const path = new URL(request.url()).pathname;
+        if (path.startsWith("/subscription/") || path.startsWith("/web/subscription/")) {
+          enrollmentRequests.push(path);
+        }
+      });
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("Tu autorización está retirada")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("link", { name: "Iniciar sesión", exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("Tu autorización está retirada")
+      );
+      expect(enrollmentRequests).toEqual([]);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Revisar privacidad", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/privacy$/));
+    })
+  );
+
 test("an expired-trial User withdraws through real Core and can recover the same receipt after ordinary access stops", ({
   page,
   request,
@@ -167,6 +196,7 @@ test("an expired-trial User withdraws through real Core and can recover the same
         )
       );
       yield* Effect.tryPromise(() => verifyTransactionAccess(page));
+      yield* Effect.tryPromise(() => verifyWithdrawnUpgrade(page));
       const response = yield* Effect.tryPromise(() =>
         page.request.get(`${apiOrigin}/transactions`, {
           headers: { origin: "https://127.0.0.1:4173" },

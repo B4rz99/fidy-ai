@@ -1,0 +1,25 @@
+apps/site/package.json
+  s_6d017cc65783af::t_0428fa720a8cc7 16
+apps/web/package.json
+  s_6d017cc65783af::t_30af620d1d0f56 60
+bun.lock
+  s_6d017cc65783af::t_6288bd5e3282eb 19,78,133,1090,1532,1534,1536,1538,1540,1542,1544,1546,1548,1550,1552,2032
+package.json
+  s_6d017cc65783af::t_aaac7626d96e29 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a664a1b5ac408cc7bb70f9e21baed92cdaabaa87",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

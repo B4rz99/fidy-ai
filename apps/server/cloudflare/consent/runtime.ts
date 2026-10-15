@@ -2,6 +2,7 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
 import {
   PrivacyTransactionRequest,
+  ProcessingConsentRenewal,
   ProcessingConsentWithdrawal,
 } from "../../src/shell/processing-consent/contract";
 import { readPrivacyTransactions } from "../transactions/operations";
@@ -11,7 +12,11 @@ import { boundedJsonBody } from "../http/operations";
 import { RequestBodyPolicy } from "../http/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { sweepOffers } from "./internal/proactivity-consent";
-import { type ConsentUnavailable, ConsentWithdrawalAdmission } from "./contract";
+import {
+  ConsentRenewalAdmission,
+  type ConsentUnavailable,
+  ConsentWithdrawalAdmission,
+} from "./contract";
 import {
   consentResponse,
   readProcessingAuthorization,
@@ -50,9 +55,10 @@ const readTransactions = (
     if (Option.isNone(decoded)) return consentResponse(invalidStatus);
     return yield* readPrivacyTransactions({ db: input.db, subject, request: decoded.value });
   }).pipe(Effect.orElseSucceed(() => consentResponse(unavailableStatus)));
-const forwardWithdrawal = (
+const forwardDecision = (
   input: PrivacyRequest,
-  subject: AuthenticatedWebSession
+  subject: AuthenticatedWebSession,
+  operation: "withdraw" | "renew"
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const policy = yield* Schema.decodeEffect(RequestBodyPolicy)({
@@ -62,24 +68,28 @@ const forwardWithdrawal = (
     const body = yield* boundedJsonBody({ request: input.request, policy, schema: Schema.Unknown });
     const decoded = Option.flatMap(
       body,
-      Schema.decodeUnknownOption(ProcessingConsentWithdrawal, { onExcessProperty: "error" })
+      Schema.decodeUnknownOption(
+        operation === "renew" ? ProcessingConsentRenewal : ProcessingConsentWithdrawal,
+        { onExcessProperty: "error" }
+      )
     );
     if (Option.isNone(decoded)) {
       return consentResponse(invalidStatus);
     }
-    const admission = yield* Schema.decodeEffect(ConsentWithdrawalAdmission)({
+    const admissionSchema =
+      operation === "renew" ? ConsentRenewalAdmission : ConsentWithdrawalAdmission;
+    const admission = yield* Schema.decodeEffect(admissionSchema)({
       userId: subject.userId,
       sessionId: subject.id,
       digest: Array.from(subject.digest),
       deadlineMilliseconds: (yield* Clock.currentTimeMillis) + admissionLifetimeMilliseconds,
+      ...(operation === "renew" ? { renewal: decoded.value } : {}),
     });
     const headers = yield* captureTraceHeaders;
-    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(ConsentWithdrawalAdmission))(
-      admission
-    );
+    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(admissionSchema))(admission);
     return yield* Effect.tryPromise(() =>
       input.coordinator.getByName(subject.userId).fetch(
-        new Request("https://coordinator.internal/consent-withdraw", {
+        new Request(`https://coordinator.internal/consent-${operation}`, {
           method: "POST",
           headers,
           body: encoded,
@@ -111,7 +121,10 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
       authenticateWebSession({
         ...input,
         current,
-        freshness: transport.value.operation === "transactions" ? "fresh" : "live",
+        freshness:
+          transport.value.operation === "transactions" || transport.value.operation === "renew"
+            ? "fresh"
+            : "live",
       })
     );
     if (Option.isNone(subject)) {
@@ -125,7 +138,8 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
         status: readProcessingConsent({ ...input, subject: subject.value }),
         authorization: readProcessingAuthorization({ ...input, subject: subject.value }),
         transactions: readTransactions(input, subject.value),
-        withdraw: forwardWithdrawal(input, subject.value),
+        withdraw: forwardDecision(input, subject.value, "withdraw"),
+        renew: forwardDecision(input, subject.value, "renew"),
       }[transport.value.operation],
     });
   }).pipe(Effect.orElseSucceed(() => consentResponse(unavailableStatus)));

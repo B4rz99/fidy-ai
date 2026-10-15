@@ -2,7 +2,11 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { installUser } from "./http-fixtures";
-import { boundSessionRequests, visiblePairingCode } from "./real-core-fixture";
+import {
+  boundSessionRequests,
+  openUpgradeThroughCore,
+  visiblePairingCode,
+} from "./real-core-fixture";
 
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
@@ -433,7 +437,7 @@ const finishRealPairing = ({
       yield* wait(page.getByRole("button", { name: "Registrar transacción" }).click());
       yield* wait(expect(page.locator("[data-sonner-toast]")).toContainText("La Cocina"));
       yield* wait(editAndCheckDashboard(page));
-      yield* wait(page.goto("/upgrade"));
+      yield* wait(openUpgradeThroughCore(page));
       yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
       yield* wait(page.goto("/app/transactions"));
       yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());

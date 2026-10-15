@@ -1,6 +1,10 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { DisclosureSnapshot, OnboardingConsentGrantId } from "~/core/consent/contract";
+import {
+  DisclosureSnapshot,
+  OnboardingConsentGrantId,
+  Sha256Digest,
+} from "~/core/consent/contract";
 import { Transaction } from "~/core/transactions/contract";
 import { UserPreferences } from "~/core/identity/contract";
 import { Category } from "~/core/categories/contract";
@@ -59,8 +63,28 @@ export type ProcessingConsentStatus = typeof ProcessingConsentStatus.Type;
 
 export const ProcessingConsentWithdrawal = Schema.Struct({ confirm: Schema.Literal(true) });
 
+/** Explicit reacceptance of the saved disclosure, bound to one current withdrawal. */
+export const ProcessingConsentRenewal = Schema.Struct({
+  confirm: Schema.Literal(true),
+  withdrawalReference: Schema.String.check(Schema.isUUID()),
+  authorizationReference: OnboardingConsentGrantId,
+  disclosureSha256: Sha256Digest,
+});
+export const ProcessingConsentRenewalReceipt = Schema.Struct({
+  status: Schema.Literal("Granted"),
+  renewal: Schema.Struct({
+    reference: Schema.String.check(Schema.isUUID()),
+    withdrawalReference: Schema.String.check(Schema.isUUID()),
+    acceptedAtMs: publicReceiptTime,
+  }),
+});
+
 /** Cookie-only privacy controls, available after withdrawal and outside agent operations. */
 export const ProcessingConsentGroup = HttpApiGroup.make("processingConsent").add(
+  HttpApiEndpoint.post("renew", "/web/consent/renew", {
+    payload: ProcessingConsentRenewal,
+    success: ProcessingConsentRenewalReceipt,
+  }),
   HttpApiEndpoint.get("status", "/web/consent", { success: ProcessingConsentStatus }),
   HttpApiEndpoint.get("authorization", "/web/consent/authorization", {
     success: ProcessingAuthorization,

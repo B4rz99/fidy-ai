@@ -1,6 +1,7 @@
 import { protectQueuedStatement } from "./internal/queued-work";
 import { DisclosureSnapshot } from "../../src/core/consent/contract";
 import { consentResponse, withdrawProcessingConsent } from "./internal/browser";
+import { renewProcessingConsent } from "./internal/renewal";
 import * as proactivity from "./internal/proactivity-consent";
 import type { ProactivityOptInKind } from "../../src/shell/consent/contract";
 import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
@@ -9,6 +10,7 @@ import { Effect, Option, Schema } from "effect";
 import {
   type ConsentEgressAction,
   type ConsentEgressRefused,
+  ConsentRenewalAdmission,
   type ConsentRevocationInput,
   type ConsentStanding,
   type ConsentStatus,
@@ -49,6 +51,19 @@ import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/cont
 import type { UserId } from "../../src/core/identity/contract";
 
 const unavailableStatus = 503;
+
+/** Restore only the exact same-User disclosed authorization under its existing coordinator. */
+export const executeConsentRenewal = (
+  input: Readonly<{ db: D1Database; candidate: unknown; userId: string; signal: AbortSignal }>
+): Effect.Effect<Response> => {
+  const admission = Schema.decodeUnknownOption(ConsentRenewalAdmission, {
+    onExcessProperty: "error",
+  })(input.candidate);
+  if (Option.isNone(admission) || admission.value.userId !== input.userId) {
+    return Effect.succeed(consentResponse(unavailableStatus));
+  }
+  return renewProcessingConsent({ ...input, admission: admission.value });
+};
 
 /** Settle an authenticated withdrawal only under the intended User's existing coordinator. */
 export const executeConsentWithdrawal = (

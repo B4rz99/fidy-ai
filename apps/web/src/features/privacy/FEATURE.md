@@ -11,6 +11,7 @@ may finish within its original lifetime; new protected work requires current Con
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
 | Read current Granted, Missing or Revoked standing                                                | `feature.tsx`; server `processing-consent` declaration and native Consent operations | Local Worker/D1; live Granted and Revoked reads                                                    |
 | Explicit withdrawal, durable receipt and idempotent retry                                        | Confirmation checkbox and command in `feature.tsx`; private Core/User coordinator    | Built browser → public Ingress → Core/local D1; live withdrawal and identical receipt after reload |
+| Explicitly renew the saved disclosure after withdrawal                                           | `renewal.tsx`; fresh cookie-only `POST /web/consent/renew`                           | Built browser → public Ingress → Core/local D1; live renewal pending deployment                    |
 | Recover an uncertain withdrawal without automatic mutation replay                                | Explicit status reread resets confirmation                                           | Built-browser failure/retry check                                                                  |
 | Inspect the exact saved disclosure, reference and acceptance instant, including after withdrawal | `authorization-copy.tsx`; `GET /web/consent/authorization`                           | Local UUID and provider-signup references; live provider-signup copy read passed after deployment  |
 | Browse saved effective Transactions after withdrawal without commercial access                   | Existing Transactions workspace; fresh cookie-only privacy transport                 | Built browser/Core/local D1; 101-record continuation and retry; live empty-account read passed     |
@@ -56,6 +57,17 @@ the authentication registry rather than browser persistence.
   Privacy or sign-in; the regression checks return to the identical receipt after the refusal.
 
 ## Remaining live evidence
+
+- Renewal is implemented locally: the exact withdrawal, authorization reference and disclosure hash
+  bind fresh browser acceptance. Immutable withdrawal history and new acceptance commit with Audit
+  before removing the current cutoff. Retry returns the same receipt; a later withdrawal cannot be
+  cleared by the earlier request. TrialPeriod and independent credential/category revocations stay intact.
+- Local renewal evidence includes refusal of altered/cross-User proof, freshness lost before commit,
+  rollback on ignored Audit or cutoff removal, and append-only legal history. Five built-browser
+  Privacy journeys passed, including renewal, reload and access to Upgrade.
+- Live renewal for the approved `obarboza@fidyapp.com` QA account and the Sandbox payment/cancellation
+  journey await deployment. PR #1331 fixed Upgrade's false sign-in message and merged; deployment
+  38807993540 refused the previous release's retained zero-traffic candidates before uploading code.
 
 - Live completion of exact pre-withdrawal queued work, independent category opt-outs and provider
   delivery need their native owner fixtures. Category-specific WhatsApp opt-ins are separate from

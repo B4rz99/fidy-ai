@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
+  applyTestMigration,
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
@@ -19,6 +20,7 @@ import {
 } from "../../src/shell/processing-consent/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import {
+  executeConsentRenewal,
   executeConsentWithdrawal,
   prepareConsentAction,
   readConsentStatus,
@@ -267,6 +269,60 @@ const consentSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     );
     return db;
   });
+
+it("renews the exact withdrawn authorization through the public browser boundary and permits another withdrawal", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* consentSetup();
+      const withdrawn = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+      );
+      const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
+        yield* Effect.tryPromise(() => withdrawn.json())
+      );
+      if (status.status !== "Revoked") throw new Error("Expected withdrawn test authorization");
+      const payload = {
+        confirm: true,
+        withdrawalReference: status.withdrawal.reference,
+        authorizationReference: "30000000-0000-4000-8000-000000000000",
+        disclosureSha256: currentDisclosureFor().contentSha256,
+      };
+      yield* Effect.tryPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0094_processing_consent_renewal.sql", import.meta.url),
+        })
+      );
+      const renewed = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload))
+      );
+      expect(renewed.status).toBe(200);
+      const receipt = yield* Effect.tryPromise(() => renewed.json());
+      const retry = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload))
+      );
+      expect(retry.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => retry.json())).toEqual(receipt);
+      const granted = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(yield* Effect.tryPromise(() => granted.json())).toEqual({
+        status: "Granted",
+        withdrawal: null,
+      });
+      const second = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+      );
+      const secondStatus = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
+        yield* Effect.tryPromise(() => second.json())
+      );
+      expect(secondStatus.status).toBe("Revoked");
+      if (secondStatus.status !== "Revoked") throw new Error("Expected another withdrawal");
+      expect(secondStatus.withdrawal.reference).not.toBe(status.withdrawal.reference);
+      const stale = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload))
+      );
+      expect(stale.status).toBe(403);
+    })
+  ));
 
 const privacyHistorySetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -835,4 +891,213 @@ it("refuses authorization copies with lost proof, hostile origins or malformed a
       }
       expect(yield* readConsentStatus({ db, userId: users[1] })).toBe("Granted");
     })
+  ));
+
+const withdrawnRenewal = (): Effect.Effect<
+  Readonly<{
+    db: D1Database;
+    payload: Readonly<{
+      confirm: true;
+      withdrawalReference: string;
+      authorizationReference: string;
+      disclosureSha256: string;
+    }>;
+    status: Extract<ProcessingConsentStatus, { status: "Revoked" }>;
+  }>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const db = yield* consentSetup();
+    yield* Effect.tryPromise(() =>
+      applyTestMigration({
+        db,
+        source: new URL("../migrations/0094_processing_consent_renewal.sql", import.meta.url),
+      })
+    );
+    const response = yield* Effect.tryPromise(() =>
+      send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+    );
+    const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
+      yield* Effect.tryPromise(() => response.json())
+    );
+    if (status.status !== "Revoked") throw new Error("Expected withdrawn test authorization");
+    return {
+      db,
+      payload: {
+        confirm: true as const,
+        withdrawalReference: status.withdrawal.reference,
+        authorizationReference: "30000000-0000-4000-8000-000000000000",
+        disclosureSha256: currentDisclosureFor().contentSha256,
+      },
+      status,
+    };
+  });
+
+it.each([
+  {
+    name: "another User's withdrawal",
+    patch: { withdrawalReference: "10000000-0000-4000-8000-000000000001" },
+  },
+  {
+    name: "another authorization",
+    patch: { authorizationReference: "30000000-0000-4000-8000-000000000001" },
+  },
+  { name: "an altered disclosure", patch: { disclosureSha256: "0".repeat(64) } },
+  { name: "no explicit acceptance", patch: { confirm: false } },
+  { name: "extra authority claims", patch: { userId: users[1] } },
+])("refuses renewal with $name without changing withdrawal", ({ patch }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, payload, status } = yield* withdrawnRenewal();
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", { ...payload, ...patch }))
+      );
+      expect([400, 403]).toContain(response.status);
+      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
+    })
+  )
+);
+
+it("refuses renewal when fresh browser authority expires between admission and commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, payload, status } = yield* withdrawnRenewal();
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload), (database) =>
+          database
+            .prepare(
+              "UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001 WHERE id=?"
+            )
+            .bind(sessions[0])
+            .run()
+        )
+      );
+      expect(response.status).toBe(403);
+      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
+    })
+  ));
+
+it("rolls back renewal when Audit silently refuses its acceptance", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, payload, status } = yield* withdrawnRenewal();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_renewal_audit BEFORE INSERT ON pat_audit WHEN NEW.operation='consent.renew' BEGIN SELECT RAISE(IGNORE); END"
+          )
+          .run()
+      );
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload))
+      );
+      expect(response.status).toBe(503);
+      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_renewal_audit").run());
+      const retried = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload))
+      );
+      expect(retried.status).toBe(200);
+    })
+  ));
+
+it("keeps withdrawal and renewal evidence immutable and rolls back a refused cutoff removal", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, payload, status } = yield* withdrawnRenewal();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_renewal_cutoff BEFORE DELETE ON consent_user_revocations BEGIN SELECT RAISE(IGNORE); END"
+          )
+          .run()
+      );
+      const refused = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload))
+      );
+      expect(refused.status).toBe(503);
+      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_renewal_cutoff").run());
+      const accepted = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/renew", "POST", payload))
+      );
+      expect(accepted.status).toBe(200);
+      for (const table of [
+        "processing_consent_withdrawal_records",
+        "processing_consent_renewals",
+      ]) {
+        yield* Effect.tryPromise(() =>
+          expect(
+            db
+              .prepare(`UPDATE ${table} SET user_id=? WHERE user_id=?`)
+              .bind(users[1], users[0])
+              .run()
+          ).rejects.toThrow("consent_append_only")
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(users[0]).run()
+          ).rejects.toThrow("consent_append_only")
+        );
+      }
+    })
+  ));
+
+it("refuses renewal without same-User browser proof and preserves the exact receipt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, payload, status } = yield* withdrawnRenewal();
+      const foreign = request(1, "/web/consent/renew", "POST", payload);
+      const hostile = request(0, "/web/consent/renew", "POST", payload);
+      hostile.headers.set("origin", "https://attacker.example");
+      const anonymous = request(0, "/web/consent/renew", "POST", payload);
+      anonymous.headers.delete("cookie");
+      for (const candidate of [foreign, hostile, anonymous]) {
+        const response = yield* Effect.tryPromise(() => send(db, candidate));
+        expect([401, 403]).toContain(response.status);
+      }
+      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
+    })
+  ));
+
+it("refuses foreign coordinators, forged digests, expired renewal admissions and aborted work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, payload, status } = yield* withdrawnRenewal();
+      const current = yield* Clock.currentTimeMillis;
+      const bytes = yield* Effect.tryPromise(() => digest(bearer(0)));
+      const admission = {
+        userId: users[0],
+        sessionId: sessions[0],
+        digest: Array.from(bytes),
+        deadlineMilliseconds: current + 5000,
+        renewal: payload,
+      };
+      const liveSignal = yield* Effect.abortSignal;
+      for (const scenario of [
+        { candidate: admission, userId: users[1], signal: liveSignal, status: 503 },
+        {
+          candidate: { ...admission, digest: Array(32).fill(0) },
+          userId: users[0],
+          signal: liveSignal,
+          status: 403,
+        },
+        {
+          candidate: { ...admission, deadlineMilliseconds: current },
+          userId: users[0],
+          signal: liveSignal,
+          status: 503,
+        },
+        { candidate: admission, userId: users[0], signal: AbortSignal.abort(), status: 503 },
+      ]) {
+        expect((yield* executeConsentRenewal({ db, ...scenario })).status).toBe(scenario.status);
+      }
+      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
+      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
+    }).pipe(Effect.scoped)
   ));

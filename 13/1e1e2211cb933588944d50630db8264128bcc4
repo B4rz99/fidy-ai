@@ -1,0 +1,144 @@
+ARCHITECTURE.md
+  s_169697deba9fb8::t_18bfe757cc8ed9 179-182
+apps/web/src/features/recurring/command.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-33
+apps/web/src/features/signed-in/feature.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 4,48
+apps/server/src/client.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 192-201
+apps/server/cloudflare/recurring-plans/internal/query.ts
+  s_169697deba9fb8::t_bb6a1cbca53d58 44-50
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-13,15-43,51-170,172-213
+  s_169697deba9fb8::t_9435814109a355 14,171
+apps/web/src/features/recurring/filters.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-99
+apps/server/.dependency-cruiser.mjs
+  s_169697deba9fb8::t_18bfe757cc8ed9 37,168
+apps/web/src/features/recurring/plan-form.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-117
+apps/server/scripts/check-browser-client.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 15
+apps/server/contracts/openapi.json
+  s_169697deba9fb8::t_18bfe757cc8ed9 51,240,246,2361,2367,2370,2909,2921,2933,2960,3337,3343,3346,3958-4080,4084,4096,4108,4124,4140,4156,4172,4188,4204,4226,4246,4259-4273,4289,4305,4340,4359,4371,4387,4399,4415,4431,4447,4450-4454,4458-4459,4463,4467,4475,4491,4503,4519,4531,4547,4566,4581,4597,4609-4621,4670,4685-4829,4832-5326,5342,5354-5382,5398,5414,5430,5442,5445-5449,5453-5454,5458,5461-5462,5466,5470,5486,5502,5518,5633,5996,6013,6134,6157,6804,6807,9945-10290,10911,11120-11139,11205,11215,11291,11327,11391,11427,11643,11679,11735,11771,11803,11867,11903,11935,11957-11988,12031,12067,12155,12211,12226,12249,12272,12295,12318,12341,12364,12387,12410,12433,12456,12479,12502,12525,12548,12571,12594,12617,12640,12663,12686,12709,12732-12755,12778,12801,12824,12847,12870,12893,12916,13953,14089,14380,14781,14917,15061,15329,15871-16125,16131,16135-16138,16145-16158,16218,16222,16265,16270-16271,16275,16277-16278,16280-16289,16295-16308,16401,16404,16411,16413-16414,16424,16527,16539,16541-16542,16549,16642,16645-16649,16656,16658-16687,16696-16699,16814-16816,16818-16839,16845,16901-16910,16955-16966,16968-16970,16972,16981,17037-17046,17088,17093-17094,17098,17100-17102,17107,17114,17118-17131,17227,17229,17234-17237,17244,17253-17266,17373,17378-17379,17383,17385-17393,17395-17396,17398,17402,17458-17467,17508-17512,17514,17519-17522,17529,17533-17542,17548,17651,17655,17660-17661,17665,17667-17668,17675,17684,17787,17801,17803-17804,17820,17937-17940,17943-17945,17947-17954,17963-17979,18076,18081-18082,18086-18089,18105-18118,18225,18230-18231,18235,18237-18239,18248-18255,18370-18380,18382-18384,18390,18497,18502-18503,18507,18509-18510,18520-18523,18626,18638-18643,18650-18663,18725,18728,18734,18756,18760,18765-18766,18768-18771,18773-18782,18784,18788,18844-18853,18860,18863,18869,18891,18895,18901,18905-18918,18924,18980-18989,19031,19036-19037,19040-19052,19057,19064,19068,19124-19133,19190,19195-19224,19226-19228,19234-19266,19276-19283,19287,19335,19338,19344,19366,19369-19370,19377-19383,19389-19402,19464,19467,19473,19495,19498,19503-19506,19516,19536,19540,19619,19622,19624-19625,19627-19630,19632-19641,19647,19688-19690,19704-19724,19731-19733,19744,19769,19771,19774-19789,19798,19862-19872,19914,19916-19917,19919-19931,19933-19934,19940-19953,20007,20009,20013,20017,20034,20059,20062,20066-20076,20078-20080,20086,20096-20103,20107,20154-20156,20167,20192,20194,20199-20209,20211-20213,20219,20229-20236,20240,20287-20289,20300,20325,20328,20332-20335,20342-20380,20390,20394,20451,20473,20476-20480,20483,20487,20489-20490,20497-20510,20520,20524,20581,20603,20606,20613,20615-20698,20709-20710,20712-20716,20718-20769,20771-20772,20774-20828,20832-20840,20945,20959,20961-20962,20964-20973,20979,21072,21075-21079,21081,21236,21955,22091,22382,22671,22961,23228,23553-23555
+apps/web/src/app/routes.ts
+  s_169697deba9fb8::t_fbcf050d8e190c 15,151
+  s_169697deba9fb8::t_18bfe757cc8ed9 147-150,152-153,311-316
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 23,55
+GLOSSARY.md
+  s_169697deba9fb8::t_18bfe757cc8ed9 117-124
+apps/web/src/features/recurring/details.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-350
+apps/web/src/features/recurring/transactions.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-116
+apps/web/e2e/recurring-plans.spec.ts
+  s_169697deba9fb8::t_f4d468138b2bcd 14-16,98,183
+  s_169697deba9fb8::t_c240e876095863 3,97,99,182,184
+  s_169697deba9fb8::t_2579ec232264cf 7,217
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-2,4-6,8-13,17-96,100-181,185-214,220-221
+  s_169697deba9fb8::t_38b70adba1159d 215-216,218-219
+apps/server/cloudflare/recurring/operations.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 253-272
+apps/server/cloudflare/recurring-plans/operations.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-174
+apps/server/src/shell/audit/internal/recording.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 29,228-229
+apps/web/src/features/recurring/month.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-167
+apps/server/cloudflare/migrations/0093_recurring_plans.sql
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-44
+apps/web/src/features/recurring/feature.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-217
+apps/server/src/shell/api.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 13,37
+apps/server/src/shell/audit/contract.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 48-49,88-94
+apps/server/cloudflare/recurring-plans/internal/snapshot.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-85
+apps/server/src/core/recurring-plans/operations.ts
+  s_169697deba9fb8::t_a0eb1f368df101 305,307-309,320,330,342
+  s_169697deba9fb8::t_a081966e7f2219 331
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-304,306,311-315,319,321,324,332-335,337-341,343-676
+  s_169697deba9fb8::t_159d075b50648e 310,316-318,322-323,325-329,336
+apps/server/cloudflare/oauth-agents/oauth-confirmation.test.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 741,785,915-939
+apps/server/cloudflare/recurring-plans/internal/mutation.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-62,64-148
+  s_169697deba9fb8::t_a0eb1f368df101 63
+apps/server/cloudflare/core-http/internal/http.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1,1321-1345,1367
+apps/server/cloudflare/recurring-plans/internal/audit.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-68
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_169697deba9fb8::t_c240e876095863 21
+  s_169697deba9fb8::t_2579ec232264cf 2,22-23,395-410
+apps/server/contracts/operation-policy.json
+  s_169697deba9fb8::t_18bfe757cc8ed9 779-808
+apps/web/src/features/recurring/form-fields.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-164
+docs/adr/0036-recurring-planning.md
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-35
+apps/server/ARCHITECTURE.md
+  s_169697deba9fb8::t_18bfe757cc8ed9 616-633
+apps/web/src/features/recurring/management.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-2,4-18,20-25,27-28,30-47,50-341
+  s_169697deba9fb8::t_6ca3424c560149 3,19,26,29,48-49
+apps/web/e2e/real-core-fixture.ts
+  s_169697deba9fb8::t_c240e876095863 69-79,238-240
+  s_169697deba9fb8::t_f4d468138b2bcd 241-243
+apps/server/src/core/recurring-plans/contract.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-252
+apps/server/src/shell/recurring-plans/contract.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-71
+apps/server/cloudflare/recurring-plans/internal/store.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-65
+apps/server/cloudflare/oauth-agents/oauth-discovery.test.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 337
+apps/server/cloudflare/transactions/operations.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-4,14,32,36,228-301
+apps/server/cloudflare/canonical-operations/internal/query-registry.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1,77
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 690-694
+apps/server/cloudflare/canonical-operations/internal/mutation-registry.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-2,255-264
+apps/web/src/features/recurring/model.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-76
+apps/web/src/transport/client.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 314-322
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_169697deba9fb8::t_6722413e68e424 620-648,673-675,681,688-694
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-262,269-594,596-601,603,605-610,612-619,649-650,652-653,657,659-660,662-665,667-672,677,680,682-683,695-697,702-705
+  s_169697deba9fb8::t_f7a8e64c28652f 263-268,595,602,604,611,651,654-656,658,661,666,676,678-679,684-687,698-701
+apps/server/src/core/recurring-plans/operations.test.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-345
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_169697deba9fb8::t_c240e876095863 28-30,93-110
+apps/web/ARCHITECTURE.md
+  s_169697deba9fb8::t_18bfe757cc8ed9 281-289
+apps/server/src/shell/audit/internal/daily-budget.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 19
+apps/server/cloudflare/recurring-plans/contract.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-21
+apps/server/cloudflare/recurring-plans/internal/facts.ts
+  s_169697deba9fb8::t_18bfe757cc8ed9 2-57
+  s_169697deba9fb8::t_5962e470b16752 1
+apps/web/src/features/recurring/workspace.tsx
+  s_169697deba9fb8::t_18bfe757cc8ed9 1-467
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "131e1e2211cb933588944d50630db8264128bcc4",
+  "prompts": {},
+  "sessions": {
+    "s_169697deba9fb8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13cac-c404-7610-8129-02b1e4e93ef0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

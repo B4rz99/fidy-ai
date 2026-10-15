@@ -16,6 +16,11 @@ export type MediaAdmissionInput = Readonly<{
   event: WhatsAppInboundEvent;
 }>;
 
+/** Retrieval and staging failures disclose neither provider material nor storage details. */
+export class StatementDocumentUnavailable extends Data.TaggedError("StatementDocumentUnavailable")<{
+  reason: "invalid-material" | "media-unavailable" | "rate-limited" | "uncertain";
+}> {}
+
 /** Only a Cloudflare Email Routing event may supply this envelope; no HTTP path accepts it. */
 export type ForwardedEmailMessage = Pick<
   ForwardableEmailMessage,

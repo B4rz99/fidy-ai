@@ -9,7 +9,7 @@ import {
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
-import { BigDecimal, Array as EffectArray, Option } from "effect";
+import { Option } from "effect";
 import { type JSX, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
@@ -21,24 +21,24 @@ import {
   budgetFigures,
   defaultBudgetGroup,
 } from "./presentation";
-import { type BudgetController, useBudgetController } from "./controller";
 import { BudgetEditor } from "./editor";
 import { BudgetRow } from "./row";
 import { BudgetSummary } from "./summary";
 import {
+  type BudgetEditing,
   type WorkspaceProps,
+  categoryFor,
   currentBudgetMonth,
   groupFor,
   monthShift,
   monthTitle,
-  rowDraft,
 } from "./model";
 
 const expandedRowLimit = 50;
 
 type ViewProps = Readonly<{
   props: WorkspaceProps;
-  controller: BudgetController;
+  controller: BudgetEditing;
 }>;
 const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
   const navigate = useNavigate();
@@ -91,60 +91,46 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
     </WorkspaceHeader>
   );
 };
-const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => {
-  const freeze = (): void =>
-    Option.match(EffectArray.head(props.report.statuses), {
-      onNone: () => undefined,
-      onSome: (first) =>
-        controller.write({
-          target: rowDraft({ status: first, categories: props.categories }),
-          amount: BigDecimal.format(first.budget.cap.amount),
-          currency: first.budget.cap.currency,
-          groupCurrency: Option.none(),
-          groupName: groupFor({ status: first, categories: props.categories }),
-        }),
-    });
-  return (
-    <div className="px-5 empty:hidden [&:not(:empty)]:pt-4" aria-live="polite">
-      {controller.saveState === "saving" ? (
-        <Alert role="note" variant="pending">
-          <AlertDescription>Guardando presupuesto…</AlertDescription>
-        </Alert>
-      ) : null}
-      {controller.saveState === "saved" ? (
-        <Alert role="note" variant="success">
-          <AlertDescription>Presupuesto guardado.</AlertDescription>
-        </Alert>
-      ) : null}
-      {controller.saveState === "failed" ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            No se pudo guardar. Usa un importe positivo con la precisión de su moneda y un nombre de
-            grupo válido.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {controller.saveState === "uncertain" ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            No pudimos confirmar el guardado. Actualiza para comprobar el plan antes de volver a
-            editar.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {props.report.initialized === false && props.report.statuses.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm text-muted-foreground">
-            Plan heredado del mes anterior. Sin acumulación de saldos.
-          </p>
-          <Button variant="outline" disabled={controller.disabled} onClick={freeze}>
-            Guardar plan del mes
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-};
+const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
+  <div className="px-5 empty:hidden [&:not(:empty)]:pt-4" aria-live="polite">
+    {controller.saveState === "saving" ? (
+      <Alert role="note" variant="pending">
+        <AlertDescription>Guardando presupuesto…</AlertDescription>
+      </Alert>
+    ) : null}
+    {controller.saveState === "saved" ? (
+      <Alert role="note" variant="success">
+        <AlertDescription>Presupuesto guardado.</AlertDescription>
+      </Alert>
+    ) : null}
+    {controller.saveState === "failed" ? (
+      <Alert variant="destructive">
+        <AlertDescription>
+          No se pudo guardar. Usa un importe positivo con la precisión de su moneda y un nombre de
+          grupo válido.
+        </AlertDescription>
+      </Alert>
+    ) : null}
+    {controller.saveState === "uncertain" ? (
+      <Alert variant="destructive">
+        <AlertDescription>
+          No pudimos confirmar el guardado. Actualiza para comprobar el plan antes de volver a
+          editar.
+        </AlertDescription>
+      </Alert>
+    ) : null}
+    {props.report.initialized === false && props.report.statuses.length > 0 ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-muted-foreground">
+          Plan heredado del mes anterior. Sin acumulación de saldos.
+        </p>
+        <Button variant="outline" disabled={controller.disabled} onClick={controller.freezePlan}>
+          Guardar plan del mes
+        </Button>
+      </div>
+    ) : null}
+  </div>
+);
 const BudgetPanel = ({
   props,
   controller,
@@ -153,7 +139,7 @@ const BudgetPanel = ({
   <WorkspacePanel
     open={Option.isSome(controller.draft)}
     locked={controller.saveState === "saving" || controller.saveState === "uncertain"}
-    onClose={() => controller.setDraft(Option.none())}
+    onClose={controller.closeEditor}
     title="Configurar presupuesto"
     description="Categoría, importe y grupo del plan mensual."
   >
@@ -170,7 +156,7 @@ const BudgetPanel = ({
             currency: status.budget.cap.currency,
           }))}
           disabled={controller.disabled}
-          onClose={() => controller.setDraft(Option.none())}
+          onClose={controller.closeEditor}
           onSubmit={controller.write}
         />
       ),
@@ -290,17 +276,7 @@ const Unbudgeted = ({
             <Button
               variant="outline"
               disabled={controller.disabled}
-              onClick={() =>
-                controller.setDraft(
-                  Option.some({
-                    category,
-                    budget: Option.fromUndefinedOr(
-                      props.budgets.find((budget) => budget.categoryId === category.id)
-                    ),
-                    groupCategoryIds: Option.none(),
-                  })
-                )
-              }
+              onClick={() => controller.assignCategory(category)}
             >
               Asignar presupuesto
             </Button>
@@ -330,18 +306,6 @@ const GroupRename = ({
     <HugeiconsIcon icon={Settings01Icon} strokeWidth={1.5} />
   </Button>
 );
-const editGroupAmount = (
-  { group, props, controller }: ViewProps & Readonly<{ group: string }>,
-  status: BudgetStatus,
-  amount: string
-): void =>
-  controller.write({
-    target: rowDraft({ status, categories: props.categories }),
-    amount,
-    currency: status.budget.cap.currency,
-    groupCurrency: Option.none(),
-    groupName: group,
-  });
 const BudgetGroup = ({
   group,
   props,
@@ -351,17 +315,6 @@ const BudgetGroup = ({
   const statuses = props.report.statuses.filter(
     (status) => groupFor({ status, categories: props.categories }) === group
   );
-  const rename = (): void =>
-    Option.match(EffectArray.head(statuses), {
-      onNone: () => undefined,
-      onSome: (first) =>
-        controller.setDraft(
-          Option.some({
-            ...rowDraft({ status: first, categories: props.categories }),
-            groupCategoryIds: Option.some(statuses.map((status) => status.budget.categoryId)),
-          })
-        ),
-    });
   return (
     <section className="budget-group relative rounded-lg border bg-card">
       <GroupHeading
@@ -371,23 +324,24 @@ const BudgetGroup = ({
         open={open}
         onToggle={() => setOpen(!open)}
         disabled={controller.disabled}
-        onRename={rename}
+        onRename={() => controller.configureGroup(group)}
       />
       {open ? (
         <>
           {statuses.map((status) => {
-            const draft = rowDraft({ status, categories: props.categories });
+            const category = categoryFor({
+              categories: props.categories,
+              id: status.budget.categoryId,
+            });
             return (
               <BudgetRow
-                key={`${status.budget.id}:${BigDecimal.format(status.budget.cap.amount)}:${controller.refreshVersion}`}
+                key={controller.rowKey(status)}
                 status={status}
-                category={draft.category}
+                category={category}
                 user={props.user}
                 disabled={controller.disabled}
-                onSave={(status, amount) =>
-                  editGroupAmount({ group, props, controller }, status, amount)
-                }
-                onSettings={() => controller.setDraft(Option.some(draft))}
+                onSave={controller.saveRow}
+                onSettings={() => controller.configureCategory(status)}
               />
             );
           })}
@@ -398,7 +352,7 @@ const BudgetGroup = ({
   );
 };
 export const BudgetWorkspace = (props: WorkspaceProps): JSX.Element => {
-  const controller = useBudgetController(props);
+  const controller = props.editing;
   const groups = workspaceGroups(props);
   return (
     <>

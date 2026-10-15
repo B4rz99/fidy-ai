@@ -144,6 +144,7 @@ it.effect("rejects concurrent prepared execution", () =>
       })
     );
     const prepared = yield* inference.prepareText(request("in progress"));
+    assertHostedFailure(yield* Effect.exit(prepared.repairInvalidOutput), invalidAuthority());
     const fiber = yield* prepared.execute.pipe(Effect.forkChild({ startImmediately: true }));
     yield* Deferred.await(started);
 
@@ -202,7 +203,7 @@ it.effect("consumes discarded and successfully executed text authority", () =>
 
     yield* executed.execute;
     assertHostedFailure(yield* Effect.exit(executed.execute), invalidAuthority());
-    assertHostedFailure(yield* Effect.exit(executed.recover), invalidAuthority());
+    assertHostedFailure(yield* Effect.exit(executed.repairInvalidOutput), invalidAuthority());
 
     const discarded = yield* inference.prepareText(request("discard once"));
     yield* discarded.discard;
@@ -251,7 +252,7 @@ it.effect("restores a continuation when its preparation is rejected", () =>
   })
 );
 
-it.effect("recovers invalid output through one opaque continuation", () =>
+it.effect("repairs invalid output once without exposing feedback preparation", () =>
   Effect.gen(function* () {
     const attempts = yield* Ref.make(0);
     const inference = makeHostedInferenceStub(
@@ -266,15 +267,11 @@ it.effect("recovers invalid output through one opaque continuation", () =>
     );
     const prepared = yield* inference.prepareText(request("recover"));
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidOutput());
-    const continuation = yield* prepared.recover;
-    assertHostedFailure(yield* Effect.exit(prepared.recover), invalidAuthority());
+    const recovered = yield* prepared.repairInvalidOutput;
+    assertHostedFailure(yield* Effect.exit(prepared.repairInvalidOutput), invalidAuthority());
 
-    const recovered = yield* continuation.prepare(continuationEvents("corrected shape"));
     expect((yield* recovered.execute).text).toBe("recovered");
-    assertHostedFailure(
-      yield* Effect.exit(continuation.prepare(continuationEvents("again"))),
-      invalidAuthority()
-    );
+    assertHostedFailure(yield* Effect.exit(recovered.execute), invalidAuthority());
   })
 );
 
@@ -285,6 +282,6 @@ it.effect("consumes interrupted execution instead of restoring authority", () =>
 
     expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
     assertHostedFailure(yield* Effect.exit(prepared.execute), invalidAuthority());
-    assertHostedFailure(yield* Effect.exit(prepared.recover), invalidAuthority());
+    assertHostedFailure(yield* Effect.exit(prepared.repairInvalidOutput), invalidAuthority());
   })
 );

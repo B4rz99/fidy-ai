@@ -1,0 +1,62 @@
+apps/web/e2e/privacy.spec.ts
+  s_6d017cc65783af::t_1d3d1f33b4dc5b 3,11,156-159,163-165,171,179-202
+  s_6d017cc65783af::t_9ec3f13be5bf4c 172,203-210,218-224
+  s_6d017cc65783af::t_bc64afa3b08638 12,160-162,166-170,173-178,211-217
+apps/server/cloudflare/transactions/runtime.ts
+  s_6d017cc65783af::t_295f61f7bb75cc 3,367-370,405-406,408
+apps/server/src/shell/processing-consent/contract.ts
+  s_6d017cc65783af::t_2594a1425890ae 3-7,66-81,87
+  s_6d017cc65783af::t_768add6463eccd 84-86
+apps/server/cloudflare/consent/operations.ts
+  s_6d017cc65783af::t_5f88c7972d0ae3 13,57,59-64
+  s_6d017cc65783af::t_5333e98395ad96 4,55-56,58,65
+  s_6d017cc65783af::t_487ab7d843eb97 66-67
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_6aa2b960f4b3b7 111-113
+apps/server/cloudflare/consent/runtime.ts
+  s_6d017cc65783af::t_5333e98395ad96 58,60-61,71-74,79-81,86
+  s_6d017cc65783af::t_8b742dce0a6fcc 5,15-19,89,92,124-127,141-142
+apps/server/cloudflare/consent/browser.test.ts
+  s_6d017cc65783af::t_637a39cae342dc 23,896-908,967-968,973-974,1004-1066
+  s_6d017cc65783af::t_5f88c7972d0ae3 4,969-971
+  s_6d017cc65783af::t_1633ec64416089 290-295,301-303,307-310,895,909-966,972,975-1003
+  s_6d017cc65783af::t_08939b18a9e509 300,304-305
+  s_6d017cc65783af::t_2567d8981d51c6 273-289,296-299,306,311-326
+  s_6d017cc65783af::t_f837700eb279eb 1067-1103
+apps/server/cloudflare/consent/contract.ts
+  s_6d017cc65783af::t_ed6fafc19762a6 10,34-37
+  s_6d017cc65783af::t_a920ca8a1ca32d 38-39
+apps/web/src/features/privacy/FEATURE.md
+  s_6d017cc65783af::t_6aa2b960f4b3b7 14,61-71
+apps/web/src/features/privacy/feature.tsx
+  s_6d017cc65783af::t_f7c67fde945ccc 14,86,90,229
+  s_6d017cc65783af::t_5f88c7972d0ae3 104-109,114-119
+apps/web/src/features/privacy/renewal.tsx
+  s_6d017cc65783af::t_545ffdf931c552 1-141
+  s_6d017cc65783af::t_e17dc80002f6eb 142-148
+apps/server/src/shell/audit/contract.ts
+  s_6d017cc65783af::t_ed6fafc19762a6 9
+apps/server/cloudflare/consent/internal/renewal.ts
+  s_6d017cc65783af::t_45d875dcdbf558 1-63
+  s_6d017cc65783af::t_33c6340bf25a33 64-184
+apps/server/cloudflare/migrations/0094_processing_consent_renewal.sql
+  s_6d017cc65783af::t_bfb3a027a1a282 1-48
+infra/cloudflare/verify-edge-policy.ts
+  s_6d017cc65783af::t_71033287a29ce9 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "48925f77c4ac7e6557d44f4785df32cf859d8360",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

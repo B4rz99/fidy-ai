@@ -5,18 +5,18 @@ derived for each decision from the original TrialPeriod, a settled paid period, 
 three-day renewal grace. It is never a separately stored entitlement. PaymentSource approval
 alone does not grant Pro. Quota exhaustion is distinct from a Paywall.
 
-| Functionality                               | Local verification                                                                                                                                            | Production verification, 2026-10-14                                                              |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Offers, upgrade guidance and billing status | Complete immutable weekly/monthly/yearly COP offers; bounded same-User history; expired/revoked/under-scoped credentials                                      | Anonymous reads return 401 and `no-store`; signed-in offers/status return 200 (2026-10-15)       |
-| Trial and AccessTier                        | Half-open trial/paid/grace boundaries, User isolation, immutable original trial, refund adjustments and independent trial preservation                        | Boundary manipulation not induced on real accounts                                               |
-| Browser-only payment enrollment             | Origin, fresh session, Consent, terms, admission, expiry, duplicate submissions and ambiguous provider outcomes; PAT/agent exclusion                          | Availability rejects foreign Origin with 403 and missing session with 401; no enrollment started |
-| Card, Nequi and DaviPlata                   | Controlled provider responses; first card and DaviPlata browser → public Ingress → private Core/local D1 journeys; reused-source enrollment                   | Actual provider protocol remains separate; see proof runbooks below                              |
-| Collection and settlement                   | D1 outbox, Queue redelivery, Workflow claims, signed callback verification, matching provider lookup, concurrency and one paid period per verified success    | Deployed provider callbacks and real settlement not exercised                                    |
-| Renewals                                    | Weekly/monthly/yearly calendar anchors, month-end/leap-day clamps, frozen Money/Price, bounded 24/48-hour retries and three-day grace                         | Scheduled deployed collection not exercised                                                      |
-| Cancellation                                | Live write authority, atomic Audit, durable stop, queued-charge fencing, preserved paid history, bounded DaviPlata source-void reconciliation                 | No existing subscription cancelled                                                               |
-| Price changes                               | Immediate durable notice and frozen existing attempts; new Price applies to newly admitted work                                                               | Live billing-email delivery not exercised                                                        |
-| Refunds                                     | Separate support authority, exact Money, competing reservations, single financial submission, reconciliation, immutable charge history and trial preservation | Real-money execution deliberately excluded                                                       |
-| Free allowances                             | Shared admission/replay, exhaustion and tier-aware accounting; Free remains distinct from resource protection                                                 | Quota exhaustion not deliberately induced                                                        |
+| Functionality                               | Local verification                                                                                                                                            | Production verification, 2026-10-15                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Offers, upgrade guidance and billing status | Complete immutable weekly/monthly/yearly COP offers; bounded same-User history; expired/revoked/under-scoped credentials                                      | Anonymous reads return 401 and `no-store`; signed-in offers/status return 200 (2026-10-15)          |
+| Trial and AccessTier                        | Half-open trial/paid/grace boundaries, User isolation, immutable original trial, refund adjustments and independent trial preservation                        | Boundary manipulation not induced on real accounts                                                  |
+| Browser-only payment enrollment             | Origin, fresh session, Consent, terms, admission, expiry, duplicate submissions and ambiguous provider outcomes; PAT/agent exclusion                          | Origin/session refusals; fresh provider-only account prepared and submitted synthetic card payment  |
+| Card, Nequi and DaviPlata                   | Controlled provider responses; first card and DaviPlata browser → public Ingress → private Core/local D1 journeys; reused-source enrollment                   | Actual provider protocol remains separate; see proof runbooks below                                 |
+| Collection and settlement                   | D1 outbox, Queue redelivery, Workflow claims, signed callback verification, matching provider lookup, concurrency and one paid period per verified success    | Deployed Queue/Workflow and authenticated lookup verified synthetic card decline; zero paid periods |
+| Renewals                                    | Weekly/monthly/yearly calendar anchors, month-end/leap-day clamps, frozen Money/Price, bounded 24/48-hour retries and three-day grace                         | Scheduled deployed collection not exercised                                                         |
+| Cancellation                                | Live write authority, atomic Audit, durable stop, queued-charge fencing, preserved paid history, bounded DaviPlata source-void reconciliation                 | No existing subscription cancelled                                                                  |
+| Price changes                               | Immediate durable notice and frozen existing attempts; new Price applies to newly admitted work                                                               | Live billing-email delivery not exercised                                                           |
+| Refunds                                     | Separate support authority, exact Money, competing reservations, single financial submission, reconciliation, immutable charge history and trial preservation | Real-money execution deliberately excluded                                                          |
+| Free allowances                             | Shared admission/replay, exhaustion and tier-aware accounting; Free remains distinct from resource protection                                                 | Quota exhaustion not deliberately induced                                                           |
 
 ## Evidence and reruns
 
@@ -31,7 +31,7 @@ foreign-Origin enrollment returns 403 with `no-store`. After fresh Google sign-i
 offers/status/availability and weekly/monthly card preparation returned 200. The provider-only
 account reached the payment form with an empty billing-email field and a Sandbox public key.
 Availability trace: `a9943b75a69b15bb2f0904b62cbe74cb`; weekly preparation trace:
-`a4b2368cce400de0e0574a83d956cbfa`. No payment was submitted for those checks.
+`a4b2368cce400de0e0574a83d956cbfa`. No payment was submitted for those preparation checks.
 
 Passed: **329 Subscription Worker/D1/provider-adapter checks**, **1 AccessTier D1 check**,
 **7 shell Subscription checks**, **17 canonical-admission checks**, **21 web Subscription
@@ -79,7 +79,20 @@ editable prefilled billing email, first-card settlement and retained-source cont
 regression failed with the original join and passed with the fix against public Ingress/Core/local
 D1 and controlled Wompi responses. Fresh-session and active-Consent guards remain required.
 
-Remaining safe live work: complete a synthetic deployed payment; correct and verify DaviPlata
+A later approved synthetic card submission on that deployed revision returned 200 after Sandbox
+tokenization returned 201. Wompi’s documented decline card reached authenticated `DECLINED`
+evidence. The deployed BillingCollection Workflow completed, and scheduled reconciliation marked
+the attempt failed after its three-minute verification window. Bounded indexed D1 reads confirmed
+zero paid periods, current Subscriptions and follow-up messages for the attempt. The browser showed
+Wompi’s refusal. Submission trace: `e03d240a14de5e15f46412524daa73c7`. No real money was charged.
+
+This exposed two remaining retry gaps: terminal browser submission disables all offer/method choices
+without a retry action, and preparation always reuses a retained card source. A failed first payment
+has no paid Subscription eligible for canonical cancellation, so that path cannot release the source
+for a different card. Successful deployed card payment and cancellation remain unverified.
+
+Remaining safe live work: close declined-source replacement/retry; complete an approved synthetic
+deployed payment and cancellation; correct and verify DaviPlata
 Sandbox protocol proof; and isolated deployed Queue/Workflow/callback recovery evidence before
 claiming the entire payment lifecycle is verified. Real charges, live refunds, recurring debit
 authorization and changing existing subscriptions are excluded from this audit.

@@ -1,0 +1,29 @@
+.github/workflows/production-staged-recovery.yml
+  s_6d017cc65783af::t_75129e73f8b435 1-61
+docs/operations/production-releases.md
+  s_6d017cc65783af::t_dcc5b79a50f72e 480-498
+infra/cloudflare/production-release.test.ts
+  s_6d017cc65783af::t_1baacdd5ee43a1 396,449
+infra/cloudflare/production-release.ts
+  s_6d017cc65783af::t_86670d988aaa6e 1,97,152,182-187,766,1262-1307,1601-1602
+infra/cloudflare/staged-recovery.test.ts
+  s_6d017cc65783af::t_010f195fd06f85 1-235
+infra/cloudflare/staged-recovery.ts
+  s_6d017cc65783af::t_ba00bff8b7944d 1-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39115e42e118ae3f8d098b01dd12a85f8f515b50",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

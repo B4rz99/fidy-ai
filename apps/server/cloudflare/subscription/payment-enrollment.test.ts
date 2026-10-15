@@ -191,6 +191,107 @@ const setup = (): Promise<{
     })
   );
 
+it("shows enrollment availability to a signed-in User without an optional mailbox credential", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* fromTestPromise(setup);
+      yield* fromTestPromise(() =>
+        fixture.db
+          .prepare("DELETE FROM verified_email_credentials WHERE user_id = ?")
+          .bind(userA)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          environment: fixture.environment,
+          request: fixture.request("/web/subscription/payment-enrollments/availability"),
+        })
+      );
+      expect(response.status).toBe(200);
+      expect(yield* fromTestPromise(() => response.json())).toEqual({
+        enabledMethods: ["card", "nequi"],
+      });
+    })
+  ));
+
+it.each([false, true])(
+  "enrolls with an explicitly supplied billing email (mailbox credential: %s)",
+  (hasMailboxCredential) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, environment, request } = yield* fromTestPromise(setup);
+        if (!hasMailboxCredential) {
+          yield* fromTestPromise(() =>
+            db.prepare("DELETE FROM verified_email_credentials WHERE user_id = ?").bind(userA).run()
+          );
+        } else {
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                "UPDATE verified_email_credentials SET email_address = 'verified@example.com' WHERE user_id = ?"
+              )
+              .bind(userA)
+              .run()
+          );
+        }
+        vi.stubGlobal("fetch", (url: URL, init?: RequestInit) =>
+          Promise.resolve(
+            new Response(providerBody(url, "AVAILABLE"), {
+              status: init?.method === "POST" ? 201 : 200,
+            })
+          )
+        );
+        const prepared = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+          })
+        );
+        expect(prepared.status).toBe(200);
+        const enrollment = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => prepared.json())
+        );
+        if (enrollment.status !== "prepared") throw new Error("Expected prepared enrollment");
+        expect(enrollment.billingEmail).toBe(hasMailboxCredential ? "verified@example.com" : "");
+        const submitted = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: enrollment.enrollmentId,
+              paymentSourceMode: "create",
+              paymentRequestId: "30000000-0000-4000-8000-000000000001",
+              billingEmail: "payer@example.com",
+              cardToken: "tok_test_browser_only",
+              decisions: {
+                acceptedEndUserPolicy: true,
+                acceptedPersonalDataAuthorization: true,
+                authorizedRecurringCharges: true,
+              },
+            }),
+          })
+        );
+        expect(submitted.status).toBe(200);
+        expect(yield* fromTestPromise(() => submitted.json())).toMatchObject({
+          status: "payment-pending",
+          enrollmentId: enrollment.enrollmentId,
+          billingAttempt: { status: "pending" },
+        });
+        const next = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+          })
+        );
+        expect(next.status).toBe(200);
+        expect(yield* fromTestPromise(() => next.json())).toMatchObject({
+          status: "prepared",
+          paymentSourceMode: "reuse",
+          billingEmail: "payer@example.com",
+        });
+      })
+    )
+);
+
 it.each([
   {
     label: "production not activated",
@@ -2009,17 +2110,17 @@ it("prepares a Price and creates exactly one provider source and pending Billing
           request: request("/web/subscription/payment-enrollments/submit", "POST", submission),
           environment,
         });
-      const changedEmail = yield* fromTestPromise(() =>
+      const invalidEmail = yield* fromTestPromise(() =>
         handlePaymentEnrollment({
           request: request("/web/subscription/payment-enrollments/submit", "POST", {
             ...submission,
-            billingEmail: "wrong@example.com",
+            billingEmail: "not-an-email",
           }),
           environment,
         })
       );
-      expect(changedEmail.status).toBe(400);
-      expect(changedEmail.headers.get("cache-control")).toBe("no-store");
+      expect(invalidEmail.status).toBe(400);
+      expect(invalidEmail.headers.get("cache-control")).toBe("no-store");
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
       const concurrent = yield* fromTestPromise(() => Promise.all([send(), send()]));
       expect(concurrent.every((response) => response.status === 200)).toBe(true);

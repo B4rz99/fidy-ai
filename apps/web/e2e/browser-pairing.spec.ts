@@ -378,7 +378,7 @@ const verifyRevokedBrowser = (
       if (Option.isNone(session)) throw new Error("Expected a redeemed WebSession cookie");
       yield* wait(context.addCookies([session.value]));
       yield* wait(page.goto("/app/transactions"));
-      yield* wait(expect(page.getByRole("alert")).toContainText("Sesión vencida"));
+      yield* wait(expect(page.getByRole("alert")).toContainText("Acceso no autorizado"));
       expect(yield* wait(page.locator("body").textContent())).not.toContain("OTHER-USER-PRIVATE");
     })
   );

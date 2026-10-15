@@ -7,15 +7,15 @@ may finish within its original lifetime; new protected work requires current Con
 
 ## Capability map
 
-| Capability                                                                                       | Owner                                                                                | Verification                                                                                      |
-| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Read current Granted, Missing or Revoked standing                                                | `feature.tsx`; server `processing-consent` declaration and native Consent operations | Local Worker/D1; live Granted read                                                                |
-| Explicit withdrawal, durable receipt and idempotent retry                                        | Confirmation checkbox and command in `feature.tsx`; private Core/User coordinator    | Built browser → public Ingress → Core/local D1; live withdrawal pending                           |
-| Recover an uncertain withdrawal without automatic mutation replay                                | Explicit status reread resets confirmation                                           | Built-browser failure/retry check                                                                 |
-| Inspect the exact saved disclosure, reference and acceptance instant, including after withdrawal | `authorization-copy.tsx`; `GET /web/consent/authorization`                           | Local UUID and provider-signup references; production failure reproduced, fix awaiting deployment |
-| Browse saved effective Transactions after withdrawal without commercial access                   | Existing Transactions workspace; fresh cookie-only privacy transport                 | Built browser/Core/local D1; 101-record continuation and retry; live withdrawn-User read pending  |
-| Reach rights contact and policy without an authorized session                                    | `RightsContact` in `feature.tsx`                                                     | Built-browser refused-session/mobile check; public production routes return 200                   |
-| Refuse foreign, expired, revoked, malformed or bearer-only authority                             | Consent public/Core boundaries                                                       | Local negative and race/rollback tests; anonymous live reads return 401/no-store                  |
+| Capability                                                                                       | Owner                                                                                | Verification                                                                                       |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Read current Granted, Missing or Revoked standing                                                | `feature.tsx`; server `processing-consent` declaration and native Consent operations | Local Worker/D1; live Granted and Revoked reads                                                    |
+| Explicit withdrawal, durable receipt and idempotent retry                                        | Confirmation checkbox and command in `feature.tsx`; private Core/User coordinator    | Built browser → public Ingress → Core/local D1; live withdrawal and identical receipt after reload |
+| Recover an uncertain withdrawal without automatic mutation replay                                | Explicit status reread resets confirmation                                           | Built-browser failure/retry check                                                                  |
+| Inspect the exact saved disclosure, reference and acceptance instant, including after withdrawal | `authorization-copy.tsx`; `GET /web/consent/authorization`                           | Local UUID and provider-signup references; live provider-signup copy read passed after deployment  |
+| Browse saved effective Transactions after withdrawal without commercial access                   | Existing Transactions workspace; fresh cookie-only privacy transport                 | Built browser/Core/local D1; 101-record continuation and retry; live empty-account read passed     |
+| Reach rights contact and policy without an authorized session                                    | `RightsContact` in `feature.tsx`                                                     | Built-browser refused-session/mobile check; public production routes return 200                    |
+| Refuse foreign, expired, revoked, malformed or bearer-only authority                             | Consent public/Core boundaries                                                       | Local negative and race/rollback tests; anonymous live reads return 401/no-store                   |
 
 The browser derives its contract from `apps/server/src/shell/processing-consent/contract.ts`.
 `apps/server/cloudflare/consent` owns native proof checks, evidence and withdrawal; public Ingress has
@@ -41,13 +41,22 @@ the authentication registry rather than browser persistence.
   The fix accepts the owner's UUID or 43-character reference while keeping malformed references refused.
   A read-only aggregate confirmed both formats in production (one UUID, four opaque references;
   ten rows read, zero written). No personal record content was retrieved.
+- The fix shipped in PR #1318. Production deployment run 38658380132 passed promotion and
+  post-promotion checks. The signed-in browser then loaded the saved provider-signup authorization
+  with its reference, acceptance date and disclosure version; the copy endpoint returned 200.
+- With the owner's explicit designation of the signed-in account, Production withdrawal succeeded.
+  Reload returned the identical receipt and acceptance-copy retrieval still returned 200 afterward.
+  The older sign-in could not read privacy Transactions (401). Returning-user Google sign-in refreshed
+  identity without granting Consent: the same withdrawal receipt remained, privacy Transactions returned
+  200, and the workspace showed “Solo lectura” without registration or bulk-edit controls. This account
+  has no Transactions; populated details and continuation are local evidence, not live evidence.
+  Ordinary Dashboard access was refused (401) even with the fresh sign-in. No data was erased.
+- That Dashboard refusal exposed misleading “Sesión vencida” copy. A built-browser/Core/local D1
+  regression reproduced it. The shared refusal screen now avoids guessing the cause and links back to
+  Privacy or sign-in; the regression checks return to the identical receipt after the refusal.
 
 ## Remaining live evidence
 
-- Deploy the copy fix, then reread it using the current signed-in browser.
-- On an explicitly designated test account, withdraw Consent, reload the original receipt, verify new
-  protected work is refused, and open saved Transactions with a recent session. The current production
-  account has not been withdrawn during this audit.
 - Live completion of exact pre-withdrawal queued work, independent category opt-outs and provider
   delivery need their native owner fixtures. Category-specific WhatsApp opt-ins are separate from
   this processing withdrawal surface.

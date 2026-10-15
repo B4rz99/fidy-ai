@@ -348,9 +348,7 @@ test("expires authentication during continuation and starts a clean replacement 
       fixture.mode = "expired";
       yield* wait(() => page.goto("/app/transactions"));
       yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
-      yield* wait(() =>
-        expect(page.getByText("Tu sesión venció. Inicia sesión de nuevo.")).toBeVisible()
-      );
+      yield* wait(() => expect(page.getByText("No pudimos autorizar esta acción.")).toBeVisible());
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(0)
       );

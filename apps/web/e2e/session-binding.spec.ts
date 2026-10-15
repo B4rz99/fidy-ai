@@ -136,10 +136,10 @@ test("keeps the signing-in tab live while a broadcast retires the other tab", ({
         expect(other.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Tu sesión venció. Inicia sesión de nuevo.")).toBeVisible()
+        expect(page.getByText("No pudimos autorizar esta acción.")).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(other.getByText("Tu sesión venció. Inicia sesión de nuevo.")).not.toBeVisible()
+        expect(other.getByText("No pudimos autorizar esta acción.")).not.toBeVisible()
       );
     })
   ));

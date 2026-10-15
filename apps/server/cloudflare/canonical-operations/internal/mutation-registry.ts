@@ -1,3 +1,5 @@
+import { prepareRecurringEdit, recurringRefusal } from "../../recurring-plans/operations";
+import { ApplyRecurringCanonicalInput } from "../../../src/shell/recurring-plans/contract";
 import { connectionInputRefusal, prepareConnectInstitution } from "../../connections/operations";
 import {
   prepareSubscriptionCancellation,
@@ -250,6 +252,16 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   CanonicalOperationId,
   CanonicalMutationAdapter
 >([
+  [
+    CanonicalOperationId.make("recurringPlans.applyRecurringEdit"),
+    {
+      prepare: decodeAndPrepare(ApplyRecurringCanonicalInput, ({ payload }, work) =>
+        prepareRecurringEdit({ work, command: payload })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: recurringRefusal,
+    },
+  ],
   [
     CanonicalOperationId.make("connections.connectInstitution"),
     {

@@ -687,7 +687,11 @@ export const executeCanonicalHttpQuery = ({
     ) {
       return transactionUnavailable();
     }
-    if (operationId === "dashboard.getDashboard" || operationId === "dashboard.getDashboardView") {
+    if (
+      operationId === "dashboard.getDashboard" ||
+      operationId === "dashboard.getDashboardView" ||
+      operationId === "recurringPlans.getRecurringWorkspace"
+    ) {
       return yield* coordinate({
         _tag: "Query",
         operation: operationId,

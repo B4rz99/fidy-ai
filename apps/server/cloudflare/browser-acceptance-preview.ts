@@ -1,5 +1,5 @@
 import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Array, Clock, Effect, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import {
   UserTransactionCoordinator,
@@ -18,6 +18,9 @@ import {
   paginationUserId,
   pairingUserId,
   privacyUserId,
+  recurringRecoveryUserId,
+  recurringSummaryUserId,
+  recurringUserId,
 } from "./browser-acceptance-seed";
 import { observeBrowserCost } from "./browser-cost/operations";
 import {
@@ -389,15 +392,22 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
         .bind(newId(), Effect.runSync(Clock.currentTimeMillis), subject.value);
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
-const approvedFixtureUser = (parameters: URLSearchParams): string => {
-  if (parameters.get("privacy") === "true") return privacyUserId;
-  if (parameters.get("access") === "true") return accessUserId;
-  if (parameters.get("dashboard") === "true") return dashboardUserId;
-  if (parameters.get("budget") === "true") return budgetUserId;
-  if (parameters.get("pagination") === "true") return paginationUserId;
-  if (parameters.get("firstCard") === "true") return firstCardUserId;
-  return parameters.get("pairing") === "true" ? pairingUserId : fixtureUserId;
-};
+const fixtureIdentities = [
+  { key: "recurring", userId: recurringUserId },
+  { key: "recurringSummary", userId: recurringSummaryUserId },
+  { key: "recurringRecovery", userId: recurringRecoveryUserId },
+  { key: "privacy", userId: privacyUserId },
+  { key: "access", userId: accessUserId },
+  { key: "dashboard", userId: dashboardUserId },
+  { key: "budget", userId: budgetUserId },
+  { key: "pagination", userId: paginationUserId },
+  { key: "firstCard", userId: firstCardUserId },
+  { key: "pairing", userId: pairingUserId },
+];
+const approvedFixtureUser = (parameters: URLSearchParams): string =>
+  Array.findFirst(fixtureIdentities, ({ key }) => parameters.get(key) === "true").pipe(
+    Option.match({ onNone: () => fixtureUserId, onSome: ({ userId }) => userId })
+  );
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: operatorPort,

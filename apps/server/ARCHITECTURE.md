@@ -613,3 +613,21 @@ Budget queries remain observational. An explicit month on a canonical Budget wri
 Group labels organize categories across months. A group rename explicitly selects Category identities, updates only the caller's Budgets, and captures the selected collection's revision for OAuth review. Each named group owns one Currency in `budget_group_currencies`, versioned from a selected month in the same canonical D1 unit as its caps and Audit. Category caps project that inherited Currency. Changes retain nominal amounts, preserve earlier month Currency, and reject incompatible precision in affected retained caps. Currency revisions invalidate Budget projections and group confirmation evidence. The browser never combines currencies or converts Money to floating-point values for totals.
 
 Budget status reports include observed monthly income and expenses from Transactions’ published exact aggregate projection. The same requested half-open period, caller ownership, and optional category/currency filters apply to that cash flow, including when no caps match.
+
+### Recurring planning
+
+`core/recurring-plans` owns local calendar projection, scoped plan transitions, exact tracking
+Money, allocation decisions and currency-separated summaries. `cloudflare/recurring-plans`
+publishes bounded observational reads and revision-bound mutation preparation to the existing
+canonical coordinator. A User-owned D1 document retains plan revisions, pauses, exceptions,
+fulfillments, exclusions and suggestion dispositions; shared metadata Audit and the document
+advance in one atomic unit under live caller authority. Its finite document limits refuse growth
+rather than truncate monthly totals. No account identity is synthesized from an AccountHint.
+
+The Transaction owner publishes effective planning facts; planning never reads foreign tables or
+reimplements Reconciliation. Unique fixed exact matches are derived without query-side domain
+writes. Explicit mutations snapshot established effective completions before changing schedules or
+allocations; bounded incomplete matching reads fail closed. Corrections invalidate retained links
+visibly. Canonical declarations derive browser, hosted-agent, PAT/OAuth and MCP capabilities.
+Historical RecurringSeries and frozen digest reports keep their existing meaning. See
+[ADR 0036](../../docs/adr/0036-recurring-planning.md).

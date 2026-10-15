@@ -34,7 +34,7 @@ export default {
       to: {
         path: "^src/",
         pathNot: [
-          "^src/core/(browser-login|budgets|categories|dashboard|email-authentication|identity|ingestion|insights|recovery|subscription|tokens)/contract\\.ts$",
+          "^src/core/(browser-login|budgets|categories|dashboard|email-authentication|identity|ingestion|insights|recurring-plans|recovery|subscription|tokens)/contract\\.ts$",
           "^src/core/tokens/operations\\.ts$",
           "^src/core/transactions/contract\\.ts$",
           "^src/core/_shared/money\\.ts$",
@@ -165,7 +165,7 @@ export default {
         path: "^src/",
         pathNot: [
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|budgets|dashboard|insights|recurring|connections|email-authentication|tokens|browser-login|recovery|ingestion|memory|quotas|canonical-catalog|authorization|operations)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|budgets|dashboard|insights|recurring|recurring-plans|connections|email-authentication|tokens|browser-login|recovery|ingestion|memory|quotas|canonical-catalog|authorization|operations)/contract\\.ts$",
         ],
       },
     },

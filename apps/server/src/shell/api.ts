@@ -10,6 +10,7 @@ import { CategoriesGroup } from "~/shell/categories/contract";
 import { DashboardGroup } from "~/shell/dashboard/contract";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
 import { IdentityGroup } from "~/shell/identity/contract";
+import { RecurringPlansGroup } from "~/shell/recurring-plans/contract";
 import { RecurringGroup } from "~/shell/recurring/contract";
 import { InsightsGroup } from "~/shell/insights/contract";
 import { IngestionGroup } from "~/shell/ingestion/contract";
@@ -33,6 +34,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(IngestionGroup)
   .add(InsightsGroup)
   .add(RecurringGroup)
+  .add(RecurringPlansGroup)
   .add(MemoryGroup)
   .add(SubscriptionGroup)
   .add(QuotasGroup)

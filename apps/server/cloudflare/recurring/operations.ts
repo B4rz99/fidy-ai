@@ -250,3 +250,23 @@ export const recurringDigestSourceIdentities = (): OwnedStatement => ({
   sql: "SELECT p.user_id,p.evaluated_revision||':'||p.evaluated_at||':'||(SELECT coalesce(max(rowid),0) FROM recurring_confirmations WHERE user_id=p.user_id)||':'||(SELECT count(*) FROM recurring_confirmations WHERE user_id=p.user_id) AS source_identity FROM recurring_progress AS p WHERE p.phase='complete'",
   params: [],
 });
+
+/** A planning decision may reference only this User's retained detector series. */
+export const ownsRecurringSeries = ({
+  db,
+  userId,
+  seriesId,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  seriesId: string;
+}>): Effect.Effect<boolean> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare("SELECT 1 FROM recurring_series WHERE user_id = ? AND id = ?")
+      .bind(userId, seriesId)
+      .first()
+  ).pipe(
+    Effect.map((row) => row !== null),
+    Effect.orElseSucceed(() => false)
+  );

@@ -278,3 +278,12 @@ The signed-in `/app/budgets` workspace keys its canonical queries by User, time 
 Category editors inherit their group Currency; only group settings or a new group expose the Currency selector. Decimal amount controls refuse non-numeric input before submission.
 
 The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
+
+### Recurring workspace
+
+`features/recurring` mounts at `/app/recurring`, using authentication-scoped canonical query atoms
+for the selected month, previous unresolved month, taxonomy and detected historical suggestions.
+Monthly list, calendar and summaries consume one server projection. Editors and transaction
+selection live in responsive sheets; drafts stay local. Accepted edits invalidate the canonical
+resource; an uncertain write requires an explicit reread before another save. The browser does not
+generate schedules, match Transactions, sum Money or change the meaning of historical detection.

@@ -288,7 +288,7 @@ The original received time was retained conservatively at the start of the displ
 On 2026-10-15, the requester established the existing production Fidy login. The production
 `Consultar prueba` control returned the actual saved authorization reference, acceptance date,
 notice version and accepted notice. The notice was expanded and the result visibly delivered in
-that same authenticated browser. Successful execution exercised the owner's fresh same-User proof
+that same authenticated browser. Successful execution exercised the owner's live same-User proof
 requirement; mailbox identity was not substituted for that authority. After `Verificar autorización`,
 the page offered withdrawal and showed no withdrawal receipt. No new withdrawal was requested or
 performed merely to create a rehearsal receipt; the withdrawal success/refusal evidence remains

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { ConsentRecordId, DisclosureSnapshot } from "~/core/consent/contract";
+import { DisclosureSnapshot, OnboardingConsentGrantId } from "~/core/consent/contract";
 import { Transaction } from "~/core/transactions/contract";
 import { UserPreferences } from "~/core/identity/contract";
 import { Category } from "~/core/categories/contract";
@@ -34,7 +34,7 @@ const publicReceiptTime = Schema.Int.check(
 export const ProcessingAuthorization = Schema.Struct({
   authorization: Schema.NullOr(
     Schema.Struct({
-      reference: ConsentRecordId,
+      reference: OnboardingConsentGrantId,
       acceptedAtMs: publicReceiptTime,
       disclosure: DisclosureSnapshot,
     })

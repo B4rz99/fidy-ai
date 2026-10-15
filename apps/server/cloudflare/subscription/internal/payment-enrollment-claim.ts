@@ -40,13 +40,16 @@ export const claimPreparedPaymentEnrollment = ({
   const claim = Schema.decodeSync(Claim)(input);
   return db
     .prepare(`UPDATE card_enrollments SET status = 'creating',
-      payment_request_id = ?, accepted_at_ms = ?, authorization_digest = ?
+      payment_request_id = ?, accepted_at_ms = ?, authorization_digest = ?, billing_email = ?
     WHERE id = ? AND user_id = ? AND status = 'prepared' AND expires_at_ms > ?
-      AND payment_source_mode = ? AND billing_email = ? AND EXISTS (${authorityGuard.sql})`)
+      AND payment_source_mode = ?
+      AND (payment_source_mode = 'create' OR billing_email = ?)
+      AND EXISTS (${authorityGuard.sql})`)
     .bind(
       claim.paymentRequestId,
       claimedAtMs,
       claim.authorizationDigest ?? null,
+      claim.billingEmail,
       claim.enrollmentId,
       claim.userId,
       claimedAtMs,

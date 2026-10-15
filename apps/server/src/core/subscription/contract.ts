@@ -296,7 +296,8 @@ const PreparedEnrollmentFields = {
   status: Schema.Literal("prepared"),
   enrollmentId: PaymentEnrollmentId,
   price: Price,
-  billingEmail: BillingEmail,
+  /** Empty when no billing contact is available; submission always requires a BillingEmail. */
+  billingEmail: Schema.Union([BillingEmail, Schema.Literal("")]),
   contracts: WompiContractEvidenceSet,
   recurringDisclosure: RecurringDisclosure,
   wompiPublicKey: Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]+$/u)),

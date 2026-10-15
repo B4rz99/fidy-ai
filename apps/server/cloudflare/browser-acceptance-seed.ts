@@ -243,6 +243,11 @@ await seedIdentity({
   email: "tarjeta@example.com",
   consentId: "24000000-0000-4000-8000-000000000282",
 });
+// Provider-authenticated Users need not establish the optional email-login credential.
+await db
+  .prepare("DELETE FROM verified_email_credentials WHERE user_id = ?")
+  .bind(firstCardUserId)
+  .run();
 
 await seedIdentity({
   userId: firstDaviplataUserId,

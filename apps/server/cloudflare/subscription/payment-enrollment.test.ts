@@ -597,8 +597,14 @@ it.each(["sandbox", "production"] as const)(
           ),
           WOMPI_INTEGRITY_SECRET: `${market === "sandbox" ? "test" : "prod"}_integrity_fixture_key`,
           WOMPI_DAVIPLATA_ACTIVATED: "enabled",
-          WOMPI_DAVIPLATA_OTP_SEND_URL: `https://${market}.wompi.co/otp/send`,
-          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: `https://${market}.wompi.co/otp/confirm`,
+          WOMPI_DAVIPLATA_OTP_SEND_URL:
+            market === "sandbox"
+              ? "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox"
+              : `https://${market}.wompi.co/otp/send`,
+          WOMPI_DAVIPLATA_OTP_CONFIRM_URL:
+            market === "sandbox"
+              ? "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox"
+              : `https://${market}.wompi.co/otp/confirm`,
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           CONTRACT_DIGEST: "0".repeat(64),
           USER_TRANSACTION_COORDINATOR: {

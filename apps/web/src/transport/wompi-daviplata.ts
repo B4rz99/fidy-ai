@@ -85,12 +85,28 @@ export type DaviplataProviderChallenge = Readonly<{
   dispose: () => void;
 }>;
 
+const sandboxOtpEndpoint =
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+/** Build from reviewed configuration and bound identity; never send a provider-supplied URL. */
+const otpEndpoint = (endpoint: string, id: string, step: "send" | "confirm"): string =>
+  endpoint === sandboxOtpEndpoint
+    ? `${endpoint}?token=${id}&operation=${step === "send" ? "RESEND_OTP" : "VALIDATE_OTP_API"}`
+    : endpoint;
+const isSandboxOtpEndpoint = (url: string, origin: string, allowAction: boolean): boolean =>
+  origin === "https://sandbox.wompi.co" &&
+  (url === sandboxOtpEndpoint ||
+    (allowAction &&
+      /^https:\/\/api-sandbox\.wompi\.co\/v1\/webhook_events\/daviplata_response\/sandbox\?token=daviplata_(?:devtest|devint)_[A-Za-z0-9_]{1,200}&operation=(?:RESEND_OTP|VALIDATE_OTP_API)$/u.test(
+        url
+      )));
 const checkEndpoint = (
   url: string,
-  origin: string
+  origin: string,
+  allowAction = false
 ): Effect.Effect<void, DaviplataAuthorizationFailed> =>
   Effect.try({
     try: () => {
+      if (isSandboxOtpEndpoint(url, origin, allowAction)) return;
       const parsed = new URL(url);
       const clean = `${parsed.username}${parsed.password}${parsed.search}${parsed.hash}` === "";
       if (
@@ -128,7 +144,7 @@ const postDaviplataOtp = <Decoder extends Schema.ConstraintDecoder<unknown>>(
 ): Effect.Effect<Decoder["Type"], DaviplataAuthorizationFailed, Decoder["DecodingServices"]> => {
   const request = Effect.gen(function* () {
     const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(Effect.mapError(failure));
-    yield* checkEndpoint(input.url, origin);
+    yield* checkEndpoint(input.url, origin, true);
     if (
       Option.isSome(input.body) &&
       new TextEncoder().encode(Redacted.value(input.body.value)).byteLength > maximumRequestBytes
@@ -352,7 +368,11 @@ const sendWithBearer = (
     else state.validates += 1;
     const response = yield* postDaviplataOtp({
       publicKey: input.publicKey,
-      url: action.type === "send" ? input.policy.sendUrl : input.policy.confirmUrl,
+      url: otpEndpoint(
+        action.type === "send" ? input.policy.sendUrl : input.policy.confirmUrl,
+        Redacted.value(Option.getOrThrow(state.token)),
+        action.type
+      ),
       authorization,
       body,
       responseSchema: OtpResponse,
@@ -434,8 +454,10 @@ const initialize = (
     if (
       authority.signal.aborted ||
       !Redacted.value(data.id).startsWith(prefix) ||
-      data.url_services.code_otp_send !== input.policy.sendUrl ||
-      data.url_services.code_otp_validate !== input.policy.confirmUrl
+      data.url_services.code_otp_send !==
+        otpEndpoint(input.policy.sendUrl, Redacted.value(data.id), "send") ||
+      data.url_services.code_otp_validate !==
+        otpEndpoint(input.policy.confirmUrl, Redacted.value(data.id), "confirm")
     ) {
       Redacted.wipeUnsafe(data.id);
       Redacted.wipeUnsafe(data.url_services.token);

@@ -232,9 +232,13 @@ const daviplataPolicy = (
     environment.WOMPI_ENVIRONMENT === "sandbox"
       ? "https://sandbox.wompi.co/"
       : "https://production.wompi.co/";
-  return Option.filter(
-    policy,
-    (value) => value.sendUrl.startsWith(origin) && value.confirmUrl.startsWith(origin)
+  return Option.filter(policy, (value) =>
+    [value.sendUrl, value.confirmUrl].every(
+      (url) =>
+        url.startsWith(origin) ||
+        (environment.WOMPI_ENVIRONMENT === "sandbox" &&
+          url === "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox")
+    )
   );
 };
 

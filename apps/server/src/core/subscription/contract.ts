@@ -201,10 +201,12 @@ export const EnrollmentAvailability = Schema.Struct({
 export type EnrollmentAvailability = typeof EnrollmentAvailability.Type;
 
 const DaviplataOtpEndpoint = Schema.String.check(
-  Schema.isPattern(/^https:\/\/(?:sandbox|production)\.wompi\.co\/[A-Za-z0-9/_-]{1,200}$/u)
+  Schema.isPattern(
+    /^https:\/\/(?:(?:sandbox|production)\.wompi\.co\/[A-Za-z0-9/_-]{1,200}|api-sandbox\.wompi\.co\/v1\/webhook_events\/daviplata_response\/sandbox)$/u
+  )
 );
 
-/** Exact reviewed provider destinations. Returned OTP service URLs must equal these, never extend them. */
+/** Reviewed query-free destinations. The known Sandbox service binds token/operation queries in its adapter. */
 export const DaviplataOtpPolicy = Schema.Struct({
   sendUrl: DaviplataOtpEndpoint,
   confirmUrl: DaviplataOtpEndpoint,

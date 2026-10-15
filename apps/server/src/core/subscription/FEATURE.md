@@ -54,19 +54,22 @@ bun run --cwd apps/web test:browser e2e/product-journeys.spec.ts --workers=1
 ```
 
 Eight opt-in real-provider cases are skipped by the ordinary local suite: four Nequi and four
-DaviPlata Sandbox scenarios. Only the four Nequi cases have separate passing live-provider evidence. The protected
+DaviPlata Sandbox scenarios. Both providers have separate passing four-case live-provider evidence. The protected
 [Nequi Sandbox proof](../../../../../docs/operations/nequi-sandbox-proof.md) and
 [DaviPlata Sandbox proof](../../../../../docs/operations/daviplata-sandbox-proof.md) document
-synthetic-only provider execution. DaviPlata's OTP variables are absent from the protected
-Production environment at this audit. Manual synthetic tokenization on 2026-10-15 established the
+synthetic-only provider execution. After the passing DaviPlata proof, the two protected OTP variables were set to the exact Sandbox
+endpoint; release now forwards them. Real-payment activation remains disabled. Manual synthetic tokenization on 2026-10-15 established the
 exact Sandbox host/path and identity/operation query binding. The adapter and browser CSP now
 support that observed protocol, with 22 closed Outbound HTTP checks, 52 browser transport/Subscription
 checks, and a passing isolated built-browser DaviPlata collection journey plus served-CSP check.
 Provider responses in that browser journey are controlled. A protected diagnostic run isolated an
 OTP-send refusal caused by rejecting the observed `daviplata_test_` Sandbox identity prefix. Local
 regressions cover the corrected prefix across outbound transport, browser and Core/local D1 enrollment.
-A separate real-adapter, public-key-only probe completed OTP send/confirmation after the fix; reusable
-source creation, settlement and actual browser OTP CORS still require their separate live checks. Production-mode DaviPlata activation is separate.
+The [protected DaviPlata run](https://github.com/B4rz99/fidy-ai/actions/runs/38793956290) at
+`90c912702f3a4286d66fae29a4eaa78aa5cbfefa` passed all four cases: real OTP authorization,
+reusable-source verification, weekly/monthly/yearly approved first payments and declined weekly
+settlement with no paid period. This uses real Wompi Sandbox with local D1/activity execution.
+Actual deployed browser OTP CORS, Queue/Workflow and recovery remain separate live checks. Production-mode DaviPlata activation is separate.
 
 The [Nequi Sandbox run](https://github.com/B4rz99/fidy-ai/actions/runs/38672345124) passed all four
 selected cases on deployed trunk revision `20889fa3d90d8f86c09ddce0cc790c8bb6ac761c`, completed
@@ -95,8 +98,8 @@ has no paid Subscription eligible for canonical cancellation, so that path canno
 for a different card. Successful deployed card payment and cancellation remain unverified.
 
 Remaining safe live work: close declined-source replacement/retry; complete an approved synthetic
-deployed payment and cancellation; correct and verify DaviPlata
-Sandbox protocol proof; and isolated deployed Queue/Workflow/callback recovery evidence before
+deployed payment and cancellation; complete deployed DaviPlata browser/CORS checks;
+and isolated deployed Queue/Workflow/callback recovery evidence before
 claiming the entire payment lifecycle is verified. Real charges, live refunds, recurring debit
 authorization and changing existing subscriptions are excluded from this audit.
 

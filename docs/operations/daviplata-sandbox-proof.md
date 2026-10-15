@@ -4,8 +4,8 @@ Issue: [#232](https://github.com/B4rz99/fidy-ai/issues/232).
 
 ## Status and launch boundary
 
-**The complete live proof has not passed. Real Sandbox tokenization and OTP authorization have been observed separately.**
-The adapter/proof-helper tests use synthetic transport premises, not recorded provider responses.
+**The protected live Sandbox protocol and first-payment proof passed all four selected cases.**
+The ordinary adapter/proof-helper tests use synthetic transport premises, not recorded provider responses.
 Credentials, checked-in tests and a manual workflow do not establish merchant eligibility or actual
 OTP origins, paths, browser CORS, recovery or reusable-source behavior.
 
@@ -51,6 +51,10 @@ gated; this Sandbox observation does not establish the Production protocol or br
 
 Missing, malformed or non-Sandbox policy rejects before tokenization or other provider effects.
 Running this proof does not set deployment variables or enable DaviPlata in the deployed app.
+After the passing run below, both protected `production` environment OTP variables were set to the
+reviewed Sandbox endpoint. The release workflow now forwards them into every Alchemy plan/apply
+step. `WOMPI_DAVIPLATA_ACTIVATED` remains unset/default-disabled: real-payment activation is not
+authorized by this Sandbox configuration. Deployed availability must be checked after release.
 Do not download credentials, dispatch from an unreviewed branch, enable HTTP/body tracing, or
 retain provider payloads as fixtures/artifacts.
 
@@ -94,8 +98,16 @@ Regression checks reproduced that refusal in outbound transport, browser authori
 D1 enrollment. After accepting the observed Sandbox prefix while preserving Production separation,
 a separate public-key-only probe through the real outbound adapter completed tokenization, OTP send
 and OTP confirmation. No reusable source or charge was created by that probe; no provider payload or
-identity was retained. A fresh protected run must still prove source creation and settlement.
-Credentials stay in the protected workflow. Source revocation/replacement, recovery and
+identity was retained. The subsequent [protected run](https://github.com/B4rz99/fidy-ai/actions/runs/38793956290) at
+`90c912702f3a4286d66fae29a4eaa78aa5cbfefa` passed all four selected cases on 2026-10-15 at
+14:34 Bogotá: weekly, monthly and yearly approved first payments, plus a declined weekly payment.
+Each completed real tokenization, exact OTP destination/identity binding, OTP send/confirmation,
+authenticated reusable-source verification and independently verified settlement; the declined
+case had no paid period. Execution used local D1/activity harnesses with the real Wompi Sandbox.
+It does not prove deployed browser OTP CORS, Queue/Workflow, restart or webhook delivery.
+The prefix-fix [Production deployment](https://github.com/B4rz99/fidy-ai/actions/runs/38793940880)
+passed its candidate, intermediate, normal-traffic and drift gates. This is release evidence, not
+a deployed DaviPlata payment. Credentials stay in the protected workflow. Source revocation/replacement, recovery and
 automatic-renewal execution remain separate work.
 
 ## Primary references

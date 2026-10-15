@@ -1,0 +1,9 @@
+/* Neutral, fixed-size test chrome; intentionally independent of the UI under test. */
+.recurring-stress-controls {
+  --spacing: 4px;
+  --muted: #e5e5e5;
+  --foreground: #171717;
+  --border: #d4d4d4;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+}

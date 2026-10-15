@@ -5,15 +5,18 @@ import { type JSX, useState } from "react";
 import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
-import { NativeSelect } from "@/ui/components/native-select";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  type Filters,
-  type Plan,
-  type PlanInput,
-  type Save,
-  type Workspace,
-  frequencies,
-} from "./model";
+  ArrowDown01Icon,
+  Cancel01Icon,
+  PauseCircleIcon,
+  Tick02Icon,
+} from "@hugeicons/core-free-icons";
+import { Badge } from "@/ui/components/badge";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
+import { RecurringIdentity } from "./visuals";
+import { ChoiceField } from "./fields";
+import { type Filters, type Plan, type PlanInput, type Save, type Workspace } from "./model";
 
 type Series = CanonicalSuccess<"recurring.listRecurringSeries">["data"]["series"][number];
 const proposal = (series: Series, today: string, timeZone: PlanInput["timeZone"]): PlanInput => ({
@@ -50,12 +53,16 @@ const SuggestionRow = ({
     </p>
     <div className="flex flex-wrap gap-2">
       <Button
+        contentLayout="wrap"
+        focusAppearance="subtle"
         disabled={disabled}
         onClick={() => create(proposal(series, view.today, timeZone), series.id)}
       >
         Crear recurrente
       </Button>
       <Button
+        contentLayout="wrap"
+        focusAppearance="subtle"
         variant="ghost"
         disabled={disabled}
         onClick={() => save({ kind: "suggestion", seriesId: series.id, action: "dismiss" })}
@@ -95,7 +102,7 @@ export const Suggestions = ({
     return (
       <div role="alert">
         No pudimos leer las sugerencias.{" "}
-        <Button variant="outline" onClick={refresh}>
+        <Button contentLayout="wrap" focusAppearance="subtle" variant="outline" onClick={refresh}>
           Reintentar sugerencias
         </Button>
       </div>
@@ -138,17 +145,22 @@ export const PlanManagement = ({
     <section className="rounded-xl border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
         <h2 className="font-medium">Todos los recurrentes</h2>
-        <NativeSelect
-          aria-label="Estado del plan"
-          size="default"
+        <ChoiceDropdown
+          id="recurring-plan-status"
+          label="Estado del plan"
           value={status}
-          onChange={(event) => setStatus(event.target.value)}
-        >
-          <option value="all">Todos</option>
-          <option value="active">Activos</option>
-          <option value="paused">Pausados</option>
-          <option value="stopped">Dejados de seguir</option>
-        </NativeSelect>
+          options={[
+            { value: "all", label: "Todos" },
+            { value: "active", label: "Activos" },
+            { value: "paused", label: "Pausados" },
+            { value: "stopped", label: "Dejados de seguir" },
+          ]}
+          disabled={false}
+          width="auto"
+          leading={null}
+          triggerLabel={Option.none()}
+          onChange={setStatus}
+        />
       </div>
       {view.document.plans.flatMap((plan) =>
         (status === "all" || planStatus(plan) === status) && matchesPlanFilters(plan, filters)
@@ -178,20 +190,22 @@ const SuggestionLink = ({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <NativeSelect
-          aria-label={`Recurrente para ${series.counterparty}`}
-          size="default"
+        <ChoiceField
+          name={`suggestion-${series.id}`}
+          label={`Recurrente para ${series.counterparty}`}
           value={planId}
-          onChange={(event) => setPlanId(event.target.value)}
-        >
-          <option value="">Vincular a uno existente</option>
-          {view.document.plans.map((plan) => (
-            <option key={plan.id} value={plan.id}>
-              {plan.revisions.at(-1)?.plan.name}
-            </option>
-          ))}
-        </NativeSelect>
+          onChange={setPlanId}
+          options={[
+            { value: "", label: "Vincular a uno existente" },
+            ...view.document.plans.map((plan) => ({
+              value: plan.id,
+              label: plan.revisions.at(-1)?.plan.name ?? "Recurrente",
+            })),
+          ]}
+        />
         <Button
+          contentLayout="wrap"
+          focusAppearance="subtle"
           variant="outline"
           disabled={disabled || planId === ""}
           onClick={() => {
@@ -227,43 +241,39 @@ const SuggestionResults = ({
   next: (cursor: string) => void;
   ready: boolean;
 }>): JSX.Element => (
-  <section className="rounded-xl border p-4">
-    <h2 className="font-medium">Revisar patrones detectados</h2>
-    {ready ? null : (
-      <output>
-        {data.evaluation.kind === "not-evaluated"
-          ? "Aún no hay una evaluación completa."
-          : "La evaluación está actualizándose."}{" "}
-        Las sugerencias no forman parte de tus próximos pagos.
-      </output>
-    )}
-    {data.series.flatMap((series) =>
-      view.document.suggestions.some((decision) => decision.seriesId === series.id)
-        ? []
-        : [
-            <SuggestionRow
-              key={series.id}
-              series={series}
-              view={view}
-              save={save}
-              create={create}
-              disabled={disabled || !ready}
-              timeZone={timeZone}
-            />,
-          ]
-    )}
-    {Option.isSome(data.cursor) ? (
-      <Button
-        variant="outline"
-        onClick={() => {
-          if (Option.isSome(data.cursor)) next(data.cursor.value);
-        }}
-      >
-        Ver más sugerencias
-      </Button>
-    ) : null}
-    <RestoreSuggestions view={view} save={save} disabled={disabled} />
-  </section>
+  <details className="group/review rounded-lg bg-secondary/50 px-4 py-3">
+    <SuggestionBanner data={data} view={view} ready={ready} />
+    <div className="mt-3 grid gap-3">
+      <ReviewState
+        ready={ready}
+        hasSuggestions={data.series.some(
+          (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
+        )}
+      />
+      {data.evaluation.kind === "updating" ? (
+        <output className="text-sm text-muted-foreground">
+          La evaluación está actualizándose. Las sugerencias no forman parte de tus próximos pagos.
+        </output>
+      ) : null}
+      {data.series.flatMap((series) =>
+        view.document.suggestions.some((decision) => decision.seriesId === series.id)
+          ? []
+          : [
+              <SuggestionRow
+                key={series.id}
+                series={series}
+                view={view}
+                save={save}
+                create={create}
+                disabled={disabled || !ready}
+                timeZone={timeZone}
+              />,
+            ]
+      )}
+      <SuggestionNext cursor={data.cursor} next={next} />
+      <RestoreSuggestions view={view} save={save} disabled={disabled} />
+    </div>
+  </details>
 );
 const RestoreSuggestions = ({
   view,
@@ -275,6 +285,8 @@ const RestoreSuggestions = ({
       decision.disposition === "dismissed"
         ? [
             <Button
+              contentLayout="wrap"
+              focusAppearance="subtle"
               key={decision.seriesId}
               variant="ghost"
               disabled={disabled}
@@ -307,6 +319,8 @@ const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
   });
 };
 const planStatusLabels = { active: "Activo", paused: "Pausado", stopped: "Dejado de seguir" };
+const statusVariants = { active: "success", paused: "warning", stopped: "destructive" } as const;
+const statusIcons = { active: Tick02Icon, paused: PauseCircleIcon, stopped: Cancel01Icon } as const;
 const PlanRow = ({
   plan,
   open,
@@ -322,15 +336,29 @@ const PlanRow = ({
 }>): JSX.Element => {
   const input = plan.revisions.at(-1)?.plan;
   const status = planStatus(plan);
+  if (input === undefined) return <></>;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-      <Button variant="ghost" onClick={() => open(plan)}>
-        {input?.name} · {frequencies.find(([frequency]) => frequency === input?.frequency)?.[1]}
-      </Button>
-      <span className="text-xs text-muted-foreground">{planStatusLabels[status]}</span>
+    <div className="@container flex min-w-0 items-center gap-2 border-b pr-4 transition-colors last:border-b-0 hover:bg-muted/50">
+      <button
+        type="button"
+        aria-label={`Editar ${input.name}`}
+        onClick={() => open(plan)}
+        className="grid min-h-16 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left outline-none focus-visible:bg-muted focus-visible:underline @min-xl:grid-cols-[minmax(0,1fr)_auto]"
+      >
+        <RecurringIdentity plan={input} />
+        <span className="flex shrink-0 items-center gap-4">
+          <Badge variant={statusVariants[status]}>
+            <HugeiconsIcon icon={statusIcons[status]} aria-hidden="true" />
+            {planStatusLabels[status]}
+          </Badge>
+        </span>
+      </button>
       {status === "paused" ? (
         <Button
+          contentLayout="wrap"
+          focusAppearance="subtle"
           variant="outline"
+          size="sm"
           disabled={disabled}
           onClick={() =>
             save({ kind: "lifecycle", planId: plan.id, date: today, action: "resume" })
@@ -342,3 +370,69 @@ const PlanRow = ({
     </div>
   );
 };
+
+const SuggestionBanner = ({
+  data,
+  view,
+  ready,
+}: Readonly<{
+  data: CanonicalSuccess<"recurring.listRecurringSeries">["data"];
+  view: Workspace;
+  ready: boolean;
+}>): JSX.Element => {
+  const count = data.series.filter(
+    (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
+  ).length;
+  const message = ready
+    ? `${count} sugerencias nuevas · Revisar`
+    : "Sin evaluación completa · Ver estado";
+  return (
+    <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-sm [&::-webkit-details-marker]:hidden">
+      <span className="flex items-center gap-2 font-medium">
+        <HugeiconsIcon
+          icon={ArrowDown01Icon}
+          className="size-4 -rotate-90 transition-transform group-open/review:rotate-0"
+        />
+        Patrones detectados
+      </span>
+      <span className="text-xs text-muted-foreground">{message}</span>
+    </summary>
+  );
+};
+const ReviewState = ({
+  ready,
+  hasSuggestions,
+}: Readonly<{ ready: boolean; hasSuggestions: boolean }>): JSX.Element => (
+  <>
+    <h2 className="text-sm font-medium">Revisión de patrones</h2>
+    {ready && !hasSuggestions ? (
+      <p className="text-sm text-muted-foreground">
+        No hay patrones nuevos para revisar en esta página.
+      </p>
+    ) : null}
+    {!ready ? (
+      <p className="text-sm text-muted-foreground">
+        Aún no hay una evaluación completa. Aquí podrás crear un recurrente desde un patrón,
+        vincularlo a uno existente o descartarlo cuando haya sugerencias disponibles.
+      </p>
+    ) : null}
+  </>
+);
+
+const SuggestionNext = ({
+  cursor,
+  next,
+}: Readonly<{ cursor: Option.Option<string>; next: (cursor: string) => void }>): JSX.Element => (
+  <>
+    {Option.isSome(cursor) ? (
+      <Button
+        contentLayout="wrap"
+        focusAppearance="subtle"
+        variant="outline"
+        onClick={() => next(cursor.value)}
+      >
+        Ver más sugerencias
+      </Button>
+    ) : null}
+  </>
+);

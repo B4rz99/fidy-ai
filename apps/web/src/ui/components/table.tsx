@@ -2,20 +2,29 @@ import { type VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
 import { cn } from "@/ui/class-names";
 
-type TableProps = React.ComponentProps<"table">;
+type TableProps = React.ComponentProps<"table"> & VariantProps<typeof tableVariants>;
 type TableSectionProps = React.ComponentProps<"thead">;
 type TableBodyProps = React.ComponentProps<"tbody">;
 type TableFooterProps = React.ComponentProps<"tfoot">;
-type TableRowProps = React.ComponentProps<"tr">;
+type TableRowProps = React.ComponentProps<"tr"> & VariantProps<typeof tableRowVariants>;
 type TableHeadProps = React.ComponentProps<"th"> & VariantProps<typeof tableHeadVariants>;
 type TableCellProps = React.ComponentProps<"td"> & VariantProps<typeof tableCellVariants>;
 type TableCaptionProps = React.ComponentProps<"caption">;
 
-const Table = ({ className, ...props }: TableProps): React.JSX.Element => (
+const tableVariants = cva("w-full caption-bottom text-sm", {
+  variants: { layout: { auto: "", fixed: "table-fixed" } },
+  defaultVariants: { layout: "auto" },
+});
+
+const Table = ({ className, layout, ...props }: TableProps): React.JSX.Element => (
   <div data-slot="table-container" className="relative w-full overflow-x-auto">
     <table
       data-slot="table"
-      className={cn("w-full caption-bottom text-sm", className)}
+      className={cn(
+        "w-full caption-bottom text-sm",
+        layout === "fixed" && "table-fixed",
+        className
+      )}
       {...props}
     />
   </div>
@@ -41,13 +50,22 @@ const TableFooter = ({ className, ...props }: TableFooterProps): React.JSX.Eleme
   />
 );
 
-const TableRow = ({ className, ...props }: TableRowProps): React.JSX.Element => (
+const tableRowVariants = cva(
+  "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+  {
+    variants: {
+      interaction: {
+        default: "",
+        clickable: "cursor-pointer outline-none focus-visible:bg-muted focus-visible:underline",
+      },
+    },
+    defaultVariants: { interaction: "default" },
+  }
+);
+const TableRow = ({ className, interaction, ...props }: TableRowProps): React.JSX.Element => (
   <tr
     data-slot="table-row"
-    className={cn(
-      "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
-      className
-    )}
+    className={cn(tableRowVariants({ interaction }), className)}
     {...props}
   />
 );

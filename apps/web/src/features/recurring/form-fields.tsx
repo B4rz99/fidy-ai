@@ -1,7 +1,7 @@
 import { type JSX, type ReactNode, useState } from "react";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import { NativeSelect } from "@/ui/components/native-select";
+import { ChoiceField, CurrencyField, DefaultChoiceField, RecurringDateField } from "./fields";
 import type { Category, PlanInput } from "./model";
 import { frequencies, kinds } from "./model";
 
@@ -18,37 +18,40 @@ export const Field = ({
 export const ScheduleFields = ({
   initial,
   categories,
-}: Readonly<{ initial: Partial<PlanInput>; categories: ReadonlyArray<Category> }>): JSX.Element => {
+}: Readonly<{
+  initial: Partial<PlanInput> & Pick<PlanInput, "timeZone">;
+  categories: ReadonlyArray<Category>;
+}>): JSX.Element => {
   const [frequency, setFrequency] = useState<string>(initial.frequency ?? "monthly");
   return (
     <>
       <Field label="Frecuencia" name="frequency">
-        <NativeSelect
-          id="recurring-frequency"
+        <ChoiceField
           name="frequency"
-          size="default"
+          label="Frecuencia"
           value={frequency}
-          onChange={(event) => setFrequency(event.target.value)}
-        >
-          {frequencies.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </NativeSelect>
+          onChange={setFrequency}
+          options={frequencies.map(([value, label]) => ({ value, label }))}
+        />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid min-w-0 gap-3">
         <Field label="Primera fecha" name="firstDate">
-          <Input
-            id="recurring-firstDate"
+          <RecurringDateField
             name="firstDate"
-            type="date"
+            label="Primera fecha"
+            initial={initial.firstDate ?? ""}
+            timeZone={initial.timeZone}
             required
-            defaultValue={initial.firstDate}
           />
         </Field>
         <Field label="Fecha final (opcional)" name="endDate">
-          <Input id="recurring-endDate" name="endDate" type="date" defaultValue={initial.endDate} />
+          <RecurringDateField
+            name="endDate"
+            label="Fecha final (opcional)"
+            initial={initial.endDate ?? ""}
+            timeZone={initial.timeZone}
+            required={false}
+          />
         </Field>
       </div>
       {frequency === "twice-monthly" ? <MonthDays initial={initial} /> : null}
@@ -64,38 +67,26 @@ export const IdentityFields = ({
       <Input id="recurring-name" name="name" required maxLength={120} defaultValue={initial.name} />
     </Field>
     <Field label="Tipo" name="kind">
-      <NativeSelect
-        id="recurring-kind"
+      <DefaultChoiceField
         name="kind"
-        size="default"
-        defaultValue={initial.kind ?? "expense"}
-      >
-        {kinds.map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </NativeSelect>
+        label="Tipo"
+        initial={initial.kind ?? "expense"}
+        options={kinds.map(([value, label]) => ({ value, label }))}
+      />
     </Field>
     <Field label="Pago de tarjeta" name="cardPayment">
-      <NativeSelect
-        id="recurring-cardPayment"
+      <DefaultChoiceField
         name="cardPayment"
-        size="default"
-        defaultValue={initial.cardPayment === true ? "yes" : "no"}
-      >
-        <option value="no">No</option>
-        <option value="yes">Sí (selecciona Transferencias)</option>
-      </NativeSelect>
+        label="Pago de tarjeta"
+        initial={initial.cardPayment === true ? "yes" : "no"}
+        options={[
+          { value: "no", label: "No" },
+          { value: "yes", label: "Sí (selecciona Transferencias)" },
+        ]}
+      />
     </Field>
     <Field label="Moneda" name="currency">
-      <Input
-        id="recurring-currency"
-        name="currency"
-        required
-        defaultValue={initial.currency ?? "COP"}
-        maxLength={3}
-      />
+      <CurrencyField initial={initial.currency ?? "COP"} />
     </Field>
   </>
 );
@@ -103,7 +94,10 @@ export const IdentityFields = ({
 const ReferenceFields = ({
   initial,
   categories,
-}: Readonly<{ initial: Partial<PlanInput>; categories: ReadonlyArray<Category> }>): JSX.Element => (
+}: Readonly<{
+  initial: Partial<PlanInput> & Pick<PlanInput, "timeZone">;
+  categories: ReadonlyArray<Category>;
+}>): JSX.Element => (
   <>
     <Field label="Contraparte (opcional)" name="counterparty">
       <Input
@@ -114,19 +108,15 @@ const ReferenceFields = ({
       />
     </Field>
     <Field label="Categoría (opcional)" name="categoryId">
-      <NativeSelect
-        id="recurring-categoryId"
+      <DefaultChoiceField
         name="categoryId"
-        size="default"
-        defaultValue={initial.categoryId ?? ""}
-      >
-        <option value="">Sin categoría</option>
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.label}
-          </option>
-        ))}
-      </NativeSelect>
+        label="Categoría (opcional)"
+        initial={initial.categoryId ?? ""}
+        options={[
+          { value: "", label: "Sin categoría" },
+          ...categories.map((category) => ({ value: category.id, label: category.label })),
+        ]}
+      />
     </Field>
     <p className="text-xs text-muted-foreground">
       Cuenta: sin cuentas disponibles. Puedes planear sin seleccionar una cuenta.
@@ -140,7 +130,7 @@ const MonthDays = ({ initial }: Readonly<{ initial: Partial<PlanInput> }>): JSX.
       Para dos veces al mes, elige dos días. Los meses cortos usan su último día y conservan el día
       original.
     </p>
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid min-w-0 gap-3">
       <Field label="Primer día del mes" name="day1">
         <Input
           id="recurring-day1"

@@ -6,7 +6,7 @@ import type { FidyClient } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { InlineChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { makeTransactionCorrection } from "./correction-command";
-import { CategoryVisual } from "./visuals";
+import { CategoryVisual } from "@/ui/components/category-visual";
 import type { Category, Transaction, TransactionListRow } from "./presentation";
 
 type CategoryProps = Readonly<{

@@ -4,7 +4,8 @@ import { type FormEvent, type JSX, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { NativeSelect } from "@/ui/components/native-select";
+import { Disclosure } from "@/ui/components/disclosure";
+import { ChoiceField, DefaultChoiceField, RecurringDateField } from "./fields";
 import { TransactionPicker } from "./transactions";
 import { PlanForm } from "./plan-form";
 import { Field } from "./form-fields";
@@ -48,21 +49,19 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
           />
         </Field>
         <Field label="Fecha real" name="actualDate">
-          <Input
-            id="recurring-actualDate"
+          <RecurringDateField
             name="actualDate"
-            type="date"
+            label="Fecha real"
+            initial={today}
+            timeZone={item.plan.timeZone}
             required
-            defaultValue={today}
           />
         </Field>
         <AssociationFields item={item} />
-        <p className="text-xs text-muted-foreground">
-          Este registro solo actualiza el seguimiento. No crea una transacción. Para vincular un
-          movimiento posterior, reemplaza el registro manual correspondiente.
-        </p>
         {invalid ? <p role="alert">Revisa el importe y la fecha.</p> : null}
-        <Button type="submit">Registrar parcial</Button>
+        <Button contentLayout="wrap" focusAppearance="subtle" type="submit">
+          Registrar
+        </Button>
       </fieldset>
     </form>
   );
@@ -70,6 +69,8 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
 const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element => (
   <div className="grid gap-3 border-t pt-4">
     <Button
+      contentLayout="wrap"
+      focusAppearance="subtle"
       variant="outline"
       disabled={disabled || item.fulfillments.length > 0}
       onClick={() =>
@@ -83,7 +84,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
     >
       {item.status === "skipped" ? "Volver a incluir" : "Omitir esta vez"}
     </Button>
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap justify-center gap-2">
       {(
         [
           ["pause", "Pausar"],
@@ -91,6 +92,8 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
         ] as const
       ).map(([action, label]) => (
         <Button
+          contentLayout="wrap"
+          focusAppearance="subtle"
           key={action}
           variant="outline"
           disabled={disabled}
@@ -100,13 +103,14 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
         </Button>
       ))}
     </div>
-    <details>
-      <summary className="cursor-pointer text-sm">Dejar de seguir</summary>
+    <Disclosure title="Dejar de seguir">
       <p className="my-3 text-sm text-muted-foreground">
         Deja de generar expectativas futuras y conserva el historial. No cancela el servicio ni
         detiene un pago bancario.
       </p>
       <Button
+        contentLayout="wrap"
+        focusAppearance="subtle"
         variant="outline"
         disabled={disabled}
         onClick={() =>
@@ -115,7 +119,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
       >
         Confirmar dejar de seguir
       </Button>
-    </details>
+    </Disclosure>
   </div>
 );
 export const OccurrenceDetails = (props: Props): JSX.Element => {
@@ -137,6 +141,8 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
             {mark.transactionId === undefined ? "Registro manual" : "Transacción vinculada"}
           </span>
           <Button
+            contentLayout="wrap"
+            focusAppearance="subtle"
             variant="ghost"
             disabled={disabled}
             onClick={() => save({ kind: "reverse", fulfillmentId: mark.id })}
@@ -150,6 +156,8 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
       <OccurrenceEditor {...props} />
       {item.status === "completed" ? (
         <Button
+          contentLayout="wrap"
+          focusAppearance="subtle"
           variant="outline"
           disabled={disabled}
           onClick={() =>
@@ -175,25 +183,35 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
   );
 };
 
+const manualOptions = (
+  item: Occurrence
+): ReadonlyArray<Readonly<{ value: string; label: string }>> => [
+  { value: "", label: "Ninguno" },
+  ...item.fulfillments
+    .filter((mark) => mark.transactionId === undefined)
+    .map((mark) => ({ value: mark.id, label: `${mark.actualDate} · ${money(mark.money)}` })),
+];
+const settlementOptions = [
+  { value: "partial", label: "Parcial" },
+  { value: "settled", label: "Pago o ingreso completo" },
+];
 const AssociationFields = ({ item }: Pick<Props, "item">): JSX.Element => (
   <>
     <Field label="Reemplazar registro manual" name="replaces">
-      <NativeSelect id="recurring-replaces" name="replaces" size="default">
-        <option value="">Ninguno</option>
-        {item.fulfillments
-          .filter((mark) => mark.transactionId === undefined)
-          .map((mark) => (
-            <option key={mark.id} value={mark.id}>
-              {mark.actualDate} · {money(mark.money)}
-            </option>
-          ))}
-      </NativeSelect>
+      <DefaultChoiceField
+        name="replaces"
+        label="Reemplazar registro manual"
+        initial=""
+        options={manualOptions(item)}
+      />
     </Field>
     <Field label="Estado del importe real" name="settlement">
-      <NativeSelect id="recurring-settlement" name="settlement" size="default">
-        <option value="partial">Parcial</option>
-        <option value="settled">Pago o ingreso completo</option>
-      </NativeSelect>
+      <DefaultChoiceField
+        name="settlement"
+        label="Estado del importe real"
+        initial="partial"
+        options={settlementOptions}
+      />
     </Field>
   </>
 );
@@ -202,10 +220,11 @@ const OccurrenceEditor = ({ item, save, categories, disabled }: Props): JSX.Elem
   const [scope, setScope] = useState<"once" | "forward">("once");
   return (
     <>
-      <details>
-        <summary className="cursor-pointer font-medium">Editar recurrente</summary>
+      <Disclosure title="Editar recurrente">
         <div className="mt-4 flex gap-2">
           <Button
+            contentLayout="wrap"
+            focusAppearance="subtle"
             variant="outline"
             aria-pressed={scope === "once"}
             onClick={() => setScope("once")}
@@ -213,6 +232,8 @@ const OccurrenceEditor = ({ item, save, categories, disabled }: Props): JSX.Elem
             Solo esta vez
           </Button>
           <Button
+            contentLayout="wrap"
+            focusAppearance="subtle"
             variant="outline"
             aria-pressed={scope === "forward"}
             onClick={() => setScope("forward")}
@@ -228,7 +249,7 @@ const OccurrenceEditor = ({ item, save, categories, disabled }: Props): JSX.Elem
             save({ kind: "edit", planId: item.planId, date: item.date, scope, plan })
           }
         />
-      </details>
+      </Disclosure>
     </>
   );
 };
@@ -262,8 +283,7 @@ const LinkTransaction = ({
   const [replaces, setReplaces] = useState("");
   const [settled, setSettled] = useState(false);
   return (
-    <details>
-      <summary className="cursor-pointer font-medium">Vincular transacción existente</summary>
+    <Disclosure title="Vincular transacción existente">
       <LinkFields
         item={item}
         disabled={disabled}
@@ -292,7 +312,7 @@ const LinkTransaction = ({
           })
         }
       />
-    </details>
+    </Disclosure>
   );
 };
 
@@ -315,36 +335,24 @@ const LinkFields = ({
     settled: boolean;
     setSettled: (value: boolean) => void;
   }>): JSX.Element => (
-  <div className="grid gap-3 py-3">
+  <fieldset disabled={disabled} className="grid gap-3 py-3">
     <Field label="Registro manual que reemplaza" name="linked-replaces">
-      <NativeSelect
-        id="recurring-linked-replaces"
-        size="default"
+      <ChoiceField
+        name="linked-replaces"
+        label="Registro manual que reemplaza"
         value={replaces}
-        onChange={(event) => setReplaces(event.target.value)}
-        disabled={disabled}
-      >
-        <option value="">Ninguno</option>
-        {item.fulfillments
-          .filter((mark) => mark.transactionId === undefined)
-          .map((mark) => (
-            <option key={mark.id} value={mark.id}>
-              {mark.actualDate} · {money(mark.money)}
-            </option>
-          ))}
-      </NativeSelect>
+        onChange={setReplaces}
+        options={manualOptions(item)}
+      />
     </Field>
     <Field label="Estado de la transacción vinculada" name="linked-settlement">
-      <NativeSelect
-        id="recurring-linked-settlement"
-        size="default"
+      <ChoiceField
+        name="linked-settlement"
+        label="Estado de la transacción vinculada"
         value={settled ? "settled" : "partial"}
-        onChange={(event) => setSettled(event.target.value === "settled")}
-        disabled={disabled}
-      >
-        <option value="partial">Parcial</option>
-        <option value="settled">Pago o ingreso completo</option>
-      </NativeSelect>
+        onChange={(value) => setSettled(value === "settled")}
+        options={settlementOptions}
+      />
     </Field>
-  </div>
+  </fieldset>
 );

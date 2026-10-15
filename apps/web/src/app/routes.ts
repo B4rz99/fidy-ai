@@ -148,7 +148,14 @@ const recurringPlansRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/recurring",
   validateSearch: (search) =>
-    Schema.decodeSync(Schema.Struct({ month: Schema.optionalKey(RecurringMonth) }))(search),
+    Schema.decodeSync(
+      Schema.Struct({
+        month: Schema.optionalKey(RecurringMonth),
+        recurringData: Schema.optionalKey(
+          Schema.Literals(["demo", "worst", "empty", "one", "many", "stale"])
+        ),
+      })
+    )(search),
   component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringFeature"),
 });
 const recurringDigestRoute = createRoute({

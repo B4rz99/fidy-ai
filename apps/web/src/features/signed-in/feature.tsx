@@ -143,7 +143,7 @@ const CompactNavigation = ({
   onLogout,
 }: Readonly<{ loggingOut: boolean; onLogout: () => void }>): JSX.Element => (
   <>
-    <div className="px-5 md:hidden">
+    <div className="px-2 md:hidden">
       <Button
         variant="outline"
         size="icon"
@@ -201,7 +201,10 @@ export const ApplicationShell = ({
   return (
     <div className="signed-in-theme min-h-svh bg-background md:flex">
       <aside className="signed-in-sidebar flex items-center justify-between border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:items-stretch md:border-r md:border-b-0">
-        <Link className="flex shrink-0 flex-col items-start gap-2 px-6 py-4" to="/app/dashboard">
+        <Link
+          className="flex shrink-0 flex-col items-start gap-2 px-3 py-4 md:px-6"
+          to="/app/dashboard"
+        >
           <FidyWordmark />
           <span className="hidden text-xs text-muted-foreground md:block">
             Tu dinero, más claro

@@ -1,7 +1,7 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter, useSearch } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { Skeleton } from "@/ui/components/skeleton";
@@ -16,6 +16,10 @@ import {
   type Workspace,
   shiftMonth,
 } from "./model";
+
+const PreviewWorkspace = import.meta.env.DEV
+  ? lazy(() => import("./dev-preview").then((module) => ({ default: module.RecurringDataPreview })))
+  : RecurringWorkspace;
 
 type Props = Readonly<{
   month: string;
@@ -96,7 +100,13 @@ export const RecurringFeature = (): JSX.Element => {
   const [now] = useState(() => DateTime.nowUnsafe());
   const [filters, setFilters] = useState<Filters>({});
   const [previous, setPrevious] = useState<Option.Option<string>>(() => Option.none());
-  if (state._tag === "Failure") return <Button onClick={refresh}>Reintentar recurrentes</Button>;
+  if (state._tag === "Failure") {
+    return (
+      <Button contentLayout="wrap" focusAppearance="subtle" onClick={refresh}>
+        Reintentar recurrentes
+      </Button>
+    );
+  }
   if (state._tag !== "Ready") return <output>Cargando recurrentes…</output>;
   const user = state.value.data;
   const currentMonth = DateTime.formatIsoDate(
@@ -163,9 +173,9 @@ const ReadyResources = ({
     router.navigate({ to: "/app/recurring", search: { month } }).catch(() => undefined);
   };
   return (
-    <>
+    <Suspense fallback={<LoadingRecurring />}>
       <SaveNotice stale={stale} saveState={saveState} waiting={waiting} retry={retry} />
-      <RecurringWorkspace
+      <PreviewWorkspace
         key={view.document.revision}
         notice={<SaveNotice stale={stale} saveState={saveState} waiting={waiting} retry={retry} />}
         view={view}
@@ -179,7 +189,7 @@ const ReadyResources = ({
         earlier={props.earlier}
         timeZone={props.timeZone}
       />
-    </>
+    </Suspense>
   );
 };
 const SaveNotice = ({
@@ -201,7 +211,13 @@ const SaveNotice = ({
             ? "No pudimos confirmar si se guardó. Actualiza y revisa el resultado antes de volver a guardar."
             : "Actualiza los recurrentes y revisa los datos antes de guardar."}
         </p>
-        <Button variant="outline" disabled={waiting} onClick={retry}>
+        <Button
+          contentLayout="wrap"
+          focusAppearance="subtle"
+          variant="outline"
+          disabled={waiting}
+          onClick={retry}
+        >
           Actualizar recurrentes
         </Button>
       </div>

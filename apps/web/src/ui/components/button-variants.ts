@@ -10,12 +10,22 @@ export const buttonVariants = cva(
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        view: "hover:bg-muted aria-pressed:bg-secondary aria-pressed:text-secondary-foreground focus-visible:border-transparent focus-visible:bg-secondary focus-visible:ring-0 focus-visible:underline focus-visible:underline-offset-4",
         disclosure: "hover:bg-muted hover:text-foreground",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-ring disabled:bg-destructive",
         link: "text-foreground underline underline-offset-4 hover:text-muted-foreground",
+      },
+      contentLayout: {
+        singleLine: "",
+        wrap: "h-auto min-w-0 max-w-full shrink whitespace-normal [overflow-wrap:anywhere]",
+      },
+      focusAppearance: {
+        ring: "",
+        subtle:
+          "focus-visible:border-transparent focus-visible:ring-0 focus-visible:bg-muted focus-visible:underline focus-visible:underline-offset-4",
       },
       size: {
         label: "min-h-11 gap-2 px-0 py-2.5 [&_svg:not([class*='size-'])]:size-4",

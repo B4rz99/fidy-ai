@@ -48,7 +48,7 @@ const TransactionPage = ({ choose, disabled, cursor, next }: PageProps): JSX.Ele
   const refresh = useAtomRefresh(resource);
   if (state._tag === "Failure") {
     return (
-      <Button variant="outline" onClick={refresh}>
+      <Button contentLayout="wrap" focusAppearance="subtle" variant="outline" onClick={refresh}>
         Reintentar transacciones
       </Button>
     );
@@ -83,12 +83,13 @@ const TransactionResults = ({
   return (
     <div className="grid gap-2">
       {stale ? (
-        <Button variant="outline" onClick={refresh}>
+        <Button contentLayout="wrap" focusAppearance="subtle" variant="outline" onClick={refresh}>
           Actualizar transacciones
         </Button>
       ) : null}
       {page.data.map((transaction) => (
         <Button
+          focusAppearance="subtle"
           key={transaction.id}
           variant="outline"
           disabled={blocked}
@@ -102,12 +103,17 @@ const TransactionResults = ({
         <p className="text-sm text-muted-foreground">Sin transacciones en esta página.</p>
       ) : null}
       {Option.isSome(more) ? (
-        <Button variant="ghost" disabled={blocked} onClick={() => next(more)}>
+        <Button
+          focusAppearance="subtle"
+          variant="ghost"
+          disabled={blocked}
+          onClick={() => next(more)}
+        >
           Ver más transacciones
         </Button>
       ) : null}
       {Option.isSome(cursor) ? (
-        <Button variant="ghost" onClick={() => next(Option.none())}>
+        <Button focusAppearance="subtle" variant="ghost" onClick={() => next(Option.none())}>
           Volver a las más recientes
         </Button>
       ) : null}

@@ -3,7 +3,7 @@ import { type FormEvent, type JSX, useState } from "react";
 import { RecurringPlanInput } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { NativeSelect } from "@/ui/components/native-select";
+import { ChoiceField } from "./fields";
 import { Field, IdentityFields, ScheduleFields } from "./form-fields";
 import type { Category, PlanInput } from "./model";
 
@@ -68,7 +68,9 @@ export const PlanForm = ({
             Revisa la fecha, moneda e importe. Un pago de tarjeta debe ser una transferencia.
           </p>
         ) : null}
-        <Button type="submit">Guardar recurrente</Button>
+        <Button contentLayout="wrap" focusAppearance="subtle" type="submit">
+          Guardar recurrente
+        </Button>
       </fieldset>
     </form>
   );
@@ -85,22 +87,20 @@ const AmountFields = ({
 }>): JSX.Element => (
   <>
     <Field label="Tipo de importe" name="amountMode">
-      <NativeSelect
-        id="recurring-amountMode"
+      <ChoiceField
         name="amountMode"
-        size="default"
+        label="Tipo de importe"
         value={amountMode}
-        onChange={(event) => {
-          const parsed = Schema.decodeUnknownOption(RecurringPlanInput.fields.amountMode)(
-            event.target.value
-          );
+        options={[
+          { value: "unknown", label: "Por confirmar" },
+          { value: "fixed", label: "Fijo" },
+          { value: "estimated", label: "Estimado" },
+        ]}
+        onChange={(value) => {
+          const parsed = Schema.decodeUnknownOption(RecurringPlanInput.fields.amountMode)(value);
           if (Option.isSome(parsed)) setAmountMode(parsed.value);
         }}
-      >
-        <option value="unknown">Por confirmar</option>
-        <option value="fixed">Fijo</option>
-        <option value="estimated">Estimado</option>
-      </NativeSelect>
+      />
     </Field>
     {amountMode !== "unknown" ? (
       <Field label="Importe" name="amount">

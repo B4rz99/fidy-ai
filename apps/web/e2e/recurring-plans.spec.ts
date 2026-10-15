@@ -5,6 +5,7 @@ import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
 const successStatus = 200;
+const monthsPerYear = 12;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
   page,
   request,
@@ -28,30 +29,24 @@ test("recurring plans persist through the real canonical API and share monthly l
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: /Arriendo de prueba/u }).first()).toBeVisible()
       );
+      yield* expectCalendarItemFits(page);
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        page
-          .getByRole("button", { name: /Arriendo de prueba/u })
+        recurringItem(page, /Arriendo de prueba/u)
           .first()
           .click()
       );
       yield* Effect.tryPromise(() =>
         page.getByLabel("Importe real", { exact: true }).fill("400000")
       );
-      yield* Effect.tryPromise(() => page.getByLabel("Fecha real").fill("2026-10-30"));
+      yield* Effect.tryPromise(() => chooseDate(page, "Fecha real", "2026-10-30"));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Registrar" }).click());
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Registrar parcial" }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("button", { name: /Arriendo de prueba.*Parcial/u }).first()
-        ).toBeVisible()
+        expect(recurringItem(page, /Arriendo de prueba.*Parcial/u).first()).toBeVisible()
       );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("button", { name: /Arriendo de prueba.*Parcial/u }).first()
-        ).toBeVisible()
+        expect(recurringItem(page, /Arriendo de prueba.*Parcial/u).first()).toBeVisible()
       );
       yield* inspectMobile(page);
     })
@@ -74,18 +69,24 @@ const createPlan = ({
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Nuevo recurrente" }).click());
     yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill(name));
-    yield* Effect.tryPromise(() => page.getByLabel("Primera fecha").fill("2026-10-31"));
-    yield* Effect.tryPromise(() => page.getByLabel("Tipo", { exact: true }).selectOption(kind));
-    yield* Effect.tryPromise(() => page.getByLabel("Moneda", { exact: true }).fill(currency));
+    yield* Effect.tryPromise(() => chooseDate(page, "Primera fecha", "2026-10-31"));
+    yield* Effect.tryPromise(() =>
+      chooseOption(
+        page,
+        "Tipo",
+        { income: "Ingresos", transfer: "Transferencias", expense: "Gastos" }[kind] ?? "Gastos"
+      )
+    );
+    yield* Effect.tryPromise(() => chooseCurrency(page, currency));
     if (amount !== "") {
-      yield* Effect.tryPromise(() => page.getByLabel("Tipo de importe").selectOption("fixed"));
+      yield* Effect.tryPromise(() => chooseOption(page, "Tipo de importe", "Fijo"));
       yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill(amount));
     }
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Guardar recurrente" }).click()
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("button").filter({ hasText: name }).first()).toBeVisible()
+      expect(recurringItem(page, new RegExp(name, "u")).first()).toBeVisible()
     );
   });
 test("keeps income, transfers, unknown expenses and filtered summaries separate", ({
@@ -132,16 +133,14 @@ test("keeps income, transfers, unknown expenses and filtered summaries separate"
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("region", { name: "Ingresos", exact: true })).toContainText("USD")
       );
-      yield* Effect.tryPromise(() => page.getByText("Filtros", { exact: true }).click());
-      yield* Effect.tryPromise(() => page.getByLabel("Filtrar moneda").fill("USD"));
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Aplicar filtros" }).click());
+      yield* filterUsd(page);
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("region", { name: "Transferencias", exact: true })).toContainText(
           "Sin recurrentes"
         )
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button").filter({ hasText: "Pago de tarjeta" })).toHaveCount(0)
+        expect(recurringItem(page, /Pago de tarjeta/u)).toHaveCount(0)
       );
     })
   ));
@@ -157,8 +156,7 @@ const inspectMobile = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
     );
     yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
     yield* Effect.tryPromise(() =>
-      page
-        .getByRole("button", { name: /Arriendo de prueba.*Parcial/u })
+      recurringItem(page, /Arriendo de prueba.*Parcial/u)
         .first()
         .click()
     );
@@ -203,9 +201,7 @@ test("recovers a committed save with a lost acknowledgement through an explicit 
         page.getByRole("button", { name: "Actualizar recurrentes" }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button").filter({ hasText: "Guardado sin respuesta" })).toHaveCount(
-          1
-        )
+        expect(recurringItem(page, /Guardado sin respuesta/u)).toHaveCount(1)
       );
     })
   ));
@@ -219,3 +215,75 @@ const loseAcknowledgement = (route: Route): Promise<void> =>
         })
       )
     : route.continue();
+
+const expectCalendarItemFits = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    page
+      .getByRole("button", { name: /Arriendo de prueba/u })
+      .first()
+      .evaluate((element) => {
+        const cell = element.closest("section");
+        if (cell === null) return false;
+        const outer = cell.getBoundingClientRect();
+        return [element, ...element.querySelectorAll("span")].every((content) => {
+          const inner = content.getBoundingClientRect();
+          return (
+            inner.left >= outer.left && inner.right <= outer.right && inner.bottom <= outer.bottom
+          );
+        });
+      })
+      .then((fits) => {
+        expect(fits).toBe(true);
+      })
+  );
+
+const filterUsd = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.getByText("Filtros", { exact: true }).click());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("combobox", { name: "Filtrar moneda", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("combobox", { name: "Buscar: Filtrar moneda", exact: true }).fill("USD")
+    );
+    yield* Effect.tryPromise(() => page.getByRole("option", { name: "USD", exact: true }).click());
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Aplicar filtros" }).click());
+  });
+
+const recurringItem = (page: Page, name: RegExp): ReturnType<Page["getByRole"]> =>
+  page
+    .getByRole("row", { name })
+    .or(page.getByRole("button", { name: new RegExp(`^(?:${name.source})`, "u") }));
+const chooseOption = (page: Page, label: string, option: string): Promise<void> =>
+  page
+    .getByRole("button", { name: label, exact: true })
+    .click()
+    .then(() => page.getByRole("menuitemradio", { name: option, exact: true }).click());
+const chooseCurrency = (page: Page, currency: string): Promise<void> =>
+  page
+    .getByRole("combobox", { name: "Moneda", exact: true })
+    .click()
+    .then(() => page.getByRole("combobox", { name: "Buscar: Moneda", exact: true }).fill(currency))
+    .then(() => page.getByRole("option", { name: currency, exact: true }).click());
+const chooseDate = (page: Page, label: string, date: string): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const trigger = page.getByRole("button", { name: label, exact: true });
+      const selected = yield* Effect.tryPromise(() => trigger.innerText());
+      const [, month = 0, year = 0] = selected.split("-").map(Number);
+      const [targetYear = 0, targetMonth = 0] = date.split("-").map(Number);
+      const steps = (targetYear - year) * monthsPerYear + targetMonth - month;
+      yield* Effect.tryPromise(() => trigger.click());
+      for (let step = 0; step < Math.abs(steps); step++) {
+        yield* Effect.tryPromise(() =>
+          page
+            .getByRole("button", {
+              name: steps > 0 ? "Ir al mes siguiente" : "Ir al mes anterior",
+              exact: true,
+            })
+            .click()
+        );
+      }
+      yield* Effect.tryPromise(() => page.locator(`[data-day="${date}"] button`).click());
+    })
+  );

@@ -50,3 +50,5 @@ stryker.log
 apps/site/.astro/
 apps/site/test-results/
 apps/site/playwright-report/
+
+.local/browser/

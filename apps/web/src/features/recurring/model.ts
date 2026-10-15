@@ -1,6 +1,6 @@
 import { DateTime, Option } from "effect";
 import type { CanonicalInput, CanonicalSuccess } from "@/transport/client";
-import { formatMoney } from "@/transport/money";
+import { formatMoneyWithCode } from "@/transport/money";
 
 export type Workspace = CanonicalSuccess<"recurringPlans.getRecurringWorkspace">["data"];
 export type Occurrence = Workspace["occurrences"][number];
@@ -35,7 +35,7 @@ export const statuses = {
   skipped: "Omitido",
 } as const;
 export const money = (value: Occurrence["completed"]): string =>
-  formatMoney({ locale: "es-CO", money: value });
+  formatMoneyWithCode({ locale: "es-CO", money: value });
 export const expectedAmount = (item: Occurrence): string => {
   if (item.status === "completed") return money(item.completed);
   if (item.plan.money === undefined) return "Por confirmar";
@@ -74,3 +74,11 @@ export const planFromTransaction = ({
     onSome: (counterparty) => ({ counterparty }),
   }),
 });
+
+export const transferLabel = (items: ReadonlyArray<Occurrence>): string => {
+  const transfers = items.filter((item) => item.plan.kind === "transfer");
+  if (!transfers.some((item) => item.plan.cardPayment === true)) return "Transferencias";
+  return transfers.every((item) => item.plan.cardPayment === true)
+    ? "Pagos de tarjeta"
+    : "Tarjetas y transferencias";
+};

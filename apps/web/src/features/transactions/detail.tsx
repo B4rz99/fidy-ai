@@ -2,7 +2,7 @@ import { Option } from "effect";
 import type { JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { CategoryVisual } from "./visuals";
+import { CategoryVisual } from "@/ui/components/category-visual";
 import { Button } from "@/ui/components/button";
 import type { FidyClient } from "@/transport/client";
 import type { DetailMode } from "./panel-state";

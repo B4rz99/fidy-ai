@@ -42,8 +42,10 @@ export const CalendarField = (props: DateFieldProps): JSX.Element => {
         aria-label={props.label}
         render={
           <Button
+            contentLayout="wrap"
             type="button"
             variant="outline"
+            focusAppearance="subtle"
             disabled={props.disabled}
             className={cn(props.appearance === "field" && "w-full")}
           />

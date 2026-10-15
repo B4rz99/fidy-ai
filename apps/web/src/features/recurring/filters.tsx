@@ -1,99 +1,135 @@
 import { Option, Schema } from "effect";
-import { type JSX } from "react";
-import { RecurringFilters } from "@/transport/client";
+import { type JSX, useState } from "react";
+import { Currency, RecurringFilters } from "@/transport/client";
 import { Button } from "@/ui/components/button";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
+import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { Input } from "@/ui/components/input";
-import { NativeSelect } from "@/ui/components/native-select";
 import type { Category, Filters } from "./model";
 import { frequencies, kinds, statuses } from "./model";
 
-const FilterSelect = ({
-  name,
-  label,
-  options,
-  value,
-}: Readonly<{
-  name: string;
-  label: string;
-  options: ReadonlyArray<readonly [string, string]>;
-  value: Option.Option<string>;
-}>): JSX.Element => (
-  <NativeSelect
-    name={name}
-    aria-label={label}
-    size="default"
-    defaultValue={Option.getOrElse(value, () => "")}
-  >
-    <option value="">{label}</option>
-    {options.map(([key, text]) => (
-      <option key={key} value={key}>
-        {text}
-      </option>
-    ))}
-  </NativeSelect>
-);
-const parseFilters = (form: FormData): Option.Option<Filters> => {
-  const raw = Object.fromEntries([...form].filter(([, value]) => value !== ""));
-  return Schema.decodeOption(RecurringFilters)(raw);
-};
+const searchLimit = 120;
+
 type FilterProps = Readonly<{
   filters: Filters;
   categories: ReadonlyArray<Category>;
   apply: (filters: Filters) => void;
 }>;
-export const FiltersForm = ({ filters, categories, apply }: FilterProps): JSX.Element => (
-  <details className="rounded-lg border p-3">
-    <summary className="cursor-pointer text-sm font-medium">Filtros</summary>
-    <form
-      className="mt-3 flex flex-wrap gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const parsed = parseFilters(new FormData(event.currentTarget));
-        if (Option.isSome(parsed)) apply(parsed.value);
-      }}
-    >
-      <Input
-        name="search"
-        aria-label="Buscar recurrentes"
-        placeholder="Buscar recurrentes"
-        className="max-w-64"
-        defaultValue={filters.search ?? ""}
-      />
-      <FilterSelect
-        name="kind"
-        label="Todos los tipos"
-        options={kinds}
-        value={Option.fromUndefinedOr(filters.kind)}
-      />
-      <FilterSelect
-        name="frequency"
-        label="Todas las frecuencias"
-        options={frequencies}
-        value={Option.fromUndefinedOr(filters.frequency)}
-      />
-      <FilterSelect
-        name="status"
-        label="Todos los estados"
-        options={Object.entries(statuses)}
-        value={Option.fromUndefinedOr(filters.status)}
-      />
-      <FilterSelect
-        name="categoryId"
-        label="Todas las categorías"
-        options={categories.map((category) => [category.id, category.label])}
-        value={Option.fromUndefinedOr(filters.categoryId)}
-      />
-      <Input
-        name="currency"
-        aria-label="Filtrar moneda"
-        placeholder="Moneda, ej. COP"
-        className="max-w-40"
-        defaultValue={filters.currency ?? ""}
-      />
-      <Button type="submit">Aplicar filtros</Button>
-      <Button variant="ghost" type="button" onClick={() => apply({})}>
-        Limpiar
-      </Button>
-    </form>
-  </details>
+type DraftProps = Readonly<{
+  draft: Readonly<Record<string, string>>;
+  change: (name: string, value: string) => void;
+}>;
+const FilterChoice = ({
+  name,
+  label,
+  options,
+  draft,
+  change,
+}: DraftProps &
+  Readonly<{
+    name: string;
+    label: string;
+    options: ReadonlyArray<readonly [string, string]>;
+  }>): JSX.Element => (
+  <ChoiceDropdown
+    id={`recurring-filter-${name}`}
+    label={label}
+    value={draft[name] ?? ""}
+    options={[{ value: "", label }, ...options.map(([value, text]) => ({ value, label: text }))]}
+    disabled={false}
+    width="auto"
+    leading={null}
+    triggerLabel={Option.none()}
+    onChange={(value) => change(name, value)}
+  />
 );
+const FilterChoices = ({
+  categories,
+  ...props
+}: DraftProps & Pick<FilterProps, "categories">): JSX.Element => (
+  <>
+    <FilterChoice {...props} name="kind" label="Todos los tipos" options={kinds} />
+    <FilterChoice {...props} name="frequency" label="Todas las frecuencias" options={frequencies} />
+    <FilterChoice
+      {...props}
+      name="status"
+      label="Todos los estados"
+      options={Object.entries(statuses)}
+    />
+    <FilterChoice
+      {...props}
+      name="categoryId"
+      label="Todas las categorías"
+      options={categories.map((category) => [category.id, category.label])}
+    />
+    <SearchableChoiceDropdown
+      id="recurring-filter-currency"
+      label="Filtrar moneda"
+      value={props.draft.currency ?? ""}
+      options={[
+        { value: "", label: "Todas las monedas" },
+        ...Currency.literals.map((value) => ({ value, label: value })),
+      ]}
+      disabled={false}
+      width="auto"
+      onChange={(value) => props.change("currency", value)}
+    />
+  </>
+);
+export const FiltersForm = ({ filters, categories, apply }: FilterProps): JSX.Element => {
+  const [draft, setDraft] = useState<Readonly<Record<string, string>>>(() => ({ ...filters }));
+  const [invalid, setInvalid] = useState(false);
+  const change = (name: string, value: string): void => setDraft({ ...draft, [name]: value });
+  return (
+    <section
+      id="recurring-filters"
+      aria-label="Filtrar recurrentes"
+      className="rounded-xl bg-muted/40 p-4"
+    >
+      <form
+        className="flex flex-wrap items-center gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const parsed = Schema.decodeOption(RecurringFilters)(
+            Object.fromEntries(Object.entries(draft).filter(([, value]) => value !== ""))
+          );
+          setInvalid(Option.isNone(parsed));
+          if (Option.isSome(parsed)) apply(parsed.value);
+        }}
+      >
+        <Input
+          maxLength={searchLimit}
+          name="search"
+          aria-label="Buscar recurrentes"
+          placeholder="Buscar recurrentes"
+          className="max-w-64"
+          value={draft.search ?? ""}
+          onChange={(event) => change("search", event.target.value)}
+        />
+        <FilterChoices draft={draft} change={change} categories={categories} />
+        <Button contentLayout="wrap" focusAppearance="subtle" type="submit" size="sm">
+          Aplicar filtros
+        </Button>
+        <Button
+          contentLayout="wrap"
+          focusAppearance="subtle"
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setInvalid(false);
+            setDraft({});
+            apply({});
+          }}
+        >
+          Limpiar
+        </Button>
+      </form>
+      {invalid ? (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          Revisa los filtros. La búsqueda admite hasta 120 caracteres.
+        </p>
+      ) : null}
+    </section>
+  );
+};

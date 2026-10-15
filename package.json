@@ -18,6 +18,7 @@
     "check:effect-family": "bun scripts/check-effect-family.ts",
     "check:pattern-sources": "bun scripts/check-pattern-sources.ts",
     "dev": "bun run --cwd infra/cloudflare dev",
+    "dev:browser": "bun scripts/dev-browser.ts",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:cloudflare": "bun run --cwd infra/cloudflare dev",
     "build": "bun run --cwd apps/site build && bun run --cwd apps/web build && bun run --cwd apps/cli build",

@@ -1,6 +1,10 @@
+import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
+import type { WhatsAppBusinessPhoneNumberId } from "../../src/shell/channels/whatsapp/contract";
+import type { HostedCanonicalCaller } from "../canonical-work/contract";
 import { admitMedia } from "./internal/media-submissions";
-import type { MediaAdmissionInput } from "./contract";
-import type { Effect } from "effect";
+import { type MediaAdmissionInput, StatementDocumentUnavailable } from "./contract";
+import type { StagedStatementBytes } from "../../src/shell/ingestion/contract";
+import { Effect, Option } from "effect";
 
 import {
   prepareStatementDocumentAdmission as documentAdmission,
@@ -8,6 +12,7 @@ import {
   readHeldStatementDocumentReference as readDocumentReference,
   readHeldStatementDocumentSubmission as readDocumentSubmission,
   releaseHeldStatementDocumentUpload as releaseDocumentUpload,
+  retrieveHeldStatementMedia,
   stageHeldStatementDocument as stageDocument,
   withHeldStatementDocumentUpload as withDocumentUpload,
 } from "./internal/statement-document";
@@ -66,20 +71,63 @@ export const prepareStatementSessionActivity: typeof sessionActivity = (input) =
 /** Admit direct attachment evidence in Agent's guarded Turn transaction. */
 export const prepareStatementDocumentAdmission: typeof documentAdmission = (input) =>
   documentAdmission(input);
+type HeldStatementDocumentWork = Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  caller: HostedCanonicalCaller;
+  outbound: OutboundHttpService;
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  current: number;
+}>;
+
+/** Recover retained bytes without a download or new charge; otherwise admit, retrieve and stage
+ * the live Turn's document, releasing its upload lease. The reference grants no publication authority.
+ */
+export const recoverHeldStatementDocument = (
+  work: HeldStatementDocumentWork
+): Effect.Effect<StagedStatementBytes, StatementDocumentUnavailable> =>
+  Effect.gen(function* () {
+    const uncertain = (): StatementDocumentUnavailable =>
+      new StatementDocumentUnavailable({ reason: "uncertain" });
+    const retained = yield* readDocumentReference(work).pipe(Effect.mapError(uncertain));
+    if (Option.isSome(retained)) {
+      yield* releaseDocumentUpload(work).pipe(Effect.mapError(uncertain));
+      return retained.value;
+    }
+    const mediaId = yield* readDocument(work).pipe(Effect.mapError(uncertain));
+    if (Option.isNone(mediaId)) return yield* uncertain();
+    return yield* withDocumentUpload({
+      ...work,
+      work: (grant) =>
+        Effect.gen(function* () {
+          const media = yield* retrieveHeldStatementMedia({ ...work, mediaId: mediaId.value }).pipe(
+            Effect.mapError(() => new StatementDocumentUnavailable({ reason: "media-unavailable" }))
+          );
+          return yield* stageDocument({ ...work, grant, bytes: media.bytes }).pipe(
+            Effect.mapError(
+              (failure) =>
+                new StatementDocumentUnavailable({
+                  reason:
+                    failure._tag === "StatementStagingFailed" ? "invalid-material" : "uncertain",
+                })
+            )
+          );
+        }),
+    }).pipe(
+      Effect.mapError((failure) =>
+        failure instanceof StatementDocumentUnavailable
+          ? failure
+          : new StatementDocumentUnavailable({
+              reason: failure._tag === "ResourceAdmissionRefused" ? "rate-limited" : "uncertain",
+            })
+      )
+    );
+  });
+
 /** Read only the admitted upload's media identity under live held authority. */
-export const readHeldStatementDocumentReference: typeof readDocumentReference = (input) =>
-  readDocumentReference(input);
 export const readHeldStatementDocument: typeof readDocument = (input) => readDocument(input);
 export const readHeldStatementDocumentSubmission: typeof readDocumentSubmission = (input) =>
   readDocumentSubmission(input);
-/** Apply installed upload budgets before provider retrieval and release bounded outstanding work. */
-export const withHeldStatementDocumentUpload: typeof withDocumentUpload = (input) =>
-  withDocumentUpload(input);
-/** Release only this admitted Turn's retained upload occupancy during recovery. */
-export const releaseHeldStatementDocumentUpload: typeof releaseDocumentUpload = (input) =>
-  releaseDocumentUpload(input);
-/** Stage verified bounded bytes with durable same-Turn retry identity. */
-export const stageHeldStatementDocument: typeof stageDocument = (input) => stageDocument(input);
 
 /** Share canonical row settlement with Agent's held, verified origin-session authority. */
 export const prepareHeldStatementReviewDecision: typeof heldReview = (input) => heldReview(input);

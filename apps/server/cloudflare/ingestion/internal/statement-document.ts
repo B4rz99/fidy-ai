@@ -1,4 +1,5 @@
-import { Clock, Effect, Option, Schema } from "effect";
+import { readWhatsAppStatementMedia } from "../../../src/shell/ingestion/operations";
+import { Clock, Crypto, Effect, Option, PlatformError, Schema } from "effect";
 import { WhatsAppMediaId } from "../../../src/shell/channels/whatsapp/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { HostedCanonicalCaller } from "../../canonical-work/contract";
@@ -260,3 +261,27 @@ export const stageHeldStatementDocument = ({
     if (updated.meta.changes !== 1) return yield* unavailable();
     return reference;
   });
+
+const workerCrypto = Crypto.make({
+  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
+  digest: (algorithm, data) =>
+    Effect.tryPromise({
+      try: () =>
+        crypto.subtle
+          .digest(algorithm, Uint8Array.from(data))
+          .then((value) => new Uint8Array(value)),
+      catch: (cause) =>
+        PlatformError.systemError({
+          _tag: "Unknown",
+          module: "WorkerCrypto",
+          method: "digest",
+          cause,
+        }),
+    }),
+});
+export const retrieveHeldStatementMedia = (
+  work: Parameters<typeof readWhatsAppStatementMedia>[0]
+): Effect.Effect<
+  Effect.Success<ReturnType<typeof readWhatsAppStatementMedia>>,
+  Effect.Error<ReturnType<typeof readWhatsAppStatementMedia>>
+> => readWhatsAppStatementMedia(work).pipe(Effect.provideService(Crypto.Crypto, workerCrypto));

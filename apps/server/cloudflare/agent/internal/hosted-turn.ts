@@ -1020,20 +1020,7 @@ const executeAdmittedTurn = ({
               failure instanceof HostedInferenceError && failure.reason._tag === "InvalidOutput"
           )
         ) {
-          const repaired = yield* exitOnAbort(
-            active.recover.pipe(
-              Effect.flatMap((continuation) =>
-                continuation.prepare([
-                  {
-                    _tag: "InvalidOutputFeedback",
-                    description:
-                      "La respuesta no cumplió el formato o los argumentos de las herramientas disponibles. Responde al pedido original usando solo herramientas disponibles y argumentos válidos. No inventes identificadores; consulta los datos necesarios primero.",
-                  },
-                ])
-              )
-            ),
-            signal
-          );
+          const repaired = yield* exitOnAbort(active.repairInvalidOutput, signal);
           if (signal.aborted || (Exit.isFailure(repaired) && Cause.hasInterrupts(repaired.cause))) {
             return (yield* finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
           }

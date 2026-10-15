@@ -1,4 +1,4 @@
-import { BigDecimal } from "effect";
+import { BigDecimal, Option } from "effect";
 import {
   Budget as BudgetSchema,
   BudgetStatusReport,
@@ -173,7 +173,18 @@ export const previewProps = ({
     categories,
     report,
     budgets: statuses.map((status) => status.budget),
-    editable: false,
-    onRefresh: (): void => undefined,
+    editing: {
+      ...props.editing,
+      disabled: true,
+      draft: Option.none(),
+      write: (): void => undefined,
+      refresh: (): void => undefined,
+      closeEditor: (): void => undefined,
+      assignCategory: (): void => undefined,
+      configureCategory: (): void => undefined,
+      configureGroup: (): void => undefined,
+      saveRow: (): void => undefined,
+      freezePlan: (): void => undefined,
+    },
   };
 };

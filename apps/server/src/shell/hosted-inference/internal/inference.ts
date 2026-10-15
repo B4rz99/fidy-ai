@@ -205,23 +205,29 @@ const makePreparedText = <Request, Continuation>(
       )
     );
   });
-  const recover = Effect.suspend(() => {
+  const repairInvalidOutput = Effect.suspend(() => {
     if (!lifecycle.beginRecovery()) return Effect.fail(invalidAuthority());
     consumeSource();
-    return Effect.succeed(
-      runtime.makeContinuation({
+    return runtime
+      .makeContinuation({
         basePrefix: input.basePrefix,
         continuation: Option.none(),
         policy: input.policy,
       })
-    );
+      .prepare([
+        {
+          _tag: "InvalidOutputFeedback",
+          description:
+            "La respuesta no cumplió el formato o los argumentos de las herramientas disponibles. Responde al pedido original usando solo herramientas disponibles y argumentos válidos. No inventes identificadores; consulta los datos necesarios primero.",
+        },
+      ]);
   });
   const discard = Effect.suspend(() => {
     if (!lifecycle.beginDiscard()) return Effect.fail(invalidAuthority());
     consumeSource();
     return Effect.void;
   });
-  return makePreparedTextAuthority({ execute, recover, discard });
+  return makePreparedTextAuthority({ execute, repairInvalidOutput, discard });
 };
 
 const prepareContinuation = <Request, Continuation>(

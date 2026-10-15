@@ -59,12 +59,14 @@ export type HostedStructuredContext = Readonly<{
 }>;
 /**
  * One-shot text authority. `execute` is valid initially and remains valid only after a retryable
- * ProviderUnavailable failure. InvalidOutput permits exactly one `recover`; terminal failures do
- * not. `discard` is valid before execution or after InvalidOutput and consumes the authority.
+ * ProviderUnavailable failure. InvalidOutput permits exactly one `repairInvalidOutput`, which
+ * prepares corrected format feedback against the original context without executing another round;
+ * terminal failures do not. `discard` is valid before execution or after InvalidOutput and consumes
+ * the authority.
  */
 export type PreparedHostedText = Readonly<{
   execute: Effect.Effect<HostedTextResult, HostedInferenceError>;
-  recover: Effect.Effect<HostedTextContinuation, HostedInferenceError>;
+  repairInvalidOutput: Effect.Effect<PreparedHostedText, HostedInferenceError>;
   discard: Effect.Effect<void, HostedInferenceError>;
 }> &
   Brand.Brand<"PreparedHostedText">;

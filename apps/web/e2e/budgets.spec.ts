@@ -174,6 +174,24 @@ test("shows grouped currency totals and prevents replay after a lost save acknow
     })
   ));
 
+const checkFailedRecovery = Effect.fn(function* (page: Page) {
+  const unavailable = (route: Route): Promise<void> => route.fulfill({ status: 503 });
+  yield* Effect.tryPromise(() => page.route(`${apiOrigin}/budget-status?**`, unavailable));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Actualizar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("alert")).toContainText("No pudimos cargar tus presupuestos")
+  );
+  const input = page.getByLabel("Presupuesto de Vivienda (COP)");
+  yield* Effect.tryPromise(() => expect(input).toHaveValue("100000"));
+  yield* Effect.tryPromise(() => expect(input).toBeDisabled());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Mes siguiente" })).toBeDisabled()
+  );
+  yield* Effect.tryPromise(() => page.unroute(`${apiOrigin}/budget-status?**`, unavailable));
+});
+
 const checkCommittedRefresh = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() => installUser(page));
   yield* Effect.tryPromise(() => installCategories({ page, categories }));
@@ -192,6 +210,7 @@ const checkCommittedRefresh = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("alert")).toContainText("No pudimos confirmar el guardado")
   );
+  yield* checkFailedRecovery(page);
   yield* Effect.tryPromise(() =>
     page.route(`${apiOrigin}/budget-status?**`, (route) =>
       route.fulfill({
@@ -229,8 +248,9 @@ const checkCommittedRefresh = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() => input.press("Tab"));
   expect(mutations).toBe(1);
 });
-test("an uncertain save rereads a committed cap without replaying the mutation", ({ page }) =>
-  Effect.runPromise(checkCommittedRefresh(page)));
+test("an uncertain save stays locked after a failed refresh, then recovers the committed cap without replay", ({
+  page,
+}) => Effect.runPromise(checkCommittedRefresh(page)));
 
 const checkEarlierMonth = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {

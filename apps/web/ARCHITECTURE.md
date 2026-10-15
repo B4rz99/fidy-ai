@@ -71,7 +71,7 @@ activation switch, or a chatbot activation path; preparation still enforces the 
 restriction. Missing or failing availability does not advertise DaviPlata.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
-OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, URLs,
+OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,
 or shared atoms. The form retains its opaque challenge in a mounted ref; the gateway and transport
 closures enclose rotating, one-use bearer authority and the approved token. Only safe interaction
 state and selection locks can enter shared view state. The transport independently verifies the
@@ -205,9 +205,14 @@ Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.co
 site, preserving immutable Consent disclosure links. The app root enters the product; its
 documents are excluded from indexing. There is no application Worker
 entrypoint. The browser Content Security Policy permits connections only to the stable API origin and
-Wompi's fixed sandbox/production tokenization origins. Card fields, Nequi numbers, and DaviPlata
-CC document/product and OTP material never pass through Fidy. An OTP policy must match those
-already permitted origins exactly; it does not widen CSP to arbitrary provider-supplied hosts.
+Wompi's fixed sandbox/production tokenization origins, plus the exact Sandbox OTP service path
+`https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox`. Card fields, Nequi
+numbers, and DaviPlata CC document/product and OTP material never pass through Fidy. For that
+Sandbox service, the transport constructs the query from the bound authorization ID and fixed
+send/confirm operation, then verifies both provider-returned URLs before OTP egress. These transient
+provider query URLs are excluded from application telemetry. Configuration cannot widen CSP to
+arbitrary provider hosts or paths; Production-mode DaviPlata activation and protocol evidence remain
+separate gates.
 Cloudflare applies
 the security headers to every SPA fallback, with the two provider-entry opener-policy exceptions
 described above, keeps shells and release metadata revalidating with

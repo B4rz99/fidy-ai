@@ -95,7 +95,7 @@ export const RecurringFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const [now] = useState(() => DateTime.nowUnsafe());
   const [filters, setFilters] = useState<Filters>({});
-  const [previous, setPrevious] = useState<Option.Option<string>>(Option.none());
+  const [previous, setPrevious] = useState<Option.Option<string>>(() => Option.none());
   if (state._tag === "Failure") return <Button onClick={refresh}>Reintentar recurrentes</Button>;
   if (state._tag !== "Ready") return <output>Cargando recurrentes…</output>;
   const user = state.value.data;

@@ -160,7 +160,7 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
   const { view, categories, disabled, save, filters, applyFilters, timeZone } = props;
   const [tab, setTab] = useState("monthly");
   const [calendar, setCalendar] = useState(false);
-  const [panel, setPanel] = useState<Option.Option<Panel>>(Option.none());
+  const [panel, setPanel] = useState<Option.Option<Panel>>(() => Option.none());
   const open = (item: Occurrence): void =>
     setPanel(Option.some({ kind: "occurrence", planId: item.planId, date: item.date }));
   const create = (): void =>
@@ -364,7 +364,7 @@ const WorkspaceSuggestions = ({
   setPanel,
 }: Pick<Props, "view" | "save" | "disabled" | "timeZone"> &
   Readonly<{ setPanel: (panel: Option.Option<Panel>) => void }>): JSX.Element => {
-  const [cursor, setCursor] = useState<Option.Option<string>>(Option.none());
+  const [cursor, setCursor] = useState<Option.Option<string>>(() => Option.none());
   return (
     <>
       <Suggestions

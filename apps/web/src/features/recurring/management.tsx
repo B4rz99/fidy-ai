@@ -150,19 +150,20 @@ export const PlanManagement = ({
           <option value="stopped">Dejados de seguir</option>
         </NativeSelect>
       </div>
-      {view.document.plans
-        .filter((plan) => status === "all" || planStatus(plan) === status)
-        .filter((plan) => matchesPlanFilters(plan, filters))
-        .map((plan) => (
-          <PlanRow
-            key={plan.id}
-            plan={plan}
-            open={open}
-            disabled={disabled}
-            save={save}
-            today={view.today}
-          />
-        ))}
+      {view.document.plans.flatMap((plan) =>
+        (status === "all" || planStatus(plan) === status) && matchesPlanFilters(plan, filters)
+          ? [
+              <PlanRow
+                key={plan.id}
+                plan={plan}
+                open={open}
+                disabled={disabled}
+                save={save}
+                today={view.today}
+              />,
+            ]
+          : []
+      )}
     </section>
   );
 };
@@ -236,21 +237,21 @@ const SuggestionResults = ({
         Las sugerencias no forman parte de tus próximos pagos.
       </output>
     )}
-    {data.series
-      .filter(
-        (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
-      )
-      .map((series) => (
-        <SuggestionRow
-          key={series.id}
-          series={series}
-          view={view}
-          save={save}
-          create={create}
-          disabled={disabled || !ready}
-          timeZone={timeZone}
-        />
-      ))}
+    {data.series.flatMap((series) =>
+      view.document.suggestions.some((decision) => decision.seriesId === series.id)
+        ? []
+        : [
+            <SuggestionRow
+              key={series.id}
+              series={series}
+              view={view}
+              save={save}
+              create={create}
+              disabled={disabled || !ready}
+              timeZone={timeZone}
+            />,
+          ]
+    )}
     {Option.isSome(data.cursor) ? (
       <Button
         variant="outline"
@@ -270,20 +271,22 @@ const RestoreSuggestions = ({
   disabled,
 }: Readonly<{ view: Workspace; save: Save; disabled: boolean }>): JSX.Element => (
   <>
-    {view.document.suggestions
-      .filter((decision) => decision.disposition === "dismissed")
-      .map((decision) => (
-        <Button
-          key={decision.seriesId}
-          variant="ghost"
-          disabled={disabled}
-          onClick={() =>
-            save({ kind: "suggestion", seriesId: decision.seriesId, action: "restore" })
-          }
-        >
-          Restaurar sugerencia descartada
-        </Button>
-      ))}
+    {view.document.suggestions.flatMap((decision) =>
+      decision.disposition === "dismissed"
+        ? [
+            <Button
+              key={decision.seriesId}
+              variant="ghost"
+              disabled={disabled}
+              onClick={() =>
+                save({ kind: "suggestion", seriesId: decision.seriesId, action: "restore" })
+              }
+            >
+              Restaurar sugerencia descartada
+            </Button>,
+          ]
+        : []
+    )}
   </>
 );
 
@@ -303,6 +306,7 @@ const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
     return true;
   });
 };
+const planStatusLabels = { active: "Activo", paused: "Pausado", stopped: "Dejado de seguir" };
 const PlanRow = ({
   plan,
   open,
@@ -318,13 +322,12 @@ const PlanRow = ({
 }>): JSX.Element => {
   const input = plan.revisions.at(-1)?.plan;
   const status = planStatus(plan);
-  const labels = { active: "Activo", paused: "Pausado", stopped: "Dejado de seguir" };
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
       <Button variant="ghost" onClick={() => open(plan)}>
         {input?.name} · {frequencies.find(([frequency]) => frequency === input?.frequency)?.[1]}
       </Button>
-      <span className="text-xs text-muted-foreground">{labels[status]}</span>
+      <span className="text-xs text-muted-foreground">{planStatusLabels[status]}</span>
       {status === "paused" ? (
         <Button
           variant="outline"

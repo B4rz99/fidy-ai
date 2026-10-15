@@ -21,19 +21,23 @@ export const Summary = ({ view }: Readonly<{ view: Workspace }>): JSX.Element =>
             <CardTitle>{label}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {view.summary
-              .filter((group) => group.kind === kind)
-              .map((group) => (
-                <div key={group.currency} className="grid gap-1">
-                  <span className="font-medium">{group.currency}</span>
-                  <span>{money(group.completed)} registrados</span>
-                  <span>{money(group.remaining)} restantes</span>
-                  {BigDecimal.isZero(group.estimated.amount) ? null : (
-                    <span className="text-muted-foreground">{money(group.estimated)} estimado</span>
-                  )}
-                  {group.unknown > 0 ? <span>{group.unknown} por confirmar</span> : null}
-                </div>
-              ))}
+            {view.summary.flatMap((group) =>
+              group.kind === kind
+                ? [
+                    <div key={group.currency} className="grid gap-1">
+                      <span className="font-medium">{group.currency}</span>
+                      <span>{money(group.completed)} registrados</span>
+                      <span>{money(group.remaining)} restantes</span>
+                      {BigDecimal.isZero(group.estimated.amount) ? null : (
+                        <span className="text-muted-foreground">
+                          {money(group.estimated)} estimado
+                        </span>
+                      )}
+                      {group.unknown > 0 ? <span>{group.unknown} por confirmar</span> : null}
+                    </div>,
+                  ]
+                : []
+            )}
             {view.summary.some((group) => group.kind === kind) ? null : (
               <p className="text-muted-foreground">Sin recurrentes este mes</p>
             )}
@@ -148,16 +152,18 @@ export const MonthCalendar = ({
               >
                 {Number(date.slice(-dayDigits))}
               </p>
-              {view.occurrences
-                .filter((item) => item.expectedDate === date)
-                .map((item) => (
-                  <OccurrenceButton
-                    key={`${item.planId}:${item.date}`}
-                    item={item}
-                    open={open}
-                    categories={categories}
-                  />
-                ))}
+              {view.occurrences.flatMap((item) =>
+                item.expectedDate === date
+                  ? [
+                      <OccurrenceButton
+                        key={`${item.planId}:${item.date}`}
+                        item={item}
+                        open={open}
+                        categories={categories}
+                      />,
+                    ]
+                  : []
+              )}
             </section>
           );
         })}

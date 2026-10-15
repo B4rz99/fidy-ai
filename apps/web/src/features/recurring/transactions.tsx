@@ -22,7 +22,7 @@ const continuation = (
 };
 /** Browse bounded canonical pages; no browser-local copy of financial history is authoritative. */
 export const TransactionPicker = (props: Props): JSX.Element => {
-  const [cursor, setCursor] = useState<Option.Option<string>>(Option.none());
+  const [cursor, setCursor] = useState<Option.Option<string>>(() => Option.none());
   return (
     <TransactionPage
       key={Option.getOrElse(cursor, () => "first")}

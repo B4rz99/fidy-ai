@@ -139,7 +139,8 @@ For an actual, newly source-backed decision about keeping the restricted case co
 
 Replace the zeroes with reviewed finite future times. Record the actual justification and operator
 review in restricted evidence under those new references; moving dates alone is not justification.
-The command refuses stale authority, a different User, a reused review, shortening approved
+The command applies only to unfinished cases; completed cases follow terminal cleanup and cannot
+accept a new retention amendment. It refuses stale authority, a different User, a reused review, shortening approved
 retention or a deadline inside the actual last-deletion backup window. It changes only the two
 case-control retentions. Financial holds, scope, withdrawal, provider outcomes and the configured
 backup window remain the original reviewed decision. The independent registry receives the review

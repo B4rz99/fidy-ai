@@ -1,8 +1,13 @@
 import { deletionDecision } from "./erasure.test-fixture";
-import { resumeErasureCases, sweepErasureControlObjects } from "./operations";
+import {
+  prepareLocalErasureRegistry,
+  resumeErasureCases,
+  sweepErasureControlObjects,
+} from "./operations";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { installRetentionTestSchema, isolatedTestStorage } from "../d1-test-fixture";
+import { ErasureUnavailable } from "../erasure-store/contract";
 import { withErasureRecovery } from "./runtime";
 
 const storage = isolatedTestStorage();
@@ -207,5 +212,53 @@ it("reconciles expired orphan control objects without touching financial bytes o
           bucket.get("held-financial").then((object) => object?.text())
         )
       ).toBe("untouched");
+    })
+  ));
+
+it("initializes an empty local registry but refuses to recreate a lost approved-case checkpoint", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
+        Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
+      const initialize = prepareLocalErasureRegistry({
+        query: (statement) => io(() => db.prepare(statement).first()),
+        exists: (key) => io(() => bucket.head(key)).pipe(Effect.map((object) => object !== null)),
+        empty: io(() => bucket.list({ limit: 1 })).pipe(
+          Effect.map((page) => page.objects.length === 0)
+        ),
+        install: (key, value) =>
+          io(() => bucket.put(key, value, { onlyIf: { etagDoesNotMatch: "*" } })).pipe(
+            Effect.map((object) => object !== null)
+          ),
+      });
+      yield* initialize;
+      expect(
+        yield* Effect.tryPromise(() =>
+          bucket.get("recovery/generation").then((object) => object?.text())
+        )
+      ).toBe("initial");
+      const previous = yield* Effect.tryPromise(() => bucket.head("recovery/generation"));
+      yield* initialize;
+      expect((yield* Effect.tryPromise(() => bucket.head("recovery/generation")))?.etag).toBe(
+        previous?.etag
+      );
+      const current = yield* Clock.currentTimeMillis;
+      const reference = "12740000-0000-4000-8000-000000000002";
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        deletionDecision({ userId, reference, current })
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,?,'Draining',?)"
+          )
+          .bind(reference, userId, current, encoded)
+          .run()
+      );
+      yield* Effect.tryPromise(() => bucket.delete("recovery/generation"));
+      expect((yield* Effect.result(initialize))._tag).toBe("Failure");
+      expect(yield* Effect.tryPromise(() => bucket.head("recovery/generation"))).toBeNull();
     })
   ));

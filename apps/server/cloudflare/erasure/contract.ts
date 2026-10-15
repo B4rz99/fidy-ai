@@ -102,3 +102,10 @@ export type ErasureExecution = Readonly<{
   recovery: ErasureRecoveryConfiguration;
   clearCoordinator: () => Effect.Effect<boolean, ErasureUnavailable>;
 }>;
+
+export type ErasureRegistryInitialization<Requirements = never> = Readonly<{
+  query: (statement: string) => Effect.Effect<unknown, ErasureUnavailable, Requirements>;
+  exists: (key: string) => Effect.Effect<boolean, ErasureUnavailable, Requirements>;
+  empty: Effect.Effect<boolean, ErasureUnavailable, Requirements>;
+  install: (key: string, value: string) => Effect.Effect<boolean, ErasureUnavailable, Requirements>;
+}>;

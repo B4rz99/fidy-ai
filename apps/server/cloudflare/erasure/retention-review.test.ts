@@ -7,6 +7,7 @@ import {
   executeErasureControl,
   executeErasureRestore,
   executeErasureRetentionReview,
+  resumeErasureCases,
 } from "./operations";
 import { withErasureRecovery } from "./runtime";
 
@@ -161,5 +162,92 @@ it("requires a fresh exact-User control review, preserves unresolved custody and
           .first("reviewRef")
       );
       expect(restored).toBe(reviewRef);
+    })
+  ));
+
+it("refuses completed-case renewal before changing controls that are eligible for terminal cleanup", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      const current = yield* Clock.currentTimeMillis;
+      const historical = current - 41 * 86400000;
+      const decision = deletionDecision({ userId, reference, current: historical });
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(decision);
+      const marker = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        decision,
+        sealed: true,
+        requestedAtMs: historical,
+        reviewedAtMs: historical,
+        operatorRef: "obarboza@fidyapp.com",
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json,last_erased_at_ms) VALUES(?,?,?,'Complete',?,?)"
+          )
+          .bind(reference, userId, historical, encoded, historical)
+          .run()
+      );
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+      const installed = yield* Effect.tryPromise(() =>
+        bucket.put(`recovery/cases/${reference}`, marker)
+      );
+      if (installed === null) return yield* Effect.die(new Error("Native marker write failed"));
+      const next = deletionDecision({ userId, reference, current });
+      const candidate = {
+        userId,
+        reference,
+        deadlineMs: current + 5000,
+        authority: {
+          permission: "titular.erase",
+          operatorRef: "obarboza@fidyapp.com",
+          expiresAtMs: current + 60000,
+        },
+        previousReviewRef: decision.receiptRetention.reviewRef,
+        receiptRetention: { ...next.receiptRetention, reviewRef },
+        recoveryRetention: { ...next.recovery.retention, reviewRef },
+      };
+      const response = yield* executeErasureRetentionReview({
+        userId,
+        candidate,
+        stores: [],
+        recovery: { db, bucket: Option.some(bucket) },
+      });
+      expect(response.status).toBe(409);
+      expect(
+        (yield* Effect.tryPromise(() => bucket.head(`recovery/cases/${reference}`)))?.etag
+      ).toBe(installed.etag);
+      expect(
+        yield* Effect.tryPromise(() =>
+          bucket.get("recovery/generation").then((object) => object?.text())
+        )
+      ).toBe("initial");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT decision_json FROM erasure_requests WHERE id=?")
+            .bind(reference)
+            .first("decision_json")
+        )
+      ).toBe(encoded);
+      yield* resumeErasureCases({
+        db,
+        bucket: Option.some(bucket),
+        coordinator: {
+          getByName: (): Pick<Fetcher, "fetch"> => ({
+            fetch: () => Promise.reject(new Error("Completed case must not resume")),
+          }),
+        },
+      });
+      expect(yield* Effect.tryPromise(() => bucket.head(`recovery/cases/${reference}`))).toBeNull();
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) FROM erasure_requests WHERE id=?")
+            .bind(reference)
+            .first("count(*)")
+        )
+      ).toBe(0);
     })
   ));

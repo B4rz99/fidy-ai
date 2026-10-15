@@ -1,3 +1,4 @@
+import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { reviewControlRetention } from "./internal/retention-review";
 import { sweepControlObjects } from "./internal/control-objects";
 import { requireInventory } from "./internal/inventory";
@@ -12,6 +13,7 @@ import {
   ErasureCustodyAdmission,
   type ErasureExecution,
   type ErasureRecoveryConfiguration,
+  type ErasureRegistryInitialization,
   ErasureRetentionAdmission,
   ErasureReviewAdmission,
 } from "./contract";
@@ -299,3 +301,9 @@ export const executeErasureRetentionReview = (
     });
     return new Response(null, { status: accepted ? acceptedStatus : conflictStatus });
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
+
+/** Only local deployment startup may use this preparation. Ordinary data access never initializes a missing registry; existing checkpoints are preserved. */
+export const prepareLocalErasureRegistry = <Requirements>(
+  input: ErasureRegistryInitialization<Requirements>
+): Effect.Effect<void, ErasureUnavailable, Requirements> =>
+  initializeRegistryStorage({ ...input, mode: "LocalStartup" });

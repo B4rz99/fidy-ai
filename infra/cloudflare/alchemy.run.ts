@@ -1,3 +1,6 @@
+import type { ErasureRegistryInitialization } from "../../apps/server/cloudflare/erasure/contract";
+import { prepareLocalErasureRegistry } from "../../apps/server/cloudflare/erasure/operations";
+import { ErasureUnavailable } from "../../apps/server/cloudflare/erasure-store/contract";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
@@ -16,7 +19,30 @@ import { freeTierWorkerObservability } from "./worker-observability";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { resolveLocalCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/operations";
 
-/** Local stack evaluation bootstraps only an empty, unapproved initial registry. It never recreates a missing checkpoint for approved cases or changes an existing generation. Production uses the authenticated operator action. */
+const localRegistryStorage = (
+  input: Readonly<{
+    db: Cloudflare.D1.QueryDatabaseClient;
+    read: Cloudflare.R2.ReadBucketClient;
+    write: Cloudflare.R2.WriteBucketClient;
+  }>
+): ErasureRegistryInitialization<Alchemy.RuntimeContext> => ({
+  query: (statement) => input.db.prepare(statement).first(),
+  exists: (key) =>
+    input.read.head(key).pipe(
+      Effect.map((object) => object !== null),
+      Effect.mapError(() => new ErasureUnavailable())
+    ),
+  empty: input.read.list({ limit: 1 }).pipe(
+    Effect.map((page) => page.objects.length === 0),
+    Effect.mapError(() => new ErasureUnavailable())
+  ),
+  install: (key, value) =>
+    input.write.put(key, value, { onlyIf: { etagDoesNotMatch: "*" } }).pipe(
+      Effect.map((object) => object !== null),
+      Effect.mapError(() => new ErasureUnavailable())
+    ),
+});
+
 const initializeLocalErasureRegistry = Effect.fn(function* (
   input: Readonly<{ database: Cloudflare.D1.Database; bucket: Cloudflare.R2.Bucket }>
 ) {
@@ -27,24 +53,9 @@ const initializeLocalErasureRegistry = Effect.fn(function* (
       const read = yield* Cloudflare.R2.ReadBucket(input.bucket);
       const write = yield* Cloudflare.R2.WriteBucket(input.bucket);
       return Effect.fn(function* () {
-        const existing = yield* read.head("recovery/generation");
-        if (existing !== null) return { required: "true" };
-        const ready = yield* db
-          .prepare(`SELECT EXISTS(SELECT 1 FROM erasure_generation WHERE id=1 AND generation='initial')
-          AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE decision_json IS NOT NULL) AS ready`)
-          .first<number>("ready");
-        const objects = yield* read.list({ limit: 1 });
-        if (ready !== 1 || objects.objects.length > 0) {
-          return yield* Effect.die(
-            new Error("Recover the independent local erasure registry before starting development.")
-          );
-        }
-        const installed = yield* write.put("recovery/generation", "initial", {
-          onlyIf: { etagDoesNotMatch: "*" },
+        yield* prepareLocalErasureRegistry({
+          ...localRegistryStorage({ db, read, write }),
         });
-        if (installed === null) {
-          return yield* Effect.die(new Error("Local erasure initialization conflicted."));
-        }
         return { required: "true" };
       });
     }).pipe(

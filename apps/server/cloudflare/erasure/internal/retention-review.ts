@@ -63,14 +63,15 @@ export const reviewControlRetention = (input: Input): Effect.Effect<boolean, Era
     const raw = yield* io(() =>
       db
         .prepare(`SELECT decision_json AS decision,last_erased_at_ms AS lastErasedAtMs
-    FROM erasure_requests WHERE id=? AND user_id=? AND decision_json IS NOT NULL`)
+    FROM erasure_requests WHERE id=? AND user_id=? AND decision_json IS NOT NULL AND state<>'Complete'`)
         .bind(admission.reference, admission.userId)
         .first()
     );
-    const stored = yield* Schema.decodeUnknownEffect(Stored)(raw);
-    const decision = reviewedDecision({ ...input, stored, current });
+    const stored = yield* Schema.decodeUnknownEffect(Schema.OptionFromNullOr(Stored))(raw);
+    if (Option.isNone(stored)) return false;
+    const decision = reviewedDecision({ ...input, stored: stored.value, current });
     if (Option.isNone(decision)) return false;
-    const previous = yield* encodeDecision(stored.decision);
+    const previous = yield* encodeDecision(stored.value.decision);
     const encoded = yield* encodeDecision(decision.value);
     yield* persistControlReview({ ...input, previous, encoded, decision: decision.value });
     const checkpoint = yield* prepareCheckpoint(input.configuration);
@@ -79,7 +80,7 @@ export const reviewControlRetention = (input: Input): Effect.Effect<boolean, Era
         ...checkpoint,
         db
           .prepare(
-            "UPDATE erasure_requests SET decision_json=? WHERE id=? AND user_id=? AND decision_json=?"
+            "UPDATE erasure_requests SET decision_json=? WHERE id=? AND user_id=? AND decision_json=? AND state<>'Complete'"
           )
           .bind(encoded, admission.reference, admission.userId, previous),
         db

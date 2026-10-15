@@ -880,7 +880,7 @@ it.each([
         }
         if (url.pathname.startsWith("/v1/tokens/daviplata/")) {
           return Promise.resolve(
-            Response.json({ data: { id: "daviplata_devtest_verified", status: "APPROVED" } })
+            Response.json({ data: { id: "daviplata_test_verified", status: "APPROVED" } })
           );
         }
         if (init?.method === "POST") {
@@ -917,7 +917,7 @@ it.each([
             enrollmentId: prepared.enrollmentId,
             method: "daviplata",
             paymentSourceMode: "create",
-            daviplataToken: "daviplata_devtest_verified",
+            daviplataToken: "daviplata_test_verified",
             paymentRequestId: "40000000-0000-4000-8000-000000000093",
             billingEmail: "payer@example.com",
             decisions: {

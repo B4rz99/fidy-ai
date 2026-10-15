@@ -190,7 +190,9 @@ const daviplataSandboxRequest = (
       }
       const endpoint = request.step === "send" ? policy.sendUrl : policy.confirmUrl;
       const id = Redacted.value(request.authorizationId);
-      if (!/^daviplata_(?:devtest|devint)_[A-Za-z0-9_]{1,200}$/u.test(id)) return rejectRequest();
+      if (!/^daviplata_(?:test|devtest|devint)_[A-Za-z0-9_]{1,200}$/u.test(id)) {
+        return rejectRequest();
+      }
       const url =
         endpoint === daviplataSandboxEndpoint
           ? `${endpoint}?token=${id}&operation=${request.step === "send" ? "RESEND_OTP" : "VALIDATE_OTP_API"}`

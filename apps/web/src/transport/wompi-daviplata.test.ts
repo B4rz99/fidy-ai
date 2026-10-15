@@ -486,8 +486,9 @@ it("completes the actual Sandbox OTP service protocol without following provider
   Effect.runPromise(
     Effect.gen(function* () {
       const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
-      const send = endpoint + "?token=daviplata_devtest_synthetic&operation=RESEND_OTP";
-      const confirm = endpoint + "?token=daviplata_devtest_synthetic&operation=VALIDATE_OTP_API";
+      const observedTokenId = "daviplata_test_synthetic";
+      const send = endpoint + "?token=daviplata_test_synthetic&operation=RESEND_OTP";
+      const confirm = endpoint + "?token=daviplata_test_synthetic&operation=VALIDATE_OTP_API";
       const provider = vi
         .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
           Promise.resolve(Response.json({}))
@@ -495,7 +496,7 @@ it("completes the actual Sandbox OTP service protocol without following provider
         .mockResolvedValueOnce(
           Response.json({
             data: {
-              id: tokenId,
+              id: observedTokenId,
               status: "PENDING",
               url_services: {
                 token: "synthetic-initial-bearer",
@@ -505,8 +506,10 @@ it("completes the actual Sandbox OTP service protocol without following provider
             },
           })
         )
-        .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"))
-        .mockResolvedValueOnce(otpResponse("APPROVED", "synthetic-confirm-bearer"));
+        .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer", observedTokenId))
+        .mockResolvedValueOnce(
+          otpResponse("APPROVED", "synthetic-confirm-bearer", observedTokenId)
+        );
       const challenge = yield* startDaviplataWithWompi({
         publicKey: "pub_test_synthetic",
         policy: { sendUrl: endpoint, confirmUrl: endpoint },

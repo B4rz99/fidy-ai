@@ -4,7 +4,7 @@ Issue: [#232](https://github.com/B4rz99/fidy-ai/issues/232).
 
 ## Status and launch boundary
 
-**The complete live proof has not been run; only real Sandbox tokenization has been observed.**
+**The complete live proof has not passed. Real Sandbox tokenization and OTP authorization have been observed separately.**
 The adapter/proof-helper tests use synthetic transport premises, not recorded provider responses.
 Credentials, checked-in tests and a manual workflow do not establish merchant eligibility or actual
 OTP origins, paths, browser CORS, recovery or reusable-source behavior.
@@ -86,7 +86,16 @@ record its successful run link and revision here. The [first protected run](http
 `84db84ee2a19bb34a2c8cb435733afa07d8340b5` failed all four cases on 2026-10-15. Its original
 redaction erased the failing step, so it proves no completed OTP/source/settlement journey. The
 proof now retains only fixed step names and still discards provider values and underlying errors;
-a fresh run is required. Credentials stay in the protected workflow. Source revocation/replacement, recovery and
+the [diagnostic rerun](https://github.com/B4rz99/fidy-ai/actions/runs/38791246089) at
+`e1a1d4d81acbedff552242d3a3e73994592eaeae` stopped at `otp-send-request`. A bounded
+public-key-only probe confirmed that Wompi now returns `daviplata_test_` identities, which the
+adapter rejected because it allowed only the documented older `devtest`/`devint` prefixes.
+Regression checks reproduced that refusal in outbound transport, browser authorization and Core/local
+D1 enrollment. After accepting the observed Sandbox prefix while preserving Production separation,
+a separate public-key-only probe through the real outbound adapter completed tokenization, OTP send
+and OTP confirmation. No reusable source or charge was created by that probe; no provider payload or
+identity was retained. A fresh protected run must still prove source creation and settlement.
+Credentials stay in the protected workflow. Source revocation/replacement, recovery and
 automatic-renewal execution remain separate work.
 
 ## Primary references

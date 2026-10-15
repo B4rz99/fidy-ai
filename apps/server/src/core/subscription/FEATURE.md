@@ -62,8 +62,11 @@ Production environment at this audit. Manual synthetic tokenization on 2026-10-1
 exact Sandbox host/path and identity/operation query binding. The adapter and browser CSP now
 support that observed protocol, with 22 closed Outbound HTTP checks, 52 browser transport/Subscription
 checks, and a passing isolated built-browser DaviPlata collection journey plus served-CSP check.
-Provider responses in that browser journey are controlled; real OTP/source/settlement and CORS
-remain unverified until the protected proof runs. Production-mode DaviPlata activation is separate.
+Provider responses in that browser journey are controlled. A protected diagnostic run isolated an
+OTP-send refusal caused by rejecting the observed `daviplata_test_` Sandbox identity prefix. Local
+regressions cover the corrected prefix across outbound transport, browser and Core/local D1 enrollment.
+A separate real-adapter, public-key-only probe completed OTP send/confirmation after the fix; reusable
+source creation, settlement and actual browser OTP CORS still require their separate live checks. Production-mode DaviPlata activation is separate.
 
 The [Nequi Sandbox run](https://github.com/B4rz99/fidy-ai/actions/runs/38672345124) passed all four
 selected cases on deployed trunk revision `20889fa3d90d8f86c09ddce0cc790c8bb6ac761c`, completed

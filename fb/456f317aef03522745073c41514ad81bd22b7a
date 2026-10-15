@@ -1,0 +1,25 @@
+apps/server/cloudflare/subscription/daviplata-sandbox.test-fixture.ts
+  s_6d017cc65783af::t_beb71235746670 8-28,38-40,44,52,68,101-104,109,113,125-171,185-190,192-196,198-200,203,206-210,213,215-216,219,222-226,229
+apps/server/cloudflare/subscription/daviplata-sandbox.test.ts
+  s_6d017cc65783af::t_bf8d2a4b9d13f3 2,36,45,112,118,126-145,160,189-220
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_6d017cc65783af::t_f8b7b62e24de59 1850-1852,1874-1876,1879,1906-1908,1911,1926-1928,1931-1933,1936,1943,1947-1954
+docs/operations/daviplata-sandbox-proof.md
+  s_6d017cc65783af::t_3370df8cb5978a 85-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fb456f317aef03522745073c41514ad81bd22b7a",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+apps/web/src/features/recurring/month.tsx
+  s_169697deba9fb8::t_fe061fa162a5eb 131
+apps/web/src/features/recurring/summary.tsx
+  s_169697deba9fb8::t_b5b4eb6bd32aea 44-45,47-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7b86e067facb2f04f4d9801e1b67fb46f53508e7",
+  "prompts": {},
+  "sessions": {
+    "s_169697deba9fb8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13cac-c404-7610-8129-02b1e4e93ef0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

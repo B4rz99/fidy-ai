@@ -1,0 +1,37 @@
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_6d017cc65783af::t_87f5625165c393 153
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_6d017cc65783af::t_cf967b679516ad 883,920
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_1ea251b8c4f855 65-69
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_6d017cc65783af::t_a9b568b2774aa0 193-195
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_6d017cc65783af::t_c23a9b3dcb225a 785,790-791
+apps/server/src/shell/subscription/contract.ts
+  s_6d017cc65783af::t_35de440833daf1 214
+apps/web/src/transport/wompi-daviplata.test.ts
+  s_6d017cc65783af::t_738df26810190f 489-491,499,509-512
+apps/web/src/transport/wompi-daviplata.ts
+  s_6d017cc65783af::t_f8ff2e4a00cd3e 26,99,453-455,458
+docs/operations/daviplata-sandbox-proof.md
+  s_6d017cc65783af::t_dbd056d7a0e75b 7,89-98
+infra/cloudflare/verify-edge-policy.ts
+  s_6d017cc65783af::t_77618e009b4690 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "993d6e3a3579d2e1324e1176bd0da09721988049",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

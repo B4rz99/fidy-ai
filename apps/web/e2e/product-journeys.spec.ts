@@ -2,10 +2,20 @@ import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect, Schema } from "effect";
 import { apiOrigin, makeUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
+import { signInThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
 
 const ok = 200;
+test.beforeEach(({ page }) =>
+  page.route(`${apiOrigin}/web/consent`, (route) =>
+    route.fulfill({
+      status: ok,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "Granted", withdrawal: null }),
+    })
+  )
+);
 const installRoute = (
   page: Page,
   url: string,
@@ -45,6 +55,71 @@ const standing = {
   paidSubscription: null,
   recentAttempts: [],
 };
+
+test("Upgrade waits for verified Consent and recovers from a failed check without requesting payment data", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      const unavailable = 503;
+      let available = false;
+      const paymentRequests: Array<string> = [];
+      page.on("request", (request) => {
+        const path = new URL(request.url()).pathname;
+        if (path.startsWith("/subscription/") || path.startsWith("/web/subscription/")) {
+          paymentRequests.push(path);
+        }
+      });
+      yield* installRoute(page, `${apiOrigin}/web/consent`, (route) =>
+        route.fulfill({
+          status: available ? ok : unavailable,
+          contentType: "application/json",
+          body: available ? JSON.stringify({ status: "Granted", withdrawal: null }) : "{}",
+        })
+      );
+      yield* installEnrollmentAvailability(page);
+      yield* installRoute(page, `${apiOrigin}/subscription/offers`, (route) =>
+        route.fulfill({ status: ok, contentType: "application/json", body: response(offers) })
+      );
+      yield* installRoute(page, `${apiOrigin}/subscription/status`, (route) =>
+        route.fulfill({ status: ok, contentType: "application/json", body: response(standing) })
+      );
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos verificar tu autorización")
+      );
+      expect(paymentRequests).toEqual([]);
+      available = true;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Elegir semanal" })).toBeVisible()
+      );
+    })
+  ));
+
+test("Upgrade requests sign-in when the browser has no session", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const unauthorized = 401;
+      yield* installRoute(page, `${apiOrigin}/web/consent`, (route) =>
+        route.fulfill({ status: unauthorized })
+      );
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("Inicia sesión para activar Pro")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("link", { name: "Iniciar sesión", exact: true })).toHaveAttribute(
+          "href",
+          "/auth/pair"
+        )
+      );
+    })
+  ));
 
 test("shows expired TrialPeriod standing and the authoritative three Subscription offers", ({
   page,

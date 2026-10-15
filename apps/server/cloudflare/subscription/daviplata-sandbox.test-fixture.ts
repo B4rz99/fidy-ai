@@ -5,9 +5,27 @@ import type { OutboundHttpResponse } from "../../src/shell/outbound-http/contrac
 import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
 
 /** Live proof failures contain no provider payload, identity, URL, token or underlying cause. */
-export class DaviplataSandboxProofFailure extends Data.TaggedError(
-  "DaviplataSandboxProofFailure"
-) {}
+export class DaviplataSandboxProofFailure extends Data.TaggedError("DaviplataSandboxProofFailure")<{
+  readonly stage:
+    | "configuration"
+    | "policy"
+    | "enrollment"
+    | "tokenization-request"
+    | "tokenization-response"
+    | "destinations"
+    | "otp-send-request"
+    | "otp-send-response"
+    | "otp-send-identity"
+    | "otp-confirm-request"
+    | "otp-confirm-response"
+    | "otp-confirm-identity"
+    | "preparation"
+    | "submission"
+    | "source-recovery"
+    | "source-unavailable"
+    | "settlement"
+    | "unexpected";
+}> {}
 
 /** Require explicit, reviewed Sandbox destinations before even tokenizing synthetic data. */
 export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
@@ -17,11 +35,13 @@ export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
     confirmUrl: Option.Option<string>;
   }>
 ) {
-  if (input.environment !== "sandbox") return yield* new DaviplataSandboxProofFailure();
+  if (input.environment !== "sandbox") {
+    return yield* new DaviplataSandboxProofFailure({ stage: "policy" });
+  }
   const policy = yield* Schema.decodeUnknownEffect(DaviplataOtpPolicy)({
     sendUrl: Option.getOrNull(input.sendUrl),
     confirmUrl: Option.getOrNull(input.confirmUrl),
-  }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+  }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "policy" })));
   if (
     [policy.sendUrl, policy.confirmUrl].some(
       (url) =>
@@ -29,7 +49,7 @@ export const requireDaviplataSandboxPolicy = Effect.fnUntraced(function* (
         url !== "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox"
     )
   ) {
-    return yield* new DaviplataSandboxProofFailure();
+    return yield* new DaviplataSandboxProofFailure({ stage: "policy" });
   }
   return policy;
 });
@@ -45,7 +65,7 @@ export const requireDaviplataSandboxEnrollment = Effect.fnUntraced(function* (
     enrollment.daviplataOtpPolicy.sendUrl !== policy.sendUrl ||
     enrollment.daviplataOtpPolicy.confirmUrl !== policy.confirmUrl
   ) {
-    return yield* new DaviplataSandboxProofFailure();
+    return yield* new DaviplataSandboxProofFailure({ stage: "enrollment" });
   }
   return enrollment;
 });
@@ -78,16 +98,19 @@ const confirmedResponse = Schema.Struct({
     subscription: Schema.Struct({ PK: secret, status: Schema.Literal("APPROVED") }),
   }),
 });
-const json = Effect.fnUntraced(function* (response: OutboundHttpResponse) {
+const json = Effect.fnUntraced(function* (
+  response: OutboundHttpResponse,
+  stage: "tokenization-response" | "otp-send-response" | "otp-confirm-response"
+) {
   if (
     response.status < successfulStatusMinimum ||
     response.status >= successfulStatusMaximumExclusive
   ) {
-    return yield* new DaviplataSandboxProofFailure();
+    return yield* new DaviplataSandboxProofFailure({ stage });
   }
   return yield* Schema.decodeEffect(UnknownJsonString)(
     new TextDecoder().decode(response.body)
-  ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+  ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage })));
 });
 
 const destination = (
@@ -98,6 +121,53 @@ const destination = (
   endpoint === "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox"
     ? `${endpoint}?token=${id}&operation=${operation}`
     : endpoint;
+
+const execute = (
+  outbound: OutboundHttpService,
+  request: Parameters<OutboundHttpService["execute"]>[0],
+  stage: "tokenization-request" | "otp-send-request" | "otp-confirm-request"
+): Effect.Effect<OutboundHttpResponse, DaviplataSandboxProofFailure> =>
+  outbound
+    .execute(request)
+    .pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage })));
+
+const otp = ({
+  outbound,
+  authorizationId,
+  token,
+  step,
+}: Readonly<{
+  outbound: OutboundHttpService;
+  authorizationId: Redacted.Redacted<string>;
+  token: Redacted.Redacted<string>;
+  step: "send" | "confirm";
+}>): Effect.Effect<unknown, DaviplataSandboxProofFailure> =>
+  execute(
+    outbound,
+    {
+      _tag: "WompiDaviplataSandboxOtp",
+      step,
+      authorizationId,
+      token,
+    },
+    step === "send" ? "otp-send-request" : "otp-confirm-request"
+  ).pipe(
+    Effect.flatMap((response) =>
+      json(response, step === "send" ? "otp-send-response" : "otp-confirm-response")
+    )
+  );
+
+const verifyDestinations = (
+  token: typeof tokenResponse.Type,
+  policy: DaviplataOtpPolicy
+): Effect.Effect<void, DaviplataSandboxProofFailure> => {
+  const id = Redacted.value(token.data.id);
+  return token.data.url_services.code_otp_send === destination(policy.sendUrl, id, "RESEND_OTP") &&
+    token.data.url_services.code_otp_validate ===
+      destination(policy.confirmUrl, id, "VALIDATE_OTP_API")
+    ? Effect.void
+    : Effect.fail(new DaviplataSandboxProofFailure({ stage: "destinations" }));
+};
 
 /** One tokenization/send/confirm sequence; never resend a one-use bearer or retry an ambiguous POST. */
 export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
@@ -112,49 +182,51 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
     sendUrl: Option.some(input.policy.sendUrl),
     confirmUrl: Option.some(input.policy.confirmUrl),
   });
-  const execute = (
-    request: Parameters<OutboundHttpService["execute"]>[0]
-  ): Effect.Effect<OutboundHttpResponse, DaviplataSandboxProofFailure> =>
-    input.outbound.execute(request).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
-  const token = yield* execute({ _tag: "WompiDaviplataSandboxToken", outcome: input.outcome }).pipe(
-    Effect.flatMap(json),
+  const token = yield* execute(
+    input.outbound,
+    { _tag: "WompiDaviplataSandboxToken", outcome: input.outcome },
+    "tokenization-request"
+  ).pipe(
+    Effect.flatMap((response) => json(response, "tokenization-response")),
     Effect.flatMap(Schema.decodeUnknownEffect(tokenResponse)),
-    Effect.mapError(() => new DaviplataSandboxProofFailure())
+    Effect.mapError((error) =>
+      error instanceof DaviplataSandboxProofFailure
+        ? error
+        : new DaviplataSandboxProofFailure({ stage: "tokenization-response" })
+    )
   );
-  const id = Redacted.value(token.data.id);
-  // Both URLs must match before either synthetic OTP or service bearer leaves this process.
-  if (
-    token.data.url_services.code_otp_send !== destination(policy.sendUrl, id, "RESEND_OTP") ||
-    token.data.url_services.code_otp_validate !==
-      destination(policy.confirmUrl, id, "VALIDATE_OTP_API")
-  ) {
-    return yield* new DaviplataSandboxProofFailure();
-  }
-  const sent = yield* execute({
-    _tag: "WompiDaviplataSandboxOtp",
-    step: "send",
+  yield* verifyDestinations(token, policy);
+  const sent = yield* otp({
+    outbound: input.outbound,
     authorizationId: token.data.id,
     token: token.data.url_services.token,
+    step: "send",
   }).pipe(
-    Effect.flatMap(json),
     Effect.flatMap(Schema.decodeUnknownEffect(sentResponse)),
-    Effect.mapError(() => new DaviplataSandboxProofFailure())
+    Effect.mapError((error) =>
+      error instanceof DaviplataSandboxProofFailure
+        ? error
+        : new DaviplataSandboxProofFailure({ stage: "otp-send-response" })
+    )
   );
   if (Redacted.value(sent.data.subscription.PK) !== Redacted.value(token.data.id)) {
-    return yield* new DaviplataSandboxProofFailure();
+    return yield* new DaviplataSandboxProofFailure({ stage: "otp-send-identity" });
   }
-  const confirmed = yield* execute({
-    _tag: "WompiDaviplataSandboxOtp",
-    step: "confirm",
+  const confirmed = yield* otp({
+    outbound: input.outbound,
     authorizationId: token.data.id,
     token: sent.data.authorization.access_token,
+    step: "confirm",
   }).pipe(
-    Effect.flatMap(json),
     Effect.flatMap(Schema.decodeUnknownEffect(confirmedResponse)),
-    Effect.mapError(() => new DaviplataSandboxProofFailure())
+    Effect.mapError((error) =>
+      error instanceof DaviplataSandboxProofFailure
+        ? error
+        : new DaviplataSandboxProofFailure({ stage: "otp-confirm-response" })
+    )
   );
   if (Redacted.value(confirmed.data.subscription.PK) !== Redacted.value(token.data.id)) {
-    return yield* new DaviplataSandboxProofFailure();
+    return yield* new DaviplataSandboxProofFailure({ stage: "otp-confirm-identity" });
   }
   return token.data.id;
 });

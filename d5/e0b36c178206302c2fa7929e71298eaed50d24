@@ -1,0 +1,37 @@
+apps/web/src/features/signed-in/feature.tsx
+  s_6d017cc65783af::t_c82061dc74cbda 22,25-38,234
+apps/web/src/app/transactions-page.tsx
+  s_6d017cc65783af::t_c82061dc74cbda 9,44
+apps/web/src/features/privacy/FEATURE.md
+  s_6d017cc65783af::t_527ac49e45c8ed 10-11,14-15,17-18,49-56
+  s_6d017cc65783af::t_0d0d613c7a18af 16
+  s_6d017cc65783af::t_9d34645c52175c 44-46
+  s_6d017cc65783af::t_69ce5c02cc6e9b 12-13,47-48
+apps/web/e2e/privacy.spec.ts
+  s_6d017cc65783af::t_6d9eafcc7bbe75 106-124,176
+  s_6d017cc65783af::t_cd6a9f39c5bc90 254
+apps/web/e2e/browser-pairing.spec.ts
+  s_6d017cc65783af::t_78a6dcb98ff3d3 381
+apps/web/e2e/canonical-browser.spec.ts
+  s_6d017cc65783af::t_f45a6c1bfe3055 47
+apps/web/e2e/session-binding.spec.ts
+  s_6d017cc65783af::t_1e1fb042c59ac8 139,142
+apps/web/e2e/transaction-pagination.spec.ts
+  s_6d017cc65783af::t_42dcabedbb9413 351
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5e0b36c178206302c2fa7929e71298eaed50d24",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

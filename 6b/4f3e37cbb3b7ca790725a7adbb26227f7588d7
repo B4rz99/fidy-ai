@@ -1,0 +1,45 @@
+docs/operations/nequi-sandbox-proof.md
+  s_6d017cc65783af::t_8628db027986f2 52-54
+  s_6d017cc65783af::t_65f07952545b35 7-16,43-45
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_a77e0e139e6de2 8-19,31-32,41,54
+  s_6d017cc65783af::t_52b67e519225b1 24-26,61-69
+  s_6d017cc65783af::t_0095158d6d7312 1-7,20-23,27-30,33-40,42-48,50-53,60,70-77
+  s_6d017cc65783af::t_65f07952545b35 49,55-59
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_6d017cc65783af::t_744bc76c23960b 607,628-629
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_6d017cc65783af::t_b24c472b6c77cc 199-202,211-213,243,271
+  s_6d017cc65783af::t_30e32a514e16f2 194-198,203-210,214-216
+  s_6d017cc65783af::t_6fc9f58c32aee0 249
+  s_6d017cc65783af::t_c42a86be17b6d6 217-242,244-248,250-270,272-293,2113,2117,2122-2123
+  s_6d017cc65783af::t_56085b81455b74 294
+apps/server/src/core/subscription/contract.ts
+  s_6d017cc65783af::t_744bc76c23960b 299
+  s_6d017cc65783af::t_8ce59b6010defb 300
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_6d017cc65783af::t_5deec6affaf367 970
+  s_6d017cc65783af::t_bc99da8e776f47 77,276
+  s_6d017cc65783af::t_8ce59b6010defb 96,531,570-572
+apps/server/cloudflare/subscription/internal/payment-enrollment-claim.ts
+  s_6d017cc65783af::t_5deec6affaf367 46
+  s_6d017cc65783af::t_8ce59b6010defb 43,45,47,52
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_6d017cc65783af::t_1d0ce63de23e23 246-250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6b4f3e37cbb3b7ca790725a7adbb26227f7588d7",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

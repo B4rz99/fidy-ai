@@ -1,3 +1,4 @@
+import { RecoveryRequest, recoverStaged } from "./staged-recovery";
 import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
@@ -93,6 +94,7 @@ const UpdatingStateEntry = Schema.Struct({
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
 const Commands = Schema.Literals([
+  "recover-staged",
   "verify-retirement",
   "verify-retention-migration",
   "capture",
@@ -147,6 +149,7 @@ type Config = Readonly<{
   file: string;
   smokeProof: string;
   smokeAttestationFile: string;
+  recoveryDeployments: Option.Option<{ public: string; core: string }>;
 }>;
 const config = (): Config => {
   const environment = process.env;
@@ -176,6 +179,12 @@ const config = (): Config => {
     file: decoded.value.RELEASE_SNAPSHOT_FILE,
     smokeProof: decoded.value.SMOKE_PROOF,
     smokeAttestationFile: decoded.value.SMOKE_ATTESTATION_FILE,
+    recoveryDeployments: Schema.decodeUnknownOption(
+      Schema.Struct({ public: VersionId, core: VersionId })
+    )({
+      public: environment.RECOVERY_PUBLIC_DEPLOYMENT_ID,
+      core: environment.RECOVERY_CORE_DEPLOYMENT_ID,
+    }),
   };
 };
 
@@ -754,9 +763,7 @@ const workersFromState = Effect.fn(function* (mode: "capture" | "completed" = "c
     "--no-input",
     "--log-level",
     "error",
-  ]).pipe(
-    Effect.mapError(() => new ReleaseFailure({ message: "Alchemy Worker state command failed" }))
-  );
+  ]);
   return yield* Effect.try({
     try: () =>
       mode === "capture" ? decodeCaptureWorkerReceipts(rawState) : decodeWorkerReceipts(rawState),
@@ -1252,6 +1259,52 @@ const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {
     coreVersionId: workers.core.versionId.value,
   });
 });
+const recoverAbandoned = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const workers = yield* workersFromState();
+  if (Option.isNone(workers.public.versionId) || Option.isNone(workers.core.versionId)) {
+    return yield* new ReleaseFailure({
+      message: "Recovery refused: Alchemy candidate identities unavailable",
+    });
+  }
+  const inspected = env.recoveryDeployments;
+  if (Option.isNone(inspected)) {
+    return yield* new ReleaseFailure({
+      message: "Recovery requires both inspected deployment IDs",
+    });
+  }
+  const request = yield* Schema.decodeEffect(RecoveryRequest)({
+    revision: env.revision,
+    public: {
+      name: workers.public.workerName,
+      deploymentId: inspected.value.public,
+      candidateVersionId: workers.public.versionId.value,
+    },
+    core: {
+      name: workers.core.workerName,
+      deploymentId: inspected.value.core,
+      candidateVersionId: workers.core.versionId.value,
+    },
+  }).pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Recovery requires both inspected deployment IDs" })
+    )
+  );
+  yield* recoverStaged(
+    {
+      ...port,
+      verifyPair: (pair) =>
+        stableIdentity({ ...pair, proof: env.smokeProof }).pipe(
+          Effect.provideService(HttpClient.HttpClient, client),
+          Effect.asVoid
+        ),
+    },
+    request
+  );
+});
 const inspectTraffic = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const workers = yield* workersFromState("capture");
   const deployments = Effect.fn(function* (name: string) {
@@ -1545,6 +1598,8 @@ if (import.meta.main) {
       yield* verifyRetirement(port, environment);
     } else if (command === "verify-retention-migration") {
       yield* verifyRetentionMigration(port, environment, client);
+    } else if (command === "recover-staged") {
+      yield* recoverAbandoned(port, environment, client);
     } else if (command === "isolate") {
       yield* isolate(port, environment, client);
     } else {

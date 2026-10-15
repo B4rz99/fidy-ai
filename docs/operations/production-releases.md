@@ -477,3 +477,22 @@ MCP authentication challenge and hostile-Origin refusal. GET probes preserve can
 and reserved proof headers. Follow the [controlled hosted MCP proof](hosted-mcp-release.md)
 and collect current evidence before requesting real-user enablement.
 A successful deployment is not host interoperability or launch approval.
+
+### Recover a stranded zero-traffic candidate
+
+If a failed pre-promotion release could not complete cleanup, capture refuses the retained
+100%/0% deployment. This is a routing repair, not permission to promote the failed candidate or
+restore data. Run `production-inspect.yml` first and review the current public/Core deployment IDs.
+Then dispatch `production-staged-recovery.yml` on protected `trunk`, supplying those two IDs.
+
+The protected Production coordinator derives Worker names and candidate versions from completed
+Alchemy receipts. It requires both inspected deployments to contain exactly the current serving
+version at 100% and that candidate at 0%, verifies the normal-traffic public/Core release identity,
+and rechecks trunk and both deployments before each write. It removes only the zero-traffic entry,
+confirms both writes and the unchanged serving pair, then runs ordinary capture. Changed identities,
+positive candidate traffic, missing receipts or failed proof refuse recovery. A partially completed
+repair requires fresh inspection; do not reuse stale deployment IDs.
+
+After successful recovery, dispatch the ordinary Production workflow for current `trunk`. Capture,
+exact-pair smoke and promotion remain mandatory. Do not run the repair from a workstation or use it
+to bypass a failed candidate proof.

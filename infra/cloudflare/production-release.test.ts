@@ -393,6 +393,7 @@ const referenceHarness = (
       file: "/unused-snapshot",
       smokeProof: "0".repeat(64),
       smokeAttestationFile: "/unused-attestation",
+      recoveryDeployments: Option.none(),
     },
     client,
   });
@@ -445,6 +446,7 @@ it.effect(
             file: "/unused-snapshot",
             smokeProof: "0".repeat(64),
             smokeAttestationFile: "/unused-attestation",
+            recoveryDeployments: Option.none(),
           },
         });
         const outcome = yield* port

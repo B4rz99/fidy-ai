@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import {
   ErasureClass,
   ErasureCustodian,
@@ -75,21 +75,29 @@ export const receipt = (
         receipt: stored.decision.receiptRetention,
         recovery: stored.decision.recovery.retention,
       },
-      next:
-        stored.connectionBlocked === 1
-          ? "connection-suppression"
-          : receiptNext({ state: stored.state, retained: retained.length }),
+      next: yield* receiptNext({ stored, retained: retained.length }),
     };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 const receiptNext = (
-  input: Readonly<{ state: typeof ErasureOperatorReceipt.Type.state; retained: number }>
-): typeof ErasureOperatorReceipt.Type.next => {
-  if (input.state === "AwaitingReview") return "operator-review";
-  if (input.state === "Draining") return "admitted-work";
-  if (input.state === "Complete") return "none";
-  if (input.state !== "ExternalPending") return "continue";
-  return input.retained > 0 ? "retention-review" : "provider-evidence";
-};
+  input: Readonly<{ stored: typeof Stored.Type; retained: number }>
+): Effect.Effect<typeof ErasureOperatorReceipt.Type.next> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const { stored } = input;
+    if (
+      [stored.decision.receiptRetention, stored.decision.recovery.retention].some(
+        (retention) => retention.reviewAtMs <= current || retention.untilMs <= current
+      )
+    ) {
+      return "retention-review";
+    }
+    if (stored.connectionBlocked === 1) return "connection-suppression";
+    if (stored.state === "AwaitingReview") return "operator-review";
+    if (stored.state === "Draining") return "admitted-work";
+    if (stored.state === "Complete") return "none";
+    if (stored.state !== "ExternalPending") return "continue";
+    return input.retained > 0 ? "retention-review" : "provider-evidence";
+  });
 
 const retainedClasses = (
   input: Readonly<{ classes: ReadonlyArray<typeof ClassProgress.Type>; decision: ErasureDecision }>

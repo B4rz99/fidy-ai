@@ -16,6 +16,51 @@ import { freeTierWorkerObservability } from "./worker-observability";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { resolveLocalCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/operations";
 
+/** Local stack evaluation bootstraps only an empty, unapproved initial registry. It never recreates a missing checkpoint for approved cases or changes an existing generation. Production uses the authenticated operator action. */
+const initializeLocalErasureRegistry = Effect.fn(function* (
+  input: Readonly<{ database: Cloudflare.D1.Database; bucket: Cloudflare.R2.Bucket }>
+) {
+  const Initialize = Alchemy.Action(
+    "InitializeLocalErasureRegistry",
+    Effect.gen(function* () {
+      const db = yield* Cloudflare.D1.QueryDatabase(input.database);
+      const read = yield* Cloudflare.R2.ReadBucket(input.bucket);
+      const write = yield* Cloudflare.R2.WriteBucket(input.bucket);
+      return Effect.fn(function* () {
+        const existing = yield* read.head("recovery/generation");
+        if (existing !== null) return { required: "true" };
+        const ready = yield* db
+          .prepare(`SELECT EXISTS(SELECT 1 FROM erasure_generation WHERE id=1 AND generation='initial')
+          AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE decision_json IS NOT NULL) AS ready`)
+          .first<number>("ready");
+        const objects = yield* read.list({ limit: 1 });
+        if (ready !== 1 || objects.objects.length > 0) {
+          return yield* Effect.die(
+            new Error("Recover the independent local erasure registry before starting development.")
+          );
+        }
+        const installed = yield* write.put("recovery/generation", "initial", {
+          onlyIf: { etagDoesNotMatch: "*" },
+        });
+        if (installed === null) {
+          return yield* Effect.die(new Error("Local erasure initialization conflicted."));
+        }
+        return { required: "true" };
+      });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Cloudflare.D1.QueryDatabaseLocal,
+          Cloudflare.R2.ReadBucketLocal,
+          Cloudflare.R2.WriteBucketLocal
+        )
+      )
+    )
+  );
+  const initialized = yield* Initialize({});
+  return initialized.required;
+});
+
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
 const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
@@ -233,6 +278,9 @@ export default Alchemy.Stack(
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
     const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
     const erasureBucket = yield* Cloudflare.R2.Bucket("TitularErasureBucket");
+    const erasureRequired = development
+      ? yield* initializeLocalErasureRegistry({ database, bucket: erasureBucket })
+      : "true";
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
     yield* Cloudflare.Worker("ForwardedEmail", {
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
@@ -243,7 +291,7 @@ export default Alchemy.Stack(
         DB: database,
         EMAIL_BUCKET: emailBucket,
         ERASURE_BUCKET: erasureBucket,
-        ERASURE_REQUIRED: "true",
+        ERASURE_REQUIRED: erasureRequired,
         EMAIL_QUEUE: emailQueue,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
@@ -317,7 +365,7 @@ export default Alchemy.Stack(
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
         ERASURE_BUCKET: erasureBucket,
-        ERASURE_REQUIRED: "true",
+        ERASURE_REQUIRED: erasureRequired,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
         HOSTED_WHATSAPP_QUEUE: hostedWhatsAppQueue,

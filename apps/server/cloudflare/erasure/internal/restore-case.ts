@@ -138,7 +138,7 @@ const restoredCaseStatement = (input: CaseImport): D1PreparedStatement => {
       restoring=1,restore_generation=excluded.restore_generation,archive_generation=excluded.archive_generation,
       restore_cursor='',restore_objects_done=0,restore_records_cursor='',restore_records_done=0,objects_captured=0,coordinator_cleared=0,marker_written=0,next_continuation_at_ms=0
       WHERE erasure_requests.user_id=excluded.user_id AND erasure_requests.restore_generation IS NOT excluded.restore_generation
-      AND (erasure_requests.decision_json IS NULL OR erasure_requests.decision_json=excluded.decision_json)`)
+      AND (erasure_requests.decision_json IS NULL OR json_remove(erasure_requests.decision_json,'$.receiptRetention','$.recovery.retention')=json_remove(excluded.decision_json,'$.receiptRetention','$.recovery.retention'))`)
     .bind(
       admission.reference,
       admission.userId,

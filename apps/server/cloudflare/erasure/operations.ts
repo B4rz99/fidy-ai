@@ -1,3 +1,4 @@
+import { reviewControlRetention } from "./internal/retention-review";
 import { sweepControlObjects } from "./internal/control-objects";
 import { requireInventory } from "./internal/inventory";
 import { purgeCompletedCases } from "./internal/control-retention";
@@ -11,6 +12,7 @@ import {
   ErasureCustodyAdmission,
   type ErasureExecution,
   type ErasureRecoveryConfiguration,
+  ErasureRetentionAdmission,
   ErasureReviewAdmission,
 } from "./contract";
 import { progress } from "./internal/progress";
@@ -266,3 +268,34 @@ const continueDisposition = (
 export const sweepErasureControlObjects = (
   input: Parameters<typeof sweepControlObjects>[0]
 ): ReturnType<typeof sweepControlObjects> => sweepControlObjects(input);
+
+export const executeErasureRetentionReview = (
+  input: Readonly<{
+    userId: string;
+    candidate: unknown;
+    recovery: ErasureRecoveryConfiguration;
+    stores: ReadonlyArray<ErasureStore>;
+  }>
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const admission = Schema.decodeUnknownOption(ErasureRetentionAdmission, {
+      onExcessProperty: "error",
+    })(input.candidate);
+    const current = yield* Clock.currentTimeMillis;
+    if (
+      Option.isNone(admission) ||
+      !validContinuation({ admission: admission.value, current, userId: input.userId })
+    ) {
+      return new Response(null, { status: conflictStatus });
+    }
+    yield* requireInventory({
+      db: input.recovery.db,
+      stores: input.stores,
+      scope: { reference: admission.value.reference, userId: input.userId },
+    });
+    const accepted = yield* reviewControlRetention({
+      configuration: input.recovery,
+      admission: admission.value,
+    });
+    return new Response(null, { status: accepted ? acceptedStatus : conflictStatus });
+  }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));

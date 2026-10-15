@@ -6,6 +6,7 @@ import {
   ErasureCustodyEvidence,
   ErasureDecision,
   ErasureReference,
+  ErasureRetention,
 } from "../../src/core/erasure/contract";
 
 const maximumOperatorLength = 256;
@@ -46,6 +47,17 @@ export const ErasureCustodyAdmission = Schema.Struct({
   ...ErasureContinuation.fields,
   evidence: ErasureCustodyEvidence,
 });
+export const ErasureRetentionReview = Schema.Struct({
+  reference: ErasureReference,
+  userId: UserId,
+  previousReviewRef: ErasureReference,
+  receiptRetention: ErasureRetention,
+  recoveryRetention: ErasureRetention,
+});
+export const ErasureRetentionAdmission = Schema.Struct({
+  ...ErasureContinuation.fields,
+  ...ErasureRetentionReview.fields,
+});
 export const ErasureRestoreAdmission = Schema.Struct({
   ...ErasureContinuation.fields,
   generation: ErasureGeneration,
@@ -60,6 +72,7 @@ export const ErasureOperatorAction = Schema.Union([
     evidence: ErasureCustodyEvidence,
   }),
   Schema.Struct({ action: Schema.Literal("Review"), decision: ErasureDecision }),
+  Schema.Struct({ action: Schema.Literal("ReviewRetention"), ...ErasureRetentionReview.fields }),
   Schema.Struct({
     action: Schema.Literal("Continue"),
     userId: UserId,

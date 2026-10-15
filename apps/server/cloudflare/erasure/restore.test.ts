@@ -1,4 +1,4 @@
-import { ErasureOperatorReceipt } from "../../src/core/erasure/contract";
+import { type ErasureDecision, ErasureOperatorReceipt } from "../../src/core/erasure/contract";
 import { it as effectIt } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
 import { type Cause, Clock, Effect, Schema } from "effect";
@@ -46,9 +46,11 @@ const advanceToExternal = (
   });
 
 const verifyProcessorEvidence = (
-  send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError>
+  send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError>,
+  decision: ErasureDecision
 ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
+    yield* verifyControlReview({ send, decision });
     expect(
       (yield* send({
         action: "CustodyEvidence",
@@ -105,6 +107,33 @@ const verifyProcessorEvidence = (
       custodian: "Kapso",
       status: "Unresolved",
       reason: "retention-conflict",
+    });
+  });
+
+const verifyControlReview = (
+  input: Readonly<{
+    send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError>;
+    decision: ErasureDecision;
+  }>
+): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const reviewRef = "12740000-0000-4000-8000-000000000060";
+    const renewal = { reviewRef, reviewAtMs: current + 86400000, untilMs: current + 45 * 86400000 };
+    expect(
+      (yield* input.send({
+        action: "ReviewRetention",
+        userId,
+        reference,
+        previousReviewRef: input.decision.receiptRetention.reviewRef,
+        receiptRetention: { ...input.decision.receiptRetention, ...renewal },
+        recoveryRetention: { ...input.decision.recovery.retention, ...renewal },
+      })).status
+    ).toBe(202);
+    const response = yield* input.send({ action: "Receipt", userId, reference });
+    expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+      controlRetention: { receipt: { reviewRef }, recovery: { reviewRef } },
+      state: "ExternalPending",
     });
   });
 
@@ -335,7 +364,7 @@ const verifyRestore = Effect.gen(function* () {
     (yield* Effect.tryPromise(() => native.registry.list({ prefix: `held-records/${reference}/` })))
       .objects.length
   ).toBe(1);
-  yield* verifyProcessorEvidence(send);
+  yield* verifyProcessorEvidence(send, baseDecision);
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
   const guarded = withErasureRecovery({
     DB: native.db,

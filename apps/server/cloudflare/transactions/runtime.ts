@@ -4,6 +4,7 @@ import {
   executeErasureContinuation,
   executeErasureControl,
   executeErasureRestore,
+  executeErasureRetentionReview,
   executeErasureReview,
 } from "../erasure/operations";
 import { makeAuditErasureStores } from "../audit/runtime";
@@ -468,6 +469,19 @@ const privateErasureRestore = (
   input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
   const erasurePath = new URL(input.request.url).pathname;
+  if (input.request.method === "POST" && erasurePath === "/erasure-retention-review") {
+    return Option.some(
+      executeErasureRetentionReview({
+        userId: input.userId,
+        candidate: input.candidate,
+        stores: erasureStores(input.environment.DB),
+        recovery: {
+          db: input.environment.DB,
+          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+        },
+      })
+    );
+  }
   if (input.request.method === "POST" && erasurePath === "/erasure-restore") {
     return Option.some(
       executeErasureRestore({

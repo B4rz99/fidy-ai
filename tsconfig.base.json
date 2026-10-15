@@ -226,6 +226,10 @@
             }
           },
           {
+            "include": ["./infra/cloudflare/alchemy.run.ts"],
+            "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
+          },
+          {
             "include": ["./scripts/document-parsing/xlsx-work.ts"],
             "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
           },

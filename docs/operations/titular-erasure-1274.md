@@ -105,7 +105,49 @@ private copies expire through bounded cleanup; expired holds are never copied an
 physical deletion resets Cloudflare verification and its recovery clock. Completed case controls
 purge only after both reviewed control deadlines and the last personal-data backup window; recovery
 locators and the case marker purge before their D1 control rows. Incomplete cases are never silently
-closed by the completed-case sweeper.
+closed by the completed-case sweeper. An overdue control review is returned as `retention-review`,
+even when local erasure is finished; neither the provider obligation nor its expired justification
+is represented as resolved.
+
+For an actual, newly source-backed decision about keeping the restricted case controls, send
+`ReviewRetention` through the same dedicated operator Access application:
+
+```json
+{
+  "action": "ReviewRetention",
+  "userId": "<exact reviewed User UUID>",
+  "reference": "<exact erasure UUID>",
+  "previousReviewRef": "<current receipt-retention review UUID>",
+  "receiptRetention": {
+    "sourceRef": "<source UUID>",
+    "reviewRef": "<new review UUID>",
+    "purpose": "rights-response",
+    "untilMs": 0,
+    "reviewAtMs": 0,
+    "terminal": "delete"
+  },
+  "recoveryRetention": {
+    "sourceRef": "<source UUID>",
+    "reviewRef": "<new review UUID>",
+    "purpose": "restore-enforcement",
+    "untilMs": 0,
+    "reviewAtMs": 0,
+    "terminal": "delete"
+  }
+}
+```
+
+Replace the zeroes with reviewed finite future times. Record the actual justification and operator
+review in restricted evidence under those new references; moving dates alone is not justification.
+The command refuses stale authority, a different User, a reused review, shortening approved
+retention or a deadline inside the actual last-deletion backup window. It changes only the two
+case-control retentions. Financial holds, scope, withdrawal, provider outcomes and the configured
+backup window remain the original reviewed decision. The independent registry receives the review
+before the native generation advances; rollback replay uses the latest control review. An interrupted
+commit can require the existing restore procedure. There is no automatic renewal. Unreviewed overdue
+controls remain an explicit operator action; resolve the actual source conflict and provider request.
+Once the case is complete, the existing bounded cleanup deletes controls after both revised deadlines
+and the last financial-data backup window. Do not erase an unresolved case merely to hide its status.
 
 ## Actual processors and manual disposition
 
@@ -159,6 +201,9 @@ both private registry bindings. Before the first erasure approval, the designate
 requires an initial native generation, no approved case and an empty registry (or an identical
 initial checkpoint). Ordinary reads never create a missing checkpoint. After any approved case,
 initialization refuses; a lost registry must be recovered independently rather than reinitialized.
+Local development performs the equivalent empty-registry check as an explicit Alchemy startup action
+before binding the required guard to its workers. This is confined to the local stack; it refuses
+missing checkpoints for approved cases. Production bootstrap continues to require operator Access.
 Confirm ordinary guarded access before releasing traffic. This operator step is required release
 work, not evidence that this checkout has been deployed.
 
@@ -172,7 +217,12 @@ Use operator `{ "action": "Restore" }` repeatedly until `AwaitingDisposition`. T
 pages of independently saved reviewed cases, reconstructs exact-User dispositions and imports
 original locators and still-live restricted holds. Resume each exact case through `Continue` or
 scheduled maintenance. A record/registry conflict refuses recovery rather than silently discarding
-an erased User. Reapplying the same generation is idempotent. Use `{ "action": "ReleaseRestore" }`
+an erased User. A separate `sealed` proof in the independent registry records that admitted work
+was drained and the coordinator cleared before deletion began. A rollback with that proof can seal
+stale pending rows again; an unsealed case must drain its original admitted work first and cannot
+claim completion merely because recovery was invoked. If those owners cannot settle while traffic
+is fenced, keep recovery blocked and reconcile the interrupted original work before release.
+Reapplying the same generation is idempotent. Use `{ "action": "ReleaseRestore" }`
 only after reconstruction: it refuses release until the scan is complete and every reconstructed
 case has finished its native D1/R2 dispositions. Processor work may still remain accurately pending.
 The ordinary generation fence remains closed until this native check succeeds. Restored credentials

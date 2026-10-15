@@ -481,3 +481,97 @@ it("refuses reused OTP bearers rather than sending a one-use credential twice", 
       expect(provider).toHaveBeenCalledTimes(3);
     })
   ));
+
+it("completes the actual Sandbox OTP service protocol without following provider URLs", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+      const send = endpoint + "?token=daviplata_devtest_synthetic&operation=RESEND_OTP";
+      const confirm = endpoint + "?token=daviplata_devtest_synthetic&operation=VALIDATE_OTP_API";
+      const provider = vi
+        .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
+          Promise.resolve(Response.json({}))
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            data: {
+              id: tokenId,
+              status: "PENDING",
+              url_services: {
+                token: "synthetic-initial-bearer",
+                code_otp_send: send,
+                code_otp_validate: confirm,
+              },
+            },
+          })
+        )
+        .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"))
+        .mockResolvedValueOnce(otpResponse("APPROVED", "synthetic-confirm-bearer"));
+      const challenge = yield* startDaviplataWithWompi({
+        publicKey: "pub_test_synthetic",
+        policy: { sendUrl: endpoint, confirmUrl: endpoint },
+        fields: {
+          documentNumber: Redacted.make("1122233"),
+          productNumber: Redacted.make("3991111111"),
+        },
+        fetchImplementation: provider,
+        signal: mountedSignal(),
+        expiresAt: (yield* Clock.currentTimeMillis) + 60_000,
+      });
+      const result = yield* challenge.confirm(Redacted.make("574829"));
+      expect(result.status).toBe("approved");
+      expect(provider.mock.calls.map((call) => call[0])).toEqual([
+        "https://sandbox.wompi.co/v1/tokens/daviplata",
+        send,
+        confirm,
+      ]);
+      challenge.dispose();
+    })
+  ));
+
+it.each([
+  "https://api-sandbox.wompi.co.evil.example/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_synthetic&operation=RESEND_OTP",
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/other?token=daviplata_devtest_synthetic&operation=RESEND_OTP",
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_foreign&operation=RESEND_OTP",
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_synthetic&operation=VALIDATE_OTP_API",
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_synthetic&operation=RESEND_OTP&token=daviplata_devtest_foreign",
+  "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_synthetic&operation=RESEND_OTP#fragment",
+  "https://user:password@api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_synthetic&operation=RESEND_OTP",
+])("rejects substituted real Sandbox service authority before OTP egress: %s", (sendUrl) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          Response.json({
+            data: {
+              id: tokenId,
+              status: "PENDING",
+              url_services: {
+                token: "synthetic-initial-bearer",
+                code_otp_send: sendUrl,
+                code_otp_validate:
+                  endpoint + "?token=daviplata_devtest_synthetic&operation=VALIDATE_OTP_API",
+              },
+            },
+          })
+        )
+      );
+      const result = yield* Effect.exit(
+        startDaviplataWithWompi({
+          publicKey: "pub_test_synthetic",
+          policy: { sendUrl: endpoint, confirmUrl: endpoint },
+          fields: {
+            documentNumber: Redacted.make("1122233"),
+            productNumber: Redacted.make("3991111111"),
+          },
+          fetchImplementation: provider,
+          signal: mountedSignal(),
+          expiresAt: (yield* Clock.currentTimeMillis) + 60_000,
+        })
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(provider).toHaveBeenCalledTimes(1);
+    })
+  )
+);

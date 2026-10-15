@@ -16,10 +16,8 @@ import {
   requireDaviplataSandboxPolicy,
 } from "./daviplata-sandbox.test-fixture";
 
-const policy = {
-  sendUrl: "https://sandbox.wompi.co/synthetic-test/send",
-  confirmUrl: "https://sandbox.wompi.co/synthetic-test/confirm",
-};
+const endpoint = "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox";
+const policy = { sendUrl: endpoint, confirmUrl: endpoint };
 const outboundFor = (
   handler: Parameters<typeof makeTestOutboundTransport>[0]
 ): OutboundHttpService =>
@@ -43,7 +41,8 @@ type ProtocolPremise = Readonly<{
 }>;
 const ordinary: ProtocolPremise = {
   name: "ordinary",
-  ...policy,
+  sendUrl: endpoint + "?token=daviplata_devtest_synthetic&operation=RESEND_OTP",
+  confirmUrl: endpoint + "?token=daviplata_devtest_synthetic&operation=VALIDATE_OTP_API",
   wrongIdentityAt: 0,
   malformedAt: 0,
   stopAt: 3,
@@ -53,7 +52,7 @@ const syntheticBody = (step: number, premise: ProtocolPremise): string => {
   if (step === 1) {
     return JSON.stringify({
       data: {
-        id: "synthetic-authorization",
+        id: "daviplata_devtest_synthetic",
         status: "PENDING",
         url_services: {
           token: "synthetic-send-bearer",
@@ -69,7 +68,7 @@ const syntheticBody = (step: number, premise: ProtocolPremise): string => {
         PK:
           step === premise.wrongIdentityAt
             ? "synthetic-foreign-authorization"
-            : "synthetic-authorization",
+            : "daviplata_devtest_synthetic",
         status: step === 2 ? "PENDING" : "APPROVED",
       },
       authorization: { access_token: "synthetic-confirm-bearer" },
@@ -159,7 +158,7 @@ it("rotates the synthetic one-use service bearer and confirms the same reusable 
         );
       });
       const token = yield* authorizeDaviplataSandbox({ outbound, policy, outcome: "declined" });
-      expect(Redacted.value(token)).toBe("synthetic-authorization");
+      expect(Redacted.value(token)).toBe("daviplata_devtest_synthetic");
       expect(requests).toBe(3);
       expect(authorization).toEqual([
         "Bearer pub_test_synthetic_only",

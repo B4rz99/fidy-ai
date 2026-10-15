@@ -22,8 +22,16 @@ alone does not grant Pro. Quota exhaustion is distinct from a Paywall.
 
 Local audit revision: `5d3cda1f4962b103cf3f916b6c81c36ed1540262`. These Subscription,
 AccessTier and enrollment source directories initially matched deployed revision
-`20889fa3d90d8f86c09ddce0cc790c8bb6ac761c`. The subsequent optional-email enrollment fix
-has local evidence only until deployed and rerun.
+`20889fa3d90d8f86c09ddce0cc790c8bb6ac761c`. The optional-email enrollment fix was merged in
+[PR #1324](https://github.com/B4rz99/fidy-ai/pull/1324) and
+[deployed successfully](https://github.com/B4rz99/fidy-ai/actions/runs/38780574628) at revision
+`3e184387cd7e8a5772cca4c868be48ffa7b0f825` on 2026-10-15. Public health confirms that revision.
+Post-deployment unauthenticated offers/status/enrollment return 401 with `no-store`;
+foreign-Origin enrollment returns 403 with `no-store`. After fresh Google sign-in, authenticated
+offers/status/availability and weekly/monthly card preparation returned 200. The provider-only
+account reached the payment form with an empty billing-email field and a Sandbox public key.
+Availability trace: `a9943b75a69b15bb2f0904b62cbe74cb`; weekly preparation trace:
+`a4b2368cce400de0e0574a83d956cbfa`. No payment was submitted for those checks.
 
 Passed: **329 Subscription Worker/D1/provider-adapter checks**, **1 AccessTier D1 check**,
 **7 shell Subscription checks**, **17 canonical-admission checks**, **21 web Subscription
@@ -49,8 +57,13 @@ Eight opt-in real-provider cases are skipped by the ordinary local suite: four N
 DaviPlata Sandbox scenarios. Only the four Nequi cases have separate passing live-provider evidence. The protected
 [Nequi Sandbox proof](../../../../../docs/operations/nequi-sandbox-proof.md) and
 [DaviPlata Sandbox proof](../../../../../docs/operations/daviplata-sandbox-proof.md) document
-synthetic-only provider execution. DaviPlata's reviewed OTP send/confirm variables are absent
-from the protected Production environment at this audit; do not guess destinations or enable it.
+synthetic-only provider execution. DaviPlata's OTP variables are absent from the protected
+Production environment at this audit. Manual synthetic tokenization on 2026-10-15 established the
+exact Sandbox host/path and identity/operation query binding. The adapter and browser CSP now
+support that observed protocol, with 22 closed Outbound HTTP checks, 52 browser transport/Subscription
+checks, and a passing isolated built-browser DaviPlata collection journey plus served-CSP check.
+Provider responses in that browser journey are controlled; real OTP/source/settlement and CORS
+remain unverified until the protected proof runs. Production-mode DaviPlata activation is separate.
 
 The [Nequi Sandbox run](https://github.com/B4rz99/fidy-ai/actions/runs/38672345124) passed all four
 selected cases on deployed trunk revision `20889fa3d90d8f86c09ddce0cc790c8bb6ac761c`, completed
@@ -66,7 +79,7 @@ editable prefilled billing email, first-card settlement and retained-source cont
 regression failed with the original join and passed with the fix against public Ingress/Core/local
 D1 and controlled Wompi responses. Fresh-session and active-Consent guards remain required.
 
-Remaining safe live work: deploy and verify the optional-email fix; DaviPlata
+Remaining safe live work: complete a synthetic deployed payment; correct and verify DaviPlata
 Sandbox protocol proof; and isolated deployed Queue/Workflow/callback recovery evidence before
 claiming the entire payment lifecycle is verified. Real charges, live refunds, recurring debit
 authorization and changing existing subscriptions are excluded from this audit.

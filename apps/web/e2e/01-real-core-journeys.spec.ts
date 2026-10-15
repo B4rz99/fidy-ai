@@ -666,8 +666,9 @@ test("tokenizes a first card without an email-login credential through real publ
 type DaviplataFixtureStep = "tokenize" | "send" | "confirm";
 const daviplataFixtureUrls: Readonly<Record<DaviplataFixtureStep, string>> = {
   tokenize: "https://sandbox.wompi.co/v1/tokens/daviplata",
-  send: "https://sandbox.wompi.co/fidy-synthetic-daviplata/send",
-  confirm: "https://sandbox.wompi.co/fidy-synthetic-daviplata/confirm",
+  send: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_acceptance&operation=RESEND_OTP",
+  confirm:
+    "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox?token=daviplata_devtest_acceptance&operation=VALIDATE_OTP_API",
 };
 const daviplataAuthorization = "daviplata_devtest_acceptance";
 const daviplataServiceBearers = {

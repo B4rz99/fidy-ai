@@ -4,10 +4,23 @@ Issue: [#232](https://github.com/B4rz99/fidy-ai/issues/232).
 
 ## Status and launch boundary
 
-**The live proof has not been run, and no successful real Sandbox evidence is recorded.**
+**The complete live proof has not been run; only real Sandbox tokenization has been observed.**
 The adapter/proof-helper tests use synthetic transport premises, not recorded provider responses.
 Credentials, checked-in tests and a manual workflow do not establish merchant eligibility or actual
 OTP origins, paths, browser CORS, recovery or reusable-source behavior.
+
+On 2026-10-15, bounded manual tokenization with the browser-published Sandbox public key and
+documented synthetic CC/product returned 201/PENDING. Both service URLs used
+`https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox`, with exactly the
+`token` and `operation` query keys. The token query matched the returned authorization ID;
+operations were `RESEND_OTP` and `VALIDATE_OTP_API`. No bearer or OTP was sent to either service.
+The prior policy rejected that host and query shape. The adapter now supports that exact Sandbox
+endpoint, constructing token/operation queries from the bound authorization instead of forwarding
+provider URLs. Discovery alone does not verify OTP, source or settlement.
+Raw payloads, authorization IDs and query values containing identity are not retained.
+A 2026-10-15 OPTIONS probe to the exact endpoint with the Fidy app Origin returned 200,
+`Access-Control-Allow-Origin: *`, POST allowed, and authorization/content-type allowed. This is
+preflight evidence only, not a browser OTP POST or completed authorization.
 
 Production enablement remains blocked on real protocol, browser CORS and interruption/recovery
 proofs. This server-side synthetic Sandbox proof does not proxy any User's account details or
@@ -21,21 +34,23 @@ protected `production` environment that holds the Wompi **Sandbox** secrets. It 
 it receives no Cloudflare credentials and deploys nothing. Environment must be `sandbox`, and keys
 must match Sandbox prefixes.
 
-An operator must separately review and explicitly set these protected-environment **variables**:
+The manual proof pins the observed endpoint in its own workflow. Deployment still requires
+separate protected-environment **variables**:
 
 - `WOMPI_DAVIPLATA_OTP_SEND_URL`
 - `WOMPI_DAVIPLATA_OTP_CONFIRM_URL`
 
-There are intentionally **no example URLs, defaults, wildcard origins or guessed paths**. Both must
-satisfy the current `DaviplataOtpPolicy`: HTTPS, exact `sandbox.wompi.co` origin, a bounded permitted
-path, and no credentials/query/fragment. Actual provider OTP
-service origins/paths and CORS are unknown. If real service URLs do not satisfy this policy, the
-proof must stop; do not broaden policy just to obtain a green run. Review provider evidence and the
-security/product decision first.
+The workflow and any later reviewed deployment configuration use the observed, query-free Sandbox endpoint:
+`https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox`.
+The adapter constructs the exact query with the returned authorization ID and either
+`RESEND_OTP` or `VALIDATE_OTP_API`. Both returned URLs must match those constructed destinations
+before any service bearer or OTP leaves the process. Altered hosts, paths, identity, operations,
+extra query fields, credentials and fragments are refused. The browser CSP allows only the new
+host's exact service path. Production-mode destinations and merchant activation remain separately
+gated; this Sandbox observation does not establish the Production protocol or browser CORS.
 
 Missing, malformed or non-Sandbox policy rejects before tokenization or other provider effects.
-The tokenization response must return both configured URL strings **exactly**, before any OTP
-service bearer or synthetic OTP is sent. Same-origin path variations are not accepted.
+Running this proof does not set deployment variables or enable DaviPlata in the deployed app.
 Do not download credentials, dispatch from an unreviewed branch, enable HTTP/body tracing, or
 retain provider payloads as fixtures/artifacts.
 
@@ -48,7 +63,7 @@ and approved/declined product data, plus the documented approval OTP. There is n
 account-data input. The sequence is:
 
 1. Real Sandbox tokenization for the selected synthetic outcome.
-2. Exact comparison of both returned OTP service URLs to reviewed configuration.
+2. Exact comparison of both returned OTP service URLs to the configured destination plus bound authorization and operation.
 3. One OTP-send POST with the returned one-use service bearer; verify the same authorization identity.
 4. One OTP-confirm POST with the newly returned bearer and fixed synthetic approval OTP; verify the
    same authorization is approved.
@@ -67,8 +82,7 @@ errors, and live payloads never enter assertion diffs. The job summary records o
 completed scenarios and evidence scope.
 
 After reviewed configuration and merge, an authorized operator may run the protected workflow and
-record its successful run link and revision here. **No run is currently linked.** This task neither
-retrieves credentials nor dispatches the workflow. Source revocation/replacement, recovery and
+record its successful run link and revision here. **No run is currently linked.** Credentials stay in the protected workflow. Source revocation/replacement, recovery and
 automatic-renewal execution remain separate work.
 
 ## Primary references

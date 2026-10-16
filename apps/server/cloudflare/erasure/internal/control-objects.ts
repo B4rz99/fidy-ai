@@ -1,5 +1,5 @@
 import { Clock, Effect, Option, Schema } from "effect";
-import { erasePrivateObject } from "../../private-objects/operations";
+import { eraseObservedPrivateObject } from "../../private-objects/operations";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 
 const maximumObjects = 32;
@@ -43,10 +43,11 @@ const sweepBucket = (input: ControlSweep): Effect.Effect<void, ErasureUnavailabl
     const current = yield* Clock.currentTimeMillis;
     for (const object of page.objects) {
       if (!(yield* expiredControl({ object, current }))) continue;
-      yield* erasePrivateObject({ bucket: input.bucket, key: object.key });
-      if ((yield* io(() => input.bucket.head(object.key))) !== null) {
-        return yield* new ErasureUnavailable();
-      }
+      yield* eraseObservedPrivateObject({
+        bucket: input.bucket,
+        key: object.key,
+        etag: object.etag,
+      });
     }
     yield* io(() =>
       input.db

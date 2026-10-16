@@ -231,6 +231,51 @@ it("reconciles expired orphan control objects without touching financial bytes o
     })
   ));
 
+it("preserves a lawful hold published after an expired placeholder was listed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      const current = yield* Clock.currentTimeMillis;
+      const key = "racing-held-record";
+      yield* Effect.tryPromise(() =>
+        bucket.put(key, "expired upload nonce", {
+          customMetadata: {
+            purpose: "private-object-placeholder",
+            expiresAtMs: String(current - 1),
+          },
+        })
+      );
+      const list = bucket.list.bind(bucket);
+      const racingBucket = new Proxy(bucket, {
+        get(target, property): unknown {
+          if (property === "list") {
+            return (options: R2ListOptions): Promise<R2Objects> =>
+              list(options).then((page) =>
+                bucket
+                  .put(key, "reviewed lawful hold", {
+                    customMetadata: {
+                      purpose: "titular-held-record",
+                      expiresAtMs: String(current + 600000),
+                    },
+                  })
+                  .then(() => page)
+              );
+          }
+          const value: unknown = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      yield* sweepErasureControlObjects({
+        db,
+        buckets: [{ id: "erasure", bucket: Option.some(racingBucket) }],
+      });
+      expect(yield* Effect.tryPromise(() => bucket.get(key).then((object) => object?.text()))).toBe(
+        "reviewed lawful hold"
+      );
+    })
+  ));
+
 it("initializes an empty local registry but refuses to recreate a lost approved-case checkpoint", () =>
   Effect.runPromise(
     Effect.gen(function* () {

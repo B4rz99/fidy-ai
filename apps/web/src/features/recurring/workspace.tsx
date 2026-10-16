@@ -269,7 +269,7 @@ const WorkspaceBody = ({
 }>): JSX.Element => {
   const { view, disabled, save, filters, timeZone } = props;
   return (
-    <div className="grid gap-4 p-4 sm:p-5">
+    <main className="grid gap-4 p-4 sm:p-5">
       <WorkspaceSuggestions
         view={view}
         save={save}
@@ -306,7 +306,7 @@ const WorkspaceBody = ({
           save={save}
         />
       )}
-    </div>
+    </main>
   );
 };
 

@@ -315,6 +315,59 @@ it("retains skipped disposition while excluding its Money from summaries", () =>
   expect(summarizeRecurring(items)).toEqual([]);
 });
 
+it.each(["pause", "stop"] as const)(
+  "%s suppresses a future occurrence restored after skipping",
+  (action) => {
+    const skipped = command(createdPlan(), {
+      kind: "skip",
+      planId,
+      date: "2026-01-31",
+      skipped: true,
+    });
+    const restored = command(skipped, { kind: "skip", planId, date: "2026-01-31", skipped: false });
+    const inactive = command(restored, { kind: "lifecycle", planId, date: "2026-01-15", action });
+    expect(
+      projectRecurringMonth({
+        document: inactive,
+        month: "2026-01",
+        now: DateTime.makeUnsafe("2026-01-15T12:00:00Z"),
+      })
+    ).toEqual([]);
+  }
+);
+
+it.each(["pause", "stop"] as const)(
+  "%s suppresses an edited future expectation while preserving its recorded fulfillment",
+  (action) => {
+    const edited = command(createdPlan(), {
+      kind: "edit",
+      planId,
+      date: "2026-01-31",
+      scope: "once",
+      plan: { ...monthly, name: "Excepción futura" },
+    });
+    const inactive = command(edited, { kind: "lifecycle", planId, date: "2026-01-15", action });
+    const projection = { month: "2026-01", now: DateTime.makeUnsafe("2026-01-15T12:00:00Z") };
+    expect(projectRecurringMonth({ document: inactive, ...projection })).toEqual([]);
+    const paid = command(edited, {
+      kind: "fulfill",
+      fulfillment: Schema.decodeSync(RecurringFulfillment)({
+        id: "20000000-0000-4000-8000-000000000015",
+        planId,
+        date: "2026-01-31",
+        actualDate: "2026-01-14",
+        settled: true,
+        money: { amount: "100", currency: "COP" },
+      }),
+    });
+    const paidInactive = command(paid, { kind: "lifecycle", planId, date: "2026-01-15", action });
+    const items = projectRecurringMonth({ document: paidInactive, ...projection });
+    expect(items).toHaveLength(1);
+    expect(items[0]?.status).toBe("completed");
+    expect(items[0]?.plan.name).toBe("Excepción futura");
+  }
+);
+
 it.each(["once", "forward"] as const)(
   "uses the effective occurrence time zone after a %s edit near midnight",
   (scope) => {

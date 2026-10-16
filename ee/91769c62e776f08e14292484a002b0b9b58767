@@ -1,0 +1,25 @@
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_8f25b11e5de2ef 488-531
+apps/web/src/features/needs-review/editor.tsx
+  s_ede1c3735d03b7::t_92af93f45dbeda 105-108,124
+apps/web/src/features/needs-review/feature.tsx
+  s_ede1c3735d03b7::t_728eeaa679c585 123
+apps/web/src/features/needs-review/inbox-controller.ts
+  s_ede1c3735d03b7::t_8a8051c82d93c4 25,27-31,40-41,44-46,69,134-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee91769c62e776f08e14292484a002b0b9b58767",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

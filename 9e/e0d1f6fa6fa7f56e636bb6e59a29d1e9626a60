@@ -1,0 +1,70 @@
+apps/web/src/features/recurring/workspace.tsx
+  s_169697deba9fb8::t_e27629fe26de9b 507
+apps/web/src/features/oauth-connections/management-view.tsx
+  s_169697deba9fb8::t_e27629fe26de9b 65,123
+  s_169697deba9fb8::t_f04d9eee3b7c29 30,55-57
+apps/web/src/features/recurring/details.tsx
+  s_169697deba9fb8::t_e27629fe26de9b 74,98,114,146
+apps/web/src/ui/components/calendar.tsx
+  s_169697deba9fb8::t_e27629fe26de9b 75,88,156
+apps/web/e2e/access-management.spec.ts
+  s_169697deba9fb8::t_bc02c5be3ee95c 161-173
+apps/web/src/features/privacy/authorization-copy.tsx
+  s_169697deba9fb8::t_4eaae6c4bf1e5d 1,27,29
+scripts/verify.ts
+  s_169697deba9fb8::t_b00a3a29244d4f 102
+package.json
+  s_169697deba9fb8::t_2e2490463a896c 11
+apps/web/src/ui/pattern-reference.tsx
+  s_169697deba9fb8::t_2e2490463a896c 17,146,149,151
+  s_169697deba9fb8::t_2ecbd1f51f6a26 2-16,18-114,120-143,147-148,150,152-171,173-215,217,219,221,224-225,227-248
+  s_169697deba9fb8::t_8f4f8c59b8b150 172,226
+  s_169697deba9fb8::t_d1633dca5f407d 1,115-119,144-145
+  s_169697deba9fb8::t_723694062592c0 216,218,220,222-223
+.oxlintrc.ui.json
+  s_169697deba9fb8::t_2e2490463a896c 1-61,94-101,110-113
+  s_169697deba9fb8::t_b00a3a29244d4f 62-93,102-109
+DESIGN.md
+  s_169697deba9fb8::t_2e2490463a896c 492-496,502-514
+  s_169697deba9fb8::t_5c8c51bd0e2e88 316-321
+apps/web/src/features/privacy/renewal.tsx
+  s_169697deba9fb8::t_4eaae6c4bf1e5d 1,43,45
+apps/web/src/features/dashboard/view.tsx
+  s_169697deba9fb8::t_e27629fe26de9b 422
+apps/web/src/features/budgets/dev-preview.tsx
+  s_169697deba9fb8::t_b00a3a29244d4f 32
+apps/web/e2e/recurring-plans.spec.ts
+  s_169697deba9fb8::t_bc02c5be3ee95c 277-283
+apps/web/src/ui/components/button-variants.ts
+  s_169697deba9fb8::t_e27629fe26de9b 46-52
+.oxlintrc.json
+  s_169697deba9fb8::t_2e2490463a896c 4-5
+apps/web/src/features/subscription/daviplata-form.tsx
+  s_169697deba9fb8::t_e27629fe26de9b 387
+apps/web/src/features/pats/management-view.tsx
+  s_169697deba9fb8::t_e27629fe26de9b 113
+apps/web/src/ui/reference.tsx
+  s_169697deba9fb8::t_e6d065370c14b2 18,262-273,275,278
+  s_169697deba9fb8::t_e4cec7ede130eb 1-2
+scripts/oxlint/lint-rules.test.js
+  s_169697deba9fb8::t_2e2490463a896c 271-278,290-292
+  s_169697deba9fb8::t_776afe8e6ab473 293
+apps/web/src/features/transactions/correction.tsx
+  s_169697deba9fb8::t_1f6616469a0291 1,264,268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ee0d1f6fa6fa7f56e636bb6e59a29d1e9626a60",
+  "prompts": {},
+  "sessions": {
+    "s_169697deba9fb8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13cac-c404-7610-8129-02b1e4e93ef0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

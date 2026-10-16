@@ -1,0 +1,23 @@
+apps/web/e2e/privacy.spec.ts
+  s_169697deba9fb8::t_a6b3010f5e1c5e 106-109
+apps/web/src/ui/components/button-variants.ts
+  s_169697deba9fb8::t_8ce3560c8d47f1 18
+DESIGN.md
+  s_169697deba9fb8::t_8ce3560c8d47f1 322
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fbed4d52018fdb21c525b44b811c8e3f0005398",
+  "prompts": {},
+  "sessions": {
+    "s_169697deba9fb8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13cac-c404-7610-8129-02b1e4e93ef0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

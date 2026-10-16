@@ -1,21 +1,25 @@
 # RNBD and reporting applicability — #1276
 
-Version 1, 2026-10-16. Use the [decision procedure](privacy-decisions-1276.md) and
+Version 2, 2026-10-16. Use the [decision procedure](privacy-decisions-1276.md) and
 [official-source record](../research/privacy-reporting-public-evidence-1276.md). This is a working
 application record, not qualified sign-off or an incident report. No registration, submission,
 account creation or third-party drill contact was performed.
 
 ## Actual RNBD determination
 
-**Unresolved — actual financial/entity evidence and qualified review pending.** The owner states
-that the company is FIDY S.A.S. and operates alone; this implementation has not independently
-verified corporate particulars, accounting statements or total assets. No private tax identifier,
-capital or financial amount is published here. Development status or absent bank access does not
-determine registration.
+**Snapshot below the published asset threshold; period-specific RNBD determination remains open.**
+The sole owner confirmed FIDY S.A.S.'s total assets and accounting date and explicitly confirmed
+that the figure was verified by the accountant. The financial particulars remain restricted. Treat
+this as owner-supplied accountant-verified information; the underlying accounting document has not
+been inspected by Codex. Do not describe the amount or accounting date as missing or unverified by
+an accountant. Incorporation facts and the applicable first-year/preceding-year measurement basis
+are not established by that snapshot, so it does not certify an exemption for another period.
 
-Restricted working decision reference: `c5f674af-2d35-4b89-91cb-85d1bd896442`, version 1,
-recorded 2026-10-16. The actual mode-0600 record exists in the existing operator-owned mode-0700
-evidence directory. It records the missing facts and unreviewed status, not a legal exemption.
+Restricted working decision reference: `b762da7e-a035-4a95-921c-9d0f0b7e70fa`, version 2,
+recorded 2026-10-16; predecessor `c5f674af-2d35-4b89-91cb-85d1bd896442` remains unchanged.
+The actual mode-0600 record exists in the existing operator-owned mode-0700 evidence directory.
+It records the supplied financial facts, source limitations, conditional assessment and review
+triggers. It does not record an independent qualified opinion or publish company financial details.
 
 The reviewer records legal nature/controller role, incorporation and database-creation dates,
 corporate evidence reference, total assets/accounting date, measurement basis, UVT year and
@@ -25,7 +29,8 @@ The decree uses **above 100,000 UVT** for private companies/nonprofits; public l
 a separate rule. Current SIC consolidation contains inconsistent wording in another paragraph.
 Exact equality and first-year measurement for a newly incorporated company need explicit review.
 The 2026 benchmark for 100,000 UVT is COP 5,237,400,000, but the correct UVT/asset-period pairing
-remains part of review. These are sourced rules and an arithmetic benchmark, not Fidy's conclusion.
+remains part of review. These are sourced rules and an arithmetic benchmark; the supplied snapshot is below the threshold,
+while the relevant measurement period remains unresolved.
 
 Record RegistrationRequired, NotRequiredForReviewedPeriod or Unresolved with actual supporting
 facts. If required, establish database-creation dates, the applicable registration period and actual
@@ -56,19 +61,21 @@ Its authenticated account authority and a follow-up channel for a particular inc
 verified before actual submission. Never use a public search-result form or send credentials to
 support. Preserve failure, alternative-route choice and actual receipt.
 
-Cloudflare authenticated support, Kapso's published legal contact and Resend's DPA/security contact
-are candidate provider entry points whose incident scope and obligations need confirmation against
-the actual agreement. The [#1275 record](provider-reconciliation-1275.md) preserves account context
+The [public-source reporting check](../research/privacy-reporting-public-evidence-1276.md#provider-reporting-check--2026-10-16)
+records published notification clauses and contact purposes for Cloudflare, Kapso and Resend. Their
+application to the actual agreement/version and incident-specific routing remain separate checks. The [#1275 record](provider-reconciliation-1275.md) preserves account context
 and provider correspondence. Wompi's published privacy email rejected the enquiry; use the recorded
 authenticated support escalation for routing rather than treating that email as a verified working
 incident channel. A rights enquiry is not proof of an incident SLA. No provider contact is made as
 a drill. Keep actual addresses/account locators and approvals in restricted decision evidence.
 
-The sole operator coordinates legal interpretation through a selected qualified Colombian reviewer;
-no reviewer, backup availability or retained counsel is invented. Unavailable-owner handling in the
-decision procedure and tabletop explicitly exposes the current coverage gap. This does not invent
-a legal obligation to hire a second employee or treat the existing sole-operator approval as new
-legal sign-off.
+The owner confirms that he is Fidy's only owner and worker, with no backup. He owns privacy
+decisions, including requests, provider evidence and incident assessment. Legal advice may be sought
+for an unresolved question; there is no standing engagement, promised external availability or
+statutory lawyer-hiring requirement established by this research. The unavailable-owner procedure
+preserves clocks and the coverage limitation; it does not invent another responder. The owner has
+accepted recording this sole-operator arrangement. That acceptance neither extends reporting
+periods nor establishes continuous response coverage.
 
 ## Bank evidence index
 
@@ -77,8 +84,8 @@ to this repository/index. Registration or a policy does not establish overall co
 
 | Outcome                       | Current evidence and limitation                                                                                                                                                                                                                                                                                             | Owner / next action                                                                                                         |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Operator/entity and RNBD      | RNBD unresolved; exact inputs above. #1272 owns verified identity/route evidence.                                                                                                                                                                                                                                           | Operator supplies private corporate/asset evidence; qualified reviewer records applicability and measurement basis.         |
-| Privacy function and rights   | Existing sole operator; #1273 rights/withdrawal and #1274 erasure procedures. No backup; unattended escalation gap explicit.                                                                                                                                                                                                | Operator records company designation/authority and a reviewed workable escalation arrangement.                              |
+| Operator/entity and RNBD      | Supplied accountant-verified financial snapshot recorded privately; below-threshold snapshot, measurement-period determination pending. #1272 owns verified identity/route evidence.                                                                                                                                        | Use supplied asset facts; resolve incorporation/measurement basis and obtain the issue-required qualified determination.    |
+| Privacy function and rights   | Existing sole operator; #1273 rights/withdrawal and #1274 erasure procedures. No backup; unattended escalation gap explicit.                                                                                                                                                                                                | Sole owner is designated; preserve unavailable-owner clocks and review the explicitly accepted coverage limitation.         |
 | Incident decisions            | Decision procedure, official-source record and synthetic tabletop. No live filing or qualified sign-off claimed.                                                                                                                                                                                                            | Reviewer applies legal/contract rules; operator rehearses and retains decision/training evidence.                           |
 | Technical response            | Existing [security response](security-response.md), [background-work monitoring](cloudflare-background-work.md) and open [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). Its referenced research files were absent in this checkout and current remote-path inspection, so are not presented as available evidence. | Technical owner supplies exact deployed detection/receipt/containment/recovery evidence; this tabletop does not replace it. |
 | Provider and bank obligations | #1275 reconciliation and #1266 bank profile/provisioning.                                                                                                                                                                                                                                                                   | Operator obtains applicable terms/contacts; reviewer records per-flow role and notification/retention decisions.            |

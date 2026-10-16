@@ -1,6 +1,6 @@
 # Privacy accountability and incident decisions — #1276
 
-Version 1, prepared 2026-10-16. **Implementation in progress; not legal sign-off, a live incident
+Version 2, updated 2026-10-16. **Implementation in progress; not legal sign-off, a live incident
 report or bank acceptance.** This procedure consumes the technical response in
 [security response](security-response.md) and the detection/operational work in
 [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). It introduces no detector, incident API,
@@ -14,17 +14,21 @@ clause references, statutory timing and unresolved interpretations.
 ## Accountable function
 
 Orlando Barboza, through `obarboza@fidyapp.com`, is the existing sole operator and the privacy
-decision owner for this implementation. This carries forward the operator arrangement approved in
-[#1273](titular-requests-1273.md); it does not claim an independently verified appointment by the
-company. The owner coordinates Titular cases, provider evidence, assessment, decision review,
-authorized communications and follow-up. The legal reviewer decides applicability; a technical
-responder supplies observations and containment evidence, not a legal verdict. At MVP scale the
+decision owner, as confirmed directly by the sole owner. This carries forward the operator
+arrangement approved in [#1273](titular-requests-1273.md). The owner confirms that he is the only
+company owner and worker; this designation does not claim an inspected corporate appointment
+document. The owner coordinates Titular cases, provider evidence, assessment, decision review,
+authorized communications and follow-up. The owner records source-backed applicability decisions
+and obtains qualified advice for unresolved
+questions; an issue-required qualified RNBD review remains distinct from a statutory obligation to
+hire a lawyer. A technical responder supplies observations and containment evidence. At MVP scale the
 same operator can perform the technical and privacy functions while recording each decision.
 
 There is **no backup person**, delegated access or retained external counsel established by this
 record. Do not invent a second responder or disclose credentials to obtain one. The escalation
-path for a legal question is the owner's selected qualified Colombian reviewer, recorded privately
-before engagement; no person or availability is assumed. Provider containment follows the existing
+path for an unresolved legal question is for the owner to seek appropriate advice when needed;
+no reviewer has been selected and no person or availability is assumed. Provider containment follows
+the existing
 verified account/security channel. A provider or reviewer cannot file on Fidy's behalf without the
 corresponding authority.
 
@@ -35,8 +39,10 @@ technical responder uses only the existing containment procedure. With no such r
 that containment and a deadline may be missed. Do not claim continuous coverage, postpone a legal
 clock until the owner returns or classify absence of a decision as non-reportable. On return, the
 owner immediately reviews elapsed targets, seeks qualified advice and documents any late action.
-Before relying on this as an effective unattended response arrangement, the owner must establish
-and rehearse a reachable escalation recipient or explicitly resolve that operational gap.
+The owner has explicitly accepted documenting the sole-operator arrangement with no human response
+coverage during unavailability. No additional employee or external retainer is required by this
+procedure. Reassess this limitation before live processing and after any missed target; owner
+acceptance does not waive statutory or contractual duties or make unattended response effective.
 
 ## Restricted decision record
 
@@ -119,7 +125,7 @@ privately; public status contains safe references and limitations only.
 ## Completion evidence
 
 Keep #1276 open until verified entity/asset facts support a dated RNBD decision by a qualified
-reviewer; the reporting rules/contacts and owner/escalation arrangement are reviewed; the synthetic
-exercise has traceable reviewed outcomes; and the bank evidence index accurately reflects them.
+reviewer; the applicable reporting rules/contacts are reviewed; the confirmed sole-operator
+arrangement accurately states its coverage limitations; the synthetic exercise has traceable reviewed outcomes; and the bank evidence index accurately reflects them.
 Existing #1273 approval does not automatically approve these new determinations. Neither provider
 acceptance in #1275 nor technical alert delivery closes these requirements.

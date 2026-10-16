@@ -1,6 +1,6 @@
 # Privacy decision tabletop — #1276
 
-Exercise version 1, 2026-10-16. **Fictional cases; assistant walkthrough, not operator training,
+Exercise version 2, 2026-10-16. **Fictional cases; assistant walkthrough, not operator training,
 qualified legal approval, a live incident or a report submitted to an authority.** Use the
 [decision procedure](privacy-decisions-1276.md) and its official-source review. Nothing below
 requests production access, fault injection, provider contact or account creation.
@@ -136,8 +136,9 @@ la detección original y se registra el conocimiento efectivo posterior, junto c
 pendientes. Se requiere revisión inmediata de contención, plazo y eventual reporte tardío.”
 
 **Next action:** owner, immediately upon return, follows technical containment, reviews notification
-urgency with a qualified reviewer and records any missed target. Before relying on unattended
-coverage, establish a reachable authorized escalation arrangement; exercise it again. Do not assign
+urgency with a qualified reviewer and records any missed target. The confirmed sole-operator arrangement provides no unattended human response coverage. Record the
+missed target and review whether processing can safely continue; owner acceptance does not extend a
+reporting period. Rehearse again if a real escalation arrangement is later established. Do not assign
 credentials or send sensitive data to an unappointed person during the tabletop.
 
 ## E — Filed initial report needs correction; delivery ambiguity
@@ -165,7 +166,7 @@ delivery decision is recorded. The fictional receipt cannot prove the live repor
 
 The assistant walkthrough exercises a positive reporting decision, a supported negative decision,
 uncertainty, a provider notice, an unavailable owner and a correction/delivery failure. It reveals
-the missing actual RNBD facts/reviewer, calendar interpretation, unavailable-owner coverage and
+the unresolved RNBD measurement basis/review, calendar interpretation, unavailable-owner coverage and
 institution-specific contacts. These are explicit open inputs, not passing launch criteria.
 
 An independent Spec reviewer reconstructed A–E and both timing worksheets on 2026-10-16. The

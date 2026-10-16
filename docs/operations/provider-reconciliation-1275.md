@@ -118,13 +118,13 @@ not qualified review, proof of accepted agreement versions or a deletion rehears
   displayed September–October billing period reports zero transcription seconds; that does not
   establish no earlier audio processing, no future transcription or the actual transcript vendor.
   No messages, transcripts or audio were opened or generated to identify a vendor.
-- **Improvement preference:** Allow model and product improvement is **on**, using the Free plan
+- **Initial improvement preference:** Allow model and product improvement was **on**, using the Free plan
   default. The UI says owners/admins can turn it off without disabling AI features needed to provide
   the service, and that changes apply to content created or processed afterward. Its displayed
   last-update time is retained privately without assuming a timezone. This is a verified account
   instruction separate from indefinite history, not evidence that the owner approved training by
-  accepting retention. A specific operator decision is pending; the switch and Save preference
-  were left unchanged. Prospective opt-out would not prove erasure of past processing or alter
+  accepting retention. The initial inspection left the switch and Save preference unchanged;
+  the subsequently authorized change is recorded below. Prospective opt-out would not prove erasure of past processing or alter
   retention.
 - **WhatsApp:** the phone-number page shows no connected production number, WhatsApp account or
   Meta app, and one active shared-sandbox session. Its enabled webhook targets Fidy's Kapso callback
@@ -137,13 +137,32 @@ not qualified review, proof of accepted agreement versions or a deletion rehears
   provider-account billing boundary, not evidence that Stripe receives Fidy Users' Transactions or
   replaces Wompi for Fidy Subscription billing.
 
-Next Kapso steps: decide the actual improvement instruction; obtain accepted Terms/DPA and company
+Next Kapso steps: obtain accepted Terms/DPA and company
 linkage evidence; establish the transcript route and applicable subprocessors/locations; review
 scope-specific rights/incident support and residual retention; then approve and execute a disposable
 provider rehearsal. Automation/connected-app configuration beyond the observed settings and period
 counters remains unverified. Recheck on project, plan, preference, transcription, number, webhook,
 subprocessor or agreement changes. No account preference, contract, message or provider data was
 changed during this inspection.
+
+### Authorized preference change — 2026-10-15
+
+The sole operator explicitly approved turning off and saving Allow model and product improvement
+for `fidy`. Restricted change receipt: `f84fd32a-d84b-46a9-8d7a-88ac4465b54e`, version 1,
+linked to the unchanged initial observation above. The switch was turned **off** and Save preference
+submitted. Kapso confirmed the update and stated that future project content will not be selected
+to improve Kapso. Reloading the page independently confirmed **off**, an explicit project choice,
+and a new provider-displayed update time. The confirmation screenshot remains in restricted storage.
+
+Audio transcription remained Both directions, log ingestion remained on, and Free indefinite
+history remained unchanged after reload. This is a prospective preference decision and observed
+configuration change, not evidence of erasure of past content or model untraining. No contract,
+message, purchase, support request or deletion was authorized or performed by this action.
+
+The previously opened invoice subsequently became available. Its summary names a generic project
+recipient and the Kapso brand, not FIDY S.A.S.; it does not establish the company agreement or
+accepted DPA/terms version. The minimized observation is in the restricted change receipt; the
+private invoice URL is not copied into evidence or Git.
 
 ## Flow reconciliation
 
@@ -209,8 +228,9 @@ before claiming all enabled billing methods are covered. The newer Kapso subproc
 must be compared to the actual transcript route. Separately inspect Kapso's Free feature/model
 improvement instruction and Resend's disclosed trust/safety sampling route against the account and
 approved purposes. The accepted Kapso retention exception grants no training authorization. The
-Kapso improvement preference was inspected and is on, but was not changed; its decision and any
-verified purpose conflict require explicit operator/legal disposition. No Resend account preference
+Kapso improvement preference was initially on and has now been explicitly disabled by the operator
+through the separately approved action recorded above. Past processing and any remaining verified
+purpose conflict still require reviewed disposition. No Resend account preference
 has been inspected here. Do not name a candidate as Fidy's active processor,
 claim finite Kapso expiry, promise completed erasure from a request receipt, promise Colombian
 residency or treat a public agreement as accepted. Record any needed copy correction with the
@@ -222,7 +242,7 @@ retain historical snapshots and run the exact-copy tests below.
 Use the [provider request procedure](provider-rights-1275.md) with the approved #1273 entitlement and
 #1274 erasure decision. It is an execution draft pending per-flow review and available-account
 testing. It introduces no new identity checks or provider deletion API. The Cloudflare and Kapso
-inspections above are read-only configuration evidence; no provider deletion/support rehearsal has
+inspections and separately authorized preference change above are configuration evidence; no provider deletion/support rehearsal has
 been performed for #1275. Local native tests do not establish provider completion.
 
 #1275 stays open until every actual active flow has current restricted evidence and qualified review

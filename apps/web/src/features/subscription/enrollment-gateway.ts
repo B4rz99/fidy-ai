@@ -74,7 +74,7 @@ export type EnrollmentGateway = Readonly<{
   prepare: (
     priceId: PriceId,
     method?: EnrollmentMethod,
-    signal?: AbortSignal
+    options?: Readonly<{ signal: AbortSignal; replaceFailedSource: boolean }>
   ) => Promise<Enrollment>;
   submit: (
     enrollment: PreparedEnrollment,
@@ -378,6 +378,21 @@ const makeStartDaviplata = (
       });
 };
 
+const makePrepare =
+  (clientService: SubscriptionEnrollmentClient): EnrollmentGateway["prepare"] =>
+  (priceId, method = "card", options) =>
+    clientService.execute(
+      (client) =>
+        client.subscriptionEnrollment.prepare({
+          payload: {
+            priceId,
+            method,
+            ...(options?.replaceFailedSource === true ? { replaceFailedSource: true } : {}),
+          },
+        }),
+      executionOptions(options?.signal)
+    );
+
 export const makeEnrollmentGateway = (
   clientService: SubscriptionEnrollmentClient
 ): EnrollmentGateway => {
@@ -422,11 +437,7 @@ export const makeEnrollmentGateway = (
             billingAttempt,
           }))
       ),
-    prepare: (priceId, method = "card", signal) =>
-      clientService.execute(
-        (client) => client.subscriptionEnrollment.prepare({ payload: { priceId, method } }),
-        executionOptions(signal)
-      ),
+    prepare: makePrepare(clientService),
     status: (enrollmentId, signal) =>
       clientService.execute(
         (client) => client.subscriptionEnrollment.status({ params: { enrollmentId } }),

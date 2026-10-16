@@ -96,6 +96,11 @@ to replace was refused; explicit replacement retained exactly COP 1 registered, 
 and one Transacción vinculada instead of adding the two records. The linked state survived release
 and reload. No additional Transaction was created by either tracking action.
 
+A once edit changed the October association expectation to Por confirmar. Its row and summary
+retained the unknown state explicitly; no amount was invented. Restoring fixed COP 2 saved
+successfully. The stopped CICLO plan's historical October expectation was then omitted, returning
+its contribution to zero without deleting management history.
+
 The production hosted agent answered a read-only November planning request with the exact two
 plans and dates, COP 2 and USD 3 separately, as one assistant response without a confirmation button.
 This establishes live hosted planning reads, independently of the deterministic canonical tests.
@@ -106,6 +111,15 @@ retaining exact-input, same-User/channel/session, expiry and one-use authority. 
 produce approval metadata. Direct and recovered browser proposals are covered locally; this UX
 fix still awaits release and its live write rerun. Other operation families retain their existing
 confirmation presentation.
+
+The follow-up was merged in [PR #1349](https://github.com/B4rz99/fidy-ai/pull/1349) as
+`db0e731ad95a6e6f971e64bd136951c66f65433f`, with all Required Checks passing. Its production
+release stopped before promotion because the separately introduced Titular-erasure recovery
+registry had not received its first operator initialization. Read-only checks confirmed an initial
+native generation, no approved case and a missing external checkpoint. This is independent of AI
+quota. The ingress bootstrap-routing fix and operator procedure are recorded in the
+[erasure runbook](../../../../../docs/operations/titular-erasure-1274.md); no deployment success or
+live lifecycle approval is inferred from the local passing checks.
 
 ### Limits and remaining evidence
 

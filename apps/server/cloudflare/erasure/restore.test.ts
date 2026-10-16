@@ -10,18 +10,24 @@ import { installRetentionTestSchema } from "../d1-test-fixture";
 import { deletionDecision } from "./erasure.test-fixture";
 import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
 import { handleErasureOperator, withErasureRecovery } from "./runtime";
+import { makePublicWorker } from "../public-worker";
+import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 
 const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
 const reference = "12740000-0000-4000-8000-000000000002";
 const issuer = "https://erasure-test.cloudflareaccess.com";
 const audience = "erasure-only";
+const ingress = makePublicWorker(
+  makeWorkerTelemetry({ exportWork: () => undefined, exportEvent: () => undefined })
+);
+const override = 'private-core="12740000-0000-4000-8000-000000000001"';
 const json = Schema.fromJsonString(Schema.Unknown);
 afterEach(() => vi.restoreAllMocks());
 const advanceToExternal = (
   input: Readonly<{
     db: () => D1Database;
-    send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError>;
+    send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>;
   }>
 ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -46,7 +52,7 @@ const advanceToExternal = (
   });
 
 const verifyProcessorEvidence = (
-  send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError>,
+  send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>,
   decision: ErasureDecision
 ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -112,7 +118,7 @@ const verifyProcessorEvidence = (
 
 const verifyControlReview = (
   input: Readonly<{
-    send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError>;
+    send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>;
     decision: ErasureDecision;
   }>
 ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
@@ -217,26 +223,53 @@ const verifyRestore = Effect.gen(function* () {
   );
   const send = (
     command: unknown,
-    assertion: string = token
-  ): Effect.Effect<Response, Schema.SchemaError> =>
+    assertion: string = token,
+    route: "owner" | "candidate" = "owner"
+  ): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
     Effect.gen(function* () {
       const body = yield* Schema.encodeEffect(json)(command);
-      return yield* handleErasureOperator({
-        request: new Request("https://api.fidyapp.com/internal/titular-erasure", {
-          method: "POST",
-          headers: { "content-type": "application/json", "cf-access-jwt-assertion": assertion },
-          body,
-        }),
-        environment: {
-          DB: native.db,
-          ERASURE_BUCKET: native.registry,
-          ERASURE_REQUIRED: "true",
-          CLOUDFLARE_ACCESS_ISSUER: issuer,
-          CLOUDFLARE_ACCESS_AUDIENCE: "recovery-only",
-          ERASURE_SUPPORT_AUDIENCE: audience,
-          USER_TRANSACTION_COORDINATOR: native.coordinator,
+      const run = Effect.runPromiseWith(yield* Effect.context<never>());
+      const dispatch = (request: Request): Promise<Response> =>
+        run(
+          handleErasureOperator({
+            request,
+            environment: {
+              DB: native.db,
+              ERASURE_BUCKET: native.registry,
+              ERASURE_REQUIRED: "true",
+              CLOUDFLARE_ACCESS_ISSUER: issuer,
+              CLOUDFLARE_ACCESS_AUDIENCE: "recovery-only",
+              ERASURE_SUPPORT_AUDIENCE: audience,
+              USER_TRANSACTION_COORDINATOR: native.coordinator,
+            },
+          }).pipe(Effect.provideService(HttpClient.HttpClient, http))
+        );
+      const request = new Request("https://api.fidyapp.com/internal/titular-erasure", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "cf-access-jwt-assertion": assertion,
+          "cloudflare-workers-version-overrides": override,
         },
-      }).pipe(Effect.provideService(HttpClient.HttpClient, http));
+        body,
+      });
+      if (route === "owner") return yield* Effect.tryPromise(() => dispatch(request));
+      return yield* Effect.tryPromise(() =>
+        ingress.fetch(request, {
+          BROWSER_ORIGIN: "https://app.fidyapp.com",
+          LOCAL_CANONICAL_READ_BEARER: "",
+          PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+          RELEASE_GIT_SHA: "c".repeat(40),
+          CORE: {
+            fetch: (input) => {
+              const forwarded = new Request(input);
+              return forwarded.headers.get("cloudflare-workers-version-overrides") === override
+                ? dispatch(forwarded)
+                : Promise.resolve(new Response(null, { status: 404 }));
+            },
+          },
+        })
+      );
     });
   for (const invalid of [
     {
@@ -284,7 +317,7 @@ const verifyRestore = Effect.gen(function* () {
         .setSubject("operator")
         .sign(privateKey)
     );
-    expect((yield* send({ action: "Restore" }, assertion)).status).toBe(401);
+    expect((yield* send({ action: "Initialize" }, assertion, "candidate")).status).toBe(401);
   }
   const forged = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
   const forgedAssertion = yield* Effect.tryPromise(() =>
@@ -297,7 +330,7 @@ const verifyRestore = Effect.gen(function* () {
       .setExpirationTime(Math.floor(current / 1000) + 300)
       .sign(forged.privateKey)
   );
-  expect((yield* send({ action: "Restore" }, forgedAssertion)).status).toBe(401);
+  expect((yield* send({ action: "Initialize" }, forgedAssertion, "candidate")).status).toBe(401);
   expect((yield* send({ action: "Restore", userId })).status).toBe(400);
   expect(
     (yield* send({
@@ -306,7 +339,7 @@ const verifyRestore = Effect.gen(function* () {
     })).status
   ).toBe(409);
   yield* Effect.tryPromise(() => native.registry.delete("recovery/generation"));
-  expect((yield* send({ action: "Initialize" })).status).toBe(204);
+  expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(204);
   const decisionCurrent = yield* Clock.currentTimeMillis;
   const heldUntil = decisionCurrent + 30000;
   const baseDecision = deletionDecision({ userId, reference, current: decisionCurrent });
@@ -327,7 +360,7 @@ const verifyRestore = Effect.gen(function* () {
   };
 
   expect((yield* send({ action: "Review", decision })).status).toBe(202);
-  expect((yield* send({ action: "Initialize" })).status).toBe(503);
+  expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(503);
   yield* Effect.tryPromise(() =>
     native.db.prepare("DELETE FROM memories WHERE user_id=?").bind(userId).run()
   );

@@ -94,6 +94,9 @@ const SignedInNavigation = ({
   loggingOut: boolean;
 }>): JSX.Element => {
   const { authentication } = useSession();
+  const privacy = useRouterState({
+    select: (state) => state.location.pathname === "/settings/privacy",
+  });
   const client = useRouter().options.context.webAuthClient;
   const [binding] = useState(() => client.query("browserSession", "binding", {}));
   const session = useAtomValue(binding);
@@ -114,7 +117,7 @@ const SignedInNavigation = ({
         >
           <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
           {link.label}
-          {link.to === "/app/needs-review" && signedIn ? <ReviewPendingCount /> : null}
+          {link.to === "/app/needs-review" && signedIn && !privacy ? <ReviewPendingCount /> : null}
         </Link>
       ))}
       <SettingsNavigation />

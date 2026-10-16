@@ -140,10 +140,14 @@ storage, or application-wide state.
 withdrawal through the server-declared browser client. It remains accessible without ordinary
 canonical work and exposes the public rights contact without login. Its route composes the shared
 ApplicationShell without the ordinary access-expiry guard or Hosted Agent, preserving the sidebar
-and compact navigation after withdrawal or session expiry. WorkspaceHeader and WorkspaceColumns
-align the controls and rights-contact panel with the existing settings layout. The authentication registry
-owns status and command state; uncertain withdrawal requires an explicit status reread before
-another confirmed attempt. The durable receipt survives reload. Copy distinguishes withdrawal
+and compact navigation after withdrawal or session expiry. The sidebar does not mount the canonical
+pending-count query on Privacy, so a product refusal cannot retire a live privacy interaction.
+WorkspaceHeader and WorkspaceColumns align the controls and rights-contact panel with the settings layout.
+Transactions likewise evaluates its independent cookie-only Consent read before choosing read-only
+access. Retiring ordinary product access does not deny this privacy path; each history page still
+requires fresh server-side WebSession proof. Granted product views still pass through SignedInContent.
+The authentication registry owns status and command state; uncertain withdrawal requires an explicit
+status reread before another confirmed attempt. The durable receipt survives reload. Copy distinguishes withdrawal
 from access to the exact saved authorization: an explicit “Consultar prueba” action reads the
 same-User historical disclosure, record reference and acceptance instant through the cookie-only
 privacy transport, including after withdrawal. The record is inert text and grants no new Consent.

@@ -157,8 +157,16 @@ separate Subscription audit. Its chat was empty after the account switch; it did
 previous account's transcript. A single greeting request returned HTTP 429 with
 `status: provider_quota_exceeded`. The UI explained the daily limit and preserved the exact draft
 in an enabled composer. This verifies deployed quota recovery, not successful model output or the
-pending lifecycle approval. Existing recurring fixtures and their cleanup remain on the original
-audit account, which is no longer the active browser account.
+pending lifecycle approval.
+
+The original fixture account was then restored through the in-app Google login. Through normal
+production controls, the remaining ASOCIACION plan was stopped from 16-10-2026. November showed no
+occurrences, while the earlier September and October occurrences remained. The September Transaction
+association was reversed, then the September and October expectations were omitted. Both months
+showed no expected or registered spending, and no previous-month pending count remained. These are
+direct web lifecycle/association observations, not hosted-model approval evidence. The three
+fictional July–September Transactions still await irreversible cleanup; the Transactions date picker
+was found to filter only the current-month result instead of loading the selected historical month.
 
 ### Limits and remaining evidence
 

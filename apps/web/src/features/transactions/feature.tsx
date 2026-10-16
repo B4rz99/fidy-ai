@@ -153,14 +153,8 @@ type TransactionQueries = Readonly<{
   onRetryMore: () => void;
 }>;
 
-const useTransactionQueries = (currentUser: CurrentUser): TransactionQueries => {
+const useTransactionQueries = (period: TransactionQueries["period"]): TransactionQueries => {
   const router = useRouter();
-  const [period] = useState(() =>
-    deriveCurrentMonthPeriod({
-      now: Effect.runSync(DateTime.now),
-      timeZone: currentUser.timeZone,
-    })
-  );
   const [categories] = useState(() =>
     router.options.context.apiClient.query("categories", "listCategories", {})
   );
@@ -209,13 +203,21 @@ const readyQueryActivity = (
     transactionWaiting: transactionState.waiting,
   });
 
+type TransactionResourceProps = Readonly<{
+  currentUser: CurrentUser;
+  profileCurrent: boolean;
+  period: TransactionQueries["period"];
+  dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
+}>;
 const TransactionResources = ({
   currentUser,
   profileCurrent,
-}: Readonly<{ currentUser: CurrentUser; profileCurrent: boolean }>): JSX.Element => {
+  period: selectedPeriod,
+  dateFilter,
+}: TransactionResourceProps): JSX.Element => {
   const router = useRouter();
   const { categoryState, period, retry, transactionState, history, onMore, onRetryMore } =
-    useTransactionQueries(currentUser);
+    useTransactionQueries(selectedPeriod);
   if (categoryState._tag === "Failure") {
     return (
       <FailedTransactionQuery
@@ -247,6 +249,7 @@ const TransactionResources = ({
     <TransactionWorkspace
       key={history.generation}
       readOnly={false}
+      dateFilter={dateFilter}
       continuation={history.continuation}
       onMore={onMore}
       onRetryMore={onRetryMore}
@@ -263,6 +266,45 @@ const TransactionResources = ({
         <QueryActivityNotice query={readyQueryActivity(categoryState, transactionState, retry)} />
       }
       onRefresh={retry}
+    />
+  );
+};
+
+/** Calendar selection owns the query month; keyed resources isolate its continuation and edits. */
+const TransactionPeriod = ({
+  currentUser,
+  profileCurrent,
+}: Readonly<{ currentUser: CurrentUser; profileCurrent: boolean }>): JSX.Element => {
+  const [selection, setSelection] = useState(() => ({
+    anchor: Effect.runSync(DateTime.now),
+    date: "",
+  }));
+  const period = deriveCurrentMonthPeriod({
+    now: selection.anchor,
+    timeZone: currentUser.timeZone,
+  });
+  return (
+    <TransactionResources
+      key={DateTime.toEpochMillis(period.from)}
+      currentUser={currentUser}
+      profileCurrent={profileCurrent}
+      period={period}
+      dateFilter={{
+        value: selection.date,
+        onChange: (date) =>
+          setSelection((previous) => ({
+            date,
+            anchor:
+              date === ""
+                ? previous.anchor
+                : DateTime.toUtc(
+                    DateTime.makeZonedUnsafe(`${date}T00:00:00.000Z`, {
+                      timeZone: currentUser.timeZone,
+                      adjustForTimeZone: true,
+                    })
+                  ),
+          })),
+      }}
     />
   );
 };
@@ -314,7 +356,7 @@ const CurrentUserQuery = (): JSX.Element => {
               waiting={state.waiting}
             />
           ) : null}
-          <TransactionResources
+          <TransactionPeriod
             key={state.value.data.timeZone}
             currentUser={state.value.data}
             profileCurrent={profileCurrent(state)}

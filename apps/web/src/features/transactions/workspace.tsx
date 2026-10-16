@@ -42,7 +42,11 @@ type WorkspaceProps = Readonly<{
 }> &
   (
     | Readonly<{ readOnly: true; editable: false }>
-    | Readonly<{ readOnly: false; editable: boolean }>
+    | Readonly<{
+        readOnly: false;
+        editable: boolean;
+        dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
+      }>
   );
 type WorkspaceFilters = Readonly<{
   search: string;
@@ -614,9 +618,14 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [searching, onSearchOpen] = useState(false);
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
-  const [filters, setFilters] = useState<WorkspaceFilters>(emptyFilters);
+  const [localFilters, setFilters] = useState<WorkspaceFilters>(emptyFilters);
+  const filters = {
+    ...localFilters,
+    date: props.readOnly ? localFilters.date : props.dateFilter.value,
+  };
   const onFilters = (next: WorkspaceFilters): void => {
     setFilters(next);
+    if (!props.readOnly) props.dateFilter.onChange(next.date);
     if (panel._tag === "Bulk") onPanel({ _tag: "Summary" });
   };
   const visible = props.transactions.filter((transaction) =>

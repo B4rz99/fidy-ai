@@ -18,10 +18,10 @@ review required by #1275, not a new requirement to approve withdrawal.
 - The [outbound owner](../../apps/server/src/shell/outbound-http/operations.ts) and its fixed
   destinations identify the implemented external HTTP routes. Workers AI uses the native binding.
   No separate Fidy transcription service is declared.
-- The account browser inventory exposed no existing account tabs on 2026-10-15. Opening Cloudflare
-  redirected to its login screen; no authenticated Cloudflare configuration was inspected. The
-  `kapso` executable was not available on this checkout's command path. These observations prove
-  neither absent accounts nor absent agreements.
+- Initial account discovery on 2026-10-15 reached Cloudflare login. The operator subsequently
+  signed in and authorized the authenticated inspection recorded below. The `kapso` executable was
+  not available on this checkout's command path; this proves neither absent accounts nor absent
+  agreements.
 - The earlier dated `fiidy` sandbox-project observation remains in
   [Kapso evidence](kapso-launch-evidence.json); it is not a current account verification.
 - No provider contact, agreement acceptance, purchase, live deletion or disclosure of private
@@ -42,9 +42,68 @@ evidence references; reviewer identity, qualification, review date and decision 
 transfer/transmission classification and mechanism with its actual source; next review/change trigger.
 An unsigned draft or publicly downloaded DPA stays unverified for the actual account.
 
+## Cloudflare account observations — 2026-10-15
+
+Restricted evidence reference: `cf01dd1f-e616-4c27-9955-401c5804fa4e`, observation version 1.
+Direct authenticated dashboard observations, recorded by Codex after the sole operator signed in;
+not qualified legal review or a provider-issued contract/deletion receipt. The account locator,
+resource identifiers, billing-profile observation, exact configuration and source-page references
+are in the existing operator-only evidence directory, outside Git, in a mode-0600 record under a
+mode-0700 directory. Only the minimized status is recorded here.
+
+- **Subscriptions:** Workers Free active; R2 Paid and Teams Free Base present. A paid R2
+  subscription does not make the Workers/D1 recovery tier Paid.
+- **D1:** region Eastern North America; jurisdiction None; read replication Disabled. The actual
+  Time Travel page says recovery is available within the past **seven days**. No bookmark retrieval,
+  restore, data export or deletion was performed. This does not prove physical backup erasure.
+- **R2:** statement staging and erasure registry show Eastern North America; forwarded-email
+  originals show Western North America. All three inspected buckets have no custom domain, public
+  development URL disabled, no CORS policy, no object lifecycle or bucket lock rules, and data access
+  logs disabled. Provider bucket rules therefore do not establish automatic financial-data expiry;
+  the existing application cleanup and reviewed holds remain separate. Global support-access and
+  provider residual-copy locations are still unverified.
+- **Core configuration:** the Production settings view exposes Workers AI, D1, private R2,
+  Durable Object, Queue and Workflow bindings, a configured model and encrypted provider-secret
+  bindings. Invocation logs are unchecked; application logs are enabled/persisted, traces disabled
+  and no telemetry export destination is shown. No secrets were revealed. The overview showed a
+  ready revision different from the row marked 100% traffic: configuration presence is not proof
+  every inspected candidate value served live traffic. Traffic/configuration reconciliation remains
+  open; no release or promotion was performed.
+- **Adjacent configuration:** Wompi is configured for sandbox and DaviPlata activation is disabled
+  in that settings view. Google/Microsoft callback configuration and Kapso/Resend encrypted bindings
+  are present; this does not verify their provider accounts or accepted agreements. The configured
+  operational alert recipient differs from the approved sole operator address; the operator must
+  confirm its intended ownership/delivery before any correction. No configuration was changed.
+- **Forwarded mail:** the account Email Routing page showed onboarding and no domain route in
+  that view. The deployed Email Worker alone does not establish an enabled financial-email route;
+  zone-specific routing remains unverified.
+- **Operator Access:** erasure and support-recovery self-hosted applications are present. The
+  erasure application has one Allow policy explicitly naming the approved operator email, a
+  15-minute policy/application session, and One-time PIN as its selected identity method; accepting
+  all identity providers and Cloudflare One Client authentication are off. This is configuration
+  evidence, not a live PIN or erasure rehearsal. The recovery application's detailed policy was not
+  inspected here.
+- **Contracts and account features:** the authenticated Configurations page states that the
+  customer DPA is incorporated into Cloudflare's self-serve and standard enterprise agreements,
+  and links the applicable public documents. This supplies account-context incorporation evidence;
+  it does not establish FIDY S.A.S.'s contractual linkage, accepted document version/date or a
+  negotiated agreement. The support-editing permission is off. Cloudy AI Assistant for Application
+  Security and Cloudflare Agent are on; neither was invoked during inspection. Include these
+  enabled console features in the account-level purpose/subprocessing review. Qualified role and
+  international-mechanism decisions, support/incident obligations and physical deletion evidence
+  remain unverified.
+
+Next Cloudflare steps: obtain the actual account/company agreement and acceptance evidence; review
+the remaining contractual/location/deletion scope; reconcile serving-version settings and actual
+email routing; resolve the alert-recipient discrepancy with the operator; then prepare an approved
+disposable rehearsal. Recheck this observation on plan, resource, deployment, routing, provider-term
+or Access-policy changes. No contract acceptance, provider contact or Fidy User-content inspection
+was needed for the read-only observations above.
+
 ## Flow reconciliation
 
-Every row below has account evidence **unverified**, reviewer **not recorded**, and owner
+The Cloudflare technical fields specifically observed above are **partially verified**; other
+account fields remain **unverified**. Every row still has reviewer **not recorded** and owner
 **obarboza@fidyapp.com**. None has an approved legal classification or international mechanism in
 this record. The next steps are specific to the flow; do not treat these rows as a completed review.
 The public-source note supplies candidate documents and their applicability limits.
@@ -116,8 +175,9 @@ retain historical snapshots and run the exact-copy tests below.
 
 Use the [provider request procedure](provider-rights-1275.md) with the approved #1273 entitlement and
 #1274 erasure decision. It is an execution draft pending per-flow review and available-account
-testing. It introduces no new identity checks or provider deletion API. No account test has been
-performed for #1275; local native tests do not establish provider completion.
+testing. It introduces no new identity checks or provider deletion API. The Cloudflare account
+inspection above is read-only configuration evidence; no provider deletion/support rehearsal has
+been performed for #1275. Local native tests do not establish provider completion.
 
 #1275 stays open until every actual active flow has current restricted evidence and qualified review
 or a specifically approved, source-consistent applicability decision, the provider deletion/support

@@ -4488,7 +4488,6 @@
         },
         "required": [
           "amount",
-          "currency",
           "counterparty",
           "occurredAt",
           "userProvidedFields"
@@ -9668,7 +9667,7 @@
                                 "type": "string"
                               },
                               "currency": {
-                                "$ref": "#/components/schemas/CurrencyPartial"
+                                "$ref": "#/components/schemas/Currency"
                               },
                               "direction": {
                                 "$ref": "#/components/schemas/Union_2"

@@ -214,7 +214,7 @@ const knownReviewSuggestions = (
   Option.map(result.knownMoney, (money) =>
     Schema.encodeSync(Schema.fromJsonString(ReviewDraft))({
       amount: BigDecimal.format(money.amount),
-      currency: money.currency,
+      currency: Option.some(money.currency),
       counterparty: "",
       occurredAt: "",
       direction: Option.none(),

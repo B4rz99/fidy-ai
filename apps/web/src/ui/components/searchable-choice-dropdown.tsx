@@ -49,7 +49,7 @@ export const SearchableChoiceDropdown = ({
       }
     >
       <span className={cn("min-w-0 whitespace-normal text-left", width === "full" && "flex-1")}>
-        {options.find((item) => item.value === value)?.label}
+        {options.find((item) => item.value === value)?.label ?? "Seleccionar"}
       </span>
       <HugeiconsIcon
         icon={ArrowDown01Icon}

@@ -40,10 +40,13 @@ export const ReviewFields = (props: Props): JSX.Element => (
     </div>
     <div>
       <Label htmlFor="review-currency">Moneda</Label>
+      {Option.isNone(props.draft.currency) ? (
+        <p className="mt-1 text-sm text-muted-foreground">Confirma la moneda para continuar.</p>
+      ) : null}
       <SearchableChoiceDropdown
         id="review-currency"
         label="Moneda"
-        value={props.draft.currency}
+        value={Option.getOrElse(props.draft.currency, () => "")}
         options={Currency.literals.map((value) => ({ value, label: value }))}
         disabled={props.locked}
         width="full"

@@ -4168,7 +4168,6 @@ it("autosaves a revision-bound draft and retains it through skip and restore", (
       const id = workspace.data.items[0]?.id ?? "";
       const draft = {
         amount: "13500",
-        currency: "COP",
         counterparty: "Café",
         occurredAt: "2026-08-01T15:00:00.000Z",
         direction: "outflow",

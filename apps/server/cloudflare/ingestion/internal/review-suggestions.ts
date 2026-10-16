@@ -96,7 +96,7 @@ const emailSuggestion = ({
     });
     return Option.some({
       amount: BigDecimal.format(extraction.money.amount),
-      currency: extraction.money.currency,
+      currency: Option.some(extraction.money.currency),
       direction: Option.some(extraction.direction),
       counterparty: Option.getOrElse(extraction.counterparty, () => ""),
       occurredAt: DateTime.formatIso(extraction.occurredAt),

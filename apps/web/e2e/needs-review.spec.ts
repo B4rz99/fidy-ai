@@ -7,9 +7,9 @@ const { expect, test } = playwright;
 const id = "24000000-0000-4000-8000-000000001350";
 const item = {
   id,
-  source: "email",
+  source: "statement",
   timeZone: "America/Bogota",
-  reason: "processing-interrupted",
+  reason: "ambiguous-currency",
   status: "pending",
   revision: 0,
   createdAt: "2026-10-15T12:00:00Z",
@@ -102,9 +102,7 @@ const editInput = Schema.Struct({
 const detailFixture = (entry: Fixture): unknown => ({
   item: {
     ...item,
-    id: entry.id,
-    revision: entry.revision,
-    status: entry.status,
+    ...entry,
     ...(entry.status === "created"
       ? { transactionId: "24000000-0000-4000-8000-000000001352" }
       : {}),
@@ -208,20 +206,22 @@ test("skips and restores in bulk, advances, and preserves edits after a failed r
         page.getByRole("button", { name: "Omitir", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Correo ${id}` })).toHaveCount(0)
+        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Correo ${secondId}` })).toBeVisible()
+        expect(
+          page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` })
+        ).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Deshacer omisión" }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(2));
       yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: `Seleccionar Correo ${id}` }).click()
+        page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` }).click()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: `Seleccionar Correo ${secondId}` }).click()
+        page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` }).click()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Omitir 2 seleccionados" }).click()
@@ -261,10 +261,12 @@ test("creates individually and advances to the next pending item", ({ page }) =>
         page.getByRole("button", { name: "Crear transacción", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Correo ${id}` })).toHaveCount(0)
+        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Correo ${secondId}` })).toBeVisible()
+        expect(
+          page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` })
+        ).toBeVisible()
       );
       expect(entries.filter((entry) => entry.status === "created")).toHaveLength(1);
     })
@@ -402,3 +404,47 @@ const mutateFixture = (entry: Fixture, input: typeof editInput.Type): void => {
       break;
   }
 };
+
+test("requires an explicit currency for an ambiguous statement item", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [
+        {
+          id,
+          revision: 0,
+          status: "pending",
+          draft: {
+            amount: "13500",
+            direction: "outflow",
+            counterparty: "Cafe",
+            occurredAt: "2026-01-01T12:00:00Z",
+            userProvidedFields: [],
+          },
+        },
+      ];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Confirma la moneda para continuar.")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("combobox", { name: "Moneda", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Buscar: Moneda", { exact: true }).fill("USD")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("option", { name: "USD", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeEnabled()
+      );
+    })
+  ));

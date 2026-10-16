@@ -733,7 +733,7 @@ export const ReviewField = Schema.Literals([
 ]);
 export const ReviewDraft = Schema.Struct({
   amount: Schema.String.check(Schema.isMaxLength(maximumReviewDraftFieldLength)),
-  currency: Money.fields.currency,
+  currency: Schema.OptionFromOptionalKey(Money.fields.currency),
   direction: Schema.OptionFromOptionalKey(Direction),
   counterparty: Schema.String.check(Schema.isMaxLength(maximumReviewDraftFieldLength)),
   occurredAt: Schema.String.check(Schema.isMaxLength(maximumReviewDraftFieldLength)),

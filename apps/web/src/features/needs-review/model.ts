@@ -12,7 +12,6 @@ export type Field = Draft["userProvidedFields"][number];
 export const emptyDraft = (): Draft =>
   Schema.decodeSync(ReviewDraft)({
     amount: "",
-    currency: "COP",
     counterparty: "",
     occurredAt: "",
     userProvidedFields: [],
@@ -59,7 +58,13 @@ export const creation = ({
       onSome: (categoryId) => ({ categoryId }),
     }),
     extraction: {
-      money: { amount: draft.amount.trim().replace(",", "."), currency: draft.currency },
+      money: {
+        amount: draft.amount.trim().replace(",", "."),
+        ...Option.match(draft.currency, {
+          onNone: () => ({}),
+          onSome: (currency) => ({ currency }),
+        }),
+      },
       ...Option.match(draft.direction, {
         onNone: () => ({}),
         onSome: (direction) => ({ direction }),
@@ -97,7 +102,9 @@ export const mergeSuggestions = ({
   return {
     amount: suggestedText(provided.has("money"), draft.amount, suggested.amount),
     currency:
-      provided.has("money") || suggested.amount === "" ? draft.currency : suggested.currency,
+      provided.has("money") && Option.isSome(draft.currency)
+        ? draft.currency
+        : Option.orElse(suggested.currency, () => draft.currency),
     direction: provided.has("direction")
       ? draft.direction
       : Option.orElse(suggested.direction, () => draft.direction),

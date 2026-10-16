@@ -11,6 +11,7 @@ refreshes on window focus. Local selection and form drafts are presentation stat
 serialized draft queue debounces saves and flushes before individual creation or omission. Bulk skip
 also waits for queued drafts, using the revisions acknowledged by those saves. Route search owns
 filters and pagination; exhausting a page advances to a populated page.
+Unknown currency remains absent in the draft and requires an explicit selection before creation.
 Server revisions prevent stale cross-device replacement. Uncertain acknowledgement stops writes
 and requires an explicit canonical reread. Neither originals nor drafts use browser storage.
 

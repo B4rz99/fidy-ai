@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { Effect } from "effect";
 import { QuotaRetentionUnavailable } from "./contract";
 
@@ -19,3 +22,6 @@ export const sweepCommercialAllowances = ({
         .run(),
     catch: () => new QuotaRetentionUnavailable(),
   }).pipe(Effect.asVoid);
+
+export const makeQuotasErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

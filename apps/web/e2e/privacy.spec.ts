@@ -1,7 +1,11 @@
 import { type Cause, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInPrivacyRenewalThroughCore, signInPrivacyThroughCore } from "./real-core-fixture";
-import type { Page, Route } from "@playwright/test";
+import {
+  signInPrivacyErasureThroughCore,
+  signInPrivacyRenewalThroughCore,
+  signInPrivacyThroughCore,
+} from "./real-core-fixture";
+import type { Locator, Page, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
 import { exerciseTitularCase } from "./titular-case-fixture";
 
@@ -10,6 +14,11 @@ const { expect, test } = playwright;
 const unauthenticatedStatus = 401;
 const successStatus = 200;
 const unavailableResponse = (route: Route): Promise<void> => route.fulfill({ status: 503 });
+const acceptedStatus = 202;
+const withdrawalCheckbox = (page: Page): Locator =>
+  page.getByRole("checkbox", {
+    name: "Entiendo las consecuencias y quiero retirar mi autorización de tratamiento.",
+  });
 
 const verifyAccessibility = (page: Page): Promise<void> =>
   Effect.runPromise(
@@ -225,7 +234,7 @@ test("a withdrawn User explicitly renews the saved authorization through real Co
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/web/consent/authorization`, unavailableResponse, { times: 1 })
       );
-      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() => withdrawalCheckbox(page).check());
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Retirar autorización", exact: true }).click()
       );
@@ -254,7 +263,7 @@ test("an expired-trial User withdraws through real Core and can recover the same
       const withdraw = page.getByRole("button", { name: "Retirar autorización", exact: true });
       yield* Effect.tryPromise(() => expect(withdraw).toBeDisabled());
       yield* Effect.tryPromise(() => verifyAuthorizationRecovery(page));
-      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() => withdrawalCheckbox(page).check());
       yield* Effect.tryPromise(() => withdraw.click());
       const receipt = page.getByRole("region", { name: "Constancia de retiro" });
       yield* Effect.tryPromise(() => expect(receipt).toContainText("Autorización retirada"));
@@ -307,7 +316,7 @@ test("an uncertain withdrawal never claims success or repeats the mutation befor
         page.route(`${apiOrigin}/web/consent/withdraw`, refuseWithdrawal)
       );
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
-      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() => withdrawalCheckbox(page).check());
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Retirar autorización", exact: true }).click()
       );
@@ -327,13 +336,13 @@ test("an uncertain withdrawal never claims success or repeats the mutation befor
         page.getByRole("button", { name: "Verificar autorización", exact: true }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
-      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).not.toBeChecked());
+      yield* Effect.tryPromise(() => expect(withdrawalCheckbox(page)).not.toBeChecked());
       yield* Effect.tryPromise(() =>
         expect(
           page.getByRole("button", { name: "Retirar autorización", exact: true })
         ).toBeDisabled()
       );
-      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() => withdrawalCheckbox(page).check());
       yield* Effect.tryPromise(() =>
         expect(
           page.getByRole("button", { name: "Retirar autorización", exact: true })
@@ -482,5 +491,45 @@ test("read-only Transactions retain loaded history through a failed continuation
           0
         )
       );
+    })
+  ));
+
+test("an erasure intention uses fresh Core authority and an explicit retry returns the same request", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInPrivacyErasureThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
+      const region = page.getByRole("region", { name: "Solicitud de eliminación" });
+      const button = region.getByRole("button", { name: "Solicitar eliminación", exact: true });
+      yield* Effect.tryPromise(() => expect(button).toBeDisabled());
+      yield* Effect.tryPromise(() => region.getByRole("checkbox").check());
+      const first = page.waitForResponse(
+        (response) =>
+          response.url() === `${apiOrigin}/web/privacy/erasure` &&
+          response.request().method() === "POST"
+      );
+      yield* Effect.tryPromise(() => button.click());
+      const response = yield* Effect.tryPromise(() => first);
+      expect(response.status()).toBe(acceptedStatus);
+      const initial: unknown = yield* Effect.tryPromise(() => response.json());
+      yield* Effect.tryPromise(() =>
+        expect(region.getByRole("alert")).toContainText("Aún no hemos eliminado tus datos")
+      );
+      yield* Effect.tryPromise(() => expect(button).toBeDisabled());
+      yield* Effect.tryPromise(() => expect(region).not.toContainText("Referencia:"));
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => region.getByRole("checkbox").check());
+      const retry = page.waitForResponse(
+        (value) =>
+          value.url() === `${apiOrigin}/web/privacy/erasure` && value.request().method() === "POST"
+      );
+      yield* Effect.tryPromise(() => button.click());
+      const repeated = yield* Effect.tryPromise(() => retry);
+      expect(repeated.status()).toBe(acceptedStatus);
+      expect(yield* Effect.tryPromise(() => repeated.json())).toEqual(initial);
+      yield* Effect.tryPromise(() => verifyAccessibility(page));
     })
   ));

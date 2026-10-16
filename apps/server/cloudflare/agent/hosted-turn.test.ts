@@ -889,7 +889,11 @@ const coordinatorFor = (
   new UserTransactionCoordinator(
     {
       id: { name: users[options.index] ?? "" },
-      storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+      storage: {
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+        setAlarm: (): Promise<void> => Promise.resolve(),
+      },
     },
     {
       DB: db,
@@ -2162,7 +2166,14 @@ const finishStatementExtraction = ({
         )
       );
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userId }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: userId },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         {
           DB: db,
           STATEMENT_STAGING_BUCKET: bucket,
@@ -4282,7 +4293,14 @@ it.each(["memory.forget", "operations.executeAtomicBatch"] as const)(
         expect(receipt.status).toBe(200);
         const other = yield* Effect.tryPromise(() => subject(1));
         const crossUser = new UserTransactionCoordinator(
-          { id: { name: users[1] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+          {
+            id: { name: users[1] },
+            storage: {
+              getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+              deleteAlarm: (): Promise<void> => Promise.resolve(),
+              setAlarm: (): Promise<void> => Promise.resolve(),
+            },
+          },
           {
             DB: db,
             HOSTED_AI_MODEL: approvedWorkersAiModel,
@@ -4469,7 +4487,14 @@ it.each([
           },
         });
         const coordinator = new UserTransactionCoordinator(
-          { id: { name: users[0] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+          {
+            id: { name: users[0] },
+            storage: {
+              getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+              deleteAlarm: (): Promise<void> => Promise.resolve(),
+              setAlarm: (): Promise<void> => Promise.resolve(),
+            },
+          },
           {
             DB: delayedDb,
             HOSTED_AI_MODEL: approvedWorkersAiModel,
@@ -4901,7 +4926,14 @@ it("refuses a cross-User hosted tool request before sending context or writing t
       const db = yield* Effect.tryPromise(() => setup());
       let sends = 0;
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: users[1] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: users[1] },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         {
           DB: db,
           HOSTED_AI_MODEL: approvedWorkersAiModel,
@@ -4950,7 +4982,14 @@ it("ends a multi-round Turn at its shared deadline without buying another model 
       try {
         let calls = 0;
         const coordinator = new UserTransactionCoordinator(
-          { id: { name: users[0] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+          {
+            id: { name: users[0] },
+            storage: {
+              getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+              deleteAlarm: (): Promise<void> => Promise.resolve(),
+              setAlarm: (): Promise<void> => Promise.resolve(),
+            },
+          },
           {
             DB: db,
             HOSTED_AI_MODEL: approvedWorkersAiModel,
@@ -5995,6 +6034,8 @@ it("recovers an abandoned staged reply by durable alarm without another User req
         {
           id: { name: users[0] },
           storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
             setAlarm: (due): Promise<void> => {
               scheduled.push(due);
               return Promise.resolve();
@@ -6346,7 +6387,14 @@ it("serializes concurrent requests at the per-User coordinator and admits two di
         },
       };
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: users[0] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: users[0] },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         environment
       );
       const credentials = yield* Effect.tryPromise(() => subject(0));
@@ -6584,7 +6632,14 @@ it("expires a proposed reply at its original deadline despite repeated authentic
       const db = yield* Effect.tryPromise(() => setup());
       const credential = yield* Effect.tryPromise(() => subject(0));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: users[0] }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: users[0] },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         {
           DB: db,
           HOSTED_AI_MODEL: approvedWorkersAiModel,

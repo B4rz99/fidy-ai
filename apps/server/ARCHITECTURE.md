@@ -107,6 +107,40 @@ replay returns the original receipt. Live verification, evidence storage, calend
 retention, safe delivery and operator approval remain gates in the
 [procedure](../../docs/operations/titular-requests-1273.md).
 
+### Whole-Titular erasure
+
+`cloudflare/erasure` composes current owners' published native erasure stores under the existing
+User coordinator. `POST /web/privacy/erasure` uses exact Origin, bounded confirmation and fresh
+WebSession authority to record one intention. Dedicated issuer-verified operator Access binds the
+verified #1273 case/handoff, exact User, current inventory, reviewed class dispositions and the
+response route before approval. The local handoff preparation tool checks reference consistency;
+it neither authenticates a Titular nor gains server authority.
+
+Draining fences new protected admissions while owners prove their exact prior work has finished or
+expired. Sealing retires MCP state/owners and confirms native alarm removal. Each owner retains its
+own exact-User SQL, archive fields, dependency order and bounded deletion. Native append-only guards
+admit only exact User/store permits inside the owner's erasure batch. Normal source-to-derived
+projectors do not run for that exact authorized erasure; derived stores have their own dispositions.
+A reviewed hold preserves a record before ordinary cleanup can delete it during draining.
+
+D1, private original buckets, restricted retained copies and processor work have independent durable
+checkpoints. Reviewed cases, original locators, held records and recovery generation live in the
+private erasure bucket outside D1. Every normal native database unit asserts that external generation
+with its D1 work, including Sessions. Missing registry/checkpoint configuration refuses normal reads
+and writes. First-release initialization is a separate operator action; it cannot reset a registry
+after an approved case. A restored D1 remains fenced until independent case replay has finished
+native dispositions and the operator release predicate succeeds. The maintenance escape path reads
+only purpose-qualified erasure controls, never ordinary restored User content.
+
+The receipt is operator-accessible after User credentials disappear and names completed, retained
+and pending scope. External acceptance, unresolved Kapso Free retention/capability, lawful holds and
+backup windows remain visible until actually resolved. Completed case controls have separate reviewed
+finite expiry and bounded D1/R2 cleanup. A metadata-only sweep reconciles expired orphan placeholders
+and nonce objects without treating financial/held payloads as control garbage. An enabled Connection
+with unresolved required suppression blocks sealing; #313 owns bank-specific implementation.
+See [inventory](../../docs/operations/titular-erasure-inventory-1274.md) and
+[operator/recovery procedure](../../docs/operations/titular-erasure-1274.md).
+
 ### Connection browser preparation
 
 The portable Connections runtime derives browser transport identity and methods from its declared

@@ -245,7 +245,11 @@ it("isolates mismatched coordinator Users and foreign charge identities before a
       const coordinator = new UserTransactionCoordinator(
         {
           id: { name: otherUserId },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         {
           DB: db,

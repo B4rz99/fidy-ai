@@ -35,7 +35,11 @@ it("keeps maintenance alarms inert while preserving the User alarm's real D1 rec
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* awaitPromise(() => databases.acquire());
-      const storage = { setAlarm: (): Promise<void> => Promise.resolve() };
+      const storage = {
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+        setAlarm: (): Promise<void> => Promise.resolve(),
+      };
       const maintenance = new UserTransactionCoordinator(
         { id: { name: "core-maintenance-v1" }, storage },
         environment(db)

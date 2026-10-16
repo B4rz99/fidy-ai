@@ -196,7 +196,12 @@ const send = (
                     coordinator = new UserTransactionCoordinator(
                       {
                         id: { name },
-                        storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+                        storage: {
+                          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+                            Promise.resolve(null),
+                          deleteAlarm: (): Promise<void> => Promise.resolve(),
+                          setAlarm: (): Promise<void> => Promise.resolve(),
+                        },
                       },
                       {
                         DB: db,
@@ -548,7 +553,11 @@ it("rejects a substituted query target, mutation id or foreign User admission be
       const coordinator = new UserTransactionCoordinator(
         {
           id: { name: users[0] ?? "" },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         {
           DB: db,

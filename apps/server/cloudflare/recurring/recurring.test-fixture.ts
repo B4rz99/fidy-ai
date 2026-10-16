@@ -19,7 +19,14 @@ export const makeCoordinators = (
         const found = Option.fromUndefinedOr(retained.get(name));
         const coordinator = Option.getOrElse(found, () => {
           const created = new UserTransactionCoordinator(
-            { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+            {
+              id: { name },
+              storage: {
+                getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+                deleteAlarm: (): Promise<void> => Promise.resolve(),
+                setAlarm: (): Promise<void> => Promise.resolve(),
+              },
+            },
             { DB: db, AI: { run: unusedAI }, HOSTED_AI_MODEL: approvedWorkersAiModel }
           );
           retained.set(name, created);

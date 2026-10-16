@@ -3,12 +3,19 @@ import { deepStrictEqual } from "node:assert";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { handleWebAuthentication } from "./operations";
 import { holdSessionCallback, seedSession, sessionRequest } from "./session.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
+const sessionDatabase = (): Promise<D1Database> =>
+  databases.acquire().then((db) =>
+    applyTestMigration({
+      db,
+      source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
+    }).then(() => db)
+  );
 
 /** Observe the real native abort event without starting another Effect runtime. */
 const awaitAbort = (signal: AbortSignal): Effect.Effect<void> =>
@@ -50,7 +57,7 @@ it.effect.each([
   ({ sql, method, logout, audits }) => {
     const controller = new AbortController();
     return Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
+      const db = yield* Effect.tryPromise(sessionDatabase);
       yield* seedSession({ db, idle: 4102444801000, hard: 4110220800000 });
       yield* TestClock.setTime(4102444800000);
       const held = yield* holdSessionCallback({ db, sqlPrefix: sql, method });
@@ -123,7 +130,7 @@ it.effect(
   () => {
     const controller = new AbortController();
     return Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
+      const db = yield* Effect.tryPromise(sessionDatabase);
       yield* seedSession({ db, idle: 4102444801000, hard: 4110220800000 });
       yield* TestClock.setTime(4102444800000);
       const held = yield* holdSessionCallback({ db, sqlPrefix: "SELECT u.id", method: "all" });

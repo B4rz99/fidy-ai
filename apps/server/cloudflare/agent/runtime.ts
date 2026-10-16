@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { Effect } from "effect";
 import {
   type AgentRetention,
@@ -33,3 +36,6 @@ export const makeAgentRetention = ({ db }: Readonly<{ db: D1Database }>): AgentR
       )
     ),
 });
+
+export const makeAgentErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

@@ -1,3 +1,9 @@
+import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import {
+  originalWriteActive,
+  prepareOriginalWrite,
+  trackOriginalWrite,
+} from "../../erasure-store/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import {
   type StatementAccounting,
@@ -389,7 +395,7 @@ const removeObject = (
   bucket: R2Bucket,
   objectKey: string
 ): Effect.Effect<void, StatementStagingUnavailable> =>
-  platformUnavailable(() => bucket.delete(objectKey));
+  erasePrivateObject({ bucket, key: objectKey }).pipe(Effect.mapError(() => unavailable()));
 
 const statementFailure = (reason: BoundedBodyReadFailed["reason"]): StatementStagingFailed => {
   if (reason === "resource-limit") return failed("resource-limit");
@@ -417,7 +423,16 @@ const insertPendingStagingRow = (
     expiresAtEpochMs: number;
   }>
 ): Effect.Effect<boolean, StatementStagingUnavailable> =>
-  settleStatement(
+  settleBatch(config.database, [
+    ...prepareOriginalWrite({
+      db: config.database,
+      userId: input.userId,
+      reference: input.stagingId,
+      bucket: "statement",
+      objectKey: input.objectKey,
+      current: input.createdAtEpochMs,
+      expiresAtMs: input.expiresAtEpochMs,
+    }),
     config.database
       .prepare(
         `INSERT INTO statement_staging_objects (
@@ -434,17 +449,48 @@ const insertPendingStagingRow = (
         input.sourceFormat,
         input.createdAtEpochMs,
         input.expiresAtEpochMs
-      )
-  ).pipe(Effect.map((result) => result.meta.changes === 1));
+      ),
+  ]).pipe(Effect.map((results) => results.at(-1)?.meta.changes === 1));
 
 const writeStagingObject = (
   config: StatementStagingConfig,
-  input: Readonly<{ objectKey: string; bytes: Uint8Array; digest: ArrayBuffer }>
+  input: Readonly<{
+    objectKey: string;
+    bytes: Uint8Array;
+    digest: ArrayBuffer;
+    userId: string;
+    stagingId: string;
+  }>
 ): Effect.Effect<boolean, StatementStagingUnavailable> =>
-  platformUnavailable(() =>
-    config.bucket.put(input.objectKey, input.bytes, { sha256: input.digest })
-  ).pipe(
-    Effect.map(() => true),
+  writePrivateObject({
+    bucket: config.bucket,
+    key: input.objectKey,
+    bytes: input.bytes,
+    metadata: { purpose: "statement-original" },
+    digest: Option.some(new Uint8Array(input.digest)),
+    predecessor: Option.none(),
+    authorise: Effect.gen(function* () {
+      const live = yield* platformUnavailable(() =>
+        config.database
+          .prepare(
+            "SELECT count(*) AS active FROM statement_staging_objects WHERE id=? AND user_id=? AND object_key=? AND status='pending' AND expires_at_ms>?"
+          )
+          .bind(input.stagingId, input.userId, input.objectKey, config.nowEpochMs())
+          .first<number>("active")
+      );
+      return (
+        live === 1 &&
+        (yield* originalWriteActive({
+          db: config.database,
+          userId: input.userId,
+          reference: input.stagingId,
+          bucket: "statement",
+          objectKey: input.objectKey,
+        }))
+      );
+    }),
+  }).pipe(
+    Effect.as(true),
     Effect.orElseSucceed(() => false)
   );
 
@@ -471,6 +517,28 @@ const discardStagedUpload = (
     yield* markStagingDeleting(config.database, input.stagingId);
     yield* removeObject(config.bucket, input.objectKey);
     yield* removeDeletingStagingRow(config.database, input.stagingId);
+  });
+
+const finishStagingUpload = (
+  input: Readonly<{
+    config: StatementStagingConfig;
+    bytes: Uint8Array;
+    digest: ArrayBuffer;
+    objectKey: string;
+    stagingId: string;
+    userId: string;
+    reference: StagedStatementBytes;
+  }>
+): Effect.Effect<StagedStatementBytes, StatementStagingUnavailable> =>
+  Effect.gen(function* () {
+    if (
+      !(yield* writeStagingObject(input.config, input)) ||
+      !(yield* markStagingAvailable(input.config, input.stagingId))
+    ) {
+      yield* discardStagedUpload(input.config, input);
+      return yield* unavailable();
+    }
+    return input.reference;
   });
 
 const stageStatementBytes = (
@@ -502,21 +570,28 @@ const stageStatementBytes = (
       userId: input.userId,
     });
     if (!pending) return yield* unavailable();
-    if (!(yield* writeStagingObject(config, { bytes, digest, objectKey }))) {
-      yield* discardStagedUpload(config, { objectKey, stagingId });
-      return yield* unavailable();
-    }
-    if (!(yield* markStagingAvailable(config, stagingId))) {
-      yield* discardStagedUpload(config, { objectKey, stagingId });
-      return yield* unavailable();
-    }
-    return {
-      stagingId: StatementStagingId.make(stagingId),
-      byteLength: bytes.byteLength,
-      sha256: StatementContentDigest.make(sha256),
-      sourceFormat,
-      expiresAt: DateTime.makeUnsafe(expiresAtEpochMs),
-    };
+    return yield* trackOriginalWrite({
+      db: config.database,
+      userId: input.userId,
+      reference: stagingId,
+      bucket: "statement",
+      objectKey,
+      work: finishStagingUpload({
+        config,
+        bytes,
+        digest,
+        objectKey,
+        stagingId,
+        userId: input.userId,
+        reference: {
+          stagingId: StatementStagingId.make(stagingId),
+          byteLength: bytes.byteLength,
+          sha256: StatementContentDigest.make(sha256),
+          sourceFormat,
+          expiresAt: DateTime.makeUnsafe(expiresAtEpochMs),
+        },
+      }),
+    }).pipe(Effect.mapError(() => unavailable()));
   });
 
 /**
@@ -1582,13 +1657,15 @@ const prepareStagingRetention = (database: D1Database, nowEpochMs: number): D1Pr
              SELECT id FROM (
                SELECT id,expires_at_ms FROM (
                  SELECT id,expires_at_ms FROM statement_staging_objects
-                 WHERE status = 'deleting' AND object_deleted_at_ms IS NULL
+                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id AND q.state<>'AwaitingReview')
+                 AND status = 'deleting' AND object_deleted_at_ms IS NULL
                  ORDER BY expires_at_ms,id LIMIT ?
                )
                UNION ALL
                SELECT id,expires_at_ms FROM (
                  SELECT id,expires_at_ms FROM statement_staging_objects
-                 WHERE status IN ('pending','available') AND object_deleted_at_ms IS NULL
+                 WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=statement_staging_objects.user_id AND q.state<>'AwaitingReview')
+                 AND status IN ('pending','available') AND object_deleted_at_ms IS NULL
                    AND expires_at_ms <= ?
                  ORDER BY expires_at_ms,id LIMIT ?
                )
@@ -1617,8 +1694,10 @@ const sweepExpiredStatementStaging = (
       })
     );
     if (rows.length === 0) return { objectsDeleted: 0, rowsDeleted: 0 };
-    yield* platformUnavailable(() =>
-      config.bucket.delete(rows.map(({ object_key: objectKey }) => objectKey))
+    yield* Effect.forEach(
+      rows,
+      ({ object_key: objectKey }) => removeObject(config.bucket, objectKey),
+      { discard: true }
     );
     const ids = encodeRetentionIds(rows.map(({ id }) => id));
     const results = yield* settleBatch(config.database, [

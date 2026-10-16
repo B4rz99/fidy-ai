@@ -24,7 +24,8 @@ const setup = (includeRetention = true): Promise<D1Database> =>
       const names = Array.from(new Bun.Glob("*.sql").scanSync(directory.pathname))
         .filter(
           (name) =>
-            name.endsWith(".sql") && (includeRetention || name !== "0074_hosted_retention.sql")
+            name.endsWith(".sql") &&
+            (includeRetention || (name < "0096_" && name !== "0074_hosted_retention.sql"))
         )
         .sort();
       yield* Effect.tryPromise(() =>

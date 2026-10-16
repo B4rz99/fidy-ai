@@ -1,3 +1,4 @@
+import { erasureAdmissionCondition } from "../../../src/shell/erasure/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import { readAdmittedHostedConsent } from "../../agent/operations";
 import { Effect, Option, Schema } from "effect";
@@ -14,6 +15,19 @@ const checkEgress = (
   }>
 ): Effect.Effect<"allowed" | "denied", ConsentUnavailable> =>
   Effect.gen(function* () {
+    const fence = erasureAdmissionCondition({
+      subject: { _tag: "User", userId: UserId.make(input.userId) },
+      admitted: Option.isSome(input.admittedTurnId),
+    });
+    const allowed = yield* Effect.tryPromise({
+      try: () =>
+        input.db
+          .prepare(`SELECT ${fence.sql} AS allowed`)
+          .bind(...fence.params)
+          .first<number>("allowed"),
+      catch: () => new ConsentUnavailable(),
+    });
+    if (allowed !== 1) return "denied" as const;
     const standing = yield* loadStanding(input);
     if (standing._tag === "Missing") return "denied" as const;
     if (Option.isNone(input.admittedTurnId)) {

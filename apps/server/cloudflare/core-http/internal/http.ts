@@ -1,4 +1,5 @@
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
+import { handleErasureOperator } from "../../erasure/runtime";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
@@ -521,6 +522,7 @@ const ownedCorePath = (path: string): boolean =>
   enrollmentCorePath(path) ||
   [
     "/health",
+    "/internal/titular-erasure",
     smokePath,
     listCategoriesPath,
     "/providers/kapso/callback",
@@ -1566,6 +1568,17 @@ const reservedCoreResponse = (
     return Option.some(handleProviderAuthentication({ request, environment }));
   }
   if (path === smokePath) return Option.some(smokeResponse(request, environment));
+  return supportCoreResponse(request, environment, path);
+};
+
+const supportCoreResponse = (
+  request: Request,
+  environment: CoreHttpEnvironment,
+  path: string
+): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
+  if (path === "/internal/titular-erasure") {
+    return Option.some(handleErasureOperator({ request, environment }));
+  }
   if (refundSupportRoute(path)) {
     return Option.some(
       Effect.tryPromise({

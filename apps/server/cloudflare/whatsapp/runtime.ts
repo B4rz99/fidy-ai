@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { Effect } from "effect";
 import { WhatsAppUnavailable } from "./contract";
 import { receiveIngress } from "./internal/ingress";
@@ -26,3 +29,6 @@ export const sweepExpiredWhatsAppWindows = (
   Effect.Success<ReturnType<typeof sweepExpiredWhatsAppWindowsOwned>>,
   WhatsAppUnavailable
 > => sweepExpiredWhatsAppWindowsOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+
+export const makeWhatsappErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

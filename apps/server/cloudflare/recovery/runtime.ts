@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { DateTime, Effect, Schema } from "effect";
 import { RecoveryRetentionUnavailable } from "./contract";
 
@@ -58,3 +61,6 @@ export const sweepRecoveryEvidence = ({
       ])
     );
   }).pipe(Effect.mapError(() => new RecoveryRetentionUnavailable()));
+
+export const makeRecoveryErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

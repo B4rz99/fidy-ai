@@ -1,4 +1,5 @@
 import { Option } from "effect";
+import { erasureAdmissionCondition } from "~/shell/erasure/operations";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import type {
   ConsentStandingRequirement,
@@ -33,7 +34,11 @@ export const consentConditions = ({
     );
     params.push(...subjectBindings(subject));
   }
-  return { sql: conditions.join(" AND "), params };
+  const erasure = erasureAdmissionCondition({ subject, admitted: requirement === "granted" });
+  return {
+    sql: [...conditions, erasure.sql].join(" AND "),
+    params: [...params, ...erasure.params],
+  };
 };
 
 export const revocationEvidence = (evidence: PATRevocationProtection): OwnedStatement => {

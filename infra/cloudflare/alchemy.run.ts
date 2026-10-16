@@ -1,3 +1,6 @@
+import type { ErasureRegistryInitialization } from "../../apps/server/cloudflare/erasure/contract";
+import { prepareLocalErasureRegistry } from "../../apps/server/cloudflare/erasure/operations";
+import { ErasureUnavailable } from "../../apps/server/cloudflare/erasure-store/contract";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
@@ -15,6 +18,59 @@ import { edgeSecurityPolicy } from "./edge-security";
 import { freeTierWorkerObservability } from "./worker-observability";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { resolveLocalCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/operations";
+
+const localRegistryStorage = (
+  input: Readonly<{
+    db: Cloudflare.D1.QueryDatabaseClient;
+    read: Cloudflare.R2.ReadBucketClient;
+    write: Cloudflare.R2.WriteBucketClient;
+  }>
+): ErasureRegistryInitialization<Alchemy.RuntimeContext> => ({
+  query: (statement) => input.db.prepare(statement).first(),
+  exists: (key) =>
+    input.read.head(key).pipe(
+      Effect.map((object) => object !== null),
+      Effect.mapError(() => new ErasureUnavailable())
+    ),
+  empty: input.read.list({ limit: 1 }).pipe(
+    Effect.map((page) => page.objects.length === 0),
+    Effect.mapError(() => new ErasureUnavailable())
+  ),
+  install: (key, value) =>
+    input.write.put(key, value, { onlyIf: { etagDoesNotMatch: "*" } }).pipe(
+      Effect.map((object) => object !== null),
+      Effect.mapError(() => new ErasureUnavailable())
+    ),
+});
+
+const initializeLocalErasureRegistry = Effect.fn(function* (
+  input: Readonly<{ database: Cloudflare.D1.Database; bucket: Cloudflare.R2.Bucket }>
+) {
+  const Initialize = Alchemy.Action(
+    "InitializeLocalErasureRegistry",
+    Effect.gen(function* () {
+      const db = yield* Cloudflare.D1.QueryDatabase(input.database);
+      const read = yield* Cloudflare.R2.ReadBucket(input.bucket);
+      const write = yield* Cloudflare.R2.WriteBucket(input.bucket);
+      return Effect.fn(function* () {
+        yield* prepareLocalErasureRegistry({
+          ...localRegistryStorage({ db, read, write }),
+        });
+        return { required: "true" };
+      });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Cloudflare.D1.QueryDatabaseLocal,
+          Cloudflare.R2.ReadBucketLocal,
+          Cloudflare.R2.WriteBucketLocal
+        )
+      )
+    )
+  );
+  const initialized = yield* Initialize({});
+  return initialized.required;
+});
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
@@ -92,7 +148,7 @@ const resolvePatAdmissionKey = (development: boolean): typeof patAdmissionKey =>
     : patAdmissionKey;
 
 const resolveAccessConfig = Effect.fn(function* (development: boolean) {
-  if (development) return { issuer: "", audience: "" };
+  if (development) return { issuer: "", audience: "", erasureAudience: "" };
   const issuer = yield* accessIssuer;
   const operatorEmail = yield* recoveryOperatorEmail;
   const identity = yield* Cloudflare.Access.IdentityProvider("RecoveryIdentity", {
@@ -121,7 +177,25 @@ const resolveAccessConfig = Effect.fn(function* (development: boolean) {
       },
     ],
   });
-  return { issuer, audience: application.aud };
+  const erasureApplication = yield* Cloudflare.Access.Application("TitularErasureAccess", {
+    type: "self_hosted",
+    name: "Fidy Titular erasure",
+    domain: "api.fidyapp.com/internal/titular-erasure",
+    sessionDuration: "15m",
+    appLauncherVisible: false,
+    allowedIdps: [identity.identityProviderId],
+    autoRedirectToIdentity: true,
+    policies: [
+      {
+        name: "titular-erasure-operator",
+        decision: "allow",
+        precedence: 1,
+        sessionDuration: "15m",
+        include: [{ email: { email: "obarboza@fidyapp.com" } }],
+      },
+    ],
+  });
+  return { issuer, audience: application.aud, erasureAudience: erasureApplication.aud };
 });
 
 const resolveBrowserOrigin = (production: boolean): string =>
@@ -214,6 +288,10 @@ export default Alchemy.Stack(
     });
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
     const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
+    const erasureBucket = yield* Cloudflare.R2.Bucket("TitularErasureBucket");
+    const erasureRequired = development
+      ? yield* initializeLocalErasureRegistry({ database, bucket: erasureBucket })
+      : "true";
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
     yield* Cloudflare.Worker("ForwardedEmail", {
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
@@ -223,6 +301,8 @@ export default Alchemy.Stack(
       env: {
         DB: database,
         EMAIL_BUCKET: emailBucket,
+        ERASURE_BUCKET: erasureBucket,
+        ERASURE_REQUIRED: erasureRequired,
         EMAIL_QUEUE: emailQueue,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
@@ -295,6 +375,8 @@ export default Alchemy.Stack(
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
+        ERASURE_BUCKET: erasureBucket,
+        ERASURE_REQUIRED: erasureRequired,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
         HOSTED_WHATSAPP_QUEUE: hostedWhatsAppQueue,
@@ -340,6 +422,7 @@ export default Alchemy.Stack(
         BILLING_COLLECTION_QUEUE: billingCollectionQueue,
         BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
         BILLING_REFUND_WORKFLOW: billingRefundWorkflow,
+        ERASURE_SUPPORT_AUDIENCE: accessConfig.erasureAudience,
         BILLING_SUPPORT_AUDIENCE: yield* Config.String("BILLING_SUPPORT_AUDIENCE").pipe(
           Config.withDefault("")
         ),

@@ -17,6 +17,7 @@ import {
   fixtureUserId,
   paginationUserId,
   pairingUserId,
+  privacyErasureUserId,
   privacyRenewalUserId,
   privacyUserId,
   recurringRecoveryUserId,
@@ -399,6 +400,7 @@ const fixtureIdentities = [
   { key: "recurringRecovery", userId: recurringRecoveryUserId },
   { key: "privacy", userId: privacyUserId },
   { key: "privacyRenewal", userId: privacyRenewalUserId },
+  { key: "privacyErasure", userId: privacyErasureUserId },
   { key: "access", userId: accessUserId },
   { key: "dashboard", userId: dashboardUserId },
   { key: "budget", userId: budgetUserId },
@@ -448,7 +450,14 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
   const existing = coordinators.get(name);
   if (existing !== undefined) return existing;
   const coordinator = new UserTransactionCoordinator(
-    { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+    {
+      id: { name },
+      storage: {
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+        setAlarm: (): Promise<void> => Promise.resolve(),
+      },
+    },
     coreEnvironment
   );
   const fetcher = {

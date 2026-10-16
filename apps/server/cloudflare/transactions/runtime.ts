@@ -1,3 +1,39 @@
+import { withErasureRecovery } from "../erasure/runtime";
+import { ErasureUnavailable } from "../erasure-store/contract";
+import {
+  executeErasureContinuation,
+  executeErasureControl,
+  executeErasureRestore,
+  executeErasureRetentionReview,
+  executeErasureReview,
+} from "../erasure/operations";
+import { makeAuditErasureStores } from "../audit/runtime";
+import { makeBrowserLoginErasureStores } from "../browser-login/runtime";
+import { makeBudgetsErasureStores } from "../budgets/runtime";
+import { makeCanonicalAdmissionErasureStores } from "../canonical-admission/runtime";
+import { makeCategoriesErasureStores } from "../categories/runtime";
+import { makeConnectionsErasureStores } from "../connections/runtime";
+import { makeConsentErasureStores } from "../consent/runtime";
+import { makeDashboardErasureStores } from "../dashboard/runtime";
+import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
+import { makeIdentityErasureStores } from "../identity/runtime";
+import { makeIngestionErasureOriginals, makeIngestionErasureStores } from "../ingestion/runtime";
+import { makeMemoryErasureStores } from "../memory/runtime";
+import { makeOauthAgentsErasureStores } from "../oauth-agents/runtime";
+import { makeOauthConfirmationErasureStores } from "../oauth-confirmation/runtime";
+import { makeProviderAuthenticationErasureStores } from "../provider-authentication/runtime";
+import { makeQuotasErasureStores } from "../quotas/runtime";
+import { makeRecoveryErasureStores } from "../recovery/runtime";
+import { makeRecurringPlansErasureStores } from "../recurring-plans/runtime";
+import { makeRecurringErasureStores } from "../recurring/runtime";
+import { makeResourceAdmissionErasureStores } from "../resource-admission/runtime";
+import { makeSubscriptionErasureStores } from "../subscription/runtime";
+import { makeTokensErasureStores } from "../tokens/runtime";
+import { makeWebSessionErasureStores } from "../web-session/runtime";
+import { makeWhatsappErasureStores } from "../whatsapp/runtime";
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import { executeConsentRenewal, executeConsentWithdrawal } from "../consent/operations";
@@ -7,10 +43,10 @@ import {
   executeSubscriptionRenewalAdmission,
 } from "../subscription/operations";
 import { ProactivityActivity, type ProactivityEnvironment } from "../insights/contract";
-import { executeProactivityWork } from "../insights/runtime";
+import { executeProactivityWork, makeInsightsErasureStores } from "../insights/runtime";
 import { RecurringWork } from "../recurring/contract";
 import { evaluateRecurringSeries } from "../recurring/operations";
-import { makeAgentService } from "../agent/runtime";
+import { makeAgentErasureStores, makeAgentService } from "../agent/runtime";
 import { repairDashboardProjections as ownerRepairDashboardProjections } from "./internal/dashboard-repair";
 import { CanonicalWorkAdmission } from "../canonical-operations/contract";
 import {
@@ -77,6 +113,8 @@ type CoordinatorEnvironment = Readonly<{
   /** Native optional binding, normalized to Option when work enters the application. */
   Partial<
     Readonly<{
+      ERASURE_BUCKET: R2Bucket;
+      ERASURE_REQUIRED: string;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       EMAIL_BUCKET: R2Bucket;
       KAPSO_API_KEY: string;
@@ -368,6 +406,100 @@ const consentActivities = new Map([
   ["/consent-renew", executeConsentRenewal],
   ["/consent-withdraw", executeConsentWithdrawal],
 ]);
+const privateErasureActivity = (
+  input: Parameters<typeof privateProactivityActivity>[0] &
+    Readonly<{
+      clearCoordinator: () => Effect.Effect<boolean, ErasureUnavailable>;
+    }>
+): Option.Option<Effect.Effect<Response>> => {
+  if (input.request.method !== "POST") return Option.none();
+  const restore = privateErasureRestore(input);
+  if (Option.isSome(restore)) return restore;
+  const erasurePath = new URL(input.request.url).pathname;
+  if (erasurePath === "/erasure-review") {
+    return Option.some(
+      executeErasureReview({
+        db: input.environment.DB,
+        userId: input.userId,
+        candidate: input.candidate,
+        signal: input.request.signal,
+        stores: erasureStores(input.environment.DB),
+        recovery: {
+          db: input.environment.DB,
+          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+        },
+      })
+    );
+  }
+  if (erasurePath === "/erasure-continue") {
+    return Option.some(
+      executeErasureContinuation({
+        db: input.environment.DB,
+        userId: input.userId,
+        candidate: input.candidate,
+        stores: erasureStores(input.environment.DB),
+        originals: makeIngestionErasureOriginals({
+          db: input.environment.DB,
+          email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
+          statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
+          retained: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+        }),
+        recovery: {
+          db: input.environment.DB,
+          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+        },
+        clearCoordinator: input.clearCoordinator,
+      })
+    );
+  }
+  if (["/erasure-receipt", "/erasure-custody-evidence"].includes(erasurePath)) {
+    return Option.some(
+      executeErasureControl({
+        db: input.environment.DB,
+        userId: input.userId,
+        candidate: input.candidate,
+        operation: erasurePath === "/erasure-receipt" ? "Receipt" : "CustodyEvidence",
+        stores: erasureStores(input.environment.DB),
+        bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+      })
+    );
+  }
+  return Option.none();
+};
+const privateErasureRestore = (
+  input: Parameters<typeof privateProactivityActivity>[0]
+): Option.Option<Effect.Effect<Response>> => {
+  const erasurePath = new URL(input.request.url).pathname;
+  if (input.request.method === "POST" && erasurePath === "/erasure-retention-review") {
+    return Option.some(
+      executeErasureRetentionReview({
+        userId: input.userId,
+        candidate: input.candidate,
+        stores: erasureStores(input.environment.DB),
+        recovery: {
+          db: input.environment.DB,
+          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+        },
+      })
+    );
+  }
+  if (input.request.method === "POST" && erasurePath === "/erasure-restore") {
+    return Option.some(
+      executeErasureRestore({
+        db: input.environment.DB,
+        userId: input.userId,
+        candidate: input.candidate,
+        stores: erasureStores(input.environment.DB),
+        recovery: {
+          db: input.environment.DB,
+          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+        },
+      })
+    );
+  }
+  return Option.none();
+};
+
 const privateOwnerActivity = (
   input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
@@ -509,22 +641,24 @@ export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
   private readonly state: Readonly<{
     id: Readonly<{ name: string }>;
-    storage: Pick<DurableObjectStorage, "setAlarm">;
+    storage: Pick<DurableObjectStorage, "setAlarm" | "deleteAlarm" | "getAlarm">;
   }>;
   private readonly env: CoordinatorEnvironment;
+  private readonly erasureEnvironment: CoordinatorEnvironment;
   private readonly mcp: McpResidency;
   constructor(
     state: Readonly<{
       id: Readonly<{ name: string }>;
-      storage: Pick<DurableObjectStorage, "setAlarm">;
+      storage: Pick<DurableObjectStorage, "setAlarm" | "deleteAlarm" | "getAlarm">;
     }>,
     env: CoordinatorEnvironment
   ) {
     this.state = state;
-    this.env = env;
+    this.erasureEnvironment = env;
+    this.env = withErasureRecovery(env);
     this.mcp = makeMcpResidency({
       userId: state.id.name,
-      db: env.DB,
+      db: this.env.DB,
       enqueueCanonicalWork: (input) => this.enqueueOAuthCanonicalWork(input),
     });
   }
@@ -598,6 +732,25 @@ export class UserTransactionCoordinator {
     return response;
   }
 
+  private clearErasureCoordinator(): Effect.Effect<boolean, ErasureUnavailable> {
+    const storage = this.state.storage;
+    const mcp = this.mcp;
+    return Effect.gen(function* () {
+      yield* mcp.retireConnections(Option.none());
+      if (!(yield* mcp.erasureSettled())) return false;
+      yield* Effect.tryPromise({
+        try: () => storage.deleteAlarm(),
+        catch: () => new ErasureUnavailable(),
+      });
+      return (
+        (yield* Effect.tryPromise({
+          try: () => storage.getAlarm(),
+          catch: () => new ErasureUnavailable(),
+        })) === null
+      );
+    });
+  }
+
   private runCoordinatedRequest(
     input: Readonly<{
       request: Request;
@@ -607,11 +760,22 @@ export class UserTransactionCoordinator {
     const { request, userId } = input;
     const environment = this.env;
     const mcp = this.mcp;
+    const clearCoordinator = (): Effect.Effect<boolean, ErasureUnavailable> =>
+      this.clearErasureCoordinator();
+    const erasureEnvironment = this.erasureEnvironment;
     return Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
           if (Option.isNone(candidate)) return transactionUnavailable();
+          const erasure = privateErasureActivity({
+            request,
+            candidate: candidate.value,
+            environment: erasureEnvironment,
+            userId,
+            clearCoordinator,
+          });
+          if (Option.isSome(erasure)) return yield* erasure.value;
           const owner = privateOwnerActivity({
             request,
             candidate: candidate.value,
@@ -672,3 +836,36 @@ export class UserTransactionCoordinator {
 /** Advance at most four incomplete Users once per private scheduled tick. */
 export const repairDashboardProjections: typeof ownerRepairDashboardProjections = (...args) =>
   ownerRepairDashboardProjections(...args);
+
+const erasureStores = (db: D1Database): ReadonlyArray<ErasureStore> => [
+  ...makeAgentErasureStores(db),
+  ...makeAuditErasureStores(db),
+  ...makeBrowserLoginErasureStores(db),
+  ...makeBudgetsErasureStores(db),
+  ...makeCanonicalAdmissionErasureStores(db),
+  ...makeCategoriesErasureStores(db),
+  ...makeConnectionsErasureStores(db),
+  ...makeConsentErasureStores(db),
+  ...makeDashboardErasureStores(db),
+  ...makeEmailAuthenticationErasureStores(db),
+  ...makeIdentityErasureStores(db),
+  ...makeIngestionErasureStores(db),
+  ...makeInsightsErasureStores(db),
+  ...makeMemoryErasureStores(db),
+  ...makeOauthAgentsErasureStores(db),
+  ...makeOauthConfirmationErasureStores(db),
+  ...makeProviderAuthenticationErasureStores(db),
+  ...makeQuotasErasureStores(db),
+  ...makeRecoveryErasureStores(db),
+  ...makeRecurringErasureStores(db),
+  ...makeRecurringPlansErasureStores(db),
+  ...makeResourceAdmissionErasureStores(db),
+  ...makeSubscriptionErasureStores(db),
+  ...makeTokensErasureStores(db),
+  ...makeTransactionsErasureStores(db),
+  ...makeWebSessionErasureStores(db),
+  ...makeWhatsappErasureStores(db),
+];
+
+export const makeTransactionsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

@@ -329,7 +329,12 @@ const setup = (
                   id: {
                     name,
                   },
-                  storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+                  storage: {
+                    getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+                      Promise.resolve(null),
+                    deleteAlarm: (): Promise<void> => Promise.resolve(),
+                    setAlarm: (): Promise<void> => Promise.resolve(),
+                  },
                 },
                 {
                   DB: db,

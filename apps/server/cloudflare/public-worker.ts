@@ -233,6 +233,7 @@ const replacementPaths = [
   emailReplacementOperations.request.path,
   emailReplacementOperations.complete.path,
 ] as const;
+const erasureSupportPath = "/internal/titular-erasure";
 const supportRecoveryPath = "/internal/support-recovery";
 const refundMethods = (path: string): ReadonlyArray<string> =>
   path === refundSupportBasePath ? ["POST"] : ["GET"];
@@ -248,6 +249,8 @@ const postPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
   supportRecoveryPath,
+  erasureSupportPath,
+  "/web/privacy/erasure",
   microsoftProviderPaths.start,
   microsoftProviderPaths.status,
   microsoftProviderPaths.complete,
@@ -407,7 +410,7 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   if (path === callbackPath || path === wompiBillingEventPath) {
     return Option.some(providerHeaders(request, path));
   }
-  if (path === supportRecoveryPath || refundSupportPath(path)) {
+  if ([supportRecoveryPath, erasureSupportPath].includes(path) || refundSupportPath(path)) {
     return Option.some(supportHeaders(request));
   }
   return Option.none();
@@ -598,7 +601,7 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
-  path === supportRecoveryPath && Option.isSome(origin);
+  (path === supportRecoveryPath || path === erasureSupportPath) && Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);

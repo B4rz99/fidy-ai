@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { Data, Effect } from "effect";
 import { sweepExpiredPATPairings as expire } from "./internal/pat-pairing";
 
@@ -9,3 +12,6 @@ export const sweepExpiredPATPairings = (
   db: D1Database
 ): Effect.Effect<void, PATRetentionUnavailable> =>
   expire(db).pipe(Effect.mapError(() => new PATRetentionUnavailable()));
+
+export const makeTokensErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

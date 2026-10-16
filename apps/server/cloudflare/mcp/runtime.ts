@@ -484,6 +484,7 @@ export type McpResidency = Readonly<{
     input: Readonly<{ admission: OAuthMcpAdmission; signal: AbortSignal }>
   ) => Effect.Effect<Response>;
   dispose: () => Effect.Effect<void, Cause.UnknownError>;
+  erasureSettled: () => Effect.Effect<boolean>;
   retireConnections: (connectionId: Option.Option<string>) => Effect.Effect<void>;
 }>;
 /** One volatile residency owner per existing User coordinator, never a global caller-tool cache. */
@@ -979,5 +980,6 @@ export const makeMcpResidency = (config: ResidencyConfig): McpResidency => {
     handle: (request) => handleResidentRequest(registry, request),
     retireConnections: (connectionId) => retireConnections(registry, connectionId),
     dispose: () => disposeRegistry(registry),
+    erasureSettled: () => Effect.sync(() => registry.owners.size === 0),
   };
 };

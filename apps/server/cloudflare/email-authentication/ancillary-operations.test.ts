@@ -2,7 +2,7 @@ import { emailPairingAllowsUser } from "../../src/shell/email-authentication/ope
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { freshSessionQuery } from "../../src/shell/web-session/operations";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
 import {
@@ -22,6 +22,12 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
+        })
+      );
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare("CREATE TABLE verified_email_credentials (user_id TEXT, email_address TEXT)"),

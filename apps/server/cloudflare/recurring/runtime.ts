@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { Cause, Effect, Exit, Schema } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
@@ -60,3 +63,6 @@ export const advanceRecurringWork = ({
       return yield* new RecurringUnavailable();
     }
   }).pipe(Effect.withSpan("recurring.evaluate"));
+
+export const makeRecurringErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

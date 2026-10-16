@@ -4,7 +4,7 @@ import { User, UserId } from "../../src/core/identity/contract";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import assert from "node:assert/strict";
 import { afterAll, expect, it } from "vitest";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { IdentityUnavailable } from "./contract";
 import { readCurrentUser } from "./operations";
 
@@ -16,6 +16,12 @@ const userB = UserId.make("10000000-0000-4000-8000-000000000002");
 const setup = (): Effect.Effect<D1Database, never> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
+    yield* Effect.tryPromise(() =>
+      applyTestMigration({
+        db,
+        source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
+      })
+    );
     yield* Effect.tryPromise(() =>
       db.batch([
         db.prepare(

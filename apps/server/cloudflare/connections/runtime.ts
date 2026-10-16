@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { protectCanonicalPressure } from "../canonical-admission/operations";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -141,3 +144,6 @@ export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Ef
       refused: (response) => Effect.succeed(continuationFailure(response.status)),
     });
   }).pipe(Effect.orElseSucceed(() => continuationFailure(unavailableStatus)));
+
+export const makeConnectionsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

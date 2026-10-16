@@ -25,6 +25,9 @@ export type CoreHttpEnvironment = ProviderEnvironment &
     Readonly<{
       RECOVERY_ISOLATION: string;
       BILLING_SUPPORT_AUDIENCE: string;
+      ERASURE_SUPPORT_AUDIENCE: string;
+      ERASURE_BUCKET: R2Bucket;
+      ERASURE_REQUIRED: string;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;

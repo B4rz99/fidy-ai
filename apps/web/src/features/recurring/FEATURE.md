@@ -175,9 +175,9 @@ Audit triggers refuse additional work atomically, but these two read adapters pr
 as unavailable. No Audit counters were reset, limits changed or failed mutations replayed. This
 separate daily canonical budget now blocks historical fixture reads/cleanup until its UTC reset.
 The diagnostic read wrote zero rows. The follow-up preserves the D1 trigger refusal, classifies only the known Audit-budget error as
-canonical HTTP 429, and publishes seconds until the next UTC day. Recurrentes shows a clear daily
-limit message instead of an outage. The 16-check recurring D1 suite covers exhausted and prior-day
-budgets, unaffected foreign Users, unchanged Audit counts and genuine storage failures remaining 503. Three built-browser recovery journeys cover unavailable, malformed and rate-limited reads;
+canonical HTTP 429, and publishes seconds until the next UTC day. Recurrentes shows a clear request-limit message instead of an outage. It does not infer a daily
+reset from the general ResourceLimited tag, which also covers temporary request pressure. The 16-check recurring D1 suite covers exhausted and prior-day
+budgets, unaffected foreign Users, unchanged Audit counts and genuine storage failures remaining 503. Four built-browser recovery journeys cover unavailable, malformed, daily-limited and temporary-pressure reads;
 39 transport checks include immediate return of long Retry-After refusals without automatic replay.
 This follow-up is locally verified; production deployment and the exact exhausted-account rerun
 remain pending.

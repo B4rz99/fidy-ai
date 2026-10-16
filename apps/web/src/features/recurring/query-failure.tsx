@@ -22,13 +22,11 @@ export const RecurringQueryFailure = ({
     <div className="p-5">
       <CanonicalQueryRetry
         title={
-          limited
-            ? "Alcanzaste el límite diario de solicitudes"
-            : "No pudimos cargar tus recurrentes"
+          limited ? "Alcanzaste el límite de solicitudes" : "No pudimos cargar tus recurrentes"
         }
         description={
           limited
-            ? "El límite diario se restablece a las 00:00 UTC. Tus datos siguen guardados."
+            ? "Inténtalo de nuevo más tarde. Tus datos siguen guardados."
             : "Tus datos no se han reemplazado por una lista vacía."
         }
         retryLabel="Reintentar"

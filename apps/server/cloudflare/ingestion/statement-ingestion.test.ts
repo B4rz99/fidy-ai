@@ -4738,6 +4738,15 @@ it("prefills independently known facts when a statement date is missing", () =>
       const source = yield* fromTestPromise(() =>
         clarifyStatement(runtime, "fecha,valor,moneda,contraparte\n?,-13500,COP,Cafe\n")
       );
+      const suggestedCategory = "10000000-0000-4000-8000-000000000003";
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+          )
+          .bind(newId(), userA, suggestedCategory)
+          .run()
+      );
       const detail = yield* fromTestPromise(() => reviewDetail(runtime, source.reviewIds[0] ?? ""));
       expect(detail.status).toBe(200);
       expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
@@ -4747,6 +4756,7 @@ it("prefills independently known facts when a statement date is missing", () =>
             currency: "COP",
             direction: "outflow",
             counterparty: "Cafe",
+            categoryId: suggestedCategory,
             occurredAt: "",
             userProvidedFields: [],
           },

@@ -7,6 +7,7 @@ import {
   ReviewStatus,
   ReviewSummary,
 } from "../../../src/core/ingestion/contract";
+import { categorizeCaptures } from "../../categories/operations";
 import { TransactionId } from "../../../src/core/transactions/contract";
 
 export const reviewCompletion = `INSERT INTO ingestion_review_assertion (id, accepted)
@@ -54,12 +55,13 @@ export const readReviewDetail = ({
             Schema.decodeEffect(reviewDraftJson)(json)
           ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
         : Option.none();
-    const suggestions =
+    const retainedSuggestions =
       DateTime.toEpochMillis(row.expiresAt) > current
         ? yield* Effect.forEach(Option.toArray(row.suggestions_json), (json) =>
             Schema.decodeEffect(reviewDraftJson)(json)
           ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
         : Option.none();
+    const suggestions = yield* suggestReviewCategory({ db, userId, draft: retainedSuggestions });
     const item = yield* projectReviewSummary(row);
     return Option.some({ item, revision: row.revision, draft, suggestions });
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
@@ -80,4 +82,32 @@ export const projectReviewSummary = (
       onNone: () => ({}),
       onSome: (transactionId) => ({ transactionId }),
     }),
+  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+
+/** Resolve current Category instructions without altering retained extraction facts or User drafts. */
+const suggestReviewCategory = ({
+  db,
+  userId,
+  draft,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  draft: Option.Option<ReviewDraft>;
+}>): Effect.Effect<Option.Option<ReviewDraft>, ReviewUnavailable> =>
+  Effect.gen(function* () {
+    if (Option.isNone(draft) || Option.isNone(draft.value.direction)) return draft;
+    const suggestion = draft.value;
+    const categories = yield* categorizeCaptures({
+      db,
+      userId,
+      captures: [
+        {
+          caller: suggestion.categoryId,
+          counterparty:
+            suggestion.counterparty === "" ? Option.none() : Option.some(suggestion.counterparty),
+          direction: draft.value.direction.value,
+        },
+      ],
+    });
+    return Option.some({ ...suggestion, categoryId: Option.fromUndefinedOr(categories[0]) });
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));

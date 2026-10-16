@@ -4104,9 +4104,12 @@ it("shows an isolated ingestion inbox with the original evidence deadline", () =
       const read = (index: number): Promise<Response> =>
         send(
           runtime,
-          new Request("https://api.fidyapp.com/ingestion/review-workspace", {
-            headers: sessionHeaders(index),
-          })
+          new Request(
+            "https://api.fidyapp.com/ingestion/review-workspace?status=pending&offset=0",
+            {
+              headers: sessionHeaders(index),
+            }
+          )
         );
       const own = yield* fromTestPromise(() => read(0));
       expect(own.status).toBe(200);

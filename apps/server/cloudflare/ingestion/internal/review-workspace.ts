@@ -75,7 +75,7 @@ const readWorkspace = ({
   request: Request;
 }>): Effect.Effect<Response, ReviewWorkspaceUnavailable> =>
   Effect.gen(function* () {
-    const query = Schema.decodeOption(ReviewWorkspaceQuery)(
+    const query = Schema.decodeOption(Schema.toCodecStringTree(ReviewWorkspaceQuery))(
       Object.fromEntries(new URL(request.url).searchParams)
     );
     if (Option.isNone(query)) return validationFailed("Invalid review selection.");

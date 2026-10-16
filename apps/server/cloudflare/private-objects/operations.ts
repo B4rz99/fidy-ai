@@ -20,13 +20,18 @@ export const writePrivateObject = <E, R>(
 ): Effect.Effect<void, E | PrivateObjectUnavailable, R> =>
   Effect.gen(function* () {
     const nonce = yield* Effect.sync(newId);
+    const current = yield* Clock.currentTimeMillis;
     const placeholder = yield* io(() =>
       input.bucket.put(input.key, new TextEncoder().encode(nonce), {
         onlyIf: Option.match(input.predecessor, {
           onNone: () => ({ etagDoesNotMatch: "*" }),
           onSome: (etag) => ({ etagMatches: etag }),
         }),
-        customMetadata: { ...input.metadata, purpose: "private-object-placeholder" },
+        customMetadata: {
+          ...input.metadata,
+          purpose: "private-object-placeholder",
+          expiresAtMs: String(current + controlLifetimeMs),
+        },
       })
     );
     const stored = yield* Schema.decodeUnknownEffect(Stored)(placeholder).pipe(

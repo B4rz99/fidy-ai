@@ -9,6 +9,7 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { installRetentionTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { withErasureRecovery } from "./runtime";
+import { writePrivateObject } from "../private-objects/operations";
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
@@ -188,6 +189,20 @@ it("reconciles expired orphan control objects without touching financial bytes o
       const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
       yield* Effect.tryPromise(() => installRetentionTestSchema(db));
       const current = yield* Clock.currentTimeMillis;
+      const interrupted = yield* Effect.result(
+        writePrivateObject({
+          bucket,
+          key: "interrupted-upload",
+          bytes: new TextEncoder().encode("unpublished financial bytes"),
+          metadata: { purpose: "statement-original" },
+          digest: Option.none(),
+          predecessor: Option.none(),
+          authorise: Effect.succeed(false),
+        })
+      );
+      expect(interrupted._tag).toBe("Failure");
+      const placeholder = yield* Effect.tryPromise(() => bucket.head("interrupted-upload"));
+      expect(Number(placeholder?.customMetadata?.["expiresAtMs"])).toBeGreaterThan(current);
       for (const [key, purpose, expiresAtMs] of [
         ["expired-placeholder", "private-object-placeholder", current - 1],
         ["expired-nonce", "private-object-erased", current - 1],
@@ -207,6 +222,7 @@ it("reconciles expired orphan control objects without touching financial bytes o
       expect(yield* Effect.tryPromise(() => bucket.head("expired-placeholder"))).toBeNull();
       expect(yield* Effect.tryPromise(() => bucket.head("expired-nonce"))).toBeNull();
       expect(yield* Effect.tryPromise(() => bucket.head("live-placeholder"))).not.toBeNull();
+      expect(yield* Effect.tryPromise(() => bucket.head("interrupted-upload"))).not.toBeNull();
       expect(
         yield* Effect.tryPromise(() =>
           bucket.get("held-financial").then((object) => object?.text())

@@ -149,7 +149,9 @@ remain blocked pending attributable no-charge confirmation. These are local resu
 verification remains pending.
 Both retry paths also complete controlled-provider settlement with the original failed attempt
 retained and exactly one paid period. A populated forward-migration check preserves existing
-source identities, BillingAttempts, outbox, collection arms and foreign keys.
+source identities, BillingAttempts, outbox, collection arms and foreign keys. After integrating
+Titular erasure, full-chain checks also verify source fences, exact-User receipt disposition,
+finite-hold archives and removal ordering; retirement history remains in retained billing records.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

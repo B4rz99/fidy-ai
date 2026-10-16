@@ -163,3 +163,27 @@ CREATE TRIGGER billing_attempt_retired_source BEFORE INSERT ON billing_attempts
 WHEN EXISTS (SELECT 1 FROM card_payment_sources source WHERE source.id=NEW.payment_source_id AND source.retired_at_ms IS NOT NULL)
 BEGIN SELECT RAISE(ABORT, 'billing_source_retired'); END;
 PRAGMA defer_foreign_keys = OFF;
+
+CREATE TRIGGER erasure_fence_card_payment_sources_insert BEFORE INSERT ON card_payment_sources
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+CREATE TRIGGER erasure_fence_card_payment_sources_update BEFORE UPDATE ON card_payment_sources
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+CREATE TRIGGER erasure_fence_card_payment_sources_delete BEFORE DELETE ON card_payment_sources
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+CREATE TRIGGER erasure_preserve_card_payment_sources_delete BEFORE DELETE ON card_payment_sources
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+  AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
+  AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN
+  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+  SELECT q.id,'card_payment_sources','drain:'||lower(hex(randomblob(16))),json_object('id',OLD."id",'user_id',OLD."user_id",'enrollment_id',OLD."enrollment_id",'wompi_source_id',OLD."wompi_source_id",'billing_email',OLD."billing_email",'created_at_ms',OLD."created_at_ms",'method',OLD."method",'retired_at_ms',OLD."retired_at_ms")
+  FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
+    AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
+    AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
+END;

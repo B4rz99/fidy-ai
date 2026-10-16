@@ -1,7 +1,7 @@
 # Erasure inventory for #1274
 
-This inventory covers the current MVP schema through migration 0105. The User coordinator composes
-199 owner dispositions over 200 personal-data tables. The reviewed decision selects `Delete` or a
+This inventory covers the current MVP schema through migration 0107. The User coordinator composes
+200 owner dispositions over 201 personal-data tables. The reviewed decision selects `Delete` or a
 finite, source-backed `Retain` for each class. Identity and credentials always delete; archived
 records exclude credential digests, verifiers, proof material and tokens. Every disposition selects
 and deletes with its own bound exact-User predicate. Billing history deliberately groups attempts
@@ -111,6 +111,7 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `internal` | `transcript_entries`                   | conversation | `transcript_entries`                       |
 | `internal` | `oauth_operation_intents`              | credentials  | `oauth_operation_intents`                  |
 | `internal` | `billing_access_adjustments`           | billing      | `billing_access_adjustments`               |
+| `internal` | `billing_checkout_responses`           | billing      | `billing_checkout_responses`               |
 | `internal` | `billing_collection_arms`              | billing      | `billing_collection_arms`                  |
 | `internal` | `billing_collection_outbox`            | billing      | `billing_collection_outbox`                |
 | `internal` | `billing_event_candidates`             | billing      | `billing_event_candidates`                 |

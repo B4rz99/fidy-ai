@@ -13,6 +13,9 @@ BEGIN SELECT RAISE(ABORT, 'billing_checkout_response_invalid'); END;
 CREATE TRIGGER billing_checkout_response_no_update BEFORE UPDATE ON billing_checkout_responses
 BEGIN SELECT RAISE(ABORT, 'billing_checkout_response_immutable'); END;
 CREATE TRIGGER billing_checkout_response_no_delete BEFORE DELETE ON billing_checkout_responses
+WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id
+ WHERE p.store_id='billing_checkout_responses' AND p.user_id=q.user_id AND q.state='Erasing'
+ AND EXISTS(SELECT 1 FROM billing_attempts a WHERE a.id=OLD.attempt_id AND a.user_id=p.user_id))
 BEGIN SELECT RAISE(ABORT, 'billing_checkout_response_immutable'); END;
 
 -- A known direct-card response plus verified final decline is distinct from a lost POST.
@@ -39,3 +42,27 @@ WHEN EXISTS (SELECT 1 FROM billing_attempts AS prior
       AND prior.previous_paid_attempt_id IS NOT NULL AND EXISTS (SELECT 1 FROM billing_attempts success
         JOIN billing_paid_periods paid ON paid.attempt_id=success.id WHERE success.previous_paid_attempt_id=prior.previous_paid_attempt_id)))
 BEGIN SELECT RAISE(ABORT, 'billing_user_collection_unresolved'); END;
+
+CREATE TRIGGER erasure_fence_billing_checkout_responses_insert BEFORE INSERT ON billing_checkout_responses
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=NEW.attempt_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_checkout_responses'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+CREATE TRIGGER erasure_fence_billing_checkout_responses_update BEFORE UPDATE ON billing_checkout_responses
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=NEW.attempt_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_checkout_responses'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+CREATE TRIGGER erasure_fence_billing_checkout_responses_delete BEFORE DELETE ON billing_checkout_responses
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_checkout_responses'))
+BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+
+CREATE TRIGGER erasure_preserve_billing_checkout_responses_delete BEFORE DELETE ON billing_checkout_responses
+WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id))
+  AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
+  AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000)
+BEGIN
+  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
+  SELECT q.id,'billing_checkout_responses','drain:'||lower(hex(randomblob(16))),json_object('transaction_id',OLD."transaction_id",'attempt_id',OLD."attempt_id")
+  FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id))
+    AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
+    AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
+END;

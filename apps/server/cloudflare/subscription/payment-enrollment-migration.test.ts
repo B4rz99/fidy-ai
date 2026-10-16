@@ -111,7 +111,7 @@ it("migrates retained card authority without changing BillingAttempt, outbox or 
         "0058_wallet_renewal",
         "0059_subscription_retries",
         "0060_subscription_cancellation",
-        "0095_declined_card_retry",
+        "0106_declined_card_retry",
       ]) {
         yield* Effect.tryPromise(() =>
           applyTestMigration({ db, source: new URL(`../migrations/${file}.sql`, import.meta.url) })
@@ -131,7 +131,7 @@ it("migrates retained card authority without changing BillingAttempt, outbox or 
       yield* Effect.tryPromise(() =>
         applyTestMigration({
           db,
-          source: new URL("../migrations/0096_failed_card_replacement.sql", import.meta.url),
+          source: new URL("../migrations/0107_failed_card_replacement.sql", import.meta.url),
         })
       );
       for (const [index, table] of [

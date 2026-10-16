@@ -194,9 +194,33 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
   },
   {
-    id: "billing_transaction_candidates",
+    id: "billing_checkout_responses",
     dataClass: "billing",
     dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'attempt_id',r.\"attempt_id\") AS body FROM billing_checkout_responses r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?)",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_checkout_responses r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?)",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM billing_checkout_responses r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?)",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM billing_checkout_responses AS r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+  {
+    id: "billing_transaction_candidates",
+    dataClass: "billing",
+    dependencies: ["billing_checkout_responses"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'attempt_id',r.\"attempt_id\",'lookup_attempts',r.\"lookup_attempts\",'last_checked_at_ms',r.\"last_checked_at_ms\") AS body FROM billing_transaction_candidates r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?)",
@@ -277,7 +301,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["billing_history", "subscription_cancellations"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'enrollment_id',r.\"enrollment_id\",'wompi_source_id',r.\"wompi_source_id\",'billing_email',r.\"billing_email\",'created_at_ms',r.\"created_at_ms\",'method',r.\"method\") AS body FROM card_payment_sources r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'enrollment_id',r.\"enrollment_id\",'wompi_source_id',r.\"wompi_source_id\",'billing_email',r.\"billing_email\",'created_at_ms',r.\"created_at_ms\",'method',r.\"method\",'retired_at_ms',r.\"retired_at_ms\") AS body FROM card_payment_sources r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -529,6 +553,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [
       "billing_access_adjustments",
       "billing_audit",
+      "billing_checkout_responses",
       "billing_collection_arms",
       "billing_collection_outbox",
       "billing_followup_outbox",

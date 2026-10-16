@@ -186,8 +186,19 @@ and unchecked provider terms; the approved synthetic replacement card settled su
 fresh status read showed Pro with the new weekly paid period. An indexed read independently
 confirmed both original failed attempts and their retry clearances remained, with zero paid periods
 for either decline and exactly one for the replacement. No real charges were made. The browser
-session expired during the first reconciliation, requiring returning-user login before retry;
-temporary cancellation access and subsequent grant cleanup remain pending.
+session expired during the first reconciliation, requiring returning-user login before retry.
+An additional indexed read confirmed retry reused the original source, replacement retired that
+source, and exactly one replacement source was active before cancellation.
+
+Approved cancellation of that Sandbox Subscription returned `detached`; repeating the call returned
+the identical receipt. Canonical status retained Pro and the paid-through instant
+`2026-10-23T12:51:10.000Z`. An indexed read independently confirmed the durable cancellation,
+one paid period, zero armed collections and zero follow-up messages. The temporary Subscription
+Retry QA grant was revoked after fresh Microsoft login; its subsequent canonical read returned
+unauthenticated, and its isolated native credential and local grant metadata were cleared.
+Four rendered payment regressions also passed against a freshly built isolated browser/Core topology,
+including explicit retry, replacement and replacement after reload. This completes the approved
+live card sequence; the deployed wallet browser and recovery checks above remain separate gaps.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

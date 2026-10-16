@@ -1,0 +1,39 @@
+apps/server/cloudflare/subscription/card-retry-erasure.test.ts
+  s_6d017cc65783af::t_f75249d880cecd 1,3-108,110-124,126-128,130-251
+  s_6d017cc65783af::t_38e04259fc3be8 125,129
+  s_6d017cc65783af::t_e9599bb05ad4b1 2,109
+apps/server/cloudflare/d1-test-fixture.ts
+  s_6d017cc65783af::t_fae64d0d74e33c 296-297
+apps/server/cloudflare/migrations/0106_declined_card_retry.sql
+  s_6d017cc65783af::t_c937fb03de5d86 16-18,45-68
+apps/server/cloudflare/migrations/0107_failed_card_replacement.sql
+  s_6d017cc65783af::t_0d5ecfb0b26b93 166-189
+apps/server/cloudflare/subscription/internal/erasure.ts
+  s_6d017cc65783af::t_4f63520c81a949 197,201-224,304,556
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_6d017cc65783af::t_77cce954bedc69 34-35
+apps/server/cloudflare/subscription/payment-enrollment-migration.test.ts
+  s_6d017cc65783af::t_fb4ca7689eff0e 114,134
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_6c2c83efe5c6e3 152-154
+docs/operations/titular-erasure-inventory-1274.md
+  s_6d017cc65783af::t_63b2dcc35cdb22 3-4,114
+infra/cloudflare/verify-edge-policy.ts
+  s_6d017cc65783af::t_279a072ff17dd4 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "564c969a89a5de75d896e32f806e7c26b00c313c",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

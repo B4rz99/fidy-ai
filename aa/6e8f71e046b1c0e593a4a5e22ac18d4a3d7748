@@ -1,0 +1,20 @@
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_6f338f07a30804 156-167,180
+  s_6d017cc65783af::t_a800905a30892b 168-179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aa6e8f71e046b1c0e593a4a5e22ac18d4a3d7748",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

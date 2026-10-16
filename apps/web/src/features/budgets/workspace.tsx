@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { Alert, AlertDescription } from "@/ui/components/alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import "./layout.css";
@@ -81,13 +82,12 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
       >
         Hoy
       </Button>
-      <Button
+      <RefreshButton
         variant="outline"
         disabled={controller.saveState === "saving"}
         onClick={controller.refresh}
-      >
-        Actualizar
-      </Button>
+        label="Actualizar"
+      />
     </WorkspaceHeader>
   );
 };

@@ -1,3 +1,4 @@
+import { CalendarField } from "@/ui/components/calendar-field";
 import { Currency } from "@fidy/server/client";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { Option } from "effect";
@@ -21,7 +22,7 @@ type Props = Readonly<{
   timeZone: string;
 }>;
 export const ReviewFields = (props: Props): JSX.Element => (
-  <div className="grid gap-6">
+  <div className="grid gap-3">
     <ReviewCounterparty {...props} />
     <div className="grid grid-cols-2 items-start gap-3">
       <div className="grid content-start gap-2.5">
@@ -57,14 +58,13 @@ export const ReviewFields = (props: Props): JSX.Element => (
             props.change(editDraft({ draft: props.draft, field: "money", value: { currency } }))
           }
         />
-        {Option.isNone(props.draft.currency) ? (
-          <p className="text-xs text-muted-foreground">Confirma la moneda para continuar.</p>
-        ) : null}
       </div>
     </div>
     <ReviewOccurrence {...props} />
-    <ReviewDirection {...props} />
-    <ReviewCategory {...props} />
+    <div className="grid grid-cols-2 items-start gap-3">
+      <ReviewDirection {...props} />
+      <ReviewCategory {...props} />
+    </div>
   </div>
 );
 const ReviewCounterparty = (props: Props): JSX.Element => (
@@ -137,37 +137,48 @@ const ReviewCategory = ({ draft, change, locked, categories }: Props): JSX.Eleme
   </div>
 );
 
-const ReviewOccurrence = (props: Props): JSX.Element => (
-  <div className="grid content-start gap-2.5">
-    <Label htmlFor="review-date">
-      Fecha y hora{" "}
-      {props.draft.occurredAt === "" ? (
-        <span className="rounded-md bg-warning/60 px-2 py-1 text-xs font-medium">
-          Por confirmar
-        </span>
-      ) : null}
-    </Label>
-    <Input
-      id="review-date"
-      type="datetime-local"
-      value={localOccurrence({ value: props.draft.occurredAt, timeZone: props.timeZone })}
-      disabled={props.locked}
-      aria-invalid={props.draft.occurredAt === ""}
-      onChange={(event) =>
-        props.change(
-          editDraft({
-            draft: props.draft,
-            field: "occurredAt",
-            value: {
-              occurredAt: canonicalOccurrence({
-                value: event.target.value,
-                timeZone: props.timeZone,
-              }),
-            },
-          })
-        )
-      }
-    />
-    <p className="text-xs text-muted-foreground">Hora de {props.timeZone}.</p>
-  </div>
-);
+const ReviewOccurrence = (props: Props): JSX.Element => {
+  const local = localOccurrence({ value: props.draft.occurredAt, timeZone: props.timeZone });
+  const [date = "", time = ""] = local.split("T");
+  const change = (value: string): void =>
+    props.change(
+      editDraft({
+        draft: props.draft,
+        field: "occurredAt",
+        value: { occurredAt: canonicalOccurrence({ value, timeZone: props.timeZone }) },
+      })
+    );
+  return (
+    <div className="grid content-start gap-2.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-3">
+        <div className="grid content-start gap-2.5">
+          <Label htmlFor="review-date">Fecha{date === "" ? " · Por confirmar" : ""}</Label>
+          <CalendarField
+            id="review-date"
+            label="Fecha del movimiento"
+            value={date}
+            timeZone={props.timeZone}
+            disabled={props.locked}
+            required
+            appearance="field"
+            onChange={(next) => change(`${next}T${time || "00:00"}`)}
+          />
+        </div>
+        <div className="grid content-start gap-2.5">
+          <Label htmlFor="review-time">Hora</Label>
+          <Input
+            id="review-time"
+            type="time"
+            required
+            value={time}
+            disabled={props.locked || date === ""}
+            onChange={(event) => {
+              if (event.target.value !== "") change(`${date}T${event.target.value}`);
+            }}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">Hora de {props.timeZone}.</p>
+    </div>
+  );
+};

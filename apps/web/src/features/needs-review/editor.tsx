@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DraftBarrier } from "./draft-barrier";
 import { RetryExtraction } from "./retry";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -64,7 +65,7 @@ export const ReviewEditor = ({ item, finished, barrier, disabled }: Props): JSX.
     );
   }
   return (
-    <section className="min-w-0 p-5 lg:p-6">
+    <section className="flex min-h-0 min-w-0 flex-col p-5 lg:p-4">
       <ReviewItemHeading item={detail.value.data.item} />
       <ReadyEditor
         key={`${item.id}:${recovery}`}
@@ -101,14 +102,14 @@ const ReadyEditor = ({
   }
   return (
     <>
-      <div className="mt-6 grid min-w-0 items-start gap-6 xl:grid-cols-2">
+      <div className="mt-4 grid min-h-0 min-w-0 flex-1 items-start gap-6 lg:overflow-auto xl:grid-cols-2">
         <div className="min-w-0">
           <OriginalMaterial item={detail.item} />
           <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={locked} />
         </div>
         <div className="min-w-0">
           <h2 className="sr-only">Completa la transacción</h2>
-          <p className="mb-6 rounded-xl bg-warning/35 px-4 py-3 text-sm font-medium">
+          <p className="mb-3 rounded-xl bg-warning/35 px-4 py-2 text-sm font-medium">
             {reviewReason(detail.item)}
           </p>
           <ReviewFields
@@ -121,7 +122,7 @@ const ReadyEditor = ({
           <EditorFeedback feedback={editor.feedback} recover={recover} />
         </div>
       </div>
-      <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t pt-5 pr-16">
+      <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-4 border-t pt-3 pr-16">
         <Button variant="ghost" onClick={() => editor.act("Skip")} disabled={locked}>
           Omitir
         </Button>
@@ -151,7 +152,7 @@ const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element =>
     expired: "Este elemento venció",
   };
   return (
-    <div className="mt-6 grid min-w-0 items-start gap-6 xl:grid-cols-2">
+    <div className="mt-4 grid min-h-0 min-w-0 flex-1 items-start gap-6 lg:overflow-auto xl:grid-cols-2">
       <OriginalMaterial item={detail.item} />
       <div className="rounded-2xl border p-6">
         <h2 className="text-xl font-medium">{titles[detail.item.status]}</h2>
@@ -171,7 +172,7 @@ const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element =>
 
 const sourceIcons = { statement: File01Icon, media: Image01Icon, email: Mail01Icon };
 const ReviewItemHeading = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
-  <header className="flex flex-wrap items-start gap-3">
+  <header className="flex shrink-0 flex-wrap items-start gap-3">
     <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-information/60">
       <HugeiconsIcon icon={sourceIcons[item.source]} size={22} aria-hidden="true" />
     </span>
@@ -190,14 +191,17 @@ const EditorFeedback = ({
   recover,
 }: Readonly<{ feedback: keyof typeof feedbackCopy; recover: () => void }>): JSX.Element => (
   <>
-    <output className="mt-4 block text-xs text-muted-foreground">{feedbackCopy[feedback]}</output>
-    <p className="mt-2 text-xs text-muted-foreground">
+    <output className="mt-2 block text-xs text-muted-foreground">{feedbackCopy[feedback]}</output>
+    <p className="mt-1 text-xs text-muted-foreground">
       Los datos que completes se registrarán como proporcionados por ti.
     </p>
     {feedback === "uncertain" || feedback === "failed" ? (
-      <Button className="mt-4" variant="outline" onClick={recover}>
-        Actualizar elemento
-      </Button>
+      <RefreshButton
+        className="mt-4"
+        variant="outline"
+        onClick={recover}
+        label="Actualizar elemento"
+      />
     ) : null}
   </>
 );

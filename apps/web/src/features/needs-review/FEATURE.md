@@ -37,7 +37,9 @@ The Variant A workspace exposes Pending and History navigation, with created/ski
 filters inside History. The inbox presents a bounded Counterparty/amount/Currency preview from
 retained drafts or suggestions; this preview is suppressed at the original evidence deadline.
 The original stays inside a bounded card beside the spaced form, with individual actions in a
-separate footer. Row activation opens the item and toggles bulk selection when eligible; the
-checkbox toggles once independently. Source and text filters apply to the current server page,
+separate footer. The desktop workspace fits the viewport, with overflow contained inside its panels.
+Row activation opens the item; only its checkbox toggles bulk selection. The shared calendar edits
+the local date while preserving an existing local time; a newly completed date starts at midnight
+and exposes the time for editing. Source and text filters apply to the current server page,
 whose pagination remains independent of the filtered result count. The bulk toolbar only appears
 for a selection, feedback, or Undo; refresh remains available in the navigation.

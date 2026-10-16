@@ -1,3 +1,5 @@
+import { Refresh04Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { FidyClient } from "@/transport/client";
 import type { Atom } from "effect/reactivity";
 import { useAtomSet } from "@effect/atom-react";
@@ -20,7 +22,7 @@ export const RetryExtraction = ({
   return (
     <div className="mt-4 grid justify-items-start gap-2">
       <Button
-        variant="ghost"
+        variant="outline"
         disabled={disabled || busy}
         onClick={() => {
           setBusy(true);
@@ -37,6 +39,7 @@ export const RetryExtraction = ({
           });
         }}
       >
+        <HugeiconsIcon icon={Refresh04Icon} size={18} aria-hidden="true" />
         {busy ? "Procesando…" : "Reintentar procesamiento"}
       </Button>
       {failed ? (

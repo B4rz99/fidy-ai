@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter, useSearch } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
@@ -211,15 +212,13 @@ const SaveNotice = ({
             ? "No pudimos confirmar si se guardó. Actualiza y revisa el resultado antes de volver a guardar."
             : "Actualiza los recurrentes y revisa los datos antes de guardar."}
         </p>
-        <Button
-          contentLayout="wrap"
+        <RefreshButton
           focusAppearance="subtle"
           variant="outline"
           disabled={waiting}
           onClick={retry}
-        >
-          Actualizar recurrentes
-        </Button>
+          label="Actualizar recurrentes"
+        />
       </div>
     ) : null}
   </>

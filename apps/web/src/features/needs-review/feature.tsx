@@ -23,7 +23,7 @@ export const NeedsReviewFeature = (): JSX.Element => {
     navigate({ search: { status, offset } }).catch(() => {});
   };
   return (
-    <>
+    <div className="flex min-w-0 flex-col lg:h-dvh lg:overflow-hidden">
       <WorkspaceHeader
         title="Por revisar"
         context={
@@ -41,7 +41,7 @@ export const NeedsReviewFeature = (): JSX.Element => {
         page={page}
         move={(offset) => select(filter, offset)}
       />
-    </>
+    </div>
   );
 };
 const ReviewResources = ({
@@ -179,7 +179,7 @@ const InboxWorkspace = ({
     view.items.find((candidate) => Option.contains(control.selected, candidate.id)) ??
     view.items[0];
   return (
-    <div className="grid min-w-0 lg:min-h-[calc(100svh-12rem)] lg:grid-cols-[minmax(16rem,0.75fr)_minmax(0,2fr)]">
+    <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[minmax(16rem,0.75fr)_minmax(0,2fr)]">
       <Inbox
         view={view}
         selected={Option.fromUndefinedOr(item?.id)}

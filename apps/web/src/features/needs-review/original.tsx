@@ -1,3 +1,5 @@
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { CanonicalSuccess } from "@/transport/client";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
@@ -15,10 +17,16 @@ export const OriginalMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Elemen
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   return (
-    <details open className="min-w-0">
-      <summary className="cursor-pointer text-sm font-semibold">
+    <details open className="group min-w-0">
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+        <HugeiconsIcon
+          icon={ArrowDown01Icon}
+          size={18}
+          aria-hidden="true"
+          className="-rotate-90 group-open:rotate-0"
+        />
         Material original{" "}
-        <span className="float-right text-xs font-normal text-muted-foreground">
+        <span className="ml-auto text-xs font-normal text-muted-foreground">
           {sources[item.source]}
         </span>
       </summary>
@@ -62,7 +70,7 @@ const MaterialBody = ({ material }: Readonly<{ material: Material }>): JSX.Eleme
   }
   return (
     <>
-      <pre className="max-h-[65svh] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-7 [overflow-wrap:anywhere]">
+      <pre className="max-h-[45svh] lg:max-h-[calc(100dvh-29rem)] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-7 [overflow-wrap:anywhere]">
         {material.text}
       </pre>
       {material.truncated ? (

@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DashboardEditorError } from "./editing";
 import { PencilIcon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -963,9 +964,12 @@ const DashboardEditorNotice = ({
       {Option.match(error.onRefresh, {
         onNone: () => null,
         onSome: (refresh) => (
-          <Button onClick={refresh} type="button" variant="outline">
-            Actualizar tablero
-          </Button>
+          <RefreshButton
+            onClick={refresh}
+            type="button"
+            variant="outline"
+            label="Actualizar tablero"
+          />
         ),
       })}
     </AlertDescription>

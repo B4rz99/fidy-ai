@@ -429,7 +429,7 @@ test("requires an explicit currency for an ambiguous statement item", ({ page })
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Confirma la moneda para continuar.")).toBeVisible()
+        expect(page.getByText("Confirma la moneda de esta transacción")).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeDisabled()
@@ -449,7 +449,7 @@ test("requires an explicit currency for an ambiguous statement item", ({ page })
     })
   ));
 
-test("selects a review item from its row and keeps history discoverable", ({ page }) =>
+test("opens rows without bulk selection and keeps history discoverable", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const entries: Fixture[] = [{ id, revision: 0, status: "pending", draft: undefined }];
@@ -459,12 +459,11 @@ test("selects a review item from its row and keeps history discoverable", ({ pag
         page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Abrir Extracto" }).click());
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Abrir y seleccionar Extracto" }).click()
+        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).not.toBeChecked()
       );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toBeChecked()
-      );
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Omitir 1 seleccionados" }).click()
       );
@@ -473,11 +472,10 @@ test("selects a review item from its row and keeps history discoverable", ({ pag
       );
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/status=history/));
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Abrir y seleccionar Extracto" })).toBeVisible()
+        expect(page.getByRole("button", { name: "Abrir Extracto" })).toBeVisible()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Abrir y seleccionar Extracto" }).click()
-      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Abrir Extracto" }).click());
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Restaurar 1 seleccionados" }).click()
       );
@@ -510,7 +508,7 @@ test("advances from a completed middle row and wraps after the last row", ({ pag
       );
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Abrir y seleccionar Extracto" }).nth(1).click()
+        page.getByRole("button", { name: "Abrir Extracto" }).nth(1).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Contraparte 1")
@@ -529,3 +527,88 @@ test("advances from a completed middle row and wraps after the last row", ({ pag
       );
     })
   ));
+
+test("keeps the desktop review controls in the viewport with bulk selection", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "pending", draft: undefined }];
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 1654, height: 978 }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Omitir 1 seleccionados" })).toBeInViewport({
+          ratio: 1,
+        })
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Crear transacción", exact: true })).toBeInViewport(
+          { ratio: 1 }
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Categoría", exact: true })).toBeInViewport({
+          ratio: 1,
+        })
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Reintentar procesamiento" })).toBeInViewport({
+          ratio: 1,
+        })
+      );
+      const overflow = yield* Effect.tryPromise(() => page.evaluate(pageOverflow));
+      expect(overflow).toBeLessThanOrEqual(1);
+    })
+  ));
+
+test("uses the shared calendar and preserves the local time when changing dates", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [
+        {
+          id,
+          revision: 0,
+          status: "pending",
+          draft: {
+            amount: "13500",
+            currency: "COP",
+            direction: "outflow",
+            counterparty: "Café",
+            occurredAt: "2026-01-01T17:30:00Z",
+            userProvidedFields: [],
+          },
+        },
+      ];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Fecha del movimiento" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: /viernes, 2 de enero de 2026/ }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Hora", { exact: true })).toHaveValue("12:30")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status").filter({ hasText: "Borrador guardado" })).toHaveCount(1)
+      );
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Fecha del movimiento" })).toHaveText("02-01-2026")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Hora", { exact: true })).toHaveValue("12:30")
+      );
+    })
+  ));
+
+const pageOverflow = (): number => document.documentElement.scrollHeight - window.innerHeight;

@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
 import type { Workspace } from "./model";
@@ -30,9 +31,7 @@ export const ReviewToolbar = ({
           ? `Omitir ${control.checked.length} seleccionados`
           : `Restaurar ${control.checked.length} seleccionados`}
       </Button>
-      <Button variant="ghost" onClick={control.recover}>
-        Actualizar
-      </Button>
+      <RefreshButton variant="ghost" onClick={control.recover} label="Actualizar" />
       {control.undo.length > 0 ? (
         <Button variant="ghost" disabled={control.locked} onClick={control.undoSkip}>
           Deshacer omisión

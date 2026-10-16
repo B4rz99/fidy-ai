@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { Option } from "effect";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
@@ -42,9 +43,7 @@ export const ReviewNavigation = (props: Props): JSX.Element => (
       Historial
     </Button>
     <ReviewFilters {...props} />
-    <Button variant="ghost" size="sm" onClick={props.refresh}>
-      Actualizar
-    </Button>
+    <RefreshButton variant="ghost" onClick={props.refresh} label="Actualizar" />
   </nav>
 );
 const ReviewFilters = (props: Props): JSX.Element => (

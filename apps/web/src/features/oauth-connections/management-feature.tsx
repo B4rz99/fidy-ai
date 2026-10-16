@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Effect, Option } from "effect";
@@ -121,14 +122,13 @@ export const ManagementPage = ({
         next={next}
       />
       {needsRetry(listing) || (result._tag === "Success" && !result.value) ? (
-        <Button
+        <RefreshButton
           type="button"
           variant="outline"
           disabled={result.waiting || listing.waiting}
           onClick={refresh}
-        >
-          Actualizar lista
-        </Button>
+          label="Actualizar lista"
+        />
       ) : null}
       {Option.isSome(after) ? <FirstConnectionsPage /> : null}
     </section>

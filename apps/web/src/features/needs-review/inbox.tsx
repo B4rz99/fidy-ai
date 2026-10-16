@@ -17,19 +17,22 @@ export type InboxProps = Readonly<{
   move: (offset: number) => void;
 }>;
 export const Inbox = (props: InboxProps): JSX.Element => (
-  <aside className="min-w-0 border-b lg:border-r lg:border-b-0" aria-label="Bandeja de revisión">
-    <div className="flex items-center justify-between gap-3 border-b px-5 py-4 text-xs text-muted-foreground">
+  <aside
+    className="flex min-h-0 min-w-0 flex-col border-b lg:border-r lg:border-b-0"
+    aria-label="Bandeja de revisión"
+  >
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b px-5 py-4 text-xs text-muted-foreground">
       <h2>Vencen primero</h2>
       <span>
         {props.view.items.length} de {props.view.total} elementos
       </span>
     </div>
-    <div className="max-h-[45svh] overflow-auto lg:max-h-[calc(100svh-19rem)]">
+    <div className="max-h-[45svh] min-h-0 flex-1 overflow-auto lg:max-h-none">
       {props.view.items.map((item) => (
         <ReviewRow key={item.id} item={item} props={props} />
       ))}
     </div>
-    <div className="flex gap-2 p-3">
+    <div className="flex shrink-0 gap-2 p-3">
       <Button
         variant="outline"
         size="sm"
@@ -63,20 +66,14 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
         aria-label={`Seleccionar ${sources[item.source]} ${item.id}`}
         checked={props.checked.includes(item.id)}
         disabled={item.status !== "pending" && item.status !== "skipped"}
-        onCheckedChange={() => {
-          props.choose(item);
-          props.toggle(item);
-        }}
+        onCheckedChange={() => props.toggle(item)}
       />
     </div>
     <button
       type="button"
-      aria-label={`Abrir y seleccionar ${sources[item.source]}`}
-      className="min-h-32 w-full min-w-0 cursor-pointer py-5 pr-5 pl-14 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      onClick={() => {
-        props.choose(item);
-        if (item.status === "pending" || item.status === "skipped") props.toggle(item);
-      }}
+      aria-label={`Abrir ${sources[item.source]}`}
+      className="min-h-26 w-full min-w-0 cursor-pointer py-3 pr-5 pl-14 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      onClick={() => props.choose(item)}
       aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
     >
       <span className="grid min-w-0 gap-1.5">

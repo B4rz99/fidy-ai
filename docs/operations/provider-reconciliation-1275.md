@@ -296,6 +296,46 @@ inspection neither accepted terms nor sent an objection. The previously approved
 exception and the verified improvement opt-out remain unchanged. Preserve the notices privately and
 recheck the affected contract and support-purpose decisions before sharing a case with Kapso.
 
+## Public-document check and authorized contact — 2026-10-16
+
+Before contact, the operator required a public-document check and authorized enquiries only for
+information not established there. The relevant official legal, retention, deletion, account-change,
+API and support documents were checked per provider:
+[Kapso](../research/kapso-public-enquiry-check-1275.md),
+[Resend](../research/resend-public-enquiry-check-1275.md) and
+[Wompi](../research/wompi-public-enquiry-check-1275.md). The notes identify checked sources and limits;
+they do not claim exhaustive coverage of every page or substitute for qualified review. Broad
+questions already answered publicly were removed from the enquiries.
+
+The Wompi follow-up found a newer privacy publication than the historical 2019 PDF: the current page
+is labelled October 2026, with a linked policy effective 2026-08-26. General retention and complaint
+requirements are publicly documented; see the updated research rather than the earlier blanket
+unknown-period statement. The public rules do not establish this merchant's historical acceptance
+or its permitted transition from a personal merchant to the company.
+
+Restricted correspondence reference: `e9c86a23-1802-4181-803c-441f5202986a`, version 1. Exact
+sent text, business mailbox, time and immediate responses are retained outside Git, mode 0600 under
+the existing restricted directory. No User content, private identifiers, credentials, attachments,
+financial records or raw account evidence were shared. No deletion, migration, contract acceptance,
+objection, account closure or paid change was requested.
+
+| Provider | Actual contact outcome                                                                                                                                   | Outstanding scope                                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kapso    | Company-mail enquiry sent at 7:30 a.m. Colombia time; Gmail confirmation and Sent result verified. No provider acknowledgement observed.                 | Actual customer/version history, prior improvement use, audio route where metadata is unavailable, and erasure completion/residual evidence.                                |
+| Resend   | Enquiry sent to its published support channel at 7:31 a.m.; provider acknowledged receipt at 7:32 a.m.                                                   | Account acceptance evidence and exact early-removal intake/completion/exclusion details. Acknowledgement is not a substantive answer or erasure.                            |
+| Wompi    | Enquiry sent at 7:32 a.m. to the current policy's privacy address; remote server rejected it with `550 5.4.1 Recipient address rejected: Access denied`. | Contact failed; no provider acceptance. Need a working authorized route for actual merchant acceptance, company transition/continuity and bounded rights-process questions. |
+
+The Wompi Help-linked form requires identification, full name and telephone in addition to the
+approved business email. Those additional fields were not supplied or submitted. The merchant
+session now redirects to sign-in, so its authenticated chat could not be inspected. Use restored
+merchant access or separately authorize the exact form data; do not invent required fields or
+claim that an email in Sent reached Wompi. No other mailbox was guessed as a fallback.
+
+These are information enquiries, not a completed provider-rights rehearsal. Acknowledgement, a
+published period or passing local tests cannot settle provider residual-copy erasure. Review actual
+responses when available, record their applicability and authorize the exact disposable scope before
+execution. Public disclosure bytes and accepted historical evidence remain unchanged.
+
 ## Flow reconciliation
 
 The Cloudflare, Kapso, Resend, Wompi and support-mailbox fields specifically observed above are **partially verified**; other

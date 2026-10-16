@@ -87,68 +87,46 @@ instruction/preference, including how prospective withdrawal is recorded. Indefi
 acceptance is not training authorization. Do not change the account preference or claim a new
 conflict resolved without inspecting the actual accepted/configured instruction.
 
-## Account-specific enquiries awaiting authorization
+## Public-document check and authorized enquiries — 2026-10-16
 
-Prepared on 2026-10-16; **none has been sent**. Each enquiry is limited to the company name,
-business mailbox and the stated service/team label. No attachments, credentials, private evidence,
-User identifiers, messages, payment records or deletion instructions are included. Send only after
-the operator separately authorizes the named destination and scope, as required by #1275. Retain the
-actual sent text, acknowledgement and substantive response privately; sending these enquiries alone
-does not complete a rights rehearsal.
+The operator authorized provider contact **only after checking official documentation and limiting
+questions to information not established publicly**. The scoped checks record sources, public
+answers, access limitations and remaining questions:
 
-### Kapso
+- [Kapso check](../research/kapso-public-enquiry-check-1275.md): published incorporation,
+  prospective opt-out, support subprocessors, retention and contact-erasure endpoint/identifiers
+  already answer the broad draft. Remaining scope is actual customer/version history, earlier
+  improvement use, unavailable route evidence and erasure completion/residual-copy details.
+- [Resend check](../research/resend-public-enquiry-check-1275.md): DPA execution/download,
+  US storage, standard Sending/Receiving retention, backups and published contacts are answered.
+  Remaining scope is actual account acceptance evidence and minimum early-removal fields and
+  per-class completion/residual reporting for one disposable email.
+- [Wompi check](../research/wompi-public-enquiry-check-1275.md): the newer policy supplies general
+  retention, complaint requirements/deadlines and a current privacy channel. Existing merchant
+  identification is not editable. Remaining scope is this merchant's historical acceptance record,
+  supported transition/continuity to FIDY S.A.S., a no-charge sandbox rights procedure and
+  route-specific recipients/technical residuals not settled by the general documents.
 
-Destination: `legal@kap.so`, as supplied by the delivered account notices. From the approved company
-mailbox. Subject: `Fidy account: applicable terms and bounded rights rehearsal`.
+These checks do not prove that no other public page could answer a question. They establish a
+bounded, documented search before the authorized contact; a later public answer should replace an
+unnecessary support question. They do not authorize deletion or legal/account changes.
 
-> FIDY S.A.S. is reconciling the Kapso project named fidy, currently on Free. Please confirm how to
-> obtain the applicable account agreement/DPA version and acceptance record, including the September
-> terms update and October support-subprocessor notice. Which transcription provider and locations
-> apply to this project's enabled audio route, and when can the disclosed support subprocessors
-> receive project content? We disabled model/product improvement; please explain its prospective
-> effect and any residual treatment of earlier content. We retain the Free indefinite-history
-> configuration. What authenticated route and minimum fields permit a disposable contact deletion
-> rehearsal, and how are completion, transcripts, media, logs, backups and subprocessor exclusions
-> reported? This is a capability enquiry, not an objection, agreement acceptance, deletion request,
-> account closure, plan change or authorization to access User content.
+The enquiries use the approved company mailbox and only the company name and service/project label.
+No User identifiers, message IDs, financial records, attachments or restricted evidence are included.
+Kapso's legal address is published in its Trust hub; Resend's support address is explicitly published
+for early removal and rights requests. Wompi's current privacy-policy address is used for a limited
+informational enquiry, requesting routing where needed. The merchant-linked support form requires
+additional identification and telephone fields, so it was not submitted using unapproved extra data.
+The previous broad drafts above are preparation examples, not the text to send after this check.
+Actual submission status and restricted correspondence references are in the
+[reconciliation](provider-reconciliation-1275.md).
 
-### Resend
-
-Destination: `privacy@resend.com`, supplied by Exhibit B of the account-accessible DPA. From the
-approved company mailbox. Subject: `Fidy team: agreement evidence and email rights rehearsal`.
-
-> FIDY S.A.S. is reviewing the Resend team named fidyapp. Please explain how to obtain its actual
-> customer agreement/DPA acceptance record and contracting-customer details. What authenticated
-> route and minimum identifiers permit a narrowly scoped rehearsal using our own disposable test
-> email? Please distinguish sending/receiving content, delivery events, logs, backups and relevant
-> subprocessors, including storage/support locations and completion versus retained copies. We need
-> the applicable retention periods, exceptions and rights/incident contacts. This enquiry requests
-> information only; it authorizes no deletion, account closure, configuration or agreement change,
-> paid upgrade or access to User messages.
-
-### Wompi
-
-Destination: the [authenticated merchant support form](https://soporte.wompi.co/hc/es-419/requests/new?ticket_form_id=360000591473)
-linked by the merchant Help menu. Use only the approved business email and the merchant display
-name `fidy`; inspect any additional required fields before submission. Subject:
-`Comercio fidy: titular contractual y procedimiento de protección de datos`.
-
-> FIDY S.A.S. está revisando la documentación del comercio llamado fidy. La pantalla de resumen
-> muestra a su operador como persona natural. ¿Cómo podemos obtener el contrato aplicable, su versión
-> y constancia de aceptación, y confirmar el procedimiento para que la relación contractual
-> corresponda a la sociedad? Esta consulta no solicita todavía cambiar el titular. Necesitamos
-> conocer el canal autenticado y los identificadores mínimos para una prueba acotada de atención de
-> derechos con datos ficticios, sin crear ni reversar un cobro. Por favor indiquen qué información
-> puede eliminarse y qué registros de pagos, fraude, contabilidad, soporte y respaldos se conservan,
-> con sus plazos, motivos, ubicaciones y destinatarios aplicables. Esta consulta no autoriza pagos,
-> devoluciones, eliminación, cambios de cuenta o plan, ni aceptación de contratos.
-
-If a channel requests additional sensitive identifiers or attachments, prepare that exact scope
-for separate authorization rather than copying the evidence register. A company migration or new
-agreement remains a separate decision. For the Resend rehearsal, the operational test email already
-sent on 2026-10-16 is a candidate disposable fixture; its exact provider ID is retained privately.
-It is not authorized for deletion by this draft, and the release-failure email is retained as
-operational evidence. Do not purge the mailbox or any provider account to obtain a passing result.
+A provider may require further verification. Obtain authorization for the exact additional sensitive
+fields before sharing them; no enquiry grants access to User content. The operational test email
+already sent on 2026-10-16 is a candidate disposable fixture for Resend; its provider ID remains
+private and no deletion instruction has been sent. Retain the release-failure email as operational
+evidence. A sent enquiry, acknowledgement or process description is not completed erasure or a
+completed provider-boundary rehearsal.
 
 ## Record and deliver the result
 

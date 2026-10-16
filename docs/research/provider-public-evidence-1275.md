@@ -1,10 +1,19 @@
 # Provider public evidence for #1275
 
-Observed: **2026-10-15**. Research version: **1**. Scope: official public sources for the services in
+Observed initially: **2026-10-15**. Research version: **2**, supplemented on **2026-10-16**. Scope: official public sources for the services in
 [the provider inventory](../operations/provider-inventory.md). This is source research, not qualified
-legal review, actual-account inspection, contract acceptance, or a deletion rehearsal. No provider
-was contacted and no data was deleted. Published versions below are not evidence of the versions
-accepted by FIDY S.A.S.
+legal review, actual-account inspection, contract acceptance, or a deletion rehearsal. The initial research involved no provider contact or deletion. The later public-document checks and
+authorized enquiry status are recorded in the linked reconciliation. Published versions below are
+not evidence of the versions accepted by FIDY S.A.S.
+
+## Public-document check before provider enquiries — 2026-10-16
+
+The follow-up checks distinguish already published answers from account-specific questions:
+[Kapso](kapso-public-enquiry-check-1275.md), [Resend](resend-public-enquiry-check-1275.md) and
+[Wompi](wompi-public-enquiry-check-1275.md). Each lists the official sources checked, access limits
+and narrowed enquiry. These are relevant-document searches, not a claim to have read every page on
+each provider's site. Contract incorporation, general retention, documented endpoints and published
+contacts should be taken from those sources rather than unnecessarily requested again from support.
 
 ## Cloudflare
 
@@ -120,15 +129,17 @@ rules **September 2026**. Retrieve the actual merchant's accepted document and p
 the public page is not an acceptance record. The [Colombia privacy hub](https://wompi.co/es/co/tratamiento-datos-personales)
 separately exposes supplier authorizations: those must not be mistaken for Fidy's merchant agreement.
 
-The official [privacy policy PDF](https://wompi.com/assets/downloadble/Politica-de-privacidad.pdf)
-identifies **WOMPI S.A.S., Medellín, Colombia** on page 1 and says approved/effective **2019-03-06** on
-page 10. Its availability today does not prove it is the merchant's current accepted policy. It
-describes Wompi as responsible for its databases, allows national/international transfers and
-transmissions, provides access/correction/suppression procedures, and excludes suppression where
-legal/contractual duties require continued retention. It publishes **ayuda@wompi.co** and its web
-request channel. No fixed all-record deletion period was established by this research. Obtain
-purpose-specific classification and retention evidence for tokenization, billing, fraud and legally
-retained transaction records; do not label all Wompi flows processor transmissions or domestic storage.
+The older [2019 privacy PDF](https://wompi.com/assets/downloadble/Politica-de-privacidad.pdf) was
+available during the initial research. It remains a historical observation, **not the current
+publication source**. The [current privacy page](https://www.wompi.co/es/co/politica-de-privacidad)
+is labelled October 2026 and links a [20-page policy](https://www.wompi.co/assets/downloadble/politica-de-privacidad-wompi.pdf)
+with a printed effective date of 2026-08-26. It states ten-year general retention for clients after
+the relationship ends and for payers after the last transaction or relationship ends, subject to its
+category-specific terms. It publishes suppression exceptions, complaint requirements and deadlines.
+These are published rules, not the merchant's accepted-version or actual deletion evidence. The
+[detailed check](wompi-public-enquiry-check-1275.md) records page references, current privacy contact,
+merchant-change guidance and remaining account-specific questions. No current source establishes
+all Wompi flows as domestic storage or processing solely on Fidy's instructions.
 
 For an authorized provider request, first reconcile the exact merchant/environment and existing
 Wompi transaction/payment-source references, then ask support what minimal verified identifiers and

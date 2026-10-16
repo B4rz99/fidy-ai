@@ -65,9 +65,13 @@ the authentication registry rather than browser persistence.
 - Local renewal evidence includes refusal of altered/cross-User proof, freshness lost before commit,
   rollback on ignored Audit or cutoff removal, and append-only legal history. Five built-browser
   Privacy journeys passed, including renewal, reload and access to Upgrade.
-- Live renewal for the approved `obarboza@fidyapp.com` QA account and the Sandbox payment/cancellation
-  journey await deployment. PR #1331 fixed Upgrade's false sign-in message and merged; deployment
-  38807993540 refused the previous release's retained zero-traffic candidates before uploading code.
+- Live renewal passed on 2026-10-15 at revision `4dfc547ab40e47b50c00fde800d3236fe550239f`
+  after [deployment recovery and release](https://github.com/B4rz99/fidy-ai/actions/runs/38815398101).
+  Returning login preserved the same withdrawal receipt. Explicit renewal for the approved QA
+  account returned active authorization and remained active after reload. Before renewal, Upgrade
+  correctly explained withdrawn authorization; afterward it allowed Sandbox enrollment. The approved
+  synthetic weekly payment then created a persisted paid period. Cancellation is tracked by
+  the [Subscription feature](../../../../server/src/core/subscription/FEATURE.md).
 
 - Live completion of exact pre-withdrawal queued work, independent category opt-outs and provider
   delivery need their native owner fixtures. Category-specific WhatsApp opt-ins are separate from

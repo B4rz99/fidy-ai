@@ -5,18 +5,18 @@ derived for each decision from the original TrialPeriod, a settled paid period, 
 three-day renewal grace. It is never a separately stored entitlement. PaymentSource approval
 alone does not grant Pro. Quota exhaustion is distinct from a Paywall.
 
-| Functionality                               | Local verification                                                                                                                                            | Production verification, 2026-10-15                                                                 |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Offers, upgrade guidance and billing status | Complete immutable weekly/monthly/yearly COP offers; bounded same-User history; expired/revoked/under-scoped credentials                                      | Anonymous reads return 401 and `no-store`; signed-in offers/status return 200 (2026-10-15)          |
-| Trial and AccessTier                        | Half-open trial/paid/grace boundaries, User isolation, immutable original trial, refund adjustments and independent trial preservation                        | Boundary manipulation not induced on real accounts                                                  |
-| Browser-only payment enrollment             | Origin, fresh session, Consent, terms, admission, expiry, duplicate submissions and ambiguous provider outcomes; PAT/agent exclusion                          | Origin/session refusals; fresh provider-only account prepared and submitted synthetic card payment  |
-| Card, Nequi and DaviPlata                   | Controlled provider responses; first card and DaviPlata browser → public Ingress → private Core/local D1 journeys; reused-source enrollment                   | Actual provider protocol remains separate; see proof runbooks below                                 |
-| Collection and settlement                   | D1 outbox, Queue redelivery, Workflow claims, signed callback verification, matching provider lookup, concurrency and one paid period per verified success    | Deployed Queue/Workflow and authenticated lookup verified synthetic card decline; zero paid periods |
-| Renewals                                    | Weekly/monthly/yearly calendar anchors, month-end/leap-day clamps, frozen Money/Price, bounded 24/48-hour retries and three-day grace                         | Scheduled deployed collection not exercised                                                         |
-| Cancellation                                | Live write authority, atomic Audit, durable stop, queued-charge fencing, preserved paid history, bounded DaviPlata source-void reconciliation                 | No existing subscription cancelled                                                                  |
-| Price changes                               | Immediate durable notice and frozen existing attempts; new Price applies to newly admitted work                                                               | Live billing-email delivery not exercised                                                           |
-| Refunds                                     | Separate support authority, exact Money, competing reservations, single financial submission, reconciliation, immutable charge history and trial preservation | Real-money execution deliberately excluded                                                          |
-| Free allowances                             | Shared admission/replay, exhaustion and tier-aware accounting; Free remains distinct from resource protection                                                 | Quota exhaustion not deliberately induced                                                           |
+| Functionality                               | Local verification                                                                                                                                                     | Production verification, 2026-10-15                                                                |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Offers, upgrade guidance and billing status | Complete immutable weekly/monthly/yearly COP offers; bounded same-User history; expired/revoked/under-scoped credentials                                               | Anonymous reads return 401 and `no-store`; signed-in offers/status return 200 (2026-10-15)         |
+| Trial and AccessTier                        | Half-open trial/paid/grace boundaries, User isolation, immutable original trial, refund adjustments and independent trial preservation                                 | Boundary manipulation not induced on real accounts                                                 |
+| Browser-only payment enrollment             | Origin, fresh session, Consent, terms, admission, expiry, duplicate submissions and ambiguous provider outcomes; PAT/agent exclusion                                   | Origin/session refusals; fresh provider-only account prepared and submitted synthetic card payment |
+| Card, Nequi and DaviPlata                   | Controlled provider responses; first card and DaviPlata browser → public Ingress → private Core/local D1 journeys; reused-source enrollment                            | Actual provider protocol remains separate; see proof runbooks below                                |
+| Collection and settlement                   | D1 outbox, Queue redelivery, Workflow claims, signed callback verification, matching provider lookup, concurrency and one paid period per verified success             | Synthetic card decline preserved zero paid periods; approved weekly card created one paid period   |
+| Renewals                                    | Weekly/monthly/yearly calendar anchors, month-end/leap-day clamps, frozen Money/Price, bounded 24/48-hour retries and three-day grace                                  | Scheduled deployed collection not exercised                                                        |
+| Cancellation                                | Live write authority, atomic Audit, durable stop, queued-charge fencing, preserved paid history, bounded DaviPlata source-void reconciliation; HTTP → User coordinator | Sandbox attempt exposed a missing HTTP dispatcher; live cancellation awaits its deployment         |
+| Price changes                               | Immediate durable notice and frozen existing attempts; new Price applies to newly admitted work                                                                        | Live billing-email delivery not exercised                                                          |
+| Refunds                                     | Separate support authority, exact Money, competing reservations, single financial submission, reconciliation, immutable charge history and trial preservation          | Real-money execution deliberately excluded                                                         |
+| Free allowances                             | Shared admission/replay, exhaustion and tier-aware accounting; Free remains distinct from resource protection                                                          | Quota exhaustion not deliberately induced                                                          |
 
 ## Evidence and reruns
 
@@ -95,10 +95,11 @@ Wompi’s refusal. Submission trace: `e03d240a14de5e15f46412524daa73c7`. No real
 This exposed two remaining retry gaps: terminal browser submission disables all offer/method choices
 without a retry action, and preparation always reuses a retained card source. A failed first payment
 has no paid Subscription eligible for canonical cancellation, so that path cannot release the source
-for a different card. Successful deployed card payment and cancellation remain unverified.
+for a different card. A successful deployed card payment was subsequently verified on the other
+approved QA account; cancellation remains pending below.
 
 Remaining safe live work: close declined-source replacement/retry; complete an approved synthetic
-deployed payment and cancellation; complete deployed DaviPlata browser/CORS checks;
+deployed cancellation; complete deployed DaviPlata browser/CORS checks;
 and isolated deployed Queue/Workflow/callback recovery evidence before
 claiming the entire payment lifecycle is verified. Real charges, live refunds, recurring debit
 authorization and changing existing subscriptions are excluded from this audit.
@@ -107,10 +108,25 @@ The subsequent Upgrade regression checks cookie-only Processing Consent before m
 Subscription queries or enrollment controls. A withdrawn User sees the withdrawal and a Privacy
 link instead of a sign-in prompt, including after reload; no Subscription/payment requests are
 sent. A failed Consent check stays closed and can be retried; a browser without a session still
-gets sign-in guidance. Production payment testing on the second QA account is blocked by its
-withdrawn Consent. Explicit Processing Consent renewal is implemented in Privacy and verified locally;
-returning login and repeated signup still preserve withdrawal. Live renewal and the approved Sandbox
-payment/cancellation await deployment recovery. No historical withdrawal or grant was edited to unblock testing.
+gets sign-in guidance. The deployed withdrawn-Consent message and explicit renewal passed on
+2026-10-15 at revision `4dfc547ab40e47b50c00fde800d3236fe550239f`, following
+[successful deployment](https://github.com/B4rz99/fidy-ai/actions/runs/38815398101).
+Returning login preserved withdrawal; explicit approved renewal returned active authorization,
+survived reload and allowed enrollment. No historical withdrawal or grant was edited to unblock testing.
+
+The approved deployed weekly card payment then passed with a Sandbox-only public key and Wompi's
+synthetic approval card. Sandbox tokenization returned 201 and Fidy submission returned 200. The
+browser reported an active Subscription; a subsequent canonical status read independently showed
+a succeeded attempt and persisted weekly COP 9,900 paid period through `2026-10-22T23:14:33.000Z`.
+This exercises the deployed first-payment path, rather than inferring settlement from the existing
+TrialPeriod. No real money was charged. Cancellation and temporary QA grant cleanup remain pending.
+
+The live cancellation call returned canonical `unavailable` (trace
+`1132b246dd9f70d2d484d7393b9afd99`); an indexed read confirmed no cancellation committed.
+The operation was installed in the canonical mutation registry but absent from Core's HTTP
+dispatcher. The added HTTP → real User coordinator/local D1 regression returned 503 without the
+dispatcher branch and 200 with it, retaining the original paid-through value. The focused renewal
+and Subscription query suites passed 100 checks, including write-scoped PAT cancellation.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

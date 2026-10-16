@@ -132,6 +132,12 @@ after an approved case. A restored D1 remains fenced until independent case repl
 native dispositions and the operator release predicate succeeds. The maintenance escape path reads
 only purpose-qualified erasure controls, never ordinary restored User content.
 
+For first-release bootstrap, native POSTs to the dedicated erasure operator path may preserve
+candidate version-routing metadata when carrying an Access assertion. This selects a staged Core;
+it does not authenticate the caller. Core still verifies the dedicated operator authority before
+every action, including Initialize. Browser-Origin requests remain refused, and ordinary paths or
+requests without an assertion cannot borrow these overrides without the existing smoke proof.
+
 The receipt is operator-accessible after User credentials disappear and names completed, retained
 and pending scope. External acceptance, unresolved Kapso Free retention/capability, lawful holds and
 backup windows remain visible until actually resolved. Completed case controls have separate reviewed

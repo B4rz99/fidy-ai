@@ -518,13 +518,19 @@ const preservesCoreQuery = (path: string): boolean =>
   dedicatedBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
-const forwardSmokeVersionOverride = (
+const forwardCandidateVersionOverride = (
   request: Request,
   environment: PublicEnvironment,
   headers: Headers
 ): void => {
   headers.delete(smokeVersionHeader);
-  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return;
+  const operatorRoute =
+    new URL(request.url).pathname === erasureSupportPath &&
+    request.method === "POST" &&
+    (request.headers.get("cf-access-jwt-assertion") ?? "") !== "";
+  if (!operatorRoute && !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
+    return;
+  }
   const override = request.headers.get(smokeVersionHeader);
   if (override !== null) headers.set(smokeVersionHeader, override);
 };
@@ -537,7 +543,7 @@ const coreRequest = (
     const headers = forwardedHeaders(request, path);
     const binding = request.headers.get(browserSessionBindingHeader);
     if (binding !== null) headers.set(browserSessionBindingHeader, binding);
-    forwardSmokeVersionOverride(request, environment, headers);
+    forwardCandidateVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");
     if (

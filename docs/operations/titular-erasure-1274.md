@@ -196,8 +196,9 @@ live outside the restored D1, in the independent private erasure bucket. Every n
 unit, including D1 Sessions, atomically asserts the external generation against D1. Missing required
 registry configuration or a mismatch refuses normal data reads and writes across entrypoints.
 
-For the first feature release, keep ordinary traffic isolated while applying migrations and wiring
-both private registry bindings. Before the first erasure approval, the designated operator sends
+For the first feature release, keep the new guarded candidate isolated from ordinary traffic while
+applying migrations and wiring both private registry bindings. The normal Production workflow
+stages it at zero percent beside the previously working release. Before the first erasure approval, the designated operator sends
 `{ "action": "Initialize" }` through the dedicated Access application. This one-time bootstrap
 requires an initial native generation, no approved case and an empty registry (or an identical
 initial checkpoint). Ordinary reads never create a missing checkpoint. After any approved case,
@@ -205,8 +206,36 @@ initialization refuses; a lost registry must be recovered independently rather t
 Local development performs the equivalent empty-registry check as an explicit Alchemy startup action
 before binding the required guard to its workers. This is confined to the local stack; it refuses
 missing checkpoints for approved cases. Production bootstrap continues to require operator Access.
+Initialize must reach that exact staged ingress/Core pair before the full smoke gate: the previous
+release does not implement the new operator endpoint. Use the current deployment's candidate
+version IDs in `Cloudflare-Workers-Version-Overrides` on the native POST, alongside the dedicated
+human Access assertion obtained with:
+
+```sh
+cloudflared access login --quiet https://api.fidyapp.com/internal/titular-erasure
+```
+
+Prepare the operator call before starting the
+workflow; candidate routing is temporary and failed smoke cleanup removes it. Ingress preserves this
+routing metadata only on the operator POST carrying an assertion; Core still verifies signature,
+issuer, distinct audience, exact operator, human identity and bounded lifetime. A routing header
+or unverified assertion grants no data authority. Never print or put the assertion in a URL,
+command argument, checked-in file or CI log; use a protected temporary file or credential store and
+an HTTP client that reads it without following redirects. Remove temporary credential files afterward.
+Do not bootstrap by writing the bucket or D1 directly. Recheck that the independent checkpoint and
+native initial generation agree, then let both exact-pair and normal-traffic smoke gates pass.
+
 Confirm ordinary guarded access before releasing traffic. This operator step is required release
 work, not evidence that this checkout has been deployed.
+
+On 16-10-2026 UTC, releases `0bd4d7d668` and `db0e731ad9` stopped before promotion at smoke
+admission. Read-only control-plane checks found native generation `initial`, no approved erasure
+case, and no `recovery/generation` object in the newly provisioned private bucket. The guard was
+correctly refusing uninitialized access. A separate ingress regression exposed why the operator
+could not bootstrap the candidate: its routing override was stripped before the private Core.
+The native journey now checks initialization through ingress and still refuses wrong account/audience,
+machine, expired, overlong and forged assertions before continuing the owned restore exercise. This records diagnosis and local verification;
+it does not claim successful production initialization or release.
 
 Before any restore, keep public traffic blocked and preserve the independent erasure bucket. Restore
 D1, then apply the current migrations using the normal infrastructure release procedure before

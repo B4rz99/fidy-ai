@@ -19,7 +19,7 @@
     "test:browser:cli": "CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.cli.config.ts"
   },
   "dependencies": {
-    "@base-ui/react": "1.8.0",
+    "@base-ui/react": "1.9.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/react": "0.5.0",
     "@effect/atom-react": "4.0.2",

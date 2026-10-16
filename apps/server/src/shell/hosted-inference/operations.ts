@@ -13,6 +13,7 @@ import {
   verifyInvalidOutputRecovery,
   verifyMutationMoney,
   verifyMutationTime,
+  verifyRecurringLifecycle,
   verifyStructuredColombianSpanish,
   verifyTransactionCorrection,
   verifyTransactionDeletion,
@@ -57,6 +58,7 @@ export const verifyHostedInferenceConformanceChecks = (
     Effect.andThen(check("canonical_correction", verifyTransactionCorrection(inference))),
     Effect.andThen(check("canonical_deletion", verifyTransactionDeletion(inference))),
     Effect.andThen(check("canonical_date_only", verifyDateOnlyMutation(inference))),
+    Effect.andThen(check("canonical_recurring_lifecycle", verifyRecurringLifecycle(inference))),
     Effect.andThen(check("invalid_output_recovery", verifyInvalidOutputRecovery(inference))),
     Effect.andThen(check("structured_es_co", verifyStructuredColombianSpanish(inference)))
   );

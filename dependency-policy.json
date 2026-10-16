@@ -32,6 +32,12 @@
     },
     {
       "name": "typescript",
+      "manifest": "tools/astro/package.json",
+      "reason": "AstroCheck from @astrojs/language-server 2.17.2 rejects TypeScript 7.0.2 before checking any files because findConfigFile and sys are absent. Reproduced with the installed workspace compiler on 2026-10-16 UTC; the isolated TypeScript 6.0.3 checker remains operational. TypeScript 7.0 intentionally ships no programmatic API (https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/); revisit when Astro supports its replacement API, then rerun the site checker and repository typecheck before updating.",
+      "until": "2026-12-20T00:00:00Z"
+    },
+    {
+      "name": "typescript",
       "manifest": "tools/depcruise/package.json",
       "reason": "With TypeScript 7.0.2, dependency-cruiser silently cruises zero modules and the repo's tripwire exits because no architecture rules ran. Revisit after TypeScript 7.1 ships the replacement compiler API and dependency-cruiser adopts it.",
       "until": "2026-12-20T00:00:00Z"

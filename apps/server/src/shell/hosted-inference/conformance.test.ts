@@ -20,9 +20,10 @@ const result = (
 const conformanceStub = (
   firstText: string,
   amount: number | string = representativeAmount,
-  times: Readonly<{ occurredAt: string; dateOnly: string }> = {
+  times: Readonly<{ occurredAt: string; dateOnly: string; recurringDate: string }> = {
     occurredAt: "2026-09-22T12:00:00Z",
     dateOnly: "2026-09-21T05:00:00Z",
+    recurringDate: "2026-09-22",
   }
 ): Effect.Effect<HostedInferenceService> =>
   Effect.gen(function* () {
@@ -46,6 +47,18 @@ const conformanceStub = (
             payload: {
               expectedRevision: 2,
               changes: { money: { amount: "2345", currency: "COP" } },
+            },
+          };
+        case "recurringPlans.applyRecurringEdit":
+          return {
+            payload: {
+              expectedRevision: 2,
+              edit: {
+                kind: "lifecycle",
+                planId: "00000000-0000-4000-8000-000000000002",
+                date: times.recurringDate,
+                action: "stop",
+              },
             },
           };
         case "transactions.deleteTransaction":
@@ -125,6 +138,7 @@ it.effect("rejects local wall time when the canonical mutation needs the UTC ins
     const inference = yield* conformanceStub("inválido", representativeAmount, {
       occurredAt: "2026-09-22T07:00:00Z",
       dateOnly: "2026-09-21T05:00:00Z",
+      recurringDate: "2026-09-22",
     });
     assert.deepStrictEqual(
       yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
@@ -150,10 +164,27 @@ it.effect("rejects UTC midnight and an invented daylight-saving offset for a dat
       const inference = yield* conformanceStub("inválido", representativeAmount, {
         occurredAt: "2026-09-22T12:00:00Z",
         dateOnly,
+        recurringDate: "2026-09-22",
       });
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
         Exit.fail({ check: "canonical_date_only", category: "InvalidOutput" })
+      );
+    }
+  })
+);
+
+it.effect("rejects timestamps and a different calendar day for recurring lifecycle changes", () =>
+  Effect.gen(function* () {
+    for (const recurringDate of ["2026-09-22T05:00:00Z", "2026-09-23"]) {
+      const inference = yield* conformanceStub("inválido", representativeAmount, {
+        occurredAt: "2026-09-22T12:00:00Z",
+        dateOnly: "2026-09-21T05:00:00Z",
+        recurringDate,
+      });
+      assert.deepStrictEqual(
+        yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+        Exit.fail({ check: "canonical_recurring_lifecycle", category: "InvalidOutput" })
       );
     }
   })

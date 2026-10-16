@@ -109,7 +109,7 @@ a generic host challenge containing operation JSON and a long command. The follo
 browser lifecycle reviews a host-owned plan name/action/date and explicit approval button while
 retaining exact-input, same-User/channel/session, expiry and one-use authority. Model prose cannot
 produce approval metadata. Direct and recovered browser proposals are covered locally; this UX
-fix still awaits release and its live write rerun. Other operation families retain their existing
+fix is now released; the live write rerun is tracked separately below. Other operation families retain their existing
 confirmation presentation.
 
 The follow-up was merged in [PR #1349](https://github.com/B4rz99/fidy-ai/pull/1349) as
@@ -118,8 +118,33 @@ release stopped before promotion because the separately introduced Titular-erasu
 registry had not received its first operator initialization. Read-only checks confirmed an initial
 native generation, no approved case and a missing external checkpoint. This is independent of AI
 quota. The ingress bootstrap-routing fix and operator procedure are recorded in the
-[erasure runbook](../../../../../docs/operations/titular-erasure-1274.md); no deployment success or
-live lifecycle approval is inferred from the local passing checks.
+[erasure runbook](../../../../../docs/operations/titular-erasure-1274.md). The protected operator
+bootstrap returned 204 on 16-10-2026. [Production run 38899280216](https://github.com/B4rz99/fidy-ai/actions/runs/38899280216)
+passed both candidate/intermediate pairings and normal-traffic smoke; live health reported
+`available` at exact revision `0f2df68a9233094e40223fab15d167b671cced24`. The overnight Fidy session was recovered through ordinary existing-account sign-in; a
+reloaded workspace retained the expected fictional audit plans. The signed-in lifecycle approval is
+a separate live check; release success alone does not establish it.
+
+### Hosted lifecycle schema follow-up, 16-10-2026
+
+After the release above, a production greeting and a read of the ASOCIACION plan each produced one
+assistant response. The read correctly reported October's COP 2 expectation as unconfirmed. A stop
+request failed before canonical execution: both model rounds rejected tool arguments. A later
+attempt asked an informal question instead of preparing the host review. No lifecycle write ran.
+
+A synthetic live provider probe reproduced a timestamp where the command requires a calendar day.
+The date and month regexes lacked the Unicode flag required by Effect's JSON Schema exporter;
+adding it publishes their patterns without changing accepted runtime values. One probe then passed,
+but the newly added strict lifecycle conformance case caught a second failure: omitted `kind` and
+`date`, with an invented `stopDate` field. Gemma's tool template omits union branches. The adapter now
+derives compact descriptions of those branches from the canonical schema, retaining canonical
+decoding and the existing confirmation authority. Local tests cover the visible discriminants,
+date/month patterns, rejected timestamps, and complete-catalog request capacity.
+
+The expanded deterministic hosted-inference suite passes 47 tests. The strict live rerun then stopped
+at `canonical_query / ProviderQuotaExceeded`; it did not reach the corrected lifecycle case. The
+provider translation fix and natural-language lifecycle approval therefore still require live
+verification after quota is available. Quota exhaustion is not recorded as a passing model check.
 
 ### Limits and remaining evidence
 

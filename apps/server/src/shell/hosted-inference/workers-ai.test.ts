@@ -4,6 +4,7 @@ import { Brand, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { operationCatalog } from "~/shell/api";
+import { RecurringDate, RecurringMonth } from "~/core/recurring-plans/contract";
 import { ToolCallId } from "~/core/agent/contract";
 import {
   HostedInferenceError,
@@ -298,6 +299,51 @@ it.effect("fits every canonical tool in one request with self-contained schemas"
     ]);
   })
 );
+
+it("publishes recurring calendar-day constraints without accepting timestamps", () => {
+  expect(workersAiProviderSchema(RecurringDate)).toMatchObject({
+    type: "string",
+    pattern: "^20\\d{2}-\\d{2}-\\d{2}$",
+  });
+  expect(Schema.is(RecurringDate)("2026-10-16")).toBe(true);
+  expect(Schema.is(RecurringDate)("2026-10-16T05:00:00Z")).toBe(false);
+  expect(Schema.is(RecurringDate)("2026-02-30")).toBe(false);
+});
+
+it("publishes recurring month constraints for provider queries", () => {
+  expect(workersAiProviderSchema(RecurringMonth)).toMatchObject({
+    type: "string",
+    pattern: "^20\\d{2}-(0[1-9]|1[0-2])$",
+  });
+});
+
+it("keeps union discriminants and calendar constraints visible to the tool template", () => {
+  const schema = workersAiProviderSchema(
+    Schema.Struct({
+      edit: Schema.Union([
+        Schema.Struct({ kind: Schema.Literal("lifecycle"), date: RecurringDate }),
+        Schema.Struct({ kind: Schema.Literal("rename"), name: Schema.String }),
+      ]),
+    })
+  );
+  expect(schema).toMatchObject({
+    properties: {
+      edit: {
+        description:
+          'Required shape: ({kind:"lifecycle",date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/} | {kind:"rename",name:string})',
+        anyOf: [
+          {
+            properties: {
+              kind: { enum: ["lifecycle"] },
+              date: { pattern: "^20\\d{2}-\\d{2}-\\d{2}$" },
+            },
+          },
+          { properties: { kind: { enum: ["rename"] } } },
+        ],
+      },
+    },
+  });
+});
 
 it("preserves nonempty homogeneous array bounds in provider schemas", () => {
   const schema = workersAiProviderSchema(

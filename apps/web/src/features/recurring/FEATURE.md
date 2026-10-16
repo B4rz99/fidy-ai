@@ -179,8 +179,18 @@ canonical HTTP 429, and publishes seconds until the next UTC day. Recurrentes sh
 reset from the general ResourceLimited tag, which also covers temporary request pressure. The 16-check recurring D1 suite covers exhausted and prior-day
 budgets, unaffected foreign Users, unchanged Audit counts and genuine storage failures remaining 503. Four built-browser recovery journeys cover unavailable, malformed, daily-limited and temporary-pressure reads;
 39 transport checks include immediate return of long Retry-After refusals without automatic replay.
-This follow-up is locally verified; production deployment and the exact exhausted-account rerun
-remain pending.
+The first follow-up merged in [PR #1355](https://github.com/B4rz99/fidy-ai/pull/1355) and deployed
+at `db48c4146f7a363c84afcda9ebfe88323e9645d7` through
+[production run 38918190752](https://github.com/B4rz99/fidy-ai/actions/runs/38918190752).
+Public health was available at that exact revision, but the exhausted account still received 503
+for both reads. A scoped read-only diagnostic confirmed the canonical count remained 256 with
+zero rows written. The production erasure-recovery database wrapper was replacing native batch
+refusals with a generic error before either owner could classify them. Running the budget
+regression through that wrapper reproduced the live 503-versus-429 defect. The wrapper follow-up
+preserves native D1 failures for the operation owner while retaining the generation assertion as
+the first statement in the same atomic unit. Unrelated storage failures remain sanitized 503;
+missing or mismatched recovery generations still refuse reads, writes and native Sessions.
+The corrected wrapper is locally verified; its deployment and live rerun remain pending.
 
 ### Limits and remaining evidence
 

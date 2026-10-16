@@ -1,7 +1,8 @@
+import { withErasureRecovery } from "../erasure/runtime";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
 import type { CanonicalWork } from "../canonical-operations/contract";
 import type { QueryCaller } from "../canonical-work/operations";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { UserId } from "../../src/core/identity/contract";
@@ -18,6 +19,7 @@ import {
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const databases = isolatedTestDatabases();
+const recoveryStorage = isolatedTestStorage();
 const bearer = (index: number): string => String(index + 1).repeat(43);
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
@@ -97,6 +99,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     return db;
   });
 afterAll(() => databases.dispose());
+afterAll(() => recoveryStorage.dispose());
 
 const transactionCount = (
   db: D1Database,
@@ -923,6 +926,16 @@ const readBudgetQuery = (
     });
     return Option.getOrThrow(result);
   });
+const recoveryDatabase = (db: D1Database): Effect.Effect<D1Database, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const { bucket } = yield* Effect.tryPromise(() => recoveryStorage.acquire());
+    yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+    return withErasureRecovery({
+      DB: db,
+      ERASURE_REQUIRED: "true",
+      ERASURE_BUCKET: bucket,
+    }).DB;
+  });
 const budgetReadOperations = [
   "categories.listCategories",
   "recurringPlans.getRecurringWorkspace",
@@ -934,12 +947,13 @@ for (const previousDay of [false, true]) {
       Effect.runPromise(
         Effect.gen(function* () {
           const db = yield* setup();
+          const guarded = yield* recoveryDatabase(db);
           const current = yield* Clock.currentTimeMillis;
           yield* Effect.tryPromise(() =>
             seedReadBudget(db, current - (previousDay ? utcDayMilliseconds : 0))
           );
           for (const operation of budgetReadOperations) {
-            const response = yield* readBudgetQuery(db, 0, operation);
+            const response = yield* readBudgetQuery(guarded, 0, operation);
             expect(response.status).toBe(previousDay ? 200 : 429);
             if (!previousDay) {
               const body = yield* Effect.tryPromise(() => response.text());
@@ -948,7 +962,7 @@ for (const previousDay of [false, true]) {
               expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
               expect(response.headers.get("cache-control")).toBe("no-store");
             }
-            expect((yield* readBudgetQuery(db, 1, operation)).status).toBe(200);
+            expect((yield* readBudgetQuery(guarded, 1, operation)).status).toBe(200);
           }
           expect(
             yield* Effect.tryPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
@@ -965,8 +979,13 @@ it(
       Effect.gen(function* () {
         const db = yield* setup();
         yield* Effect.tryPromise(() => db.prepare("DROP TABLE category_audit").run());
+        const guarded = yield* recoveryDatabase(db);
         for (const operation of budgetReadOperations) {
-          expect((yield* readBudgetQuery(db, 0, operation)).status).toBe(503);
+          const response = yield* readBudgetQuery(guarded, 0, operation);
+          expect(response.status).toBe(503);
+          const body = yield* Effect.tryPromise(() => response.text());
+          expect(body).not.toContain("category_audit");
+          expect(body).not.toContain("D1_ERROR");
         }
       })
     ),

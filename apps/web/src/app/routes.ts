@@ -17,6 +17,7 @@ import {
 } from "@/transport/client";
 import { type JSX, createElement } from "react";
 import {
+  Outlet,
   type RouterHistory,
   createRootRouteWithContext,
   createRoute,
@@ -80,6 +81,7 @@ const TransactionListFeature = lazyRouteComponent(
 const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
+  component: lazyRouteComponent(() => import("./application-frame"), "ApplicationFrame"),
   notFoundComponent: () =>
     createElement(
       "main",
@@ -92,7 +94,12 @@ const AuthenticatedRoute = lazyRouteComponent(() =>
   Promise.all([import("@/features/signed-in/feature"), import("@/features/agent/feature")]).then(
     ([signedIn, agent]) => ({
       default: (): JSX.Element =>
-        createElement(signedIn.SignedInFeature, null, createElement(agent.HostedAgentFeature)),
+        createElement(
+          signedIn.SignedInContent,
+          null,
+          createElement(Outlet),
+          createElement(agent.HostedAgentFeature)
+        ),
     })
   )
 );
@@ -153,7 +160,7 @@ const needsReviewRoute = createRoute({
     )(search),
   component: lazyRouteComponent(
     () => import("@/features/needs-review/feature"),
-    "NeedsReviewFeature"
+    "NeedsReviewRoute"
   ),
 });
 const recurringPlansRoute = createRoute({
@@ -209,7 +216,6 @@ const accessManagementRoute = createRoute({
 const independentApplicationRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "independent-application",
-  component: lazyRouteComponent(() => import("@/features/signed-in/feature"), "ApplicationShell"),
 });
 const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,

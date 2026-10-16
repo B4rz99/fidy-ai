@@ -1,8 +1,9 @@
 import { useReviewExpired } from "./expiry";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess } from "@/transport/client";
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { useAtomMount, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -20,11 +21,25 @@ export const OriginalMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Elemen
     <RetainedMaterial item={item} />
   );
 };
-const RetainedMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
+const useMaterialQuery = (
+  item: Item
+): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewMaterial">, unknown>> => {
   const client = useRouter().options.context.apiClient;
   const [query] = useState(() =>
-    client.query("ingestion", "getReviewMaterial", { params: { id: item.id } })
+    client.query("ingestion", "getReviewMaterial", {
+      params: { id: item.id },
+      reactivityKeys: ["ingestion-review"],
+    })
   );
+  return query;
+};
+/** Load original bytes alongside the selected detail, within the same expiry fence. */
+export const ReviewMaterialPreload = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
+  useAtomMount(useMaterialQuery(item));
+  return <></>;
+};
+const RetainedMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
+  const query = useMaterialQuery(item);
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   return (

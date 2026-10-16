@@ -241,12 +241,3 @@ export const SignedInContent = ({
   const { authentication } = useSession();
   return authentication === "expired" ? <AccessRefused /> : <>{children}</>;
 };
-
-/** Authenticated route layout whose child server state shares one authentication lifetime. */
-export const SignedInFeature = ({
-  children,
-}: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => (
-  <SignedInContent>
-    <ApplicationShell>{children}</ApplicationShell>
-  </SignedInContent>
-);

@@ -308,3 +308,15 @@ resource results do not authorize editing: freshness and refresh failures still 
 Dashboard initialization remains exclusive to a declared uninitialized response during an
 actual visit. Consent, session binding and security settings reads retain their fresh access
 checks. Router intent preloading loads destination code without executing workspace commands.
+
+The root application frame owns one shared shell across authenticated and independently authorized
+application routes, including Transactions; each route retains its own access checks. It retains a
+visited Needs Review workspace across ordinary navigation within the authentication lifetime.
+Its saved route snapshot contains only the validated filter
+and offset; hidden panels keep their evidence deadline timers active. Entering Privacy disposes
+the retained workspace, as does authentication replacement. The first pending page shares the
+navigation count's canonical query, and the selected original loads alongside its detail. Returning
+invalidates review reads while retaining visible content and disabling decisions until fresh.
+A newer saved canonical draft replaces a clean local draft; outstanding local edits remain visible
+and require recovery if superseded. A completed autosave releases its draft barrier so subsequent
+bulk decisions use the fresh workspace revision.

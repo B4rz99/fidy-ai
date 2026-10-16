@@ -1,3 +1,4 @@
+import { signInThroughCore } from "./real-core-fixture";
 import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
@@ -703,7 +704,7 @@ test("removes retained review fields and original material at the evidence deadl
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
         page.clock.install({
-          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:59Z")),
+          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:00Z")),
         })
       );
       yield* Effect.tryPromise(() => installUser(page));
@@ -716,11 +717,26 @@ test("removes retained review fields and original material at the evidence deadl
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
       );
-      yield* Effect.tryPromise(() => page.clock.fastForward("00:02"));
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("navigation", { name: "Aplicación" })
+          .getByText("Ajustes", { exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Correo", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "Cambiar correo verificado", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward("01:01"));
       yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveCount(0));
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
       );
+      yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
       yield* Effect.tryPromise(() =>
         expect(
           page.getByRole("heading", { name: "Este elemento venció", exact: true })
@@ -773,9 +789,9 @@ const measureHistorySwitch = (): void => {
 };
 
 const recordSwitchDuration = (page: Page): Promise<void> =>
-  page
-    .locator("body")
-    .getAttribute("data-review-switch-milliseconds")
+  expect(page.locator("body"))
+    .toHaveAttribute("data-review-switch-milliseconds", /[0-9]/u)
+    .then(() => page.locator("body").getAttribute("data-review-switch-milliseconds"))
     .then((milliseconds) => {
       expect(milliseconds).not.toBeNull();
       expect(Number(milliseconds)).toBeLessThan(100);
@@ -784,3 +800,163 @@ const recordSwitchDuration = (page: Page): Promise<void> =>
         contentType: "text/plain",
       });
     });
+
+for (const destination of ["Presupuestos", "Transacciones"]) {
+  test(`returns from ${destination} with its review form and original already available`, ({
+    page,
+    request,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+        yield* Effect.tryPromise(() => page.clock.resume());
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          page.getByLabel("Contraparte (opcional)").fill("Borrador al volver")
+        );
+        yield* Effect.tryPromise(() =>
+          page.getByRole("link", { name: destination, exact: true }).click()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("heading", { name: destination, exact: true })).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, delayedReviewRead)
+        );
+        yield* Effect.tryPromise(() => page.evaluate(measureReviewEntry));
+        yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Valor")).toBeVisible({ timeout: 100 })
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible({
+            timeout: 100,
+          })
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Borrador al volver")
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.locator("body")).toHaveAttribute("data-review-entry-milliseconds", /[0-9]/u)
+        );
+        yield* Effect.tryPromise(() => recordReviewEntry(page));
+        if (destination === "Transacciones") {
+          yield* Effect.tryPromise(() => verifyPrivacyDisposesReview(page));
+        }
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Cerrar sesión", exact: true }).click()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
+        );
+      })
+    ));
+}
+
+const verifyPrivacyDisposesReview = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("navigation", { name: "Aplicación" })
+          .getByText("Ajustes", { exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Privacidad", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/privacy$/u));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveCount(0));
+    })
+  );
+
+const delayedReviewRead = (route: Route): Promise<void> =>
+  Effect.runPromise(
+    Effect.sleep("1 second").pipe(Effect.andThen(Effect.tryPromise(() => reviewRoute(route))))
+  );
+
+const measureReviewEntry = (): void => {
+  document.addEventListener(
+    "click",
+    () => {
+      const started = performance.now();
+      const observer = new MutationObserver(() => {
+        const input = document.getElementById("review-amount");
+        if (input === null || input.getClientRects().length === 0) return;
+        document.body.dataset.reviewEntryMilliseconds = String(performance.now() - started);
+        observer.disconnect();
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    },
+    { capture: true, once: true }
+  );
+};
+
+const reviewEntryTargetMilliseconds = 10;
+const recordReviewEntry = (page: Page): Promise<void> =>
+  page
+    .locator("body")
+    .getAttribute("data-review-entry-milliseconds")
+    .then((milliseconds) => {
+      expect(milliseconds).not.toBeNull();
+      return page
+        .locator('script[src="/@vite/client"]')
+        .count()
+        .then((development) => {
+          if (development === 0) {
+            expect(Number(milliseconds)).toBeLessThanOrEqual(reviewEntryTargetMilliseconds);
+          }
+          return test.info().attach("review-entry-duration", {
+            body: `${milliseconds} ms`,
+            contentType: "text/plain",
+          });
+        });
+    });
+
+test("refreshes a saved review draft from another device after returning", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entry: Fixture = { id, revision: 0, status: "pending", draft: undefined };
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute([entry]))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toBeVisible());
+      yield* Effect.tryPromise(() => openReviewSibling(page));
+      entry.revision = 1;
+      entry.draft = {
+        amount: "49000",
+        counterparty: "Borrador remoto",
+        occurredAt: "",
+        userProvidedFields: ["money", "counterparty"],
+      };
+      yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Borrador remoto")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveValue("49000"));
+    })
+  ));
+const openReviewSibling = (page: Page): Promise<void> =>
+  page
+    .getByRole("navigation", { name: "Aplicación" })
+    .getByText("Ajustes", { exact: true })
+    .click()
+    .then(() => page.getByRole("link", { name: "Correo", exact: true }).click())
+    .then(() =>
+      expect(
+        page.getByRole("heading", { name: "Cambiar correo verificado", exact: true })
+      ).toBeVisible()
+    );

@@ -14,7 +14,7 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
 import { useReviewEditor } from "./editor-controller";
-import { OriginalMaterial } from "./original";
+import { OriginalMaterial, ReviewMaterialPreload } from "./original";
 import { type Category, type Detail, type Item, deadline, sources } from "./model";
 
 type Props = Readonly<{
@@ -25,7 +25,14 @@ type Props = Readonly<{
 }>;
 export const ReviewEditor = (props: Props): JSX.Element => {
   const expired = useReviewExpired(props.item);
-  return expired ? <ExpiredReviewItem item={props.item} /> : <ReviewItemEditor {...props} />;
+  return expired ? (
+    <ExpiredReviewItem item={props.item} />
+  ) : (
+    <>
+      <ReviewMaterialPreload item={props.item} />
+      <ReviewItemEditor {...props} />
+    </>
+  );
 };
 const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
   <div className="p-5">
@@ -53,7 +60,9 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
       reactivityKeys: ["ingestion-review"],
     })
   );
-  const [categoryQuery] = useState(() => apiClient.query("categories", "listCategories", {}));
+  const [categoryQuery] = useState(() =>
+    apiClient.query("categories", "listCategories", { reactivityKeys: ["ingestion-review"] })
+  );
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
@@ -71,33 +80,27 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
     return <p className="p-6 text-sm text-muted-foreground">Cargando elemento…</p>;
   }
   if (detail._tag !== "Ready" || categories._tag !== "Ready") {
-    return (
-      <div className="p-5">
-        <p>No pudimos cargar todos los datos del elemento.</p>
-        <Button variant="outline" onClick={recover}>
-          Reintentar
-        </Button>
-      </div>
-    );
+    return <ReviewItemFailure recover={recover} />;
   }
   if (Option.isSome(previous) && previous.value === detail.value.data) {
-    return (
-      <output className="block p-5">
-        <p>Actualizando la versión guardada…</p>
-        <Button variant="outline" onClick={recover}>
-          Reintentar actualización
-        </Button>
-      </output>
-    );
+    return <RecoveringReviewItem recover={recover} />;
   }
   return (
     <section className="flex min-h-0 min-w-0 flex-col p-5 lg:p-4">
       <ReviewItemHeading item={detail.value.data.item} />
+      {[detail, categories].some((state) => Option.isSome(state.refreshFailure)) ? (
+        <ReviewItemFailure recover={recover} />
+      ) : null}
       <ReadyEditor
         key={`${item.id}:${recovery}`}
         detail={detail.value.data}
         barrier={barrier}
-        disabled={disabled}
+        disabled={[
+          disabled,
+          ...[detail, categories].map(
+            (state) => state.waiting || Option.isSome(state.refreshFailure)
+          ),
+        ].some(Boolean)}
         categories={categories.value.data}
         finished={finished}
         recover={recover}
@@ -105,6 +108,22 @@ const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Ele
     </section>
   );
 };
+const RecoveringReviewItem = ({ recover }: Readonly<{ recover: () => void }>): JSX.Element => (
+  <output className="block p-5">
+    <p>Actualizando la versión guardada…</p>
+    <Button variant="outline" onClick={recover}>
+      Reintentar actualización
+    </Button>
+  </output>
+);
+const ReviewItemFailure = ({ recover }: Readonly<{ recover: () => void }>): JSX.Element => (
+  <div className="p-5">
+    <p>No pudimos cargar todos los datos del elemento.</p>
+    <Button variant="outline" onClick={recover}>
+      Reintentar
+    </Button>
+  </div>
+);
 const ReadyEditor = ({
   detail,
   categories,

@@ -23,6 +23,7 @@ type Queue = {
   wanted: Option.Option<Draft>;
   timer: Option.Option<number>;
   tail: Promise<void>;
+  clean: () => void;
 };
 const clearTimer = (owner: Queue): void => {
   Option.map(owner.timer, window.clearTimeout);
@@ -50,6 +51,7 @@ const saveDraft = (
           return;
         }
         owner.revision = latest.revision;
+        if (Option.isNone(owner.wanted)) owner.clean();
         feedback(Option.isSome(owner.wanted) ? "unsaved" : "saved");
       },
       failed: (uncertain) => {
@@ -60,7 +62,7 @@ const saveDraft = (
   });
   return owner.tail;
 };
-const makeQueue = (detail: Detail): Queue => {
+const makeQueue = (detail: Detail, barrier: DraftBarrier): Queue => {
   const owner: Queue = {
     id: detail.item.id,
     blocked: false,
@@ -72,6 +74,7 @@ const makeQueue = (detail: Detail): Queue => {
     wanted: Option.none(),
     timer: Option.none(),
     tail: Promise.resolve(),
+    clean: () => barrier.delete(detail.item.id),
   };
   return owner;
 };
@@ -105,6 +108,31 @@ const scheduleDraft = ({
     }, autosaveMilliseconds)
   );
 };
+const useCanonicalDraft = ({
+  detail,
+  barrier,
+  feedback,
+  acting,
+}: Readonly<{
+  detail: Detail;
+  barrier: DraftBarrier;
+  feedback: Feedback;
+  acting: boolean;
+}>): Readonly<{
+  owner: Queue;
+  draft: Draft;
+  setDraft: (draft: Draft) => void;
+}> => {
+  const [owner, setOwner] = useState(() => makeQueue(detail, barrier));
+  const [draft, setDraft] = useState(() => owner.draft);
+  if (detail.revision > owner.revision && feedback === "saved" && !acting) {
+    const next = makeQueue(detail, barrier);
+    setOwner(next);
+    setDraft(next.draft);
+  }
+  return { owner, draft, setDraft };
+};
+
 export const useReviewEditor = ({
   apiClient,
   detail,
@@ -118,17 +146,12 @@ export const useReviewEditor = ({
 }>): EditorController => {
   const [writer] = useState(() => makeReviewWrite(apiClient));
   const send = useAtomSet(writer, { mode: "promiseExit" });
-  const [owner] = useState(() => makeQueue(detail));
-  const [draft, setDraft] = useState(() =>
-    Option.getOrElse(
-      Option.orElse(detail.draft, () => detail.suggestions),
-      emptyDraft
-    )
-  );
   const [feedback, setFeedback] = useState<Feedback>("saved");
   const [acting, setActing] = useState(false);
+  const { owner, draft, setDraft } = useCanonicalDraft({ detail, barrier, feedback, acting });
+  const superseded = detail.revision > owner.revision;
   const change = (next: Draft): void => {
-    if (owner.blocked || acting) return;
+    if (owner.blocked || acting || superseded) return;
     setDraft(next);
     setFeedback("unsaved");
     scheduleDraft({ owner, next, send, feedback: setFeedback });
@@ -139,7 +162,7 @@ export const useReviewEditor = ({
     );
   };
   const act = (kind: "Create" | "Skip"): void => {
-    if (owner.blocked || acting) return;
+    if (owner.blocked || acting || superseded) return;
     setActing(true);
     saveDraft(owner, send, setFeedback)
       .then(() => runDecision({ kind, owner, detail, send, finished, setActing, setFeedback }))
@@ -153,8 +176,8 @@ export const useReviewEditor = ({
     change,
     suggested: (next) => change(mergeSuggestions({ draft: owner.draft, suggested: next })),
     act,
-    feedback,
-    locked: feedback === "failed" || feedback === "uncertain" || acting,
+    feedback: superseded ? "failed" : feedback,
+    locked: [superseded, feedback === "failed", feedback === "uncertain", acting].some(Boolean),
     creation: creation({ detail, draft }),
   };
 };

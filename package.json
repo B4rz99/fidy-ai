@@ -8,6 +8,7 @@
   ],
   "type": "module",
   "scripts": {
+    "lint:ui": "oxlint --deny-warnings --config .oxlintrc.ui.json apps/web/src",
     "lint": "oxlint --deny-warnings --config .oxlintrc.json .",
     "lint:type-aware": "bun install --cwd tools/astro --frozen-lockfile && oxlint --deny-warnings --config .oxlintrc.json --type-aware . && bun run --cwd apps/server check:lint-guards && node scripts/oxlint/lint-rules.test.js",
     "lint:suppressions": "bun scripts/check-lint-suppressions.ts",

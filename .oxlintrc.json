@@ -1,17 +1,8 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "jsdoc", "react", "jsx-a11y"],
-  "jsPlugins": [
-    "./scripts/oxlint/effect-guards.js",
-    "./scripts/oxlint/test-guards.js",
-    "@shadcn/lint"
-  ],
-  "settings": {
-    "shadcn": {
-      "ui": "@/ui/components",
-      "note": "See DESIGN.md: Application components and patterns. Reuse the shared UI components and their named variants; transaction behavior stays in its feature."
-    }
-  },
+  "jsPlugins": ["./scripts/oxlint/effect-guards.js", "./scripts/oxlint/test-guards.js"],
+  "extends": ["./.oxlintrc.ui.json"],
   "ignorePatterns": [
     "**/node_modules/**",
     "**/dist/**",
@@ -177,41 +168,6 @@
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
-    {
-      "files": ["apps/web/src/**/*.{ts,tsx}"],
-      "rules": {
-        "shadcn/no-raw-colors": "error",
-        "shadcn/no-arbitrary-values": ["error", { "allow": ["layout"] }],
-        "shadcn/no-restyle": [
-          "error",
-          {
-            "allow": ["layout"],
-            "contracts": [
-              {
-                "pattern": "^(Button|Input|DropdownMenuTrigger|Calendar)$",
-                "allow": ["layout"],
-                "message": "Use the component's named variant or size. Keep Fidy colors, radii, focus, and control density in src/ui/components; use a parent for surrounding spacing. See DESIGN.md."
-              },
-              {
-                "pattern": "^Card$|(Content|Header|Footer|Group|Panel)$",
-                "allow": ["layout", "spacing"]
-              },
-              {
-                "pattern": "^CardTitle$|^Table(Cell|Head)$|^CardAction$",
-                "allow": ["layout", "typography"]
-              },
-              { "pattern": "^Empty$", "allow": ["layout", "border"] },
-              { "pattern": "^AlertDescription$", "allow": ["layout", "spacing"] },
-              {
-                "pattern": "^(ChoiceDropdown|InlineChoiceDropdown|ChoiceMenuOptions|CalendarField|HeaderSearch|IconIndicator|DirectionIndicator|WorkspaceHeader|WorkspaceColumns|WorkspacePanel|RecordToolbar)$",
-                "allow": ["layout"],
-                "message": "Reuse the approved Fidy pattern. Change its shared component only for an approved design decision; do not override colors, typography, shape, or control spacing in a view. See DESIGN.md: Application components and patterns."
-              }
-            ]
-          }
-        ]
-      }
-    },
     // These libraries expose extensionless package exports that resolve to .mjs.
     {
       "files": [
@@ -226,13 +182,6 @@
     {
       "files": ["apps/web/src/features/transactions/ledger.tsx"],
       "rules": { "react/incompatible-library": "off" }
-    },
-    {
-      "files": ["apps/web/src/ui/components/**"],
-      "rules": {
-        "shadcn/no-restyle": "off",
-        "shadcn/no-arbitrary-values": "off"
-      }
     },
     {
       "files": ["apps/cli/vitest.config.ts"],

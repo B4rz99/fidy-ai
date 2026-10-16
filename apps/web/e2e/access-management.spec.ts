@@ -158,6 +158,19 @@ test("Accesos displays token and MCP metadata without horizontal overflow", ({ p
       yield* Effect.tryPromise(() =>
         expect(page.getByText("01-10-2026", { exact: true })).toBeVisible()
       );
+      for (const label of [
+        "Desactivar",
+        "Desactivar todos los tokens",
+        "Revocar este agente",
+        "Revocar todos los agentes conectados",
+      ]) {
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: label, exact: true })).toHaveCSS(
+            "background-color",
+            "rgb(240, 180, 174)"
+          )
+        );
+      }
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
       const widths = yield* Effect.tryPromise(() => page.evaluate(documentWidths));
       expect(widths.content).toBeLessThanOrEqual(widths.viewport);

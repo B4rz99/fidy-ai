@@ -1,3 +1,4 @@
+import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { DateTime, Effect, Option } from "effect";
 import { type JSX, useState } from "react";
@@ -23,10 +24,9 @@ const AuthorizationRecord = ({
         </time>
       </p>
       <p>Versión del aviso: {record.disclosure.revision}</p>
-      <details>
-        <summary className="cursor-pointer underline">Ver el aviso que autorizaste</summary>
+      <Disclosure title="Ver el aviso que autorizaste">
         <p className="mt-3 whitespace-pre-wrap">{record.disclosure.text}</p>
-      </details>
+      </Disclosure>
     </section>
   );
 };

@@ -1,3 +1,4 @@
+import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
 import { Effect, Option } from "effect";
@@ -39,10 +40,9 @@ const makeRenewal = ({
 
 const RenewalDisclosure = ({ authorization }: Pick<RenewalInput, "authorization">): JSX.Element => (
   <>
-    <details>
-      <summary className="cursor-pointer underline">Leer el aviso para renovar</summary>
+    <Disclosure title="Leer el aviso para renovar">
       <p className="mt-3 whitespace-pre-wrap">{authorization.disclosure.text}</p>
-    </details>
+    </Disclosure>
     <p>
       Versión: {authorization.disclosure.revision}. Consulta la{" "}
       <a

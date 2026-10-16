@@ -99,6 +99,7 @@ const checks: Array<Check> = [
   rootCheck("static", "Architecture tests", ["bun", "run", "test:architecture"]),
   rootCheck("static", "Browser client graph", ["bun", "run", "check:browser-client"]),
   rootCheck("static", "Web policy integrity", ["bun", "run", "check:policy"]),
+  rootCheck("static", "Shadcn design system", ["bun", "run", "lint:ui"]),
   rootCheck("static", "Shadcn output integrity", ["bun", "run", "check:shadcn"]),
   rootCheck("static", "Generated contract freshness", ["bun", "run", "contracts:check:freshness"]),
   rootCheck("static", "Generated notification-email format freshness", [

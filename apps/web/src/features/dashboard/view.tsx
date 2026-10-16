@@ -419,7 +419,7 @@ const WidgetActions = ({
       onClick={() => editor.onGesture({ kind: "remove-widget", widgetId })}
       size="icon"
       type="button"
-      variant="ghost"
+      variant="destructive"
     >
       <HugeiconsIcon icon={XIcon} strokeWidth={2} />
     </Button>

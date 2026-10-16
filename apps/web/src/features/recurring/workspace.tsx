@@ -504,7 +504,7 @@ const InvalidFulfillments = ({
         <Button
           contentLayout="wrap"
           focusAppearance="subtle"
-          variant="outline"
+          variant="destructive"
           disabled={disabled}
           onClick={() => save({ kind: "reverse", fulfillmentId: id })}
         >

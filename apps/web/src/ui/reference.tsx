@@ -1,5 +1,5 @@
-import { useState, useSyncExternalStore } from "react";
-import type { JSX } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
+import type { JSX, RefCallback } from "react";
 import { CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -13,9 +13,9 @@ import { Skeleton } from "@/ui/components/skeleton";
 import { Spinner } from "@/ui/components/spinner";
 import { CompactTableReference } from "./compact-table-reference";
 import { cn } from "./class-names";
-import { type DarkPalette, darkPalettes } from "./dark-palettes";
 import { BudgetBalance, BudgetMeter } from "@/ui/components/budget-meter";
 import { FinancialReference } from "./financial-reference";
+import { PatternReference } from "./pattern-reference";
 import { WorkspaceReference } from "./workspace-reference";
 import "./reference.css";
 
@@ -28,56 +28,6 @@ const subscribeToTheme = (notify: () => void): (() => void) => {
   preference.addEventListener("change", notify);
   return () => preference.removeEventListener("change", notify);
 };
-
-const DarkPaletteReference = ({
-  selected,
-  onSelect,
-}: Readonly<{ selected: DarkPalette; onSelect: (palette: DarkPalette) => void }>): JSX.Element => (
-  <section aria-labelledby="dark-options-heading" className="flex flex-col gap-4">
-    <div className="flex flex-col gap-2">
-      <h2 id="dark-options-heading" className="text-2xl font-semibold tracking-tight">
-        Cuatro formas de ver la noche
-      </h2>
-      <p className="max-w-2xl text-muted-foreground">
-        Compara los mismos elementos en cuatro paletas sin azul. Elige una para verla en toda esta
-        página.
-      </p>
-    </div>
-    <div className="grid gap-4 sm:grid-cols-2">
-      {darkPalettes.map(({ id, name, description }) => (
-        <article
-          key={id}
-          data-dark-palette={id}
-          aria-label={name}
-          className="dark flex flex-col gap-5 rounded-xl border bg-background p-5 text-foreground"
-        >
-          <div className="flex flex-col gap-2">
-            <h3 className="text-lg font-semibold">{name}</h3>
-            <p className="text-sm text-muted-foreground">{description}</p>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4 text-card-foreground">
-            <div>
-              <p className="font-semibold">La Cocina</p>
-              <p className="text-sm text-muted-foreground">Restaurantes</p>
-            </div>
-            <p className="font-semibold tabular-nums">− $28.000 COP</p>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Badge variant="success">Registrada</Badge>
-            <Button
-              aria-label={`Probar ${name}`}
-              aria-pressed={selected === id}
-              variant={selected === id ? "default" : "outline"}
-              onClick={() => onSelect(id)}
-            >
-              {selected === id ? "Viendo esta opción" : "Probar esta opción"}
-            </Button>
-          </div>
-        </article>
-      ))}
-    </div>
-  </section>
-);
 
 const ReferenceHeader = ({
   theme,
@@ -307,23 +257,25 @@ const EmptyReference = (): JSX.Element => (
 
 export const UIReference = (): JSX.Element => {
   const [theme, setTheme] = useState<Theme>("dark");
-  const [darkPalette, setDarkPalette] = useState<DarkPalette>("graphite");
   const prefersDark = useSyncExternalStore(subscribeToTheme, systemDark);
   const dark = theme === "dark" || (theme === "system" && prefersDark);
+  const themeScope = useCallback<RefCallback<HTMLDivElement>>(
+    (element) => {
+      if (element === null) return;
+      const root = element.ownerDocument.documentElement;
+      const previous = root.classList.contains("dark");
+      root.classList.toggle("dark", dark);
+      return (): void => {
+        root.classList.toggle("dark", previous);
+      };
+    },
+    [dark]
+  );
   return (
-    <div
-      data-dark-palette={darkPalette}
-      className={cn("ui-reference min-h-svh bg-background text-foreground", dark && "dark")}
-    >
+    <div ref={themeScope} className="ui-reference min-h-svh bg-background text-foreground">
       <main className="mx-auto flex max-w-6xl flex-col gap-10 px-5 py-8 sm:px-6 lg:px-12">
         <ReferenceHeader theme={theme} onTheme={setTheme} />
-        <DarkPaletteReference
-          selected={darkPalette}
-          onSelect={(palette) => {
-            setDarkPalette(palette);
-            setTheme("dark");
-          }}
-        />
+        <PatternReference />
         <PaletteReference />
         <div className="grid gap-6 lg:grid-cols-2">
           <ActionReference />

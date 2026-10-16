@@ -43,6 +43,13 @@ export const buttonVariants = cva(
         "icon-lg": "size-12",
       },
     },
+    compoundVariants: [
+      {
+        variant: "destructive",
+        focusAppearance: "subtle",
+        className: "focus-visible:bg-destructive focus-visible:text-destructive-foreground",
+      },
+    ],
     defaultVariants: {
       variant: "default",
       size: "default",

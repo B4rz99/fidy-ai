@@ -91,7 +91,6 @@ type RevocationActionProps = Readonly<{
 type RevocationControlProps = RevocationActionProps &
   Readonly<{
     triggerLabel: string;
-    triggerVariant: "outline" | "destructive";
     confirmation: JSX.Element;
     confirmLabel: string;
     revokingLabel: string;
@@ -105,14 +104,13 @@ const RevocationControl = ({
   cancel,
   revoke,
   triggerLabel,
-  triggerVariant,
   confirmation,
   confirmLabel,
   revokingLabel,
 }: RevocationControlProps): JSX.Element => {
   if (!selected) {
     return (
-      <Button disabled={disabled} onClick={select} type="button" variant={triggerVariant}>
+      <Button disabled={disabled} onClick={select} type="button" variant="destructive">
         {triggerLabel}
       </Button>
     );
@@ -151,7 +149,6 @@ const OneRevocationControl = (
     confirmLabel="Sí, desactivar"
     revokingLabel="Desactivando…"
     triggerLabel="Desactivar"
-    triggerVariant="outline"
   />
 );
 
@@ -191,7 +188,6 @@ const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
     confirmLabel="Sí, desactivar todos"
     revokingLabel="Desactivando todos…"
     triggerLabel="Desactivar todos los tokens"
-    triggerVariant="outline"
   />
 );
 

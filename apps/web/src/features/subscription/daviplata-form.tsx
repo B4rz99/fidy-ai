@@ -384,7 +384,7 @@ export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
       ) : null}
       <AuthorizationProgress stage={stage} />
       {cancellableStage(stage) ? (
-        <Button type="button" variant="outline" onClick={interaction.cancel}>
+        <Button type="button" variant="destructive" onClick={interaction.cancel}>
           Cancelar autorización
         </Button>
       ) : null}

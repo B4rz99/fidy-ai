@@ -1,0 +1,21 @@
+apps/server/cloudflare/ingestion/internal/review-workspace.ts
+  s_ede1c3735d03b7::t_d744687cbd115f 78
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_ede1c3735d03b7::t_40e55ee0423f87 4107-4112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8064ca13cacf928c8e4e47e1c53adecfd16287ed",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

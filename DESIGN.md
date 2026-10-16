@@ -558,6 +558,11 @@ confirmation button or success footer. A failed acknowledgement offers a connect
 same reply. Closing the panel preserves its state and never acknowledges a hidden reply. The UI advertises
 only text capabilities supported by the existing Agent endpoint.
 
+Recurring lifecycle changes show the host's readable plan name, action and effective date with
+an explicit “Confirmar cambio” button. Only server-issued confirmation metadata can enable that
+action; assistant prose cannot. The opaque one-use command remains in mounted state and is not
+shown in chat history. Delivery acknowledgement remains automatic and separate from mutation approval.
+
 ### Financial workspace components
 
 Use `AmountInput` for decimal drafts. It composes `Input`, refuses letters, places the caret at the end on click, and offers full or content width. Features retain exact validation, Currency precision, and command ownership.

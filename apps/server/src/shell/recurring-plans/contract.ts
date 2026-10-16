@@ -58,7 +58,7 @@ export const RecurringPlansGroup = HttpApiGroup.make("recurringPlans")
     })
       .annotate(
         OpenApi.Description,
-        "Explicitly create, edit, pause, resume or stop a recurring plan; skip an occurrence; record/reverse a tracking mark or associate an effective Transaction; dismiss, restore or link a detected suggestion. Supply the observed document revision and stable UUIDs. Unknown outcomes require a reread, never blind replay. Manual marks create no Transactions; stopping tracking never cancels external services. All agent changes require exact User confirmation."
+        "Explicitly create, edit, pause, resume or stop a recurring plan; skip an occurrence; record/reverse a tracking mark or associate an effective Transaction; dismiss, restore or link a detected suggestion. Supply the observed document revision and stable UUIDs. Unknown outcomes require a reread, never blind replay. Manual marks create no Transactions; stopping tracking never cancels external services. Propose a clearly requested edit directly; the host obtains exact User confirmation before execution. Do not ask for a separate informal confirmation."
       )
       .annotateMerge(
         operationPolicy({

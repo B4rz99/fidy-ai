@@ -326,10 +326,46 @@ objection, account closure or paid change was requested.
 | Wompi    | Enquiry sent at 7:32 a.m. to the current policy's privacy address; remote server rejected it with `550 5.4.1 Recipient address rejected: Access denied`. | Contact failed; no provider acceptance. Need a working authorized route for actual merchant acceptance, company transition/continuity and bounded rights-process questions. |
 
 The Wompi Help-linked form requires identification, full name and telephone in addition to the
-approved business email. Those additional fields were not supplied or submitted. The merchant
-session now redirects to sign-in, so its authenticated chat could not be inspected. Use restored
-merchant access or separately authorize the exact form data; do not invent required fields or
-claim that an email in Sent reached Wompi. No other mailbox was guessed as a fallback.
+approved business email. Those additional fields were not supplied or submitted. The initial
+merchant session expired; the operator subsequently restored it for the follow-up below. No other
+mailbox was guessed as a fallback, and an email in Sent does not establish Wompi receipt.
+
+### Restored Wompi merchant chat — 2026-10-16
+
+Restricted follow-up reference: `5dfc1a2d-2d65-499c-ad92-4368f41a7919`, version 1, linked to the
+correspondence record above. The operator restored merchant access and authorized continuing after
+the exact support-chat policy prompt was shown. The policy prompt was accepted at 8:02 a.m.
+Colombia time. The narrowed enquiry was sent through authenticated Help → Chatea con nosotros and
+routed to **Recibir pagos**. The virtual assistant acknowledged the question's subject but said the
+specific contractual/company/privacy questions were outside its direct scope.
+
+A human adviser, working channel or case number was requested. The assistant required the merchant
+NIT or natural-person holder's identification number, plus the reason for contact. The reason was
+supplied without personal identifiers; a request to route the enquiry using only the merchant label
+and business email was declined. The assistant repeated that identification is indispensable and
+said the owner can provide it directly in the same chat. No identification number, phone, attachment,
+payer data or credential was supplied. **No human transfer, case number or substantive answer was
+obtained.** The owner can enter the existing merchant holder's identification directly in Wompi;
+there is no need to copy it into Codex chat. Preserve the conversation for continuation and keep the
+provider boundary unresolved until its actual response or supported disposition is recorded.
+
+### Wompi human handoff after owner verification — 2026-10-16
+
+Restricted follow-up reference: `053418fe-a8f5-4425-a5d4-211bb446da9a`, version 1. The owner
+entered the merchant holder's identification directly in Wompi. Its value was not copied into the
+repository or this follow-up record. The virtual assistant then transferred the conversation to
+adviser Santiago Álvarez. The same four bounded questions were sent at 8:05 a.m. Colombia time,
+including the failed published email route and a request for a case number or competent team.
+
+The adviser requested merchant name, registered email, identification and registered phone. The
+business name/email were supplied and the adviser was referred to the identification already
+entered by the owner. A request to handle the informational enquiry with those details rather than
+additional phone data was initially made. The owner subsequently supplied the identification and
+registered phone directly in the same Wompi chat; their values were not copied into these records.
+Restricted follow-up reference: `7b90b306-7ffa-46bd-a0d1-9faab449c9e1`, version 1. Human transfer
+is verified; adviser validation, a case number, substantive answers and any deletion rehearsal remain
+unverified. A filtered company-inbox check showed the Resend acknowledgement but no substantive
+Resend or Kapso answer.
 
 These are information enquiries, not a completed provider-rights rehearsal. Acknowledgement, a
 published period or passing local tests cannot settle provider residual-copy erasure. Review actual

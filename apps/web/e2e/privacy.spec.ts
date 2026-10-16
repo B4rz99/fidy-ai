@@ -103,6 +103,10 @@ const verifyAuthorizationRecovery = (page: Page): Promise<void> =>
         expect(page.getByRole("alert")).toContainText("No pudimos consultar la prueba")
       );
       yield* Effect.tryPromise(() => expect(withdraw).toBeDisabled());
+      yield* Effect.tryPromise(() => expect(withdraw).toHaveCSS("color", "rgb(23, 25, 22)"));
+      yield* Effect.tryPromise(() =>
+        expect(withdraw).toHaveCSS("background-color", "rgb(240, 180, 174)")
+      );
       yield* Effect.tryPromise(() => page.unroute(copyEndpoint));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Consultar prueba", exact: true }).click()

@@ -319,7 +319,7 @@ Hover and keyboard focus keep the destructive fill. Cancelling an ordinary edit 
 Calendar selection and focused days use a single coral/red button surface; the day cell never adds
 a second today background. Grafito is the sole dark palette in both the app and UI reference.
 
-Disabled destructive buttons retain the shared coral fill and use the muted disabled label;
+Disabled destructive buttons retain the shared coral fill and contrasting dark destructive label;
 they remain non-interactive until their prerequisite is met.
 On failure, keep entered values and offer a useful correction or retry. Confirm
 success only after the operation succeeds. Empty states explain what is missing and

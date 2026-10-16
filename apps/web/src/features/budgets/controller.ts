@@ -1,6 +1,7 @@
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { BigDecimal, Cause, Effect, Exit, Option, Predicate, Schema } from "effect";
-import type { Atom } from "effect/reactivity";
+import type { AsyncResult, Atom } from "effect/reactivity";
 import { useRef, useState } from "react";
 import { type CanonicalInput, Currency, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
@@ -14,7 +15,7 @@ import {
   groupFor,
   rowDraft,
 } from "./model";
-import type { BudgetStatus, Category, CurrentUser } from "./presentation";
+import type { BudgetReport, BudgetStatus, Category, CurrentUser } from "./presentation";
 
 type BudgetMonth =
   | Readonly<{ _tag: "Loading" | "Failure"; waiting: boolean; refresh: () => void }>
@@ -93,7 +94,12 @@ const makeBudgetWrite = (
     { concurrent: false }
   );
 
-type MonthInput = Readonly<{ apiClient: FidyClient; user: CurrentUser; month: string }>;
+type MonthInput = Readonly<{
+  apiClient: FidyClient;
+  user: CurrentUser;
+  month: string;
+  profileCurrent: boolean;
+}>;
 type MonthData = Omit<WorkspaceProps, "editing">;
 type MonthRead =
   | Readonly<{ _tag: "Loading" | "Failure"; waiting: boolean; refresh: () => void }>
@@ -105,11 +111,17 @@ type MonthRead =
       data: MonthData;
     }>;
 const useMonthQueries = ({ apiClient, user, month }: MonthInput): MonthRead => {
-  const [report] = useState(() =>
-    apiClient.query("budgets", "getBudgetStatus", { query: { timeZone: user.timeZone, month } })
+  const [report] = useState(() => budgetStatusQuery({ apiClient, user, month }));
+  const [categories] = useState(() =>
+    apiClient
+      .query("categories", "listCategories", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
   );
-  const [categories] = useState(() => apiClient.query("categories", "listCategories", {}));
-  const [budgets] = useState(() => apiClient.query("budgets", "listBudgets", {}));
+  const [budgets] = useState(() =>
+    apiClient
+      .query("budgets", "listBudgets", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
+  );
   const reportState = useAtomValue(report).pipe(presentCanonicalQuery);
   const categoryState = useAtomValue(categories).pipe(presentCanonicalQuery);
   const budgetState = useAtomValue(budgets).pipe(presentCanonicalQuery);
@@ -292,7 +304,7 @@ export const useMonthlyBudgets = (input: MonthInput): BudgetMonth => {
   const reads = useMonthQueries(input);
   const writes = useBudgetWrites({
     ...input,
-    editable: reads._tag === "Ready" && !reads.stale && !reads.waiting,
+    editable: input.profileCurrent && reads._tag === "Ready" && !reads.stale && !reads.waiting,
     refreshQueries: reads.refresh,
   });
   if (reads._tag !== "Ready") return { ...reads, refresh: writes.refresh };
@@ -303,3 +315,17 @@ export const useMonthlyBudgets = (input: MonthInput): BudgetMonth => {
     workspace: { ...reads.data, editing: budgetEditing(reads.data, writes) },
   };
 };
+
+const budgetStatusQuery = ({
+  apiClient,
+  user,
+  month,
+}: Pick<MonthInput, "apiClient" | "user" | "month">): Atom.Atom<
+  AsyncResult.AsyncResult<Readonly<{ data: BudgetReport }>, unknown>
+> =>
+  apiClient
+    .query("budgets", "getBudgetStatus", {
+      ...workspaceQueryRetention,
+      query: { timeZone: user.timeZone, month },
+    })
+    .pipe(revalidateWorkspaceQuery);

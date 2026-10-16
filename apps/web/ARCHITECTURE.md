@@ -300,3 +300,11 @@ individual creation or skip. Bulk skip/restore use the same canonical mutation. 
 require a canonical reread. Original text is escaped, media locators are not rendered as public
 URLs, and neither originals nor drafts enter browser storage. Navigation owns pending-count
 polling within the authentication registry lifetime.
+
+Main workspace display queries retain their last result for one minute of inactivity in the
+current authentication registry. Returning to Budgets, Recurring, Transactions or Dashboard
+renders that result immediately and revalidates on mount and window focus. Cached profiles and
+resource results do not authorize editing: freshness and refresh failures still gate writes.
+Dashboard initialization remains exclusive to a declared uninitialized response during an
+actual visit. Consent, session binding and security settings reads retain their fresh access
+checks. Router intent preloading loads destination code without executing workspace commands.

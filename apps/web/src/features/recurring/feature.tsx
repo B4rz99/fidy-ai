@@ -1,7 +1,10 @@
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter, useSearch } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
+import type { AsyncResult, Atom } from "effect/reactivity";
+import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type JSX, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
@@ -23,6 +26,9 @@ const PreviewWorkspace = import.meta.env.DEV
   : RecurringWorkspace;
 
 type Props = Readonly<{
+  profileStale: boolean;
+  profileWaiting: boolean;
+  refreshProfile: () => void;
   month: string;
   currentMonth: string;
   timeZone: PlanInput["timeZone"];
@@ -31,19 +37,31 @@ type Props = Readonly<{
   previous: Option.Option<string>;
   earlier: (month: string) => void;
 }>;
-const Resources = (props: Props): JSX.Element => {
-  const router = useRouter();
-  const apiClient = router.options.context.apiClient;
-  const [resource] = useState(() =>
-    apiClient.query("recurringPlans", "getRecurringWorkspace", {
+const recurringQuery = (
+  apiClient: FidyClient,
+  props: Props
+): Atom.Atom<
+  AsyncResult.AsyncResult<CanonicalSuccess<"recurringPlans.getRecurringWorkspace">, unknown>
+> =>
+  apiClient
+    .query("recurringPlans", "getRecurringWorkspace", {
+      ...workspaceQueryRetention,
       query: {
         month: props.month,
         ...props.filters,
         ...(Option.isSome(props.previous) ? { previousMonth: props.previous.value } : {}),
       },
     })
+    .pipe(revalidateWorkspaceQuery);
+const Resources = (props: Props): JSX.Element => {
+  const router = useRouter();
+  const apiClient = router.options.context.apiClient;
+  const [resource] = useState(() => recurringQuery(apiClient, props));
+  const [categories] = useState(() =>
+    apiClient
+      .query("categories", "listCategories", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
   );
-  const [categories] = useState(() => apiClient.query("categories", "listCategories", {}));
   const [command] = useState(() => makeRecurringWrite(apiClient));
   const execute = useAtomSet(command);
   const [saveState, setSaveState] = useState("idle");
@@ -54,9 +72,10 @@ const Resources = (props: Props): JSX.Element => {
   const retry = (): void => {
     refresh();
     refreshCategories();
+    props.refreshProfile();
     setSaveState("idle");
   };
-  const waiting = state.waiting || categoryState.waiting;
+  const waiting = props.profileWaiting || state.waiting || categoryState.waiting;
   if (state._tag === "Failure" || categoryState._tag === "Failure") {
     return (
       <div className="p-5">
@@ -79,7 +98,10 @@ const Resources = (props: Props): JSX.Element => {
       props={props}
       view={state.value.data}
       categories={categoryState.value.data}
-      stale={Option.isSome(state.refreshFailure) || Option.isSome(categoryState.refreshFailure)}
+      stale={
+        props.profileStale ||
+        [state.refreshFailure, categoryState.refreshFailure].some(Option.isSome)
+      }
       waiting={waiting}
       saveState={saveState}
       setSaveState={setSaveState}
@@ -93,7 +115,9 @@ const Resources = (props: Props): JSX.Element => {
 export const RecurringFeature = (): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() =>
-    router.options.context.apiClient.query("identity", "getCurrentUser", {})
+    router.options.context.apiClient
+      .query("identity", "getCurrentUser", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
   );
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
@@ -116,6 +140,9 @@ export const RecurringFeature = (): JSX.Element => {
   const month = "month" in search && typeof search.month === "string" ? search.month : currentMonth;
   return (
     <Resources
+      profileStale={Option.isSome(state.refreshFailure)}
+      profileWaiting={state.waiting}
+      refreshProfile={refresh}
       key={`${user.id}:${month}:${JSON.stringify(filters)}:${Option.getOrElse(previous, () => "")}`}
       month={month}
       currentMonth={currentMonth}

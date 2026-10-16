@@ -15,7 +15,7 @@ import {
   RecurringMonth,
   type WebAuthClient,
 } from "@/transport/client";
-import { type JSX, Suspense, createElement, lazy } from "react";
+import { type JSX, createElement } from "react";
 import {
   type RouterHistory,
   createRootRouteWithContext,
@@ -23,7 +23,6 @@ import {
   createRouter,
   lazyRouteComponent,
   redirect,
-  useRouter,
 } from "@tanstack/react-router";
 import { RouteFailure } from "./route-failure";
 
@@ -78,21 +77,7 @@ const TransactionListFeature = lazyRouteComponent(
   "TransactionsPage"
 );
 
-const DashboardRouteContent = lazy(() =>
-  import("@/features/dashboard/feature").then((module) => ({
-    default: module.DashboardFeature,
-  }))
-);
-const DashboardRoute = (): JSX.Element => {
-  const router = useRouter();
-  return createElement(
-    Suspense,
-    { fallback: createElement("p", { "aria-live": "polite" }, "Cargando tablero…") },
-    createElement(DashboardRouteContent, {
-      apiClient: router.options.context.apiClient,
-    })
-  );
-};
+const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
   notFoundComponent: () =>
@@ -361,6 +346,8 @@ const routeTree = rootRoute.addChildren([
 
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
+    defaultPreload: "intent",
+    defaultPreloadDelay: 0,
     defaultErrorComponent: RouteFailure,
     routeTree,
     context: {

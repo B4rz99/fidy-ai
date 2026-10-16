@@ -1,3 +1,4 @@
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Effect, Option } from "effect";
@@ -162,12 +163,17 @@ const useTransactionQueries = (currentUser: CurrentUser): TransactionQueries => 
     })
   );
   const [categories] = useState(() =>
-    router.options.context.apiClient.query("categories", "listCategories", {})
+    router.options.context.apiClient
+      .query("categories", "listCategories", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
   );
   const [transactions] = useState(() =>
-    router.options.context.apiClient.query("transactions", "listTransactions", {
-      query: { from: period.from, to: period.to },
-    })
+    router.options.context.apiClient
+      .query("transactions", "listTransactions", {
+        ...workspaceQueryRetention,
+        query: { from: period.from, to: period.to },
+      })
+      .pipe(revalidateWorkspaceQuery)
   );
   const [historyResource] = useState(() =>
     transactionHistory({
@@ -278,7 +284,9 @@ const profileCurrent = ({
 const CurrentUserQuery = (): JSX.Element => {
   const router = useRouter();
   const [currentUser] = useState(() =>
-    router.options.context.apiClient.query("identity", "getCurrentUser", {})
+    router.options.context.apiClient
+      .query("identity", "getCurrentUser", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
   );
   const result = useAtomValue(currentUser);
   const refresh = useAtomRefresh(currentUser);

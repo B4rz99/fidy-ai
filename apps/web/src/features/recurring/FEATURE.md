@@ -33,7 +33,8 @@ the 100-plan presentation case; those fixtures do not prove persistence or produ
 Omit an occurrence, include it again, then pause or stop before its expected date: the retained
 exception bypassed lifecycle filtering, leaving the future expectation in rows and totals. The
 same problem affected a once-edited future expectation. Projection now applies the plan's tracking
-interval to retained exceptions while retaining fulfillment history independently. Domain regressions
+interval to effective expected dates while retaining fulfillment history independently. Displaced
+past unresolved occurrences stay inspectable; displaced future expectations respect pause/stop. Domain regressions
 failed before the fix; the real browser lifecycle journey passes afterward. This audit's fix has
 not been released to production.
 
@@ -72,7 +73,7 @@ replayed, and no existing financial Transaction was changed or deleted.
 
 ## Rerun
 
-Final feature verification passed **440 Core tests** with the whole-Core coverage thresholds,
+Final feature verification passed **442 Core tests** with the whole-Core coverage thresholds,
 **72 Worker/D1/OAuth checks**, and **12 browser checks**. One optional external native-host bridge
 check was skipped because its bridge was not configured; local OAuth confirmation checks ran.
 The browser stress case reported zero Axe violations on the populated page and the settled mobile

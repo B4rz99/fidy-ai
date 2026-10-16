@@ -250,10 +250,7 @@ export const projectRecurringMonth = ({
   );
   return document.plans
     .flatMap((plan) => {
-      const retained = [
-        ...document.exceptions.filter((entry) => trackedOn({ plan, date: entry.date })),
-        ...document.fulfillments,
-      ]
+      const retained = [...document.exceptions, ...document.fulfillments]
         .filter((entry) => entry.planId === plan.id)
         .map((entry) => entry.date);
       const dates = new Set([...generatedDates(plan, from, through), ...retained]);
@@ -267,7 +264,12 @@ export const projectRecurringMonth = ({
               DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: input.timeZone })),
           })
         )
-        .filter((item) => item.expectedDate >= from && item.expectedDate <= through);
+        .filter(
+          (item) =>
+            item.expectedDate >= from &&
+            item.expectedDate <= through &&
+            (item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate }))
+        );
     })
     .sort(
       (left, right) =>

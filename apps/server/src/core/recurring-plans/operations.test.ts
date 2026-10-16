@@ -337,6 +337,37 @@ it.each(["pause", "stop"] as const)(
 );
 
 it.each(["pause", "stop"] as const)(
+  "%s uses the displaced expected date rather than the occurrence identity",
+  (action) => {
+    for (const [identity, expected, visible] of [
+      ["2026-01-31", "2026-01-14", true],
+      ["2026-01-10", "2026-01-31", false],
+    ] as const) {
+      const created = command(emptyRecurringDocument(), {
+        kind: "create",
+        id: planId,
+        plan: { ...monthly, firstDate: identity },
+      });
+      const edited = command(created, {
+        kind: "edit",
+        planId,
+        date: identity,
+        scope: "once",
+        plan: { ...monthly, firstDate: expected },
+      });
+      const inactive = command(edited, { kind: "lifecycle", planId, date: "2026-01-15", action });
+      const items = projectRecurringMonth({
+        document: inactive,
+        month: "2026-01",
+        now: DateTime.makeUnsafe("2026-01-15T12:00:00Z"),
+      });
+      expect(items.map((item) => item.expectedDate)).toEqual(visible ? [expected] : []);
+      if (visible) expect(items[0]?.status).toBe("unconfirmed");
+    }
+  }
+);
+
+it.each(["pause", "stop"] as const)(
   "%s suppresses an edited future expectation while preserving its recorded fulfillment",
   (action) => {
     const edited = command(createdPlan(), {

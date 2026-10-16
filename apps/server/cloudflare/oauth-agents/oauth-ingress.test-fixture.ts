@@ -169,7 +169,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
       .filter(
         (name) =>
           auditMigration ||
-          (name < "0096_" &&
+          (name < "0095_" &&
             name !== "0037_oauth_shared_audit_budget.sql" &&
             name !== "0062_pat_activity.sql" &&
             name !== "0063_connections.sql" &&

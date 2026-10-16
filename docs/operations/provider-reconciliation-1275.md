@@ -210,6 +210,21 @@ prepare an approved disposable rights/support rehearsal. No agreement, message, 
 request or deletion was submitted. Recheck on entity, plan, domain, transport, receiving, webhook,
 provider-term, subprocessor or retention changes.
 
+### Authorized alert-recipient correction — 2026-10-15
+
+The sole operator confirmed `obarboza@fidyapp.com` as the intended recipient. Restricted change
+receipt: `feeedbd5-b1db-4737-8732-2df613f3d1f8`, version 1. The GitHub `production` environment's
+`OPERATOR_ALERT_EMAIL` was corrected and independently read back with the exact approved address.
+This corrects the input used by production deployment and CI notification workflows; it does not
+retroactively change an already deployed Worker or prove delivery.
+
+Cloudflare still shows the old address. Its settings editor offers a new version or deployment,
+while the latest candidate differs from the version serving 100% of traffic. The editor was canceled
+without saving or deploying: promoting unrelated candidate code is outside this address correction.
+Apply the corrected environment input through the controlled production release process, verify
+the serving version's value, and then verify actual alert receipt. No Resend suppression was removed
+and no test email was sent. Earlier observations above remain historical, not current instructions.
+
 ## Flow reconciliation
 
 The Cloudflare, Kapso and Resend technical fields specifically observed above are **partially verified**; other

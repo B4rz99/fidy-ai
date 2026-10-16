@@ -411,7 +411,10 @@ test("saving a later Transaction resets pages and reloads its correction without
     })
   ));
 
-const installCalendarHistory = (page: Page, historical: DateTime.Utc): Promise<Array<URL>> => {
+const installCalendarHistory = (
+  page: Page,
+  historical: DateTime.Utc
+): Promise<ReadonlyArray<URL>> => {
   const row = {
     ...fixtureRows(1)[0],
     counterparty: "Registro histórico",

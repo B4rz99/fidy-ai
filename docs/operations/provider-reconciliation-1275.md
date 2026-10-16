@@ -164,9 +164,55 @@ recipient and the Kapso brand, not FIDY S.A.S.; it does not establish the compan
 accepted DPA/terms version. The minimized observation is in the restricted change receipt; the
 private invoice URL is not copied into evidence or Git.
 
+## Resend account observations — 2026-10-15
+
+Restricted evidence reference: `753516b5-c5bd-49dd-a7f7-b26cd20b22e4`, observation version 1. Authenticated read-only
+inspection of team `fidyapp`; the approved operator is its listed admin. Exact source-page references,
+domain settings and a provider-signed DPA copy are retained outside Git in the existing restricted
+evidence directory. No email bodies, API keys or webhook signing secrets were opened. This is
+account evidence, not qualified legal review or a deletion rehearsal.
+
+- **Plan and entity:** Transactional, Marketing and Team show Free; Transactional allows 3,000
+  emails monthly and 100 daily. Billing shows no payment methods or invoices. The team name and
+  operator membership do not establish FIDY S.A.S. as the contracting customer or an acceptance date.
+- **Domains and transport:** both domains are verified in São Paulo (`sa-east-1`). The primary
+  domain has Sending enabled, Receiving disabled and Opportunistic TLS; the ingestion subdomain has
+  both Sending and Receiving enabled and Enforced TLS. Opportunistic TLS can fall back to an
+  unencrypted connection to a recipient mail server. Sending region is not storage residency;
+  the DPA identifies primary processing in the United States. Tracking configuration is offered,
+  but actual open/click tracking preferences were not established. No transport setting was changed.
+- **Account/source discrepancy:** an enabled Resend webhook points to Fidy's API, while the inspected
+  current source declares neither Resend Receiving nor a matching webhook route. Receiving enabled
+  at the provider establishes an additional account capability, not successful ingestion or delivery
+  into the current application. Event subscriptions, historic content, destination behavior and
+  whether this is obsolete configuration remain unverified. Reconcile this boundary before excluding
+  inbound mail or its provider subprocessors from review; do not infer an active financial-data flow.
+- **Operational alert delivery:** the configured alert recipient differs from the approved operator.
+  Resend lists that recipient as suppressed with origin **Bounce**, and the sending list shows
+  suppressed operational alerts. Delivery to the intended operator is therefore not verified. The
+  operator's confirmation of the intended address is pending; no recipient, suppression or retry
+  setting was changed. Do not remove a bounce suppression merely to bypass delivery protection.
+- **Account-accessible DPA:** Documents says its attached DPA is provider-signed and fully executed
+  at signup. The retained 19-page copy is updated 2025-12-31 and names Plus Five Five, Inc.; it bears
+  the provider CEO's dated signature of 2026-01-14. Customer signature fields are blank, and the
+  preamble/section 12 tie effectiveness to acceptance of the applicable Agreement or execution.
+  This supplies account-context incorporation evidence, not a FIDY-specific acceptance receipt.
+  The document covers instructions/return/deletion (section 2), confidentiality (3), subprocessors
+  and change notices (4), security (5/Exhibit C), transfers (6), rights/breach assistance (8), and
+  independent account/usage purposes (9). Exhibit B supplies a privacy contact. Exhibit A's deletion
+  within 90 days of account termination is not a per-email erasure guarantee; section 2.4 permits
+  qualified residual storage. GDPR SCCs and this signature do not establish the Colombian mechanism.
+
+Next Resend steps: establish actual company/Agreement acceptance evidence; reconcile the enabled
+receiving/webhook configuration with the serving application; resolve alert delivery with the
+operator; review transport, applicable retention and subprocessors for each actual flow; then
+prepare an approved disposable rights/support rehearsal. No agreement, message, purchase, provider
+request or deletion was submitted. Recheck on entity, plan, domain, transport, receiving, webhook,
+provider-term, subprocessor or retention changes.
+
 ## Flow reconciliation
 
-The Cloudflare and Kapso technical fields specifically observed above are **partially verified**; other
+The Cloudflare, Kapso and Resend technical fields specifically observed above are **partially verified**; other
 account fields remain **unverified**. Every row still has reviewer **not recorded** and owner
 **obarboza@fidyapp.com**. None has an approved legal classification or international mechanism in
 this record. The next steps are specific to the flow; do not treat these rows as a completed review.
@@ -184,7 +230,7 @@ The public-source note supplies candidate documents and their applicability limi
 | W-billing    | Wompi receives payment enrollment and collection data, billing email, amount/currency, references and payment-source authority. Card/wallet entry is transient; native adapters include card, Nequi and DaviPlata. | Verify merchant entity, sandbox/production and each activated method, actual merchant agreements/acceptances, method-specific recipients, retention and rights route. Source support for a wallet does not prove activation or add its operator as a verified Fidy recipient. |
 | G-auth       | Google OIDC `openid email`: provider verification and stable issuer/subject, with optional contact email. Fidy retains no provider tokens and requests no mailbox scope.                                           | Verify actual OAuth application, project owner, consent screen, scopes, callback and applicable identity/API terms; classify independent Google purposes separately. A Workspace DPA is not automatically the consumer OIDC mechanism.                                        |
 | MS-auth      | Microsoft common-v2 OIDC supports personal and work/school accounts; tenant-qualified issuer/subject and optional contact claims, no mailbox scope or retained provider tokens.                                    | Verify application registration, owner, audience types, scopes/callback and actual identity terms. Review consumer and organizational flows separately; do not assume an enterprise DPA makes all identity activity processing on Fidy's instructions.                        |
-| R-email      | Resend sends authentication, recovery and service email to the intended recipient; no inbound financial mailbox or Resend Receiving is wired.                                                                      | Verify sending account, entity, plan, domain, retained email/log data, recipients and applicable DPA acceptance. A sending-region setting alone is not proof of storage residency.                                                                                            |
+| R-email      | Source wires outbound authentication, recovery and service email. The account additionally enables Receiving and a webhook without a matching current source route; actual inbound use is unverified.              | Verify sending account, entity, plan, domain, retained email/log data, recipients and applicable DPA acceptance. A sending-region setting alone is not proof of storage residency.                                                                                            |
 | OP-inbox     | The published support inbox receives request correspondence and any approved response.                                                                                                                             | Identify its actual hosting provider, account/entity, retention, trash/archive/backups and contractual rights/incident channels. Do not infer its host from the email address or OIDC provider.                                                                               |
 | OP-evidence  | The local restricted case register/evidence stores minimal authority, case, source, response and delivery evidence.                                                                                                | Verify actual storage/backup destinations, permissions, approved finite retention and any third-party service. Existing FileVault/setup evidence is dated #1273 evidence, not proof of a new backup contract.                                                                 |
 
@@ -230,8 +276,7 @@ improvement instruction and Resend's disclosed trust/safety sampling route again
 approved purposes. The accepted Kapso retention exception grants no training authorization. The
 Kapso improvement preference was initially on and has now been explicitly disabled by the operator
 through the separately approved action recorded above. Past processing and any remaining verified
-purpose conflict still require reviewed disposition. No Resend account preference
-has been inspected here. Do not name a candidate as Fidy's active processor,
+purpose conflict still require reviewed disposition. The Resend domain transport settings were inspected; its trust/safety sampling applicability and other account instructions remain unverified. Do not name a candidate as Fidy's active processor,
 claim finite Kapso expiry, promise completed erasure from a request receipt, promise Colombian
 residency or treat a public agreement as accepted. Record any needed copy correction with the
 reviewer's approved findings first. Then update the current artifact and metadata/digests together,
@@ -241,8 +286,8 @@ retain historical snapshots and run the exact-copy tests below.
 
 Use the [provider request procedure](provider-rights-1275.md) with the approved #1273 entitlement and
 #1274 erasure decision. It is an execution draft pending per-flow review and available-account
-testing. It introduces no new identity checks or provider deletion API. The Cloudflare and Kapso
-inspections and separately authorized preference change above are configuration evidence; no provider deletion/support rehearsal has
+testing. It introduces no new identity checks or provider deletion API. The Cloudflare, Kapso and Resend
+inspections and separately authorized Kapso preference change above are configuration evidence; no provider deletion/support rehearsal has
 been performed for #1275. Local native tests do not establish provider completion.
 
 #1275 stays open until every actual active flow has current restricted evidence and qualified review

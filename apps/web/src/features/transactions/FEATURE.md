@@ -11,6 +11,12 @@ clearing the day without returning to the current month. Five Transaction presen
 checks and repository lint, typed lint, format and type gates passed. Deployment and live historical
 fixture deletion evidence remain pending.
 
+The historical-date fix merged in [PR #1354](https://github.com/B4rz99/fidy-ai/pull/1354) and
+deployed successfully through [run 38912895285](https://github.com/B4rz99/fidy-ai/actions/runs/38912895285).
+Public health reported `available` at exact revision `6c0f5fff24b47985c213329bb141e70a4ae469ef`.
+Populated live historical-date verification and fixture cleanup remain blocked by the fixture
+User's separate 256-call canonical UTC-day budget; this is not recorded as a passing live read.
+
 Effect 4.0.2 continuation, 2026-10-14, baseline `30f585ceb1a811a97c523251ea6bd0bee13fc07f`: all seven built-browser checks across deletion, Budgets and the Budget Widget passed. Production capture created the fictional `PRUEBA QA AUDITORIA 20261014`, COP 1 expense dated 14-10-2026. Changing Otros to Restaurantes in the table saved directly without opening the editor; reload retained the Category, amount and date. Opening deletion displayed the explicit irreversible-deletion review; cancellation retained the record. After action-time approval, the browser deleted only this fixture through “Eliminar definitivamente”. A full reload returned an empty history with zero Transactions, income and expense counts. This closes current-artifact production deletion and reload persistence for the fixture; direct Audit/SourceAttestation retention for this new deletion was not inspected.
 
 Rebased audit, 2026-10-14, release baseline `a387f50fb5`: seven built-browser journeys passed across Transactions deletion/pagination, Budgets, and the Dashboard Budget Widget. The Transactions checks include cancellation, pending submission locks, rejected deletion, lost acknowledgement followed by canonical refresh without replay, and an actual Core/D1 105-record history whose second-page correction and deletion persist after reload. Controlled HTTP refusal journeys and actual persistence journeys remain distinct. The Transaction and Budget Worker/D1 suites passed alongside onboarding (the latter needed the browser session-binding header in its restored recovery fixture). No production Transaction was created or deleted in this rerun.

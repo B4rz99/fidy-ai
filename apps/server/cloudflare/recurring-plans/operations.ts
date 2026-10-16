@@ -1,4 +1,5 @@
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
+import { refusedByAuditBudget } from "../../src/shell/audit/operations";
 import {
   RecurringWorkspace,
   RecurringWorkspaceQuery,
@@ -7,7 +8,9 @@ import { RecurringCommand } from "../../src/core/recurring-plans/contract";
 import { applyRecurringEdit, planAt } from "../../src/core/recurring-plans/operations";
 import {
   type QueryCaller,
+  boundaryFailure,
   callerScope,
+  canonicalAuditRateLimitedResponse,
   credentialRefusedPreparation,
   failedPreparation,
   isOAuthCaller,
@@ -29,6 +32,8 @@ import { workspaceValue } from "./internal/query";
 import { outcome, validReversal, validateReferences } from "./internal/mutation";
 import { audit, credentialUse } from "./internal/audit";
 import { completion, encodeDocument, readDocument, writeDocument } from "./internal/store";
+
+import { TransactionBoundaryFailure } from "../canonical-work/contract";
 
 const operation = "recurringPlans.applyRecurringEdit";
 
@@ -72,19 +77,27 @@ export const browseRecurringPlans = ({
       query: query.value,
     });
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))(view);
-    yield* Effect.tryPromise(() =>
-      db.batch([
-        ...credentialUse({ db, subject, current }),
-        audit({
-          work: { db, subject, current },
-          operation: "recurringPlans.getRecurringWorkspace",
-          outcome: "accepted",
-        }),
-        db.prepare(completion),
-      ])
-    );
+    yield* Effect.tryPromise({
+      try: () =>
+        db.batch([
+          ...credentialUse({ db, subject, current }),
+          audit({
+            work: { db, subject, current },
+            operation: "recurringPlans.getRecurringWorkspace",
+            outcome: "accepted",
+          }),
+          db.prepare(completion),
+        ]),
+      catch: boundaryFailure,
+    });
     return Response.json({ data, next: [] }, { headers: transactionNoStore });
-  }).pipe(Effect.orElseSucceed(transactionUnavailable));
+  }).pipe(
+    Effect.catch((cause) =>
+      cause instanceof TransactionBoundaryFailure && refusedByAuditBudget(cause.cause)
+        ? Effect.map(Clock.currentTimeMillis, canonicalAuditRateLimitedResponse)
+        : Effect.succeed(transactionUnavailable())
+    )
+  );
 
 /** Prepare, never commit, a revision-bound User mutation inside the existing canonical unit. */
 export const prepareRecurringEdit = ({

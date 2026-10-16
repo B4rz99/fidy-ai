@@ -146,6 +146,36 @@ at `canonical_query / ProviderQuotaExceeded`; it did not reach the corrected lif
 provider translation fix and natural-language lifecycle approval therefore still require live
 verification after quota is available. Quota exhaustion is not recorded as a passing model check.
 
+The follow-up merged in [PR #1353](https://github.com/B4rz99/fidy-ai/pull/1353) and deployed through
+[production run 38906832229](https://github.com/B4rz99/fidy-ai/actions/runs/38906832229). All CI checks,
+both Worker pairings, normal traffic and drift checks passed. Public health reported `available`
+at exact revision `84743a04f96685670f240cf7d69935b20c064e68`, with contract digest
+`cf1813f589f1c81fc8e96b395631f1fafdfb128e99c2557709b6b1b5a50cd812`.
+
+The reloaded production page showed the empty recurring workspace for the account used by the
+separate Subscription audit. Its chat was empty after the account switch; it did not retain the
+previous account's transcript. A single greeting request returned HTTP 429 with
+`status: provider_quota_exceeded`. The UI explained the daily limit and preserved the exact draft
+in an enabled composer. This verifies deployed quota recovery, not successful model output or the
+pending lifecycle approval.
+
+The original fixture account was then restored through the in-app Google login. Through normal
+production controls, the remaining ASOCIACION plan was stopped from 16-10-2026. November showed no
+occurrences, while the earlier September and October occurrences remained. The September Transaction
+association was reversed, then the September and October expectations were omitted. Both months
+showed no expected or registered spending, and no previous-month pending count remained. These are
+direct web lifecycle/association observations, not hosted-model approval evidence. The three
+fictional July–September Transactions still await irreversible cleanup; the Transactions date picker
+was found to filter only the current-month result instead of loading the selected historical month.
+
+A later recurring/category reread returned HTTP 503 at release `17d62a7a`. Scoped read-only D1
+diagnostics confirmed exactly 256 canonical calls for this User on 16-10-2026, matching
+`dailyAuditBudget`; D1 itself remained readable and public health remained available. The canonical
+Audit triggers refuse additional work atomically, but these two read adapters present that refusal
+as unavailable. No Audit counters were reset, limits changed or failed mutations replayed. This
+separate daily canonical budget now blocks historical fixture reads/cleanup until its UTC reset.
+The diagnostic read wrote zero rows. Correct rate-limit classification is a remaining adapter gap.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

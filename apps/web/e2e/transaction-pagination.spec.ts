@@ -410,3 +410,83 @@ test("saving a later Transaction resets pages and reloads its correction without
       yield* wait(() => expect(page.getByLabel("Monto ($)", { exact: true })).toHaveValue("0.02"));
     })
   ));
+
+const installCalendarHistory = (
+  page: Page,
+  historical: DateTime.Utc
+): Promise<ReadonlyArray<URL>> => {
+  const row = {
+    ...fixtureRows(1)[0],
+    counterparty: "Registro histórico",
+    occurredAt: DateTime.formatIso(historical),
+  };
+  const requests: Array<URL> = [];
+  return page
+    .route(`${apiOrigin}/transactions?*`, (route) => {
+      const url = new URL(route.request().url());
+      requests.push(url);
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      const included =
+        from !== null &&
+        to !== null &&
+        Date.parse(from) <= historical.epochMilliseconds &&
+        historical.epochMilliseconds < Date.parse(to);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: included ? [row] : [], next: [] }),
+      });
+    })
+    .then(() => requests);
+};
+test("calendar selection loads the selected month and clearing the day retains that month", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const current = yield* DateTime.now;
+      const historical = DateTime.subtract(current, { months: 2 });
+      const date = DateTime.formatIsoDate(
+        DateTime.setZone(historical, DateTime.zoneMakeNamedUnsafe("America/Bogota"))
+      );
+      const requests = yield* wait(() => installCalendarHistory(page, historical));
+      yield* wait(() => page.goto("/app/transactions"));
+      yield* wait(() =>
+        expect(page.getByText("No hay transacciones para mostrar", { exact: true })).toBeVisible()
+      );
+      yield* wait(() => page.getByRole("button", { name: "Fecha", exact: true }).click());
+      yield* wait(() =>
+        page.getByRole("button", { name: "Ir al mes anterior", exact: true }).click()
+      );
+      yield* wait(() =>
+        page.getByRole("button", { name: "Ir al mes anterior", exact: true }).click()
+      );
+      const label = new Intl.DateTimeFormat("es", {
+        dateStyle: "full",
+        timeZone: "America/Bogota",
+      }).format(historical.epochMilliseconds);
+      yield* wait(() => page.getByRole("button", { name: label, exact: true }).click());
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Registro histórico", exact: true })
+        ).toBeVisible()
+      );
+      expect(requests.at(-1)?.searchParams.get("from")?.slice(0, "YYYY-MM".length)).toBe(
+        date.slice(0, "YYYY-MM".length)
+      );
+      const count = requests.length;
+      yield* wait(() => page.getByRole("button", { name: "Fecha", exact: true }).click());
+      yield* wait(() =>
+        page.getByRole("button", { name: "Todas las fechas", exact: true }).click()
+      );
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Registro histórico", exact: true })
+        ).toBeVisible()
+      );
+      expect(requests).toHaveLength(count);
+    })
+  ));

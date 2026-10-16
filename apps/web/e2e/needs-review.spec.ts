@@ -485,3 +485,47 @@ test("selects a review item from its row and keeps history discoverable", ({ pag
       yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
     })
   ));
+
+test("advances from a completed middle row and wraps after the last row", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const thirdId = "24000000-0000-4000-8000-000000001352";
+      const entries: Fixture[] = [id, secondId, thirdId].map((value, index) => ({
+        id: value,
+        revision: 0,
+        status: "pending",
+        draft: {
+          amount: "13500",
+          currency: "COP",
+          direction: "outflow",
+          counterparty: `Contraparte ${index}`,
+          occurredAt: "2026-01-01T12:00:00Z",
+          userProvidedFields: [],
+        },
+      }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Abrir y seleccionar Extracto" }).nth(1).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Contraparte 1")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Contraparte 2")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Contraparte 0")
+      );
+    })
+  ));

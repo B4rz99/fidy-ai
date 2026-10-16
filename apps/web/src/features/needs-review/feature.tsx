@@ -120,7 +120,7 @@ const ReadyInbox = ({
         reviewTitle(item).toLocaleLowerCase("es-CO").includes(search.toLocaleLowerCase("es-CO"))
     ),
   };
-  const control = useInboxControl({ view, refresh });
+  const control = useInboxControl({ view, visibleItems: visible.items, refresh });
   return (
     <>
       <ReviewNavigation

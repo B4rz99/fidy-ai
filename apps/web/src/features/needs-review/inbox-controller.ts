@@ -22,8 +22,13 @@ export type InboxControl = Readonly<{
 }>;
 export const useInboxControl = ({
   view,
+  visibleItems,
   refresh,
-}: Readonly<{ view: Workspace; refresh: () => void }>): InboxControl => {
+}: Readonly<{
+  view: Workspace;
+  visibleItems: ReadonlyArray<Item>;
+  refresh: () => void;
+}>): InboxControl => {
   const [barrier] = useState<DraftBarrier>(() => new Map());
   const apiClient = useRouter().options.context.apiClient;
   const [writer] = useState(() => makeReviewWrite(apiClient));
@@ -32,18 +37,13 @@ export const useInboxControl = ({
   const [checked, setChecked] = useState<ReadonlyArray<Item["id"]>>([]);
   const [undo, setUndo] = useState<ReadonlyArray<Detail>>([]);
   const [feedback, setFeedback] = useState("");
-  const [blocked, setBlocked] = useState(false);
-  const [recovering, setRecovering] = useState<Option.Option<Workspace>>(Option.none);
-  const locked =
-    blocked &&
-    Option.match(recovering, { onNone: () => true, onSome: (previous) => previous === view });
-  const setLocked = (value: boolean): void => {
-    setBlocked(value);
-    setRecovering(Option.none());
-  };
-  const selected = selectedItem({ selection, view });
+  const { locked, setLocked, recover } = useReviewLock({ view, refresh });
+  const selected = selectedItem({ selection, view: { ...view, items: visibleItems } });
   const finished = (items: ReadonlyArray<Detail>, skipped: boolean): void => {
     items.forEach((item) => barrier.delete(item.item.id));
+    setSelection(
+      selectionAfterDecision({ view: { ...view, items: visibleItems }, selected, completed: items })
+    );
     setLocked(false);
     setChecked([]);
     setFeedback(skipped ? `${items.length} elementos omitidos.` : "Cambio guardado.");
@@ -66,10 +66,7 @@ export const useInboxControl = ({
       setChecked((current) =>
         current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]
       ),
-    recover: () => {
-      setRecovering(Option.some(view));
-      refresh();
-    },
+    recover,
     undoSkip: () => {
       bulk(
         true,
@@ -134,3 +131,48 @@ const selectedItem = ({
     Option.filter(selection, (id) => view.items.some((item) => item.id === id)),
     () => Option.fromUndefinedOr(view.items[0]?.id)
   );
+
+const selectionAfterDecision = ({
+  view,
+  selected,
+  completed,
+}: Readonly<{
+  view: Workspace;
+  selected: Option.Option<Item["id"]>;
+  completed: ReadonlyArray<Detail>;
+}>): Option.Option<Item["id"]> => {
+  const completedIds = new Set(completed.map((detail) => detail.item.id));
+  const position = view.items.findIndex((item) => Option.contains(selected, item.id));
+  const active = view.items[position];
+  if (active === undefined || !completedIds.has(active.id)) return selected;
+  const following = [...view.items.slice(position + 1), ...view.items.slice(0, position)];
+  return Option.fromUndefinedOr(following.find((item) => !completedIds.has(item.id))?.id);
+};
+
+/** Only a fresh canonical workspace can release an uncertain write lock. */
+const useReviewLock = ({
+  view,
+  refresh,
+}: Readonly<{ view: Workspace; refresh: () => void }>): Readonly<{
+  locked: boolean;
+  setLocked: (value: boolean) => void;
+  recover: () => void;
+}> => {
+  const [blocked, setBlocked] = useState(false);
+  const [recovering, setRecovering] = useState<Option.Option<Workspace>>(Option.none);
+  const locked =
+    blocked &&
+    Option.match(recovering, { onNone: () => true, onSome: (previous) => previous === view });
+  const setLocked = (value: boolean): void => {
+    setBlocked(value);
+    setRecovering(Option.none());
+  };
+  return {
+    locked,
+    setLocked,
+    recover: () => {
+      setRecovering(Option.some(view));
+      refresh();
+    },
+  };
+};

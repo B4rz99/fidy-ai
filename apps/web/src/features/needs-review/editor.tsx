@@ -102,7 +102,10 @@ const ReadyEditor = ({
   return (
     <>
       <div className="mt-6 grid min-w-0 items-start gap-6 xl:grid-cols-2">
-        <OriginalMaterial item={detail.item} />
+        <div className="min-w-0">
+          <OriginalMaterial item={detail.item} />
+          <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={locked} />
+        </div>
         <div className="min-w-0">
           <h2 className="sr-only">Completa la transacción</h2>
           <p className="mb-6 rounded-xl bg-warning/35 px-4 py-3 text-sm font-medium">
@@ -116,10 +119,9 @@ const ReadyEditor = ({
             timeZone={detail.item.timeZone}
           />
           <EditorFeedback feedback={editor.feedback} recover={recover} />
-          <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={locked} />
         </div>
       </div>
-      <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t pt-5">
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t pt-5 pr-16">
         <Button variant="ghost" onClick={() => editor.act("Skip")} disabled={locked}>
           Omitir
         </Button>

@@ -270,7 +270,6 @@ const TransactionResources = ({
   );
 };
 
-/** Calendar selection owns the query month; keyed resources isolate its continuation and edits. */
 const TransactionPeriod = ({
   currentUser,
   profileCurrent,

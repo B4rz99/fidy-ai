@@ -35,6 +35,7 @@ type WorkspaceProps = Readonly<{
   transactions: ReadonlyArray<Transaction>;
   period: Readonly<{ monthLabel: string; timeZone: string }>;
   queryNotice: ReactNode;
+  dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
   onRefresh: () => void;
   continuation: HistoryState["continuation"];
   onMore: () => void;
@@ -45,7 +46,6 @@ type WorkspaceProps = Readonly<{
     | Readonly<{
         readOnly: false;
         editable: boolean;
-        dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
       }>
   );
 type WorkspaceFilters = Readonly<{
@@ -54,12 +54,8 @@ type WorkspaceFilters = Readonly<{
   categoryId: string;
   date: string;
 }>;
-const emptyFilters: WorkspaceFilters = {
-  search: "",
-  direction: "all",
-  categoryId: "all",
-  date: "",
-};
+const emptyLocalFilters = { search: "", direction: "all", categoryId: "all" };
+const emptyFilters: WorkspaceFilters = { ...emptyLocalFilters, date: "" };
 const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.search.trim() !== "" ||
   filters.direction !== "all" ||
@@ -618,14 +614,14 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [searching, onSearchOpen] = useState(false);
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
-  const [localFilters, setFilters] = useState<WorkspaceFilters>(emptyFilters);
+  const [localFilters, setFilters] = useState(emptyLocalFilters);
   const filters = {
     ...localFilters,
-    date: props.readOnly ? localFilters.date : props.dateFilter.value,
+    date: props.dateFilter.value,
   };
   const onFilters = (next: WorkspaceFilters): void => {
-    setFilters(next);
-    if (!props.readOnly) props.dateFilter.onChange(next.date);
+    setFilters({ search: next.search, direction: next.direction, categoryId: next.categoryId });
+    props.dateFilter.onChange(next.date);
     if (panel._tag === "Bulk") onPanel({ _tag: "Summary" });
   };
   const visible = props.transactions.filter((transaction) =>

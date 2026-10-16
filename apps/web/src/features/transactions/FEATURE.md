@@ -5,8 +5,8 @@ Historical-date audit, 2026-10-16: production displayed an empty October history
 filtered already-loaded current-month records. The follow-up makes the selected calendar date own
 the canonical query month, retaining the User's IANA time zone and half-open month bounds. A changed
 month replaces query/continuation/editing state, while clearing the day keeps that month. The
-privacy read-only history retains its existing unbounded query. All 15 browser checks across
-pagination, deletion and actual Core/D1 persistence passed, including selected-month fetch and
+privacy read-only history retains its existing unbounded query. All 21 browser checks across
+privacy read-only history, pagination, deletion and actual Core/D1 persistence passed, including selected-month fetch and
 clearing the day without returning to the current month. Five Transaction presentation/scroll unit
 checks and repository lint, typed lint, format and type gates passed. Deployment and live historical
 fixture deletion evidence remain pending.

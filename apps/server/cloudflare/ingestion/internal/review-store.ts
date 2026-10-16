@@ -1,0 +1,61 @@
+import { ReviewUnavailable } from "../contract";
+import { DateTime, Effect, Option, Schema } from "effect";
+import {
+  type ReviewDetail,
+  ReviewDraft,
+  ReviewSummary,
+} from "../../../src/core/ingestion/contract";
+import { TransactionId } from "../../../src/core/transactions/contract";
+
+export const reviewCompletion = `INSERT INTO ingestion_review_assertion (id, accepted)
+  VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
+  ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
+export const ReviewRow = Schema.Struct({
+  ...ReviewSummary.fields,
+  createdAt: Schema.DateTimeUtcFromMillis,
+  expiresAt: Schema.DateTimeUtcFromMillis,
+  transactionId: Schema.OptionFromNullOr(TransactionId),
+  revision: Schema.Int,
+  draft_json: Schema.OptionFromNullOr(Schema.String),
+  suggestions_json: Schema.OptionFromNullOr(Schema.String),
+});
+export const reviewProjection = `id, source, reason, time_zone AS timeZone,
+  CASE WHEN status != 'created' AND expires_at_ms <= ? THEN 'expired' ELSE status END AS status,
+  created_at_ms AS createdAt, expires_at_ms AS expiresAt, transaction_id AS transactionId,revision,draft_json,suggestions_json`;
+export const reviewDraftJson = Schema.fromJsonString(Schema.toCodecJson(ReviewDraft));
+
+export const readReviewDetail = ({
+  db,
+  userId,
+  id,
+  current,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  id: string;
+  current: number;
+}>): Effect.Effect<Option.Option<ReviewDetail>, ReviewUnavailable> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT ${reviewProjection}
+    FROM ingestion_review_sources WHERE user_id = ? AND id = ?`)
+        .bind(current, userId, id)
+        .first()
+    );
+    if (raw === null) return Option.none();
+    const row = yield* Schema.decodeUnknownEffect(ReviewRow)(raw);
+    const draft =
+      DateTime.toEpochMillis(row.expiresAt) > current
+        ? yield* Effect.forEach(Option.toArray(row.draft_json), (json) =>
+            Schema.decodeEffect(reviewDraftJson)(json)
+          ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
+        : Option.none();
+    const suggestions =
+      DateTime.toEpochMillis(row.expiresAt) > current
+        ? yield* Effect.forEach(Option.toArray(row.suggestions_json), (json) =>
+            Schema.decodeEffect(reviewDraftJson)(json)
+          ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
+        : Option.none();
+    return Option.some({ item: row, revision: row.revision, draft, suggestions });
+  }).pipe(Effect.mapError(() => new ReviewUnavailable()));

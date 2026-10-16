@@ -1,3 +1,4 @@
+import type { CapturedInterpretationContext } from "../../src/core/interpretation-evidence/contract";
 import type { IanaTimeZone } from "../../src/core/_shared/context";
 import {
   type NotificationInterpretationEvidence,
@@ -182,3 +183,15 @@ export type TransactionOutcome = Readonly<{
   /** The revision a correction observed and must still find, when it observed one. */
   expectedRevision: Option.Option<number>;
 }>;
+
+/** Explicit User-supplied facts retain a review reference without fabricating extracted evidence. */
+export type ReviewedCaptureInput = CaptureFacts &
+  Readonly<{
+    attestationId: string;
+    createdAt: string;
+    context: CapturedInterpretationContext;
+    reviewItemId: string;
+    userProvidedFields: ReadonlyArray<
+      "money" | "direction" | "counterparty" | "occurredAt" | "categoryId"
+    >;
+  }>;

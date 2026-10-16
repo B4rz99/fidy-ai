@@ -4,7 +4,11 @@ import { NotificationEmailSourceAttestation } from "../../../src/core/source-att
 import { NotificationInterpretationEvidence } from "../../../src/core/transactions/contract";
 import { encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { prepareConsentAction, prepareQueuedConsentAction } from "../../consent/operations";
-import type { NotificationEmailCaptureInput, StatementCaptureInput } from "../contract";
+import type {
+  NotificationEmailCaptureInput,
+  ReviewedCaptureInput,
+  StatementCaptureInput,
+} from "../contract";
 
 /** Decode the installed Transaction admission trigger from a native D1 batch failure. */
 export const statementCaptureCapacityExceeded = (cause: unknown): boolean =>
@@ -19,7 +23,7 @@ const sourceAuthority = ({
 });
 
 const transactionStatement = (
-  input: StatementCaptureInput | NotificationEmailCaptureInput,
+  input: StatementCaptureInput | NotificationEmailCaptureInput | ReviewedCaptureInput,
   createdAt: string
 ): OwnedStatement => {
   const { extraction, userId, transactionId, categoryId } = input;
@@ -157,3 +161,32 @@ export const prepareNotificationEmailCapture = (
       }),
     ];
   });
+
+/** A review decision is manual capture; its source context and all User-supplied facts stay explicit. */
+export const prepareReviewedCapture = (
+  input: ReviewedCaptureInput
+): ReadonlyArray<D1PreparedStatement> => {
+  const transaction = transactionStatement(input, input.createdAt);
+  const guard = sourceAuthority(input);
+  return [
+    input.db.prepare(transaction.sql).bind(...transaction.params),
+    input.db
+      .prepare(`INSERT INTO source_attestations
+      (id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at,review_item_id,user_provided_fields)
+      SELECT ?,?,?,'manual',?,?,?,'user-reviewed-v1',?,?,? WHERE ${guard.sql}`)
+      .bind(
+        input.attestationId,
+        input.userId,
+        input.transactionId,
+        input.context.serviceMarket,
+        input.context.locale,
+        input.context.timeZone,
+        input.createdAt,
+        input.reviewItemId,
+        Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)))(
+          input.userProvidedFields
+        ),
+        ...guard.params
+      ),
+  ];
+};

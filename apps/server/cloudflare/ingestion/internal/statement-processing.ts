@@ -8,10 +8,11 @@ import {
 
 import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCaptures } from "../../categories/operations";
-import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
+import { BigDecimal, Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   type InterpretedStatementRow,
   ParsedStatementRow,
+  ReviewDraft,
   StatementRowEvidence,
 } from "../../../src/core/ingestion/contract";
 import {
@@ -207,6 +208,21 @@ const acceptedStatements = (
     sourceGuard: { sql: activeSource, params: activeArgs },
   });
 
+const knownReviewSuggestions = (
+  result: Extract<RowWork["result"], { outcome: "needs-review" }>
+): Option.Option<string> =>
+  Option.map(result.knownMoney, (money) =>
+    Schema.encodeSync(Schema.fromJsonString(ReviewDraft))({
+      amount: BigDecimal.format(money.amount),
+      currency: money.currency,
+      counterparty: "",
+      occurredAt: "",
+      direction: Option.none(),
+      categoryId: Option.none(),
+      userProvidedFields: [],
+    })
+  );
+
 const reviewStatement = (
   {
     db,
@@ -223,15 +239,16 @@ const reviewStatement = (
   }: Readonly<{ id: string; activeArgs: ReadonlyArray<string | number>; current: number }>
 ): D1PreparedStatement => {
   const evidence = Schema.encodeUnknownSync(evidenceCodec)(result.evidence);
+  const suggestions = knownReviewSuggestions(result);
   return db
     .prepare(`INSERT INTO statement_needs_review
-      (id, user_id, submission_id, record_number, reason, original_evidence, known_money,
+      (id, user_id, submission_id, record_number, reason, original_evidence, known_money, review_suggestions_json,
        issues, status, evidence_expires_at_ms, created_at_ms, service_market, locale,
        time_zone, source_format, parser_revision, extractor_revision)
       SELECT ?, ?, ?, ?, ?,
         CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
           AND ? > ? THEN ? ELSE NULL END,
-        NULL, ?,
+        NULL, ?, ?,
         CASE WHEN COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) < ?
           AND ? > ? THEN 'pending' ELSE 'expired' END,
         ?, ?, ?, ?, ?, ?, ?, ? WHERE ${active}`)
@@ -245,6 +262,7 @@ const reviewStatement = (
       context.retention_expires_at_ms,
       current,
       JSON.stringify(evidence),
+      Option.getOrNull(suggestions),
       JSON.stringify(result.issues),
       maximumRetainedReviewEvidence,
       context.retention_expires_at_ms,

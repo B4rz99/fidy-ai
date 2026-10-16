@@ -144,6 +144,22 @@ const budgetsRoute = createRoute({
     )(search),
   component: lazyRouteComponent(() => import("@/features/budgets/feature"), "BudgetsFeature"),
 });
+const createdReviewTransactionRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/needs-review/transactions/$id",
+  component: lazyRouteComponent(
+    () => import("@/features/needs-review/created-transaction"),
+    "CreatedReviewTransaction"
+  ),
+});
+const needsReviewRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/needs-review",
+  component: lazyRouteComponent(
+    () => import("@/features/needs-review/feature"),
+    "NeedsReviewFeature"
+  ),
+});
 const recurringPlansRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/recurring",
@@ -320,6 +336,8 @@ const routeTree = rootRoute.addChildren([
       dashboardRoute,
       budgetsRoute,
       recurringPlansRoute,
+      needsReviewRoute,
+      createdReviewTransactionRoute,
     ]),
     accessManagementRoute,
     patManagementRoute,

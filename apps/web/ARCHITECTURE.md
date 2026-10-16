@@ -292,3 +292,11 @@ Monthly list, calendar and summaries consume one server projection. Editors and 
 selection live in responsive sheets; drafts stay local. Accepted edits invalidate the canonical
 resource; an uncertain write requires an explicit reread before another save. The browser does not
 generate schedules, match Transactions, sum Money or change the meaning of historical detection.
+
+The `/app/needs-review` feature composes the persistent ingestion inbox, browser-only original
+preview, editable draft and lifecycle history. Canonical query atoms retain server ownership;
+a serialized editing owner debounces revision-bound autosaves and flushes before an explicit
+individual creation or skip. Bulk skip/restore use the same canonical mutation. Uncertain writes
+require a canonical reread. Original text is escaped, media locators are not rendered as public
+URLs, and neither originals nor drafts enter browser storage. Navigation owns pending-count
+polling within the authentication registry lifetime.

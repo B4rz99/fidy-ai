@@ -28,8 +28,16 @@ const sessionDestinations = new Map([
   ["recurring", "pat_audit"],
   ["recurringPlans", "pat_audit"],
 ]);
+const reviewOperations = new Set<string>([
+  "ingestion.getReviewWorkspace",
+  "ingestion.getReviewItem",
+  "ingestion.getReviewMaterial",
+  "ingestion.getReviewSuggestions",
+  "ingestion.applyReviewEdit",
+]);
 const sessionDestination = (operation: AuditCredentialOperation): string => {
   const owner = operation.split(".")[0];
+  if (reviewOperations.has(operation)) return "pat_audit";
   if (owner === "ingestion") {
     if (
       operation === "ingestion.resolveNeedsReviewItem" ||

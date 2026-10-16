@@ -43,6 +43,7 @@ import {
   sweepExpiredUploadAdmission,
   sweepForwardedEmail,
   sweepMediaSubmissions,
+  sweepReviewDrafts,
 } from "../ingestion/runtime";
 import { sweepProactivityConsentOffers } from "../consent/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
@@ -288,6 +289,10 @@ export const runCoreMaintenance = (
     const platform = makePlatformMaintenance(environment);
     yield* executeSchedule([
       activity("async.health", platform.inspectHealth()),
+      activity(
+        "ingestion.reviewDraftExpiry",
+        sweepReviewDrafts({ db: environment.DB, current: nowEpochMs })
+      ),
       activity(
         "audit.retention",
         makeAuditRetention({ database: environment.DB }).sweep(nowEpochMs)

@@ -1,3 +1,4 @@
+import { ReviewCommand } from "../../../src/core/ingestion/contract";
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { browserSessionBindingResponse } from "../../web-session/operations";
@@ -1343,6 +1344,44 @@ const recurringEditResponse = (
     });
   }).pipe(Effect.orElseSucceed(unavailable));
 
+const reviewEditResponse = (
+  input: Parameters<typeof connectInstitutionResponse>[0]
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const payload = yield* boundedJsonBody({
+      request: input.request,
+      policy: recurringBodyPolicy,
+      schema: Schema.toCodecJson(ReviewCommand),
+    }).pipe(Effect.orElseSucceed(() => Option.none()));
+    const wire = Option.isSome(payload)
+      ? yield* Schema.encodeEffect(Schema.toCodecJson(ReviewCommand))(payload.value)
+      : {};
+    return yield* sendToCoordinator({
+      environment: input.environment,
+      subject: input.subject,
+      work: ownerCall(CanonicalOperationId.make("ingestion.applyReviewEdit"), { payload: wire }),
+    });
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+const workspaceEditResponse = (
+  input: Parameters<typeof reviewEditResponse>[0] & Readonly<{ operation: CatalogOperation }>
+): Option.Option<Effect.Effect<Response>> => {
+  if (input.operation.id === "ingestion.applyReviewEdit") {
+    return Option.some(reviewEditResponse(input));
+  }
+  return input.operation.id === "recurringPlans.applyRecurringEdit"
+    ? Option.some(recurringEditResponse(input))
+    : Option.none();
+};
+const reviewQueryBucket = (
+  environment: CoreHttpEnvironment,
+  operation: string
+): Option.Option<R2Bucket> =>
+  Option.fromUndefinedOr(
+    ["ingestion.getReviewMaterial", "ingestion.getReviewSuggestions"].includes(operation)
+      ? environment.EMAIL_BUCKET
+      : environment.STATEMENT_STAGING_BUCKET
+  );
 const executeCanonicalWork = (
   input: Readonly<{
     request: Request;
@@ -1358,13 +1397,14 @@ const executeCanonicalWork = (
       subject,
       operation: operation.id,
       request,
-      bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
+      bucket: reviewQueryBucket(environment, operation.id),
       browserOrigin: environment.BROWSER_ORIGIN,
       coordinate: (work) =>
         sendToCoordinator({ environment, subject, work }).pipe(Effect.orElseSucceed(unavailable)),
     });
   }
-  if (operation.id === "recurringPlans.applyRecurringEdit") return recurringEditResponse(input);
+  const workspaceEdit = workspaceEditResponse(input);
+  if (Option.isSome(workspaceEdit)) return workspaceEdit.value;
   if (operation.id === "connections.connectInstitution") return connectInstitutionResponse(input);
   if (operation.id === "subscription.cancelSubscription") {
     return sendToCoordinator({

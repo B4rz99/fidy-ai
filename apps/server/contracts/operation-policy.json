@@ -379,6 +379,21 @@
       }
     },
     {
+      "id": "ingestion.applyReviewEdit",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "ingestion.enableEmailForwarding",
       "policy": {
         "access": {
@@ -395,6 +410,58 @@
     },
     {
       "id": "ingestion.getEmailForwarding",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "ingestion.getReviewItem",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "ingestion.getReviewMaterial",
+      "policy": {
+        "access": {
+          "type": "web-session-only"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "ingestion.getReviewSuggestions",
+      "policy": {
+        "access": {
+          "type": "web-session-only"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "ingestion.getReviewWorkspace",
       "policy": {
         "access": {
           "scope": {

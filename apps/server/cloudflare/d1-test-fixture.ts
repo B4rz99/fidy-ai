@@ -232,12 +232,18 @@ export const isolatedTestStorage = (): Readonly<{
   };
 };
 
+const reviewTestMigrations = (names: ReadonlyArray<string>): ReadonlyArray<string> => [
+  ...(names.includes("0016_statement_processing") ? ["0095_review_suggestions"] : []),
+  ...(names.includes("0033_statement_clarification") ? ["0096_ingestion_review"] : []),
+];
+
 export const canonicalAdmissionMigrationNames = (
   names: ReadonlyArray<string>
 ): ReadonlyArray<string> =>
   [
     ...new Set([
       ...names,
+      ...reviewTestMigrations(names),
       ...(names.includes("0020_dashboard_projection")
         ? ["0083_transaction_deletion", "0085_budget_contribution_pages"]
         : []),

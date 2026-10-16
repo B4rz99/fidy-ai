@@ -1,6 +1,12 @@
+import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Crypto, Effect } from "effect";
-import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
+import type {
+  ForwardedEmailEnvironment,
+  ForwardedEmailMessage,
+  ReviewRetentionWork,
+  ReviewUnavailable,
+} from "./contract";
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
@@ -126,3 +132,7 @@ export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) 
 
 /** Clear expired personal review evidence while retaining classification and conserved accounting. */
 export const expireStatementReviewEvidence: typeof expireReview = (input) => expireReview(input);
+
+export const sweepReviewDrafts = (
+  input: ReviewRetentionWork
+): Effect.Effect<void, ReviewUnavailable> => sweepDrafts(input);

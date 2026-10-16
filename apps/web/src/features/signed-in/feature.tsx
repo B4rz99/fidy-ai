@@ -1,3 +1,4 @@
+import { ReviewPendingCount } from "@/features/needs-review/navigation";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -44,6 +45,7 @@ export const AccessRefused = (): JSX.Element => (
 const navigationLinks = [
   { to: "/app/dashboard", label: "Tablero", icon: Home01Icon },
   { to: "/app/transactions", label: "Transacciones", icon: CreditCardIcon },
+  { to: "/app/needs-review", label: "Por revisar", icon: CreditCardIcon },
   { to: "/app/budgets", label: "Presupuestos", icon: Wallet01Icon },
   { to: "/app/recurring", label: "Recurrentes", icon: Calendar03Icon },
 ] as const;
@@ -112,6 +114,7 @@ const SignedInNavigation = ({
         >
           <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
           {link.label}
+          {link.to === "/app/needs-review" && signedIn ? <ReviewPendingCount /> : null}
         </Link>
       ))}
       <SettingsNavigation />

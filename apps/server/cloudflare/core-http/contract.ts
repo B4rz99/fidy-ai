@@ -33,6 +33,7 @@ export type CoreHttpEnvironment = ProviderEnvironment &
       BILLING_COLLECTION_QUEUE: Queue;
       HOSTED_WHATSAPP_QUEUE: Queue;
       STATEMENT_STAGING_BUCKET: R2Bucket;
+      EMAIL_BUCKET: R2Bucket;
     }>
   >;
 

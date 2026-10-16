@@ -21,16 +21,26 @@ const verifyAccessibility = (page: Page): Promise<void> =>
     })
   );
 
+const captureAccessResponse = (route: Route, capture: (payload: unknown) => void): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const response = yield* Effect.tryPromise(() => route.fetch());
+      capture(yield* Effect.tryPromise(() => response.json()));
+      yield* Effect.tryPromise(() => route.fulfill({ response }));
+    })
+  );
+
 const verifyTransactionAccess = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const response = page
-        .waitForResponse(
-          (value) =>
-            value.url() === `${apiOrigin}/web/privacy/transactions` &&
-            value.request().method() === "POST"
-        )
-        .then((value): Promise<unknown> => value.json());
+      let payload: unknown;
+      const endpoint = `${apiOrigin}/web/privacy/transactions`;
+      const capture = (value: unknown): void => {
+        payload = value;
+      };
+      yield* Effect.tryPromise(() =>
+        page.route(endpoint, (route) => captureAccessResponse(route, capture))
+      );
       yield* Effect.tryPromise(() =>
         page.getByRole("link", { name: "Ver mis transacciones", exact: true }).click()
       );
@@ -70,7 +80,7 @@ const verifyTransactionAccess = (page: Page): Promise<void> =>
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Referencia de consulta:", { exact: false })).toHaveCount(0)
       );
-      const payload = yield* Effect.tryPromise(() => response);
+      yield* Effect.tryPromise(() => page.unroute(endpoint));
       const { reference: ownerResultRef } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ reference: Schema.String.check(Schema.isUUID()) })
       )(payload);

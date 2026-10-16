@@ -264,7 +264,12 @@ export const projectRecurringMonth = ({
               DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: input.timeZone })),
           })
         )
-        .filter((item) => item.expectedDate >= from && item.expectedDate <= through);
+        .filter(
+          (item) =>
+            item.expectedDate >= from &&
+            item.expectedDate <= through &&
+            (item.fulfillments.length > 0 || trackedOn({ plan, date: item.expectedDate }))
+        );
     })
     .sort(
       (left, right) =>

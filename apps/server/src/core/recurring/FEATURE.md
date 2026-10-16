@@ -4,6 +4,10 @@ Historical monthly charge patterns from effective Transactions, with an optional
 digest and authenticated report. A pattern does not establish that a charge remains active.
 This feature does not manage the User's paid Subscription or authorize merchant payments.
 
+The separately released user-maintained planning workspace has its own
+[feature audit](../../../../web/src/features/recurring/FEATURE.md). Planning expectations do not
+change the historical evidence or confirmation meaning described here.
+
 | Functionality                        | Local verification                                                                                                                                                                           | Production verification, 2026-10-13                                                                                            |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Detect monthly patterns              | Three distinct consecutive-month outflows; explicit normalized Counterparty; equal Currency; fixed-reference 5% Money tolerance; month-end clamping and three-day drift; ambiguity rejection | Three disposable July–September charges produced one monthly COP pattern through normal scheduled processing                   |

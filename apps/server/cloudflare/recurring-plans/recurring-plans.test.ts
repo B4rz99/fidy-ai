@@ -4,6 +4,9 @@ import type { QueryCaller } from "../canonical-work/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import { UserId } from "../../src/core/identity/contract";
+import { RecurringSeriesPage } from "../../src/core/recurring/contract";
+import { evaluateRecurringSeries } from "../recurring/operations";
 import { afterAll, expect, it } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 
@@ -89,6 +92,26 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     return db;
   });
 afterAll(() => databases.dispose());
+
+const transactionCount = (
+  db: D1Database,
+  subject: QueryCaller
+): Effect.Effect<number, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const result = yield* executeCanonicalQuery({
+      db,
+      subject,
+      operation: CanonicalOperationId.make("transactions.listTransactions"),
+      input: { query: {} },
+      bucket: Option.none(),
+    });
+    const response = Option.getOrThrow(result);
+    expect(response.status).toBe(200);
+    const body = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.Array(Schema.Unknown) })
+    )(yield* Effect.tryPromise(() => response.json()));
+    return body.data.length;
+  });
 
 it(
   "persists revision-bound recurring edits through the canonical D1 owner",
@@ -215,6 +238,170 @@ const read = (
     )(yield* Effect.tryPromise(() => response.json()));
     return parsed.data;
   });
+
+it(
+  "detected history stays outside the plan until explicit review, and dismissal, restoration and linking persist",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, subjects } = yield* fixture();
+        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, '{}', 'disclosure', 'decision', 0, 0)"
+            )
+            .bind(owner.userId, owner.userId)
+            .run()
+        );
+        for (const occurredAt of [
+          "2026-07-10T12:00:00.000Z",
+          "2026-08-10T12:00:00.000Z",
+          "2026-09-10T12:00:00.000Z",
+        ]) {
+          const captured = yield* call(db, owner, {
+            _tag: "Call",
+            operation: CanonicalOperationId.make("transactions.createTransaction"),
+            input: {
+              payload: {
+                money: planInput.money,
+                direction: "outflow",
+                counterparty: "Propietario",
+                categoryId: "10000000-0000-4000-8000-000000000001",
+                occurredAt,
+              },
+            },
+          });
+          expect(captured.status).toBe(201);
+        }
+        const evaluationSteps = 6;
+        for (let index = 0; index < evaluationSteps; index++) {
+          yield* evaluateRecurringSeries({ db, userId: UserId.make(owner.userId) });
+        }
+        const result = yield* executeCanonicalQuery({
+          db,
+          subject: owner,
+          operation: CanonicalOperationId.make("recurring.listRecurringSeries"),
+          input: { query: {} },
+          bucket: Option.none(),
+        });
+        const seriesResponse = Option.getOrThrow(result);
+        expect(seriesResponse.status).toBe(200);
+        const detected = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(RecurringSeriesPage) })
+        )(yield* Effect.tryPromise(() => seriesResponse.json()));
+        expect(detected.data.series).toHaveLength(1);
+        const series = Option.getOrThrow(Option.fromUndefinedOr(detected.data.series[0]));
+        expect((yield* read(db, owner)).document.plans).toEqual([]);
+        expect(
+          (yield* call(
+            db,
+            owner,
+            edit(0, { kind: "suggestion", seriesId: series.id, action: "dismiss" })
+          )).status
+        ).toBe(200);
+        expect((yield* read(db, owner)).document.suggestions).toEqual([
+          { seriesId: series.id, disposition: "dismissed" },
+        ]);
+        expect(
+          (yield* call(
+            db,
+            owner,
+            edit(1, { kind: "suggestion", seriesId: series.id, action: "restore" })
+          )).status
+        ).toBe(200);
+        expect((yield* read(db, owner)).document.suggestions).toEqual([]);
+        expect(
+          (yield* call(db, owner, edit(2, { kind: "create", id: planId, plan: planInput }))).status
+        ).toBe(200);
+        expect(
+          (yield* call(
+            db,
+            owner,
+            edit(3, { kind: "suggestion", seriesId: series.id, action: "link", planId })
+          )).status
+        ).toBe(200);
+        const linked = yield* read(db, owner);
+        expect(linked.document.plans).toHaveLength(1);
+        expect(linked.document.suggestions).toEqual([
+          { seriesId: series.id, disposition: "linked", planId },
+        ]);
+      })
+    ),
+  30000
+);
+
+it(
+  "manual tracking creates no Transaction and a later captured payment replaces it without double fulfillment",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, subjects } = yield* fixture();
+        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+        expect(
+          (yield* call(
+            db,
+            owner,
+            edit(0, { kind: "create", id: planId, plan: { ...planInput, firstDate: "2026-10-10" } })
+          )).status
+        ).toBe(200);
+        const mark = {
+          id: "40000000-0000-4000-8000-000000000151",
+          planId,
+          date: "2026-10-10",
+          actualDate: "2026-10-10",
+          money: { amount: "400000", currency: "COP" },
+          settled: false,
+        };
+        expect(
+          (yield* call(db, owner, edit(1, { kind: "fulfill", fulfillment: mark }))).status
+        ).toBe(200);
+        expect((yield* read(db, owner)).occurrences[0]?.status).toBe("partial");
+        expect(yield* transactionCount(db, owner)).toBe(0);
+        const captured = yield* call(db, owner, {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("transactions.createTransaction"),
+          input: {
+            payload: {
+              money: planInput.money,
+              direction: "outflow",
+              counterparty: "Propietario",
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              occurredAt: "2026-10-10T12:00:00.000Z",
+            },
+          },
+        });
+        expect(captured.status).toBe(201);
+        const transaction = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
+        )(yield* Effect.tryPromise(() => captured.json()));
+        const linked = {
+          ...mark,
+          id: "40000000-0000-4000-8000-000000000152",
+          money: planInput.money,
+          transactionId: transaction.data.id,
+          settled: true,
+        };
+        expect((yield* read(db, owner)).occurrences[0]?.status).toBe("partial");
+        expect(
+          (yield* call(db, owner, edit(2, { kind: "fulfill", fulfillment: linked }))).status
+        ).toBe(400);
+        expect(
+          (yield* call(
+            db,
+            owner,
+            edit(2, { kind: "fulfill", fulfillment: linked, replaces: mark.id })
+          )).status
+        ).toBe(200);
+        const replaced = yield* read(db, owner);
+        expect(replaced.occurrences[0]?.status).toBe("completed");
+        expect(replaced.occurrences[0]?.fulfillments).toHaveLength(1);
+        expect(replaced.occurrences[0]?.completed).toEqual(replaced.occurrences[0]?.plan.money);
+        expect(yield* transactionCount(db, owner)).toBe(1);
+      })
+    ),
+  30000
+);
 it(
   "rejects stale revisions and fabricated accounts without replacing either User's plan document",
   () =>

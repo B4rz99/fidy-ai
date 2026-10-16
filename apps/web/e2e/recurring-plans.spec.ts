@@ -287,3 +287,170 @@ const chooseDate = (page: Page, label: string, date: string): Promise<void> =>
       yield* Effect.tryPromise(() => page.locator(`[data-day="${date}"] button`).click());
     })
   );
+
+test("manual tracking can be reversed and skipped, while pause, resume and stop survive reload", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({ page, request, identity: "recurring" })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Ciclo de seguimiento",
+        kind: "expense",
+        currency: "COP",
+        amount: "100",
+      });
+      yield* Effect.tryPromise(() => recurringItem(page, /Ciclo de seguimiento/u).click());
+      yield* Effect.tryPromise(() => page.getByLabel("Importe real", { exact: true }).fill("40"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Registrar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Ciclo de seguimiento.*Parcial/u)).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => recurringItem(page, /Ciclo de seguimiento/u).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Revertir", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Ciclo de seguimiento.*Parcial/u)).toHaveCount(0)
+      );
+      yield* changeOccurrence(page, "Omitir esta vez");
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Ciclo de seguimiento.*Omitido/u)).toBeVisible()
+      );
+      yield* changeOccurrence(page, "Volver a incluir");
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Ciclo de seguimiento.*Omitido/u)).toHaveCount(0)
+      );
+      yield* changeOccurrence(page, "Pausar");
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Ciclo de seguimiento/u)).toHaveCount(0)
+      );
+      yield* verifyPlanLifecycle(page);
+    })
+  ));
+
+const changeOccurrence = (page: Page, action: string): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => recurringItem(page, /Ciclo de seguimiento/u).click());
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: action, exact: true }).click());
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const verifyPlanLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+    );
+    const plan = page.getByRole("button", { name: "Editar Ciclo de seguimiento", exact: true });
+    yield* Effect.tryPromise(() => expect(plan).toContainText("Pausado"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Reanudar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Ciclo de seguimiento/u)).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(plan).toContainText("Activo"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Mensual", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => recurringItem(page, /Ciclo de seguimiento/u).click());
+    yield* Effect.tryPromise(() => page.getByText("Dejar de seguir", { exact: true }).click());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("dialog")).toContainText("No cancela el servicio")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Confirmar dejar de seguir", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Ciclo de seguimiento/u)).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: "Editar Ciclo de seguimiento", exact: true })
+      ).toContainText("Dejado de seguir")
+    );
+  });
+
+test("one-occurrence edits stay local and forward edits preserve earlier monthly history", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({ page, request, identity: "recurringSummary" })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Plan con excepciones",
+        kind: "expense",
+        currency: "COP",
+        amount: "100",
+      });
+      yield* editExpectedPlan(page, {
+        current: "Plan con excepciones",
+        name: "Solo octubre",
+        amount: "120",
+        scope: "Solo esta vez",
+      });
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Solo octubre/u)).toContainText("120,00")
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-11"));
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Plan con excepciones/u)).toContainText("100,00")
+      );
+      yield* editExpectedPlan(page, {
+        current: "Plan con excepciones",
+        name: "Desde noviembre",
+        amount: "150",
+        scope: "Esta y próximas",
+      });
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-12"));
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Desde noviembre/u)).toContainText("150,00")
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Solo octubre/u)).toContainText("120,00")
+      );
+    })
+  ));
+
+const editExpectedPlan = (
+  page: Page,
+  {
+    current,
+    name,
+    amount,
+    scope,
+  }: Readonly<{ current: string; name: string; amount: string; scope: string }>
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => recurringItem(page, new RegExp(current, "u")).click());
+    yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: scope, exact: true }).click());
+    yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill(name));
+    yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill(amount));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar recurrente", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+  });

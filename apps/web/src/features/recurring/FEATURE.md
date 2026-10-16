@@ -190,7 +190,9 @@ regression through that wrapper reproduced the live 503-versus-429 defect. The w
 preserves native D1 failures for the operation owner while retaining the generation assertion as
 the first statement in the same atomic unit. Unrelated storage failures remain sanitized 503;
 missing or mismatched recovery generations still refuse reads, writes and native Sessions.
-The corrected wrapper is locally verified; its deployment and live rerun remain pending.
+The corrected wrapper is locally verified. Its deployment and live rerun status are tracked in
+[PR #1356](https://github.com/B4rz99/fidy-ai/pull/1356), separately from successful AI lifecycle
+output and irreversible fixture cleanup.
 
 ### Limits and remaining evidence
 

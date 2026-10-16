@@ -617,6 +617,7 @@ export type NeedsReviewStatementRow = Readonly<{
   recordNumber: number;
   reason: NeedsReviewReason;
   knownMoney: Option.Option<Money>;
+  suggestions: Option.Option<ReviewDraft>;
   issues: ReadonlyArray<typeof CapturedFieldIssue.Type>;
   evidence: StatementRowEvidence;
 }>;

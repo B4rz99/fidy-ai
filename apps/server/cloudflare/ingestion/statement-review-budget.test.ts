@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { Option, Schema } from "effect";
 import {
   type NeedsReviewStatementRow,
+  ReviewDraft,
   StatementRowEvidence,
 } from "../../src/core/ingestion/contract";
 import { statementReviewAdmission } from "./internal/statement-review-budget";
@@ -27,6 +28,7 @@ const reviewRow = (raw: string, extraIssueBytes: number): NeedsReviewStatementRo
   recordNumber: 1,
   reason: "mapping-unavailable",
   knownMoney: Option.none(),
+  suggestions: Option.none(),
   issues: [
     { path: "", message: `Statement mapping is unavailable.${" ".repeat(extraIssueBytes)}` },
   ],
@@ -104,4 +106,19 @@ it("charges actual UTF-8 metadata without a fixed safety reserve", () => {
   expect(statementReviewAdmission({ ...context, locale: "es-COé" })(row)).toBe(false);
   expect(statementReviewAdmission({ ...context, createdAt: 0 })(reviewRow(raw, 7))).toBe(true);
   expect(statementReviewAdmission({ ...context, createdAt: 0 })(reviewRow(raw, 8))).toBe(false);
+});
+
+it("charges retained partial facts against the complete-row capacity", () => {
+  const row = reviewRow("\u0001".repeat(166_000) + "x".repeat(3_806), 0);
+  const suggestions = Schema.decodeSync(ReviewDraft)({
+    amount: "13500",
+    currency: "COP",
+    counterparty: "Cafe",
+    occurredAt: "",
+    userProvidedFields: [],
+  });
+  expect(statementReviewAdmission(context)(row)).toBe(true);
+  expect(statementReviewAdmission(context)({ ...row, suggestions: Option.some(suggestions) })).toBe(
+    false
+  );
 });

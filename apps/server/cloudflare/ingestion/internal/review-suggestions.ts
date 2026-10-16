@@ -1,5 +1,6 @@
 import { ReviewUnavailable } from "../contract";
-import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { encodeMoneyAmount } from "../../../src/core/_shared/money";
 import PostalMime from "postal-mime";
 import { ReviewDraft } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
@@ -95,7 +96,7 @@ const emailSuggestion = ({
       ],
     });
     return Option.some({
-      amount: BigDecimal.format(extraction.money.amount),
+      amount: encodeMoneyAmount(extraction.money.amount),
       currency: Option.some(extraction.money.currency),
       direction: Option.some(extraction.direction),
       counterparty: Option.getOrElse(extraction.counterparty, () => ""),

@@ -1658,22 +1658,29 @@ it("omits untrusted trace fields before delegating statement Work to the User co
 
 const clarifyStatement = (
   runtime: Runtime,
-  csv: string
+  csv: string,
+  index = 0
 ): Promise<Readonly<{ submissionId: string; reviewIds: ReadonlyArray<string> }>> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const owner =
+        index === 0
+          ? { userId: userA, grantId: "30000000-0000-4000-8000-000000000198" }
+          : { userId: userB, grantId: "30000000-0000-4000-8000-000000000199" };
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(`INSERT INTO onboarding_consent_records
     (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
-    VALUES ('30000000-0000-4000-8000-000000000198', ?, '{}', 'fixture', 'fixture', 1, 1)`)
-          .bind(userA)
+    VALUES (?, ?, '{}', 'fixture', 'fixture', 1, 1)`)
+          .bind(owner.grantId, owner.userId)
           .run()
       );
-      const { staged } = yield* fromTestPromise(() => stageOne(runtime, 0, statementBytes(csv)));
+      const { staged } = yield* fromTestPromise(() =>
+        stageOne(runtime, index, statementBytes(csv))
+      );
       const accepted = yield* fromTestPromise(() =>
         publishFixture(runtime, {
-          index: 0,
+          index,
           idempotencyKey: "20000000-0000-4000-8000-000000000698",
           reference: staged,
         })
@@ -1681,7 +1688,10 @@ const clarifyStatement = (
       expect(accepted.status).toBe(202);
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: owner.userId },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1696,7 +1706,7 @@ const clarifyStatement = (
             body: JSON.stringify({
               _tag: "StatementWork",
               version: 1,
-              userId: userA,
+              userId: owner.userId,
               submissionId: submission.id,
             }),
           })
@@ -4720,3 +4730,90 @@ const reviewBinding = (preparation: CanonicalMutationPreparation): OAuthReviewBi
     },
   ];
 };
+
+it("prefills independently known facts when a statement date is missing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const source = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,moneda,contraparte\n?,-13500,COP,Cafe\n")
+      );
+      const detail = yield* fromTestPromise(() => reviewDetail(runtime, source.reviewIds[0] ?? ""));
+      expect(detail.status).toBe(200);
+      expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
+        data: {
+          suggestions: {
+            amount: "13500",
+            currency: "COP",
+            direction: "outflow",
+            counterparty: "Cafe",
+            occurredAt: "",
+            userProvidedFields: [],
+          },
+        },
+      });
+    })
+  ));
+
+it("physically erases expired drafts and suggestions without erasing another User's unexpired data", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const started = yield* Clock.currentTimeMillis;
+      const staggerMilliseconds = 120_000;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const csv = "fecha,valor,moneda,contraparte\n?,-13500,COP,Cafe\n?,-25000,COP,Tienda\n";
+      for (const index of [0, 1]) {
+        vi.setSystemTime(started + index * staggerMilliseconds);
+        const source = yield* fromTestPromise(() => clarifyStatement(runtime, csv, index));
+        for (const id of source.reviewIds) {
+          const saved = yield* fromTestPromise(() =>
+            editReview(
+              runtime,
+              {
+                _tag: "SaveDraft",
+                id,
+                revision: 0,
+                draft: {
+                  amount: "7000",
+                  currency: "COP",
+                  counterparty: "Saved",
+                  occurredAt: "",
+                  userProvidedFields: ["money", "counterparty"],
+                },
+              },
+              index
+            )
+          );
+          expect(saved.status).toBe(200);
+        }
+      }
+      expect(yield* reviewRetentionRows(runtime.db)).toEqual([
+        { user_id: userA, drafts: 2, suggestions: 2 },
+        { user_id: userB, drafts: 2, suggestions: 2 },
+      ]);
+      vi.setSystemTime(started + dayMilliseconds + 1);
+      yield* fromTestPromise(() =>
+        coreWorker.scheduled(
+          {
+            cron: "* * * * *",
+            noRetry: () => undefined,
+            scheduledTime: started + dayMilliseconds + 1,
+          },
+          coreEnvironment(runtime)
+        )
+      );
+      expect(yield* reviewRetentionRows(runtime.db)).toEqual([
+        { user_id: userA, drafts: 0, suggestions: 0 },
+        { user_id: userB, drafts: 2, suggestions: 2 },
+      ]);
+    })
+  ));
+const reviewRetentionRows = (db: D1Database): Effect.Effect<ReadonlyArray<unknown>> =>
+  fromTestPromise(() =>
+    db
+      .prepare(
+        "SELECT r.user_id,sum(n.draft_json IS NOT NULL) AS drafts,sum(r.review_suggestions_json IS NOT NULL) AS suggestions FROM statement_needs_review r JOIN ingestion_review_state n ON n.id=r.id AND n.user_id=r.user_id GROUP BY r.user_id ORDER BY r.user_id"
+      )
+      .all()
+  ).pipe(Effect.map((result) => result.results));

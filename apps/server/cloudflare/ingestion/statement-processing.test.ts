@@ -1812,6 +1812,7 @@ effectIt.effect(
           recordNumber: 1,
           reason: "mapping-unavailable",
           knownMoney: Option.none(),
+          suggestions: Option.none(),
           issues: [{ path: "", message: `Statement mapping is unavailable.${" ".repeat(extra)}` }],
           evidence: {
             sourceFormat: "csv",
@@ -1837,8 +1838,8 @@ effectIt.effect(
             db
               .prepare(`INSERT INTO statement_needs_review
         (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,status,
-        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,review_suggestions_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`)
               .bind(
                 "10000000-0000-4000-8000-000000000701",
                 userA,

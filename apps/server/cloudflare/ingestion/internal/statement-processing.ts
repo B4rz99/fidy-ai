@@ -8,7 +8,7 @@ import {
 
 import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCaptures } from "../../categories/operations";
-import { BigDecimal, Clock, Data, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   type InterpretedStatementRow,
   ParsedStatementRow,
@@ -211,17 +211,7 @@ const acceptedStatements = (
 const knownReviewSuggestions = (
   result: Extract<RowWork["result"], { outcome: "needs-review" }>
 ): Option.Option<string> =>
-  Option.map(result.knownMoney, (money) =>
-    Schema.encodeSync(Schema.fromJsonString(ReviewDraft))({
-      amount: BigDecimal.format(money.amount),
-      currency: Option.some(money.currency),
-      counterparty: "",
-      occurredAt: "",
-      direction: Option.none(),
-      categoryId: Option.none(),
-      userProvidedFields: [],
-    })
-  );
+  Option.map(result.suggestions, Schema.encodeSync(Schema.fromJsonString(ReviewDraft)));
 
 const reviewStatement = (
   {

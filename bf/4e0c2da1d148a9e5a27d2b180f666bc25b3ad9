@@ -1,0 +1,62 @@
+apps/web/src/app/review-workspace.tsx
+  s_ede1c3735d03b7::t_90be3b1b020f4d 5-20
+  s_ede1c3735d03b7::t_8f2195e8a69887 69-72,74-75
+  s_b75995d26622a8::t_4cbb5a63978b46 1-4,21-68,73,76-79
+apps/web/src/features/needs-review/feature.tsx
+  s_ede1c3735d03b7::t_a137f9c976fd4a 7,31,35-43,45-54,57-58
+  s_ede1c3735d03b7::t_8eebf96ae3f082 1,11,20-24
+  s_ede1c3735d03b7::t_6f9f1e9c2bb55c 30
+  s_ede1c3735d03b7::t_c4e7de443ef238 129-132
+  s_ede1c3735d03b7::t_b2787fb9e0b2cc 25-29,44
+  s_ede1c3735d03b7::t_047b94f339d16d 9,55-56,59-61,63,78,84,106,115,121,137,145-150,159-173,175-176,187-188,195-197,200,282-294
+apps/web/src/app/routes.ts
+  s_ede1c3735d03b7::t_90be3b1b020f4d 20
+  s_ede1c3735d03b7::t_4b590ffccd626f 84,97-100
+  s_b75995d26622a8::t_d820712d245c79 101-102,163
+apps/web/src/app/application-frame.tsx
+  s_ede1c3735d03b7::t_58c4c64393f721 10,17-18
+  s_ede1c3735d03b7::t_3f747ed5071a71 15
+  s_ede1c3735d03b7::t_4b590ffccd626f 1-9,19-20,23-28
+  s_ede1c3735d03b7::t_b4826a23cf26d4 21-22
+  s_ede1c3735d03b7::t_81aedeb9aabcbb 11-14,16
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_335513886ad7bf 792-794
+  s_ede1c3735d03b7::t_99f3b87f765113 805-849,853-860
+  s_ede1c3735d03b7::t_8f2195e8a69887 943
+  s_ede1c3735d03b7::t_86400120f09590 721-724,867-870,872-874
+  s_ede1c3735d03b7::t_b4a2bd39b7260e 720,725-726,728-729,733,850-852,862-866,871,875-881,884,886,902,927-928,932,934,946,948,950
+  s_ede1c3735d03b7::t_8ee599f849a6f5 1,707,727,730-732,734,739,803-804,861,882-883,885,887-901,903-926,929-931,933,935-942,944-945,947,949,951-962
+apps/web/ARCHITECTURE.md
+  s_ede1c3735d03b7::t_f98f14521e23c7 312-315
+  s_ede1c3735d03b7::t_6ef5982702e2ab 311,316-322
+apps/web/src/features/needs-review/editor-controller.ts
+  s_ede1c3735d03b7::t_841ed4e2b479a9 26,54,65,77,111-135,151-152,154,165,179-180
+apps/web/src/features/needs-review/editor.tsx
+  s_b75995d26622a8::t_95a3c00f32814f 17,28-35,63-65,83,86,91-93,98-103,111-126
+apps/web/src/features/needs-review/original.tsx
+  s_b75995d26622a8::t_dcd5cb86ae4dea 4,6,24-26,29-32,34-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf4e0c2da1d148a9e5a27d2b180f666bc25b3ad9",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

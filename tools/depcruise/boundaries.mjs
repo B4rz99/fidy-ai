@@ -44,6 +44,7 @@ const compositionRoots = new Set([
   "cloudflare/agent/proactive-transcript.test.ts",
   "cloudflare/whatsapp/insight-delivery.test.ts",
   "cloudflare/recurring/recurring.test-fixture.ts",
+  "cloudflare/recurring-plans/recurring-plans.test.ts",
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/onboarding/browser-authentication.test.ts",

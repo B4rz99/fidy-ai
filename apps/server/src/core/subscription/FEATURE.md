@@ -135,8 +135,9 @@ Canonical status still returned Pro, the original paid Subscription through
 `2026-10-22T23:14:33.000Z`, and the succeeded attempt. An indexed read independently confirmed
 one paid period, the durable cancellation, zero armed collections and zero follow-up messages
 (four rows read, zero written). All 332 local billing checks passed; eight opt-in provider cases
-were skipped by this rerun. The temporary Subscription QA grant remains active pending a fresh
-browser sign-in to authorize its revocation; the expired browser's cleanup attempt was refused.
+were skipped by this rerun. After fresh browser sign-in, the temporary Subscription QA grant was
+revoked; a subsequent canonical request returned unauthenticated. Its isolated native credential
+and metadata were cleared; the pre-existing CLI credential was preserved.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

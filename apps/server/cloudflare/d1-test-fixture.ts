@@ -24,8 +24,16 @@ const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
 const installPrivacySchema = (db: D1Database): Promise<void> => {
   const installed = privacySchemas.get(db);
   if (installed !== undefined) return installed;
-  const pending = loadMigrationStatements(privacySchema)
-    .then((sql) => db.batch(sql.map((statement) => db.prepare(statement))))
+  const pending = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='erasure_requests'")
+    .first<string>("name")
+    .then((existing) =>
+      existing === null
+        ? loadMigrationStatements(privacySchema).then((sql) =>
+            db.batch(sql.map((statement) => db.prepare(statement)))
+          )
+        : undefined
+    )
     .then(() => undefined);
   privacySchemas.set(db, pending);
   return pending;

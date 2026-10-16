@@ -347,8 +347,12 @@ const installDeclinedEnrollment = (page: Page): Effect.Effect<() => number, Caus
     return () => submissions;
   });
 
-for (const replaceFailedSource of [false, true]) {
-  test(`a declined payment permits a fresh reviewed attempt (replace card: ${replaceFailedSource})`, ({
+for (const { replaceFailedSource, reload } of [
+  { replaceFailedSource: false, reload: false },
+  { replaceFailedSource: true, reload: false },
+  { replaceFailedSource: true, reload: true },
+]) {
+  test(`a declined payment permits a fresh reviewed attempt (replace card: ${replaceFailedSource}, reload: ${reload})`, ({
     page,
   }) =>
     Effect.runPromise(
@@ -364,6 +368,12 @@ for (const replaceFailedSource of [false, true]) {
         yield* Effect.tryPromise(() =>
           expect(page.getByText(/Wompi rechazó el pago/u)).toBeVisible()
         );
+        if (reload) {
+          yield* Effect.tryPromise(() => page.reload());
+          yield* Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Elegir mensual" }).click()
+          );
+        }
         yield* Effect.tryPromise(() =>
           page
             .getByRole("button", {

@@ -139,7 +139,7 @@ were skipped by this rerun. After fresh browser sign-in, the temporary Subscript
 revoked; a subsequent canonical request returned unauthenticated. Its isolated native credential
 and metadata were cleared; the pre-existing CLI credential was preserved.
 
-Local follow-up: rendered-browser regressions now cover explicit retry and a new card form with
+Local follow-up: rendered-browser regressions cover explicit retry, replacement after reload, and a new card form with
 unselected provider terms and no automatic second submission. Native Core/local D1 regressions
 cover known verified decline, pending payment, paid Subscription, provider error and lost creation
 response. The latter four cannot retire a source. Rejected replacement preserves the original

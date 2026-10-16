@@ -681,6 +681,11 @@ const renderPaymentEnrollment = (
           enrollment={enrollment}
           submit={(email, fields) => submit(enrollment, email, fields)}
         />
+        {enrollment.method === "card" && enrollment.paymentSourceMode === "reuse" && (
+          <Button disabled={busy} onClick={() => prepare(true)} type="button" variant="outline">
+            Usar otra tarjeta
+          </Button>
+        )}
       </div>
     );
   }

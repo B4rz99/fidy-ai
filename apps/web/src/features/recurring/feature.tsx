@@ -3,9 +3,9 @@ import { useRouter, useSearch } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
 import { type JSX, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
+import { RecurringQueryFailure } from "./query-failure";
 import { Button } from "@/ui/components/button";
 import { Skeleton } from "@/ui/components/skeleton";
-import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { RecurringWorkspace } from "./workspace";
 import { type RecurringWrite, makeRecurringWrite } from "./command";
 import {
@@ -58,16 +58,7 @@ const Resources = (props: Props): JSX.Element => {
   const waiting = state.waiting || categoryState.waiting;
   if (state._tag === "Failure" || categoryState._tag === "Failure") {
     return (
-      <div className="p-5">
-        <CanonicalQueryRetry
-          title="No pudimos cargar tus recurrentes"
-          description="Tus datos no se han reemplazado por una lista vacía."
-          retryLabel="Reintentar"
-          retryingLabel="Reintentando…"
-          waiting={waiting}
-          onRetry={retry}
-        />
-      </div>
+      <RecurringQueryFailure states={[state, categoryState]} waiting={waiting} retry={retry} />
     );
   }
   if (state._tag !== "Ready" || categoryState._tag !== "Ready") {

@@ -20,16 +20,17 @@ import {
   transactionNoStore,
 } from "./contract";
 import { readConsentStatus } from "../consent/operations";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   recordOAuthCall,
   recordedPATCallProof,
   refusedByAuditBudget,
+  utcDayMilliseconds,
 } from "../../src/shell/audit/operations";
 import { type CanonicalCapability } from "../../src/core/canonical-operations/contract";
-import { type ErrorCode } from "../../src/shell/public-http/contract";
+import { type ErrorCode, ResourceLimited } from "../../src/shell/public-http/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
 import { type AuditedPATMutation, type PATAuthority } from "../../src/shell/tokens/contract";
@@ -217,6 +218,27 @@ export const recordTransactionRefusal = ({
     .then(() => refusalStatement({ db, subject, outcome, operation, current }).run())
     .then((audit) => (audit.meta.changes === 1 ? "recorded" : "credential_refused"))
     .catch((error: unknown) => (refusedByAuditBudget(error) ? "rate_limited" : "unavailable"));
+
+export const canonicalAuditRateLimitedResponse = (current: number): Response => {
+  const millisecondsPerSecond = 1000;
+  const retryAfterSeconds = Math.ceil(
+    (utcDayMilliseconds - (current % utcDayMilliseconds)) / millisecondsPerSecond
+  );
+  return Response.json(
+    Schema.encodeSync(Schema.toCodecJson(ResourceLimited))(
+      ResourceLimited.make({
+        error: {
+          code: "rate_limited",
+          message:
+            "Alcanzaste el límite diario de solicitudes. Inténtalo después del reinicio diario.",
+          retryAfterSeconds,
+        },
+        next: [],
+      })
+    ),
+    { status: 429, headers: { ...transactionNoStore, "retry-after": String(retryAfterSeconds) } }
+  );
+};
 
 export const transactionUnavailable = (): Response =>
   Response.json({ status: "unavailable" }, { status: 503, headers: transactionNoStore });

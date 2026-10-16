@@ -174,7 +174,13 @@ diagnostics confirmed exactly 256 canonical calls for this User on 16-10-2026, m
 Audit triggers refuse additional work atomically, but these two read adapters present that refusal
 as unavailable. No Audit counters were reset, limits changed or failed mutations replayed. This
 separate daily canonical budget now blocks historical fixture reads/cleanup until its UTC reset.
-The diagnostic read wrote zero rows. Correct rate-limit classification is a remaining adapter gap.
+The diagnostic read wrote zero rows. The follow-up preserves the D1 trigger refusal, classifies only the known Audit-budget error as
+canonical HTTP 429, and publishes seconds until the next UTC day. Recurrentes shows a clear daily
+limit message instead of an outage. The 16-check recurring D1 suite covers exhausted and prior-day
+budgets, unaffected foreign Users, unchanged Audit counts and genuine storage failures remaining 503. Three built-browser recovery journeys cover unavailable, malformed and rate-limited reads;
+39 transport checks include immediate return of long Retry-After refusals without automatic replay.
+This follow-up is locally verified; production deployment and the exact exhausted-account rerun
+remain pending.
 
 ### Limits and remaining evidence
 

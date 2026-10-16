@@ -8,7 +8,12 @@ import { UserId } from "../../src/core/identity/contract";
 import { RecurringSeriesPage } from "../../src/core/recurring/contract";
 import { evaluateRecurringSeries } from "../recurring/operations";
 import { afterAll, expect, it } from "vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import {
+  dailyAuditBudget,
+  dailyAuditCount,
+  utcDayMilliseconds,
+} from "../../src/shell/audit/operations";
 
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
@@ -886,6 +891,83 @@ it(
         expect(workspace.occurrences).toHaveLength(1);
         expect(workspace.previous).toHaveLength(1);
         expect(workspace.matchesComplete).toBe(false);
+      })
+    ),
+  30000
+);
+
+const seedReadBudget = (db: D1Database, current: number): Promise<D1Result> =>
+  db
+    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
+    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+    SELECT 'read-budget-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
+    .bind(dailyAuditBudget - 1, users[0], sessions[0], current)
+    .run();
+const readBudgetQuery = (
+  db: D1Database,
+  index: number,
+  operation: "categories.listCategories" | "recurringPlans.getRecurringWorkspace"
+): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const subject = {
+      userId: users[index] ?? "",
+      id: sessions[index] ?? "",
+      digest: yield* Effect.tryPromise(() => digest(bearer(index))),
+    };
+    const result = yield* executeCanonicalQuery({
+      db,
+      subject,
+      operation: CanonicalOperationId.make(operation),
+      input: operation === "categories.listCategories" ? {} : { query: { month: "2026-10" } },
+      bucket: Option.none(),
+    });
+    return Option.getOrThrow(result);
+  });
+const budgetReadOperations = [
+  "categories.listCategories",
+  "recurringPlans.getRecurringWorkspace",
+] as const;
+for (const previousDay of [false, true]) {
+  it(
+    `classifies exhausted read budgets without leaking storage errors (previous day: ${previousDay})`,
+    () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const db = yield* setup();
+          const current = yield* Clock.currentTimeMillis;
+          yield* Effect.tryPromise(() =>
+            seedReadBudget(db, current - (previousDay ? utcDayMilliseconds : 0))
+          );
+          for (const operation of budgetReadOperations) {
+            const response = yield* readBudgetQuery(db, 0, operation);
+            expect(response.status).toBe(previousDay ? 200 : 429);
+            if (!previousDay) {
+              const body = yield* Effect.tryPromise(() => response.text());
+              expect(body).toContain('"code":"rate_limited"');
+              expect(body).not.toContain("transaction_audit_limit");
+              expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
+              expect(response.headers.get("cache-control")).toBe("no-store");
+            }
+            expect((yield* readBudgetQuery(db, 1, operation)).status).toBe(200);
+          }
+          expect(
+            yield* Effect.tryPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
+          ).toBe(previousDay ? budgetReadOperations.length : dailyAuditBudget);
+        })
+      ),
+    30000
+  );
+}
+it(
+  "keeps unrelated read storage failures unavailable",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() => db.prepare("DROP TABLE category_audit").run());
+        for (const operation of budgetReadOperations) {
+          expect((yield* readBudgetQuery(db, 0, operation)).status).toBe(503);
+        }
       })
     ),
   30000

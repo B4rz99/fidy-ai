@@ -1,0 +1,39 @@
+apps/server/cloudflare/ingestion/internal/statement-review-budget.ts
+  s_ede1c3735d03b7::t_1b48633c6b75f2 249
+  s_ede1c3735d03b7::t_421ef945eef74c 5-6,250-252
+apps/server/cloudflare/ingestion/internal/review-suggestions.ts
+  s_ede1c3735d03b7::t_1b48633c6b75f2 2-3,99
+apps/server/cloudflare/ingestion/statement-review-budget.test.ts
+  s_ede1c3735d03b7::t_1b48633c6b75f2 5,31,110-123
+  s_ede1c3735d03b7::t_73b3418cc598f4 124
+apps/web/src/features/needs-review/FEATURE.md
+  s_ede1c3735d03b7::t_1b48633c6b75f2 14-15
+apps/server/cloudflare/ingestion/internal/statement-processing.ts
+  s_ede1c3735d03b7::t_7c40e3d7065ff8 11,214
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_ede1c3735d03b7::t_7d36f906be15cf 1661-1662,1666-1669,1674-1675,1678-1680,1683,1691-1694,1709,4733-4819
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_ede1c3735d03b7::t_36d743e058d7b0 1815,1841-1842
+apps/server/src/core/ingestion/contract.ts
+  s_ede1c3735d03b7::t_158c4a7572fec7 620
+apps/server/src/core/ingestion/operations.ts
+  s_ede1c3735d03b7::t_b9ba541b2b64eb 4,6,17,306,407,554,588-659
+apps/server/src/core/ingestion/rules.test.ts
+  s_ede1c3735d03b7::t_32046fcaf6b458 391-402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9174f84830d7e7f56b4507b8b4d509d8e5e966a2",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

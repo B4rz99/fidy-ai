@@ -28,8 +28,8 @@ Other observed boundaries:
   observed service boundary, not another recipient of Fidy User financial payloads. Review installer
   traffic separately if its actual use introduces a personal-data flow.
 - The support mailbox and restricted case evidence are actual operator custodians from #1273/#1274.
-  The current mailbox provider and any backup service are unverified here; do not infer Google
-  Workspace from a Google login or Resend from outbound service email.
+  The authenticated company inbox verifies Google-hosted mail separately from OIDC. Workspace
+  contract, retention, disposal and any backup service remain unverified; see the dated reconciliation.
 - User-selected external agents receive data under the User's own grants. Their model providers
   are not automatically Fidy subprocessors. Review a Fidy-contracted integration if one is added.
 

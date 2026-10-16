@@ -225,9 +225,80 @@ Apply the corrected environment input through the controlled production release 
 the serving version's value, and then verify actual alert receipt. No Resend suppression was removed
 and no test email was sent. Earlier observations above remain historical, not current instructions.
 
+## Account follow-up — 2026-10-16
+
+These observations supplement the dated records above; they do not rewrite their original state.
+
+### Wompi merchant account
+
+Restricted evidence reference: `a5acd656-699c-4c9b-957e-36e584039d88`, version 1. After the
+operator signed in, the merchant dashboard showed an approved `fidy` account and the sole operator
+as an active SuperAdmin. **The account summary identifies the operator personally as the legal
+holder, rather than FIDY S.A.S.** Company incorporation alone therefore does not establish this
+merchant's company agreement. No merchant, payout, authentication or billing setting was changed;
+no payment, refund, agreement acceptance or support request was submitted. Government identifiers,
+payout account numbers, phone numbers and credentials were not retained in the evidence record.
+
+The merchant lists cards, Nequi, PSE, Botón Bancolombia, Bancolombia QR, Compra y Paga Después
+Bancolombia, DaviPlata and SU+Pay as enabled. This is merchant capability, not evidence that Fidy's
+serving application enables every method: the earlier Cloudflare configuration showed sandbox
+billing and DaviPlata disabled. No financial transaction was opened to prove activity. The account
+summary shows a per-successful-transaction plan; no purchase or plan change was made.
+
+The authenticated Help menu links the [merchant support form](https://soporte.wompi.co/hc/es-419/requests/new?ticket_form_id=360000591473).
+The Procedures selector showed no available entries during inspection. This does not prove that
+company migration or privacy procedures are unavailable through support. The next bounded enquiry
+must establish the account/company relationship, actual agreement and acceptance evidence, and the
+rights/retention route without sharing payment credentials or requesting a migration automatically.
+International locations, method-specific recipients and completed provider erasure remain unverified.
+
+### CI alert receipt and controlled release
+
+Restricted evidence reference: `6ea30774-282b-4e39-b5ab-ae327e886af5`, version 1, linked to the
+2026-10-15 correction receipt. The existing [operator alert test](https://github.com/B4rz99/fidy-ai/actions/runs/38895084735)
+succeeded. Resend showed **Delivered** to the approved operator; the company inbox independently
+showed receipt at 6:38 a.m. Colombia time. The subsequent release-failure alert also arrived in that
+inbox at 6:41 a.m. This verifies the CI notification path to the corrected address.
+
+The [controlled production retry](https://github.com/B4rz99/fidy-ai/actions/runs/38895079577), at
+trunk revision `dc0c7d01ff802ed123adfebd2501542c3502d517`, failed before promotion: candidate
+smoke returned 503 with the expected version, no-store and `stage=admission`. The failed-candidate
+cleanup and failure-notification steps succeeded. No smoke gate was bypassed and no dashboard
+release was performed. The corrected serving Core runtime recipient therefore remains unverified.
+Read-only D1 schema inspection found the expected smoke table and indexes, with no triggers; this
+neither reproduces a write failure locally nor establishes its cause. Keep release recovery distinct
+from the verified CI email receipt and avoid blind production retries.
+
+### Receiving and company support mailbox
+
+Restricted evidence reference: `26aaf35f-d235-4960-95d3-90a8a325586c`, version 1. Resend's
+Receiving view displayed **No received emails yet**. This is a dated view, not proof that historical
+inbound data never existed. The enabled webhook remains unchanged and its actual use unresolved.
+
+The authorized company mailbox is a Google-hosted Gmail session with Workspace branding; the domain
+MX also points to Google. This verifies Google hosting for the support-correspondence flow,
+separately from Google OIDC. Current Workspace plan, company agreement/acceptance, data regions,
+Vault, retention and disposal settings remain unverified. Do not apply the Workspace contract to
+the OIDC flow or infer a current subscription from an old invoice notice.
+
+### Delivered Kapso change notices
+
+Restricted evidence reference: `9f495531-87d0-4c17-8dc6-db80ab138274`, version 1. The company inbox
+contains the September 17 terms/privacy/DPA update notice and an October 11 subprocessor notice.
+The latter identifies Slack, Supabase and Vercel for support collaboration, case storage and support
+application hosting, says those services were already used, and describes feature-specific audio
+and live-assistance routes. These are provider-disclosed support subprocessors, not newly verified
+recipients of Fidy User content. The actual support/transcript route still requires reconciliation.
+
+The October notice specifies a 15-day concern/objection window from receipt and gives a legal
+contact. Prioritize its qualified review; delivery does not prove FIDY S.A.S.'s acceptance, and this
+inspection neither accepted terms nor sent an objection. The previously approved Free-history
+exception and the verified improvement opt-out remain unchanged. Preserve the notices privately and
+recheck the affected contract and support-purpose decisions before sharing a case with Kapso.
+
 ## Flow reconciliation
 
-The Cloudflare, Kapso and Resend technical fields specifically observed above are **partially verified**; other
+The Cloudflare, Kapso, Resend, Wompi and support-mailbox fields specifically observed above are **partially verified**; other
 account fields remain **unverified**. Every row still has reviewer **not recorded** and owner
 **obarboza@fidyapp.com**. None has an approved legal classification or international mechanism in
 this record. The next steps are specific to the flow; do not treat these rows as a completed review.
@@ -246,7 +317,7 @@ The public-source note supplies candidate documents and their applicability limi
 | G-auth       | Google OIDC `openid email`: provider verification and stable issuer/subject, with optional contact email. Fidy retains no provider tokens and requests no mailbox scope.                                           | Verify actual OAuth application, project owner, consent screen, scopes, callback and applicable identity/API terms; classify independent Google purposes separately. A Workspace DPA is not automatically the consumer OIDC mechanism.                                        |
 | MS-auth      | Microsoft common-v2 OIDC supports personal and work/school accounts; tenant-qualified issuer/subject and optional contact claims, no mailbox scope or retained provider tokens.                                    | Verify application registration, owner, audience types, scopes/callback and actual identity terms. Review consumer and organizational flows separately; do not assume an enterprise DPA makes all identity activity processing on Fidy's instructions.                        |
 | R-email      | Source wires outbound authentication, recovery and service email. The account additionally enables Receiving and a webhook without a matching current source route; actual inbound use is unverified.              | Verify sending account, entity, plan, domain, retained email/log data, recipients and applicable DPA acceptance. A sending-region setting alone is not proof of storage residency.                                                                                            |
-| OP-inbox     | The published support inbox receives request correspondence and any approved response.                                                                                                                             | Identify its actual hosting provider, account/entity, retention, trash/archive/backups and contractual rights/incident channels. Do not infer its host from the email address or OIDC provider.                                                                               |
+| OP-inbox     | The published support inbox receives request correspondence and any approved response.                                                                                                                             | Google hosting is verified by the authenticated company inbox. Verify Workspace account/entity, accepted terms, retention, trash/archive/backups and rights/incident channels separately from OIDC.                                                                           |
 | OP-evidence  | The local restricted case register/evidence stores minimal authority, case, source, response and delivery evidence.                                                                                                | Verify actual storage/backup destinations, permissions, approved finite retention and any third-party service. Existing FileVault/setup evidence is dated #1273 evidence, not proof of a new backup contract.                                                                 |
 
 The fixed anonymous GitHub release-metadata GET sends no User financial payload or User credential;
@@ -301,7 +372,7 @@ retain historical snapshots and run the exact-copy tests below.
 
 Use the [provider request procedure](provider-rights-1275.md) with the approved #1273 entitlement and
 #1274 erasure decision. It is an execution draft pending per-flow review and available-account
-testing. It introduces no new identity checks or provider deletion API. The Cloudflare, Kapso and Resend
+testing. It introduces no new identity checks or provider deletion API. The Cloudflare, Kapso, Resend, Wompi and support-mailbox
 inspections and separately authorized Kapso preference change above are configuration evidence; no provider deletion/support rehearsal has
 been performed for #1275. Local native tests do not establish provider completion.
 

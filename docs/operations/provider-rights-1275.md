@@ -87,6 +87,69 @@ instruction/preference, including how prospective withdrawal is recorded. Indefi
 acceptance is not training authorization. Do not change the account preference or claim a new
 conflict resolved without inspecting the actual accepted/configured instruction.
 
+## Account-specific enquiries awaiting authorization
+
+Prepared on 2026-10-16; **none has been sent**. Each enquiry is limited to the company name,
+business mailbox and the stated service/team label. No attachments, credentials, private evidence,
+User identifiers, messages, payment records or deletion instructions are included. Send only after
+the operator separately authorizes the named destination and scope, as required by #1275. Retain the
+actual sent text, acknowledgement and substantive response privately; sending these enquiries alone
+does not complete a rights rehearsal.
+
+### Kapso
+
+Destination: `legal@kap.so`, as supplied by the delivered account notices. From the approved company
+mailbox. Subject: `Fidy account: applicable terms and bounded rights rehearsal`.
+
+> FIDY S.A.S. is reconciling the Kapso project named fidy, currently on Free. Please confirm how to
+> obtain the applicable account agreement/DPA version and acceptance record, including the September
+> terms update and October support-subprocessor notice. Which transcription provider and locations
+> apply to this project's enabled audio route, and when can the disclosed support subprocessors
+> receive project content? We disabled model/product improvement; please explain its prospective
+> effect and any residual treatment of earlier content. We retain the Free indefinite-history
+> configuration. What authenticated route and minimum fields permit a disposable contact deletion
+> rehearsal, and how are completion, transcripts, media, logs, backups and subprocessor exclusions
+> reported? This is a capability enquiry, not an objection, agreement acceptance, deletion request,
+> account closure, plan change or authorization to access User content.
+
+### Resend
+
+Destination: `privacy@resend.com`, supplied by Exhibit B of the account-accessible DPA. From the
+approved company mailbox. Subject: `Fidy team: agreement evidence and email rights rehearsal`.
+
+> FIDY S.A.S. is reviewing the Resend team named fidyapp. Please explain how to obtain its actual
+> customer agreement/DPA acceptance record and contracting-customer details. What authenticated
+> route and minimum identifiers permit a narrowly scoped rehearsal using our own disposable test
+> email? Please distinguish sending/receiving content, delivery events, logs, backups and relevant
+> subprocessors, including storage/support locations and completion versus retained copies. We need
+> the applicable retention periods, exceptions and rights/incident contacts. This enquiry requests
+> information only; it authorizes no deletion, account closure, configuration or agreement change,
+> paid upgrade or access to User messages.
+
+### Wompi
+
+Destination: the [authenticated merchant support form](https://soporte.wompi.co/hc/es-419/requests/new?ticket_form_id=360000591473)
+linked by the merchant Help menu. Use only the approved business email and the merchant display
+name `fidy`; inspect any additional required fields before submission. Subject:
+`Comercio fidy: titular contractual y procedimiento de protección de datos`.
+
+> FIDY S.A.S. está revisando la documentación del comercio llamado fidy. La pantalla de resumen
+> muestra a su operador como persona natural. ¿Cómo podemos obtener el contrato aplicable, su versión
+> y constancia de aceptación, y confirmar el procedimiento para que la relación contractual
+> corresponda a la sociedad? Esta consulta no solicita todavía cambiar el titular. Necesitamos
+> conocer el canal autenticado y los identificadores mínimos para una prueba acotada de atención de
+> derechos con datos ficticios, sin crear ni reversar un cobro. Por favor indiquen qué información
+> puede eliminarse y qué registros de pagos, fraude, contabilidad, soporte y respaldos se conservan,
+> con sus plazos, motivos, ubicaciones y destinatarios aplicables. Esta consulta no autoriza pagos,
+> devoluciones, eliminación, cambios de cuenta o plan, ni aceptación de contratos.
+
+If a channel requests additional sensitive identifiers or attachments, prepare that exact scope
+for separate authorization rather than copying the evidence register. A company migration or new
+agreement remains a separate decision. For the Resend rehearsal, the operational test email already
+sent on 2026-10-16 is a candidate disposable fixture; its exact provider ID is retained privately.
+It is not authorized for deletion by this draft, and the release-failure email is retained as
+operational evidence. Do not purge the mailbox or any provider account to obtain a passing result.
+
 ## Record and deliver the result
 
 Map actual evidence to #1274 outcomes: `Accepted` for pending requests, `Verified` only for confirmed

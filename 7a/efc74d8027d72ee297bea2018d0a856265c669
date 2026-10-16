@@ -1,0 +1,37 @@
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_9b5c7812f0e1bd 1-2,82-86,603-605,615-627,633-786
+apps/web/src/features/needs-review/FEATURE.md
+  s_ede1c3735d03b7::t_171e967dc72c11 46-54
+apps/web/src/features/needs-review/editor.tsx
+  s_ede1c3735d03b7::t_122744e8571536 1,26-48,51-54
+apps/web/src/features/needs-review/expiry.ts
+  s_ede1c3735d03b7::t_bd7a45f0905e92 1-25
+apps/web/src/features/needs-review/feature.tsx
+  s_ede1c3735d03b7::t_21cddbe0200b36 1-2,39-48,54-74,88-93
+apps/web/src/features/needs-review/fields.tsx
+  s_ede1c3735d03b7::t_b1401bc249b8d1 1,170,172,175
+apps/web/src/features/needs-review/inbox.tsx
+  s_ede1c3735d03b7::t_ca031cea171e6a 1,57-65,67-91,93-96
+apps/web/src/features/needs-review/original.tsx
+  s_ede1c3735d03b7::t_f835ef283a29d8 1,14-23
+apps/web/src/features/needs-review/presentation.ts
+  s_ede1c3735d03b7::t_4ecd4809edd42d 1,22,27
+apps/web/src/ui/components/time-field.tsx
+  s_ede1c3735d03b7::t_a932deca6c16e9 1-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7aefc74d8027d72ee297bea2018d0a856265c669",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

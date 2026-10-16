@@ -1,3 +1,4 @@
+import { useReviewExpired } from "./expiry";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DraftBarrier } from "./draft-barrier";
 import { RetryExtraction } from "./retry";
@@ -22,10 +23,35 @@ type Props = Readonly<{
   disabled: boolean;
   finished: (items: ReadonlyArray<Detail>, skipped: boolean) => void;
 }>;
-export const ReviewEditor = ({ item, finished, barrier, disabled }: Props): JSX.Element => {
+export const ReviewEditor = (props: Props): JSX.Element => {
+  const expired = useReviewExpired(props.item);
+  return expired ? <ExpiredReviewItem item={props.item} /> : <ReviewItemEditor {...props} />;
+};
+const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
+  <div className="p-5">
+    <h2 className="text-xl font-semibold">
+      {item.status === "created" ? "Transacción creada" : "Este elemento venció"}
+    </h2>
+    <p className="mt-3 text-sm text-muted-foreground">
+      El original venció. Envía el material de nuevo para revisarlo.
+    </p>
+    {item.status === "created" ? (
+      <a
+        className="mt-4 inline-block underline"
+        href={`/app/needs-review/transactions/${item.transactionId}`}
+      >
+        Ver transacción
+      </a>
+    ) : null}
+  </div>
+);
+const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [query] = useState(() =>
-    apiClient.query("ingestion", "getReviewItem", { params: { id: item.id } })
+    apiClient.query("ingestion", "getReviewItem", {
+      params: { id: item.id },
+      reactivityKeys: ["ingestion-review"],
+    })
   );
   const [categoryQuery] = useState(() => apiClient.query("categories", "listCategories", {}));
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);

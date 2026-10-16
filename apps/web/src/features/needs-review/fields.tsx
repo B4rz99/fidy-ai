@@ -1,3 +1,4 @@
+import { TimeField } from "@/ui/components/time-field";
 import { CalendarField } from "@/ui/components/calendar-field";
 import { Currency } from "@fidy/server/client";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
@@ -166,15 +167,12 @@ const ReviewOccurrence = (props: Props): JSX.Element => {
         </div>
         <div className="grid content-start gap-2.5">
           <Label htmlFor="review-time">Hora</Label>
-          <Input
+          <TimeField
             id="review-time"
-            type="time"
-            required
+            label="Hora del movimiento"
             value={time}
             disabled={props.locked || date === ""}
-            onChange={(event) => {
-              if (event.target.value !== "") change(`${date}T${event.target.value}`);
-            }}
+            onChange={(next) => change(`${date}T${next}`)}
           />
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { reviewHasExpired } from "./expiry";
 import { DateTime, Option } from "effect";
 import type { Item } from "./model";
 
@@ -18,12 +19,12 @@ export const reviewReason = (item: Item): string => {
   }
 };
 export const reviewTitle = (item: Item): string =>
-  Option.match(item.preview, {
+  Option.match(reviewHasExpired(item) ? Option.none() : item.preview, {
     onSome: (preview) => preview.counterparty.trim() || "Transacción por completar",
     onNone: () => (item.source === "media" ? "Recibo por completar" : "Transacción por completar"),
   });
 export const reviewAmount = (item: Item): string =>
-  Option.match(item.preview, {
+  Option.match(reviewHasExpired(item) ? Option.none() : item.preview, {
     onNone: () => "Valor por completar",
     onSome: (preview) =>
       preview.amount === ""

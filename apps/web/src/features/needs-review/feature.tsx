@@ -1,3 +1,5 @@
+import { Atom } from "effect/reactivity";
+import { cn } from "@/ui/class-names";
 import { type InboxControl, useInboxControl } from "./inbox-controller";
 import { reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
@@ -34,16 +36,42 @@ export const NeedsReviewFeature = (): JSX.Element => {
       >
         {null}
       </WorkspaceHeader>
-      <ReviewResources
-        key={`${filter}:${page}`}
-        filter={filter}
+      <ReviewPanel
+        active={filter === "pending"}
+        filter="pending"
+        page={filter === "pending" ? page : 0}
         select={select}
-        page={page}
-        move={(offset) => select(filter, offset)}
+      />
+      <ReviewPanel
+        active={filter !== "pending"}
+        filter={filter === "pending" ? "history" : filter}
+        page={filter === "pending" ? 0 : page}
+        select={select}
       />
     </div>
   );
 };
+const ReviewPanel = ({
+  active,
+  filter,
+  page,
+  select,
+}: Readonly<{
+  active: boolean;
+  filter: Filter;
+  page: number;
+  select: (status: Filter, offset: number) => void;
+}>): JSX.Element => (
+  <div hidden={!active} className={cn("min-h-0 flex-1 flex-col", active ? "flex" : "hidden")}>
+    <ReviewResources
+      key={`${filter}:${page}`}
+      filter={filter}
+      select={select}
+      page={page}
+      move={(offset) => select(filter, offset)}
+    />
+  </div>
+);
 const ReviewResources = ({
   filter,
   page,
@@ -57,10 +85,12 @@ const ReviewResources = ({
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [query] = useState(() =>
-    apiClient.query("ingestion", "getReviewWorkspace", {
-      query: { status: Option.some(filter), offset: Option.some(page) },
-      reactivityKeys: ["ingestion-review"],
-    })
+    apiClient
+      .query("ingestion", "getReviewWorkspace", {
+        query: { status: Option.some(filter), offset: Option.some(page) },
+        reactivityKeys: ["ingestion-review"],
+      })
+      .pipe(Atom.withRefresh("60 seconds"), Atom.refreshOnWindowFocus)
   );
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);

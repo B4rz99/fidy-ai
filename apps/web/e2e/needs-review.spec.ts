@@ -1,5 +1,5 @@
-import type { Route } from "@playwright/test";
-import { Effect, Schema } from "effect";
+import type { Page, Route } from "@playwright/test";
+import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -79,7 +79,11 @@ const reviewRoute = (route: Route): Promise<void> => {
   return route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: response({ pendingCount: 1, total: 1, items: [item] }),
+    body: response(
+      new URL(route.request().url()).searchParams.get("status") === "history"
+        ? { pendingCount: 1, total: 0, items: [] }
+        : { pendingCount: 1, total: 1, items: [item] }
+    ),
   });
 };
 
@@ -596,7 +600,9 @@ test("uses the shared calendar and preserves the local time when changing dates"
         page.getByRole("button", { name: /viernes, 2 de enero de 2026/ }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Hora", { exact: true })).toHaveValue("12:30")
+        expect(page.getByRole("button", { name: "Hora del movimiento", exact: true })).toHaveText(
+          "12:30"
+        )
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("status").filter({ hasText: "Borrador guardado" })).toHaveCount(1)
@@ -606,9 +612,175 @@ test("uses the shared calendar and preserves the local time when changing dates"
         expect(page.getByRole("button", { name: "Fecha del movimiento" })).toHaveText("02-01-2026")
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Hora", { exact: true })).toHaveValue("12:30")
+        expect(page.getByRole("button", { name: "Hora del movimiento", exact: true })).toHaveText(
+          "12:30"
+        )
+      );
+      yield* Effect.tryPromise(() => chooseReviewTime({ page, hour: "23", minute: "59" }));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status").filter({ hasText: "Borrador guardado" })).toHaveCount(1)
+      );
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Hora del movimiento", exact: true })).toHaveText(
+          "23:59"
+        )
       );
     })
   ));
 
 const pageOverflow = (): number => document.documentElement.scrollHeight - window.innerHeight;
+
+test("switches between visited review tabs within 100ms without waiting for another request", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [
+        { id, revision: 0, status: "pending", draft: undefined },
+        { id: secondId, revision: 0, status: "skipped", draft: undefined },
+      ];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Historial", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Contraparte (opcional)").fill("Borrador entre vistas")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Elemento omitido", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "Completa la transacción", exact: true })
+        ).toBeAttached()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Borrador entre vistas")
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, delayedReviewRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.evaluate(measureHistorySwitch));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Elemento omitido", exact: true })).toBeVisible({
+          timeout: 100,
+        })
+      );
+      yield* Effect.tryPromise(() => recordSwitchDuration(page));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "Completa la transacción", exact: true })
+        ).toBeAttached({ timeout: 100 })
+      );
+    })
+  ));
+
+const delayedReviewRoute =
+  (entries: Fixture[]) =>
+  (route: Route): Promise<void> =>
+    Effect.runPromise(
+      Effect.sleep("1 second").pipe(
+        Effect.andThen(Effect.tryPromise(() => lifecycleRoute(entries)(route)))
+      )
+    );
+
+test("removes retained review fields and original material at the evidence deadline", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.clock.install({
+          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:59Z")),
+        })
+      );
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward("00:02"));
+      yield* Effect.tryPromise(() => expect(page.getByLabel("Valor")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "Este elemento venció", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));
+
+const chooseReviewTime = ({
+  page,
+  hour,
+  minute,
+}: Readonly<{ page: Page; hour: string; minute: string }>): Promise<void> =>
+  page
+    .getByRole("button", { name: "Hora del movimiento", exact: true })
+    .click()
+    .then(() => page.getByRole("button", { name: "Horas", exact: true }).click())
+    .then(() => page.getByRole("menuitemradio", { name: hour, exact: true }).click())
+    .then(() => page.getByRole("button", { name: "Minutos", exact: true }).click())
+    .then(() => page.getByRole("menuitemradio", { name: minute, exact: true }).click())
+    .then(() => page.getByRole("button", { name: "Listo", exact: true }).click());
+
+const measureHistorySwitch = (): void => {
+  document.addEventListener(
+    "click",
+    function record(event): void {
+      if (
+        !(event.target instanceof Element) ||
+        event.target.closest("button")?.textContent.trim() !== "Historial"
+      ) {
+        return;
+      }
+      document.removeEventListener("click", record, true);
+      const start = performance.now();
+      const check = (): void => {
+        const heading = Array.from(document.querySelectorAll("h2")).find(
+          (element) =>
+            element.textContent === "Elemento omitido" && element.closest("[hidden]") === null
+        );
+        if (heading === undefined) {
+          requestAnimationFrame(check);
+          return;
+        }
+        document.body.dataset.reviewSwitchMilliseconds = String(performance.now() - start);
+      };
+      requestAnimationFrame(check);
+    },
+    true
+  );
+};
+
+const recordSwitchDuration = (page: Page): Promise<void> =>
+  page
+    .locator("body")
+    .getAttribute("data-review-switch-milliseconds")
+    .then((milliseconds) => {
+      expect(milliseconds).not.toBeNull();
+      expect(Number(milliseconds)).toBeLessThan(100);
+      return test.info().attach("review-switch-duration", {
+        body: `${milliseconds} ms`,
+        contentType: "text/plain",
+      });
+    });

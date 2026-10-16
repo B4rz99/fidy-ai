@@ -43,3 +43,12 @@ the local date while preserving an existing local time; a newly completed date s
 and exposes the time for editing. Source and text filters apply to the current server page,
 whose pagination remains independent of the filtered result count. The bulk toolbar only appears
 for a selection, feedback, or Undo; refresh remains available in the navigation.
+
+Pending and History retain separate mounted panels while the workspace is open. Their canonical
+queries and first selected items load in parallel; switching panels does not wait for another read
+or discard an in-progress pending draft. Workspace queries refresh every minute and on window
+focus, and review decisions invalidate both panels. Authentication registry replacement clears
+query state. Deadline-owned timers remove the editor and original subscriptions at evidence
+expiry, and row previews stop displaying the expired facts. The shared time popover uses the same
+button, popover and choice controls as the calendar; it edits exact hours and minutes in 24-hour
+local time. Browser acceptance measures a warmed tab switch below 100 ms with delayed requests.

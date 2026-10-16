@@ -1,3 +1,4 @@
+import { useReviewExpired } from "./expiry";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { CanonicalSuccess } from "@/transport/client";
@@ -10,6 +11,16 @@ import { sources } from "./model";
 import type { Item } from "./model";
 
 export const OriginalMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
+  const expired = useReviewExpired(item);
+  return expired ? (
+    <p className="text-sm text-muted-foreground">
+      El original venció. Envía el material de nuevo para revisarlo.
+    </p>
+  ) : (
+    <RetainedMaterial item={item} />
+  );
+};
+const RetainedMaterial = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
   const client = useRouter().options.context.apiClient;
   const [query] = useState(() =>
     client.query("ingestion", "getReviewMaterial", { params: { id: item.id } })

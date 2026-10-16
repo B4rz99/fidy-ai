@@ -1,3 +1,4 @@
+import { useReviewExpired } from "./expiry";
 import { Option } from "effect";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
@@ -53,40 +54,43 @@ export const Inbox = (props: InboxProps): JSX.Element => (
   </aside>
 );
 
-const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>): JSX.Element => (
-  <div
-    className={
-      Option.contains(props.selected, item.id)
-        ? "relative flex items-center border-b border-l-2 border-l-primary bg-secondary/35"
-        : "relative flex items-center border-b border-l-2 border-l-transparent"
-    }
-  >
-    <div className="absolute left-4 z-10 flex items-center">
-      <Checkbox
-        aria-label={`Seleccionar ${sources[item.source]} ${item.id}`}
-        checked={props.checked.includes(item.id)}
-        disabled={item.status !== "pending" && item.status !== "skipped"}
-        onCheckedChange={() => props.toggle(item)}
-      />
-    </div>
-    <button
-      type="button"
-      aria-label={`Abrir ${sources[item.source]}`}
-      className="min-h-26 w-full min-w-0 cursor-pointer py-3 pr-5 pl-14 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      onClick={() => props.choose(item)}
-      aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
+const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>): JSX.Element => {
+  const expired = useReviewExpired(item);
+  return (
+    <div
+      className={
+        Option.contains(props.selected, item.id)
+          ? "relative flex items-center border-b border-l-2 border-l-primary bg-secondary/35"
+          : "relative flex items-center border-b border-l-2 border-l-transparent"
+      }
     >
-      <span className="grid min-w-0 gap-1.5">
-        <span className="text-xs text-muted-foreground">
-          {sources[item.source]}
-          {item.status === "pending" ? "" : ` · ${statuses[item.status]}`}
+      <div className="absolute left-4 z-10 flex items-center">
+        <Checkbox
+          aria-label={`Seleccionar ${sources[item.source]} ${item.id}`}
+          checked={props.checked.includes(item.id)}
+          disabled={expired || (item.status !== "pending" && item.status !== "skipped")}
+          onCheckedChange={() => props.toggle(item)}
+        />
+      </div>
+      <button
+        type="button"
+        aria-label={`Abrir ${sources[item.source]}`}
+        className="min-h-26 w-full min-w-0 cursor-pointer py-3 pr-5 pl-14 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        onClick={() => props.choose(item)}
+        aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
+      >
+        <span className="grid min-w-0 gap-1.5">
+          <span className="text-xs text-muted-foreground">
+            {sources[item.source]}
+            {item.status === "pending" ? "" : ` · ${statuses[item.status]}`}
+          </span>
+          <span className="truncate text-sm font-semibold">{reviewTitle(item)}</span>
+          <span className="text-xs text-muted-foreground">{reviewAmount(item)}</span>
+          <span className="text-xs font-medium" title={deadline(item)}>
+            {reviewExpiry(item)}
+          </span>
         </span>
-        <span className="truncate text-sm font-semibold">{reviewTitle(item)}</span>
-        <span className="text-xs text-muted-foreground">{reviewAmount(item)}</span>
-        <span className="text-xs font-medium" title={deadline(item)}>
-          {reviewExpiry(item)}
-        </span>
-      </span>
-    </button>
-  </div>
-);
+      </button>
+    </div>
+  );
+};

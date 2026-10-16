@@ -1,0 +1,36 @@
+apps/web/src/features/needs-review/FEATURE.md
+  s_ede1c3735d03b7::t_266cda496ddb6e 14
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_266cda496ddb6e 10,12,105,209,212-214,221,224,264,267-269
+  s_ede1c3735d03b7::t_fc1afcaf1b57e7 407-450
+apps/server/cloudflare/ingestion/internal/review-suggestions.ts
+  s_ede1c3735d03b7::t_c0d2eefe0b949f 99
+apps/server/cloudflare/ingestion/internal/statement-processing.ts
+  s_ede1c3735d03b7::t_1532f88462dcac 217
+apps/server/contracts/openapi.json
+  s_ede1c3735d03b7::t_775a1441844b2d 9670
+apps/server/src/core/ingestion/contract.ts
+  s_ede1c3735d03b7::t_0b0666d29a81b7 736
+apps/web/src/features/needs-review/fields.tsx
+  s_ede1c3735d03b7::t_c557d157968752 43-45,49
+apps/web/src/features/needs-review/model.ts
+  s_ede1c3735d03b7::t_852e0a8307cb25 61-67,105-107
+apps/web/src/ui/components/searchable-choice-dropdown.tsx
+  s_ede1c3735d03b7::t_cdf9d0d7215eed 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf3dcf23da9ed5c50cba9f39202ceddf5cbcff70",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

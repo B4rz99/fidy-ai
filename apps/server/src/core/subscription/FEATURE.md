@@ -175,8 +175,19 @@ period and succeeded attempt; Upgrade rendered that standing after explicit retr
 unavailable result. The initial refusal was not diagnosed as a persistent defect. Anonymous status
 returned 401/no-store and foreign-Origin enrollment returned 403/no-store. DaviPlata's Sandbox OTP
 preflight returned 200 with Fidy's Origin, POST and required headers allowed; this alone is not the
-deployed browser OTP journey. Live retry/replacement remains pending an eligible unpaid QA account
-and the reviewed payment authorization.
+deployed browser OTP journey.
+
+The approved deployed card sequence then passed on the existing unpaid Microsoft QA account at
+that revision. Initial status returned Free, no paid Subscription and no BillingAttempts. A weekly
+COP 9,900 Sandbox decline finalized without a paid period; a fresh enrollment reused that source
+without card re-entry, and its explicitly submitted retry also finalized as failed. After the second
+decline, the browser exposed retry and replacement actions. Replacement opened blank card fields
+and unchecked provider terms; the approved synthetic replacement card settled successfully, and a
+fresh status read showed Pro with the new weekly paid period. An indexed read independently
+confirmed both original failed attempts and their retry clearances remained, with zero paid periods
+for either decline and exactly one for the replacement. No real charges were made. The browser
+session expired during the first reconciliation, requiring returning-user login before retry;
+temporary cancellation access and subsequent grant cleanup remain pending.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

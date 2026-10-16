@@ -1,0 +1,63 @@
+docs/operations/titular-erasure-1274.md
+  s_b75995d26622a8::t_71e2fdd6a8cf9f 3-4,243-249
+  s_b75995d26622a8::t_1b63e1b5265f3b 237-242
+apps/web/src/features/recurring/FEATURE.md
+  s_b75995d26622a8::t_98407579ce1a33 112,124-126
+  s_b75995d26622a8::t_71e2fdd6a8cf9f 121-123
+  s_b75995d26622a8::t_312ccbdaae1ebb 128-147
+  s_b75995d26622a8::t_2cf9c35bf9f5da 127
+apps/server/src/core/recurring-plans/contract.ts
+  s_b75995d26622a8::t_02ad96e598dc70 12,19
+infra/cloudflare/workers-ai-conformance-script.test.ts
+  s_b75995d26622a8::t_133c79427b5c57 254-259
+apps/server/src/shell/hosted-inference/workers-ai.test.ts
+  s_b75995d26622a8::t_133c79427b5c57 335-336,338-340
+  s_b75995d26622a8::t_09470f0742e435 320-332,334,342-347
+  s_b75995d26622a8::t_d409ed2bdc7f3a 337,341
+  s_b75995d26622a8::t_7175c6fd2f37b8 333
+  s_b75995d26622a8::t_d4b6c6be05c297 7,303-318
+  s_b75995d26622a8::t_c519b6047b96e3 319
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_b75995d26622a8::t_f0b315cc34caea 167
+  s_b75995d26622a8::t_3478499ce9a9bd 141
+  s_b75995d26622a8::t_d409ed2bdc7f3a 23,26,52-59
+  s_b75995d26622a8::t_6588f0d87a49e1 60-63,176-191
+apps/server/src/shell/hosted-inference/internal/conformance.ts
+  s_b75995d26622a8::t_d27e11e0849ff5 196-226
+  s_b75995d26622a8::t_ddc592dc2fb956 8,195,227-230
+.patterns/ai.md
+  s_b75995d26622a8::t_460372a9833c38 76-82
+apps/server/src/shell/hosted-inference/internal/provider-schema.ts
+  s_b75995d26622a8::t_3478499ce9a9bd 36-39
+  s_b75995d26622a8::t_5f7640c888e84d 25-26
+  s_b75995d26622a8::t_cdc4fccbfa84e5 42-51,56-57
+  s_b75995d26622a8::t_e1afe4b9fea79d 84,104-105,107-108
+  s_b75995d26622a8::t_06cf054f07c59c 85-101,106
+  s_b75995d26622a8::t_076569a98ab5c2 52-55,58,80-83
+  s_b75995d26622a8::t_d409ed2bdc7f3a 24,27-35,40-41,59-64,109-111
+  s_b75995d26622a8::t_c45716d860faf5 102-103,112
+apps/server/contracts/openapi.json
+  s_b75995d26622a8::t_dd8d6f2a5add93 3991,3995,4692,4747,4751,4777,4841,4888,4892,4985,4992,5034,5038,5119,5165,5192,10001,10005,10089,10128,10149,10176,10183,20646,20655,20757,20801,20817
+apps/server/src/shell/hosted-inference/contract.ts
+  s_b75995d26622a8::t_de7bc501bb9f9a 350
+apps/server/src/shell/hosted-inference/operations.ts
+  s_b75995d26622a8::t_580dd4a2b571d3 16,61
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_b75995d26622a8::t_f90be06016ff0e 106,120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ca2afdda277ad523851b898ad2dc5ed5f813bae7",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

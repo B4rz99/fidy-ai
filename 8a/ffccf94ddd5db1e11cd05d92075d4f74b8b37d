@@ -1,0 +1,32 @@
+apps/server/src/core/recurring/FEATURE.md
+  s_b75995d26622a8::t_0ad46b87e89b1c 49-51,53-54
+apps/web/package.json
+  s_b75995d26622a8::t_28048b6172bd04 22
+dependency-policy.json
+  s_b75995d26622a8::t_28048b6172bd04 35-38
+  s_b75995d26622a8::t_7609540efa3563 33-34
+tools/astro/package.json
+  s_b75995d26622a8::t_28048b6172bd04 10
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_b75995d26622a8::t_80ffbe8bcef7c9 79
+bun.lock
+  s_b75995d26622a8::t_4c42c1d714c14e 95,292,294,2014,2160-2161,2222-2223,2296-2299
+tools/astro/bun.lock
+  s_b75995d26622a8::t_a807b6df77ce98 10,114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8affccf94ddd5db1e11cd05d92075d4f74b8b37d",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

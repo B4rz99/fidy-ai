@@ -1,0 +1,57 @@
+apps/server/src/shell/agent/contract.ts
+  s_b75995d26622a8::t_e6364a6f4aa402 15-17,22
+apps/web/src/features/agent/feature.tsx
+  s_b75995d26622a8::t_9cce73acecf316 14
+  s_b75995d26622a8::t_0d6d86b9dcae77 39-42,44-45,74-98
+apps/server/cloudflare/agent/internal/hosted-confirmation.ts
+  s_b75995d26622a8::t_0d6d86b9dcae77 3,14-15,61-68
+apps/server/cloudflare/recurring-plans/operations.ts
+  s_b75995d26622a8::t_e6364a6f4aa402 7,175-197
+apps/server/cloudflare/agent/internal/hosted-browser-confirmation.ts
+  s_b75995d26622a8::t_5285216abbe8b3 18,81-84
+  s_b75995d26622a8::t_aa13ac2eaabc42 1-17,19-80,85-89
+apps/web/e2e/recurring-chat-confirmation.spec.ts
+  s_b75995d26622a8::t_9cce73acecf316 1,30-71,81-119,121-122,124-125
+  s_b75995d26622a8::t_0d6d86b9dcae77 8-29,76-79
+  s_b75995d26622a8::t_e38465860b3d87 2-7,72-75,80,120,123,126
+apps/web/src/features/recurring/FEATURE.md
+  s_b75995d26622a8::t_f0f65ac0c88ce3 102-108
+  s_b75995d26622a8::t_1274eafeff1806 38-41,61-101,109,112-115
+apps/server/src/shell/recurring-plans/contract.ts
+  s_b75995d26622a8::t_9cce73acecf316 61
+apps/web/src/features/agent/FEATURE.md
+  s_b75995d26622a8::t_f0f65ac0c88ce3 88-94
+DESIGN.md
+  s_b75995d26622a8::t_f0f65ac0c88ce3 539-543
+apps/server/cloudflare/agent/internal/hosted-turn.ts
+  s_b75995d26622a8::t_0d6d86b9dcae77 2,200
+  s_b75995d26622a8::t_6dd20487a02d9c 1,203-204,1855-1865,1869-1877,1963-1978
+apps/web/src/features/agent/conversation.ts
+  s_b75995d26622a8::t_0d6d86b9dcae77 114-118,121,132-136,147,153-187,212-222
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_b75995d26622a8::t_0d6d86b9dcae77 4,114,7482
+  s_b75995d26622a8::t_9cce73acecf316 1,7517-7535
+  s_b75995d26622a8::t_f0f65ac0c88ce3 7622-7628
+  s_b75995d26622a8::t_5285216abbe8b3 2-3,5-13,7475-7478,7480-7481,7483-7516,7536-7603,7605-7608,7610-7621,7629,7631,7636-7639,7643-7649,7651-7654,7656-7657
+  s_b75995d26622a8::t_3b98b8d6157315 7479,7604,7609,7630,7632-7635,7640-7642,7650,7655,7658-7661
+apps/server/ARCHITECTURE.md
+  s_b75995d26622a8::t_f0f65ac0c88ce3 640-643
+apps/web/ARCHITECTURE.md
+  s_b75995d26622a8::t_f0f65ac0c88ce3 65-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c795bb339d524a799e1c60e4b9e203d64aab96c",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

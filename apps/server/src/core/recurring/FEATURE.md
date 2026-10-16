@@ -46,10 +46,12 @@ reevaluation; complete 40-item historical report, loading/failure/explicit retry
 malformed-response refusal and unsafe-text rendering. Malformed links explain recovery
 without a no-op retry; unavailable reports no longer ask an already signed-in User to
 sign in; every amount carries its Currency code so COP and USD cannot share an ambiguous `$` label.
-These browser fixes are local changes, awaiting deployment and a Production rerun.
+These browser fixes were committed as `83fd381b92` and are included in the deployed
+`0f2df68a9233094e40223fab15d167b671cced24` release. This establishes release inclusion;
+the populated production report still needs a live rerun.
 
-Remaining live checks: a populated frozen report and disclosed opt-in, plus the browser fixes after
-deployment. Historical fixtures are correctly suppressed and cannot produce an eligible digest.
+Remaining live checks: a populated frozen report and disclosed opt-in. Historical fixtures are
+correctly suppressed and cannot produce an eligible digest.
 Proactive delivery additionally needs a connected WhatsApp number and approved template; the
 current Kapso sandbox cannot prove it.
 

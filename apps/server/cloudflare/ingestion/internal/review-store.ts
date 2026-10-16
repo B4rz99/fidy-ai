@@ -3,6 +3,8 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import {
   type ReviewDetail,
   ReviewDraft,
+  ReviewMetadata,
+  ReviewStatus,
   ReviewSummary,
 } from "../../../src/core/ingestion/contract";
 import { TransactionId } from "../../../src/core/transactions/contract";
@@ -11,7 +13,8 @@ export const reviewCompletion = `INSERT INTO ingestion_review_assertion (id, acc
   VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
   ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
 export const ReviewRow = Schema.Struct({
-  ...ReviewSummary.fields,
+  ...ReviewMetadata.fields,
+  status: ReviewStatus,
   createdAt: Schema.DateTimeUtcFromMillis,
   expiresAt: Schema.DateTimeUtcFromMillis,
   transactionId: Schema.OptionFromNullOr(TransactionId),
@@ -57,5 +60,24 @@ export const readReviewDetail = ({
             Schema.decodeEffect(reviewDraftJson)(json)
           ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
         : Option.none();
-    return Option.some({ item: row, revision: row.revision, draft, suggestions });
+    const item = yield* projectReviewSummary(row);
+    return Option.some({ item, revision: row.revision, draft, suggestions });
+  }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+
+export const projectReviewSummary = (
+  row: Omit<typeof ReviewRow.Type, "draft_json" | "suggestions_json">
+): Effect.Effect<ReviewSummary, ReviewUnavailable> =>
+  Schema.decodeEffect(Schema.toCodecJson(ReviewSummary))({
+    revision: row.revision,
+    id: row.id,
+    source: row.source,
+    reason: row.reason,
+    timeZone: row.timeZone,
+    createdAt: DateTime.formatIso(row.createdAt),
+    expiresAt: DateTime.formatIso(row.expiresAt),
+    status: row.status,
+    ...Option.match(row.transactionId, {
+      onNone: () => ({}),
+      onSome: (transactionId) => ({ transactionId }),
+    }),
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));

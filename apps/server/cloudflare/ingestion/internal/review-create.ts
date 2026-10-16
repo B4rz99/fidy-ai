@@ -18,7 +18,11 @@ export const reviewedCapture = ({
   command: CreateReview;
   guard: OwnedStatement;
 }>): Effect.Effect<
-  Readonly<{ statements: ReadonlyArray<D1PreparedStatement>; transactionId: string }>,
+  Readonly<{
+    statements: ReadonlyArray<D1PreparedStatement>;
+    transactionId: string;
+    categoryId: string;
+  }>,
   ReviewUnavailable
 > =>
   Effect.gen(function* () {
@@ -59,13 +63,17 @@ export const reviewedCapture = ({
       createdAt: DateTime.formatIso(DateTime.makeUnsafe(work.current)),
       context,
       reviewItemId: command.id,
-      userProvidedFields: [
-        "money",
-        "direction",
-        "occurredAt",
-        ...Option.toArray(command.extraction.counterparty).map(() => "counterparty" as const),
-        ...Option.toArray(command.categoryId).map(() => "categoryId" as const),
-      ],
+      userProvidedFields: providedFields(command),
     });
-    return { statements, transactionId };
+    return { statements, transactionId, categoryId };
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
+
+const providedFields = (
+  command: CreateReview
+): ReadonlyArray<"money" | "direction" | "occurredAt" | "counterparty" | "categoryId"> => [
+  "money",
+  "direction",
+  "occurredAt",
+  ...Option.toArray(command.extraction.counterparty).map(() => "counterparty" as const),
+  ...Option.toArray(command.categoryId).map(() => "categoryId" as const),
+];

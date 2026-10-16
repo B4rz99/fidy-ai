@@ -8,7 +8,9 @@ original permits explicit manual completion only before its original deadline.
 Canonical query atoms own inbox, item, taxonomy and browser-only original/suggestion reads.
 The authentication registry owns their lifetime. Navigation polls the complete pending count and
 refreshes on window focus. Local selection and form drafts are presentation state; a mounted,
-serialized draft queue debounces saves and flushes before individual creation or omission.
+serialized draft queue debounces saves and flushes before individual creation or omission. Bulk skip
+also waits for queued drafts, using the revisions acknowledged by those saves. Route search owns
+filters and pagination; exhausting a page advances to a populated page.
 Server revisions prevent stale cross-device replacement. Uncertain acknowledgement stops writes
 and requires an explicit canonical reread. Neither originals nor drafts use browser storage.
 

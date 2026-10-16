@@ -1,7 +1,7 @@
 import { useInboxControl } from "./inbox-controller";
 import { ReviewToolbar } from "./toolbar";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { useRouter } from "@tanstack/react-router";
+import { Navigate, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -14,8 +14,13 @@ import type { Workspace } from "./model";
 
 type Filter = "pending" | "history" | "created" | "skipped" | "expired";
 export const NeedsReviewFeature = (): JSX.Element => {
-  const [filter, setFilter] = useState<Filter>("pending");
-  const [page, setPage] = useState(0);
+  const search = useSearch({ from: "/authenticated/app/needs-review" });
+  const navigate = useNavigate({ from: "/app/needs-review" });
+  const filter = search.status ?? "pending";
+  const page = search.offset ?? 0;
+  const select = (status: Filter, offset: number): void => {
+    navigate({ search: { status, offset } }).catch(() => {});
+  };
   return (
     <>
       <WorkspaceHeader
@@ -38,13 +43,17 @@ export const NeedsReviewFeature = (): JSX.Element => {
           onChange={(value) => {
             const selected = filters.find((option) => option.value === value);
             if (selected !== undefined) {
-              setFilter(selected.value);
-              setPage(0);
+              select(selected.value, 0);
             }
           }}
         />
       </WorkspaceHeader>
-      <ReviewResources key={`${filter}:${page}`} filter={filter} page={page} move={setPage} />
+      <ReviewResources
+        key={`${filter}:${page}`}
+        filter={filter}
+        page={page}
+        move={(offset) => select(filter, offset)}
+      />
     </>
   );
 };
@@ -86,6 +95,9 @@ const ReviewResources = ({
   if (state._tag !== "Ready") {
     return <p className="p-5 text-muted-foreground">Cargando elementos…</p>;
   }
+  if (state.value.data.items.length === 0 && page > 0 && state.value.data.total > 0) {
+    return <Navigate to="/app/needs-review" search={{ status: filter, offset: 0 }} replace />;
+  }
   return <ReadyInbox view={state.value.data} page={page} move={move} refresh={refresh} />;
 };
 const ReadyInbox = ({
@@ -124,7 +136,13 @@ const ReadyInbox = ({
             </p>
           </div>
         ) : (
-          <ReviewEditor key={item.id} item={item} finished={control.finished} />
+          <ReviewEditor
+            key={item.id}
+            item={item}
+            finished={control.finished}
+            barrier={control.barrier}
+            disabled={control.locked}
+          />
         )}
       </div>
     </>

@@ -1,7 +1,8 @@
 import { Data, Effect, Option, Schema } from "effect";
 import { TransactionId } from "../../../src/core/transactions/contract";
 import {
-  ReviewSummary,
+  ReviewMetadata,
+  ReviewStatus,
   ReviewWorkspace,
   ReviewWorkspaceQuery,
   reviewPageSize,
@@ -17,11 +18,13 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
+import { projectReviewSummary } from "./review-store";
 import { validationFailed } from "./statement-ingestion";
 
 const Counts = Schema.Struct({ pendingCount: Schema.Int, total: Schema.Int });
 const Row = Schema.Struct({
-  ...ReviewSummary.fields,
+  ...ReviewMetadata.fields,
+  status: ReviewStatus,
   createdAt: Schema.DateTimeUtcFromMillis,
   expiresAt: Schema.DateTimeUtcFromMillis,
   transactionId: Schema.OptionFromNullOr(TransactionId),
@@ -105,7 +108,8 @@ const readWorkspace = ({
       ])
     );
     const counts = yield* Schema.decodeUnknownEffect(Counts)(results[0]?.results[0]);
-    const items = yield* Schema.decodeUnknownEffect(Schema.Array(Row))(results[1]?.results);
+    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Row))(results[1]?.results);
+    const items = yield* Effect.forEach(rows, projectReviewSummary);
     const data = yield* Schema.encodeUnknownEffect(Schema.toCodecJson(ReviewWorkspace))({
       ...counts,
       items,

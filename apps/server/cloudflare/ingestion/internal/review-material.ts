@@ -10,7 +10,7 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import { reviewAudit } from "./review-audit";
+import { commitReviewRead, reviewAudit } from "./review-audit";
 import { readReviewDetail, reviewCompletion } from "./review-store";
 
 const materialIdPosition = -2;
@@ -95,6 +95,11 @@ export const browseReviewMaterial = ({
     const current = transactionNow();
     const found = yield* readReviewDetail({ db, userId: subject.userId, id, current });
     if (Option.isNone(found)) {
+      yield* commitReviewRead({
+        work: { db, subject, current },
+        operation: "ingestion.getReviewMaterial",
+        accepted: false,
+      });
       return transactionFailure({
         code: "not_found",
         status: 404,

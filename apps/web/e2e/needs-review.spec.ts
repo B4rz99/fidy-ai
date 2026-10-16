@@ -83,6 +83,9 @@ const reviewRoute = (route: Route): Promise<void> => {
   });
 };
 
+const reviewPageSize = 50;
+const fixtureStart = 1350;
+const uuidTailLength = 12;
 const secondId = "24000000-0000-4000-8000-000000001351";
 type Fixture = {
   id: string;
@@ -97,7 +100,15 @@ const editInput = Schema.Struct({
   items: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Schema.String }))),
 });
 const detailFixture = (entry: Fixture): unknown => ({
-  item: { ...item, id: entry.id, revision: entry.revision, status: entry.status },
+  item: {
+    ...item,
+    id: entry.id,
+    revision: entry.revision,
+    status: entry.status,
+    ...(entry.status === "created"
+      ? { transactionId: "24000000-0000-4000-8000-000000001352" }
+      : {}),
+  },
   revision: entry.revision,
   ...(entry.draft === undefined ? {} : { draft: entry.draft }),
 });
@@ -135,7 +146,18 @@ const workspaceFixture = (route: Route, entries: Fixture[], url: URL): Promise<v
     body: response({
       pendingCount: entries.filter((candidate) => candidate.status === "pending").length,
       total: visible.length,
-      items: visible.map((candidate) => ({ ...item, ...candidate })),
+      items: visible
+        .slice(
+          Number(url.searchParams.get("offset") ?? "0"),
+          Number(url.searchParams.get("offset") ?? "0") + reviewPageSize
+        )
+        .map((candidate) => ({
+          ...item,
+          ...candidate,
+          ...(candidate.status === "created"
+            ? { transactionId: "24000000-0000-4000-8000-000000001352" }
+            : {}),
+        })),
     }),
   });
 };
@@ -143,23 +165,13 @@ const saveFixture = (route: Route, entries: Fixture[]): Promise<void> => {
   const input = Schema.decodeUnknownSync(editInput)(route.request().postDataJSON());
   const ids = input.items?.map((entry) => entry.id) ?? [input.id];
   const changed = entries.filter((entry) => ids.includes(entry.id));
-  for (const entry of changed) {
-    entry.revision += 1;
-    switch (input._tag) {
-      case "SaveDraft":
-        entry.draft = input.draft;
-        break;
-      case "Skip":
-        entry.status = "skipped";
-        break;
-      case "Restore":
-        entry.status = "pending";
-        break;
-      case "Create":
-        entry.status = "created";
-        break;
-    }
+  if (input._tag === "SaveDraft" && changed.some((entry) => entry.status !== "pending")) {
+    return route.fulfill({
+      status: 400,
+      body: '{"error":{"code":"validation_failed","message":"Stale draft"}}',
+    });
   }
+  changed.forEach((entry) => mutateFixture(entry, input));
   return route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -307,3 +319,86 @@ const lostAcknowledgementRoute =
 
 const hasHorizontalOverflow = (): boolean =>
   document.documentElement.scrollWidth > window.innerWidth;
+
+test("flushes a just-edited draft before bulk skip and restores it", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "pending", draft: undefined }];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").click());
+      yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("98765"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir 1 seleccionados" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Deshacer omisión" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toHaveValue("98765")
+      );
+    })
+  ));
+
+test("advances to a populated page and preserves navigation in the URL", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = pagedReviewFixtures();
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review?status=pending&offset=50"));
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/offset=0/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("checkbox")).toHaveCount(reviewPageSize)
+      );
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/status=pending/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("checkbox")).toHaveCount(reviewPageSize)
+      );
+    })
+  ));
+const pagedReviewFixtures = (): Fixture[] =>
+  Array.from({ length: 51 }, (_, index) => ({
+    id: `24000000-0000-4000-8000-${String(fixtureStart + index).padStart(uuidTailLength, "0")}`,
+    revision: 0,
+    status: "pending",
+    draft: {
+      amount: "13500",
+      currency: "COP",
+      direction: "outflow",
+      counterparty: "Cafe",
+      occurredAt: "2026-01-01T12:00:00Z",
+      userProvidedFields: [],
+    },
+  }));
+
+const mutateFixture = (entry: Fixture, input: typeof editInput.Type): void => {
+  entry.revision += 1;
+  switch (input._tag) {
+    case "SaveDraft":
+      entry.draft = input.draft;
+      break;
+    case "Skip":
+      entry.status = "skipped";
+      break;
+    case "Restore":
+      entry.status = "pending";
+      break;
+    case "Create":
+      entry.status = "created";
+      break;
+  }
+};

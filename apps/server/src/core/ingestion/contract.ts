@@ -685,17 +685,27 @@ export const StatementStagingFailureReason = Schema.Literals([
 export type StatementStagingFailureReason = typeof StatementStagingFailureReason.Type;
 
 export const ReviewStatus = Schema.Literals(["pending", "created", "skipped", "expired"]);
-export const ReviewSummary = Schema.Struct({
+export const ReviewMetadata = Schema.Struct({
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   id: NeedsReviewItemId,
   source: Schema.Literals(["statement", "email", "media"]),
   timeZone: CapturedInterpretationContext.fields.timeZone,
   reason: Schema.String,
-  status: ReviewStatus,
   createdAt: UtcTimestamp,
   expiresAt: UtcTimestamp,
-  transactionId: Schema.OptionFromOptionalKey(TransactionId),
 });
+export const ReviewSummary = Schema.Union([
+  Schema.Struct({
+    ...ReviewMetadata.fields,
+    status: Schema.Literal("created"),
+    transactionId: TransactionId,
+  }),
+  Schema.Struct({
+    ...ReviewMetadata.fields,
+    status: Schema.Literals(["pending", "skipped", "expired"]),
+    transactionId: Schema.OptionFromOptionalKey(Schema.Never),
+  }),
+]);
 export type ReviewSummary = typeof ReviewSummary.Type;
 export const ReviewWorkspace = Schema.Struct({
   pendingCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

@@ -1,3 +1,4 @@
+import type { DraftBarrier } from "./draft-barrier";
 import { useAtomSet } from "@effect/atom-react";
 import { Option } from "effect";
 import { useState } from "react";
@@ -108,9 +109,11 @@ export const useReviewEditor = ({
   apiClient,
   detail,
   finished,
+  barrier,
 }: Readonly<{
   apiClient: FidyClient;
   detail: Detail;
+  barrier: DraftBarrier;
   finished: (items: ReadonlyArray<Detail>, skipped: boolean) => void;
 }>): EditorController => {
   const [writer] = useState(() => makeReviewWrite(apiClient));
@@ -129,6 +132,11 @@ export const useReviewEditor = ({
     setDraft(next);
     setFeedback("unsaved");
     scheduleDraft({ owner, next, send, feedback: setFeedback });
+    barrier.set(owner.id, () =>
+      saveDraft(owner, send, setFeedback).then(() =>
+        owner.blocked ? Option.none() : Option.some(owner.revision)
+      )
+    );
   };
   const act = (kind: "Create" | "Skip"): void => {
     if (owner.blocked || acting) return;

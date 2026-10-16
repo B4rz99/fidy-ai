@@ -1,9 +1,12 @@
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import type { OAuthReviewBinding } from "../oauth-confirmation/contract";
+import { prepareOAuthConfirmation } from "../oauth-confirmation/operations";
 import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppMediaId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { ReviewWorkspace } from "../../src/core/ingestion/contract";
+import { ReviewCommand, ReviewWorkspace } from "../../src/core/ingestion/contract";
 import {
   StatementContentDigest,
   StatementSourceFormat,
@@ -13,7 +16,7 @@ import {
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { StatementWork } from "./contract";
 import { DurableTraceContext } from "../../src/shell/observability/contract";
-import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
@@ -47,6 +50,7 @@ import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   acceptWhatsAppMedia,
   prepareHeldStatementReviewDecision,
+  prepareReviewEdit,
   prepareStatementAbandonment,
   prepareStatementReviewDecision,
   processForwardedEmail,
@@ -4288,6 +4292,24 @@ it("delivers retained original material only to its browser owner", () =>
       });
       const foreign = yield* fromTestPromise(() => read(1));
       expect(foreign.status).toBe(404);
+      const retry = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}/suggestions`, {
+            headers: sessionHeaders(1),
+          })
+        )
+      );
+      expect(retry.status).toBe(404);
+      const audit = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT outcome FROM pat_audit WHERE user_id=? AND operation IN ('ingestion.getReviewMaterial','ingestion.getReviewSuggestions')"
+          )
+          .bind(userB)
+          .all()
+      );
+      expect(audit.results).toEqual([{ outcome: "rejected" }, { outcome: "rejected" }]);
     })
   ));
 
@@ -4551,7 +4573,7 @@ it("supports every ingestion source with atomic bulk decisions and individual cr
       const createdHistory = yield* readReviewInbox(runtime, "created");
       expect(createdHistory.pendingCount).toBe(0);
       expect(createdHistory.items).toHaveLength(3);
-      expect(createdHistory.items.every((item) => Option.isSome(item.transactionId))).toBe(true);
+      expect(createdHistory.items.every((item) => item.status === "created")).toBe(true);
     })
   ));
 
@@ -4605,3 +4627,97 @@ it("denies agent originals and refuses review reads and writes after Consent rev
       expect(write.status).not.toBe(200);
     })
   ));
+
+it("invalidates OAuth review when automatic Category changes without creating a Transaction", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const source = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      const current = yield* Clock.currentTimeMillis;
+      const subject = yield* oauthClarificationSubject(runtime.db, current);
+      const operation = CanonicalOperationId.make("ingestion.applyReviewEdit");
+      const input = {
+        payload: {
+          _tag: "Create",
+          id: source.reviewIds[0] ?? "",
+          revision: 0,
+          extraction: {
+            money: { amount: "13500", currency: "COP" },
+            direction: "outflow",
+            counterparty: "Cafe",
+            occurredAt: "2026-08-01T12:00:00Z",
+          },
+        },
+      };
+      const command = yield* Schema.decodeEffect(Schema.toCodecJson(ReviewCommand))(input.payload);
+      const work: CanonicalPreparationWork = {
+        db: runtime.db,
+        subject,
+        current,
+        bucket: Option.some(runtime.bucket),
+        input,
+      };
+      const first = yield* prepareReviewEdit({ work, command });
+      const firstBinding = reviewBinding(first);
+      const issued = yield* prepareOAuthConfirmation({
+        db: runtime.db,
+        subject,
+        binding: firstBinding,
+        work: { operation, input, attempt: { _tag: "Review" } },
+      });
+      if (issued._tag !== "Review") return yield* Effect.die("Missing review intent");
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+          )
+          .bind(newId(), userA, "10000000-0000-4000-8000-000000000003")
+          .run()
+      );
+      const changed = yield* prepareReviewEdit({ work, command });
+      const changedBinding = reviewBinding(changed);
+      expect(changedBinding).not.toEqual(firstBinding);
+      expect(changedBinding[0]?.effect).toContain("10000000-0000-4000-8000-000000000003");
+      const accepted = yield* prepareOAuthConfirmation({
+        db: runtime.db,
+        subject,
+        binding: changedBinding,
+        work: {
+          operation,
+          input,
+          attempt: {
+            _tag: "Decision",
+            reference: issued.review.reference,
+            response: { action: "accept", content: { confirm: true } },
+          },
+        },
+      });
+      expect(accepted._tag).toBe("Prepared");
+      if (accepted._tag !== "Prepared" || changed._tag !== "Prepared") {
+        return yield* Effect.die("Missing guarded acceptance");
+      }
+      const rejected = yield* Effect.tryPromise(() =>
+        runtime.db.batch([
+          ...accepted.statements,
+          ...Option.getOrThrow(changed.mutation.oauthReview).guards,
+          ...changed.mutation.statements,
+        ])
+      ).pipe(Effect.result);
+      expect(Result.isFailure(rejected)).toBe(true);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+    })
+  ));
+const reviewBinding = (preparation: CanonicalMutationPreparation): OAuthReviewBinding => {
+  if (preparation._tag !== "Prepared") throw new Error("Missing mutation preparation");
+  const review = Option.getOrThrow(preparation.mutation.oauthReview);
+  return [
+    {
+      operation: CanonicalOperationId.make("ingestion.applyReviewEdit"),
+      scope: "write" as const,
+      effect: review.effect,
+      revision: review.revision,
+    },
+  ];
+};

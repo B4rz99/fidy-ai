@@ -1,3 +1,4 @@
+import type { DraftBarrier } from "./draft-barrier";
 import { RetryExtraction } from "./retry";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
@@ -12,9 +13,11 @@ import { type Category, type Detail, type Item, deadline } from "./model";
 
 type Props = Readonly<{
   item: Item;
+  barrier: DraftBarrier;
+  disabled: boolean;
   finished: (items: ReadonlyArray<Detail>, skipped: boolean) => void;
 }>;
-export const ReviewEditor = ({ item, finished }: Props): JSX.Element => {
+export const ReviewEditor = ({ item, finished, barrier, disabled }: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [query] = useState(() =>
     apiClient.query("ingestion", "getReviewItem", { params: { id: item.id } })
@@ -27,6 +30,7 @@ export const ReviewEditor = ({ item, finished }: Props): JSX.Element => {
   const [previous, setPrevious] = useState<Option.Option<Detail>>(Option.none);
   const recover = (): void => {
     if (detail._tag === "Ready") setPrevious(Option.some(detail.value.data));
+    barrier.delete(item.id);
     refresh();
     setRecovery((value) => value + 1);
   };
@@ -56,6 +60,8 @@ export const ReviewEditor = ({ item, finished }: Props): JSX.Element => {
       <ReadyEditor
         key={`${item.id}:${recovery}`}
         detail={detail.value.data}
+        barrier={barrier}
+        disabled={disabled}
         categories={categories.value.data}
         finished={finished}
         recover={recover}
@@ -68,14 +74,19 @@ const ReadyEditor = ({
   categories,
   finished,
   recover,
+  barrier,
+  disabled,
 }: Readonly<{
   detail: Detail;
+  barrier: DraftBarrier;
+  disabled: boolean;
   categories: ReadonlyArray<Category>;
   finished: Props["finished"];
   recover: () => void;
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const editor = useReviewEditor({ apiClient, detail, finished });
+  const editor = useReviewEditor({ apiClient, detail, finished, barrier });
+  const locked = editor.locked || disabled;
   if (detail.item.status !== "pending") {
     return <HistoryDetail detail={detail} />;
   }
@@ -89,11 +100,11 @@ const ReadyEditor = ({
       <output className="my-4 text-sm text-muted-foreground">
         {feedbackCopy[editor.feedback]}
       </output>
-      <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={editor.locked} />
+      <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={locked} />
       <ReviewFields
         draft={editor.draft}
         change={editor.change}
-        locked={editor.locked}
+        locked={locked}
         categories={categories}
         timeZone={detail.item.timeZone}
       />
@@ -105,11 +116,11 @@ const ReadyEditor = ({
       <div className="mt-6 flex flex-wrap gap-2">
         <Button
           onClick={() => editor.act("Create")}
-          disabled={editor.locked || Option.isNone(editor.creation)}
+          disabled={locked || Option.isNone(editor.creation)}
         >
           Crear transacción
         </Button>
-        <Button variant="outline" onClick={() => editor.act("Skip")} disabled={editor.locked}>
+        <Button variant="outline" onClick={() => editor.act("Skip")} disabled={locked}>
           Omitir
         </Button>
       </div>
@@ -136,10 +147,10 @@ const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element =>
           ? "Envía el material de nuevo para revisarlo."
           : "Restaura un elemento omitido para volver a editarlo."}
       </p>
-      {Option.isSome(detail.item.transactionId) ? (
+      {detail.item.status === "created" ? (
         <a
           className="mt-4 inline-block underline"
-          href={`/app/needs-review/transactions/${detail.item.transactionId.value}`}
+          href={`/app/needs-review/transactions/${detail.item.transactionId}`}
         >
           Ver transacción
         </a>

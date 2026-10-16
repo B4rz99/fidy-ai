@@ -1,6 +1,6 @@
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { reviewedCapture } from "./review-create";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   ReviewCommand,
   ReviewEditResult,
@@ -109,20 +109,20 @@ const reviewOAuth = ({
   command,
   refs,
   guards,
+  category,
 }: Readonly<{
   work: CanonicalPreparationWork;
   command: ReviewCommand;
   refs: ReadonlyArray<ReviewReference>;
   guards: ReadonlyArray<OwnedStatement>;
+  category: Option.Option<string>;
 }>): PreparedCanonicalMutation["oauthReview"] =>
   isOAuthCaller(work.subject)
     ? Option.some(
         oauthMutationReview({
           db: work.db,
-          effect: Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(ReviewCommand)))(
-            command
-          ),
-          revision: refs.map(({ id, revision }) => `${id}:${revision}`).join(","),
+          effect: `${Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(ReviewCommand)))(command)}${Option.match(category, { onNone: () => "", onSome: (id) => ` Categoría de la nueva Transacción: ${id}.` })}`,
+          revision: `${refs.map(({ id, revision }) => `${id}:${revision}`).join(",")}:${Option.getOrElse(category, () => "")}`,
           guard: {
             sql: `SELECT 1 WHERE ${guards.map(({ sql }) => `EXISTS (${sql})`).join(" AND ")}`,
             params: guards.flatMap(({ params }) => params),
@@ -147,15 +147,8 @@ export const prepareReviewEdit = ({
       return refusedPreparation(reviewRefusal(work));
     }
     const guards = refs.map((ref) => selectionGuard(work, command, ref));
-    for (const guard of guards) {
-      const eligible = yield* Effect.tryPromise(() =>
-        work.db
-          .prepare(guard.sql)
-          .bind(...guard.params)
-          .first()
-      );
-      if (eligible === null) return refusedPreparation(reviewRefusal(work));
-    }
+    const eligible = yield* Effect.forEach(guards, (guard) => eligibleReview(work.db, guard));
+    if (eligible.some((row) => row === null)) return refusedPreparation(reviewRefusal(work));
     const draft =
       command._tag === "SaveDraft"
         ? Option.some(yield* Schema.encodeEffect(reviewDraftJson)(command.draft))
@@ -169,7 +162,13 @@ export const prepareReviewEdit = ({
     return {
       _tag: "Prepared" as const,
       mutation: {
-        oauthReview: reviewOAuth({ work, command, refs, guards }),
+        oauthReview: reviewOAuth({
+          work,
+          command,
+          refs,
+          guards,
+          category: Option.map(capture, (value) => value.categoryId),
+        }),
         requiredScope: callerScope(work.subject),
         auditBudget: "shared" as const,
         commitGuards: Option.none(),
@@ -192,3 +191,14 @@ export const prepareReviewEdit = ({
       },
     };
   }).pipe(Effect.orElseSucceed(failedPreparation));
+
+const eligibleReview = (
+  db: D1Database,
+  guard: OwnedStatement
+): Effect.Effect<unknown, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(guard.sql)
+      .bind(...guard.params)
+      .first()
+  );

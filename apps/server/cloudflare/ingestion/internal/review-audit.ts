@@ -1,3 +1,4 @@
+import { ReviewUnavailable } from "../contract";
 import { Effect } from "effect";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
 import { recordLivePATUse } from "../../../src/shell/tokens/operations";
@@ -70,3 +71,13 @@ export const reviewRefusal = (work: Work): CanonicalMutationRefusal => ({
         : transactionUnavailable()
     ),
 });
+
+export const commitReviewRead = (
+  input: Readonly<{ work: Work; operation: Operation; accepted: boolean }>
+): Effect.Effect<void, ReviewUnavailable> =>
+  Effect.tryPromise(() =>
+    input.work.db.batch([...reviewAudit(input), input.work.db.prepare(reviewCompletion)])
+  ).pipe(
+    Effect.asVoid,
+    Effect.mapError(() => new ReviewUnavailable())
+  );

@@ -155,6 +155,17 @@ const createdReviewTransactionRoute = createRoute({
 const needsReviewRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/needs-review",
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        status: Schema.optionalKey(
+          Schema.Literals(["pending", "history", "created", "skipped", "expired"])
+        ),
+        offset: Schema.optionalKey(
+          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }))
+        ),
+      })
+    )(search),
   component: lazyRouteComponent(
     () => import("@/features/needs-review/feature"),
     "NeedsReviewFeature"

@@ -48,7 +48,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_17"
+            "$ref": "#/components/schemas/Union_19"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -250,26 +250,26 @@
       },
       "Arrays_4": {
         "items": {
-          "$ref": "#/components/schemas/Objects_32"
+          "$ref": "#/components/schemas/Objects_31"
         },
         "maxItems": 100,
         "minItems": 1,
         "prefixItems": [
           {
-            "$ref": "#/components/schemas/Objects_32"
+            "$ref": "#/components/schemas/Objects_31"
           }
         ],
         "type": "array"
       },
       "Arrays_5": {
         "items": {
-          "$ref": "#/components/schemas/Objects_35"
+          "$ref": "#/components/schemas/Objects_34"
         },
         "type": "array"
       },
       "Arrays_6": {
         "items": {
-          "$ref": "#/components/schemas/Objects_35"
+          "$ref": "#/components/schemas/Objects_34"
         },
         "type": "array"
       },
@@ -2737,7 +2737,7 @@
                 "$ref": "#/components/schemas/InterpretationRevision"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_13"
+                "$ref": "#/components/schemas/Union_15"
               },
               "receivedEmailId": {
                 "maxLength": 256,
@@ -2835,7 +2835,7 @@
                     "type": "string"
                   },
                   {
-                    "$ref": "#/components/schemas/Union_13"
+                    "$ref": "#/components/schemas/Union_15"
                   }
                 ]
               },
@@ -4518,7 +4518,7 @@
             "$ref": "#/components/schemas/Objects_29"
           },
           "item": {
-            "$ref": "#/components/schemas/Objects_31"
+            "$ref": "#/components/schemas/Union_11"
           },
           "revision": {
             "minimum": 0,
@@ -4537,61 +4537,6 @@
       "Objects_31": {
         "additionalProperties": false,
         "properties": {
-          "createdAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          },
-          "expiresAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          },
-          "id": {
-            "$ref": "#/components/schemas/NeedsReviewItemId"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "revision": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "source": {
-            "enum": [
-              "statement",
-              "email",
-              "media"
-            ],
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "pending",
-              "created",
-              "skipped",
-              "expired"
-            ],
-            "type": "string"
-          },
-          "timeZone": {
-            "$ref": "#/components/schemas/IanaTimeZone"
-          },
-          "transactionId": {
-            "$ref": "#/components/schemas/TransactionId"
-          }
-        },
-        "required": [
-          "revision",
-          "id",
-          "source",
-          "timeZone",
-          "reason",
-          "status",
-          "createdAt",
-          "expiresAt"
-        ],
-        "type": "object"
-      },
-      "Objects_32": {
-        "additionalProperties": false,
-        "properties": {
           "id": {
             "$ref": "#/components/schemas/NeedsReviewItemId"
           },
@@ -4606,7 +4551,7 @@
         ],
         "type": "object"
       },
-      "Objects_33": {
+      "Objects_32": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4625,7 +4570,7 @@
         ],
         "type": "object"
       },
-      "Objects_34": {
+      "Objects_33": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4641,7 +4586,7 @@
         ],
         "type": "object"
       },
-      "Objects_35": {
+      "Objects_34": {
         "additionalProperties": false,
         "properties": {
           "message": {
@@ -4657,7 +4602,7 @@
         ],
         "type": "object"
       },
-      "Objects_36": {
+      "Objects_35": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4669,7 +4614,7 @@
         ],
         "type": "object"
       },
-      "Objects_37": {
+      "Objects_36": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4685,7 +4630,7 @@
         ],
         "type": "object"
       },
-      "Objects_38": {
+      "Objects_37": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4697,7 +4642,7 @@
         ],
         "type": "object"
       },
-      "Objects_39": {
+      "Objects_38": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4710,6 +4655,18 @@
         "required": [
           "data",
           "next"
+        ],
+        "type": "object"
+      },
+      "Objects_39": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/StatementSubmissionId"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -4732,18 +4689,6 @@
       "Objects_40": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/StatementSubmissionId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_41": {
-        "additionalProperties": false,
-        "properties": {
           "data": {
             "$ref": "#/components/schemas/StatementSubmission"
           },
@@ -4757,7 +4702,7 @@
         ],
         "type": "object"
       },
-      "Objects_42": {
+      "Objects_41": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -4776,7 +4721,7 @@
         ],
         "type": "object"
       },
-      "Objects_43": {
+      "Objects_42": {
         "additionalProperties": false,
         "properties": {
           "kind": {
@@ -4791,7 +4736,7 @@
         ],
         "type": "object"
       },
-      "Objects_44": {
+      "Objects_43": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4807,7 +4752,7 @@
         ],
         "type": "object"
       },
-      "Objects_45": {
+      "Objects_44": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4819,7 +4764,7 @@
         ],
         "type": "object"
       },
-      "Objects_46": {
+      "Objects_45": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4837,6 +4782,22 @@
               "deliveryAttempt"
             ],
             "type": "object"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_46": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InsightEvent"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4867,22 +4828,6 @@
       "Objects_48": {
         "additionalProperties": false,
         "properties": {
-          "data": {
-            "$ref": "#/components/schemas/InsightEvent"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_49": {
-        "additionalProperties": false,
-        "properties": {
           "exceptions": {
             "items": {
               "additionalProperties": false,
@@ -4896,7 +4841,7 @@
                   "type": "string"
                 },
                 "replacement": {
-                  "$ref": "#/components/schemas/Objects_51"
+                  "$ref": "#/components/schemas/Objects_50"
                 },
                 "skipped": {
                   "type": "boolean"
@@ -4923,7 +4868,7 @@
           },
           "fulfillments": {
             "items": {
-              "$ref": "#/components/schemas/Objects_53"
+              "$ref": "#/components/schemas/Objects_52"
             },
             "maxItems": 4096,
             "type": "array"
@@ -4958,13 +4903,13 @@
                 },
                 "revisions": {
                   "items": {
-                    "$ref": "#/components/schemas/Objects_50"
+                    "$ref": "#/components/schemas/Objects_49"
                   },
                   "maxItems": 100,
                   "minItems": 1,
                   "prefixItems": [
                     {
-                      "$ref": "#/components/schemas/Objects_50"
+                      "$ref": "#/components/schemas/Objects_49"
                     }
                   ],
                   "type": "array"
@@ -5029,6 +4974,22 @@
         ],
         "type": "object"
       },
+      "Objects_49": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Objects_50"
+          }
+        },
+        "required": [
+          "from",
+          "plan"
+        ],
+        "type": "object"
+      },
       "Objects_5": {
         "additionalProperties": false,
         "properties": {
@@ -5042,22 +5003,6 @@
         "type": "object"
       },
       "Objects_50": {
-        "additionalProperties": false,
-        "properties": {
-          "from": {
-            "type": "string"
-          },
-          "plan": {
-            "$ref": "#/components/schemas/Objects_51"
-          }
-        },
-        "required": [
-          "from",
-          "plan"
-        ],
-        "type": "object"
-      },
-      "Objects_51": {
         "additionalProperties": false,
         "properties": {
           "accountId": {
@@ -5097,13 +5042,13 @@
             "type": "string"
           },
           "frequency": {
-            "$ref": "#/components/schemas/Union_15"
+            "$ref": "#/components/schemas/Union_17"
           },
           "kind": {
-            "$ref": "#/components/schemas/Union_14"
+            "$ref": "#/components/schemas/Union_16"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_52"
+            "$ref": "#/components/schemas/Objects_51"
           },
           "monthDays": {
             "maxItems": 2,
@@ -5163,7 +5108,7 @@
         ],
         "type": "object"
       },
-      "Objects_52": {
+      "Objects_51": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -5182,7 +5127,7 @@
         ],
         "type": "object"
       },
-      "Objects_53": {
+      "Objects_52": {
         "additionalProperties": false,
         "properties": {
           "actualDate": {
@@ -5200,7 +5145,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_52"
+            "$ref": "#/components/schemas/Objects_51"
           },
           "planId": {
             "format": "uuid",
@@ -5226,7 +5171,7 @@
         ],
         "type": "object"
       },
-      "Objects_54": {
+      "Objects_53": {
         "additionalProperties": false,
         "properties": {
           "completed": {
@@ -5240,12 +5185,12 @@
           },
           "fulfillments": {
             "items": {
-              "$ref": "#/components/schemas/Objects_53"
+              "$ref": "#/components/schemas/Objects_52"
             },
             "type": "array"
           },
           "plan": {
-            "$ref": "#/components/schemas/Objects_51"
+            "$ref": "#/components/schemas/Objects_50"
           },
           "planId": {
             "format": "uuid",
@@ -5277,7 +5222,7 @@
         ],
         "type": "object"
       },
-      "Objects_55": {
+      "Objects_54": {
         "additionalProperties": false,
         "properties": {
           "edit": {
@@ -5297,7 +5242,7 @@
                     "type": "string"
                   },
                   "plan": {
-                    "$ref": "#/components/schemas/Objects_51"
+                    "$ref": "#/components/schemas/Objects_50"
                   },
                   "seriesId": {
                     "format": "uuid",
@@ -5325,7 +5270,7 @@
                     "type": "string"
                   },
                   "plan": {
-                    "$ref": "#/components/schemas/Objects_51"
+                    "$ref": "#/components/schemas/Objects_50"
                   },
                   "planId": {
                     "format": "uuid",
@@ -5416,7 +5361,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "fulfillment": {
-                    "$ref": "#/components/schemas/Objects_53"
+                    "$ref": "#/components/schemas/Objects_52"
                   },
                   "kind": {
                     "enum": [
@@ -5504,11 +5449,27 @@
         ],
         "type": "object"
       },
+      "Objects_55": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Objects_48"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
       "Objects_56": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Objects_49"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5523,22 +5484,6 @@
       "Objects_57": {
         "additionalProperties": false,
         "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Memory"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_58": {
-        "additionalProperties": false,
-        "properties": {
           "id": {
             "$ref": "#/components/schemas/MemoryId"
           }
@@ -5548,7 +5493,7 @@
         ],
         "type": "object"
       },
-      "Objects_59": {
+      "Objects_58": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5561,6 +5506,18 @@
         "required": [
           "data",
           "next"
+        ],
+        "type": "object"
+      },
+      "Objects_59": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -5583,18 +5540,6 @@
       "Objects_60": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_61": {
-        "additionalProperties": false,
-        "properties": {
           "data": {
             "$ref": "#/components/schemas/MemoryId"
           },
@@ -5608,7 +5553,7 @@
         ],
         "type": "object"
       },
-      "Objects_62": {
+      "Objects_61": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5624,7 +5569,7 @@
         ],
         "type": "object"
       },
-      "Objects_63": {
+      "Objects_62": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5640,7 +5585,7 @@
         ],
         "type": "object"
       },
-      "Objects_64": {
+      "Objects_63": {
         "additionalProperties": false,
         "properties": {
           "publicCode": {
@@ -5652,7 +5597,7 @@
         ],
         "type": "object"
       },
-      "Objects_65": {
+      "Objects_64": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5668,7 +5613,7 @@
         ],
         "type": "object"
       },
-      "Objects_66": {
+      "Objects_65": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5831,7 +5776,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_17"
+            "$ref": "#/components/schemas/Union_19"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -6194,7 +6139,7 @@
         "additionalProperties": false,
         "properties": {
           "cadence": {
-            "$ref": "#/components/schemas/Objects_43"
+            "$ref": "#/components/schemas/Objects_42"
           },
           "confirmationId": {
             "format": "uuid",
@@ -6211,7 +6156,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_42"
+            "$ref": "#/components/schemas/Objects_41"
           },
           "seriesId": {
             "format": "uuid",
@@ -6332,7 +6277,7 @@
             ]
           },
           "cadence": {
-            "$ref": "#/components/schemas/Objects_43"
+            "$ref": "#/components/schemas/Objects_42"
           },
           "confirmedAt": {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -6355,7 +6300,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_42"
+            "$ref": "#/components/schemas/Objects_41"
           }
         },
         "required": [
@@ -7710,7 +7655,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_12"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -7790,7 +7735,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_12"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -7991,7 +7936,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_12"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8071,7 +8016,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_12"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8151,7 +8096,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_12"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -11558,6 +11503,115 @@
           {
             "additionalProperties": false,
             "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "expiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "$ref": "#/components/schemas/Union_12"
+              },
+              "status": {
+                "enum": [
+                  "created"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "$ref": "#/components/schemas/TransactionId"
+              }
+            },
+            "required": [
+              "revision",
+              "id",
+              "source",
+              "timeZone",
+              "reason",
+              "createdAt",
+              "expiresAt",
+              "status",
+              "transactionId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "expiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "$ref": "#/components/schemas/Union_12"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "skipped",
+                  "expired"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "not": {}
+              }
+            },
+            "required": [
+              "revision",
+              "id",
+              "source",
+              "timeZone",
+              "reason",
+              "createdAt",
+              "expiresAt",
+              "status"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_12": {
+        "enum": [
+          "statement",
+          "email",
+          "media"
+        ],
+        "type": "string"
+      },
+      "Union_13": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
               "_tag": {
                 "enum": [
                   "Create"
@@ -11654,7 +11708,7 @@
           }
         ]
       },
-      "Union_12": {
+      "Union_14": {
         "enum": [
           "malformed-source-row",
           "missing-required-fact",
@@ -11666,7 +11720,7 @@
         ],
         "type": "string"
       },
-      "Union_13": {
+      "Union_15": {
         "enum": [
           "provider-retrieval-failed",
           "processing-interrupted",
@@ -11674,7 +11728,7 @@
         ],
         "type": "string"
       },
-      "Union_14": {
+      "Union_16": {
         "enum": [
           "income",
           "expense",
@@ -11682,7 +11736,7 @@
         ],
         "type": "string"
       },
-      "Union_15": {
+      "Union_17": {
         "enum": [
           "weekly",
           "fortnightly",
@@ -11694,7 +11748,7 @@
         ],
         "type": "string"
       },
-      "Union_16": {
+      "Union_18": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -11760,7 +11814,7 @@
           }
         ]
       },
-      "Union_17": {
+      "Union_19": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -11770,7 +11824,15 @@
           }
         ]
       },
-      "Union_18": {
+      "Union_2": {
+        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+        "enum": [
+          "inflow",
+          "outflow"
+        ],
+        "type": "string"
+      },
+      "Union_20": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -12266,7 +12328,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Union_11"
+                    "$ref": "#/components/schemas/Union_13"
                   }
                 },
                 "required": [
@@ -12322,7 +12384,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_36"
+                    "$ref": "#/components/schemas/Objects_35"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ResolveNeedsReviewItemInput"
@@ -12358,7 +12420,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_38"
+                    "$ref": "#/components/schemas/Objects_37"
                   }
                 },
                 "required": [
@@ -12390,7 +12452,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_40"
+                    "$ref": "#/components/schemas/Objects_39"
                   }
                 },
                 "required": [
@@ -12454,7 +12516,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_44"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInput"
@@ -12490,7 +12552,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_44"
                   }
                 },
                 "required": [
@@ -12522,7 +12584,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_44"
                   }
                 },
                 "required": [
@@ -12554,7 +12616,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_55"
+                    "$ref": "#/components/schemas/Objects_54"
                   }
                 },
                 "required": [
@@ -12618,7 +12680,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_58"
+                    "$ref": "#/components/schemas/Objects_57"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ReviseInput"
@@ -12654,7 +12716,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_60"
+                    "$ref": "#/components/schemas/Objects_59"
                   }
                 },
                 "required": [
@@ -12742,7 +12804,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_64"
+                    "$ref": "#/components/schemas/Objects_63"
                   }
                 },
                 "required": [
@@ -12798,7 +12860,7 @@
           }
         ]
       },
-      "Union_19": {
+      "Union_21": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13158,7 +13220,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_33"
+                "$ref": "#/components/schemas/Objects_32"
               }
             },
             "required": [
@@ -13181,7 +13243,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_34"
+                "$ref": "#/components/schemas/Objects_33"
               }
             },
             "required": [
@@ -13204,7 +13266,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_37"
+                "$ref": "#/components/schemas/Objects_36"
               }
             },
             "required": [
@@ -13227,7 +13289,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_39"
+                "$ref": "#/components/schemas/Objects_38"
               }
             },
             "required": [
@@ -13250,7 +13312,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_41"
+                "$ref": "#/components/schemas/Objects_40"
               }
             },
             "required": [
@@ -13273,7 +13335,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_44"
+                "$ref": "#/components/schemas/Objects_43"
               }
             },
             "required": [
@@ -13296,7 +13358,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_46"
+                "$ref": "#/components/schemas/Objects_45"
               }
             },
             "required": [
@@ -13319,7 +13381,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_47"
+                "$ref": "#/components/schemas/Objects_46"
               }
             },
             "required": [
@@ -13342,7 +13404,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_48"
+                "$ref": "#/components/schemas/Objects_47"
               }
             },
             "required": [
@@ -13365,7 +13427,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_56"
+                "$ref": "#/components/schemas/Objects_55"
               }
             },
             "required": [
@@ -13388,7 +13450,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_57"
+                "$ref": "#/components/schemas/Objects_56"
               }
             },
             "required": [
@@ -13411,7 +13473,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_59"
+                "$ref": "#/components/schemas/Objects_58"
               }
             },
             "required": [
@@ -13434,7 +13496,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_61"
+                "$ref": "#/components/schemas/Objects_60"
               }
             },
             "required": [
@@ -13457,7 +13519,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_62"
+                "$ref": "#/components/schemas/Objects_61"
               }
             },
             "required": [
@@ -13480,7 +13542,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_63"
+                "$ref": "#/components/schemas/Objects_62"
               }
             },
             "required": [
@@ -13503,7 +13565,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_65"
+                "$ref": "#/components/schemas/Objects_64"
               }
             },
             "required": [
@@ -13526,7 +13588,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_66"
+                "$ref": "#/components/schemas/Objects_65"
               }
             },
             "required": [
@@ -13537,14 +13599,6 @@
             "type": "object"
           }
         ]
-      },
-      "Union_2": {
-        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-        "enum": [
-          "inflow",
-          "outflow"
-        ],
-        "type": "string"
       },
       "Union_3": {
         "enum": [
@@ -17162,7 +17216,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_34"
+                  "$ref": "#/components/schemas/Objects_33"
                 }
               }
             },
@@ -17458,7 +17512,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_37"
+                  "$ref": "#/components/schemas/Objects_36"
                 }
               }
             },
@@ -17594,7 +17648,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_39"
+                  "$ref": "#/components/schemas/Objects_38"
                 }
               }
             },
@@ -17746,7 +17800,7 @@
                       "properties": {
                         "items": {
                           "items": {
-                            "$ref": "#/components/schemas/Objects_31"
+                            "$ref": "#/components/schemas/Union_11"
                           },
                           "type": "array"
                         },
@@ -18377,7 +18431,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_13"
               }
             }
           },
@@ -18388,7 +18442,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_33"
+                  "$ref": "#/components/schemas/Objects_32"
                 }
               }
             },
@@ -18799,7 +18853,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_41"
+                  "$ref": "#/components/schemas/Objects_40"
                 }
               }
             },
@@ -18945,7 +18999,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_46"
+                  "$ref": "#/components/schemas/Objects_45"
                 }
               }
             },
@@ -19081,7 +19135,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_48"
+                  "$ref": "#/components/schemas/Objects_47"
                 }
               }
             },
@@ -19217,7 +19271,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_47"
+                  "$ref": "#/components/schemas/Objects_46"
                 }
               }
             },
@@ -19787,7 +19841,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_44"
+                  "$ref": "#/components/schemas/Objects_43"
                 }
               }
             },
@@ -20185,7 +20239,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_57"
+                  "$ref": "#/components/schemas/Objects_56"
                 }
               }
             },
@@ -20321,7 +20375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_61"
+                  "$ref": "#/components/schemas/Objects_60"
                 }
               }
             },
@@ -20465,7 +20519,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_59"
+                  "$ref": "#/components/schemas/Objects_58"
                 }
               }
             },
@@ -20605,13 +20659,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_18"
+                      "$ref": "#/components/schemas/Union_20"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_18"
+                        "$ref": "#/components/schemas/Union_20"
                       }
                     ],
                     "type": "array"
@@ -20638,13 +20692,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_19"
+                            "$ref": "#/components/schemas/Union_21"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_19"
+                              "$ref": "#/components/schemas/Union_21"
                             }
                           ],
                           "type": "array"
@@ -21044,7 +21098,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_63"
+                  "$ref": "#/components/schemas/Objects_62"
                 }
               }
             },
@@ -21483,7 +21537,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_66"
+                  "$ref": "#/components/schemas/Objects_65"
                 }
               }
             },
@@ -21605,7 +21659,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_64"
+                "$ref": "#/components/schemas/Objects_63"
               }
             }
           },
@@ -21616,7 +21670,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_65"
+                  "$ref": "#/components/schemas/Objects_64"
                 }
               }
             },
@@ -21748,16 +21802,16 @@
                           "$ref": "#/components/schemas/AccessTier"
                         },
                         "canonicalCalls": {
-                          "$ref": "#/components/schemas/Union_16"
+                          "$ref": "#/components/schemas/Union_18"
                         },
                         "forwardedEmails": {
-                          "$ref": "#/components/schemas/Union_16"
+                          "$ref": "#/components/schemas/Union_18"
                         },
                         "hostedHistoryTurns": {
-                          "$ref": "#/components/schemas/Union_16"
+                          "$ref": "#/components/schemas/Union_18"
                         },
                         "mediaSubmissions": {
-                          "$ref": "#/components/schemas/Union_16"
+                          "$ref": "#/components/schemas/Union_18"
                         }
                       },
                       "required": [
@@ -22045,7 +22099,7 @@
             "name": "kind",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_14"
+              "$ref": "#/components/schemas/Union_16"
             }
           },
           {
@@ -22053,7 +22107,7 @@
             "name": "frequency",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_15"
+              "$ref": "#/components/schemas/Union_17"
             }
           },
           {
@@ -22107,7 +22161,7 @@
                       "additionalProperties": false,
                       "properties": {
                         "document": {
-                          "$ref": "#/components/schemas/Objects_49"
+                          "$ref": "#/components/schemas/Objects_48"
                         },
                         "invalidFulfillmentIds": {
                           "items": {
@@ -22157,7 +22211,7 @@
                                 "type": "object"
                               },
                               "item": {
-                                "$ref": "#/components/schemas/Objects_54"
+                                "$ref": "#/components/schemas/Objects_53"
                               }
                             },
                             "required": [
@@ -22176,13 +22230,13 @@
                         },
                         "occurrences": {
                           "items": {
-                            "$ref": "#/components/schemas/Objects_54"
+                            "$ref": "#/components/schemas/Objects_53"
                           },
                           "type": "array"
                         },
                         "previous": {
                           "items": {
-                            "$ref": "#/components/schemas/Objects_54"
+                            "$ref": "#/components/schemas/Objects_53"
                           },
                           "type": "array"
                         },
@@ -22203,7 +22257,7 @@
                                 "$ref": "#/components/schemas/Money_2"
                               },
                               "kind": {
-                                "$ref": "#/components/schemas/Union_14"
+                                "$ref": "#/components/schemas/Union_16"
                               },
                               "remaining": {
                                 "$ref": "#/components/schemas/Money_2"
@@ -22365,7 +22419,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_55"
+                "$ref": "#/components/schemas/Objects_54"
               }
             }
           },
@@ -22376,7 +22430,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_56"
+                  "$ref": "#/components/schemas/Objects_55"
                 }
               }
             },
@@ -22633,7 +22687,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_62"
+                  "$ref": "#/components/schemas/Objects_61"
                 }
               }
             },

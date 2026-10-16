@@ -1,3 +1,4 @@
+import { type DraftBarrier, flushReviewSelection } from "./draft-barrier";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -6,6 +7,7 @@ import { type ReviewWrite, makeReviewWrite } from "./command";
 import type { Detail, Item, Workspace } from "./model";
 
 export type InboxControl = Readonly<{
+  barrier: DraftBarrier;
   selected: Option.Option<Item["id"]>;
   checked: ReadonlyArray<Item["id"]>;
   undo: ReadonlyArray<Detail>;
@@ -22,6 +24,7 @@ export const useInboxControl = ({
   view,
   refresh,
 }: Readonly<{ view: Workspace; refresh: () => void }>): InboxControl => {
+  const [barrier] = useState<DraftBarrier>(() => new Map());
   const apiClient = useRouter().options.context.apiClient;
   const [writer] = useState(() => makeReviewWrite(apiClient));
   const send = useAtomSet(writer);
@@ -38,11 +41,9 @@ export const useInboxControl = ({
     setBlocked(value);
     setRecovering(Option.none());
   };
-  const selected = Option.orElse(
-    Option.filter(selection, (id) => view.items.some((item) => item.id === id)),
-    () => Option.fromUndefinedOr(view.items[0]?.id)
-  );
+  const selected = selectedItem({ selection, view });
   const finished = (items: ReadonlyArray<Detail>, skipped: boolean): void => {
+    items.forEach((item) => barrier.delete(item.item.id));
     setLocked(false);
     setChecked([]);
     setFeedback(skipped ? `${items.length} elementos omitidos.` : "Cambio guardado.");
@@ -50,8 +51,9 @@ export const useInboxControl = ({
     refresh();
   };
   const bulk = (restore: boolean, items: ReadonlyArray<Item>): void =>
-    submitBulk({ restore, items, locked, send, finished, setLocked, setFeedback });
+    submitBulk({ restore, items, locked, send, finished, setLocked, setFeedback, barrier });
   return {
+    barrier,
     selected,
     checked,
     undo,
@@ -86,7 +88,9 @@ const submitBulk = ({
   finished,
   setLocked,
   setFeedback,
+  barrier,
 }: Readonly<{
+  barrier: DraftBarrier;
   restore: boolean;
   items: ReadonlyArray<Item>;
   locked: boolean;
@@ -95,21 +99,38 @@ const submitBulk = ({
   setLocked: (value: boolean) => void;
   setFeedback: (value: string) => void;
 }>): void => {
-  const first = items[0];
-  if (locked || first === undefined) return;
+  if (locked || items.length === 0) return;
   setLocked(true);
-  send({
-    command: {
-      _tag: restore ? "Restore" : "Skip",
-      items: [
-        { id: first.id, revision: first.revision },
-        ...items.slice(1).map((value) => ({ id: value.id, revision: value.revision })),
-      ],
-    },
-    saved: (values) => finished(values, !restore),
-    failed: () => {
-      setLocked(true);
-      setFeedback("No pudimos confirmar el cambio. Actualiza antes de continuar.");
-    },
-  });
+  flushReviewSelection({ barrier, items })
+    .then((saved) => {
+      if (Option.isNone(saved)) {
+        setFeedback("No pudimos guardar el borrador. Actualiza antes de continuar.");
+        return;
+      }
+      const first = saved.value[0];
+      if (first === undefined) return;
+      send({
+        command: {
+          _tag: restore ? "Restore" : "Skip",
+          items: [
+            { id: first.id, revision: first.revision },
+            ...saved.value.slice(1).map((value) => ({ id: value.id, revision: value.revision })),
+          ],
+        },
+        saved: (values) => finished(values, !restore),
+        failed: () => setFeedback("No pudimos confirmar el cambio. Actualiza antes de continuar."),
+      });
+    })
+    .catch(() => setFeedback("No pudimos confirmar el guardado. Actualiza antes de continuar."));
 };
+
+const selectedItem = ({
+  selection,
+  view,
+}: Readonly<{ selection: Option.Option<Item["id"]>; view: Workspace }>): Option.Option<
+  Item["id"]
+> =>
+  Option.orElse(
+    Option.filter(selection, (id) => view.items.some((item) => item.id === id)),
+    () => Option.fromUndefinedOr(view.items[0]?.id)
+  );

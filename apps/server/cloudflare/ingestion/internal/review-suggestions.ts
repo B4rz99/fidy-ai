@@ -13,7 +13,7 @@ import {
 } from "../../canonical-work/operations";
 import { categorizeCaptures } from "../../categories/operations";
 import { readReviewDetail, reviewCompletion } from "./review-store";
-import { reviewAudit } from "./review-audit";
+import { commitReviewRead, reviewAudit } from "./review-audit";
 
 const maximumEmailBytes = 1_048_576;
 const itemPosition = -2;
@@ -122,6 +122,11 @@ export const browseReviewSuggestions = ({
     const id = new URL(request.url).pathname.split("/").at(itemPosition) ?? "";
     const detail = yield* readReviewDetail({ db, userId: subject.userId, id, current });
     if (Option.isNone(detail) || detail.value.item.expiresAt.epochMilliseconds <= current) {
+      yield* commitReviewRead({
+        work: { db, subject, current },
+        operation: "ingestion.getReviewSuggestions",
+        accepted: false,
+      });
       return transactionFailure({
         code: "not_found",
         status: 404,

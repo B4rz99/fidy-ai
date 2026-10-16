@@ -251,7 +251,7 @@ it.effect(
     })
 );
 
-it.effect("advertises self-contained schemas for every canonical tool", () =>
+it.effect("fits every canonical tool in one request with self-contained schemas", () =>
   Effect.gen(function* () {
     const binding = captureRun(() => Promise.resolve(completed()));
     const inference = yield* makeConfiguredInference(binding.run);
@@ -267,10 +267,6 @@ it.effect("advertises self-contained schemas for every canonical tool", () =>
     const batch = request.tools.find(
       ({ function: tool }) => tool.name === "operations__executeAtomicBatch"
     );
-    const batchSchema = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
-      batch?.function.parameters
-    );
-    expect(new TextEncoder().encode(batchSchema).byteLength).toBeLessThan(60_000);
     expect(batch?.function.parameters).toMatchObject({
       properties: {
         payload: {

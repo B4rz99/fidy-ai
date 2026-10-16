@@ -125,7 +125,9 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
       authenticateWebSession({
         ...input,
         current,
-        freshness: ["transactions", "erase", "renew"].includes(transport.value.operation) ? "fresh" : "live",
+        freshness: ["transactions", "erase", "renew"].includes(transport.value.operation)
+          ? "fresh"
+          : "live",
       })
     );
     if (Option.isNone(subject)) {

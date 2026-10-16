@@ -155,6 +155,7 @@ export const seedPersonalClasses = (input: PersonalSeed): Effect.Effect<void> =>
         ...conversationRows(input),
         ...projectionRows(input),
         ...credentialRows(input),
+        ...renewalAndPlanRows(input),
       ])
       .then(() => undefined)
   );
@@ -280,4 +281,21 @@ const credentialRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement>
   input.db
     .prepare("INSERT INTO memory_audit VALUES(?,?,?,'memory.remember','success',?)")
     .bind(input.userId, input.userId, input.userId, input.current),
+];
+
+const renewalAndPlanRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
+  input.db
+    .prepare(
+      "INSERT INTO recurring_plan_documents VALUES(?, json_object('revision',1,'private','User expectation'), 1)"
+    )
+    .bind(input.userId),
+  input.db
+    .prepare("INSERT INTO consent_user_revocations VALUES(?,?,?,?,?)")
+    .bind(input.userId, input.userId, input.userId, input.userId, input.current),
+  input.db
+    .prepare("INSERT INTO processing_consent_renewals VALUES(?,?,?,?,?,'{}',?)")
+    .bind(input.userId, input.userId, input.userId, input.userId, input.userId, input.current + 1),
+  input.db
+    .prepare("DELETE FROM consent_user_revocations WHERE id=? AND user_id=?")
+    .bind(input.userId, input.userId),
 ];

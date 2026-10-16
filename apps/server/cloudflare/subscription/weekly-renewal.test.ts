@@ -1290,7 +1290,14 @@ it("routes HTTP cancellation through the User coordinator and preserves paid acc
           getByName: (name) => ({
             fetch: (request) =>
               new UserTransactionCoordinator(
-                { id: { name }, storage: { setAlarm: () => Promise.reject(new Error("unused")) } },
+                {
+                  id: { name },
+                  storage: {
+                    setAlarm: () => Promise.reject(new Error("unused")),
+                    deleteAlarm: () => Promise.reject(new Error("unused")),
+                    getAlarm: () => Promise.reject(new Error("unused")),
+                  },
+                },
                 environment
               ).fetch(new Request(request)),
           }),

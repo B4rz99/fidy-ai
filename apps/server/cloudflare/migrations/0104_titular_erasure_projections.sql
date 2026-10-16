@@ -162,4 +162,3 @@ BEGIN
     AND bucket = CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / size_seconds
     AND digit_sum = 0;
 END;
-

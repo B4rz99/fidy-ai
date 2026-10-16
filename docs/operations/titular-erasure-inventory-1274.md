@@ -1,7 +1,7 @@
 # Erasure inventory for #1274
 
-This inventory covers the current MVP schema through migration 0102. The User coordinator composes
-196 owner dispositions over 197 personal-data tables. The reviewed decision selects `Delete` or a
+This inventory covers the current MVP schema through migration 0105. The User coordinator composes
+199 owner dispositions over 200 personal-data tables. The reviewed decision selects `Delete` or a
 finite, source-backed `Retain` for each class. Identity and credentials always delete; archived
 records exclude credential digests, verifiers, proof material and tokens. Every disposition selects
 and deletes with its own bound exact-User predicate. Billing history deliberately groups attempts
@@ -247,3 +247,14 @@ a stored manifest that no longer matches its current owner publications.
 A provider's residual backup, independent operator volume backup or linked security counter cannot
 be relabelled anonymous because the normal User row was deleted. The receipt's restricted-copy,
 control-retention and custodian evidence must explain actual remaining scope and its source/expiry.
+
+## Integrated current planning and renewed Consent
+
+The Recurring Plans owner publishes `recurring_plan_documents` as a `schedules` disposition;
+its User-authored expectations are personal data, independent of historical recurring projections.
+The Consent owner also disposes `processing_consent_withdrawal_records` and
+`processing_consent_renewals` under `consent`, before their grant, session and User parents.
+Renewal cannot restart processing after an approved erasure. Ordinary consent-history immutability
+and the exact-renewal requirement remain intact outside the reviewed erasure permission.
+Shared `recurring_plan_assertion` and `processing_consent_renewal_assertion` contain only a fixed
+transaction assertion, no User or personal payload.

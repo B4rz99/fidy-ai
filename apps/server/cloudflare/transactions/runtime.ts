@@ -24,6 +24,7 @@ import { makeOauthConfirmationErasureStores } from "../oauth-confirmation/runtim
 import { makeProviderAuthenticationErasureStores } from "../provider-authentication/runtime";
 import { makeQuotasErasureStores } from "../quotas/runtime";
 import { makeRecoveryErasureStores } from "../recovery/runtime";
+import { makeRecurringPlansErasureStores } from "../recurring-plans/runtime";
 import { makeRecurringErasureStores } from "../recurring/runtime";
 import { makeResourceAdmissionErasureStores } from "../resource-admission/runtime";
 import { makeSubscriptionErasureStores } from "../subscription/runtime";
@@ -857,6 +858,7 @@ const erasureStores = (db: D1Database): ReadonlyArray<ErasureStore> => [
   ...makeQuotasErasureStores(db),
   ...makeRecoveryErasureStores(db),
   ...makeRecurringErasureStores(db),
+  ...makeRecurringPlansErasureStores(db),
   ...makeResourceAdmissionErasureStores(db),
   ...makeSubscriptionErasureStores(db),
   ...makeTokensErasureStores(db),

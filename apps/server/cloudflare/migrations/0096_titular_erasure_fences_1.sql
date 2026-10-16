@@ -8,11 +8,6 @@ CREATE TRIGGER pat_revocation_consents_no_delete BEFORE DELETE ON pat_revocation
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='pat_revocation_consents' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN SELECT RAISE(ABORT,'consent_append_only'); END;
 
-DROP TRIGGER consent_user_revocations_no_delete;
-CREATE TRIGGER consent_user_revocations_no_delete BEFORE DELETE ON consent_user_revocations
-WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='consent_user_revocations' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
-BEGIN SELECT RAISE(ABORT, 'consent_append_only'); END;
-
 DROP TRIGGER transaction_correction_no_delete;
 CREATE TRIGGER transaction_correction_no_delete BEFORE DELETE ON transaction_corrections
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='transaction_corrections' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))

@@ -4,7 +4,7 @@ import { Option, Schema } from "effect";
 const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
 const schemaInstallers = new WeakMap<D1Database, (sql: ReadonlyArray<string>) => Promise<void>>();
 const privacySchemas = new WeakMap<D1Database, Promise<void>>();
-const privacySchema = new URL("./migrations/0093_titular_erasure.sql", import.meta.url);
+const privacySchema = new URL("./migrations/0095_titular_erasure.sql", import.meta.url);
 
 const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
   Option.getOrElse(Option.fromUndefinedOr(migrationStatements.get(source.href)), () => {

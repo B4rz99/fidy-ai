@@ -1,6 +1,10 @@
 import { type Cause, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInPrivacyRenewalThroughCore, signInPrivacyThroughCore } from "./real-core-fixture";
+import {
+  signInPrivacyErasureThroughCore,
+  signInPrivacyRenewalThroughCore,
+  signInPrivacyThroughCore,
+} from "./real-core-fixture";
 import type { Locator, Page, Route } from "@playwright/test";
 import { apiOrigin } from "./http-fixtures";
 import { exerciseTitularCase } from "./titular-case-fixture";
@@ -230,7 +234,7 @@ test("a withdrawn User explicitly renews the saved authorization through real Co
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/web/consent/authorization`, unavailableResponse, { times: 1 })
       );
-      yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
+      yield* Effect.tryPromise(() => withdrawalCheckbox(page).check());
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Retirar autorización", exact: true }).click()
       );
@@ -496,7 +500,7 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInPrivacyThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => signInPrivacyErasureThroughCore({ page, request }));
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
       const region = page.getByRole("region", { name: "Solicitud de eliminación" });
       const button = region.getByRole("button", { name: "Solicitar eliminación", exact: true });

@@ -1,7 +1,7 @@
 import { it as effectIt } from "@effect/vitest";
 import { deletionDecision } from "./erasure.test-fixture";
 import { expect } from "vitest";
-import { Clock, Effect, Schema } from "effect";
+import { type Cause, Clock, Effect, Schema } from "effect";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -10,6 +10,46 @@ const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
 const reference = "12740000-0000-4000-8000-000000000002";
 const json = Schema.fromJsonString(Schema.Unknown);
+
+const verifyRenewalFence = (
+  input: Readonly<{ db: D1Database; current: number }>
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const withdrawal = "12740000-0000-4000-8000-000000000081";
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare("INSERT INTO consent_user_revocations VALUES(?,?,?,?,?)")
+        .bind(withdrawal, userId, userId, userId, input.current + 1)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        input.db
+          .prepare("INSERT INTO processing_consent_renewals VALUES(?,?,?,?,?,'{}',?)")
+          .bind(withdrawal, userId, withdrawal, userId, userId, input.current + 2)
+          .run()
+      ).rejects.toThrow("erasure_fenced")
+    );
+  });
+
+const verifyNewStoreGuards = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    for (const table of ["processing_consent_withdrawal_records", "processing_consent_renewals"]) {
+      yield* Effect.tryPromise(() =>
+        expect(
+          db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(foreignUser).run()
+        ).rejects.toThrow("consent_append_only")
+      );
+    }
+    yield* Effect.tryPromise(() =>
+      expect(
+        db
+          .prepare("UPDATE recurring_plan_documents SET user_id=? WHERE user_id=?")
+          .bind(foreignUser, userId)
+          .run()
+      ).rejects.toThrow("erasure_fenced")
+    );
+  });
 
 const verifyNativeErasure = Effect.gen(function* () {
   const platform = yield* nativeErasurePlatform;
@@ -81,6 +121,7 @@ const verifyNativeErasure = Effect.gen(function* () {
       deadlineMs: current + 5000,
     })).status
   ).toBe(202);
+  yield* verifyRenewalFence({ db, current });
   expect(
     (yield* send("erasure-continue", {
       userId,
@@ -98,6 +139,7 @@ const verifyNativeErasure = Effect.gen(function* () {
       db.prepare("SELECT state FROM erasure_requests WHERE id=?").bind(reference).first("state")
     )
   ).toBe("Sealing");
+  yield* verifyNewStoreGuards(db);
   expect(
     (yield* Effect.result(
       Effect.tryPromise(() =>
@@ -169,6 +211,9 @@ const verifyNativeErasure = Effect.gen(function* () {
     "subscription_identities",
     "web_sessions",
     "memory_audit",
+    "recurring_plan_documents",
+    "processing_consent_withdrawal_records",
+    "processing_consent_renewals",
   ]) {
     expect(
       yield* Effect.tryPromise(() =>

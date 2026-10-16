@@ -2,6 +2,55 @@ import type { ErasureProjection } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
+    id: "processing_consent_withdrawal_records",
+    dataClass: "consent",
+    dependencies: ["processing_consent_renewals"],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'grant_record_id',r.\"grant_record_id\",'session_id',r.\"session_id\",'occurred_at_ms',r.\"occurred_at_ms\") AS body FROM processing_consent_withdrawal_records r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM processing_consent_withdrawal_records r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM processing_consent_withdrawal_records r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM processing_consent_withdrawal_records AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+  {
+    id: "processing_consent_renewals",
+    dataClass: "consent",
+    dependencies: [],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'withdrawal_id',r.\"withdrawal_id\",'grant_record_id',r.\"grant_record_id\",'session_id',r.\"session_id\",'disclosure_json',r.\"disclosure_json\",'accepted_at_ms',r.\"accepted_at_ms\") AS body FROM processing_consent_renewals r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM processing_consent_renewals r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM processing_consent_renewals r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM processing_consent_renewals AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+
+  {
     id: "consent_user_revocations",
     dataClass: "consent",
     dependencies: [],
@@ -100,7 +149,11 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "onboarding_consent_records",
     dataClass: "consent",
-    dependencies: ["consent_user_revocations"],
+    dependencies: [
+      "consent_user_revocations",
+      "processing_consent_withdrawal_records",
+      "processing_consent_renewals",
+    ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'disclosure_json',r.\"disclosure_json\",'disclosure_message_id',r.\"disclosure_message_id\",'decision_message_id',r.\"decision_message_id\",'decision_received_at_ms',r.\"decision_received_at_ms\",'accepted_at_ms',r.\"accepted_at_ms\") AS body FROM onboarding_consent_records r WHERE r.user_id=?",

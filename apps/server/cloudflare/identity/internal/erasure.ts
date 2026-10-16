@@ -30,6 +30,9 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "identity",
     dependencies: [
       "audit_retention_permits",
+      "processing_consent_withdrawal_records",
+      "processing_consent_renewals",
+      "recurring_plan_documents",
       "backup_recovery_credentials",
       "billing_history",
       "billing_price_notices",

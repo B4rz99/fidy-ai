@@ -62,26 +62,51 @@ export const readReviewDetail = ({
           ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
         : Option.none();
     const suggestions = yield* suggestReviewCategory({ db, userId, draft: retainedSuggestions });
-    const item = yield* projectReviewSummary(row);
+    const item = yield* projectReviewSummary({ row, current });
     return Option.some({ item, revision: row.revision, draft, suggestions });
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
-export const projectReviewSummary = (
-  row: Omit<typeof ReviewRow.Type, "draft_json" | "suggestions_json">
-): Effect.Effect<ReviewSummary, ReviewUnavailable> =>
-  Schema.decodeEffect(Schema.toCodecJson(ReviewSummary))({
-    revision: row.revision,
-    id: row.id,
-    source: row.source,
-    reason: row.reason,
-    timeZone: row.timeZone,
-    createdAt: DateTime.formatIso(row.createdAt),
-    expiresAt: DateTime.formatIso(row.expiresAt),
-    status: row.status,
-    ...Option.match(row.transactionId, {
-      onNone: () => ({}),
-      onSome: (transactionId) => ({ transactionId }),
-    }),
+export const projectReviewSummary = ({
+  row,
+  current,
+}: Readonly<{
+  row: typeof ReviewRow.Type;
+  current: number;
+}>): Effect.Effect<ReviewSummary, ReviewUnavailable> =>
+  Effect.gen(function* () {
+    const retained =
+      DateTime.toEpochMillis(row.expiresAt) > current
+        ? Option.orElse(row.draft_json, () => row.suggestions_json)
+        : Option.none();
+    const preview = yield* Effect.forEach(Option.toArray(retained), (json) =>
+      Schema.decodeEffect(reviewDraftJson)(json)
+    );
+    return yield* Schema.decodeEffect(Schema.toCodecJson(ReviewSummary))({
+      ...(preview[0] === undefined
+        ? {}
+        : {
+            preview: {
+              counterparty: preview[0].counterparty,
+              amount: preview[0].amount,
+              ...Option.match(preview[0].currency, {
+                onNone: () => ({}),
+                onSome: (currency) => ({ currency }),
+              }),
+            },
+          }),
+      revision: row.revision,
+      id: row.id,
+      source: row.source,
+      reason: row.reason,
+      timeZone: row.timeZone,
+      createdAt: DateTime.formatIso(row.createdAt),
+      expiresAt: DateTime.formatIso(row.expiresAt),
+      status: row.status,
+      ...Option.match(row.transactionId, {
+        onNone: () => ({}),
+        onSome: (transactionId) => ({ transactionId }),
+      }),
+    });
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
 /** Resolve current Category instructions without altering retained extraction facts or User drafts. */

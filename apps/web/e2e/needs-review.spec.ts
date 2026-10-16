@@ -448,3 +448,40 @@ test("requires an explicit currency for an ambiguous statement item", ({ page })
       );
     })
   ));
+
+test("selects a review item from its row and keeps history discoverable", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "pending", draft: undefined }];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Abrir y seleccionar Extracto" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toBeChecked()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir 1 seleccionados" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/status=history/));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Abrir y seleccionar Extracto" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Abrir y seleccionar Extracto" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Restaurar 1 seleccionados" }).click()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+    })
+  ));

@@ -18,9 +18,9 @@ export const RetryExtraction = ({
   const [retry] = useState(() => makeRetry(apiClient, item.id));
   const run = useAtomSet(retry);
   return (
-    <div className="my-4 grid gap-2">
+    <div className="mt-4 grid justify-items-start gap-2">
       <Button
-        variant="outline"
+        variant="ghost"
         disabled={disabled || busy}
         onClick={() => {
           setBusy(true);

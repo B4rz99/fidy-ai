@@ -21,65 +21,74 @@ type Props = Readonly<{
   timeZone: string;
 }>;
 export const ReviewFields = (props: Props): JSX.Element => (
-  <div className="grid gap-4">
-    <div>
-      <Label htmlFor="review-amount">Valor</Label>
-      <Input
-        id="review-amount"
-        inputMode="decimal"
-        value={props.draft.amount}
-        maxLength={120}
-        disabled={props.locked}
-        aria-invalid={props.draft.amount === ""}
-        onChange={(event) =>
-          props.change(
-            editDraft({ draft: props.draft, field: "money", value: { amount: event.target.value } })
-          )
-        }
-      />
-    </div>
-    <div>
-      <Label htmlFor="review-currency">Moneda</Label>
-      {Option.isNone(props.draft.currency) ? (
-        <p className="mt-1 text-sm text-muted-foreground">Confirma la moneda para continuar.</p>
-      ) : null}
-      <SearchableChoiceDropdown
-        id="review-currency"
-        label="Moneda"
-        value={Option.getOrElse(props.draft.currency, () => "")}
-        options={Currency.literals.map((value) => ({ value, label: value }))}
-        disabled={props.locked}
-        width="full"
-        onChange={(currency) =>
-          props.change(editDraft({ draft: props.draft, field: "money", value: { currency } }))
-        }
-      />
-    </div>
-    <ReviewDirection {...props} />
-    <div>
-      <Label htmlFor="review-counterparty">Contraparte (opcional)</Label>
-      <Input
-        id="review-counterparty"
-        value={props.draft.counterparty}
-        maxLength={120}
-        disabled={props.locked}
-        onChange={(event) =>
-          props.change(
-            editDraft({
-              draft: props.draft,
-              field: "counterparty",
-              value: { counterparty: event.target.value },
-            })
-          )
-        }
-      />
+  <div className="grid gap-6">
+    <ReviewCounterparty {...props} />
+    <div className="grid grid-cols-2 items-start gap-3">
+      <div className="grid content-start gap-2.5">
+        <Label htmlFor="review-amount">Valor</Label>
+        <Input
+          id="review-amount"
+          inputMode="decimal"
+          value={props.draft.amount}
+          maxLength={120}
+          disabled={props.locked}
+          aria-invalid={props.draft.amount === ""}
+          onChange={(event) =>
+            props.change(
+              editDraft({
+                draft: props.draft,
+                field: "money",
+                value: { amount: event.target.value },
+              })
+            )
+          }
+        />
+      </div>
+      <div className="grid content-start gap-2.5">
+        <Label htmlFor="review-currency">Moneda</Label>
+        <SearchableChoiceDropdown
+          id="review-currency"
+          label="Moneda"
+          value={Option.getOrElse(props.draft.currency, () => "")}
+          options={Currency.literals.map((value) => ({ value, label: value }))}
+          disabled={props.locked}
+          width="full"
+          onChange={(currency) =>
+            props.change(editDraft({ draft: props.draft, field: "money", value: { currency } }))
+          }
+        />
+        {Option.isNone(props.draft.currency) ? (
+          <p className="text-xs text-muted-foreground">Confirma la moneda para continuar.</p>
+        ) : null}
+      </div>
     </div>
     <ReviewOccurrence {...props} />
+    <ReviewDirection {...props} />
     <ReviewCategory {...props} />
   </div>
 );
+const ReviewCounterparty = (props: Props): JSX.Element => (
+  <div className="grid content-start gap-2.5">
+    <Label htmlFor="review-counterparty">Contraparte (opcional)</Label>
+    <Input
+      id="review-counterparty"
+      value={props.draft.counterparty}
+      maxLength={120}
+      disabled={props.locked}
+      onChange={(event) =>
+        props.change(
+          editDraft({
+            draft: props.draft,
+            field: "counterparty",
+            value: { counterparty: event.target.value },
+          })
+        )
+      }
+    />
+  </div>
+);
 const ReviewDirection = ({ draft, change, locked }: Props): JSX.Element => (
-  <div>
+  <div className="grid content-start gap-2.5">
     <Label htmlFor="review-direction">
       Tipo de transacción{Option.isNone(draft.direction) ? " · Falta completar" : ""}
     </Label>
@@ -107,7 +116,7 @@ const ReviewDirection = ({ draft, change, locked }: Props): JSX.Element => (
   </div>
 );
 const ReviewCategory = ({ draft, change, locked, categories }: Props): JSX.Element => (
-  <div>
+  <div className="grid content-start gap-2.5">
     <Label htmlFor="review-category">Categoría</Label>
     <ChoiceDropdown
       id="review-category"
@@ -129,8 +138,15 @@ const ReviewCategory = ({ draft, change, locked, categories }: Props): JSX.Eleme
 );
 
 const ReviewOccurrence = (props: Props): JSX.Element => (
-  <div>
-    <Label htmlFor="review-date">Fecha y hora</Label>
+  <div className="grid content-start gap-2.5">
+    <Label htmlFor="review-date">
+      Fecha y hora{" "}
+      {props.draft.occurredAt === "" ? (
+        <span className="rounded-md bg-warning/60 px-2 py-1 text-xs font-medium">
+          Por confirmar
+        </span>
+      ) : null}
+    </Label>
     <Input
       id="review-date"
       type="datetime-local"
@@ -152,8 +168,6 @@ const ReviewOccurrence = (props: Props): JSX.Element => (
         )
       }
     />
-    <p className="mt-1 text-xs text-muted-foreground">
-      Hora de {props.timeZone}. Los datos ingresados se registran como proporcionados por ti.
-    </p>
+    <p className="text-xs text-muted-foreground">Hora de {props.timeZone}.</p>
   </div>
 );

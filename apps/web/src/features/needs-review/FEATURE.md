@@ -32,3 +32,12 @@ only facts the User has not edited and autosaves the result. A missing parser or
 remains an honest processing failure; it neither reports successful extraction nor drops edits.
 Reviewed captures retain the captured context and a manual SourceAttestation referencing the item.
 No receipt or email is split into multiple Transactions.
+
+The Variant A workspace exposes Pending and History navigation, with created/skipped/expired
+filters inside History. The inbox presents a bounded Counterparty/amount/Currency preview from
+retained drafts or suggestions; this preview is suppressed at the original evidence deadline.
+The original stays inside a bounded card beside the spaced form, with individual actions in a
+separate footer. Row activation opens the item and toggles bulk selection when eligible; the
+checkbox toggles once independently. Source and text filters apply to the current server page,
+whose pagination remains independent of the filtered result count. The bulk toolbar only appears
+for a selection, feedback, or Undo; refresh remains available in the navigation.

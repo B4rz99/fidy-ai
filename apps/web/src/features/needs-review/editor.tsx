@@ -3,13 +3,17 @@ import { RetryExtraction } from "./retry";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { File01Icon, Image01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import { Badge } from "@/ui/components/badge";
+import { reviewExpiry, reviewReason, reviewTitle } from "./presentation";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
 import { useReviewEditor } from "./editor-controller";
 import { OriginalMaterial } from "./original";
-import { type Category, type Detail, type Item, deadline } from "./model";
+import { type Category, type Detail, type Item, deadline, sources } from "./model";
 
 type Props = Readonly<{
   item: Item;
@@ -26,14 +30,19 @@ export const ReviewEditor = ({ item, finished, barrier, disabled }: Props): JSX.
   const detail = useAtomValue(query).pipe(presentCanonicalQuery);
   const categories = useAtomValue(categoryQuery).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
+  const refreshCategories = useAtomRefresh(categoryQuery);
   const [recovery, setRecovery] = useState(0);
   const [previous, setPrevious] = useState<Option.Option<Detail>>(Option.none);
   const recover = (): void => {
     if (detail._tag === "Ready") setPrevious(Option.some(detail.value.data));
     barrier.delete(item.id);
     refresh();
+    refreshCategories();
     setRecovery((value) => value + 1);
   };
+  if (detail._tag === "Initial" || categories._tag === "Initial") {
+    return <p className="p-6 text-sm text-muted-foreground">Cargando elemento…</p>;
+  }
   if (detail._tag !== "Ready" || categories._tag !== "Ready") {
     return (
       <div className="p-5">
@@ -55,8 +64,8 @@ export const ReviewEditor = ({ item, finished, barrier, disabled }: Props): JSX.
     );
   }
   return (
-    <div className="grid min-w-0 xl:grid-cols-2">
-      <OriginalMaterial key={item.id} item={detail.value.data.item} />
+    <section className="min-w-0 p-5 lg:p-6">
+      <ReviewItemHeading item={detail.value.data.item} />
       <ReadyEditor
         key={`${item.id}:${recovery}`}
         detail={detail.value.data}
@@ -66,7 +75,7 @@ export const ReviewEditor = ({ item, finished, barrier, disabled }: Props): JSX.
         finished={finished}
         recover={recover}
       />
-    </div>
+    </section>
   );
 };
 const ReadyEditor = ({
@@ -91,40 +100,37 @@ const ReadyEditor = ({
     return <HistoryDetail detail={detail} />;
   }
   return (
-    <div className="min-w-0 p-5">
-      <h2 className="text-xl font-medium">Completa la transacción</h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Revisa los datos antes de crearla. Disponible hasta {deadline(detail.item)}. Los datos que
-        completes se registrarán como proporcionados por ti.
-      </p>
-      <output className="my-4 text-sm text-muted-foreground">
-        {feedbackCopy[editor.feedback]}
-      </output>
-      <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={locked} />
-      <ReviewFields
-        draft={editor.draft}
-        change={editor.change}
-        locked={locked}
-        categories={categories}
-        timeZone={detail.item.timeZone}
-      />
-      {editor.feedback === "uncertain" || editor.feedback === "failed" ? (
-        <Button className="mt-4" variant="outline" onClick={recover}>
-          Actualizar elemento
+    <>
+      <div className="mt-6 grid min-w-0 items-start gap-6 xl:grid-cols-2">
+        <OriginalMaterial item={detail.item} />
+        <div className="min-w-0">
+          <h2 className="sr-only">Completa la transacción</h2>
+          <p className="mb-6 rounded-xl bg-warning/35 px-4 py-3 text-sm font-medium">
+            {reviewReason(detail.item)}
+          </p>
+          <ReviewFields
+            draft={editor.draft}
+            change={editor.change}
+            locked={locked}
+            categories={categories}
+            timeZone={detail.item.timeZone}
+          />
+          <EditorFeedback feedback={editor.feedback} recover={recover} />
+          <RetryExtraction item={detail.item} suggested={editor.suggested} disabled={locked} />
+        </div>
+      </div>
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t pt-5">
+        <Button variant="ghost" onClick={() => editor.act("Skip")} disabled={locked}>
+          Omitir
         </Button>
-      ) : null}
-      <div className="mt-6 flex flex-wrap gap-2">
         <Button
           onClick={() => editor.act("Create")}
           disabled={locked || Option.isNone(editor.creation)}
         >
           Crear transacción
         </Button>
-        <Button variant="outline" onClick={() => editor.act("Skip")} disabled={locked}>
-          Omitir
-        </Button>
       </div>
-    </div>
+    </>
   );
 };
 const feedbackCopy = {
@@ -136,25 +142,68 @@ const feedbackCopy = {
 } as const;
 
 const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element => {
-  const expired = detail.item.status === "expired";
+  const titles = {
+    pending: "Por revisar",
+    skipped: "Elemento omitido",
+    created: "Transacción creada",
+    expired: "Este elemento venció",
+  };
   return (
-    <div className="p-5">
-      <h2 className="text-xl font-medium">
-        {expired ? "Este elemento venció" : "Elemento en el historial"}
-      </h2>
-      <p className="mt-3 text-sm text-muted-foreground">
-        {expired
-          ? "Envía el material de nuevo para revisarlo."
-          : "Restaura un elemento omitido para volver a editarlo."}
-      </p>
-      {detail.item.status === "created" ? (
-        <a
-          className="mt-4 inline-block underline"
-          href={`/app/needs-review/transactions/${detail.item.transactionId}`}
-        >
-          Ver transacción
-        </a>
-      ) : null}
+    <div className="mt-6 grid min-w-0 items-start gap-6 xl:grid-cols-2">
+      <OriginalMaterial item={detail.item} />
+      <div className="rounded-2xl border p-6">
+        <h2 className="text-xl font-medium">{titles[detail.item.status]}</h2>
+        <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
+        {detail.item.status === "created" ? (
+          <a
+            className="mt-4 inline-block underline"
+            href={`/app/needs-review/transactions/${detail.item.transactionId}`}
+          >
+            Ver transacción
+          </a>
+        ) : null}
+      </div>
     </div>
   );
+};
+
+const sourceIcons = { statement: File01Icon, media: Image01Icon, email: Mail01Icon };
+const ReviewItemHeading = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
+  <header className="flex flex-wrap items-start gap-3">
+    <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-information/60">
+      <HugeiconsIcon icon={sourceIcons[item.source]} size={22} aria-hidden="true" />
+    </span>
+    <div className="min-w-0 flex-1">
+      <h2 className="text-xl font-semibold tracking-tight">{reviewTitle(item)}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{sources[item.source]}</p>
+    </div>
+    <Badge variant="secondary" title={deadline(item)}>
+      {reviewExpiry(item)}
+    </Badge>
+  </header>
+);
+
+const EditorFeedback = ({
+  feedback,
+  recover,
+}: Readonly<{ feedback: keyof typeof feedbackCopy; recover: () => void }>): JSX.Element => (
+  <>
+    <output className="mt-4 block text-xs text-muted-foreground">{feedbackCopy[feedback]}</output>
+    <p className="mt-2 text-xs text-muted-foreground">
+      Los datos que completes se registrarán como proporcionados por ti.
+    </p>
+    {feedback === "uncertain" || feedback === "failed" ? (
+      <Button className="mt-4" variant="outline" onClick={recover}>
+        Actualizar elemento
+      </Button>
+    ) : null}
+  </>
+);
+
+const historyDescription = (item: Item): string => {
+  if (item.status === "expired") return "Envía el material de nuevo para revisarlo.";
+  if (item.status === "created") {
+    return "La transacción ya está guardada. Puedes abrirla para consultar sus datos.";
+  }
+  return "Selecciona este elemento y pulsa Restaurar para volver a editarlo. Su vencimiento original se conserva.";
 };

@@ -2,8 +2,8 @@ import { Option } from "effect";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
 import { Checkbox } from "@/ui/components/checkbox";
-import { Badge } from "@/ui/components/badge";
 import { type Item, type Workspace, deadline, sources, statuses } from "./model";
+import { reviewAmount, reviewExpiry, reviewTitle } from "./presentation";
 
 const pageSize = 50;
 export type InboxProps = Readonly<{
@@ -13,45 +13,20 @@ export type InboxProps = Readonly<{
   choose: (item: Item) => void;
   toggle: (item: Item) => void;
   page: number;
+  pageLength: number;
   move: (offset: number) => void;
 }>;
 export const Inbox = (props: InboxProps): JSX.Element => (
   <aside className="min-w-0 border-b lg:border-r lg:border-b-0" aria-label="Bandeja de revisión">
-    <div className="border-b p-4">
-      <h2 className="font-medium">{props.view.total} elementos</h2>
-      <p className="mt-1 text-xs text-muted-foreground">Primero los que vencen antes</p>
+    <div className="flex items-center justify-between gap-3 border-b px-5 py-4 text-xs text-muted-foreground">
+      <h2>Vencen primero</h2>
+      <span>
+        {props.view.items.length} de {props.view.total} elementos
+      </span>
     </div>
-    <div className="max-h-[45svh] overflow-auto lg:max-h-[calc(100svh-15rem)]">
+    <div className="max-h-[45svh] overflow-auto lg:max-h-[calc(100svh-19rem)]">
       {props.view.items.map((item) => (
-        <div
-          key={item.id}
-          className={
-            Option.contains(props.selected, item.id)
-              ? "flex gap-2 border-b bg-secondary/50 p-3"
-              : "flex gap-2 border-b p-3"
-          }
-        >
-          <Checkbox
-            aria-label={`Seleccionar ${sources[item.source]} ${item.id}`}
-            checked={props.checked.includes(item.id)}
-            disabled={item.status !== "pending" && item.status !== "skipped"}
-            onCheckedChange={() => props.toggle(item)}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            contentLayout="wrap"
-            className="h-auto min-w-0 flex-1 justify-start"
-            onClick={() => props.choose(item)}
-            aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
-          >
-            <span className="grid min-w-0 gap-2 text-left">
-              <span className="font-medium">{sources[item.source]}</span>
-              <Badge variant="secondary">{statuses[item.status]}</Badge>
-              <span className="text-xs text-muted-foreground">Vence {deadline(item)}</span>
-            </span>
-          </Button>
-        </div>
+        <ReviewRow key={item.id} item={item} props={props} />
       ))}
     </div>
     <div className="flex gap-2 p-3">
@@ -66,11 +41,55 @@ export const Inbox = (props: InboxProps): JSX.Element => (
       <Button
         variant="outline"
         size="sm"
-        disabled={props.page + props.view.items.length >= props.view.total}
+        disabled={props.page + props.pageLength >= props.view.total}
         onClick={() => props.move(props.page + pageSize)}
       >
         Siguiente
       </Button>
     </div>
   </aside>
+);
+
+const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>): JSX.Element => (
+  <div
+    className={
+      Option.contains(props.selected, item.id)
+        ? "relative flex items-center border-b border-l-2 border-l-primary bg-secondary/35"
+        : "relative flex items-center border-b border-l-2 border-l-transparent"
+    }
+  >
+    <div className="absolute left-4 z-10 flex items-center">
+      <Checkbox
+        aria-label={`Seleccionar ${sources[item.source]} ${item.id}`}
+        checked={props.checked.includes(item.id)}
+        disabled={item.status !== "pending" && item.status !== "skipped"}
+        onCheckedChange={() => {
+          props.choose(item);
+          props.toggle(item);
+        }}
+      />
+    </div>
+    <button
+      type="button"
+      aria-label={`Abrir y seleccionar ${sources[item.source]}`}
+      className="min-h-32 w-full min-w-0 cursor-pointer py-5 pr-5 pl-14 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      onClick={() => {
+        props.choose(item);
+        if (item.status === "pending" || item.status === "skipped") props.toggle(item);
+      }}
+      aria-current={Option.contains(props.selected, item.id) ? "true" : undefined}
+    >
+      <span className="grid min-w-0 gap-1.5">
+        <span className="text-xs text-muted-foreground">
+          {sources[item.source]}
+          {item.status === "pending" ? "" : ` · ${statuses[item.status]}`}
+        </span>
+        <span className="truncate text-sm font-semibold">{reviewTitle(item)}</span>
+        <span className="text-xs text-muted-foreground">{reviewAmount(item)}</span>
+        <span className="text-xs font-medium" title={deadline(item)}>
+          {reviewExpiry(item)}
+        </span>
+      </span>
+    </button>
+  </div>
 );

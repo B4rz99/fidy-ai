@@ -1,8 +1,5 @@
 import { Data, Effect, Option, Schema } from "effect";
-import { TransactionId } from "../../../src/core/transactions/contract";
 import {
-  ReviewMetadata,
-  ReviewStatus,
   ReviewWorkspace,
   ReviewWorkspaceQuery,
   reviewPageSize,
@@ -18,17 +15,10 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import { projectReviewSummary } from "./review-store";
+import { ReviewRow, projectReviewSummary } from "./review-store";
 import { validationFailed } from "./statement-ingestion";
 
 const Counts = Schema.Struct({ pendingCount: Schema.Int, total: Schema.Int });
-const Row = Schema.Struct({
-  ...ReviewMetadata.fields,
-  status: ReviewStatus,
-  createdAt: Schema.DateTimeUtcFromMillis,
-  expiresAt: Schema.DateTimeUtcFromMillis,
-  transactionId: Schema.OptionFromNullOr(TransactionId),
-});
 const relation = `SELECT *, CASE WHEN status != 'created' AND expires_at_ms <= ?
   THEN 'expired' ELSE status END AS visible_status FROM ingestion_review_sources WHERE user_id = ?`;
 const completion = `INSERT INTO ingestion_review_assertion (id, accepted)
@@ -94,7 +84,7 @@ const readWorkspace = ({
           .bind(...params, current, subject.userId),
         db
           .prepare(`SELECT id, source, reason, time_zone AS timeZone, visible_status AS status, created_at_ms AS createdAt,
-      expires_at_ms AS expiresAt, transaction_id AS transactionId, revision FROM (${relation}) WHERE ${filter}
+      expires_at_ms AS expiresAt, transaction_id AS transactionId, revision, draft_json, suggestions_json FROM (${relation}) WHERE ${filter}
       ORDER BY expires_at_ms, id LIMIT ? OFFSET ?`)
           .bind(
             current,
@@ -108,8 +98,8 @@ const readWorkspace = ({
       ])
     );
     const counts = yield* Schema.decodeUnknownEffect(Counts)(results[0]?.results[0]);
-    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Row))(results[1]?.results);
-    const items = yield* Effect.forEach(rows, projectReviewSummary);
+    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ReviewRow))(results[1]?.results);
+    const items = yield* Effect.forEach(rows, (row) => projectReviewSummary({ row, current }));
     const data = yield* Schema.encodeUnknownEffect(Schema.toCodecJson(ReviewWorkspace))({
       ...counts,
       items,

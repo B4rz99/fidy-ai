@@ -686,7 +686,14 @@ export const StatementStagingFailureReason = Schema.Literals([
 export type StatementStagingFailureReason = typeof StatementStagingFailureReason.Type;
 
 export const ReviewStatus = Schema.Literals(["pending", "created", "skipped", "expired"]);
+const maximumReviewPreviewLength = 120;
+const ReviewPreview = Schema.Struct({
+  counterparty: Schema.String.check(Schema.isMaxLength(maximumReviewPreviewLength)),
+  amount: Schema.String.check(Schema.isMaxLength(maximumReviewPreviewLength)),
+  currency: Schema.OptionFromOptionalKey(Money.fields.currency),
+});
 export const ReviewMetadata = Schema.Struct({
+  preview: Schema.OptionFromOptionalKey(ReviewPreview),
   revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   id: NeedsReviewItemId,
   source: Schema.Literals(["statement", "email", "media"]),

@@ -4365,6 +4365,9 @@ it("expires skipped drafts at the original deadline and refuses restoration or c
         const body = yield* fromTestPromise(() => detail.json());
         expect(body).toMatchObject({ data: { item: { status: "expired" } } });
         expect(body).not.toHaveProperty("data.draft");
+        expect(body).not.toHaveProperty("data.item.preview");
+        const history = yield* readReviewInbox(runtime, "expired");
+        expect(history.items[0]?.preview).toEqual(Option.none());
         expect(
           (yield* fromTestPromise(() =>
             editReview(runtime, { _tag: "Restore", items: [{ id, revision: 2 }] })
@@ -4750,6 +4753,18 @@ it("prefills independently known facts when a statement date is missing", () =>
           .bind(newId(), userA, suggestedCategory)
           .run()
       );
+      const inbox = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request("https://api.fidyapp.com/ingestion/review-workspace?offset=0", {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(inbox.status).toBe(200);
+      expect(yield* fromTestPromise(() => inbox.json())).toMatchObject({
+        data: { items: [{ preview: { counterparty: "Cafe", amount: "13500", currency: "COP" } }] },
+      });
       const detail = yield* fromTestPromise(() => reviewDetail(runtime, source.reviewIds[0] ?? ""));
       expect(detail.status).toBe(200);
       expect(yield* fromTestPromise(() => detail.json())).toMatchObject({

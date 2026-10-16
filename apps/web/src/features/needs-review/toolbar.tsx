@@ -7,6 +7,9 @@ export const ReviewToolbar = ({
   view,
   control,
 }: Readonly<{ view: Workspace; control: InboxControl }>): JSX.Element => {
+  if (control.checked.length === 0 && control.undo.length === 0 && control.feedback === "") {
+    return <></>;
+  }
   const pending = view.items.some((item) => item.status === "pending");
   return (
     <div className="flex flex-wrap items-center gap-3 border-b px-5 py-3">

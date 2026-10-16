@@ -211,12 +211,14 @@ it.each([
         let now = yield* Clock.currentTimeMillis;
         let reference = "";
         let sourceCreations = 0;
+        let collections = 0;
         const provider = vi.fn((url: URL, init?: RequestInit): Promise<Response> =>
           (url.pathname === "/v1/transactions" && init?.method === "POST"
             ? new Request(url, init).json().then((body: unknown) => {
                 reference = Schema.decodeUnknownSync(Schema.Struct({ reference: Schema.String }))(
                   body
                 ).reference;
+                collections += 1;
                 if (creationLost) throw new Error("Synthetic lost creation response");
               })
             : Promise.resolve()
@@ -235,15 +237,16 @@ it.each([
                 },
               });
             } else if (url.pathname.startsWith("/v1/transactions")) {
+              const currentOutcome = collections > 1 ? "APPROVED" : outcome;
               body = JSON.stringify({
                 data: {
-                  id: "checkout-declined-1",
+                  id: `checkout-declined-${Math.max(1, collections)}`,
                   reference,
-                  status: outcome,
+                  status: currentOutcome,
                   amount_in_cents: 990000,
                   currency: "COP",
                   finalized_at:
-                    outcome === "PENDING"
+                    currentOutcome === "PENDING"
                       ? null
                       : DateTime.formatIso(DateTime.makeUnsafe(now - 1000)),
                 },
@@ -392,7 +395,10 @@ it.each([
           })
         );
         expect(retry.status).toBe(200);
-        expect(yield* fromTestPromise(() => retry.json())).toMatchObject({
+        const retried = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+          yield* fromTestPromise(() => retry.json())
+        );
+        expect(retried).toMatchObject({
           billingAttempt: { status: "pending" },
         });
         expect(
@@ -400,6 +406,36 @@ it.each([
             ([url, init]) => url.pathname === "/v1/transactions" && init?.method === "POST"
           )
         ).toHaveLength(1);
+        if (retried.status !== "payment-pending") throw new Error("Expected pending retry");
+        yield* fromTestPromise(() =>
+          runBillingCollectionWorkflow({
+            environment,
+            activity,
+            payload: { version: 1, attemptId: retried.billingAttempt.id },
+          })
+        );
+        expect(collections).toBe(2);
+        expect(
+          (yield* fromTestPromise(() =>
+            environment.DB.prepare(
+              "SELECT status FROM billing_attempts ORDER BY created_at_ms"
+            ).all()
+          )).results
+        ).toEqual([{ status: "failed" }, { status: "succeeded" }]);
+        expect(
+          yield* fromTestPromise(() =>
+            environment.DB.prepare("SELECT count(*) AS count FROM billing_paid_periods").first(
+              "count"
+            )
+          )
+        ).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            environment.DB.prepare("SELECT count(*) AS count FROM card_payment_sources").first(
+              "count"
+            )
+          )
+        ).toBe(replaceFailedSource ? 2 : 1);
       })
     )
 );

@@ -168,6 +168,14 @@ direct web lifecycle/association observations, not hosted-model approval evidenc
 fictional July–September Transactions still await irreversible cleanup; the Transactions date picker
 was found to filter only the current-month result instead of loading the selected historical month.
 
+A later recurring/category reread returned HTTP 503 at release `17d62a7a`. Scoped read-only D1
+diagnostics confirmed exactly 256 canonical calls for this User on 16-10-2026, matching
+`dailyAuditBudget`; D1 itself remained readable and public health remained available. The canonical
+Audit triggers refuse additional work atomically, but these two read adapters present that refusal
+as unavailable. No Audit counters were reset, limits changed or failed mutations replayed. This
+separate daily canonical budget now blocks historical fixture reads/cleanup until its UTC reset.
+The diagnostic read wrote zero rows. Correct rate-limit classification is a remaining adapter gap.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

@@ -1,0 +1,60 @@
+apps/web/src/features/needs-review/presentation.ts
+  s_ede1c3735d03b7::t_9ad2d81acd3003 6-11,14-17,23,28-31,38-40,43-44
+  s_ede1c3735d03b7::t_3aba5f080aa503 1-5,12-13,18-22,24-27,32-37,45,47,49
+  s_ede1c3735d03b7::t_9fe7bc4d04e59d 41-42,46,48
+apps/web/src/features/needs-review/inbox.tsx
+  s_ede1c3735d03b7::t_3aba5f080aa503 6,16,21-22,27,62-65,69-71,76,81,87-88,92-94
+  s_ede1c3735d03b7::t_9ad2d81acd3003 23-25,55-61,66-67,72-75,77-78,80,82-86,89-91
+  s_ede1c3735d03b7::t_9576374da488cc 29,44,52-54,68,79,95
+apps/web/src/features/needs-review/toolbar.tsx
+  s_ede1c3735d03b7::t_39d92f9a874743 10-12
+apps/web/src/features/needs-review/editor.tsx
+  s_ede1c3735d03b7::t_9ad2d81acd3003 6-8,16,33,40,43-45,67-68,78,103-107,109-117,119-124,133,152-154,157-165,169-172,174-199,201
+  s_ede1c3735d03b7::t_b998522fd75385 145-150,155
+  s_ede1c3735d03b7::t_5c197291c96ce2 9,108,118,156,173,200,202-209
+apps/web/src/features/needs-review/feature.tsx
+  s_ede1c3735d03b7::t_9ad2d81acd3003 52-57,87-96,115-122,127,171,174-175,177,181,205
+  s_ede1c3735d03b7::t_3aba5f080aa503 2,15-16,31,35,40,51,103-104,106-107,113-114,135-137,142,144,149,192
+  s_ede1c3735d03b7::t_6ea6d6ea7a037b 1,126,128-134,138-141,143,145-148,153-170,172-173,176,178-180,182-191,193-204,206
+apps/web/src/features/needs-review/fields.tsx
+  s_ede1c3735d03b7::t_9ad2d81acd3003 24-63,66,70-89,91,119,141-144,146-149
+  s_ede1c3735d03b7::t_bef872a4c951ae 145,171
+apps/server/contracts/openapi.json
+  s_ede1c3735d03b7::t_c36b5925f0e088 253,259,266,272,4537-4557,4574,4593,4609,4625,4637,4653,4665,4698-4709,4725,4744,4759,4775,4787,4816,4832,4848,4864,4891,4926,4932,4997,5000-5001,5005,5009,5012-5016,5020-5021,5025,5071,5131,5150,5168,5194,5208,5213,5245,5265,5293,5384,5472,5476,5488,5504,5516,5549-5560,5576,5592,5608,5620,5636,6162,6179,6300,6323,11535-11537,11586-11588,12413,12449,12481,12545,12581,12613,12645,12709,12745,12833,13249,13272,13295,13318,13341,13364,13387,13410,13433,13456,13479,13502,13525,13548,13571,13594,13617,17245,17541,17677,18471,18882,19028,19164,19300,19870,20268,20404,20548,21127,21566,21688,21699,22190,22240,22259,22265,22448,22459,22716
+apps/web/src/features/needs-review/retry.tsx
+  s_ede1c3735d03b7::t_9ad2d81acd3003 21,23
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_9ad2d81acd3003 451-487
+apps/web/src/features/needs-review/original.tsx
+  s_ede1c3735d03b7::t_b998522fd75385 44-46
+  s_ede1c3735d03b7::t_9ad2d81acd3003 7,18-26,28-43,47,65
+  s_ede1c3735d03b7::t_fbe68337359ff1 27
+apps/server/cloudflare/ingestion/internal/review-store.ts
+  s_ede1c3735d03b7::t_b362816b541f85 65,69-109
+apps/server/cloudflare/ingestion/internal/review-workspace.ts
+  s_ede1c3735d03b7::t_e176eaf9e3ec69 18,87,101-102
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_ede1c3735d03b7::t_1f3b933dcd3e2f 4368-4370,4756-4767
+apps/server/src/core/ingestion/contract.ts
+  s_ede1c3735d03b7::t_905f1c6550fdc2 689-694,696
+apps/web/src/features/needs-review/FEATURE.md
+  s_ede1c3735d03b7::t_13dcf91ac50d7b 35-43
+apps/web/src/features/needs-review/view-navigation.tsx
+  s_ede1c3735d03b7::t_932ef5870f2047 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0d9a7f22d9b2cef926cc0cb557d1e43285ca3f4a",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

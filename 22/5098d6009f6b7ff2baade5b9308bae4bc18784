@@ -1,0 +1,24 @@
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_b75995d26622a8::t_a76e4c5987135d 929-938,950,982,984-988
+  s_b75995d26622a8::t_dc31975324419d 1,5,22,102,956,965
+apps/web/src/features/recurring/FEATURE.md
+  s_b75995d26622a8::t_a76e4c5987135d 182-193
+apps/server/cloudflare/erasure/internal/database.ts
+  s_b75995d26622a8::t_aea71fbfd19721 18-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "225098d6009f6b7ff2baade5b9308bae4bc18784",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

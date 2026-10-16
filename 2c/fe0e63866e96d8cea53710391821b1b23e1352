@@ -1,0 +1,73 @@
+apps/web/src/features/oauth-connections/management-feature.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,125,130
+  s_ede1c3735d03b7::t_4e0e4a0096189d 131
+apps/web/src/features/needs-review/editor.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,68,105,112,125,155,175,194-195,199-204
+apps/web/src/features/recurring/transactions.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,87
+  s_ede1c3735d03b7::t_9421f23563d155 88-92
+apps/web/src/features/transactions/deletion.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,95
+  s_ede1c3735d03b7::t_1688f68447d289 96-99
+apps/web/src/features/dashboard/view.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,967
+  s_ede1c3735d03b7::t_8f81ac9c5d167c 968-972
+apps/web/src/features/transactions/manual-capture.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,176
+  s_ede1c3735d03b7::t_05948db03ecd63 177-181
+apps/web/src/features/needs-review/toolbar.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,34
+apps/web/src/features/recurring/feature.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,215,220
+  s_ede1c3735d03b7::t_4b29006454ab8f 221
+apps/web/src/features/transactions/inline-category.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,37
+apps/web/src/ui/components/refresh-button.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1-13
+apps/web/src/features/budgets/workspace.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,85,89
+  s_ede1c3735d03b7::t_09e9d17b728058 90
+apps/web/src/features/needs-review/original.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1-2,20-24
+  s_ede1c3735d03b7::t_51ae9c34685645 25-27,29,73
+apps/web/src/features/transactions/bulk-correction.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,270
+apps/web/src/features/needs-review/retry.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1-2,25,42
+apps/web/src/features/subscription/feature.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,1305
+  s_ede1c3735d03b7::t_c8f45793fd1a75 1306-1310
+apps/web/src/features/transactions/correction.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,240,249
+apps/web/src/features/transactions/workspace.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1
+  s_ede1c3735d03b7::t_2779f6305f16ce 407
+apps/web/src/features/needs-review/view-navigation.tsx
+  s_ede1c3735d03b7::t_765ea27723f4de 1,46
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_11a6d50ccb21a7 432,452,462,464,466,475,477-478,511,530-614
+apps/web/src/features/needs-review/FEATURE.md
+  s_ede1c3735d03b7::t_d7b47c00281fd2 40-43
+apps/web/src/features/needs-review/feature.tsx
+  s_ede1c3735d03b7::t_eb2a9e9badbf69 26,44,182
+apps/web/src/features/needs-review/fields.tsx
+  s_ede1c3735d03b7::t_82cfff995ff269 1,25,64-67,140-184
+apps/web/src/features/needs-review/inbox.tsx
+  s_ede1c3735d03b7::t_6d9d70441e352a 20-24,30,35,69,74-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2cfe0e63866e96d8cea53710391821b1b23e1352",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

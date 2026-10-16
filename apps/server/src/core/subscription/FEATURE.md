@@ -153,6 +153,53 @@ source identities, BillingAttempts, outbox, collection arms and foreign keys. Af
 Titular erasure, full-chain checks also verify source fences, exact-User receipt disposition,
 finite-hold archives and removal ordering; retirement history remains in retained billing records.
 
+On 2026-10-16 UTC, both real-provider Sandbox proofs were rerun at merged revision
+`dc0c7d01ff802ed123adfebd2501542c3502d517`: [Nequi run 38849853307](https://github.com/B4rz99/fidy-ai/actions/runs/38849853307)
+and [DaviPlata run 38849855435](https://github.com/B4rz99/fidy-ai/actions/runs/38849855435)
+each passed their four selected cases: weekly/monthly/yearly approval and weekly decline.
+These proofs use actual Sandbox provider protocols with local D1/activity execution, not the
+deployed browser, callback, Queue or Workflow. No real charges were made.
+
+The retry release [38847681503](https://github.com/B4rz99/fidy-ai/actions/runs/38847681503)
+stopped before promotion with HTTP 503 at candidate smoke admission. Independent read-only checks
+found the smoke schema present, native erasure generation `initial`, no approved erasure cases,
+and the private registry checkpoint missing. The erasure guard refuses that uninitialized access;
+the protected candidate-bootstrap routing repair is tracked in
+[PR #1351](https://github.com/B4rz99/fidy-ai/pull/1351). Protected operator initialization subsequently
+returned 204, and [release 38899280216](https://github.com/B4rz99/fidy-ai/actions/runs/38899280216)
+passed both candidate/intermediate pairings, promotion and normal-traffic checks. Public health and
+the web artifact both report `0f2df68a9233094e40223fab15d167b671cced24` and contract digest
+`44612b70c28a1d5456d7319ed3563a62176294f0fd59efc5ffc9d55ec67bd403`.
+The existing browser session authorized a fresh status read returning 200 with the original paid
+period and succeeded attempt; Upgrade rendered that standing after explicit retry from an initial
+unavailable result. The initial refusal was not diagnosed as a persistent defect. Anonymous status
+returned 401/no-store and foreign-Origin enrollment returned 403/no-store. DaviPlata's Sandbox OTP
+preflight returned 200 with Fidy's Origin, POST and required headers allowed; this alone is not the
+deployed browser OTP journey.
+
+The approved deployed card sequence then passed on the existing unpaid Microsoft QA account at
+that revision. Initial status returned Free, no paid Subscription and no BillingAttempts. A weekly
+COP 9,900 Sandbox decline finalized without a paid period; a fresh enrollment reused that source
+without card re-entry, and its explicitly submitted retry also finalized as failed. After the second
+decline, the browser exposed retry and replacement actions. Replacement opened blank card fields
+and unchecked provider terms; the approved synthetic replacement card settled successfully, and a
+fresh status read showed Pro with the new weekly paid period. An indexed read independently
+confirmed both original failed attempts and their retry clearances remained, with zero paid periods
+for either decline and exactly one for the replacement. No real charges were made. The browser
+session expired during the first reconciliation, requiring returning-user login before retry.
+An additional indexed read confirmed retry reused the original source, replacement retired that
+source, and exactly one replacement source was active before cancellation.
+
+Approved cancellation of that Sandbox Subscription returned `detached`; repeating the call returned
+the identical receipt. Canonical status retained Pro and the paid-through instant
+`2026-10-23T12:51:10.000Z`. An indexed read independently confirmed the durable cancellation,
+one paid period, zero armed collections and zero follow-up messages. The temporary Subscription
+Retry QA grant was revoked after fresh Microsoft login; its subsequent canonical read returned
+unauthenticated, and its isolated native credential and local grant metadata were cleared.
+Four rendered payment regressions also passed against a freshly built isolated browser/Core topology,
+including explicit retry, replacement and replacement after reload. This completes the approved
+live card sequence; the deployed wallet browser and recovery checks above remain separate gaps.
+
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and

@@ -455,6 +455,12 @@ routing bucket, provider representation or credential authority.
 Payment enrollment requires fresh browser authority and Consent and stays outside canonical/PAT
 access. Transient payment authorization material goes directly from the browser to Wompi. Paid Pro
 requires independently verified matching settlement, not authorization or PaymentSource availability.
+A direct-card creation response retains its transaction identity separately from callback hints.
+Only that known transaction, authenticated final decline after the retry window, no other candidate
+and no paid period permit another explicit first-payment attempt. Unknown sends remain blocked.
+Source replacement atomically rechecks fresh browser authority, retires only a definitively declined
+card and reserves a new enrollment; rejection preserves the existing form and source. A partial
+unique index retains one active source while original source identities and billing history survive.
 AccessTier is derived at the decision instant, never persisted as a separate authority. Automatic
 renewal includes a fixed three-day grace after the paid boundary, excluding stopped renewals and
 refunded periods; grace never alters paid history. See

@@ -103,5 +103,56 @@ it("migrates retained card authority without changing BillingAttempt, outbox or 
           db.prepare("UPDATE card_payment_sources SET method = 'nequi'").run()
         ).rejects.toThrow()
       );
+      for (const file of [
+        "0031_daviplata_enrollment",
+        "0035_billing_corrections",
+        "0052_weekly_card_renewal",
+        "0053_calendar_card_renewal",
+        "0058_wallet_renewal",
+        "0059_subscription_retries",
+        "0060_subscription_cancellation",
+        "0095_declined_card_retry",
+      ]) {
+        yield* Effect.tryPromise(() =>
+          applyTestMigration({ db, source: new URL(`../migrations/${file}.sql`, import.meta.url) })
+        );
+      }
+      const retained = [];
+      for (const table of [
+        "billing_attempts",
+        "billing_collection_outbox",
+        "billing_collection_arms",
+      ]) {
+        retained.push(yield* Effect.tryPromise(() => db.prepare(`SELECT * FROM ${table}`).all()));
+      }
+      const source = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT * FROM card_payment_sources").first()
+      );
+      yield* Effect.tryPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0096_failed_card_replacement.sql", import.meta.url),
+        })
+      );
+      for (const [index, table] of [
+        "billing_attempts",
+        "billing_collection_outbox",
+        "billing_collection_arms",
+      ].entries()) {
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare(`SELECT * FROM ${table}`).all())).results
+        ).toEqual(retained[index]?.results);
+      }
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT * FROM card_payment_sources").first())
+      ).toEqual({ ...source, retired_at_ms: null });
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
+      ).toEqual([]);
+      yield* Effect.tryPromise(() =>
+        expect(
+          db.prepare("UPDATE card_payment_sources SET retired_at_ms = 1").run()
+        ).rejects.toThrow("card_source_immutable")
+      );
     })
   ));

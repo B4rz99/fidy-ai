@@ -98,7 +98,7 @@ has no paid Subscription eligible for canonical cancellation, so that path canno
 for a different card. A successful deployed card payment and cancellation were subsequently verified
 on the other approved QA account, as detailed below.
 
-Remaining safe live work: close declined-source replacement/retry; complete deployed DaviPlata browser/CORS checks;
+Remaining safe live work: verify the declined-card retry/replacement fix after deployment; complete deployed DaviPlata browser/CORS checks;
 and isolated deployed Queue/Workflow/callback recovery evidence before
 claiming the entire payment lifecycle is verified. Real charges, live refunds, recurring debit
 authorization and changing existing subscriptions are excluded from this audit.
@@ -138,6 +138,15 @@ one paid period, the durable cancellation, zero armed collections and zero follo
 were skipped by this rerun. After fresh browser sign-in, the temporary Subscription QA grant was
 revoked; a subsequent canonical request returned unauthenticated. Its isolated native credential
 and metadata were cleared; the pre-existing CLI credential was preserved.
+
+Local follow-up: rendered-browser regressions now cover explicit retry and a new card form with
+unselected provider terms and no automatic second submission. Native Core/local D1 regressions
+cover known verified decline, pending payment, paid Subscription, provider error and lost creation
+response. The latter four cannot retire a source. Rejected replacement preserves the original
+prepared enrollment atomically. New card sources retain the original failed attempt and source
+identity; only one source is active. Historical attempts without retained creation-response evidence
+remain blocked pending attributable no-charge confirmation. These are local results; deployed
+verification remains pending.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

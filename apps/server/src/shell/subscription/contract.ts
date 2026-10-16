@@ -173,10 +173,11 @@ export class PaymentEnrollmentUnavailableApi extends Schema.Error<PaymentEnrollm
   { httpApiStatus: 503 }
 ) {}
 
-/** Browser preparation request names only the immutable server-owned Price. */
+/** Replacement is limited to a definitively declined first card payment; it cannot change a paid Subscription. */
 export const PreparePaymentEnrollmentPayload = Schema.Struct({
   priceId: PriceId,
   method: EnrollmentMethod,
+  replaceFailedSource: Schema.optionalKey(Schema.Boolean),
 });
 
 const TokenText = Schema.String.check(

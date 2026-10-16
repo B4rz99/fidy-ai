@@ -297,3 +297,93 @@ test("activates Subscription through reviewed reused-source terms without sendin
       expect(submittedJson).not.toContain("cardToken");
     })
   ));
+
+const installDeclinedEnrollment = (page: Page): Effect.Effect<() => number, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => installReusedEnrollment(page));
+    let submissions = 0;
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/web/subscription/payment-enrollments/prepare`, (route) => {
+        const payload: unknown = route.request().postDataJSON();
+        const replacing =
+          Schema.decodeUnknownSync(
+            Schema.Struct({ replaceFailedSource: Schema.optionalKey(Schema.Boolean) })
+          )(payload).replaceFailedSource === true;
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ...prepared,
+            paymentSourceMode: replacing ? "create" : "reuse",
+          }),
+        });
+      })
+    );
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/web/subscription/payment-enrollments/submit`, (route) => {
+        submissions += 1;
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: JSON.stringify({
+            status: "payment-pending",
+            enrollmentId,
+            billingAttempt: {
+              id: "24000000-0000-4000-8000-000000000257",
+              priceId: offerIds[1],
+              money: offers[1]?.money,
+              billingPeriod: "monthly",
+              serviceMarket: "CO",
+              taxTreatment: "not-taxable",
+              timeZone: "America/Bogota",
+              createdAt: "2026-09-27T00:00:00.000Z",
+              status: "failed",
+              failedAt: "2026-09-27T00:03:01.000Z",
+            },
+          }),
+        });
+      })
+    );
+    return () => submissions;
+  });
+
+for (const replaceFailedSource of [false, true]) {
+  test(`a declined payment permits a fresh reviewed attempt (replace card: ${replaceFailedSource})`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const submissions = yield* installDeclinedEnrollment(page);
+        yield* Effect.tryPromise(() => page.goto("/upgrade"));
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Elegir mensual" }).click()
+        );
+        yield* Effect.tryPromise(() => page.getByLabel(/Acepto el reglamento/iu).check());
+        yield* Effect.tryPromise(() => page.getByLabel(/Autorizo el tratamiento/iu).check());
+        yield* Effect.tryPromise(() => page.getByRole("button", { name: "Activar Pro" }).click());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText(/Wompi rechazó el pago/u)).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          page
+            .getByRole("button", {
+              name: replaceFailedSource ? "Usar otra tarjeta" : "Volver a intentar",
+              exact: true,
+            })
+            .click()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel(/Acepto el reglamento/iu)).not.toBeChecked()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Activar Pro" })).toBeDisabled()
+        );
+        expect(submissions()).toBe(1);
+        if (replaceFailedSource) {
+          yield* Effect.tryPromise(() =>
+            expect(page.getByLabel("Número de tarjeta", { exact: true })).toBeVisible()
+          );
+        }
+      })
+    ));
+}

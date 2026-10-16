@@ -21,7 +21,13 @@ BillingAttempt settlement does.
 
 Wompi documents a once-per-merchant Production wallet subscription and no proven recovery after
 losing an approved authorization before source creation. Reload therefore must not promise a safe
-restart or durable resume. The single source per User is retained without method switching, and
-method expansion uses a forward D1 migration that preserves all authorization and billing history.
+restart or durable resume. One active source per User is retained without wallet method switching. A direct-card first payment
+may be retried only when its retained creation response identifies the exact transaction, an
+authenticated lookup verifies final decline, the three-minute provider retry opportunity has elapsed,
+and no other candidate or paid period exists. Unknown creation outcomes and historical attempts
+without that response evidence still require attributable no-charge confirmation. Explicit card
+replacement retires only such a failed source; immutable source and billing identities remain
+retained. Paid Subscriptions cannot use this replacement path. Method expansion and source-history
+changes use forward D1 migrations that preserve authorization and billing history.
 The [Sandbox proof runbook](../operations/daviplata-sandbox-proof.md) distinguishes synthetic fixtures,
 the opt-in real-provider check and unresolved browser/native/recovery release gates.

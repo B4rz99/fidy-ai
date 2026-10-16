@@ -1,0 +1,61 @@
+apps/web/src/features/recurring/FEATURE.md
+  s_b75995d26622a8::t_266083ab2322c8 149-159,184
+  s_b75995d26622a8::t_e069b865481b02 160-169
+  s_b75995d26622a8::t_77d762da4ebf38 171-176,184
+  s_b75995d26622a8::t_b625432e2d469f 177-183
+apps/web/src/features/transactions/feature.tsx
+  s_b75995d26622a8::t_b0aaaecc9ffaa3 206-211,217
+  s_b75995d26622a8::t_02d61eb143cb9e 281-284
+  s_b75995d26622a8::t_d719a110c2b078 156,215-216,220,252,273-280,285-310,358
+apps/web/src/features/transactions/FEATURE.md
+  s_b75995d26622a8::t_e069b865481b02 3-7,10
+  s_b75995d26622a8::t_79729e1e11cc64 11-13,30-32
+  s_b75995d26622a8::t_95da12ab91fe4e 8-9
+  s_b75995d26622a8::t_b8e187f2dc631b 14-19
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_b0aaaecc9ffaa3 46-48,49,618-619,621
+  s_b75995d26622a8::t_befa4a33791241 38,57-58,617,620,623-624
+apps/web/e2e/transaction-pagination.spec.ts
+  s_b75995d26622a8::t_02d61eb143cb9e 443-445,457-459,461-475,479,481-489
+  s_b75995d26622a8::t_f1601bec323e5f 413,446-449,451-454,456,460,480,490-492
+  s_b75995d26622a8::t_e7612a8e9488c7 450
+  s_b75995d26622a8::t_b0aaaecc9ffaa3 418-442,455,476-478
+  s_b75995d26622a8::t_8488cb9e590112 414-417
+apps/web/src/features/transactions/privacy-view.tsx
+  s_b75995d26622a8::t_a3581389bbebb9 28,61
+apps/server/cloudflare/canonical-work/operations.ts
+  s_b75995d26622a8::t_5780ec4e808e95 229
+  s_b75995d26622a8::t_28fcd07dea31c6 23,30,33,222-228,230-242
+apps/server/cloudflare/categories/internal/canonical-category.ts
+  s_b75995d26622a8::t_5780ec4e808e95 23-28,148,152,154
+  s_b75995d26622a8::t_72a6fa9d7d7ccb 12-16,21-22,155-156
+apps/server/cloudflare/recurring-plans/operations.ts
+  s_b75995d26622a8::t_5780ec4e808e95 11,13,36-37,80-92,94-96
+  s_b75995d26622a8::t_dfb07b9aa93057 1-2,97-100
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_b75995d26622a8::t_2e1ae4c5c6a4da 11-16,898-974
+apps/web/e2e/recurring-recovery.spec.ts
+  s_b75995d26622a8::t_bf1c78310bd2e2 11,13-31,40-43,46,48-49,54,73
+apps/web/src/features/recurring/feature.tsx
+  s_b75995d26622a8::t_b9ff3aff8ceb23 6,61
+apps/web/src/features/recurring/query-failure.tsx
+  s_b75995d26622a8::t_336750efd3c67c 1-41
+apps/web/src/transport/client.test.ts
+  s_b75995d26622a8::t_947c091cee386d 271
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "75b03615337ab492901923c330da73b6206440c4",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

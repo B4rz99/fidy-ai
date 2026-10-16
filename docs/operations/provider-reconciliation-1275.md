@@ -367,6 +367,23 @@ is verified; adviser validation, a case number, substantive answers and any dele
 unverified. A filtered company-inbox check showed the Resend acknowledgement but no substantive
 Resend or Kapso answer.
 
+### Wompi escalation confirmed — 2026-10-16
+
+Restricted provider receipt reference: `2b489f0d-c993-4509-8fcf-a7998706d202`, version 1, linked
+to the owner-validation record. Adviser Santiago Álvarez confirmed that the enquiry was escalated
+to the responsible area and supplied a provider case number. The exact case locator, quoted
+confirmation and screenshot are retained privately, without the owner's identification or phone
+values. This supersedes the earlier pending-case status; preserve those earlier records as history.
+
+Wompi said its response would arrive by email as soon as possible, with **no firm deadline**.
+Escalation and a case reference verify actual provider support intake. They do not establish a
+substantive answer, the applicable contract/company-transition decision, a completed disposable
+rights rehearsal or erasure of any provider copy. The next step is to reconcile the response to the
+four submitted questions, record unanswered scope and execute only a separately authorized bounded
+test where the provider procedure supports it. Do not treat the closed chat or satisfaction survey
+as resolution of the underlying enquiry. The sole operator owns follow-up through the registered
+mailbox and private case reference.
+
 These are information enquiries, not a completed provider-rights rehearsal. Acknowledgement, a
 published period or passing local tests cannot settle provider residual-copy erasure. Review actual
 responses when available, record their applicability and authorize the exact disposable scope before

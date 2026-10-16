@@ -146,6 +146,20 @@ at `canonical_query / ProviderQuotaExceeded`; it did not reach the corrected lif
 provider translation fix and natural-language lifecycle approval therefore still require live
 verification after quota is available. Quota exhaustion is not recorded as a passing model check.
 
+The follow-up merged in [PR #1353](https://github.com/B4rz99/fidy-ai/pull/1353) and deployed through
+[production run 38906832229](https://github.com/B4rz99/fidy-ai/actions/runs/38906832229). All CI checks,
+both Worker pairings, normal traffic and drift checks passed. Public health reported `available`
+at exact revision `84743a04f96685670f240cf7d69935b20c064e68`, with contract digest
+`cf1813f589f1c81fc8e96b395631f1fafdfb128e99c2557709b6b1b5a50cd812`.
+
+The reloaded production page showed the empty recurring workspace for the account used by the
+separate Subscription audit. Its chat was empty after the account switch; it did not retain the
+previous account's transcript. A single greeting request returned HTTP 429 with
+`status: provider_quota_exceeded`. The UI explained the daily limit and preserved the exact draft
+in an enabled composer. This verifies deployed quota recovery, not successful model output or the
+pending lifecycle approval. Existing recurring fixtures and their cleanup remain on the original
+audit account, which is no longer the active browser account.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

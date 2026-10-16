@@ -30,7 +30,7 @@ period or an incident-reporting extension.
 
 ## Common timing worksheet
 
-For A–D, assume detection and notice to the responsible privacy function at
+For A–C, assume detection and notice to the responsible privacy function at
 **2026-10-16T14:00:00Z**, 9:00 a.m. Bogotá. The source rule's fifteen working days is evaluated
 from the following working day, with detection and awareness retained independently. For the
 exercise, Saturdays are conservatively counted and Sundays/Colombian national holidays excluded.
@@ -116,8 +116,11 @@ resolving the trigger/calendar. No clarification is actually sent in this exerci
 
 ## D — Primary owner unavailable
 
-**Fictional facts:** the technical system detects a possible personal-data incident at T0; a
-provider notice reaches the designated inbox. The only operator is unavailable until October 19.
+**Fictional facts:** the technical system detects a possible personal-data incident at
+2026-10-16T14:00:00Z (T0); a provider notice reaches the designated inbox at that same instant.
+The only operator is unavailable until October 19 and first reads the notice at
+2026-10-19T14:00:00Z, 9:00 a.m. Bogotá. Inbox arrival and human awareness are separate facts;
+this case does not assume that the responsible privacy function knew at T0.
 No authorized backup or engaged reviewer is stipulated. Monitoring and denial controls are not
 assumed to provide human response or automatic incident containment.
 
@@ -165,6 +168,9 @@ uncertainty, a provider notice, an unavailable owner and a correction/delivery f
 the missing actual RNBD facts/reviewer, calendar interpretation, unavailable-owner coverage and
 institution-specific contacts. These are explicit open inputs, not passing launch criteria.
 
-An independent procedure review and restricted execution receipt must be linked before representing
-the walkthrough as reproduced. Operator participation and qualified approval are separate evidence;
-do not label either completed from this document alone.
+An independent Spec reviewer reconstructed A–E and both timing worksheets on 2026-10-16. The
+review reproduced the stated classifications and November 4 / November 9 arithmetic, and identified
+the distinction between inbox arrival and human awareness now made explicit in D. The version-1
+restricted receipt predates this clarification; it remains the original assistant execution record,
+not evidence that its source hashes match the revised document. Operator participation and qualified
+approval remain separate, outstanding evidence; this procedural review does not establish either.

@@ -4,6 +4,7 @@ import {
   makeTelemetryService,
 } from "../../src/shell/observability/operations";
 import type { WebAuthenticationRequest } from "./contract";
+import { applyTestMigration } from "../d1-test-fixture";
 
 export const sessionUser = "10000000-0000-4000-8000-000000000001";
 export const sessionId = "20000000-0000-4000-8000-000000000001";
@@ -160,6 +161,12 @@ export const seedSession = ({
   hard: number;
 }>): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      applyTestMigration({
+        db,
+        source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
+      })
+    );
     const digest = new Uint8Array(
       yield* Effect.tryPromise(() =>
         crypto.subtle.digest("SHA-256", new TextEncoder().encode(sessionToken))

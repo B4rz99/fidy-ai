@@ -1,0 +1,60 @@
+apps/web/e2e/recurring-plans.spec.ts
+  s_b75995d26622a8::t_c5400244be2f9b 389,394-395,399,416,426,430,434-436,446-451,455-456
+  s_b75995d26622a8::t_450f4027ebb719 290,295-296,300,308-309,316,323,327,331,335-348,352-353,367-368,379,388
+  s_b75995d26622a8::t_a8173230ecb100 291-294,297-299,301-307,310-315,317-322,324-326,328-330,332-334,349-351,354-357,362,364-366,369-374,376-378,380-387
+  s_b75995d26622a8::t_0f11acfad3e38c 375
+  s_b75995d26622a8::t_59a5ee7b34fc01 358-361,363,390-393,396-398,400-415,417-425,427-429,431-433,437-445,452-454
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_b75995d26622a8::t_e9d21b81669b53 249-256
+  s_b75995d26622a8::t_81acd25f58576e 96-99,242-248,257-332,342-346
+  s_b75995d26622a8::t_a2eb2f751388aa 333
+  s_b75995d26622a8::t_4b186af8ec1996 100-113,334-341,347-350,353-369,371-404
+  s_b75995d26622a8::t_ab4308e4a66875 114-115,241
+  s_b75995d26622a8::t_a7c9f2efc8f706 7-9
+  s_b75995d26622a8::t_d4eb5f66720710 351-352,370
+apps/server/src/core/recurring-plans/operations.ts
+  s_b75995d26622a8::t_28c8a206590a2a 253-256
+apps/web/e2e/recurring-pagination.spec.ts
+  s_b75995d26622a8::t_7dbc7f2b364c2f 1,68-69
+  s_b75995d26622a8::t_c26dd1a323c747 4,6-7,9-14,28,30-32,41-53,64-67,70,75-76,82,89-90,94,105-108
+  s_b75995d26622a8::t_3656c633ce24ba 8,72-73,78,80-81,103-104,132-133
+  s_b75995d26622a8::t_dbf98a3e42ce7a 127
+  s_b75995d26622a8::t_b9a32d2fa6a714 3,5
+  s_b75995d26622a8::t_93ae3c13c23b04 15-27,29,33-40,54-63,71,74,77,79,83-86,88,91-93,95,97-102,110-126,128-131,134
+  s_b75995d26622a8::t_9f8b1029762631 2,109
+  s_b75995d26622a8::t_88aa11bdcc65b2 87,96
+apps/web/src/features/recurring/FEATURE.md
+  s_b75995d26622a8::t_50eadfcb8cf356 1-14,30,32-38,44-74,82-86
+  s_b75995d26622a8::t_116b3790c65db0 80
+  s_b75995d26622a8::t_e9d21b81669b53 15-29
+  s_b75995d26622a8::t_2552ff702cb44a 31,39-43
+  s_b75995d26622a8::t_c83ab75378fb9c 75-79,81
+apps/web/e2e/recurring-recovery.spec.ts
+  s_b75995d26622a8::t_1874cebe2d1dca 1-8,11-12,17-18,31-32,45,57-59
+  s_b75995d26622a8::t_3ec95dc5979880 9-10,24
+  s_b75995d26622a8::t_2f24729914a6e6 13-16,19-23,25-30,33-44,46-56
+apps/web/src/features/recurring/workspace.tsx
+  s_b75995d26622a8::t_c845969b5f2019 272,309
+apps/server/src/core/recurring-plans/operations.test.ts
+  s_b75995d26622a8::t_eb04d232eb07ce 318-361
+  s_b75995d26622a8::t_67076eff6d2ff8 362
+  s_b75995d26622a8::t_9daaab47d2ea8d 363-370
+apps/server/src/core/recurring/FEATURE.md
+  s_b75995d26622a8::t_2cc31fe8f0e381 7-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b21abeb6ad04597bba38c829d126771118d9a7d7",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

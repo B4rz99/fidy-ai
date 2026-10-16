@@ -1,0 +1,20 @@
+apps/web/e2e/privacy.spec.ts
+  s_b75995d26622a8::t_16fe1ad0d14de9 24-32,36-42
+  s_b75995d26622a8::t_85aa9dd4a7e09f 43,83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "894ec61c5b84796a26541d5cf2b6217b3c502ed8",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

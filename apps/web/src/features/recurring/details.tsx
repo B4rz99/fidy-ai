@@ -71,7 +71,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
     <Button
       contentLayout="wrap"
       focusAppearance="subtle"
-      variant="outline"
+      variant={item.status === "skipped" ? "outline" : "destructive"}
       disabled={disabled || item.fulfillments.length > 0}
       onClick={() =>
         save({
@@ -95,7 +95,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
           contentLayout="wrap"
           focusAppearance="subtle"
           key={action}
-          variant="outline"
+          variant={action === "pause" ? "destructive" : "outline"}
           disabled={disabled}
           onClick={() => save({ kind: "lifecycle", planId: item.planId, date: today, action })}
         >
@@ -111,7 +111,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
       <Button
         contentLayout="wrap"
         focusAppearance="subtle"
-        variant="outline"
+        variant="destructive"
         disabled={disabled}
         onClick={() =>
           save({ kind: "lifecycle", planId: item.planId, date: today, action: "stop" })
@@ -143,7 +143,7 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
           <Button
             contentLayout="wrap"
             focusAppearance="subtle"
-            variant="ghost"
+            variant="destructive"
             disabled={disabled}
             onClick={() => save({ kind: "reverse", fulfillmentId: mark.id })}
           >

@@ -274,6 +274,13 @@ const chooseDate = (page: Page, label: string, date: string): Promise<void> =>
       const [targetYear = 0, targetMonth = 0] = date.split("-").map(Number);
       const steps = (targetYear - year) * monthsPerYear + targetMonth - month;
       yield* Effect.tryPromise(() => trigger.click());
+      const selectedDay = page.locator('[data-selected-single="true"]');
+      yield* Effect.tryPromise(() =>
+        expect(selectedDay).toHaveCSS("background-color", "rgb(240, 180, 174)")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(selectedDay.locator("..")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+      );
       for (let step = 0; step < Math.abs(steps); step++) {
         yield* Effect.tryPromise(() =>
           page

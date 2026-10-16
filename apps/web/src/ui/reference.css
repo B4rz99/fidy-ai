@@ -1,17 +1,3 @@
-@import "./dark-palettes.css";
-
-.dark[data-dark-palette] {
-  --background: var(--preview-canvas);
-  --card: var(--preview-surface);
-  --secondary: var(--preview-raised);
-  --muted-foreground: var(--preview-muted);
-  --border: var(--preview-border);
-  --popover: var(--secondary);
-  --muted: var(--secondary);
-  --accent: var(--secondary);
-  --input: var(--muted-foreground);
-}
-
 .ui-reference [data-slot] {
   transition: none;
 }

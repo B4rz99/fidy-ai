@@ -29,8 +29,7 @@ export const BudgetDataPreview = (props: WorkspaceProps): JSX.Element => {
       <div
         ref={restoreTextSizeOnUnmount}
         aria-label="Budget stress test"
-        className="fixed bottom-3 left-1/2 z-50 flex w-max max-w-[95vw] -translate-x-1/2 flex-wrap justify-center gap-1 rounded-2xl border border-border bg-muted p-1 text-xs text-foreground shadow-sm"
-        style={{ fontFamily: "system-ui" }}
+        className="fixed bottom-3 left-1/2 z-50 flex w-max max-w-[95vw] -translate-x-1/2 flex-wrap justify-center gap-1 rounded-2xl border border-border bg-muted p-1 font-sans text-xs text-foreground shadow-sm"
       >
         {datasets.map((item) => (
           <button

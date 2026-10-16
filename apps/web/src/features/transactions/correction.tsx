@@ -1,3 +1,4 @@
+import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomSet } from "@effect/atom-react";
 import { BigDecimal, DateTime, Option } from "effect";
 import { useState } from "react";
@@ -260,12 +261,11 @@ const OptionalNotes = ({
   draft: CorrectionDraft;
   onChange: (draft: CorrectionDraft) => void;
 }>): JSX.Element => (
-  <details>
-    <summary className="cursor-pointer text-sm text-muted-foreground">Notas (opcional)</summary>
+  <Disclosure title="Notas (opcional)">
     <div className="pt-2">
       <DraftNotes draft={draft} onChange={onChange} />
     </div>
-  </details>
+  </Disclosure>
 );
 const CorrectionActions = ({
   status,

@@ -313,7 +313,13 @@ not a replacement for its label. Focus has a visible contrasting outline.
 
 Loading preserves the control's dimensions and identifies the action in progress.
 Disabled controls remain readable and explain unavailable actions when necessary.
-Disabled destructive buttons retain the shared coral fill and use the muted disabled label;
+Destructive actions (deactivation, revocation, deletion, unlinking, reversal, stopping or pausing
+tracking) use the shared `Button` destructive variant, including the action that opens a confirmation.
+Hover and keyboard focus keep the destructive fill. Cancelling an ordinary edit remains neutral.
+Calendar selection and focused days use a single coral/red button surface; the day cell never adds
+a second today background. Grafito is the sole dark palette in both the app and UI reference.
+
+Disabled destructive buttons retain the shared coral fill and contrasting dark destructive label;
 they remain non-interactive until their prerequisite is met.
 On failure, keep entered values and offer a useful correction or retry. Confirm
 success only after the operation succeeds. Empty states explain what is missing and
@@ -483,13 +489,29 @@ next to compact amounts when their separate type column is hidden.
 
 ### Enforcement and reference
 
+`/ui-reference.html#patterns` starts with a compact interactive reference for dropdowns,
+dates, clickable rows with independent category selection, status badges, and pointer/keyboard
+focus. It uses the actual shared components and local state; it never accesses account data.
+Check these examples in light/Grafito, at phone width, and with Tab, Enter, Space, and Escape.
+
 `/ui-reference.html` demonstrates the shared tokens, control states, search,
 choice menus, calendar, indicators, and workspace composition using local example
 data. Extend this reference when approving a new reusable treatment, including
 keyboard behavior, light/Grafito appearance, and narrow layouts.
 
-The root `.oxlintrc.json` runs `@shadcn/lint` in normal lint and CI. Raw colors and
-arbitrary non-layout values are rejected. `no-restyle` contracts reserve component
+`bun run lint:ui` runs only the built-in `@shadcn/lint` rules from `.oxlintrc.ui.json`.
+The root lint configuration extends this same policy, and the required CI Workspace Gate
+runs it through the static verification group. No custom design-system lint rules are used.
+The six rules reject raw colors, arbitrary non-layout values, component restyling, inline
+styles, unknown classes, and unreadable component classes.
+
+Existing CSS selector hooks are listed explicitly for class-existence checking because the
+installed linter cannot discover all separately imported stylesheets. Shared component owners
+may define styles and forward classes. The dashboard's canonical split weights are a scoped
+inline-style exception: its existing helper emits only the `--dashboard-weight` custom property.
+Feature views otherwise cannot use inline styling. New selector exceptions or shared component
+changes require reviewing their rendered reference; a clean lint result does not prove that a
+view selected the correct component or implemented row behavior. `no-restyle` contracts reserve component
 colors, typography, shape, focus, and control spacing for the UI owner. Pages may
 place controls; use component props and named variants for their appearance, or
 put surrounding spacing on a parent. Shared implementations can define their own

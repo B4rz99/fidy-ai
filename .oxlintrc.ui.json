@@ -1,0 +1,113 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [],
+  "jsPlugins": ["@shadcn/lint"],
+  "settings": {
+    "shadcn": {
+      "ui": "@/ui/components",
+      "note": "See DESIGN.md and /ui-reference.html. Reuse shared components and named variants; views own layout and behavior."
+    }
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/src/**/*.{ts,tsx}"],
+      "rules": {
+        "shadcn/no-raw-colors": "error",
+        "shadcn/no-arbitrary-values": [
+          "error",
+          {
+            "allow": ["layout"]
+          }
+        ],
+        "shadcn/no-restyle": [
+          "error",
+          {
+            "allow": ["layout"],
+            "contracts": [
+              {
+                "pattern": "^(Button|Input|Badge|DropdownMenuTrigger|Calendar|TableRow)$",
+                "allow": ["layout"],
+                "message": "Use the component's named variant or size. Keep Fidy colors, radii, focus, and control density in src/ui/components; use a parent for surrounding spacing. See DESIGN.md."
+              },
+              {
+                "pattern": "^Card$|(Content|Header|Footer|Group|Panel)$",
+                "allow": ["layout", "spacing"]
+              },
+              {
+                "pattern": "^CardTitle$|^Table(Cell|Head)$|^CardAction$",
+                "allow": ["layout", "typography"]
+              },
+              {
+                "pattern": "^Empty$",
+                "allow": ["layout", "border"]
+              },
+              {
+                "pattern": "^AlertDescription$",
+                "allow": ["layout", "spacing"]
+              },
+              {
+                "pattern": "^(SearchableChoiceDropdown|ChoiceDropdown|InlineChoiceDropdown|ChoiceMenuOptions|CalendarField|HeaderSearch|IconIndicator|DirectionIndicator|WorkspaceHeader|WorkspaceColumns|WorkspacePanel|RecordToolbar)$",
+                "allow": ["layout"],
+                "message": "Reuse the approved Fidy pattern. Change its shared component only for an approved design decision; do not override colors, typography, shape, or control spacing in a view. See DESIGN.md: Application components and patterns."
+              }
+            ]
+          }
+        ],
+        "shadcn/no-inline-styles": [
+          "error",
+          {
+            "allow": ["--dashboard-weight"]
+          }
+        ],
+        "shadcn/no-unknown-classes": [
+          "error",
+          {
+            "allow": [
+              "budget-figures",
+              "budget-group",
+              "budget-group-figures",
+              "budget-group-heading",
+              "budget-head",
+              "budget-name",
+              "budget-progress",
+              "budget-row",
+              "budget-row-label",
+              "budget-table",
+              "budget-table-container",
+              "budget-totals",
+              "budget-tracks",
+              "budget-unbudgeted",
+              "budget-value",
+              "budget-value-label",
+              "dashboard-drop-zone",
+              "financial-summary-amount",
+              "financial-summary-card",
+              "is-assistant",
+              "is-user",
+              "ledger-actions",
+              "recurring-stress-controls",
+              "transaction-amount-direction",
+              "ui-reference"
+            ]
+          }
+        ],
+        "shadcn/require-static-classes": "error"
+      }
+    },
+    {
+      "files": ["apps/web/src/ui/components/**"],
+      "rules": {
+        "shadcn/no-restyle": "off",
+        "shadcn/no-arbitrary-values": "off",
+        "shadcn/require-static-classes": "off",
+        "shadcn/no-inline-styles": "off"
+      }
+    },
+    {
+      "files": ["apps/web/src/features/dashboard/view.tsx"],
+      "rules": {
+        "shadcn/no-inline-styles": "off"
+      }
+    }
+  ]
+}

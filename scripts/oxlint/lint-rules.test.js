@@ -268,6 +268,14 @@ const designCases = [
   { expression: '<div className={cn("text-[#123456]")} />', rule: "no-arbitrary-values" },
   { expression: '<Button className="bg-secondary">Guardar</Button>', rule: "no-restyle" },
   { expression: '<Button className="p-4">Guardar</Button>', rule: "no-restyle" },
+  { expression: '<Button className="focus-visible:ring-0">Guardar</Button>', rule: "no-restyle" },
+  { expression: '<Badge className="bg-secondary">Activo</Badge>', rule: "no-restyle" },
+  { expression: '<TableRow className="hover:bg-secondary" />', rule: "no-restyle" },
+  { expression: '<div style={{ color: "red" }} />', rule: "no-inline-styles" },
+  { expression: '<div className="rounded-fidy-typo" />', rule: "no-unknown-classes" },
+  { expression: "<Button className={String(1)}>Guardar</Button>", rule: "require-static-classes" },
+  { expression: '<Badge variant="success">Activo</Badge>' },
+  { expression: '<TableRow interaction="clickable" />' },
   { expression: '<Button variant="outline" className="w-full">Guardar</Button>' },
   { expression: '<CardContent className="flex gap-4 px-6">Contenido</CardContent>' },
 ];
@@ -278,6 +286,10 @@ try {
       `import type { JSX } from "react";\n` +
         (expression.includes("Button")
           ? `import { Button } from "@/ui/components/button";\n`
+          : "") +
+        (expression.includes("Badge") ? `import { Badge } from "@/ui/components/badge";\n` : "") +
+        (expression.includes("TableRow")
+          ? `import { TableRow } from "@/ui/components/table";\n`
           : "") +
         (expression.includes("CardContent")
           ? `import { CardContent } from "@/ui/components/card";\n`

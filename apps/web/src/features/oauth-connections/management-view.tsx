@@ -27,6 +27,7 @@ const Timestamp = ({ value }: Readonly<{ value: DateTime.Utc }>): JSX.Element =>
     {dateFormat.format(DateTime.toDate(value)).replaceAll("/", "-")}
   </time>
 );
+const stateVariants = { active: "success", expired: "warning", revoked: "destructive" } as const;
 const states = { active: "Activo", expired: "Vencido", revoked: "Revocado" } as const;
 const ConnectionRow = ({
   connection,
@@ -51,7 +52,9 @@ const ConnectionRow = ({
           ))}
         </div>
       </TableCell>
-      <TableCell density="compact">{states[connection.state]}</TableCell>
+      <TableCell density="compact">
+        <Badge variant={stateVariants[connection.state]}>{states[connection.state]}</Badge>
+      </TableCell>
       <TableCell density="compact" className="tabular-nums whitespace-nowrap">
         <Timestamp value={connection.expiresAt} />
       </TableCell>
@@ -59,7 +62,7 @@ const ConnectionRow = ({
         {connection.state === "active" ? (
           <Button
             type="button"
-            variant="outline"
+            variant="destructive"
             disabled={busy}
             onClick={() => revoke(connection.connectionId)}
           >
@@ -117,7 +120,7 @@ export const OAuthManagementView = ({
         </Button>
       ),
     })}
-    <Button type="button" variant="outline" disabled={busy} onClick={revokeAll}>
+    <Button type="button" variant="destructive" disabled={busy} onClick={revokeAll}>
       Revocar todos los agentes conectados
     </Button>
   </section>

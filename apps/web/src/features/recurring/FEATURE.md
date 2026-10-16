@@ -35,8 +35,10 @@ exception bypassed lifecycle filtering, leaving the future expectation in rows a
 same problem affected a once-edited future expectation. Projection now applies the plan's tracking
 interval to effective expected dates while retaining fulfillment history independently. Displaced
 past unresolved occurrences stay inspectable; displaced future expectations respect pause/stop. Domain regressions
-failed before the fix; the real browser lifecycle journey passes afterward. This audit's fix has
-not been released to production.
+failed before the fix; the real browser lifecycle journey passes afterward. The fix was squash-merged in [PR #1340](https://github.com/B4rz99/fidy-ai/pull/1340) and
+released as `d4a7c1cc0dd7bf59aa0e6389f5064189b8385895` by
+[Production run 38840874441](https://github.com/B4rz99/fidy-ai/actions/runs/38840874441).
+Normal-traffic health reported that exact revision; the reloaded browser exposed one main landmark.
 
 The populated workspace also lacked a main landmark. The content container now uses `main`,
 preserving its layout while making the page navigable through assistive-technology landmarks.
@@ -56,15 +58,61 @@ The first creation attempt was refused after the observed document revision chan
 refresh recovered; only the second, freshly reviewed creation succeeded. No uncertain mutation was
 replayed, and no existing financial Transaction was changed or deleted.
 
+### Production rerun after PR #1340
+
+On the same signed-in account, the fictional `PRUEBA QA CICLO 20261015` reproduced the defect
+before release: omit/include/pause left its 31-10-2026 COP 100 expectation in rows and totals,
+while management reported Pausado. After release, the same retained state disappeared from the
+monthly projection. Resume restored it. A once edit displaced that occurrence to 14-10-2026;
+pause preserved this past unresolved occurrence. November retained its original 30-day clamped
+anchor. A forward November edit to USD 3 preserved October's COP 100 and kept separate COP/USD
+totals; filtering USD changed both rows and summaries.
+
+The same plan exercised every cadence through real production reads after explicit forward edits:
+
+| Cadence                        | Observed projection from 30-11-2026            |
+| ------------------------------ | ---------------------------------------------- |
+| Weekly                         | 07/14/21/28-12-2026                            |
+| Every fourteen days            | 14/28-12-2026                                  |
+| Twice monthly, day 15 and last | 15/31-12-2026                                  |
+| Monthly                        | 30-11-2026 after the earlier 31-10-2026 anchor |
+| Quarterly                      | 28-02-2027                                     |
+| Half-yearly                    | 30-05-2027                                     |
+| Yearly                         | 30-11-2027                                     |
+
+Two browser tabs reviewed the same November occurrence. The second tab's once edit committed;
+the first tab's stale draft was refused with explicit refresh recovery and did not overwrite it.
+The audit name was restored. Stopping and reloading suppressed the future once-edited occurrence.
+
+Three fictional COP 1 Transactions with Counterparty `PRUEBA QA PATRON 20261015`, dated
+15-07/08/09-2026, produced one historical monthly suggestion through normal scheduled evaluation.
+The UI disclosed incomplete evaluation before it was ready. No plan was created automatically.
+Dismissal and restoration persisted; explicitly linking the suggestion to the existing CICLO plan
+left the plan count unchanged after reload.
+
+The fictional `PRUEBA QA ASOCIACION 20261015` had a COP 2 September expectation. A COP 1 manual
+mark produced partial tracking. Linking the September Transaction without naming the manual mark
+to replace was refused; explicit replacement retained exactly COP 1 registered, COP 1 remaining,
+and one Transacción vinculada instead of adding the two records. The linked state survived release
+and reload. No additional Transaction was created by either tracking action.
+
+The production hosted agent answered a read-only November planning request with the exact two
+plans and dates, COP 2 and USD 3 separately, as one assistant response without a confirmation button.
+This establishes live hosted planning reads, independently of the deterministic canonical tests.
+A subsequent explicit stop request exposed a separate UX defect: an informal model question preceded
+a generic host challenge containing operation JSON and a long command. The follow-up fix gives
+browser lifecycle reviews a host-owned plan name/action/date and explicit approval button while
+retaining exact-input, same-User/channel/session, expiry and one-use authority. Model prose cannot
+produce approval metadata. Direct and recovered browser proposals are covered locally; this UX
+fix still awaits release and its live write rerun. Other operation families retain their existing
+confirmation presentation.
+
 ### Limits and remaining evidence
 
-- Live rerun of the retained-exception fix awaits release; local passing checks do not establish
-  production deployment.
-- Production did not exercise captured-Transaction association, populated discovery review,
-  mixed-Currency plans, all cadences, or two concurrent clients. Their local seams are recorded
-  above; no claim of complete live verification is made.
-- A live WhatsApp/hosted-model planning conversation and a real external MCP client's planning
-  confirmation remain separate from the local canonical/OAuth tests.
+- Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans
+  are retained management history because the product has no plan-deletion action.
+- A real external MCP client's planning confirmation and a live WhatsApp planning conversation
+  remain separate from the local canonical/OAuth tests and the hosted browser conversation.
 - There is no authoritative Account domain to select from. Planning without an Account works;
   unavailable Accounts are not fabricated from hints.
 - New planning does not enable reminders or change existing discovery delivery. Live WhatsApp
@@ -79,6 +127,9 @@ check was skipped because its bridge was not configured; local OAuth confirmatio
 The browser stress case reported zero Axe violations on the populated page and the settled mobile
 detail sheet. These counts include historical recurring/report regressions, not just new planning.
 Repository type checking, ordinary/type-aware lint, formatting and module-dependency checks passed.
+The lifecycle approval follow-up additionally passed **120 hosted-turn/recurring Worker checks**
+and **15 browser checks**, including direct delivery, interrupted delivery recovery and rejection of
+model-written approval prose.
 
 ```sh
 bun run --cwd apps/server test:core

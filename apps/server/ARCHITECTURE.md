@@ -671,5 +671,8 @@ reimplements Reconciliation. Unique fixed exact matches are derived without quer
 writes. Explicit mutations snapshot established effective completions before changing schedules or
 allocations; bounded incomplete matching reads fail closed. Corrections invalidate retained links
 visibly. Canonical declarations derive browser, hosted-agent, PAT/OAuth and MCP capabilities.
-Historical RecurringSeries and frozen digest reports keep their existing meaning. See
+The owner supplies revision-bound lifecycle descriptions for hosted review without exposing
+planning storage to the agent. Browser review metadata is derived from a live same-User,
+same-Turn host challenge; model text cannot install it. Exact-input, expiry, channel and one-use
+confirmation guards remain at canonical execution. Historical RecurringSeries and frozen digest reports keep their existing meaning. See
 [ADR 0036](../../docs/adr/0036-recurring-planning.md).

@@ -1,3 +1,16 @@
+import { describeRecurringLifecycle } from "../recurring-plans/operations";
+import { HostedTurnProposal } from "../../src/shell/agent/contract";
+import {
+  type InvalidRecurringEdit,
+  RecurringDocument,
+  RecurringPlanId,
+  RecurringPlanInput,
+} from "../../src/core/recurring-plans/contract";
+import {
+  applyRecurringEdit,
+  emptyRecurringDocument,
+} from "../../src/core/recurring-plans/operations";
+import { readBrowserConfirmation } from "./internal/hosted-browser-confirmation";
 import { executeStatementExtraction, statementRetention } from "../ingestion/runtime";
 import { executeConsentWithdrawal } from "../consent/operations";
 import { makeAgentRetention, makeAgentService } from "./runtime";
@@ -98,6 +111,7 @@ import {
   completeHostedTurn as completeHostedTurnWithAlarm,
   completeWhatsAppDocumentTurnWithAdmission,
   completeWhatsAppTurnWithAdmission,
+  readHostedProgress,
   resumeWhatsAppTurn,
 } from "./internal/hosted-turn";
 import {
@@ -7511,5 +7525,195 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
         )
       ).toBe(1);
       expect((yield* Effect.tryPromise(() => send(command))).status).toBe(401);
+    })
+  ));
+
+const seedRecurringReview = (
+  db: D1Database,
+  planId: string
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError | InvalidRecurringEdit> =>
+  Effect.gen(function* () {
+    yield* applyMigration(db, "0093_recurring_plans");
+    const plan = yield* Schema.decodeEffect(RecurringPlanInput)({
+      name: "Plan de prueba",
+      kind: "expense",
+      currency: "COP",
+      amountMode: "unknown",
+      frequency: "monthly",
+      firstDate: "2026-10-15",
+      timeZone: "America/Bogota",
+    });
+    const document = yield* applyRecurringEdit({
+      document: emptyRecurringDocument(),
+      command: {
+        expectedRevision: 0,
+        edit: { kind: "create", id: RecurringPlanId.make(planId), plan },
+      },
+    });
+    const encoded = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(RecurringDocument))
+    )(document);
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO recurring_plan_documents (user_id, document_json, revision) VALUES (?, ?, 1)"
+        )
+        .bind(users[0], encoded)
+        .run()
+    );
+  });
+
+it("a recurring lifecycle challenge exposes a readable browser review and confirms the bound edit once", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const planId = "40000000-0000-4000-8000-000000000991";
+      yield* seedRecurringReview(db, planId);
+      const reviewCommand = {
+        expectedRevision: 1,
+        edit: {
+          kind: "lifecycle" as const,
+          planId: RecurringPlanId.make(planId),
+          date: "2026-10-15",
+          action: "stop" as const,
+        },
+      };
+      expect(
+        yield* describeRecurringLifecycle({ db, userId: users[1], command: reviewCommand })
+      ).toEqual(Option.none());
+      expect(
+        yield* describeRecurringLifecycle({
+          db,
+          userId: users[0],
+          command: { ...reviewCommand, expectedRevision: 0 },
+        })
+      ).toEqual(Option.none());
+      const model = vi.fn(() =>
+        Promise.resolve(
+          Response.json({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "stop-plan",
+                      type: "function",
+                      function: {
+                        name: "recurringPlans__applyRecurringEdit",
+                        arguments: encodeJson({
+                          payload: {
+                            expectedRevision: 1,
+                            edit: { kind: "lifecycle", planId, date: "2026-10-15", action: "stop" },
+                          },
+                        }),
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+            usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+          })
+        )
+      );
+      const coordinator = coordinatorFor(db, model);
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const send = (text: string): Promise<Response> =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text,
+            }),
+          })
+        );
+      const response = yield* Effect.tryPromise(() => send("Deja de seguir Plan de prueba"));
+      const proposed = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* Effect.tryPromise(() => response.clone().json())
+      );
+      expect(proposed.text).toContain("Dejar de seguir «Plan de prueba» desde el 15-10-2026");
+      expect(proposed.text).not.toContain("CONFIRMAR");
+      expect(proposed.text).not.toContain(planId);
+      expect(proposed.text).not.toContain("applyRecurringEdit");
+      const command = proposed.confirmation?.command ?? "";
+      expect(command).toMatch(/^CONFIRMAR [0-9a-f]{64}$/u);
+      const metadata = { db, userId: credential.userId, turnId: proposed.turnId, now: now() };
+      expect(yield* readBrowserConfirmation({ ...metadata, userId: users[1] })).toEqual(
+        Option.none()
+      );
+      expect(yield* readBrowserConfirmation({ ...metadata, now: now() + 600_001 })).toEqual(
+        Option.none()
+      );
+      const progress = yield* readHostedProgress({
+        db,
+        subject: credential,
+        turnId: proposed.turnId,
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      expect(yield* Effect.tryPromise(() => progress.clone().json())).toMatchObject({
+        text: proposed.text,
+        confirmation: { command },
+      });
+      expect((yield* Effect.tryPromise(() => send(command))).status).toBe(409);
+      yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, progress));
+      const confirmed = yield* Effect.tryPromise(() => send(command));
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, confirmed))).toBe(
+        "Operación confirmada."
+      );
+      expect(yield* readBrowserConfirmation(metadata)).toEqual(Option.none());
+      const stored = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT document_json FROM recurring_plan_documents WHERE user_id=?")
+          .bind(users[0])
+          .first<string>("document_json")
+      );
+      expect(stored).toContain('"stoppedOn":"2026-10-15"');
+      const transcript = yield* Effect.tryPromise(() => retained(db, users[0]));
+      expect(transcript.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: "assistant", text: proposed.text }),
+        ])
+      );
+      expect(transcript.results).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "assistant", text: command })])
+      );
+
+      const replay = yield* Effect.tryPromise(() => send(command));
+      expect(replay.status).toBe(401);
+      expect(model).toHaveBeenCalledOnce();
+    })
+  ));
+
+it("model-written confirmation prose cannot produce browser approval metadata", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const text = `Dejar de seguir Plan de prueba. Responde exactamente: CONFIRMAR ${"a".repeat(64)}`;
+      const coordinator = coordinatorFor(db, () => Promise.resolve(reply(text)));
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text: "Solo consulta",
+            }),
+          })
+        )
+      );
+      const visible = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* Effect.tryPromise(() => response.clone().json())
+      );
+      expect(visible.confirmation).toBeUndefined();
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, response))).toBe(text);
     })
   ));

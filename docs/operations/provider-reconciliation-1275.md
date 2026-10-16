@@ -100,9 +100,54 @@ disposable rehearsal. Recheck this observation on plan, resource, deployment, ro
 or Access-policy changes. No contract acceptance, provider contact or Fidy User-content inspection
 was needed for the read-only observations above.
 
+## Kapso account observations — 2026-10-15
+
+Restricted evidence reference: `7cf135cf-3161-46a8-b4a1-6e320563046c`, observation version 1.
+Direct authenticated dashboard observations after the sole operator signed in. The project/account
+locator, owner linkage, exact settings, source-page references and unchanged-preference screenshot
+are in the existing restricted evidence directory, outside Git. This is configuration evidence,
+not qualified review, proof of accepted agreement versions or a deletion rehearsal.
+
+- **Project and plan:** the current project is named `fidy`; the approved operator is its sole
+  listed member with role owner. Billing confirms Kapso Free. The older `fiidy` CLI observation
+  remains historical; the displayed names alone do not establish a rename or the same project.
+- **Retention:** the actual settings say WhatsApp history is kept indefinitely on Free. Call
+  records and diagnostic webhook logs have separate schedules. This confirms the already accepted
+  indefinite-history exception; no upgrade or finite conversation expiry is introduced.
+- **Data capture:** audio transcription is set to Both directions and log ingestion is on. The
+  displayed September–October billing period reports zero transcription seconds; that does not
+  establish no earlier audio processing, no future transcription or the actual transcript vendor.
+  No messages, transcripts or audio were opened or generated to identify a vendor.
+- **Improvement preference:** Allow model and product improvement is **on**, using the Free plan
+  default. The UI says owners/admins can turn it off without disabling AI features needed to provide
+  the service, and that changes apply to content created or processed afterward. Its displayed
+  last-update time is retained privately without assuming a timezone. This is a verified account
+  instruction separate from indefinite history, not evidence that the owner approved training by
+  accepting retention. A specific operator decision is pending; the switch and Save preference
+  were left unchanged. Prospective opt-out would not prove erasure of past processing or alter
+  retention.
+- **WhatsApp:** the phone-number page shows no connected production number, WhatsApp account or
+  Meta app, and one active shared-sandbox session. Its enabled webhook targets Fidy's Kapso callback
+  and subscribes to received/sent/delivered/failed message events. The dashboard reports a previous
+  delivered webhook; no new signed callback or Fidy admission test was run. This does not establish
+  a Production Meta business/contract relationship.
+- **Billing evidence:** invoices are available, but no invoice recipient, company linkage or
+  accepted Terms/DPA version/date was established. A Stripe payment facility is visible in Kapso's
+  billing UI; no payment data was entered or purchase/portal action performed. This is an observed
+  provider-account billing boundary, not evidence that Stripe receives Fidy Users' Transactions or
+  replaces Wompi for Fidy Subscription billing.
+
+Next Kapso steps: decide the actual improvement instruction; obtain accepted Terms/DPA and company
+linkage evidence; establish the transcript route and applicable subprocessors/locations; review
+scope-specific rights/incident support and residual retention; then approve and execute a disposable
+provider rehearsal. Automation/connected-app configuration beyond the observed settings and period
+counters remains unverified. Recheck on project, plan, preference, transcription, number, webhook,
+subprocessor or agreement changes. No account preference, contract, message or provider data was
+changed during this inspection.
+
 ## Flow reconciliation
 
-The Cloudflare technical fields specifically observed above are **partially verified**; other
+The Cloudflare and Kapso technical fields specifically observed above are **partially verified**; other
 account fields remain **unverified**. Every row still has reviewer **not recorded** and owner
 **obarboza@fidyapp.com**. None has an approved legal classification or international mechanism in
 this record. The next steps are specific to the flow; do not treat these rows as a completed review.
@@ -163,9 +208,10 @@ The policy's card-focused payment description must be reconciled with actual wal
 before claiming all enabled billing methods are covered. The newer Kapso subprocessor publication
 must be compared to the actual transcript route. Separately inspect Kapso's Free feature/model
 improvement instruction and Resend's disclosed trust/safety sampling route against the account and
-approved purposes. The accepted Kapso retention exception grants no training authorization. No
-account preference was inspected or changed here; any verified conflict needs its own explicit
-operator/legal decision. Do not name a candidate as Fidy's active processor,
+approved purposes. The accepted Kapso retention exception grants no training authorization. The
+Kapso improvement preference was inspected and is on, but was not changed; its decision and any
+verified purpose conflict require explicit operator/legal disposition. No Resend account preference
+has been inspected here. Do not name a candidate as Fidy's active processor,
 claim finite Kapso expiry, promise completed erasure from a request receipt, promise Colombian
 residency or treat a public agreement as accepted. Record any needed copy correction with the
 reviewer's approved findings first. Then update the current artifact and metadata/digests together,
@@ -175,8 +221,8 @@ retain historical snapshots and run the exact-copy tests below.
 
 Use the [provider request procedure](provider-rights-1275.md) with the approved #1273 entitlement and
 #1274 erasure decision. It is an execution draft pending per-flow review and available-account
-testing. It introduces no new identity checks or provider deletion API. The Cloudflare account
-inspection above is read-only configuration evidence; no provider deletion/support rehearsal has
+testing. It introduces no new identity checks or provider deletion API. The Cloudflare and Kapso
+inspections above are read-only configuration evidence; no provider deletion/support rehearsal has
 been performed for #1275. Local native tests do not establish provider completion.
 
 #1275 stays open until every actual active flow has current restricted evidence and qualified review

@@ -11,6 +11,8 @@ import { UserId } from "../../src/core/identity/contract";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { applyTestMigration } from "../d1-test-fixture";
+import coreWorker, { UserTransactionCoordinator } from "../core-worker";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Fiber, Option, Schema } from "effect";
@@ -1200,6 +1202,119 @@ const cancel = (db: D1Database, now: number, subjectUser = userId): Effect.Effec
       input: {},
     },
   });
+it("cancels a paid Subscription through a write-scoped PAT", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("card");
+      yield* fromPromise(() =>
+        db.exec(
+          "CREATE TABLE pats (id TEXT PRIMARY KEY,user_id TEXT,bearer_digest BLOB,scopes_json TEXT,expires_at_ms INTEGER,revoked_at_ms INTEGER,last_used_at_ms INTEGER) STRICT;"
+        )
+      );
+      yield* fromPromise(() =>
+        db
+          .prepare('INSERT INTO pats VALUES (?, ?, ?, \'["read","write"]\', ?, NULL, NULL)')
+          .bind(paymentRequestId, userId, new Uint8Array(32), 9000000000000)
+          .run()
+      );
+      const response = yield* executeCanonicalWork({
+        db,
+        subject: {
+          patId: paymentRequestId,
+          userId,
+          digest: new Uint8Array(32),
+          requiredScope: Option.some("write"),
+        },
+        current: dueAt - 1000,
+        bucket: Option.none(),
+        hostedFence: Option.none(),
+        inference: Option.none(),
+        oauthConfirmation: Option.none(),
+        work: {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("subscription.cancelSubscription"),
+          input: {},
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(yield* fromPromise(() => response.json())).toMatchObject({
+        data: { sourceCancellation: "detached" },
+      });
+    })
+  ));
+it("routes HTTP cancellation through the User coordinator and preserves paid access", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("card");
+      yield* fromPromise(() =>
+        db.exec(
+          "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER) STRICT;"
+        )
+      );
+      for (const name of [
+        "0032_commercial_allowances.sql",
+        "0033_canonical_request_protection.sql",
+      ]) {
+        yield* fromPromise(() =>
+          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
+        );
+      }
+      const bearer = "1".repeat(43);
+      const digest = new Uint8Array(
+        yield* fromPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer)))
+      );
+      yield* fromPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET token_digest=? WHERE id=?")
+          .bind(digest, enrollmentId)
+          .run()
+      );
+      const environment: Parameters<typeof coreWorker.fetch>[1] = {
+        DB: db,
+        AI: { run: () => Promise.reject(new Error("unused")) },
+        HOSTED_AI_MODEL: approvedWorkersAiModel,
+        CONTRACT_DIGEST: "a".repeat(64),
+        RELEASE_GIT_SHA: "a".repeat(40),
+        BROWSER_ORIGIN: "https://app.fidyapp.com",
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: "",
+        WOMPI_PRIVATE_KEY: "",
+        WOMPI_INTEGRITY_SECRET: "",
+        KAPSO_API_KEY: "",
+        KAPSO_WEBHOOK_SECRET: "",
+        WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+        WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
+        CLOUDFLARE_ACCESS_ISSUER: "",
+        CLOUDFLARE_ACCESS_AUDIENCE: "",
+        USER_TRANSACTION_COORDINATOR: {
+          getByName: (name) => ({
+            fetch: (request) =>
+              new UserTransactionCoordinator(
+                { id: { name }, storage: { setAlarm: () => Promise.reject(new Error("unused")) } },
+                environment
+              ).fetch(new Request(request)),
+          }),
+        },
+      };
+      const response = yield* fromPromise(() =>
+        coreWorker.fetch(
+          new Request("https://core.internal/subscription/cancellation", {
+            method: "POST",
+            headers: {
+              "Fidy-Session-Binding": enrollmentId,
+              cookie: `__Host-fidy_session=${bearer}`,
+              origin: "https://app.fidyapp.com",
+            },
+          }),
+          environment
+        )
+      );
+      expect(response.status, yield* fromPromise(() => response.clone().text())).toBe(200);
+      expect(yield* fromPromise(() => response.json())).toMatchObject({
+        data: { sourceCancellation: "detached", paidThrough: "2026-10-13T15:00:00.000Z" },
+      });
+    })
+  ));
 it.each(["card", "nequi", "daviplata"] as const)(
   "cancels $0 renewal idempotently while preserving the paid period and fencing queued collection",
   (method) =>

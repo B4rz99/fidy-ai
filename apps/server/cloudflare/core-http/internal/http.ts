@@ -1366,6 +1366,13 @@ const executeCanonicalWork = (
   }
   if (operation.id === "recurringPlans.applyRecurringEdit") return recurringEditResponse(input);
   if (operation.id === "connections.connectInstitution") return connectInstitutionResponse(input);
+  if (operation.id === "subscription.cancelSubscription") {
+    return sendToCoordinator({
+      environment,
+      subject,
+      work: canonicalCall(operation.id, {}),
+    }).pipe(Effect.orElseSucceed(unavailable));
+  }
   const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
   const otherOwner = Option.orElse(budgetResponse(input), () =>
     Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))

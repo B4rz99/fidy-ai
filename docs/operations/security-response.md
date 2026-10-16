@@ -5,6 +5,10 @@ Use with [production recovery](production-recovery.md) and
 [background-work monitoring](cloudflare-background-work.md).
 This procedure does not widen production access, permit destructive recovery, or enable MCP launch.
 
+Use [privacy decisions](privacy-decisions-1276.md) for the separate privacy assessment, RNBD
+applicability and recipient-specific reporting decision. It consumes this technical handoff and
+#1262's actual evidence; a privacy tabletop does not verify technical detection or live response.
+
 ## Ownership and detection
 
 The sole Production operator owns triage, containment, recovery and the restricted incident record.

@@ -73,6 +73,13 @@ cancellation behavior, provider error mapping, and metadata-only telemetry. It m
 the binding or configured model is absent. It must not expose raw prompts, replies, tool arguments, or
 provider payloads to logs or telemetry.
 
+Gemma's [canonical tool template](https://huggingface.co/google/gemma-4-26B-A4B-it/blob/2dc3dccd5a7e302f0ac2a185a4e7e5265e0868d8/chat_template.jinja)
+renders parameter descriptions but omits JSON Schema union branches and patterns. The provider-schema
+adapter derives compact shape descriptions from the reflected canonical schema so discriminants,
+required fields, and calendar formats reach the model. Keep the original schema and canonical
+decoding; these descriptions provide guidance, never execution authority. Do not duplicate a
+handwritten command catalog. Test the complete tool catalog against the request capacity bound.
+
 Provider-specific wire details remain inside the adapter. Do not leak a provider SDK type, token
 counter, error class, model name, or request shape into core or the provider-neutral contract unless
 that fact is deliberately part of the closed application contract.

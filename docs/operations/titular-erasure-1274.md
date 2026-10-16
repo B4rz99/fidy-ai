@@ -1,7 +1,7 @@
 # Whole-Titular erasure — #1274
 
-Implementation and local evidence; this document does not record a Production release or a live
-processor deletion. This extends the approved [#1273 procedure](titular-requests-1273.md).
+Implementation, operator procedure and verification evidence. The Production bootstrap and release
+proof below do not establish execution of a real erasure case or processor deletion. This extends the approved [#1273 procedure](titular-requests-1273.md).
 `obarboza@fidyapp.com` remains the sole operator. There is no backup operator and no new document,
 selfie or emailed-ID verification. Exceptional entitlement remains #1326.
 
@@ -234,8 +234,19 @@ case, and no `recovery/generation` object in the newly provisioned private bucke
 correctly refusing uninitialized access. A separate ingress regression exposed why the operator
 could not bootstrap the candidate: its routing override was stripped before the private Core.
 The native journey now checks initialization through ingress and still refuses wrong account/audience,
-machine, expired, overlong and forged assertions before continuing the owned restore exercise. This records diagnosis and local verification;
-it does not claim successful production initialization or release.
+machine, expired, overlong and forged assertions before continuing the owned restore exercise. The routing fix was merged in [PR #1351](https://github.com/B4rz99/fidy-ai/pull/1351)
+as `0f2df68a9233094e40223fab15d167b671cced24`. At 12:17:38 UTC on 16-10-2026, the dedicated
+human operator Initialize returned 204 with `no-store` through that exact zero-traffic ingress/Core
+pair. A subsequent independent read found `recovery/generation` equal to `initial`. No direct bucket
+or D1 bootstrap write was used, and the temporary assertion copy was removed. This establishes the
+one-time initialization, not execution of an erasure case or provider deletion.
+
+[Production run 38899280216](https://github.com/B4rz99/fidy-ai/actions/runs/38899280216) then
+passed both candidate/intermediate pairings, promoted the exact tested versions and passed the normal
+traffic probe. Public health reported `available`, revision
+`0f2df68a9233094e40223fab15d167b671cced24` and contract digest
+`44612b70c28a1d5456d7319ed3563a62176294f0fd59efc5ffc9d55ec67bd403`. This verifies guarded
+admission after initialization; it is not a live restore or erasure rehearsal.
 
 Before any restore, keep public traffic blocked and preserve the independent erasure bucket. Restore
 D1, then apply the current migrations using the normal infrastructure release procedure before

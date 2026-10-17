@@ -49,12 +49,14 @@ const sweepBucket = (input: ControlSweep): Effect.Effect<void, ErasureUnavailabl
         etag: object.etag,
       });
     }
+    const nextCursor = page.truncated ? page.cursor : "";
+    if ((stored ?? "") === nextCursor) return;
     yield* io(() =>
       input.db
         .prepare(
-          "INSERT INTO erasure_control_sweeps(bucket,cursor) VALUES(?,?) ON CONFLICT(bucket) DO UPDATE SET cursor=excluded.cursor"
+          "INSERT INTO erasure_control_sweeps(bucket,cursor) VALUES(?,?) ON CONFLICT(bucket) DO UPDATE SET cursor=excluded.cursor WHERE cursor <> excluded.cursor"
         )
-        .bind(input.id, page.truncated ? page.cursor : "")
+        .bind(input.id, nextCursor)
         .run()
     );
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));

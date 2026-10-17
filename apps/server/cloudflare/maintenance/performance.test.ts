@@ -2,6 +2,7 @@ import { Clock, Config, Effect, Exit, Logger, Option, Schema, Tracer } from "eff
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage, observeRetentionCost } from "../d1-test-fixture";
 import { maintenancePerformanceEnvironment } from "../maintenance-performance.test-fixture";
+import { withErasureRecovery } from "../erasure/runtime";
 import { runCoreMaintenance, runEmailMaintenance } from "./runtime";
 
 const enabled =
@@ -54,6 +55,7 @@ it.skipIf(!enabled)(
                 .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
             })
           );
+          yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
           const now = yield* Clock.currentTimeMillis;
           yield* Effect.tryPromise(() =>
             db.batch([
@@ -147,7 +149,11 @@ it.skipIf(!enabled)(
               },
             });
             const environment = maintenancePerformanceEnvironment({
-              db: measured.database,
+              db: withErasureRecovery({
+                DB: measured.database,
+                ERASURE_REQUIRED: "true",
+                ERASURE_BUCKET: bucket,
+              }).DB,
               bucket,
               queue,
               workflow,

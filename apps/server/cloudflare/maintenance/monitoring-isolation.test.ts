@@ -79,6 +79,17 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
           db.prepare("INSERT INTO resource_admission_grants VALUES ('workers-ai-expired',1,1)"),
         ])
       );
+      const current = Math.floor((yield* Clock.currentTimeMillis) / 300_000) * 300_000 + 5_000;
+      const liveClock = yield* Clock.Clock;
+      const canaryClock: Clock.Clock = {
+        currentTimeMillis: Effect.succeed(current),
+        currentTimeMillisUnsafe: () => current,
+        currentTimeNanos: liveClock.currentTimeNanos,
+        currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+        monotonicTimeNanos: liveClock.monotonicTimeNanos,
+        monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+        sleep: (duration) => liveClock.sleep(duration),
+      };
       const held = Promise.withResolvers<QueueSendResponse>();
       const send = vi.fn(() => held.promise);
       try {
@@ -89,7 +100,7 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
                 ASYNC_HEALTH_ENABLED: Option.some("enabled"),
                 OPERATIONAL_CANARY_QUEUE: Option.some({ send }),
               })
-            ),
+            ).pipe(Effect.provideService(Clock.Clock, canaryClock)),
             { signal: AbortSignal.timeout(5_000) }
           )
         );

@@ -6,6 +6,22 @@ completed. After commit, Core tries an identity-targeted offer within its execut
 The offer has a two-second budget. Failure leaves the accepted response intact, and the next minute's
 cron can retry after the shared publication cooldown.
 
+## Idle D1 budget
+
+Core still scans accepted work every minute. Unchanged operational health snapshots refresh every
+five minutes; state changes persist immediately, and older observations cannot replace newer ones.
+The Queue→Workflow canary publishes in the first minute of each five-minute period, with the existing
+ten-minute stale threshold. A missed publication window is detected by that threshold rather than
+replayed on every subsequent minute. Repeated empty/final-page control-object sweeps do not rewrite
+a cursor; multi-page cursors still advance durably and lawful-hold checks remain unchanged.
+
+`maintenance/idle-budget.test.ts` installs every migration in native D1, applies the production
+recovery wrapper, and runs Core, Email and all control-bucket sweeps over a complete five-minute
+steady-state cycle. It budgets downstream canary writes and asserts fewer than 10,000 projected daily
+idle writes (10% of the Free allowance) and 750,000 reads. This protects idle overhead, not total
+account usage: real work, incidents and other databases still consume the account-wide allowance.
+The opt-in performance benchmark also includes the recovery guard.
+
 ## Operational signals
 
 The Production stack enables Core's `ASYNC_HEALTH_ENABLED` inspection and binds `AsyncDeadLetters`.

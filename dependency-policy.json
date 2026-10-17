@@ -56,32 +56,74 @@
     },
     {
       "name": "@effect/platform-bun",
-      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
-      "until": "2026-10-19T00:00:00Z"
-    },
-    {
-      "name": "@effect/platform-node",
-      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
-      "until": "2026-10-19T00:00:00Z"
-    },
-    {
-      "name": "@effect/sql-d1",
-      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "manifest": "apps/cli/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
       "until": "2026-10-19T00:00:00Z"
     },
     {
       "name": "@effect/vitest",
-      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "manifest": "apps/cli/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/sql-d1",
+      "manifest": "apps/server/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-bun",
+      "manifest": "apps/server/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-node",
+      "manifest": "apps/server/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/vitest",
+      "manifest": "apps/server/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
       "until": "2026-10-19T00:00:00Z"
     },
     {
       "name": "@effect/atom-react",
-      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "manifest": "apps/web/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
       "until": "2026-10-19T00:00:00Z"
     },
     {
       "name": "@effect/platform-browser",
-      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "manifest": "apps/web/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-bun",
+      "manifest": "apps/web/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-bun",
+      "manifest": "infra/cloudflare/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/vitest",
+      "manifest": "infra/cloudflare/package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-bun",
+      "manifest": "package.json",
+      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
       "until": "2026-10-19T00:00:00Z"
     }
   ],

@@ -1,0 +1,27 @@
+apps/web/src/features/needs-review/fields.tsx
+  s_ede1c3735d03b7::t_6ea3797771fa2b 1,27-32
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_6ea3797771fa2b 1006-1022
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_ede1c3735d03b7::t_a95a6626792503 36
+apps/web/e2e/real-core-fixture.ts
+  s_ede1c3735d03b7::t_fb2fc85a543421 96,281
+apps/web/e2e/workspace-navigation.spec.ts
+  s_ede1c3735d03b7::t_38e2ab903139ab 186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8f7f1d3704c339ec649aeaf8176fcec048f3db79",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

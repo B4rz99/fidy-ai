@@ -961,8 +961,15 @@ const openReviewSibling = (page: Page): Promise<void> =>
       ).toBeVisible()
     );
 
-for (const picker of ["Fecha del movimiento", "Hora del movimiento"]) {
-  test(`dismisses ${picker} when leaving the retained review`, ({ page, request }) =>
+const reviewPickers = [
+  { label: "Fecha del movimiento", trigger: "button", popup: "dialog" },
+  { label: "Hora del movimiento", trigger: "button", popup: "dialog" },
+  { label: "Moneda", trigger: "combobox", popup: "listbox" },
+  { label: "Categoría", trigger: "button", popup: "menu" },
+  { label: "Tipo de transacción", trigger: "button", popup: "menu" },
+] as const;
+for (const picker of reviewPickers) {
+  test(`dismisses ${picker.label} when leaving the retained review`, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
@@ -991,15 +998,15 @@ for (const picker of ["Fecha del movimiento", "Hora del movimiento"]) {
         yield* Effect.tryPromise(() => page.goto("/app/recurring"));
         yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
         yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: picker, exact: true }).click()
+          page.getByRole(picker.trigger, { name: picker.label, exact: true }).click()
         );
-        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
+        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());
         yield* Effect.tryPromise(() =>
-          expect(page.getByRole("dialog", { includeHidden: true })).toHaveCount(0)
+          expect(page.getByRole(picker.popup, { includeHidden: true })).toHaveCount(0)
         );
         yield* Effect.tryPromise(() => page.goForward());
-        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
         yield* Effect.tryPromise(() =>
           expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
         );
@@ -1008,15 +1015,15 @@ for (const picker of ["Fecha del movimiento", "Hora del movimiento"]) {
         );
         yield* Effect.tryPromise(() => page.getByRole("button", { name: /^Pendientes/u }).click());
         yield* Effect.tryPromise(() =>
-          page.getByRole("button", { name: picker, exact: true }).click()
+          page.getByRole(picker.trigger, { name: picker.label, exact: true }).click()
         );
-        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
+        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toBeVisible());
         yield* Effect.tryPromise(() => page.goBack());
         yield* Effect.tryPromise(() =>
-          expect(page.getByRole("dialog", { includeHidden: true })).toHaveCount(0)
+          expect(page.getByRole(picker.popup, { includeHidden: true })).toHaveCount(0)
         );
         yield* Effect.tryPromise(() => page.goForward());
-        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+        yield* Effect.tryPromise(() => expect(page.getByRole(picker.popup)).toHaveCount(0));
         yield* Effect.tryPromise(() =>
           expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
         );

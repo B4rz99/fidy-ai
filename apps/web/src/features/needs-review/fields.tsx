@@ -4,7 +4,8 @@ import { CalendarField } from "@/ui/components/calendar-field";
 import { Currency } from "@/transport/client";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { Option } from "effect";
-import type { JSX } from "react";
+import { type JSX, memo } from "react";
+import { useDismissedPickerScope } from "@/ui/use-dismissed-picker-scope";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
@@ -30,10 +31,15 @@ export const ReviewFields = (props: Props): JSX.Element => {
       shouldThrow: false,
       select: (match) => (match.search.status ?? "pending") === "pending",
     }) ?? false;
-  return <ReviewFieldControls key={String(active)} {...props} locked={props.locked || !active} />;
+  const { generation, scope } = useDismissedPickerScope(active);
+  return (
+    <div hidden={!active} inert={!active} ref={scope}>
+      <ReviewFieldControls key={generation} {...props} />
+    </div>
+  );
 };
 
-const ReviewFieldControls = (props: Props): JSX.Element => (
+const ReviewFieldControls = memo((props: Props): JSX.Element => (
   <div className="grid gap-3">
     <ReviewCounterparty {...props} />
     <div className="grid grid-cols-2 items-start gap-3">
@@ -78,7 +84,7 @@ const ReviewFieldControls = (props: Props): JSX.Element => (
       <ReviewCategory {...props} />
     </div>
   </div>
-);
+));
 const ReviewCounterparty = (props: Props): JSX.Element => (
   <div className="grid content-start gap-2.5">
     <Label htmlFor="review-counterparty">Contraparte (opcional)</Label>

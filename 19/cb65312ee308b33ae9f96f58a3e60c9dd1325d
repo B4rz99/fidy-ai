@@ -1,0 +1,44 @@
+apps/server/cloudflare/erasure/internal/generation.ts
+  s_b75995d26622a8::t_21e4a8e7e9aa0b 43-47
+apps/web/src/features/recurring/FEATURE.md
+  s_b75995d26622a8::t_d0bab278765a4d 236-244
+apps/server/cloudflare/erasure/recovery.test.ts
+  s_b75995d26622a8::t_af05f5bd55c389 13,27-29,31-37,52,74-75,96-97
+  s_b75995d26622a8::t_db1d4cf9ae9f6a 40-43,47-48,61-66,68,79-80,85-89,91
+  s_b75995d26622a8::t_b96654fb882f1a 24-26
+  s_b75995d26622a8::t_c8893c97672a9e 30
+  s_b75995d26622a8::t_e7ac88f6b34b81 38-39
+  s_b75995d26622a8::t_aab9be69725d78 44-46
+  s_b75995d26622a8::t_30aa121356f986 49-51
+  s_b75995d26622a8::t_485fd2948068f7 53-55,58-60
+  s_b75995d26622a8::t_454010f10745e2 67
+  s_b75995d26622a8::t_b593936c38c45e 69-73
+  s_b75995d26622a8::t_0d9b736c1c7f7d 76-78
+  s_b75995d26622a8::t_fff4cc2242f5f9 81-84
+  s_b75995d26622a8::t_306889358de78c 90
+  s_b75995d26622a8::t_e1766e86863f52 92-95
+  s_b75995d26622a8::t_cc8d4df650ce1f 98-100
+  s_b75995d26622a8::t_4e2d48d421d385 20-23,56-57,101
+apps/web/src/features/agent/FEATURE.md
+  s_b75995d26622a8::t_d0bab278765a4d 75-94
+apps/server/ARCHITECTURE.md
+  s_b75995d26622a8::t_3395a3bbfc75f5 133-134
+  s_b75995d26622a8::t_395a6af55f5eff 132
+  s_b75995d26622a8::t_d0bab278765a4d 130-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "19cb65312ee308b33ae9f96f58a3e60c9dd1325d",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+apps/web/e2e/budgets.spec.ts
+  s_ede1c3735d03b7::t_4e7a3b97a76934 9,344
+apps/web/e2e/workspace-navigation.spec.ts
+  s_ede1c3735d03b7::t_075b20e979cd04 194-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1234da8f9cbe50506e1f4ebe07ff13f68d8e9c10",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

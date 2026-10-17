@@ -127,9 +127,11 @@ D1, private original buckets, restricted retained copies and processor work have
 checkpoints. Reviewed cases, original locators, held records and recovery generation live in the
 private erasure bucket outside D1. Every normal native database unit asserts that external generation
 with its D1 work, including Sessions. Missing registry/checkpoint configuration refuses normal reads
-and writes. First-release initialization is a separate operator action; it cannot reset a registry
-after an approved case. A restored D1 remains fenced until independent case replay has finished
-native dispositions and the operator release predicate succeeds. The maintenance escape path reads
+and writes. The assertion is a read-only SQL expression that raises a native error on mismatch;
+it remains inside the same atomic batch, so guarded reads do not consume D1 writes and a failed
+assertion rolls back the whole batch. First-release initialization is a separate operator action;
+it cannot reset a registry after an approved case. A restored D1 remains fenced until independent
+case replay has finished native dispositions and the operator release predicate succeeds. The maintenance escape path reads
 only purpose-qualified erasure controls, never ordinary restored User content.
 
 For first-release bootstrap, native POSTs to the dedicated erasure operator path may preserve

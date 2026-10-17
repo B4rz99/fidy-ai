@@ -72,6 +72,26 @@ successful lifecycle change. [PR #1358](https://github.com/B4rz99/fidy-ai/pull/1
 ingress fix. Deployment and recovery of the retained production Turn still need verification;
 the synthetic plan has not yet been claimed as stopped.
 
+The merged ingress fix at `6ebada00c01afa5b33acd06f99657a1dc0487099` passed CI, but both
+attempts of [production run 39054872325](https://github.com/B4rz99/fidy-ai/actions/runs/39054872325)
+failed the stable Worker-pair capture before candidate upload. The live release remained
+`15a3408c229e9e4365da4c6ccba377a6d8865010`. Session binding and consent returned HTTP 503;
+scoped Core telemetry showed platform outcome `ok`, 4–5 ms CPU and no platform exception.
+The independently read D1 and R2 recovery generations matched. D1 analytics over an 18-hour
+window reported 102,734 rows written across the ten returned query groups, including 71,018
+recovery-assertion writes in the earlier top-five query sample. This suggests D1 write-quota
+exhaustion; it does not establish a provider quota error or an exact UTC-day account total.
+The authenticated Cloudflare dashboard was unavailable without sign-in. No quota, registry,
+deployment safeguard or billing setting was changed.
+
+A native D1 regression reproduced one write for a successful recovery assertion. Replacing its
+INSERT with a read-only SQL assertion reduced that batch to zero rows written. The assertion
+still runs inside the native atomic batch and aborts on missing or mismatched generations;
+an additional regression proves that a later failed assertion rolls back earlier writes and
+the generation update. The combined recovery, restore, orchestration and recurring-plan suite
+passed 25 checks. This is local evidence; deployment and the retained hosted Turn still require
+production verification.
+
 On 2026-10-11 at revision `b131e61435ec63c57470f57ed1ad3409261f0005`, the combined Transactions/chat rendered feature suite passed 50 checks; `application.test.tsx` passed 24 checks; Transactions and hosted-session Core tests passed 33 checks. Counts include neighbouring capabilities and are not all chat tests.
 
 The deterministic hosted inference suite passed 37 checks, including date-only conformance. The combined Transaction/HostedTurn actual local Worker/D1 suite passed 187 checks, including exact once-only deletion confirmation. The built-browser Transactions journeys passed 14 checks. Across these commands, 345 checks passed; no live model call was required.

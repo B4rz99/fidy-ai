@@ -1,0 +1,24 @@
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_67ec7f90bef508 964-972,1001,1003,1006,1009,1018,1020,1023,1026
+apps/web/src/ui/use-dismissed-picker-scope.ts
+  s_ede1c3735d03b7::t_f20251bd505e8a 3
+  s_ede1c3735d03b7::t_28dd773ee16e71 1-2,4-24
+apps/web/src/features/needs-review/fields.tsx
+  s_ede1c3735d03b7::t_bd00b6a71c9d3f 7-8,34-39,42,87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b5bc51616bdc4f1615ac74380649ce365b823602",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

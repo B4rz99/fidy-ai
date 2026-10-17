@@ -67,7 +67,10 @@ const merchant = JSON.stringify({
   },
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 const setup = (): Promise<{
   db: D1Database;
@@ -190,6 +193,252 @@ const setup = (): Promise<{
       };
     })
   );
+
+it.each([
+  { replaceFailedSource: false, outcome: "DECLINED", creationLost: false },
+  { replaceFailedSource: true, outcome: "DECLINED", creationLost: false },
+  { replaceFailedSource: true, outcome: "PENDING", creationLost: false },
+  { replaceFailedSource: true, outcome: "APPROVED", creationLost: false },
+  { replaceFailedSource: true, outcome: "DECLINED", creationLost: true },
+  { replaceFailedSource: true, outcome: "ERROR", creationLost: false },
+] as const)(
+  "guards explicit card retry: $outcome, replacement $replaceFailedSource, lost response $creationLost",
+  ({ replaceFailedSource, outcome, creationLost }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        const { environment, request } = yield* fromTestPromise(setup);
+        let now = yield* Clock.currentTimeMillis;
+        let reference = "";
+        let sourceCreations = 0;
+        let collections = 0;
+        const provider = vi.fn((url: URL, init?: RequestInit): Promise<Response> =>
+          (url.pathname === "/v1/transactions" && init?.method === "POST"
+            ? new Request(url, init).json().then((body: unknown) => {
+                reference = Schema.decodeUnknownSync(Schema.Struct({ reference: Schema.String }))(
+                  body
+                ).reference;
+                collections += 1;
+                if (creationLost) throw new Error("Synthetic lost creation response");
+              })
+            : Promise.resolve()
+          ).then(() => {
+            if (url.pathname === "/v1/payment_sources" && init?.method === "POST") {
+              sourceCreations += 1;
+            }
+            let body: string;
+            if (url.pathname.startsWith("/v1/payment_sources")) {
+              body = JSON.stringify({
+                data: {
+                  id: 3890 + sourceCreations,
+                  type: "CARD",
+                  status: "AVAILABLE",
+                  customer_email: "payer@example.com",
+                },
+              });
+            } else if (url.pathname.startsWith("/v1/transactions")) {
+              const currentOutcome = collections > 1 ? "APPROVED" : outcome;
+              body = JSON.stringify({
+                data: {
+                  id: `checkout-declined-${Math.max(1, collections)}`,
+                  reference,
+                  status: currentOutcome,
+                  amount_in_cents: 990000,
+                  currency: "COP",
+                  finalized_at:
+                    currentOutcome === "PENDING"
+                      ? null
+                      : DateTime.formatIso(DateTime.makeUnsafe(now - 1000)),
+                },
+              });
+            } else {
+              body = providerBody(url, "AVAILABLE");
+            }
+            return new Response(body, { status: 200 });
+          })
+        );
+        vi.stubGlobal("fetch", provider);
+        const prepare = (): Promise<Response> =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+          });
+        const first = yield* fromTestPromise(prepare);
+        const enrollment = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => first.json())
+        );
+        const decisions = {
+          acceptedEndUserPolicy: true,
+          acceptedPersonalDataAuthorization: true,
+          authorizedRecurringCharges: true,
+        };
+        const submitted = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: enrollment.enrollmentId,
+              paymentRequestId: "30000000-0000-4000-8000-000000000081",
+              paymentSourceMode: "create",
+              billingEmail: "payer@example.com",
+              decisions,
+              cardToken: "tok_test_declined",
+            }),
+          })
+        );
+        const payment = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+          yield* fromTestPromise(() => submitted.json())
+        );
+        if (payment.status !== "payment-pending") throw new Error("Expected pending payment");
+        const pendingPreparation = yield* fromTestPromise(prepare);
+        const pendingEnrollment = yield* Schema.decodeUnknownEffect(
+          Schema.toCodecJson(PaymentEnrollment)
+        )(yield* fromTestPromise(() => pendingPreparation.json()));
+        const refusedReplacement = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId,
+              replaceFailedSource: true,
+            }),
+          })
+        );
+        expect(refusedReplacement.status).not.toBe(200);
+        const retainedPreparation = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request(
+              `/web/subscription/payment-enrollments/${pendingEnrollment.enrollmentId}`
+            ),
+          })
+        );
+        expect(yield* fromTestPromise(() => retainedPreparation.json())).toMatchObject({
+          status: "prepared",
+        });
+        const activity = (
+          _name: string,
+          _options: unknown,
+          work: () => Promise<void>
+        ): Promise<void> => work();
+        yield* fromTestPromise(() =>
+          runBillingCollectionWorkflow({
+            environment,
+            activity,
+            payload: { version: 1, attemptId: payment.billingAttempt.id },
+          })
+        );
+        now += 181_000;
+        vi.setSystemTime(now);
+        yield* fromTestPromise(() =>
+          runBillingCollectionWorkflow({
+            environment,
+            activity,
+            payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-1" },
+          })
+        );
+        now += 181_000;
+        vi.setSystemTime(now);
+        yield* fromTestPromise(() =>
+          runBillingCollectionWorkflow({
+            environment,
+            activity,
+            payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-1" },
+          })
+        );
+        const status = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request(`/web/subscription/billing-attempts/${payment.billingAttempt.id}`),
+          })
+        );
+        expect(yield* fromTestPromise(() => status.json())).toMatchObject({
+          status: (
+            {
+              PENDING: "pending",
+              APPROVED: "succeeded",
+              DECLINED: "failed",
+              ERROR: "failed",
+            } as const
+          )[outcome],
+        });
+        const next = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId,
+              replaceFailedSource,
+            }),
+          })
+        );
+        if (outcome !== "DECLINED" || creationLost) {
+          expect(next.status).not.toBe(200);
+          expect(sourceCreations).toBe(1);
+          return;
+        }
+        expect(next.status).toBe(200);
+        const nextEnrollment = yield* Schema.decodeUnknownEffect(
+          Schema.toCodecJson(PaymentEnrollment)
+        )(yield* fromTestPromise(() => next.json()));
+        expect(nextEnrollment).toMatchObject({
+          paymentSourceMode: replaceFailedSource ? "create" : "reuse",
+        });
+        const retry = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: nextEnrollment.enrollmentId,
+              paymentRequestId: "30000000-0000-4000-8000-000000000082",
+              paymentSourceMode: replaceFailedSource ? "create" : "reuse",
+              billingEmail: "payer@example.com",
+              decisions,
+              ...(replaceFailedSource ? { cardToken: "tok_test_replacement" } : {}),
+            }),
+          })
+        );
+        expect(retry.status).toBe(200);
+        const retried = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+          yield* fromTestPromise(() => retry.json())
+        );
+        expect(retried).toMatchObject({
+          billingAttempt: { status: "pending" },
+        });
+        expect(
+          provider.mock.calls.filter(
+            ([url, init]) => url.pathname === "/v1/transactions" && init?.method === "POST"
+          )
+        ).toHaveLength(1);
+        if (retried.status !== "payment-pending") throw new Error("Expected pending retry");
+        yield* fromTestPromise(() =>
+          runBillingCollectionWorkflow({
+            environment,
+            activity,
+            payload: { version: 1, attemptId: retried.billingAttempt.id },
+          })
+        );
+        expect(collections).toBe(2);
+        expect(
+          (yield* fromTestPromise(() =>
+            environment.DB.prepare(
+              "SELECT status FROM billing_attempts ORDER BY created_at_ms"
+            ).all()
+          )).results
+        ).toEqual([{ status: "failed" }, { status: "succeeded" }]);
+        expect(
+          yield* fromTestPromise(() =>
+            environment.DB.prepare("SELECT count(*) AS count FROM billing_paid_periods").first(
+              "count"
+            )
+          )
+        ).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            environment.DB.prepare("SELECT count(*) AS count FROM card_payment_sources").first(
+              "count"
+            )
+          )
+        ).toBe(replaceFailedSource ? 2 : 1);
+      })
+    )
+);
 
 it("shows enrollment availability to a signed-in User without an optional mailbox credential", () =>
   Effect.runPromise(

@@ -233,6 +233,7 @@ const replacementPaths = [
   emailReplacementOperations.request.path,
   emailReplacementOperations.complete.path,
 ] as const;
+const erasureSupportPath = "/internal/titular-erasure";
 const supportRecoveryPath = "/internal/support-recovery";
 const refundMethods = (path: string): ReadonlyArray<string> =>
   path === refundSupportBasePath ? ["POST"] : ["GET"];
@@ -248,6 +249,8 @@ const postPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
   supportRecoveryPath,
+  erasureSupportPath,
+  "/web/privacy/erasure",
   microsoftProviderPaths.start,
   microsoftProviderPaths.status,
   microsoftProviderPaths.complete,
@@ -407,7 +410,7 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   if (path === callbackPath || path === wompiBillingEventPath) {
     return Option.some(providerHeaders(request, path));
   }
-  if (path === supportRecoveryPath || refundSupportPath(path)) {
+  if ([supportRecoveryPath, erasureSupportPath].includes(path) || refundSupportPath(path)) {
     return Option.some(supportHeaders(request));
   }
   return Option.none();
@@ -515,13 +518,19 @@ const preservesCoreQuery = (path: string): boolean =>
   dedicatedBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
-const forwardSmokeVersionOverride = (
+const forwardCandidateVersionOverride = (
   request: Request,
   environment: PublicEnvironment,
   headers: Headers
 ): void => {
   headers.delete(smokeVersionHeader);
-  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return;
+  const operatorRoute =
+    new URL(request.url).pathname === erasureSupportPath &&
+    request.method === "POST" &&
+    (request.headers.get("cf-access-jwt-assertion") ?? "") !== "";
+  if (!operatorRoute && !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
+    return;
+  }
   const override = request.headers.get(smokeVersionHeader);
   if (override !== null) headers.set(smokeVersionHeader, override);
 };
@@ -534,7 +543,7 @@ const coreRequest = (
     const headers = forwardedHeaders(request, path);
     const binding = request.headers.get(browserSessionBindingHeader);
     if (binding !== null) headers.set(browserSessionBindingHeader, binding);
-    forwardSmokeVersionOverride(request, environment, headers);
+    forwardCandidateVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");
     if (
@@ -598,7 +607,7 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
-  path === supportRecoveryPath && Option.isSome(origin);
+  (path === supportRecoveryPath || path === erasureSupportPath) && Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);

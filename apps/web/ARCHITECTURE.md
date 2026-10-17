@@ -62,7 +62,12 @@ proposal for a connection retry, and unresolved execution or delivery blocks ano
 receipt stay in mounted component state, not browser storage or a URL. This
 channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
 redirect-rejecting, bounded browser HTTP policy as the derived clients. The
-web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
+web does not maintain copied canonical schemas, operation maps, or access policy. Host-issued recurring
+lifecycle reviews may carry an opaque exact-input confirmation command alongside readable text.
+Only the mounted conversation owner handles that command; presentation receives a confirmation
+flag and action, never the command. A model-written challenge is ordinary escaped text and cannot
+create an approval control. The command is sent only by an explicit click after visible delivery is
+acknowledged, stays out of displayed history, and is never stored in a URL or browser storage. The Pro payment flow
 is browser-mediated: method-specific card, Nequi and DaviPlata authorization goes directly to Wompi
 and shares Price, Consent and payment status views. A separate server-declared availability GET,
 owned by the session's Effect Atom registry, advertises DaviPlata only when operator activation and

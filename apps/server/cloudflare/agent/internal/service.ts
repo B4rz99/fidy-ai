@@ -384,7 +384,13 @@ const runHostedReceipt = (owner: AgentServiceInput, request: Request): Promise<R
 const runHostedProgress = (owner: AgentServiceInput, request: Request): Promise<Response> => {
   const userId = owner.userId;
   const env = owner.environment;
-  const state = { storage: { setAlarm: owner.scheduleRecovery } };
+  const state = {
+    storage: {
+      getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+      deleteAlarm: (): Promise<void> => Promise.resolve(),
+      setAlarm: owner.scheduleRecovery,
+    },
+  };
   return Effect.runPromise(
     Effect.gen(function* () {
       const candidate = yield* Effect.tryPromise(() => request.json()).pipe(

@@ -251,7 +251,12 @@ layer(BunServices.layer, { excludeTestServices: true })((it) => {
       25_000
     );
   }
-  for (const check of ["canonical_correction", "canonical_deletion", "canonical_date_only"]) {
+  for (const check of [
+    "canonical_correction",
+    "canonical_deletion",
+    "canonical_date_only",
+    "canonical_recurring_lifecycle",
+  ]) {
     it.effect(`reports the closed ${check} failure without private content`, () =>
       exercise("refused", check)
     );

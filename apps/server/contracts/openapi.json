@@ -4185,9 +4185,11 @@
             "$ref": "#/components/schemas/CurrencyPartial"
           },
           "endDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "firstDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "frequency": {
@@ -4853,6 +4855,7 @@
               "additionalProperties": false,
               "properties": {
                 "date": {
+                  "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                   "type": "string"
                 },
                 "planId": {
@@ -4907,9 +4910,11 @@
                     "additionalProperties": false,
                     "properties": {
                       "from": {
+                        "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                         "type": "string"
                       },
                       "through": {
+                        "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                         "type": "string"
                       }
                     },
@@ -4935,6 +4940,7 @@
                   "type": "array"
                 },
                 "stoppedOn": {
+                  "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                   "type": "string"
                 }
               },
@@ -5010,6 +5016,7 @@
         "additionalProperties": false,
         "properties": {
           "from": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "plan": {
@@ -5056,9 +5063,11 @@
             "$ref": "#/components/schemas/Currency"
           },
           "endDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "firstDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "frequency": {
@@ -5151,12 +5160,14 @@
         "additionalProperties": false,
         "properties": {
           "actualDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "automatic": {
             "type": "boolean"
           },
           "date": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "id": {
@@ -5198,9 +5209,11 @@
             "$ref": "#/components/schemas/Money_2"
           },
           "date": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "expectedDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "fulfillments": {
@@ -5281,6 +5294,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "date": {
+                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                     "type": "string"
                   },
                   "kind": {
@@ -5326,6 +5340,7 @@
                     "type": "string"
                   },
                   "date": {
+                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                     "type": "string"
                   },
                   "kind": {
@@ -5352,6 +5367,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "date": {
+                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                     "type": "string"
                   },
                   "kind": {
@@ -10397,9 +10413,11 @@
                         "type": "string"
                       },
                       "month": {
+                        "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                         "type": "string"
                       },
                       "previousMonth": {
+                        "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                         "type": "string"
                       },
                       "search": {
@@ -10483,6 +10501,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "date": {
+                                "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                 "type": "string"
                               },
                               "kind": {
@@ -10521,6 +10540,7 @@
                                 "type": "string"
                               },
                               "date": {
+                                "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                 "type": "string"
                               },
                               "kind": {
@@ -10541,6 +10561,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "date": {
+                                "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                 "type": "string"
                               },
                               "kind": {
@@ -10567,12 +10588,14 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "actualDate": {
+                                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                     "type": "string"
                                   },
                                   "automatic": {
                                     "type": "boolean"
                                   },
                                   "date": {
+                                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                     "type": "string"
                                   },
                                   "id": {
@@ -22100,6 +22123,7 @@
             "name": "month",
             "required": true,
             "schema": {
+              "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
               "type": "string"
             }
           },
@@ -22108,6 +22132,7 @@
             "name": "previousMonth",
             "required": false,
             "schema": {
+              "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
               "type": "string"
             }
           },
@@ -22209,6 +22234,7 @@
                                     "type": "string"
                                   },
                                   "date": {
+                                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                     "type": "string"
                                   },
                                   "direction": {
@@ -22252,6 +22278,7 @@
                           "type": "boolean"
                         },
                         "month": {
+                          "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                           "type": "string"
                         },
                         "occurrences": {
@@ -22267,6 +22294,7 @@
                           "type": "array"
                         },
                         "previousMonth": {
+                          "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                           "type": "string"
                         },
                         "summary": {
@@ -22438,7 +22466,7 @@
     },
     "/recurring-plans/edits": {
       "post": {
-        "description": "Explicitly create, edit, pause, resume or stop a recurring plan; skip an occurrence; record/reverse a tracking mark or associate an effective Transaction; dismiss, restore or link a detected suggestion. Supply the observed document revision and stable UUIDs. Unknown outcomes require a reread, never blind replay. Manual marks create no Transactions; stopping tracking never cancels external services. All agent changes require exact User confirmation.",
+        "description": "Explicitly create, edit, pause, resume or stop a recurring plan; skip an occurrence; record/reverse a tracking mark or associate an effective Transaction; dismiss, restore or link a detected suggestion. Supply the observed document revision and stable UUIDs. Unknown outcomes require a reread, never blind replay. Manual marks create no Transactions; stopping tracking never cancels external services. Propose a clearly requested edit directly; the host obtains exact User confirmation before execution. Do not ask for a separate informal confirmation.",
         "operationId": "recurringPlans.applyRecurringEdit",
         "parameters": [],
         "requestBody": {

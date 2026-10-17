@@ -111,9 +111,14 @@ const conversationCommands = (
   ),
 });
 
+export type VisibleAgentReply = Readonly<{
+  text: string;
+  awaitingVisibility: boolean;
+  confirmation: boolean;
+}>;
 type ConversationView = Readonly<{
   history: ReadonlyArray<Entry>;
-  reply: Option.Option<Readonly<{ text: string; awaitingVisibility: boolean }>>;
+  reply: Option.Option<VisibleAgentReply>;
   status: string;
   empty: boolean;
   canSubmit: boolean;
@@ -124,7 +129,11 @@ const presentConversation = ({ turn, history }: Conversation): ConversationView 
   history,
   reply:
     "value" in turn && !("status" in turn.value)
-      ? Option.some({ text: turn.value.text, awaitingVisibility: turn.tag === "proposal" })
+      ? Option.some({
+          text: turn.value.text,
+          awaitingVisibility: turn.tag === "proposal",
+          confirmation: turn.value.confirmation !== undefined,
+        })
       : Option.none(),
   status: status[turn.tag],
   empty: history.length === 0 && turn.tag === "idle",
@@ -135,10 +144,46 @@ const presentConversation = ({ turn, history }: Conversation): ConversationView 
 type HostedConversation = Readonly<{
   view: ConversationView;
   submit: (text: string) => void;
+  confirm: () => void;
   replyVisible: () => void;
   checkProgress: () => void;
   retryDelivery: () => void;
 }>;
+
+const submitConversation = ({
+  text,
+  displayText,
+  turn,
+  setConversation,
+  propose,
+}: Readonly<{
+  text: string;
+  displayText: string;
+  turn: Turn;
+  setConversation: SetConversation;
+  propose: (submission: Submission) => void;
+}>): void => {
+  if (!canSubmit(turn)) return;
+  const decoded = Schema.decodeOption(HostedTurnRequest)({ text });
+  if (Option.isNone(decoded)) {
+    setTurn(setConversation, { tag: "error" });
+    return;
+  }
+  const entry: Entry = {
+    id: Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)),
+    from: "user",
+    text: displayText,
+  };
+  const previous: ReadonlyArray<Entry> =
+    turn.tag === "completed"
+      ? [{ id: turn.value.turnId, from: "assistant", text: turn.value.text }]
+      : [];
+  setConversation((current) => ({
+    turn: { tag: "waiting" },
+    history: [...current.history, ...previous, entry].slice(-visibleHistoryLimit),
+  }));
+  propose({ payload: decoded.value, entryId: entry.id });
+};
 
 /**
  * Owns one mounted conversation, including exact receipt retention and bounded visible history.
@@ -164,27 +209,17 @@ export const useHostedConversation = ({
   };
   return {
     view: presentConversation(conversation),
-    submit: (text): void => {
-      if (!canSubmit(turn)) return;
-      const decoded = Schema.decodeOption(HostedTurnRequest)({ text });
-      if (Option.isNone(decoded)) {
-        setTurn(setConversation, { tag: "error" });
-        return;
-      }
-      const entry: Entry = {
-        id: Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)),
-        from: "user",
-        text: decoded.value.text,
-      };
-      const previous: ReadonlyArray<Entry> =
-        turn.tag === "completed"
-          ? [{ id: turn.value.turnId, from: "assistant", text: turn.value.text }]
-          : [];
-      setConversation((current) => ({
-        turn: { tag: "waiting" },
-        history: [...current.history, ...previous, entry].slice(-visibleHistoryLimit),
-      }));
-      propose({ payload: decoded.value, entryId: entry.id });
+    submit: (text): void =>
+      submitConversation({ text, displayText: text, turn, setConversation, propose }),
+    confirm: (): void => {
+      if (turn.tag !== "completed" || turn.value.confirmation === undefined) return;
+      submitConversation({
+        text: turn.value.confirmation.command,
+        displayText: "Confirmar cambio",
+        turn,
+        setConversation,
+        propose,
+      });
     },
     replyVisible: (): void => {
       if (turn.tag !== "proposal") return;

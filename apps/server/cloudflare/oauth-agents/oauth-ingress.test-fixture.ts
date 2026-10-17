@@ -85,7 +85,14 @@ const fetchCoordinator = (
   let coordinator = input.coordinators.get(input.name);
   if (coordinator === undefined) {
     coordinator = new UserTransactionCoordinator(
-      { id: { name: input.name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+      {
+        id: { name: input.name },
+        storage: {
+          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+          deleteAlarm: (): Promise<void> => Promise.resolve(),
+          setAlarm: (): Promise<void> => Promise.resolve(),
+        },
+      },
       input.environment
     );
     input.coordinators.set(input.name, coordinator);
@@ -162,7 +169,8 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
       .filter(
         (name) =>
           auditMigration ||
-          (name !== "0037_oauth_shared_audit_budget.sql" &&
+          (name < "0095_" &&
+            name !== "0037_oauth_shared_audit_budget.sql" &&
             name !== "0062_pat_activity.sql" &&
             name !== "0063_connections.sql" &&
             name !== "0064_connection_browser_execution.sql" &&

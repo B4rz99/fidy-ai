@@ -6,7 +6,7 @@ import {
   NotificationInterpretationEvidence,
   TransactionExtraction,
 } from "../../src/core/transactions/contract";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { prepareNotificationEmailCapture, prepareStatementCapture } from "./operations";
 import type { StatementCaptureInput } from "./contract";
 
@@ -22,6 +22,12 @@ const run = <A>(work: () => Promise<A>): Effect.Effect<A> =>
 
 const setup = Effect.fn(function* () {
   const db = yield* run(() => databases.acquire());
+  yield* run(() =>
+    applyTestMigration({
+      db,
+      source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
+    })
+  );
   yield* run(() =>
     db.exec(`CREATE TABLE capture_sources (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, active INTEGER NOT NULL);
       CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE (user_id, id));

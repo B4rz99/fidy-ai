@@ -329,7 +329,12 @@ const setup = (
                   id: {
                     name,
                   },
-                  storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+                  storage: {
+                    getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+                      Promise.resolve(null),
+                    deleteAlarm: (): Promise<void> => Promise.resolve(),
+                    setAlarm: (): Promise<void> => Promise.resolve(),
+                  },
                 },
                 {
                   DB: db,
@@ -2469,7 +2474,7 @@ it("includes PAT metadata listing in the shared User/day canonical work budget",
             session: sessions[0],
           })
         )).status
-      ).toBe(503);
+      ).toBe(429);
     })
   ));
 it("bounds canonical work across a stable User and multiple PATs", () =>
@@ -3661,7 +3666,7 @@ it("shares the Category work budget between WebSessions, PATs and Transaction wo
             bearer: issued.bearer,
           })
         )).status
-      ).toBe(503);
+      ).toBe(429);
       expect(
         (yield* awaitPromise(
           send({
@@ -3670,7 +3675,7 @@ it("shares the Category work budget between WebSessions, PATs and Transaction wo
             session: sessions[0],
           })
         )).status
-      ).toBe(503);
+      ).toBe(429);
     })
   ));
 it("rechecks revoke/use races at protected canonical work, not only bearer admission", () =>

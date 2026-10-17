@@ -1,3 +1,4 @@
+import { withErasureRecovery } from "../erasure/runtime";
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -36,9 +37,15 @@ export const makeCoreHttp = (telemetry: TelemetryService): CoreHttpHandler => {
       );
       const response = yield* executeCoreHttp({
         request,
-        environment,
+        environment:
+          new URL(request.url).pathname === "/internal/titular-erasure"
+            ? environment
+            : withErasureRecovery(environment),
         telemetry,
-        publish: acceptedWorkPublisher({ environment, context: Option.fromUndefinedOr(context) }),
+        publish: acceptedWorkPublisher({
+          environment: withErasureRecovery(environment),
+          context: Option.fromUndefinedOr(context),
+        }),
       }).pipe(
         Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
       );

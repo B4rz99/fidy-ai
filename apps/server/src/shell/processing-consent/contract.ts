@@ -1,5 +1,6 @@
+import { ErasureReceipt, ErasureRequest } from "~/core/erasure/contract";
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import {
   DisclosureSnapshot,
   OnboardingConsentGrantId,
@@ -79,8 +80,14 @@ export const ProcessingConsentRenewalReceipt = Schema.Struct({
   }),
 });
 
+const acceptedStatus = 202;
+
 /** Cookie-only privacy controls, available after withdrawal and outside agent operations. */
 export const ProcessingConsentGroup = HttpApiGroup.make("processingConsent").add(
+  HttpApiEndpoint.post("erase", "/web/privacy/erasure", {
+    payload: ErasureRequest,
+    success: ErasureReceipt.pipe(HttpApiSchema.status(acceptedStatus)),
+  }),
   HttpApiEndpoint.post("renew", "/web/consent/renew", {
     payload: ProcessingConsentRenewal,
     success: ProcessingConsentRenewalReceipt,

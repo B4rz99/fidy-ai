@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { Clock, Effect, Option, type PlatformError, Schema } from "effect";
 import {
   OAuthSource,
@@ -266,3 +269,6 @@ export const handleOAuthRequest = (input: BootstrapInput): Effect.Effect<Respons
       )
     )
   );
+
+export const makeOauthAgentsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

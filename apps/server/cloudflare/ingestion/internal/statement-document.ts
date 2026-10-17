@@ -202,13 +202,16 @@ type HeldDocumentUpload = Readonly<{
   current: number;
   grant: ResourceAdmissionGrant;
 }>;
+const liveDocument = (document: typeof Document.Type, grantId: string, current: number): boolean =>
+  Option.contains(document.upload_grant_id, grantId) &&
+  Option.exists(document.upload_expires_at_ms, (expires) => expires > current);
+
 /** Stage bounded verified bytes only under this Pending upload's admitted, unexpired grant. */
 export const stageHeldStatementDocument = ({
   db,
   bucket,
   caller,
   bytes,
-  current,
   grant,
 }: HeldDocumentUpload): ReturnType<
   ReturnType<typeof StatementStaging.make>["stageStatementBytes"]
@@ -217,11 +220,7 @@ export const stageHeldStatementDocument = ({
     const document = yield* findDocument({ db, caller });
     const clock = yield* Clock.Clock;
     const checkedAt = clock.currentTimeMillisUnsafe();
-    if (
-      Option.isNone(document) ||
-      !Option.contains(document.value.upload_grant_id, grant.grantId) ||
-      !Option.exists(document.value.upload_expires_at_ms, (expires) => expires > checkedAt)
-    ) {
+    if (Option.isNone(document) || !liveDocument(document.value, grant.grantId, checkedAt)) {
       return yield* unavailable();
     }
     if (document.value.reference_json !== null) {
@@ -229,7 +228,11 @@ export const stageHeldStatementDocument = ({
         document.value.reference_json
       ).pipe(Effect.mapError(unavailable));
     }
-    const staging = StatementStaging.make({ database: db, bucket, nowEpochMs: () => current });
+    const staging = StatementStaging.make({
+      database: db,
+      bucket,
+      nowEpochMs: () => clock.currentTimeMillisUnsafe(),
+    });
     const reference = yield* staging.stageStatementBytes({
       userId: caller.userId,
       request: new Request("https://statement.internal/bytes", {

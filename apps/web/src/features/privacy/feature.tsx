@@ -1,3 +1,4 @@
+import { ErasureRequest } from "./erasure-request";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { DateTime, Effect, Option } from "effect";
@@ -250,6 +251,7 @@ export const PrivacyFeature = (): JSX.Element => {
       ) : null}
       <AuthorizationCopy client={client} />
       <SavedTransactionsLink />
+      <ErasureRequest client={client} />
     </PrivacyWorkspace>
   );
 };

@@ -145,7 +145,7 @@ const instances: Array<Miniflare> = [];
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
 const migrationNames = [
-  "0096_ingestion_review",
+  "0109_ingestion_review",
   "0001_categories",
   "0002_resource_admission",
   "0003_pending_consent",
@@ -417,7 +417,14 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
     getByName: (name: string): Pick<Fetcher, "fetch"> => ({
       fetch: (command: Request): Promise<Response> =>
         new UserTransactionCoordinator(
-          { id: { name }, storage: { setAlarm: () => Promise.resolve() } },
+          {
+            id: { name },
+            storage: {
+              getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+              deleteAlarm: (): Promise<void> => Promise.resolve(),
+              setAlarm: () => Promise.resolve(),
+            },
+          },
           {
             DB: runtime.db,
             STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1322,7 +1329,14 @@ it("finishes a durably queued statement after withdrawal without reopening ordin
           .run()
       );
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: userA },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -1690,7 +1704,11 @@ const clarifyStatement = (
       const coordinator = new UserTransactionCoordinator(
         {
           id: { name: owner.userId },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         {
           DB: runtime.db,
@@ -2602,7 +2620,14 @@ it("shows committed review rows only to their User through the canonical read", 
       expect(accepted.status).toBe(202);
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: userA },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -2834,7 +2859,14 @@ it("marks an accepted unsupported XLSX payload terminal without inventing Transa
       expect(accepted.status).toBe(202);
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: userA },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
@@ -2892,7 +2924,14 @@ it("settles an errored Workflow when its final failure-report activity also exha
           .run()
       );
       const coordinator = new UserTransactionCoordinator(
-        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          id: { name: userA },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
+        },
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,

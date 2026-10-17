@@ -18,6 +18,8 @@ const withMaintenanceExecutor = (worker: typeof coreWorker): typeof coreWorker =
       {
         id: { name: "core-maintenance-v1" },
         storage: {
+          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+          deleteAlarm: (): Promise<void> => Promise.resolve(),
           setAlarm: (): Promise<void> => Promise.reject(new Error("Unused maintenance alarm")),
         },
       },

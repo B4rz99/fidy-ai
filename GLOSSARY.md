@@ -414,6 +414,26 @@ _Avoid_: Log, event, trace.
 The legal term under Ley 1581 for the person a piece of personal data is about. Used only when
 speaking about data-protection rights, never as a synonym for User.
 
+**ErasureDecision**:
+An explicitly reviewed disposition of one verified Titular case, bound to the precise User, current
+MVP scope, permissible class actions, withdrawal handoff and verified final response route. It
+stops new admissions at approval while exact pre-cutoff work may finish within its original bounds.
+It is neither ordinary Transaction deletion nor a processing-Consent withdrawal.
+_Avoid_: Delete-account flag, automatic wipe, withdrawal receipt.
+
+**ErasureRetention**:
+A restricted exception to an ErasureDecision, tied to a reviewed legal or contractual source, exact
+data scope, limited purpose, finite expiry, review instant and terminal deletion. A reference only
+addresses the source evidence; it is not itself a retention basis. Linked/pseudonymous copies remain
+personal data and remain visible in the disposition receipt.
+_Avoid_: Keep for audit, indefinite legal hold, anonymized identifier.
+
+**ErasureCustodyEvidence**:
+The reviewed observation of an actual processor or restricted operator store's disposition.
+Acceptance, verified deletion, retained scope, non-applicability and unresolved capability/conflict
+are distinct outcomes; acceptance does not close the affected scope.
+_Avoid_: Provider success, deletion queued equals deleted.
+
 **Asesoría**:
 Regulated financial advice. The product describes the user's own data and gives generic education
 freely, but never gives personalized investment, credit, or tax recommendations.

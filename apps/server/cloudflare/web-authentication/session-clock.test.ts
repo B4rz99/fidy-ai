@@ -3,12 +3,19 @@ import { deepStrictEqual } from "node:assert";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 import { TestClock } from "effect/testing";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { handleWebAuthentication } from "./operations";
 import { seedSession, sessionId, sessionRequest, sessionUser } from "./session.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
+const sessionDatabase = (): Promise<D1Database> =>
+  databases.acquire().then((db) =>
+    applyTestMigration({
+      db,
+      source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
+    }).then(() => db)
+  );
 const current = 4102444800000;
 
 it.effect.each([
@@ -19,7 +26,7 @@ it.effect.each([
   "refuses current-user at the composing Clock's $boundary without renewal or Audit",
   ({ idle, hard, revoked }) =>
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
+      const db = yield* Effect.tryPromise(sessionDatabase);
       yield* seedSession({ db, idle, hard });
       yield* Effect.tryPromise(() =>
         db.prepare("UPDATE web_sessions SET revoked_at_ms = ?").bind(revoked).run()
@@ -89,7 +96,7 @@ it.effect.each([
   "renews and audits live use with $renewal at the composing Clock without extending freshness or hard expiry",
   ({ idle, hard, renewed }) =>
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
+      const db = yield* Effect.tryPromise(sessionDatabase);
       yield* seedSession({ db, idle, hard });
       yield* TestClock.setTime(current);
       const outcome = yield* Effect.exit(

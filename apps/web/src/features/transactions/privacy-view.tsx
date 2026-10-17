@@ -25,6 +25,7 @@ const ReadOnlyNotice = (): JSX.Element => (
 
 /** Read-only Transaction access grants neither mutation nor hosted-agent authority. */
 export const PrivacyTransactions = (): JSX.Element => {
+  const [date, setDate] = useState("");
   const router = useRouter();
   const [historyResource] = useState(() =>
     privacyTransactionHistory(router.options.context.webAuthClient)
@@ -57,6 +58,7 @@ export const PrivacyTransactions = (): JSX.Element => {
     <TransactionWorkspace
       key={history.generation}
       readOnly
+      dateFilter={{ value: date, onChange: setDate }}
       editable={false}
       apiClient={router.options.context.apiClient}
       currentUser={state.value.presentation}

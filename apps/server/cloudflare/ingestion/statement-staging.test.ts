@@ -84,8 +84,8 @@ const migrationNames = [
   "0019_canonical_child_guards",
   "0035_billing_corrections",
   "0052_weekly_card_renewal",
-  "0095_review_suggestions",
-  "0096_ingestion_review",
+  "0108_review_suggestions",
+  "0109_ingestion_review",
 ] as const;
 type Runtime = Readonly<{
   readonly database: D1Database;
@@ -384,7 +384,11 @@ const verifyDelayedUpload = (
         prepareHeldStatementSubmission({ ...work, userId, current: currentNowEpochMs() });
       expect(yield* publication(userA)).toMatchObject({ _tag: "Refused" });
       expect(yield* publication(userB)).toMatchObject({ _tag: "Refused" });
-      expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).toBeNull();
+      expect(
+        (yield* fromTestPromise(() => runtime.bucket.head(row.object_key)))?.customMetadata?.[
+          "purpose"
+        ]
+      ).toBe("private-object-placeholder");
       if (outcome === "interrupted") {
         expect(row.status).toBe("pending");
         yield* Fiber.interrupt(fiber);
@@ -424,7 +428,7 @@ const verifyDelayedUpload = (
       expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).toBeNull();
       delayed.release();
       yield* fromTestPromise(() => delayed.settled);
-      expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).not.toBeNull();
+      expect(yield* fromTestPromise(() => runtime.bucket.head(row.object_key))).toBeNull();
       expect(
         Option.isNone(yield* fromTestPromise(() => stagingRow(runtime.database, row.id)))
       ).toBe(true);
@@ -438,7 +442,7 @@ const verifyDelayedUpload = (
           nowEpochMs: currentNowEpochMs,
         }),
       };
-      expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).not.toBeNull();
+      expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).toBeNull();
       expect(
         Option.isNone(yield* fromTestPromise(() => stagingRow(restarted.database, row.id)))
       ).toBe(true);
@@ -470,7 +474,7 @@ const verifyDelayedUpload = (
         objectsDeleted: 0,
         rowsDeleted: 0,
       });
-      expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).not.toBeNull();
+      expect(yield* fromTestPromise(() => restarted.bucket.head(row.object_key))).toBeNull();
     }).pipe(
       Effect.ensuring(
         Effect.gen(function* () {
@@ -1129,7 +1133,7 @@ describe("Cloudflare statement byte staging", () => {
 effectIt.layer(NodeFileSystem.layer)((it) => {
   for (const outcome of ["interrupted", "ambiguous-rejection"] as const) {
     it.effect(
-      `reproduces ownerless retained bytes after a synthetic ${outcome} write lands after cleanup and restart`,
+      `does not recreate financial bytes when a synthetic ${outcome} write arrives after cleanup and restart`,
       () => verifyDelayedUpload(outcome)
     );
   }

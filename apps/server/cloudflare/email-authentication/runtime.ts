@@ -1,3 +1,7 @@
+import { withErasureRecovery } from "../erasure/runtime";
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Effect } from "effect";
 import type {
@@ -57,7 +61,7 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
       work: observeWorkerPromise(
         () =>
           runPairing({
-            environment: this.env,
+            environment: withErasureRecovery(this.env),
             payload: event.payload,
             activity: (name, options, activity) => step.do(name, options, activity),
           }),
@@ -68,7 +72,7 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
           parent: workTraceParent(event.payload),
         }
       ),
-      db: this.env.DB,
+      db: withErasureRecovery(this.env).DB,
     });
   }
 }
@@ -99,7 +103,7 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
       work: observeWorkerPromise(
         () =>
           runReplacement({
-            environment: this.env,
+            environment: withErasureRecovery(this.env),
             payload: event.payload,
             activity: (name, options, activity) => step.do(name, options, activity),
           }),
@@ -110,7 +114,10 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
           parent: workTraceParent(event.payload),
         }
       ),
-      db: this.env.DB,
+      db: withErasureRecovery(this.env).DB,
     });
   }
 }
+
+export const makeEmailAuthenticationErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

@@ -1,3 +1,5 @@
+import { resumeErasureCases, sweepErasureControlObjects } from "./erasure/operations";
+import { withErasureRecovery } from "./erasure/runtime";
 import type { ProviderEnvironment } from "./provider-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
 import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./maintenance/contract";
@@ -57,6 +59,9 @@ type CoreEnvironment = ProviderEnvironment &
     Readonly<{
       RECOVERY_ISOLATION: string;
       BILLING_SUPPORT_AUDIENCE: string;
+      ERASURE_SUPPORT_AUDIENCE: string;
+      ERASURE_REQUIRED: string;
+      ERASURE_BUCKET: R2Bucket;
       BILLING_REFUND_WORKFLOW: Workflow;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
@@ -191,13 +196,44 @@ class CoreMaintenanceCoordinator {
   private active: Option.Option<Promise<void>> = Option.none();
   private readonly state: Readonly<{ id: Pick<DurableObjectId, "name"> }>;
   private readonly environment: CoreEnvironment;
+  private readonly erasureEnvironment: CoreEnvironment;
 
   constructor(
     state: Readonly<{ id: Pick<DurableObjectId, "name"> }>,
     environment: CoreEnvironment
   ) {
     this.state = state;
-    this.environment = environment;
+    this.erasureEnvironment = environment;
+    this.environment = withErasureRecovery(environment);
+  }
+
+  private resumeErasureWork(): Effect.Effect<void> {
+    return resumeErasureCases({
+      db: this.erasureEnvironment.DB,
+      coordinator: this.erasureEnvironment.USER_TRANSACTION_COORDINATOR,
+      bucket: Option.fromUndefinedOr(this.erasureEnvironment.ERASURE_BUCKET),
+    }).pipe(
+      Effect.ensuring(
+        sweepErasureControlObjects({
+          db: this.erasureEnvironment.DB,
+          buckets: [
+            {
+              id: "email",
+              bucket: Option.fromUndefinedOr(this.erasureEnvironment.EMAIL_BUCKET),
+            },
+            {
+              id: "statement",
+              bucket: Option.fromUndefinedOr(this.erasureEnvironment.STATEMENT_STAGING_BUCKET),
+            },
+            {
+              id: "erasure",
+              bucket: Option.fromUndefinedOr(this.erasureEnvironment.ERASURE_BUCKET),
+            },
+          ],
+        }).pipe(Effect.orDie)
+      ),
+      Effect.orDie
+    );
   }
 
   fetch(request: Request): Promise<Response> {
@@ -216,6 +252,7 @@ class CoreMaintenanceCoordinator {
     const work = Option.getOrElse(this.active, () => {
       const started = runCoreMaintenance(maintenanceInput(this.environment))
         .pipe(
+          Effect.ensuring(this.resumeErasureWork()),
           observeWorkerExecution({
             environment: this.environment,
             telemetry: cloudflareWorkerTelemetry,
@@ -269,7 +306,7 @@ export class UserTransactionCoordinator {
 
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: makeCoreHttp(telemetry),
-  queue: makeCoreQueue(telemetry),
+  queue: (batch, environment) => makeCoreQueue(telemetry)(batch, withErasureRecovery(environment)),
   scheduled: (_controller, environment) =>
     Effect.gen(function* () {
       const executor = environment.USER_TRANSACTION_COORDINATOR;

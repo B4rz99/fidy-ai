@@ -1,4 +1,4 @@
-import { ConnectionBrowserAdmission } from "./contract";
+import { ConnectionBrowserAdmission, ConnectionRetentionUnavailable } from "./contract";
 import { beginContinuation } from "./internal/browser";
 import { initiationStatements, readInitiationResult } from "./internal/initiation";
 import { Effect, Option, Schema } from "effect";
@@ -311,3 +311,17 @@ export const executeConnectionBrowserAdmission = (
   }
   return beginContinuation({ db: input.db, admission: admission.value, signal: input.signal });
 };
+
+/** Until #313 publishes completed suppression, an enabled institution's Connection blocks whole-User erasure. */
+export const requiresErasureSuppression = (
+  input: Readonly<{ db: D1Database; userId: string }>
+): Effect.Effect<boolean, ConnectionRetentionUnavailable> =>
+  Effect.tryPromise({
+    try: () =>
+      input.db
+        .prepare(`SELECT EXISTS(SELECT 1 FROM connections c
+    JOIN connection_institution_gate g ON g.institution_id=c.institution_id WHERE c.user_id=? AND g.enabled=1) AS pending`)
+        .bind(input.userId)
+        .first<number>("pending"),
+    catch: () => new ConnectionRetentionUnavailable(),
+  }).pipe(Effect.map((pending) => pending !== 0));

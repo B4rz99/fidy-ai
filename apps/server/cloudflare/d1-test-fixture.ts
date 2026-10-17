@@ -3,6 +3,8 @@ import { Option, Schema } from "effect";
 
 const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
 const schemaInstallers = new WeakMap<D1Database, (sql: ReadonlyArray<string>) => Promise<void>>();
+const privacySchemas = new WeakMap<D1Database, Promise<void>>();
+const privacySchema = new URL("./migrations/0095_titular_erasure.sql", import.meta.url);
 
 const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
   Option.getOrElse(Option.fromUndefinedOr(migrationStatements.get(source.href)), () => {
@@ -19,52 +21,79 @@ const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
     return loaded;
   });
 
-/** Applies checked-in migration statements in order in one D1 transaction per file.
+const installPrivacySchema = (db: D1Database): Promise<void> => {
+  const installed = privacySchemas.get(db);
+  if (installed !== undefined) return installed;
+  const pending = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='erasure_requests'")
+    .first<string>("name")
+    .then((existing) =>
+      existing === null
+        ? loadMigrationStatements(privacySchema).then((sql) =>
+            db.batch(sql.map((statement) => db.prepare(statement)))
+          )
+        : undefined
+    )
+    .then(() => undefined);
+  privacySchemas.set(db, pending);
+  return pending;
+};
+
+/** Applies one file in a native transaction after installing the shared privacy-control schema.
  * Only immutable SQL text is cached; every database still executes every migration.
  */
 export const applyTestMigration = ({
   db,
   source,
 }: Readonly<{ db: D1Database; source: URL }>): Promise<void> =>
-  loadMigrationStatements(source)
-    .then((sql) => db.batch(sql.map((statement) => db.prepare(statement))))
+  installPrivacySchema(db)
+    .then(() => (source.href === privacySchema.href ? [] : loadMigrationStatements(source)))
+    .then((sql) =>
+      sql.length === 0 ? undefined : db.batch(sql.map((statement) => db.prepare(statement)))
+    )
     .then(() => undefined);
 
-/** Installs an ordered baseline in one transaction before seeding a fresh test database.
+/** Installs the shared privacy controls and an ordered baseline before seeding a fresh test database.
  * Native pooled Workers retain only the immutable migrated schema and baseline seeds,
- * never a test's rows. Failure rolls back the whole schema. This does not model migration boundaries;
+ * never a test's rows. An owner-baseline failure rolls back its complete batch. This does not model migration boundaries;
  * tests of file-by-file migration behavior must use applyTestMigration instead.
  */
 export const installTestSchema = (
   input: Readonly<{ db: D1Database; sources: ReadonlyArray<URL> }>
 ): Promise<void> => installTestSchemaWithPrefix({ ...input, prefixStatements: [] });
 
-/** Includes immutable caller-owned schema declarations before checked-in migrations. */
-export const installTestSchemaWithPrefix = ({
-  db,
-  sources,
-  prefixStatements,
-}: Readonly<{
-  db: D1Database;
-  sources: ReadonlyArray<URL>;
-  prefixStatements: ReadonlyArray<string>;
-}>): Promise<void> =>
-  Array.from(new Map(sources.map((source) => [source.href, source])).values())
+const testSchemaStatements = (
+  input: Readonly<{ sources: ReadonlyArray<URL>; prefixStatements: ReadonlyArray<string> }>
+): Promise<ReadonlyArray<string>> =>
+  Array.from(new Map(input.sources.map((source) => [source.href, source])).values())
+    .filter((source) => source.href !== privacySchema.href)
     .reduce<Promise<ReadonlyArray<string>>>(
       (previous, source) =>
         previous.then((sql) => loadMigrationStatements(source).then((next) => [...sql, ...next])),
-      Promise.resolve(prefixStatements)
-    )
+      Promise.resolve(input.prefixStatements)
+    );
+
+/** Includes current privacy controls and the caller's immutable baseline. */
+export const installTestSchemaWithPrefix = (
+  input: Readonly<{
+    db: D1Database;
+    sources: ReadonlyArray<URL>;
+    prefixStatements: ReadonlyArray<string>;
+  }>
+): Promise<void> =>
+  installPrivacySchema(input.db)
+    .then(() => testSchemaStatements(input))
     .then((sql) =>
       sql.length === 0
         ? undefined
-        : Option.match(Option.fromUndefinedOr(schemaInstallers.get(db)), {
+        : Option.match(Option.fromUndefinedOr(schemaInstallers.get(input.db)), {
             onNone: () =>
-              db.batch(sql.map((statement) => db.prepare(statement))).then(() => undefined),
+              input.db
+                .batch(sql.map((statement) => input.db.prepare(statement)))
+                .then(() => undefined),
             onSome: (install) => install(sql),
           })
-    )
-    .then(() => undefined);
+    );
 
 type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
 const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
@@ -233,8 +262,8 @@ export const isolatedTestStorage = (): Readonly<{
 };
 
 const reviewTestMigrations = (names: ReadonlyArray<string>): ReadonlyArray<string> => [
-  ...(names.includes("0016_statement_processing") ? ["0095_review_suggestions"] : []),
-  ...(names.includes("0033_statement_clarification") ? ["0096_ingestion_review"] : []),
+  ...(names.includes("0016_statement_processing") ? ["0108_review_suggestions"] : []),
+  ...(names.includes("0033_statement_clarification") ? ["0109_ingestion_review"] : []),
 ];
 
 export const canonicalAdmissionMigrationNames = (
@@ -270,6 +299,8 @@ export const canonicalAdmissionMigrationNames = (
       "0058_wallet_renewal",
       "0059_subscription_retries",
       "0060_subscription_cancellation",
+      "0106_declined_card_retry",
+      "0107_failed_card_replacement",
       "0016_hosted_turn",
       "0062_pat_activity",
       "0063_connections",

@@ -1,3 +1,9 @@
+import { erasePrivateObject, writePrivateObject } from "../../private-objects/operations";
+import {
+  originalWriteActive,
+  prepareOriginalWrite,
+  trackOriginalWrite,
+} from "../../erasure-store/operations";
 import { captureWorkTrace } from "../../runtime/telemetry/operations";
 import { activateDeferredEmails, prepareEmailProcessingAdmission } from "./email-allowance";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
@@ -14,6 +20,35 @@ import {
 } from "../../../src/core/ingestion/contract";
 
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "../contract";
+
+const authoriseOriginalWrite = (
+  input: Readonly<{
+    environment: ForwardedEmailEnvironment;
+    userId: string;
+    id: string;
+    objectKey: string;
+  }>
+): Effect.Effect<boolean, EmailUnavailable> =>
+  Effect.gen(function* () {
+    const checked = yield* Clock.currentTimeMillis;
+    const live = yield* io(() =>
+      input.environment.DB.prepare(
+        "SELECT count(*) AS active FROM forwarded_email_receipts WHERE id=? AND user_id=? AND object_key=? AND state='storing' AND expires_at_ms>? AND received_at_ms>?"
+      )
+        .bind(input.id, input.userId, input.objectKey, checked, checked - storingInterruptionMs)
+        .first<number>("active")
+    );
+    return (
+      live === 1 &&
+      (yield* originalWriteActive({
+        db: input.environment.DB,
+        userId: input.userId,
+        reference: input.id,
+        bucket: "email",
+        objectKey: input.objectKey,
+      }).pipe(Effect.mapError(authorityUnavailable)))
+    );
+  });
 
 const maximumRawBytes = 1_048_576;
 const millisecondsPerDay = 86_400_000;
@@ -279,12 +314,21 @@ export const receiveForwardedEmail = Effect.fn(function* (
   const objectKey = `email/v1/${yield* cryptoService.randomUUIDv4}`;
   const reservation = yield* Effect.exit(
     io(() =>
-      environment.DB.prepare(
-        `INSERT INTO forwarded_email_receipts
+      environment.DB.batch([
+        ...prepareOriginalWrite({
+          db: environment.DB,
+          userId: approved.user_id,
+          reference: id,
+          bucket: "email",
+          objectKey,
+          current: now,
+          expiresAtMs: now + storingInterruptionMs,
+        }),
+        environment.DB.prepare(
+          `INSERT INTO forwarded_email_receipts
      (id, user_id, delivery_digest, object_key, byte_length, state, received_at_ms, expires_at_ms, time_zone)
      VALUES (?, ?, ?, ?, ?, 'storing', ?, ?, ?)`
-      )
-        .bind(
+        ).bind(
           id,
           approved.user_id,
           digest,
@@ -293,8 +337,8 @@ export const receiveForwardedEmail = Effect.fn(function* (
           now,
           now + retentionMs,
           approved.timeZone
-        )
-        .run()
+        ),
+      ])
     )
   );
   if (reservation._tag === "Failure") {
@@ -309,62 +353,84 @@ export const receiveForwardedEmail = Effect.fn(function* (
     if (Option.isSome(claimed) && claimed.value.state === "queued") return;
     return yield* authorityUnavailable();
   }
-  const stored = yield* Effect.result(
-    io(() =>
-      environment.EMAIL_BUCKET.put(objectKey, bytes, {
-        customMetadata: { purpose: "forwarded-email" },
-      })
-    )
-  );
-  if (Result.isFailure(stored)) {
-    yield* io(() => environment.EMAIL_BUCKET.delete(objectKey));
-    yield* io(() =>
-      environment.DB.prepare(
-        "DELETE FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'storing'"
-      )
-        .bind(id, approved.user_id)
-        .run()
-    );
-    return yield* authorityUnavailable();
-  }
-  const publication = yield* Effect.result(
-    io(() =>
-      environment.DB.batch([
-        ...prepareEmailProcessingAdmission({
-          db: environment.DB,
-          userId: approved.user_id,
-          receiptId: id,
-          current: now,
-          state: "storing",
-        }),
-      ])
-    )
-  );
-  if (Result.isSuccess(publication) && publication.success[3]?.meta.changes === 1) return;
-  // A failed batch is ambiguous (the response can be lost after commit). Never delete a
-  // successfully queued object; otherwise remove both private bytes and its reservation.
-  const committed = yield* io(() =>
-    environment.DB.prepare(
-      "SELECT state FROM forwarded_email_receipts WHERE id = ? AND user_id = ?"
-    )
-      .bind(id, approved.user_id)
-      .first()
-  );
-  const published = Schema.decodeUnknownOption(ReceiptState)(committed);
-  if (Option.isSome(published) && published.value.state === "queued") return;
-  yield* io(() => environment.EMAIL_BUCKET.delete(objectKey));
-  yield* io(() =>
-    environment.DB.prepare(
-      "DELETE FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'storing'"
-    )
-      .bind(id, approved.user_id)
-      .run()
-  );
-  if (Result.isFailure(publication) && publication.failure.reason === "capacity") {
-    reject(message);
-    return;
-  }
-  return yield* authorityUnavailable();
+  return yield* trackOriginalWrite({
+    db: environment.DB,
+    userId: approved.user_id,
+    reference: id,
+    bucket: "email",
+    objectKey,
+    work: Effect.gen(function* () {
+      const stored = yield* Effect.result(
+        writePrivateObject({
+          bucket: environment.EMAIL_BUCKET,
+          key: objectKey,
+          bytes,
+          metadata: { purpose: "forwarded-email" },
+          digest: Option.none(),
+          predecessor: Option.none(),
+          authorise: authoriseOriginalWrite({
+            environment,
+            userId: approved.user_id,
+            id,
+            objectKey,
+          }),
+        }).pipe(Effect.mapError(authorityUnavailable))
+      );
+      if (Result.isFailure(stored)) {
+        yield* erasePrivateObject({ bucket: environment.EMAIL_BUCKET, key: objectKey }).pipe(
+          Effect.mapError(authorityUnavailable)
+        );
+        yield* io(() =>
+          environment.DB.prepare(
+            "DELETE FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'storing'"
+          )
+            .bind(id, approved.user_id)
+            .run()
+        );
+        return yield* authorityUnavailable();
+      }
+      const publication = yield* Effect.result(
+        io(() =>
+          environment.DB.batch([
+            ...prepareEmailProcessingAdmission({
+              db: environment.DB,
+              userId: approved.user_id,
+              receiptId: id,
+              current: now,
+              state: "storing",
+            }),
+          ])
+        )
+      );
+      if (Result.isSuccess(publication) && publication.success[3]?.meta.changes === 1) return;
+      // A failed batch is ambiguous (the response can be lost after commit). Never delete a
+      // successfully queued object; otherwise remove both private bytes and its reservation.
+      const committed = yield* io(() =>
+        environment.DB.prepare(
+          "SELECT state FROM forwarded_email_receipts WHERE id = ? AND user_id = ?"
+        )
+          .bind(id, approved.user_id)
+          .first()
+      );
+      const published = Schema.decodeUnknownOption(ReceiptState)(committed);
+      if (Option.isSome(published) && published.value.state === "queued") return;
+      yield* erasePrivateObject({ bucket: environment.EMAIL_BUCKET, key: objectKey }).pipe(
+        Effect.mapError(authorityUnavailable)
+      );
+      yield* io(() =>
+        environment.DB.prepare(
+          "DELETE FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'storing'"
+        )
+          .bind(id, approved.user_id)
+          .run()
+      );
+      if (Result.isFailure(publication) && publication.failure.reason === "capacity") {
+        reject(message);
+        return;
+      }
+      return yield* authorityUnavailable();
+    }),
+  }).pipe(Effect.mapError(authorityUnavailable));
 });
 
 /** Publish only an opaque receipt identity and its explicit UserId; redelivery is expected. */
@@ -418,7 +484,8 @@ const prepareCleanupSelection = (db: D1Database, now: number): D1PreparedStateme
     db,
     statement: {
       sql: `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
-        WHERE state IN ('storing', 'queued') AND (expires_at_ms <= ?
+        WHERE NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE q.user_id=forwarded_email_receipts.user_id AND q.state<>'AwaitingReview')
+        AND state IN ('storing', 'queued') AND (expires_at_ms <= ?
           OR (state = 'storing' AND received_at_ms <= ?))
         ORDER BY expires_at_ms ASC, id ASC LIMIT ?`,
       params: [now + sweepLookaheadMs, now - storingInterruptionMs, maximumSweep],
@@ -483,7 +550,9 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
         ),
       ])
     );
-    yield* io(() => environment.EMAIL_BUCKET.delete(row.object_key));
+    yield* erasePrivateObject({ bucket: environment.EMAIL_BUCKET, key: row.object_key }).pipe(
+      Effect.mapError(authorityUnavailable)
+    );
     yield* io(() =>
       environment.DB.prepare(
         "UPDATE forwarded_email_receipts SET state = 'expired' WHERE id = ? AND user_id = ? AND state IN ('storing', 'queued')"

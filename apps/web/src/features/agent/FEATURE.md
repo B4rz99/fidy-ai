@@ -85,3 +85,10 @@ Further production diagnosis, 2026-10-12: an ordinary-language Dashboard-title r
 A separate synthetic, non-mutating proposal probe used the installed Workers AI adapter and the approved model through Wrangler's remote AI binding. It returned the closed category `ProviderQuotaExceeded`; no canonical mutation executed and no raw model output was recorded. That refusal does not classify the earlier production HTTP 503 failures. Wrangler's local harness initially stalled under Bun and ran after switching to Node. A foreign Dashboard test token subsequently appeared in the newly selected account, so production mutation tests paused pending confirmation that the account is isolated from the other active task.
 
 After the User confirmed the other agent had paused, production testing resumed on release `9aafe8db5498df4f875d65371239d877b6a24abf`. An ordinary-language title request and a separate read-only greeting both received HTTP 429 from `/web/hosted-turns`; the title response contained only the closed status `provider_quota_exceeded`. The UI displayed the daily-limit explanation, retained each failed draft and allowed explicit resubmission. No assistant success message or Dashboard mutation appeared. This closes the live quota-feedback check, while leaving the earlier intermittent ordinary-language edit failure undiagnosed until inference is available.
+
+Recurring planning audit, 2026-10-15: production release `d4a7c1cc0d` answered a November request
+with the exact owned COP 2 and USD 3 plans and dates in one assistant reply. The write request
+then exposed an informal question followed by an internal JSON/CONFIRMAR challenge. The current
+follow-up adds structured, host-issued browser lifecycle approval with a readable owner-supplied
+summary, preserves exact confirmation authority and stage/recovery semantics, and prevents model
+prose from creating an approval button. Live write verification remains pending its deployment.

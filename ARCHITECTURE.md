@@ -16,7 +16,12 @@ separate responsibilities:
 
 Cloudflare is the sole Production runtime authority. The public ingress Worker has no D1 binding;
 the private Core Worker owns the User-scoped data API and primary D1 authority. The unrouted Email
-Worker has a narrow D1 binding for forwarded-mail admission and retention. Durable Objects coordinate
+Worker has a narrow D1 binding for forwarded-mail admission and retention. Core and Email also bind a separate private
+Titular-erasure registry bucket. Reviewed erasure checkpoints and restricted retained copies survive
+D1 recovery independently; the public Ingress has no database or registry binding. Ordinary native
+data units fail closed when the registry generation disagrees with D1. Dedicated operator Access
+owns review and controlled recovery release; it does not reuse browser, recovery or billing authority.
+Durable Objects coordinate
 per-User work, Queues redeliver bounded identities, Workflows execute durable steps, R2 retains
 private bytes, Email Workers admit forwarded mail, and Workers AI handles Fidy-controlled inference.
 An unimplemented seam returns a typed unavailable result rather than falling back to process-local

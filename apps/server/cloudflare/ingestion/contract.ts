@@ -6,6 +6,7 @@ import { Data, type Effect, type Option, Schema } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { QueryCaller, TransactionAuthority } from "../canonical-work/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
+import type { PrivateObjectBucket } from "../private-objects/contract";
 import {
   type StatementSubmission,
   StatementSubmissionId,
@@ -31,14 +32,7 @@ export type ForwardedEmailMessage = Pick<
 /** Private Email Worker bindings, never accessible through ingress. */
 export type ForwardedEmailEnvironment = Readonly<{
   DB: D1Database;
-  EMAIL_BUCKET: Readonly<{
-    put: (
-      key: string,
-      bytes: Uint8Array,
-      options: { customMetadata: { purpose: string } }
-    ) => Promise<unknown>;
-    delete: (key: string) => Promise<unknown>;
-  }>;
+  EMAIL_BUCKET: PrivateObjectBucket;
   EMAIL_QUEUE: Readonly<{
     send: (job: Readonly<{ receiptId: string; userId: string }>) => Promise<unknown>;
   }>;

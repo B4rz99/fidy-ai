@@ -161,13 +161,13 @@ export const statementRefusalResponse = (refusal: StatementPublicationRefusal): 
 
 const stagingService = (
   environment: StatementIngestionEnvironment,
-  current: number
+  current: () => number
 ): Option.Option<ReturnType<typeof StatementStaging.make>> =>
   Option.map(Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET), (bucket) =>
     StatementStaging.make({
       bucket,
       database: environment.DB,
-      nowEpochMs: () => current,
+      nowEpochMs: current,
     })
   );
 
@@ -216,7 +216,8 @@ export const uploadStagedStatement = ({
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const nowEpochMs = yield* Clock.currentTimeMillis;
-    const staging = stagingService(environment, nowEpochMs);
+    const clock = yield* Clock.Clock;
+    const staging = stagingService(environment, () => clock.currentTimeMillisUnsafe());
     if (Option.isNone(staging)) return unavailable();
     const admission = statementUploadAuthority({ db: environment.DB, current: nowEpochMs });
     const admitted = yield* Effect.result(

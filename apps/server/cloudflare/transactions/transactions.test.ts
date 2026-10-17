@@ -802,7 +802,15 @@ const sendPublicRequest = (
             getByName: (name) => ({
               fetch: (command) =>
                 new UserTransactionCoordinator(
-                  { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+                  {
+                    id: { name },
+                    storage: {
+                      getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+                        Promise.resolve(null),
+                      deleteAlarm: (): Promise<void> => Promise.resolve(),
+                      setAlarm: (): Promise<void> => Promise.resolve(),
+                    },
+                  },
                   coordinatorEnvironment(db)
                 ).fetch(new Request(command)),
             }),
@@ -837,7 +845,11 @@ effectIt.effect(
       const coordinator = new UserTransactionCoordinator(
         {
           id: { name: users[0] ?? "" },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         {
           ...coordinatorEnvironment(db),
@@ -983,7 +995,11 @@ const hostedNegativeFixture = (
       const instance = new UserTransactionCoordinator(
         {
           id: { name: users[0] ?? "" },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         { ...coordinatorEnvironment(db), AI: { run } }
       );
@@ -1050,6 +1066,8 @@ effectIt.effect(
         {
           id: { name: users[0] ?? "" },
           storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
             setAlarm: (): Promise<void> => Promise.reject(new Error("alarm unavailable")),
           },
         },
@@ -1169,7 +1187,11 @@ effectIt.effect(
       const instance = new UserTransactionCoordinator(
         {
           id: { name: users[0] ?? "" },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         {
           ...coordinatorEnvironment(controlledDb),
@@ -1319,7 +1341,14 @@ effectIt.effect("refuses repeated public over-allowance Turns before buying mode
     );
     let calls = 0;
     const coordinator = new UserTransactionCoordinator(
-      { id: { name: user }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+      {
+        id: { name: user },
+        storage: {
+          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+          deleteAlarm: (): Promise<void> => Promise.resolve(),
+          setAlarm: (): Promise<void> => Promise.resolve(),
+        },
+      },
       {
         ...coordinatorEnvironment(db),
         AI: {
@@ -1433,7 +1462,11 @@ effectIt.effect(
       const coordinator = new UserTransactionCoordinator(
         {
           id: { name: users[0] ?? "" },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         {
           ...coordinatorEnvironment(db),
@@ -3731,14 +3764,22 @@ it("serializes concurrent mutations for one User without mixing another User's r
       const coordinatorA = new UserTransactionCoordinator(
         {
           id: { name: first.value.userId },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         coordinatorEnvironment(db)
       );
       const coordinatorB = new UserTransactionCoordinator(
         {
           id: { name: second.value.userId },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         coordinatorEnvironment(db)
       );
@@ -3805,7 +3846,11 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
       const coordinator = new UserTransactionCoordinator(
         {
           id: { name: session.value.userId },
-          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+          storage: {
+            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+            deleteAlarm: (): Promise<void> => Promise.resolve(),
+            setAlarm: (): Promise<void> => Promise.resolve(),
+          },
         },
         {
           DB: db,

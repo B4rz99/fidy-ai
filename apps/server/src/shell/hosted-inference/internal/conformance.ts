@@ -5,6 +5,7 @@ import {
   UpdateTransactionInput,
 } from "~/core/transactions/contract";
 import { IanaTimeZone } from "~/core/_shared/context";
+import { RecurringCommand } from "~/core/recurring-plans/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
   HostedInferenceError,
@@ -187,6 +188,42 @@ export const verifyTransactionDeletion = (
       Schema.Struct({ params: Schema.Struct({ id: TransactionId }) })
     )(call.params).pipe(Effect.mapError(conformanceFailure));
     if (args.params.id !== representativeTransactionId) {
+      return yield* conformanceFailure();
+    }
+  });
+
+const representativePlanId = "00000000-0000-4000-8000-000000000002";
+const expectedRecurringLifecycle = Schema.Struct({
+  expectedRevision: Schema.Literal(2),
+  edit: Schema.Struct({
+    kind: Schema.Literal("lifecycle"),
+    planId: Schema.Literal(representativePlanId),
+    action: Schema.Literal("stop"),
+    date: Schema.Literal("2026-09-22"),
+  }),
+});
+
+export const verifyRecurringLifecycle = (
+  inference: HostedInferenceService
+): Effect.Effect<void, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const prepared = yield* inference.prepareText({
+      context: context(
+        `Deja de seguir el recurrente de prueba ${representativePlanId} desde hoy, 22 de septiembre de 2026. La revisión observada del documento es 2. Usa la herramienta para preparar el cambio; el host obtiene la confirmación.`
+      ),
+      availableOperations: [CanonicalOperationId.make("recurringPlans.applyRecurringEdit")],
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(1),
+    });
+    const result = yield* prepared.execute;
+    const call = result.toolCalls[0];
+    if (result.toolCalls.length !== 1 || call?.operation !== "recurringPlans.applyRecurringEdit") {
+      return yield* conformanceFailure();
+    }
+    const args = yield* Schema.decodeUnknownEffect(Schema.Struct({ payload: RecurringCommand }))(
+      call.params
+    ).pipe(Effect.mapError(conformanceFailure));
+    if (!Schema.is(expectedRecurringLifecycle)(args.payload)) {
       return yield* conformanceFailure();
     }
   });

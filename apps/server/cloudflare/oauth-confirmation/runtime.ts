@@ -1,3 +1,6 @@
+import { projections as erasureProjections } from "./internal/erasure";
+import { makeErasureStore } from "../erasure-store/runtime";
+import type { ErasureStore } from "../erasure-store/contract";
 import { Effect } from "effect";
 import { OAuthConfirmationRetentionUnavailable } from "./contract";
 
@@ -16,3 +19,6 @@ export const sweepOAuthConfirmation = (
     Effect.asVoid,
     Effect.mapError(() => new OAuthConfirmationRetentionUnavailable())
   );
+
+export const makeOauthConfirmationErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
+  erasureProjections.map((projection) => makeErasureStore({ db, projection }));

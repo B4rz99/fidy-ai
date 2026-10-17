@@ -33,6 +33,7 @@ export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
 export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
 export const recurringRecoveryUserId = "24000000-0000-4000-8000-000000000421";
 export const navigationIdentities = [
+  { key: "navigationClock", userId: "24000000-0000-4000-8000-000000000511" },
   { key: "navigationTransactions", userId: "24000000-0000-4000-8000-000000000451" },
   { key: "navigationBudget", userId: "24000000-0000-4000-8000-000000000461" },
   { key: "navigationRecurring", userId: "24000000-0000-4000-8000-000000000471" },

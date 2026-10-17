@@ -183,7 +183,7 @@ test("refreshes the retained recurring default month after midnight", ({ page, r
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({ page, request, identity: "navigationRecurring" })
+        signInNavigationThroughCore({ page, request, identity: "navigationClock" })
       );
       yield* Effect.tryPromise(() => page.clock.setFixedTime("2026-11-01T04:59:00Z"));
       yield* Effect.tryPromise(() => page.goto("/app/recurring"));

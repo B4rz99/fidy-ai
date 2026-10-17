@@ -1003,6 +1003,23 @@ for (const picker of ["Fecha del movimiento", "Hora del movimiento"]) {
         yield* Effect.tryPromise(() =>
           expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
         );
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Historial", exact: true }).click()
+        );
+        yield* Effect.tryPromise(() => page.getByRole("button", { name: /^Pendientes/u }).click());
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: picker, exact: true }).click()
+        );
+        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
+        yield* Effect.tryPromise(() => page.goBack());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("dialog", { includeHidden: true })).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() => page.goForward());
+        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
+        );
       })
     ));
 }

@@ -1,4 +1,4 @@
-import { useRouterState } from "@tanstack/react-router";
+import { useMatch } from "@tanstack/react-router";
 import { TimeField } from "@/ui/components/time-field";
 import { CalendarField } from "@/ui/components/calendar-field";
 import { Currency } from "@/transport/client";
@@ -24,9 +24,12 @@ type Props = Readonly<{
   timeZone: string;
 }>;
 export const ReviewFields = (props: Props): JSX.Element => {
-  const active = useRouterState({
-    select: (state) => state.location.pathname === "/app/needs-review",
-  });
+  const active =
+    useMatch({
+      from: "/authenticated/app/needs-review",
+      shouldThrow: false,
+      select: (match) => (match.search.status ?? "pending") === "pending",
+    }) ?? false;
   return <ReviewFieldControls key={String(active)} {...props} locked={props.locked || !active} />;
 };
 

@@ -93,6 +93,7 @@ const signInWithIdentity = (
     | "navigationTransactions"
     | "navigationBudget"
     | "navigationRecurring"
+    | "navigationClock"
     | "navigationDashboard"
 ): Promise<void> =>
   page.clock
@@ -277,6 +278,7 @@ export const signInNavigationThroughCore = (
         | "navigationTransactions"
         | "navigationBudget"
         | "navigationRecurring"
+        | "navigationClock"
         | "navigationDashboard";
     }>
 ): Promise<void> => signInWithIdentity(input, input.identity);

@@ -1,0 +1,51 @@
+apps/web/src/app/recurring-workspace.tsx
+  s_ede1c3735d03b7::t_0e20dfeb7d6501 41-46
+  s_ede1c3735d03b7::t_5617df19303f83 1-40,47-55
+apps/web/src/app/review-workspace.tsx
+  s_ede1c3735d03b7::t_0e20dfeb7d6501 43
+  s_ede1c3735d03b7::t_19753065c98fa6 1-2,5,9,46,49
+apps/web/src/app/routes.ts
+  s_ede1c3735d03b7::t_0e20dfeb7d6501 178
+apps/web/src/app/workspace-resume.ts
+  s_ede1c3735d03b7::t_0e20dfeb7d6501 7-10
+  s_ede1c3735d03b7::t_afb5d438461404 1-6,11-30
+apps/web/src/features/recurring/feature.tsx
+  s_ede1c3735d03b7::t_0e20dfeb7d6501 259-260
+  s_ede1c3735d03b7::t_2d2be1415ce215 4,49,63-66,110-112,116-119,139,261
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_ede1c3735d03b7::t_cf886979ef4433 13,19,400,410
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_ede1c3735d03b7::t_d388e5c3b95baa 24,34-39,102-111,163-168
+apps/web/e2e/budgets.spec.ts
+  s_ede1c3735d03b7::t_ebd42a7234ad7d 4,343-344
+apps/web/e2e/provider-authentication.journeys.ts
+  s_ede1c3735d03b7::t_041ec10ec120db 2-6,400,422,449
+apps/web/e2e/real-core-fixture.ts
+  s_ede1c3735d03b7::t_e86cb3a56d73ca 83,92-95,268-283
+apps/web/e2e/workspace-navigation.spec.ts
+  s_ede1c3735d03b7::t_7d84709e4259ac 4,16,22,28,34,42-44,80-86,88,93-107,136-180
+apps/web/src/app/application-frame.tsx
+  s_ede1c3735d03b7::t_470f0fc5321882 5,39
+apps/web/src/features/recurring/FEATURE.md
+  s_ede1c3735d03b7::t_5e8b3c176dfc35 265-272
+apps/web/src/features/recurring/month.tsx
+  s_ede1c3735d03b7::t_570888a09c20e3 1,131-137,139-141,158,170-173
+apps/web/src/features/recurring/workspace.tsx
+  s_ede1c3735d03b7::t_3d02e5b394aab6 1,326-339,341-371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52198196ce2e7daf10c0f7cba219f78a3fc69500",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,524 @@
+apps/server/cloudflare/insights/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-723
+dependency-policy.json
+  s_ede1c3735d03b7::t_a102902e465843 35-38
+  s_ede1c3735d03b7::t_3e529d0c84aae6 33-34
+apps/server/cloudflare/identity/current-user.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 7,19-24
+apps/web/src/transport/client.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 271
+apps/server/cloudflare/agent/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,39-41
+apps/server/cloudflare/erasure/internal/retention-review.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-142
+apps/server/cloudflare/ingestion/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 2-6,8,109,144-154
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 23,26,52-63,141,167,176-187
+  s_ede1c3735d03b7::t_2e05cf7ec3f540 188-191
+apps/server/cloudflare/private-objects/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-93
+apps/server/src/core/subscription/FEATURE.md
+  s_ede1c3735d03b7::t_a102902e465843 101,142-201
+  s_ede1c3735d03b7::t_57218f603a35da 202
+apps/server/cloudflare/oauth-agents/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,272-274
+apps/server/cloudflare/recurring-plans/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/server/src/shell/consent/internal/protected-actions.ts
+  s_ede1c3735d03b7::t_a102902e465843 2,37-41
+apps/server/cloudflare/identity/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+infra/cloudflare/alchemy.run.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,22-74,151,180-198,291-294,304-305,378-379,425
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 199-204,556-560
+apps/server/cloudflare/erasure/erasure.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-59
+apps/server/cloudflare/insights/insight-store.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 214-219
+apps/server/ARCHITECTURE.md
+  s_ede1c3735d03b7::t_a102902e465843 110-149,464-469,686-689
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_ede1c3735d03b7::t_3cb05a66429245 87-88
+  s_ede1c3735d03b7::t_a102902e465843 387-391,431,445,477,1136
+apps/server/cloudflare/public-worker-erasure.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-64
+apps/server/cloudflare/identity/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-31,33-205
+  s_ede1c3735d03b7::t_54871fa9a68e2c 32
+apps/server/cloudflare/recurring-plans/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-28
+apps/server/cloudflare/erasure/internal/restore.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-153
+apps/server/src/shell/erasure/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-14
+apps/server/cloudflare/erasure-store/internal/original-holds.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-230
+apps/server/cloudflare/whatsapp/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-250
+apps/server/cloudflare/erasure/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-111
+apps/server/cloudflare/erasure/internal/sealed-case.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-49
+apps/web/src/features/recurring/query-failure.tsx
+  s_ede1c3735d03b7::t_a102902e465843 1-39
+apps/server/cloudflare/migrations/0107_failed_card_replacement.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-189
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 230-238
+apps/server/cloudflare/ingestion/internal/statement-ingestion.ts
+  s_ede1c3735d03b7::t_a102902e465843 164,170,219-220
+apps/server/cloudflare/subscription/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-4,154,158,212,223,267-269
+apps/server/cloudflare/transactions/internal/erasure.ts
+  s_ede1c3735d03b7::t_54871fa9a68e2c 130,256
+  s_ede1c3735d03b7::t_a102902e465843 1-129,131-255,257-285
+apps/server/src/core/recurring/FEATURE.md
+  s_ede1c3735d03b7::t_a102902e465843 49-51,53-54
+apps/server/src/shell/processing-consent/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 1,3,83-84,87-90
+apps/server/cloudflare/agent/internal/service.ts
+  s_ede1c3735d03b7::t_a102902e465843 387-393
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_ede1c3735d03b7::t_a102902e465843 77,381-395,440
+apps/server/cloudflare/memory/memory.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 187-194
+apps/server/cloudflare/connections/connections.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 181-189
+apps/server/cloudflare/audit/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-316
+apps/server/cloudflare/connections/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 1,314-327
+apps/server/cloudflare/email-authentication/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-4,64,75,106,117,121-123
+apps/server/cloudflare/erasure/orchestration.test.ts
+  s_ede1c3735d03b7::t_3cb05a66429245 84,87-88,91,151,158,217
+  s_ede1c3735d03b7::t_a82a4a9eaab2d7 85-86,89-90,152-157
+  s_ede1c3735d03b7::t_a102902e465843 1-83,92-150,159-216,218-277
+apps/web/src/features/agent/feature.tsx
+  s_ede1c3735d03b7::t_a102902e465843 14,39-42,44-45,74-98
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 34-35
+apps/web/e2e/recurring-recovery.spec.ts
+  s_ede1c3735d03b7::t_a102902e465843 11-12,14-41,50-53,56,58-59,64,83
+apps/web/src/features/privacy/FEATURE.md
+  s_ede1c3735d03b7::t_a102902e465843 26-39
+apps/server/cloudflare/budgets/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-270
+apps/server/cloudflare/mcp/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 487,983
+DESIGN.md
+  s_ede1c3735d03b7::t_a102902e465843 561-565
+apps/server/cloudflare/quotas/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-28
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_ede1c3735d03b7::t_a102902e465843 425-426,434,468,521-549,558-568,594-596,603,977-978,1053
+apps/server/src/shell/hosted-inference/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 350
+apps/server/cloudflare/erasure/internal/operator.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-90
+scripts/titular-requests/input.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-37
+apps/server/src/shell/subscription/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 176,180
+apps/server/cloudflare/erasure/originals.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-156
+apps/web/src/features/transactions/privacy-view.tsx
+  s_ede1c3735d03b7::t_a102902e465843 28,61
+apps/server/cloudflare/migrations/0096_titular_erasure_fences_1.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-577
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 203-211
+apps/server/cloudflare/recurring/recurring.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 22-29
+ARCHITECTURE.md
+  s_ede1c3735d03b7::t_a102902e465843 19-24
+apps/server/cloudflare/erasure/internal/database.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-105
+apps/server/cloudflare/migrations/0104_titular_erasure_projections.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-164
+apps/server/cloudflare/memory/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+docs/operations/titular-erasure-1274.md
+  s_ede1c3735d03b7::t_a102902e465843 1-294
+apps/server/cloudflare/migrations/0101_titular_erasure_holds_1.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-683
+apps/server/cloudflare/categories/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/server/cloudflare/provider-authentication/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,76-80
+apps/web/src/features/transactions/feature.tsx
+  s_ede1c3735d03b7::t_a102902e465843 157,212-217,221-223,226,258,279-316,366
+GLOSSARY.md
+  s_ede1c3735d03b7::t_a102902e465843 417-436
+scripts/check-lint-suppressions.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 130,134
+apps/server/cloudflare/recovery/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-76
+scripts/titular-erasure/main.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-45
+apps/server/cloudflare/erasure/internal/inventory.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-33
+apps/server/cloudflare/recurring-plans/recurring-plans.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1,5,12-17,22,102,901-989
+  s_ede1c3735d03b7::t_67d1aefdbec8d6 990-993
+apps/server/cloudflare/recurring-plans/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-2,8,11,13,36-37,80-92,94-100,188-210
+apps/server/cloudflare/ingestion/internal/forwarded-email.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6,24-52,317-328,331,340-341,356-433,487-488,553-555
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 805-813,848-852,998-1002,1069-1070,1190-1194,1344-1351,1465-1469,3767-3771,3778-3782,3849-3853
+apps/web/src/features/transactions/workspace.tsx
+  s_ede1c3735d03b7::t_a102902e465843 39,47-50,58-59,616-620,622-623
+infra/cloudflare/workers-ai-conformance-script.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 254-259
+apps/server/cloudflare/d1-test-fixture.ts
+  s_ede1c3735d03b7::t_3cb05a66429245 265-266
+  s_ede1c3735d03b7::t_a102902e465843 6-7,24-42,49-53,56,58,65-69,73-85,89,91-93,96,302-303
+apps/server/cloudflare/ingestion/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 9,35
+apps/server/cloudflare/migrations/0106_declined_card_retry.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-68
+apps/server/cloudflare/core-worker.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 21-22
+apps/server/cloudflare/memory/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-28
+apps/server/cloudflare/erasure-store/internal/originals.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-133
+apps/server/src/shell/hosted-inference/workers-ai.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 7,303-346
+  s_ede1c3735d03b7::t_b7fea17adf0790 347
+apps/web/src/features/recurring/FEATURE.md
+  s_ede1c3735d03b7::t_a102902e465843 38-41,61-196,199-202,217-219
+scripts/titular-erasure/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-48
+apps/server/cloudflare/audit/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/server/cloudflare/agent/internal/hosted-turn.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-2,200,203-204,1855-1865,1869-1877,1963-1978
+apps/server/cloudflare/erasure/internal/disposition.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-57
+apps/server/cloudflare/migrations/0098_titular_erasure_fences_3.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-567
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 248-252
+apps/server/cloudflare/erasure/retention-review.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-253
+apps/server/cloudflare/web-authentication/session-clock.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 6,12-18,29,99
+apps/server/cloudflare/erasure/internal/initialize.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-33
+apps/server/cloudflare/categories/internal/canonical-category.ts
+  s_ede1c3735d03b7::t_a102902e465843 12-16,21-28,148,152,154-156
+apps/server/src/shell/hosted-inference/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 16,61
+scripts/titular-requests/main.ts
+  s_ede1c3735d03b7::t_a102902e465843 1,3,8,15
+apps/server/cloudflare/web-session/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/server/cloudflare/migrations/0103_titular_erasure_holds_3.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-647
+apps/server/cloudflare/erasure/internal/generation.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-46
+apps/server/cloudflare/tokens/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,15-17
+apps/server/cloudflare/migrations/0097_titular_erasure_fences_2.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-571
+apps/server/cloudflare/migrations/0099_titular_erasure_fences_4.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-563
+apps/server/cloudflare/erasure/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-309
+apps/server/cloudflare/oauth-confirmation/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-28
+apps/server/cloudflare/erasure/internal/operator-request.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-164
+apps/server/cloudflare/ingestion/internal/erasure-originals.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-8
+apps/server/cloudflare/consent/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-4,128-130,141,159-161
+apps/server/cloudflare/erasure/native.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-301
+apps/server/cloudflare/web-authentication/session-lifetime.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 6,12-18,60,133
+apps/server/cloudflare/core-http/internal/http.ts
+  s_ede1c3735d03b7::t_a102902e465843 3,526,1611-1621
+apps/web/e2e/recurring-chat-confirmation.spec.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-126
+apps/server/cloudflare/budgets/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/server/cloudflare/tokens/pats.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 332-337,2477,3669,3678
+apps/server/src/core/erasure/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-143
+apps/server/cloudflare/ingestion/email-worker.ts
+  s_ede1c3735d03b7::t_a102902e465843 1,21,30
+apps/server/cloudflare/public-worker.ts
+  s_ede1c3735d03b7::t_a102902e465843 236,252-253,413,521,527-533,546,610
+apps/server/cloudflare/agent/internal/hosted-browser-confirmation.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-89
+apps/server/cloudflare/core-http/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 28-30
+apps/server/cloudflare/web-session/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-48
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 88-95,172-173
+apps/server/cloudflare/erasure-store/internal/original-checkpoint.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-72
+docs/operations/titular-erasure-inventory-1274.md
+  s_ede1c3735d03b7::t_a102902e465843 1-2,4-62,64-262
+  s_ede1c3735d03b7::t_54871fa9a68e2c 3
+  s_ede1c3735d03b7::t_a82a4a9eaab2d7 63
+apps/server/src/shell/agent/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 15-17,22
+apps/web/src/features/privacy/feature.tsx
+  s_ede1c3735d03b7::t_a102902e465843 1,254
+apps/server/cloudflare/migrations/0110_review_erasure.sql
+  s_ede1c3735d03b7::t_54871fa9a68e2c 1-64
+apps/web/ARCHITECTURE.md
+  s_ede1c3735d03b7::t_a102902e465843 65-70
+apps/server/cloudflare/consent/browser.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 195-203
+apps/server/cloudflare/ingestion/internal/erasure.ts
+  s_ede1c3735d03b7::t_54871fa9a68e2c 7-22,29-30,414
+  s_ede1c3735d03b7::t_a102902e465843 1-6,31-413,415-568
+  s_ede1c3735d03b7::t_a82a4a9eaab2d7 23-28
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1293-1300
+apps/server/cloudflare/transactions/ingestion-capture.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 9,25-30
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_ede1c3735d03b7::t_3cb05a66429245 148
+  s_ede1c3735d03b7::t_a102902e465843 421-427,1332-1339,1707-1711,2623-2630,2862-2869,2927-2934
+  s_ede1c3735d03b7::t_289094d0b02fc1 420
+apps/server/cloudflare/erasure-store/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-65
+apps/server/cloudflare/canonical-admission/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,45-47
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_ede1c3735d03b7::t_a102902e465843 26,120-124
+  s_ede1c3735d03b7::t_b47905c89625f1 125-126
+apps/server/cloudflare/canonical-admission/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-154
+apps/server/cloudflare/erasure-store/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-39
+apps/server/cloudflare/subscription/payment-enrollment-migration.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 106-156
+apps/web/src/features/transactions/FEATURE.md
+  s_ede1c3735d03b7::t_a102902e465843 3-19,30-32
+apps/server/cloudflare/maintenance/core-schedule.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 38-42
+apps/server/cloudflare/categories/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-28
+apps/server/cloudflare/transactions/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-36,46,49,116-117,409-502,644,647,652,657-658,661,735-753,763-765,771-778,839-871
+apps/server/cloudflare/erasure-store/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-82
+apps/server/cloudflare/subscription/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-598
+apps/server/src/shell/hosted-inference/internal/conformance.ts
+  s_ede1c3735d03b7::t_a102902e465843 8,195-228
+  s_ede1c3735d03b7::t_0ef1f1a2801b03 229-230
+apps/server/cloudflare/erasure/internal/registry-initialization.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-23
+apps/server/cloudflare/erasure/erasure.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-190
+apps/server/cloudflare/email-authentication/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-184
+apps/server/cloudflare/browser-login/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-59
+apps/server/cloudflare/core-http/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1,40-43,45-48
+apps/server/cloudflare/erasure/internal/control-objects.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-77
+apps/server/cloudflare/agent/hosted-retention.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 27-28
+apps/server/cloudflare/erasure/internal/held-records.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-361
+apps/server/cloudflare/erasure/internal/control-retention.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-84
+apps/server/cloudflare/oauth-agents/oauth-native-residency.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 245-253
+apps/server/cloudflare/migrations/0105_titular_erasure_current_plans_and_consent.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-96
+apps/server/cloudflare/erasure/internal/external.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-92
+apps/server/cloudflare/private-objects/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-18
+apps/server/cloudflare/erasure/restore.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-492
+apps/server/cloudflare/erasure/owner-disposition.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-98
+apps/server/cloudflare/oauth-confirmation/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,22-24
+apps/server/cloudflare/ingestion/internal/statement-document.ts
+  s_ede1c3735d03b7::t_a102902e465843 205-208,223,231-235
+apps/server/cloudflare/browser-login/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/server/cloudflare/migrations/0100_titular_erasure_fences_5.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-311
+apps/server/cloudflare/erasure/internal/draining.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-56
+package.json
+  s_ede1c3735d03b7::t_a102902e465843 27,41
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_ede1c3735d03b7::t_3cb05a66429245 64-65
+apps/server/cloudflare/recovery/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,64-66
+apps/web/src/features/privacy/erasure-request.tsx
+  s_ede1c3735d03b7::t_a102902e465843 1-80
+apps/web/src/features/agent/FEATURE.md
+  s_ede1c3735d03b7::t_a102902e465843 88-94
+apps/server/cloudflare/connections/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,147-149
+apps/server/cloudflare/resource-admission/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-28
+apps/server/src/shell/recurring-plans/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 61
+apps/server/cloudflare/erasure/recovery.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-325
+apps/server/cloudflare/provider-authentication/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-100
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 70-73,197-441
+  s_ede1c3735d03b7::t_fa598e017a154c 442
+apps/server/cloudflare/ingestion/internal/statement-staging.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6,398,426-435,452-453,457-463,465-493,522-543,573-594,1660-1661,1667-1668,1697-1700
+apps/server/cloudflare/canonical-work/operations.ts
+  s_ede1c3735d03b7::t_a102902e465843 23,30,33,222-241
+  s_ede1c3735d03b7::t_0fb83435930d37 242
+apps/server/src/core/recurring-plans/contract.ts
+  s_ede1c3735d03b7::t_a102902e465843 12,19
+apps/server/cloudflare/consent/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-455
+apps/server/src/shell/hosted-inference/internal/provider-schema.ts
+  s_ede1c3735d03b7::t_a102902e465843 24-64,80-111
+  s_ede1c3735d03b7::t_61b700a3a6ae3a 112
+apps/server/cloudflare/subscription/card-retry-erasure.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-251
+tools/depcruise/boundaries.mjs
+  s_ede1c3735d03b7::t_a102902e465843 28-31,47
+tools/astro/package.json
+  s_ede1c3735d03b7::t_a102902e465843 10
+scripts/titular-erasure/operations.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-127
+apps/server/cloudflare/email-authentication/ancillary-operations.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 5,25-30
+apps/server/cloudflare/migrations/0102_titular_erasure_holds_2.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-659
+apps/server/cloudflare/erasure/internal/review.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-139
+apps/server/cloudflare/oauth-agents/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-158
+apps/server/cloudflare/tokens/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-97
+apps/server/cloudflare/connections/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-76
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-13,114,906-910,2183-2190,4310-4317,4504-4511,4943-4950,4999-5006,6051-6052,6404-6411,6649-6656,7530-7719
+apps/web/e2e/transaction-pagination.spec.ts
+  s_ede1c3735d03b7::t_a102902e465843 413-492
+infra/cloudflare/scripts/check-workers-ai-conformance.sh
+  s_ede1c3735d03b7::t_a102902e465843 106,120
+infra/cloudflare/verify-edge-policy.ts
+  s_ede1c3735d03b7::t_a102902e465843 5
+apps/server/cloudflare/quotas/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,25-27
+apps/server/cloudflare/erasure/internal/progress.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-137
+apps/server/cloudflare/migrations/0095_titular_erasure.sql
+  s_ede1c3735d03b7::t_a102902e465843 1-123
+apps/server/cloudflare/agent/internal/hosted-confirmation.ts
+  s_ede1c3735d03b7::t_a102902e465843 3,14-15,61-68
+apps/server/cloudflare/erasure/internal/recovery-case.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-10
+apps/server/cloudflare/recurring/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,66-68
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 43-50
+apps/server/cloudflare/erasure-store/internal/d1.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-125
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_ede1c3735d03b7::t_a102902e465843 20,403,453-460
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_ede1c3735d03b7::t_a102902e465843 565-574
+apps/server/cloudflare/erasure/internal/receipt.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-189
+apps/web/e2e/product-journeys.spec.ts
+  s_ede1c3735d03b7::t_a102902e465843 300-399
+tsconfig.base.json
+  s_ede1c3735d03b7::t_a102902e465843 123,228-230
+  s_ede1c3735d03b7::t_b47713c75b5317 231
+apps/server/cloudflare/erasure/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-124
+apps/server/contracts/openapi.json
+  s_ede1c3735d03b7::t_a102902e465843 4188,4192,4858,4913,4917,4943,5019,5066,5070,5163,5170,5212,5216,5297,5343,5370,10416,10420,10504,10543,10564,10591,10598,22126,22135,22237,22281,22297,22469
+apps/server/cloudflare/consent/internal/egress.ts
+  s_ede1c3735d03b7::t_a102902e465843 1,18-30
+apps/server/cloudflare/insights/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-4,419,426,438-440
+apps/web/e2e/real-core-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 87,250-252
+  s_ede1c3735d03b7::t_a26a72c20e0455 253
+apps/server/cloudflare/erasure/internal/restore-case.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-249
+apps/web/src/features/subscription/feature.tsx
+  s_ede1c3735d03b7::t_a102902e465843 429,443,516,519-523,614-643,648,656,685-689,709,753,1042-1046,1093-1095,1101-1103
+apps/server/cloudflare/core-worker.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-2,62-64,199,206-236,255,309
+apps/server/cloudflare/erasure/internal/provider-evidence.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-111
+apps/server/cloudflare/dashboard/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-28
+apps/web/src/features/recurring/feature.tsx
+  s_ede1c3735d03b7::t_a102902e465843 10,81
+apps/server/cloudflare/ingestion/statement-upload-race.test-fixture.ts
+  s_ede1c3735d03b7::t_a102902e465843 95-98
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_ede1c3735d03b7::t_a102902e465843 227,413-420,1065-1074,1437-1438
+apps/server/cloudflare/dashboard/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_ede1c3735d03b7::t_a102902e465843 79
+apps/web/package.json
+  s_ede1c3735d03b7::t_a102902e465843 22
+apps/server/cloudflare/agent/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-316
+.patterns/ai.md
+  s_ede1c3735d03b7::t_a102902e465843 76-82
+apps/server/cloudflare/erasure/internal/checkpoint.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-98
+apps/server/cloudflare/whatsapp/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-3,32-34
+apps/server/cloudflare/recurring/internal/erasure.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-172
+docs/adr/0021-browser-only-payment-credential-enrollment.md
+  s_ede1c3735d03b7::t_a102902e465843 24-31
+apps/web/e2e/privacy.spec.ts
+  s_ede1c3735d03b7::t_a102902e465843 12,16,25-29,241,271,355,375,381,532-569
+  s_ede1c3735d03b7::t_d2981da6c5f2c4 570-571
+apps/server/cloudflare/resource-admission/runtime.ts
+  s_ede1c3735d03b7::t_a102902e465843 1-6
+apps/web/src/features/agent/conversation.ts
+  s_ede1c3735d03b7::t_a102902e465843 114-118,121,132-136,147,153-187,212-222
+bun.lock
+  s_ede1c3735d03b7::t_a5bd863ad5f093 95,292,294,2014,2160-2161,2222-2223,2296-2299
+tools/astro/bun.lock
+  s_ede1c3735d03b7::t_af958a73d2f55e 10,114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2734a843e87ed5f0e9d47ada09e083606065cf8",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

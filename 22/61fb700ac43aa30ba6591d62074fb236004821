@@ -1,0 +1,40 @@
+apps/web/e2e/needs-review.spec.ts
+  s_ede1c3735d03b7::t_550ce7f70a23a6 963-964,966-967,970-1008
+  s_ede1c3735d03b7::t_35828ce499e278 965,968-969
+apps/web/e2e/workspace-navigation.spec.ts
+  s_ede1c3735d03b7::t_550ce7f70a23a6 181-187,189-193,195-212
+  s_ede1c3735d03b7::t_a4a577e9b58101 188,194
+apps/web/src/features/needs-review/fields.tsx
+  s_ede1c3735d03b7::t_883878e20f4e3a 1,26-29,31-33
+  s_ede1c3735d03b7::t_550ce7f70a23a6 30
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_ede1c3735d03b7::t_ff2f07a03a3cb9 25,404
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_ede1c3735d03b7::t_5f5be7341673d9 33,125-130
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_ede1c3735d03b7::t_6d705a2538bdfd 28,829
+apps/web/e2e/real-core-fixture.ts
+  s_ede1c3735d03b7::t_f482c510172f11 92,267-269
+apps/web/e2e/recurring-plans.spec.ts
+  s_ede1c3735d03b7::t_371f518d233389 182
+apps/web/src/features/recurring/FEATURE.md
+  s_ede1c3735d03b7::t_88497756b94bb3 269
+apps/web/src/features/recurring/feature.tsx
+  s_ede1c3735d03b7::t_d1b60bea42d047 6,124-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2261fb700ac43aa30ba6591d62074fb236004821",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

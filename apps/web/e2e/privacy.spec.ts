@@ -1,6 +1,14 @@
+import {
+  consultAuthorizationThroughCore,
+  openPrivacyTransactionsThroughCore,
+  reloadPrivacyThroughCore,
+  reloadUpgradeThroughCore,
+  reopenPrivacyThroughCore,
+} from "./privacy-core-fixture";
 import { type Cause, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import {
+  openUpgradeThroughCore,
   signInPrivacyErasureThroughCore,
   signInPrivacyRenewalThroughCore,
   signInPrivacyThroughCore,
@@ -15,6 +23,7 @@ const unauthenticatedStatus = 401;
 const successStatus = 200;
 const unavailableResponse = (route: Route): Promise<void> => route.fulfill({ status: 503 });
 const acceptedStatus = 202;
+const completeWithdrawalJourneyMilliseconds = 60_000;
 const withdrawalCheckbox = (page: Page): Locator =>
   page.getByRole("checkbox", {
     name: "Entiendo las consecuencias y quiero retirar mi autorización de tratamiento.",
@@ -39,6 +48,13 @@ const captureAccessResponse = (route: Route, capture: (payload: unknown) => void
     })
   );
 
+const captureErasureReplies = (page: Page, replies: unknown[]): Promise<unknown> =>
+  page.route(`${apiOrigin}/web/privacy/erasure`, (route) =>
+    captureAccessResponse(route, (payload) => {
+      replies.push(payload);
+    })
+  );
+
 const verifyTransactionAccess = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -50,9 +66,7 @@ const verifyTransactionAccess = (page: Page): Promise<void> =>
       yield* Effect.tryPromise(() =>
         page.route(endpoint, (route) => captureAccessResponse(route, capture))
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Ver mis transacciones", exact: true }).click()
-      );
+      yield* Effect.tryPromise(() => openPrivacyTransactionsThroughCore(page));
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/));
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Solo lectura", { exact: true })).toBeVisible()
@@ -135,9 +149,7 @@ const verifyRefusalRecovery = (page: Page, original: string): Promise<void> =>
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos autorizar esta acción.")
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Revisar privacidad", exact: true }).click()
-      );
+      yield* Effect.tryPromise(() => reopenPrivacyThroughCore(page));
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/settings\/privacy$/));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("region", { name: "Constancia de retiro" })).toHaveText(original, {
@@ -157,14 +169,14 @@ const verifyWithdrawnUpgrade = (page: Page): Promise<void> =>
           enrollmentRequests.push(path);
         }
       });
-      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() => openUpgradeThroughCore(page));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("Tu autorización está retirada")
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("link", { name: "Iniciar sesión", exact: true })).toHaveCount(0)
       );
-      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => reloadUpgradeThroughCore(page));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("Tu autorización está retirada")
       );
@@ -207,7 +219,7 @@ const verifyRenewal = (page: Page): Promise<void> =>
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Tu autorización está vigente.", { exact: true })).toBeVisible()
       );
-      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => reloadPrivacyThroughCore(page));
       yield* Effect.tryPromise(() =>
         expect(
           page.getByRole("button", { name: "Retirar autorización", exact: true })
@@ -251,7 +263,9 @@ test("an expired-trial User withdraws through real Core and can recover the same
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      test.setTimeout(completeWithdrawalJourneyMilliseconds);
       yield* Effect.tryPromise(() => signInPrivacyThroughCore({ page, request }));
+      const privacyReviewRequests = observePrivacyReviewRequests(page);
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
       yield* Effect.tryPromise(() =>
         expect(
@@ -268,14 +282,12 @@ test("an expired-trial User withdraws through real Core and can recover the same
       const receipt = page.getByRole("region", { name: "Constancia de retiro" });
       yield* Effect.tryPromise(() => expect(receipt).toContainText("Autorización retirada"));
       const original = yield* Effect.tryPromise(() => receipt.innerText());
-      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => reloadPrivacyThroughCore(page));
       yield* Effect.tryPromise(() => expect(receipt).toHaveText(original, { useInnerText: true }));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("link", { name: "obarboza@fidyapp.com" })).toBeVisible()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Consultar prueba", exact: true }).click()
-      );
+      yield* Effect.tryPromise(() => consultAuthorizationThroughCore(page));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("region", { name: "Copia de autorización" })).toContainText(
           "Versión del aviso:"
@@ -289,17 +301,50 @@ test("an expired-trial User withdraws through real Core and can recover the same
           "Referencia:"
         )
       );
-      yield* Effect.tryPromise(() => verifyTransactionAccess(page));
       yield* Effect.tryPromise(() => verifyWithdrawnUpgrade(page));
       const response = yield* Effect.tryPromise(() =>
         page.request.get(`${apiOrigin}/transactions`, {
-          headers: { origin: "https://127.0.0.1:4173" },
+          headers: { origin: new URL(page.url()).origin },
         })
       );
       expect(response.status()).toBe(unauthenticatedStatus);
       yield* Effect.tryPromise(() => verifyRefusalRecovery(page, original));
+      yield* Effect.tryPromise(() => verifyTransactionAccess(page));
+      yield* Effect.tryPromise(() => verifyAnonymousTransactionRefusal(page));
+      expect(privacyReviewRequests).toEqual([]);
     })
   ));
+
+const observePrivacyReviewRequests = (page: Page): ReadonlyArray<string> => {
+  const requests: Array<string> = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (
+      new URL(page.url()).pathname === "/settings/privacy" &&
+      path === "/ingestion/review-workspace"
+    ) {
+      requests.push(path);
+    }
+  });
+  return requests;
+};
+
+const verifyAnonymousTransactionRefusal = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.context().clearCookies());
+      yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("Acceso no autorizado")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("table", { name: "Tabla de transacciones" })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Solo lectura", { exact: true })).toHaveCount(0)
+      );
+    })
+  );
 
 test("an uncertain withdrawal never claims success or repeats the mutation before checking status", ({
   page,
@@ -506,18 +551,14 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       const button = region.getByRole("button", { name: "Solicitar eliminación", exact: true });
       yield* Effect.tryPromise(() => expect(button).toBeDisabled());
       yield* Effect.tryPromise(() => region.getByRole("checkbox").check());
-      const first = page
-        .waitForResponse(
-          (response) =>
-            response.url() === `${apiOrigin}/web/privacy/erasure` &&
-            response.request().method() === "POST"
-        )
-        .then((response) => {
-          expect(response.status()).toBe(acceptedStatus);
-          return response.json();
-        });
+      const replies: unknown[] = [];
+      yield* Effect.tryPromise(() => captureErasureReplies(page, replies));
+      const first = page.waitForResponse(`${apiOrigin}/web/privacy/erasure`);
       yield* Effect.tryPromise(() => button.click());
-      const initial: unknown = yield* Effect.tryPromise(() => first);
+      const response = yield* Effect.tryPromise(() => first);
+      expect(response.status()).toBe(acceptedStatus);
+      const initial: unknown = replies[0];
+      expect(initial).toBeDefined();
       yield* Effect.tryPromise(() =>
         expect(region.getByRole("alert")).toContainText("Aún no hemos eliminado tus datos")
       );
@@ -525,18 +566,15 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       yield* Effect.tryPromise(() => expect(region).not.toContainText("Referencia:"));
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() => region.getByRole("checkbox").check());
-      const retry = page
-        .waitForResponse(
-          (value) =>
-            value.url() === `${apiOrigin}/web/privacy/erasure` &&
-            value.request().method() === "POST"
-        )
-        .then((response) => {
-          expect(response.status()).toBe(acceptedStatus);
-          return response.json();
-        });
+      const retry = page.waitForResponse(
+        (value) =>
+          value.url() === `${apiOrigin}/web/privacy/erasure` && value.request().method() === "POST"
+      );
       yield* Effect.tryPromise(() => button.click());
-      expect(yield* Effect.tryPromise(() => retry)).toEqual(initial);
+      const repeated = yield* Effect.tryPromise(() => retry);
+      expect(repeated.status()).toBe(acceptedStatus);
+      expect(replies).toHaveLength(2);
+      expect(replies[1]).toEqual(initial);
       yield* Effect.tryPromise(() => verifyAccessibility(page));
     })
   ));

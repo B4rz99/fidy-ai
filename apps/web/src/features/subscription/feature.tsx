@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import {
   make as makeScopedAtom,
   useAtom,
@@ -1348,9 +1349,12 @@ export const SubscriptionStandingView = ({
           Tu historial permanece disponible aunque termine el acceso Pro. Las cuotas no son un
           bloqueo de suscripción.
         </p>
-        <Button type="button" variant="outline" onClick={onRetry}>
-          Actualizar estado
-        </Button>
+        <RefreshButton
+          type="button"
+          variant="outline"
+          onClick={onRetry}
+          label="Actualizar estado"
+        />
       </CardContent>
     </Card>
   );

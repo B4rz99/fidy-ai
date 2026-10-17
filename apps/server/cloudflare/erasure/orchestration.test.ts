@@ -81,6 +81,14 @@ const verifyNativeErasure = Effect.gen(function* () {
   );
   for (const [index, id] of [userId, foreignUser].entries()) {
     yield* seedPersonalClasses({ db, userId: id, current, index });
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(`INSERT INTO ingestion_review_state
+        (id,user_id,status,revision,draft_json,transaction_id,expires_at_ms,updated_at_ms,created_at_ms)
+        VALUES(?,?,'created',1,'{"counterparty":"Personal draft"}',?,?,?,?)`)
+        .bind(id, id, id, current + 86400000, current, current)
+        .run()
+    );
     const key = `staging/statement/v1/${(index === 0 ? "a" : "b").repeat(64)}`;
     yield* Effect.tryPromise(() =>
       db
@@ -140,6 +148,14 @@ const verifyNativeErasure = Effect.gen(function* () {
     )
   ).toBe("Sealing");
   yield* verifyNewStoreGuards(db);
+  yield* Effect.tryPromise(() =>
+    expect(
+      db
+        .prepare("UPDATE ingestion_review_state SET user_id=? WHERE user_id=?")
+        .bind(foreignUser, userId)
+        .run()
+    ).rejects.toThrow("erasure_fenced")
+  );
   expect(
     (yield* Effect.result(
       Effect.tryPromise(() =>
@@ -198,6 +214,7 @@ const verifyNativeErasure = Effect.gen(function* () {
     )
   ).toBe("Conservar");
   for (const table of [
+    "ingestion_review_state",
     "whatsapp_identities",
     "transactions",
     "source_attestations",

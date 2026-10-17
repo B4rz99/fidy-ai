@@ -34,6 +34,11 @@ export type AuditCredentialOperation =
   | "ingestion.getEmailForwarding"
   | "ingestion.getStatementSubmission"
   | "ingestion.listNeedsReviewItems"
+  | "ingestion.getReviewWorkspace"
+  | "ingestion.getReviewSuggestions"
+  | "ingestion.getReviewMaterial"
+  | "ingestion.getReviewItem"
+  | "ingestion.applyReviewEdit"
   | "ingestion.submitForExtraction"
   | "ingestion.resolveNeedsReviewItem"
   | "ingestion.skipNeedsReviewItem"
@@ -87,6 +92,11 @@ export type AuditAuthority =
   | OAuthAuthority;
 
 type AcceptedSessionOperation =
+  | "ingestion.getReviewWorkspace"
+  | "ingestion.getReviewSuggestions"
+  | "ingestion.getReviewMaterial"
+  | "ingestion.getReviewItem"
+  | "ingestion.applyReviewEdit"
   | "recurringPlans.getRecurringWorkspace"
   | "recurringPlans.applyRecurringEdit"
   | Extract<

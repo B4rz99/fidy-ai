@@ -690,3 +690,13 @@ planning storage to the agent. Browser review metadata is derived from a live sa
 same-Turn host challenge; model text cannot install it. Exact-input, expiry, channel and one-use
 confirmation guards remain at canonical execution. Historical RecurringSeries and frozen digest reports keep their existing meaning. See
 [ADR 0036](../../docs/adr/0036-recurring-planning.md).
+
+The ingestion review workspace projects statement rows, forwarded email and media into an
+expiry-ordered, metadata-only inbox and retained history. Revision-bound drafts and reversible
+skip/restore decisions live with Ingestion; individual reviewed capture composes Transaction and
+manual SourceAttestation writes in the canonical D1 unit. The source context and original expiry
+never come from the browser. Original material and deterministic suggestion reads use explicit
+WebSession-only canonical policies, so originals cannot enter agent tools or immutable transcripts.
+They return bounded escaped text with no-store delivery; missing media bytes permit manual completion
+before expiry. Draft/suggestion retention ends at the original source deadline independently of
+hosted conversation routing. Retry never commits a Transaction or overwrites User-edited facts.

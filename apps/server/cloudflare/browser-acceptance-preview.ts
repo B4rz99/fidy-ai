@@ -10,16 +10,19 @@ import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import {
   accessUserId,
+  budgetEditingUserId,
   budgetUserId,
   dashboardUserId,
   db,
   firstCardUserId,
   fixtureUserId,
+  navigationIdentities,
   paginationUserId,
   pairingUserId,
   privacyErasureUserId,
   privacyRenewalUserId,
   privacyUserId,
+  recurringEditingUserId,
   recurringRecoveryUserId,
   recurringSummaryUserId,
   recurringUserId,
@@ -395,8 +398,10 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
 const fixtureIdentities = [
+  ...navigationIdentities,
   { key: "recurring", userId: recurringUserId },
   { key: "recurringSummary", userId: recurringSummaryUserId },
+  { key: "recurringEditing", userId: recurringEditingUserId },
   { key: "recurringRecovery", userId: recurringRecoveryUserId },
   { key: "privacy", userId: privacyUserId },
   { key: "privacyRenewal", userId: privacyRenewalUserId },
@@ -404,6 +409,7 @@ const fixtureIdentities = [
   { key: "access", userId: accessUserId },
   { key: "dashboard", userId: dashboardUserId },
   { key: "budget", userId: budgetUserId },
+  { key: "budgetEditing", userId: budgetEditingUserId },
   { key: "pagination", userId: paginationUserId },
   { key: "firstCard", userId: firstCardUserId },
   { key: "pairing", userId: pairingUserId },

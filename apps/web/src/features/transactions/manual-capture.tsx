@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import type { CaptureStatus } from "./panel-state";
 import { useAtomSet } from "@effect/atom-react";
 import { BigDecimal, Cause, DateTime, Effect, Option, Predicate } from "effect";
@@ -172,9 +173,12 @@ const CaptureFeedback = ({
           No pudimos confirmar el registro de la transacción. Revisa el historial antes de registrar
           otro movimiento.
         </p>
-        <Button type="button" onClick={onCheckHistory} variant="outline">
-          Actualizar historial
-        </Button>
+        <RefreshButton
+          type="button"
+          onClick={onCheckHistory}
+          variant="outline"
+          label="Actualizar historial"
+        />
       </div>
     ) : null}
     {status === "failed" ? (

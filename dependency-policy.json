@@ -51,7 +51,7 @@
     {
       "name": "@effect/tsgo",
       "manifest": "package.json",
-      "reason": "0.51.1 still introduces 3,228 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the normal warning-failing project-reference build exits with status 2. Reproduced after normal installation on 2026-10-17 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit upstream severity and supported stable replacements, then rerun the normal installer, typecheck and unit verification.",
+      "reason": "0.51.1 introduces 3,278 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-17 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
       "until": "2026-10-24T00:00:00Z"
     },
     {
@@ -131,7 +131,7 @@
     {
       "cve": "CVE-2026-93687",
       "path": "bun.lock",
-      "reason": "Temporarily retain the required shadcn development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; the GitHub Advisory API still lists no patched version as rechecked on 2026-10-17 UTC. The User explicitly approved renewal of this existing restricted development-CLI exception through 2026-10-24 00:00 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
+      "reason": "Temporarily retain the required shadcn 4.21.4 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GitHub advisory GHSA-vfj7-8cjw-p6xm still lists no patched version, rechecked on 2026-10-17 UTC. The User explicitly approved renewing this existing development-only exception through 2026-10-24 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs. Recheck upstream before expiry; upgrade or replace the affected chain only after releases meet the unchanged seven-day minimumReleaseAge. Rerun CLI/application verification and SCA, and remove this record and its matching scanner exclusion when resolved.",
       "until": "2026-10-24T00:00:00Z"
     }
   ]

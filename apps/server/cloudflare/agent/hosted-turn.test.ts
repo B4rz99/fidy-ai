@@ -3093,7 +3093,8 @@ it.each([
                 .bind(users[0])
                 .first()
             )
-          ).toEqual({ state: "abandoned" });
+          ).toEqual({ state: "awaiting" });
+          // The original evidence deadline, rather than this hosted session, owns review lifetime.
           expect(
             (yield* Effect.tryPromise(() =>
               db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()

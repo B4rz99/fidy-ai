@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
 import { useState } from "react";
 import type { JSX, ReactNode, RefCallback } from "react";
@@ -403,9 +404,7 @@ const WorkspaceHeader = ({
       onChange={onDate}
     />
     <FilterButton disabled={disabled} onClick={() => onTool("category")} />
-    <Button variant="ghost" disabled={disabled} onClick={onRefresh}>
-      Actualizar transacciones
-    </Button>
+    <RefreshButton disabled={disabled} onClick={onRefresh} label="Actualizar transacciones" />
     {readOnly ? null : (
       <Button disabled={disabled} onClick={onCapture}>
         + Registrar

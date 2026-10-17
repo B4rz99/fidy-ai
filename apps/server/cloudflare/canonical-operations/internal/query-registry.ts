@@ -28,6 +28,10 @@ import {
 import { getHeldPATActivity, getPATActivity, listPATs } from "../../tokens/operations";
 import type { StatementDecisionWork } from "../../ingestion/contract";
 import {
+  browseReviewItem,
+  browseReviewMaterial,
+  browseReviewSuggestions,
+  browseReviewWorkspace,
   forwardingAddressResponse,
   listNeedsReviewItems,
   readHeldStatementQuery,
@@ -74,6 +78,10 @@ const historyOwner =
     });
 
 const queryOwners = new Map<string, QueryOwner>([
+  ["ingestion.getReviewWorkspace", browseReviewWorkspace],
+  ["ingestion.getReviewItem", browseReviewItem],
+  ["ingestion.getReviewMaterial", browseReviewMaterial],
+  ["ingestion.getReviewSuggestions", browseReviewSuggestions],
   ["recurringPlans.getRecurringWorkspace", browseRecurringPlans],
   ...(
     [

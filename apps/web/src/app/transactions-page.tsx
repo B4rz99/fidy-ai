@@ -7,7 +7,6 @@ import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/can
 import type { ProcessingConsentStatus } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { AccessRefused, SignedInContent } from "@/features/signed-in/feature";
-import { useSession } from "@/session/session-context";
 import { HostedAgentFeature } from "@/features/agent/feature";
 import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
 
@@ -18,7 +17,7 @@ const currentConsent = <E,>(
     ? Option.some(state.value)
     : Option.none();
 
-/** After withdrawal, Transactions remain read-only and do not grant agent access. */
+/** Privacy reads use their own cookie proof after ordinary access ends; product views retain SignedInContent. */
 export const TransactionsPage = (): JSX.Element => {
   const client = useRouter().options.context.webAuthClient;
   const [query] = useState(() =>
@@ -31,15 +30,13 @@ export const TransactionsPage = (): JSX.Element => {
   const [binding] = useState(() => client.query("browserSession", "binding", {}));
   const session = useAtomValue(binding);
   const refresh = useAtomRefresh(query);
-  const { authentication } = useSession();
   if (
-    authentication === "expired" ||
-    (status._tag === "Failure" &&
-      AsyncResult.match(session, {
-        onInitial: () => false,
-        onFailure: () => false,
-        onSuccess: ({ value }) => Option.isNone(Option.fromNullishOr(value.binding)),
-      }))
+    status._tag === "Failure" &&
+    AsyncResult.match(session, {
+      onInitial: () => false,
+      onFailure: () => false,
+      onSuccess: ({ value }) => Option.isNone(Option.fromNullishOr(value.binding)),
+    })
   ) {
     return <AccessRefused />;
   }

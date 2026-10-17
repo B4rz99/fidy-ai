@@ -37,6 +37,12 @@ export const SourceAttestationCommon = Schema.Struct({
 const ManualSourceAttestation = Schema.Struct({
   ...SourceAttestationCommon.fields,
   kind: Schema.Literal("manual"),
+  reviewItemId: Schema.OptionFromOptionalKey(Schema.String.check(Schema.isUUID())),
+  userProvidedFields: Schema.OptionFromOptionalKey(
+    Schema.Array(
+      Schema.Literals(["money", "direction", "counterparty", "occurredAt", "categoryId"])
+    )
+  ),
 });
 
 export const StatementLineSourceAttestation = Schema.Struct({

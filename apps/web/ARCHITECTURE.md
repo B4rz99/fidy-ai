@@ -145,10 +145,14 @@ storage, or application-wide state.
 withdrawal through the server-declared browser client. It remains accessible without ordinary
 canonical work and exposes the public rights contact without login. Its route composes the shared
 ApplicationShell without the ordinary access-expiry guard or Hosted Agent, preserving the sidebar
-and compact navigation after withdrawal or session expiry. WorkspaceHeader and WorkspaceColumns
-align the controls and rights-contact panel with the existing settings layout. The authentication registry
-owns status and command state; uncertain withdrawal requires an explicit status reread before
-another confirmed attempt. The durable receipt survives reload. Copy distinguishes withdrawal
+and compact navigation after withdrawal or session expiry. The sidebar does not mount the canonical
+pending-count query on Privacy, so a product refusal cannot retire a live privacy interaction.
+WorkspaceHeader and WorkspaceColumns align the controls and rights-contact panel with the settings layout.
+Transactions likewise evaluates its independent cookie-only Consent read before choosing read-only
+access. Retiring ordinary product access does not deny this privacy path; each history page still
+requires fresh server-side WebSession proof. Granted product views still pass through SignedInContent.
+The authentication registry owns status and command state; uncertain withdrawal requires an explicit
+status reread before another confirmed attempt. The durable receipt survives reload. Copy distinguishes withdrawal
 from access to the exact saved authorization: an explicit “Consultar prueba” action reads the
 same-User historical disclosure, record reference and acceptance instant through the cookie-only
 privacy transport, including after withdrawal. The record is inert text and grants no new Consent.
@@ -297,3 +301,31 @@ Monthly list, calendar and summaries consume one server projection. Editors and 
 selection live in responsive sheets; drafts stay local. Accepted edits invalidate the canonical
 resource; an uncertain write requires an explicit reread before another save. The browser does not
 generate schedules, match Transactions, sum Money or change the meaning of historical detection.
+
+The `/app/needs-review` feature composes the persistent ingestion inbox, browser-only original
+preview, editable draft and lifecycle history. Canonical query atoms retain server ownership;
+a serialized editing owner debounces revision-bound autosaves and flushes before an explicit
+individual creation or skip. Bulk skip/restore use the same canonical mutation. Uncertain writes
+require a canonical reread. Original text is escaped, media locators are not rendered as public
+URLs, and neither originals nor drafts enter browser storage. Navigation owns pending-count
+polling within the authentication registry lifetime.
+
+Main workspace display queries retain their last result for one minute of inactivity in the
+current authentication registry. Returning to Budgets, Recurring, Transactions or Dashboard
+renders that result immediately and revalidates on mount and window focus. Cached profiles and
+resource results do not authorize editing: freshness and refresh failures still gate writes.
+Dashboard initialization remains exclusive to a declared uninitialized response during an
+actual visit. Consent, session binding and security settings reads retain their fresh access
+checks. Router intent preloading loads destination code without executing workspace commands.
+
+The root application frame owns one shared shell across authenticated and independently authorized
+application routes, including Transactions; each route retains its own access checks. It retains a
+visited Needs Review workspace across ordinary navigation within the authentication lifetime.
+Its saved route snapshot contains only the validated filter
+and offset; hidden panels keep their evidence deadline timers active. Entering Privacy disposes
+the retained workspace, as does authentication replacement. The first pending page shares the
+navigation count's canonical query, and the selected original loads alongside its detail. Returning
+invalidates review reads while retaining visible content and disabling decisions until fresh.
+A newer saved canonical draft replaces a clean local draft; outstanding local edits remain visible
+and require recovery if superseded. A completed autosave releases its draft barrier so subsequent
+bulk decisions use the fresh workspace revision.

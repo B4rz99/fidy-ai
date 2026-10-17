@@ -61,6 +61,9 @@ const migrations = [
   "0078_statement_materialization_binding",
   "0079_statement_progress",
   "0082_statement_review_capacity",
+  "0108_review_suggestions",
+  "0109_review_state",
+  "0110_ingestion_review",
 ];
 const storage = isolatedTestStorage();
 
@@ -68,7 +71,7 @@ const setup = (
   content: string | Uint8Array,
   sourceFormat: "csv" | "xlsx" = "csv",
   schemaMigrations: ReadonlyArray<string> = migrations
-): Promise<{ db: D1Database; bucket: R2Bucket }> =>
+): Promise<{ db: D1Database; bucket: R2Bucket; submittedAt: number }> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, bucket } = yield* fromTestPromise(() => storage.acquire());
@@ -144,7 +147,7 @@ const setup = (
           .bind(submissionId, userA, current)
           .run()
       );
-      return { db, bucket };
+      return { db, bucket, submittedAt: current };
     })
   );
 
@@ -189,10 +192,10 @@ effectIt.effect(
 );
 
 effectIt.effect(
-  "extends clarification with session activity but never resumes an abandoned origin",
+  "expires hosted routing independently without discarding unexpired review evidence",
   () =>
     Effect.gen(function* () {
-      const { db, bucket } = yield* fromTestPromise(() =>
+      const { db, bucket, submittedAt } = yield* fromTestPromise(() =>
         setup("date,amount,description\nunclear,unknown,Cafe\n")
       );
       const now = currentMillis();
@@ -242,7 +245,7 @@ effectIt.effect(
             .bind(submissionId)
             .first()
         )
-      ).toEqual({ state: "awaiting", expires_at_ms: now + idleMs + 1000 });
+      ).toEqual({ state: "awaiting", expires_at_ms: submittedAt + retentionMs });
       yield* fromTestPromise(() => activity(now + idleMs + 1000, now + 2 * idleMs));
       yield* fromTestPromise(() => activity(now + idleMs + 1001, now + 3 * idleMs));
       expect(
@@ -252,7 +255,7 @@ effectIt.effect(
             .bind(submissionId)
             .first()
         )
-      ).toEqual({ state: "abandoned" });
+      ).toEqual({ state: "awaiting" });
       expect(
         yield* fromTestPromise(() =>
           db
@@ -262,7 +265,17 @@ effectIt.effect(
             .bind(submissionId)
             .first()
         )
-      ).toEqual({ original_evidence: null, known_money: null });
+      ).toEqual({
+        original_evidence: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          sourceFormat: "csv",
+          recordNumber: 1,
+          startLine: 2,
+          endLine: 2,
+          rawRecord: "unclear,unknown,Cafe\n",
+          fields: ["unclear", "unknown", "Cafe"],
+        }),
+        known_money: null,
+      });
       expect(
         yield* fromTestPromise(() =>
           db
@@ -272,7 +285,7 @@ effectIt.effect(
             .bind(userA)
             .first()
         )
-      ).toEqual({ submission_id: null, consumed_at_ms: null });
+      ).toEqual({ submission_id: submissionId, consumed_at_ms: null });
     })
 );
 
@@ -895,7 +908,7 @@ effectIt.effect(
           Option.isSome(projected) &&
             projected.value.status === "failed" &&
             projected.value.accounting
-        ).toMatchObject({ inputRows: 32, acceptedRows: 0, needsReviewRows: 0, abandonedRows: 32 });
+        ).toMatchObject({ inputRows: 32, acceptedRows: 0, needsReviewRows: 32 });
       }
       expect(entitlement?.consumed_at_ms).toBeNull();
       expect(
@@ -907,7 +920,7 @@ effectIt.effect(
             .bind(submissionId)
             .first()
         )
-      ).toEqual({ count: 0 });
+      ).toEqual({ count: 32 });
       expect(
         yield* fromTestPromise(() =>
           db
@@ -917,7 +930,7 @@ effectIt.effect(
             .bind(submissionId)
             .first()
         )
-      ).toEqual({ count: 32 });
+      ).toEqual({ count: 0 });
     })
 );
 
@@ -1800,6 +1813,7 @@ effectIt.effect(
           recordNumber: 1,
           reason: "mapping-unavailable",
           knownMoney: Option.none(),
+          suggestions: Option.none(),
           issues: [{ path: "", message: `Statement mapping is unavailable.${" ".repeat(extra)}` }],
           evidence: {
             sourceFormat: "csv",
@@ -1825,8 +1839,8 @@ effectIt.effect(
             db
               .prepare(`INSERT INTO statement_needs_review
         (id,user_id,submission_id,record_number,reason,original_evidence,known_money,issues,status,
-        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,review_suggestions_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`)
               .bind(
                 "10000000-0000-4000-8000-000000000701",
                 userA,
@@ -3150,7 +3164,7 @@ it(
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 2 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)
       INSERT INTO statement_needs_review SELECT 'capacity-' || i, user_id, submission_id, i, reason,
         original_evidence, known_money, issues, status, evidence_expires_at_ms, created_at_ms,
-        service_market, locale, time_zone, source_format, parser_revision, extractor_revision
+        service_market, locale, time_zone, source_format, parser_revision, extractor_revision, NULL
       FROM statement_needs_review, n WHERE id = 'template'`)
             .run()
         );

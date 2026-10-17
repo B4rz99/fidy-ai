@@ -62,6 +62,7 @@ import {
 } from "./internal/transaction-outcome";
 import {
   prepareNotificationEmailCapture as ownerPrepareNotificationEmailCapture,
+  prepareReviewedCapture as ownerPrepareReviewedCapture,
   prepareStatementCapture as ownerPrepareStatementCapture,
   statementCaptureCapacityExceeded as ownerStatementCaptureCapacityExceeded,
 } from "./internal/ingestion-capture";
@@ -299,3 +300,6 @@ export const readPlanningTransactionMonths = ({
     if (decoded.length > maximumMonths) return Option.none();
     return Option.some(decoded.map((row) => row.month));
   }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+export const prepareReviewedCapture: typeof ownerPrepareReviewedCapture = (input) =>
+  ownerPrepareReviewedCapture(input);

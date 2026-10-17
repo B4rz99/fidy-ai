@@ -179,7 +179,7 @@ test("recovers a committed save with a lost acknowledgement through an explicit 
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringRecovery" })
+        signInRecurringThroughCore({ page, request, identity: "recurringEditing" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* Effect.tryPromise(() => page.route("**/recurring-plans/edits", loseAcknowledgement));

@@ -1,9 +1,9 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { useState } from "react";
 import type { JSX } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import { Option } from "effect";
 import type { FidyClient } from "@/transport/client";
-import { Button } from "@/ui/components/button";
 import { InlineChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { makeTransactionCorrection } from "./correction-command";
 import { CategoryVisual } from "@/ui/components/category-visual";
@@ -34,9 +34,7 @@ const CategoryFeedback = ({
             ? "No se guardó la categoría. Actualiza el historial."
             : "No pudimos confirmar el cambio. Actualiza el historial antes de volver a editar."}
         </p>
-        <Button variant="ghost" onClick={onRefresh}>
-          Actualizar historial
-        </Button>
+        <RefreshButton variant="ghost" onClick={onRefresh} label="Actualizar historial" />
       </div>
     ) : null}
   </>

@@ -1,6 +1,6 @@
 # Erasure inventory for #1274
 
-This inventory covers the current MVP schema through migration 0107. The User coordinator composes
+This inventory covers the current MVP schema through migration 0111. The User coordinator composes
 200 owner dispositions over 201 personal-data tables. The reviewed decision selects `Delete` or a
 finite, source-backed `Retain` for each class. Identity and credentials always delete; archived
 records exclude credential digests, verifiers, proof material and tokens. Every disposition selects
@@ -60,6 +60,7 @@ class-wide hold. Stop review until the actual source and executable scope agree.
 | `internal` | `forwarded_email_outbox`               | ingestion    | `forwarded_email_outbox`                   |
 | `internal` | `forwarded_email_outcomes`             | ingestion    | `forwarded_email_outcomes`                 |
 | `internal` | `forwarded_email_receipts`             | ingestion    | `forwarded_email_receipts`                 |
+| `internal` | `ingestion_review_state`               | ingestion    | `ingestion_review_state`                   |
 | `internal` | `media_needs_review`                   | ingestion    | `media_needs_review`                       |
 | `internal` | `media_submission_outbox`              | ingestion    | `media_submission_outbox`                  |
 | `internal` | `media_submissions`                    | ingestion    | `media_submissions`                        |

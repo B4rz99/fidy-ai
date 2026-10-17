@@ -1,3 +1,4 @@
+import { useRouterState } from "@tanstack/react-router";
 import { TimeField } from "@/ui/components/time-field";
 import { CalendarField } from "@/ui/components/calendar-field";
 import { Currency } from "@/transport/client";
@@ -22,7 +23,14 @@ type Props = Readonly<{
   categories: ReadonlyArray<Category>;
   timeZone: string;
 }>;
-export const ReviewFields = (props: Props): JSX.Element => (
+export const ReviewFields = (props: Props): JSX.Element => {
+  const active = useRouterState({
+    select: (state) => state.location.pathname === "/app/needs-review",
+  });
+  return <ReviewFieldControls key={String(active)} {...props} locked={props.locked || !active} />;
+};
+
+const ReviewFieldControls = (props: Props): JSX.Element => (
   <div className="grid gap-3">
     <ReviewCounterparty {...props} />
     <div className="grid grid-cols-2 items-start gap-3">

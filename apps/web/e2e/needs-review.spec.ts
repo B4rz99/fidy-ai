@@ -960,3 +960,49 @@ const openReviewSibling = (page: Page): Promise<void> =>
         page.getByRole("heading", { name: "Cambiar correo verificado", exact: true })
       ).toBeVisible()
     );
+
+for (const picker of ["Fecha del movimiento", "Hora del movimiento"]) {
+  test(`dismisses ${picker} when leaving the retained review`, ({ page, request }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+        yield* Effect.tryPromise(() => page.clock.resume());
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(
+            `${apiOrigin}/ingestion/review-workspace**`,
+            lifecycleRoute([
+              {
+                id,
+                revision: 0,
+                status: "pending",
+                draft: {
+                  amount: "13500",
+                  currency: "COP",
+                  direction: "outflow",
+                  counterparty: "Café",
+                  occurredAt: "2026-01-01T17:30:00Z",
+                  userProvidedFields: [],
+                },
+              },
+            ])
+          )
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/recurring"));
+        yield* Effect.tryPromise(() => page.getByRole("link", { name: /^Por revisar/u }).click());
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: picker, exact: true }).click()
+        );
+        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
+        yield* Effect.tryPromise(() => page.goBack());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("dialog", { includeHidden: true })).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() => page.goForward());
+        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café")
+        );
+      })
+    ));
+}

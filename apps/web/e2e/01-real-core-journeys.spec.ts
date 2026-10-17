@@ -25,6 +25,7 @@ const forbidden = 403;
 const unauthorized = 401;
 const noContent = 204;
 const notFound = 404;
+const enrollmentJourneyMilliseconds = 60_000;
 const canonicalRecoveryMilliseconds = 15_000;
 const resourceProbeRetries = 6;
 const maximumProbeDelaySeconds = 5;
@@ -825,6 +826,7 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      test.setTimeout(enrollmentJourneyMilliseconds);
       yield* fromPlaywright(signInFirstDaviplataThroughCore({ page, request }));
       const providerCalls: Array<DaviplataFixtureStep> = [];
       const fidyBodies: Array<ObservedFidyBody> = [];

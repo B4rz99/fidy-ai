@@ -266,7 +266,7 @@ bun run --cwd apps/web test:browser recurring-plans.spec.ts recurring-recovery.s
 The application frame retains a visited recurring workspace within the current authentication
 lifetime. Its filters survive navigation, with the active route’s month remaining
 authoritative. Hidden workspaces are inert and their portaled sheets dismiss while inactive. Returning refreshes the profile, Category list, and recurring projection together before
-editing resumes. Privacy navigation or authentication expiry disposes the retained workspace.
+editing resumes. The same resume invalidation refreshes the current date, so a return after a local month boundary selects the current month and updates Hoy. Privacy navigation or authentication expiry disposes the retained workspace.
 Unchanged retained review and recurring displays are memoized so showing them does not rebuild their
 forms or calendars. The browser navigation benchmark uses independent Users and keeps its 10 ms
 median target while withholding fresh network results; stale editing remains disabled.

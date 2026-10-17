@@ -30,6 +30,7 @@ export const accessUserId = "24000000-0000-4000-8000-000000000361";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 export const recurringUserId = "24000000-0000-4000-8000-000000000401";
 export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
+export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
 export const recurringRecoveryUserId = "24000000-0000-4000-8000-000000000421";
 export const navigationIdentities = [
   { key: "navigationTransactions", userId: "24000000-0000-4000-8000-000000000451" },
@@ -120,6 +121,12 @@ await seedIdentity({
   bsuid: "CO.RecurringSummary",
   email: "resumen-recurrentes@example.com",
   consentId: "24000000-0000-4000-8000-000000000412",
+});
+await seedIdentity({
+  userId: recurringEditingUserId,
+  bsuid: "CO.RecurringEditing",
+  email: "edicion-recurrentes@example.com",
+  consentId: "24000000-0000-4000-8000-000000000502",
 });
 await seedIdentity({
   userId: recurringRecoveryUserId,

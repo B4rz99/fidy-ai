@@ -89,6 +89,7 @@ const signInWithIdentity = (
     | "recurring"
     | "recurringSummary"
     | "recurringRecovery"
+    | "recurringEditing"
     | "navigationTransactions"
     | "navigationBudget"
     | "navigationRecurring"
@@ -263,7 +264,9 @@ export const signInPrivacyRenewalThroughCore = (input: SignInFixture): Promise<v
 /** Each recurring journey has independent planning data and canonical admission limits. */
 export const signInRecurringThroughCore = (
   input: SignInFixture &
-    Readonly<{ identity: "recurring" | "recurringSummary" | "recurringRecovery" }>
+    Readonly<{
+      identity: "recurring" | "recurringSummary" | "recurringRecovery" | "recurringEditing";
+    }>
 ): Promise<void> => signInWithIdentity(input, input.identity);
 
 /** Navigation benchmarks cannot share admission budgets or mutable data with other journeys. */

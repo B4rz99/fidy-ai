@@ -3,7 +3,7 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
-import type { AsyncResult, Atom } from "effect/reactivity";
+import { type AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type JSX, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -121,7 +121,12 @@ export const RecurringFeature = ({
   );
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
-  const [now] = useState(() => DateTime.nowUnsafe());
+  const [clock] = useState(() =>
+    Atom.make(() => DateTime.nowUnsafe()).pipe(
+      router.options.context.apiClient.runtime.factory.withReactivity(["recurring-resume"])
+    )
+  );
+  const now = useAtomValue(clock);
   const [filters, setFilters] = useState<Filters>({});
   const [previous, setPrevious] = useState<Option.Option<string>>(() => Option.none());
   if (state._tag === "Failure") {

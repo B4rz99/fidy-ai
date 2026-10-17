@@ -1,0 +1,56 @@
+infra/cloudflare/edge-security.ts
+  s_b75995d26622a8::t_c568eef15dd752 127
+apps/web/src/features/agent/FEATURE.md
+  s_b75995d26622a8::t_9c9a1a634e2a63 69-73
+apps/web/e2e/recurring-plans.spec.ts
+  s_b75995d26622a8::t_242cfee3a18b17 212,214,217-218
+  s_b75995d26622a8::t_700ef4f6f3730d 8,213
+scripts/mcp/production-native.ts
+  s_b75995d26622a8::t_3bc5fbbc8fdd10 1338,1353-1357
+infra/cloudflare/workers.test.ts
+  s_b75995d26622a8::t_c568eef15dd752 478
+infra/cloudflare/verify-edge-policy.ts
+  s_b75995d26622a8::t_374363bf384b88 5
+apps/web/e2e/privacy.spec.ts
+  s_b75995d26622a8::t_773ce7419a0857 531-532
+  s_b75995d26622a8::t_242cfee3a18b17 509-518,520,528-530,533-537,539
+dependency-policy.json
+  s_b75995d26622a8::t_f8fffbf65aea15 55,134-135
+  s_b75995d26622a8::t_6dbb4f238e635c 54,56-127
+apps/web/src/features/recurring/FEATURE.md
+  s_b75995d26622a8::t_c5ed2371d8ff7d 229-235
+apps/server/package.json
+  s_b75995d26622a8::t_b19d30a2543a94 300,305
+apps/web/package.json
+  s_b75995d26622a8::t_46044aca6288ef 30
+bun.lock
+  s_b75995d26622a8::t_e05045196c88fd 14,16,22,58,63,103,146,344,752,754,756,758,760,762,868,930,932,938,1120,1164,1700
+infra/cloudflare/package.json
+  s_b75995d26622a8::t_b062dce60277bb 20
+package.json
+  s_b75995d26622a8::t_aaa09f965caaa0 63,65,71
+tools/astro/bun.lock
+  s_b75995d26622a8::t_4e08d36f08672f 9,112
+tools/astro/package.json
+  s_b75995d26622a8::t_1749f0e3ee186a 9
+tools/mutation/bun.lock
+  s_b75995d26622a8::t_de0b61e24a2929 8
+tools/mutation/package.json
+  s_b75995d26622a8::t_23a9a6e4ec6fc9 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb653c2294a727f7818e69a9ed40aac398baad91",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -27,7 +27,7 @@
     "@fidy/server": "workspace:0.0.0",
     "@hugeicons/core-free-icons": "4.3.3",
     "@hugeicons/react": "1.1.10",
-    "@tanstack/react-router": "1.170.41",
+    "@tanstack/react-router": "1.170.42",
     "@tanstack/react-table": "8.21.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",

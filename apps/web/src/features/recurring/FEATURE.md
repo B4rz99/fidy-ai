@@ -226,6 +226,13 @@ the actual recovery request. Its reproduction and fix are recorded in the
 [chat audit](../agent/FEATURE.md). The plan's final stopped state and live lifecycle approval remain
 unverified until deployment and recovery; no financial Transaction was created for this test.
 
+The follow-up browser rerun passed 14 journeys across recurring plans, direct/recovered hosted
+approval and privacy recovery. Its lost-acknowledgement fixture now forwards temporary 429
+responses to the actual client retry policy and drops the response only after a successful save;
+it no longer mistakes a refused write for a committed one. The existing request limits and test
+timeouts are unchanged. The ingress progress route is also included in the existing production
+edge IP budget, with 38 focused infrastructure checks passing after the reviewed manifest update.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

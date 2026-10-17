@@ -5,7 +5,7 @@
     "": {
       "name": "fidy-ai-mutation-tools",
       "dependencies": {
-        "fast-uri": "4.2.1",
+        "fast-uri": "4.2.2",
         "qs": "6.16.0",
       },
       "devDependencies": {

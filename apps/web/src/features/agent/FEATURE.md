@@ -66,8 +66,11 @@ preflight and session-forwarding sets. A seven-check public-ingress regression f
 before the fix; all seven passed after sharing the three hosted-browser paths across those sets.
 The existing cancellation and telemetry checks also passed (11 checks total). Origin restrictions,
 POST-only methods, cookie forwarding, session binding and no-store responses remain enforced.
-Deployment and recovery of the retained production Turn still need verification; the synthetic
-plan has not yet been claimed as stopped.
+A scoped read-only D1 diagnostic subsequently found the retained Turn `interrupted`, with two
+recorded tool calls and no delivery proposal; it wrote zero rows. This does not establish a
+successful lifecycle change. [PR #1358](https://github.com/B4rz99/fidy-ai/pull/1358) contains the
+ingress fix. Deployment and recovery of the retained production Turn still need verification;
+the synthetic plan has not yet been claimed as stopped.
 
 On 2026-10-11 at revision `b131e61435ec63c57470f57ed1ad3409261f0005`, the combined Transactions/chat rendered feature suite passed 50 checks; `application.test.tsx` passed 24 checks; Transactions and hosted-session Core tests passed 33 checks. Counts include neighbouring capabilities and are not all chat tests.
 

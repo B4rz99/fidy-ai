@@ -1,0 +1,37 @@
+infra/cloudflare/edge-security.ts
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 127
+apps/server/cloudflare/public-worker.ts
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 228-232,267,281,367,389
+infra/cloudflare/verify-edge-policy.ts
+  s_ede1c3735d03b7::t_78bf331aec63fd 5
+scripts/mcp/production-native.ts
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 1338,1353-1357
+apps/server/cloudflare/public-worker-hosted-recovery.test.ts
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 1-114
+dependency-policy.json
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 59-60,64-66,71-84,89-90,95-96,101-126
+infra/cloudflare/workers.test.ts
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 478
+apps/web/src/features/recurring/FEATURE.md
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 197-235
+apps/web/src/features/agent/FEATURE.md
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 46-74
+apps/web/e2e/recurring-plans.spec.ts
+  s_ede1c3735d03b7::t_fdc22c3e552e3e 8,212-214,217-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff97bd6680825214558dc8953d7079b51a30cd9a",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

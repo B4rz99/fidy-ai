@@ -233,6 +233,15 @@ it no longer mistakes a refused write for a committed one. The existing request 
 timeouts are unchanged. The ingress progress route is also included in the existing production
 edge IP budget, with 38 focused infrastructure checks passing after the reviewed manifest update.
 
+The ingress fix merged in PR #1358, but its production run failed stable Worker-pair capture
+before uploading a candidate. Production session binding and consent subsequently returned 503.
+Read-only diagnostics found matching recovery generations and substantial D1 write volume;
+write-quota exhaustion is suspected, not confirmed. The follow-up read-only recovery assertion
+passed 25 combined native D1 checks, preserving generation refusal and atomic rollback while
+eliminating assertion writes on successful reads. The [chat audit](../agent/FEATURE.md) records
+the exact deployment and diagnostic limits. The hosted stop request and fixture cleanup remain
+pending production recovery; local checks do not close those live gaps.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

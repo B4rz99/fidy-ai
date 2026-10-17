@@ -1,0 +1,28 @@
+apps/server/cloudflare/erasure/recovery.test.ts
+  s_ede1c3735d03b7::t_117e814d70dbb2 13,20-100
+  s_ede1c3735d03b7::t_359a825ef7b672 101
+apps/server/cloudflare/erasure/internal/generation.ts
+  s_ede1c3735d03b7::t_117e814d70dbb2 43-47
+apps/server/ARCHITECTURE.md
+  s_ede1c3735d03b7::t_117e814d70dbb2 130-134
+apps/web/src/features/recurring/FEATURE.md
+  s_ede1c3735d03b7::t_117e814d70dbb2 236-244
+apps/web/src/features/agent/FEATURE.md
+  s_ede1c3735d03b7::t_117e814d70dbb2 75-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bbad1b2f0fa0489eb296cc7df3d3313c829ed03d",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

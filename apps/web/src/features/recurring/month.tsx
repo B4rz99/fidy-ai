@@ -1,3 +1,4 @@
+import { useRouterState } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
 import { type JSX, useState } from "react";
 import { cn } from "@/ui/class-names";
@@ -127,7 +128,17 @@ const CalendarGrid = ({
     </div>
   );
 };
+const dayLabel = (date: string): string =>
+  DateTime.format(DateTime.makeUnsafe(date), {
+    locale: "es-CO",
+    dateStyle: "full",
+    timeZone: "UTC",
+  });
+
 export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
+  const active = useRouterState({
+    select: (state) => state.location.pathname === "/app/recurring",
+  });
   const [selected, setSelected] = useState<Option.Option<string>>(() => Option.none());
   const agenda = (date: string): void => setSelected(Option.some(date));
   const openItem = (item: Occurrence): void => {
@@ -144,13 +155,7 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
       <div className="divide-y @min-5xl:hidden">
         {dates.map((date) => (
           <section key={date} aria-label={date} className="grid min-w-0 gap-3 p-3">
-            <h3 className="text-sm font-medium">
-              {DateTime.format(DateTime.makeUnsafe(date), {
-                locale: "es-CO",
-                dateStyle: "full",
-                timeZone: "UTC",
-              })}
-            </h3>
+            <h3 className="text-sm font-medium">{dayLabel(date)}</h3>
             <DayItems
               date={date}
               items={view.occurrences.filter((item) => item.expectedDate === date)}
@@ -162,7 +167,10 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
         ))}
       </div>
       <Sheet
-        open={Option.isSome(selected)}
+        open={active && Option.isSome(selected)}
+        onOpenChangeComplete={(opened) => {
+          if (!opened) setSelected(Option.none());
+        }}
         onOpenChange={(opened) => {
           if (!opened) setSelected(Option.none());
         }}

@@ -80,6 +80,7 @@ const signInWithIdentity = (
     | "firstCard"
     | "dashboard"
     | "budget"
+    | "budgetEditing"
     | "pagination"
     | "access"
     | "privacy"
@@ -88,6 +89,10 @@ const signInWithIdentity = (
     | "recurring"
     | "recurringSummary"
     | "recurringRecovery"
+    | "navigationTransactions"
+    | "navigationBudget"
+    | "navigationRecurring"
+    | "navigationDashboard"
 ): Promise<void> =>
   page.clock
     .install()
@@ -260,3 +265,19 @@ export const signInRecurringThroughCore = (
   input: SignInFixture &
     Readonly<{ identity: "recurring" | "recurringSummary" | "recurringRecovery" }>
 ): Promise<void> => signInWithIdentity(input, input.identity);
+
+/** Navigation benchmarks cannot share admission budgets or mutable data with other journeys. */
+export const signInNavigationThroughCore = (
+  input: SignInFixture &
+    Readonly<{
+      identity:
+        | "navigationTransactions"
+        | "navigationBudget"
+        | "navigationRecurring"
+        | "navigationDashboard";
+    }>
+): Promise<void> => signInWithIdentity(input, input.identity);
+
+/** Budget editor journeys cannot race the Budget Widget's cap mutations. */
+export const signInBudgetEditingThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithIdentity(input, "budgetEditing");

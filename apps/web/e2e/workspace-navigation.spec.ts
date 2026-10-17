@@ -1,12 +1,7 @@
 import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin } from "./http-fixtures";
-import {
-  signInBudgetThroughCore,
-  signInDashboardThroughCore,
-  signInRecurringThroughCore,
-  signInThroughCore,
-} from "./real-core-fixture";
+import { signInNavigationThroughCore } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -18,26 +13,25 @@ const workspaces = [
     name: "Transacciones",
     ready: "+ Registrar",
     path: "/transactions**",
-    signIn: signInThroughCore,
+    identity: "navigationTransactions",
   },
   {
     name: "Presupuestos",
     ready: "Mes anterior",
     path: "/budget-status**",
-    signIn: signInBudgetThroughCore,
+    identity: "navigationBudget",
   },
   {
     name: "Recurrentes",
     ready: "Nuevo recurrente",
     path: "/recurring-plans**",
-    signIn: (input: Parameters<typeof signInThroughCore>[0]): Promise<void> =>
-      signInRecurringThroughCore({ ...input, identity: "recurring" }),
+    identity: "navigationRecurring",
   },
   {
     name: "Tablero",
     ready: "Personalizar",
     path: "/dashboard/view",
-    signIn: signInDashboardThroughCore,
+    identity: "navigationDashboard",
   },
 ] as const;
 
@@ -45,7 +39,9 @@ for (const workspace of workspaces) {
   test(`returns to ${workspace.name} from cached data while refreshing`, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() => workspace.signIn({ page, request }));
+        yield* Effect.tryPromise(() =>
+          signInNavigationThroughCore({ page, request, identity: workspace.identity })
+        );
         yield* Effect.tryPromise(() => page.clock.resume());
         const development = yield* Effect.tryPromise(() =>
           page.locator('script[src="/@vite/client"]').count()
@@ -81,23 +77,33 @@ for (const workspace of workspaces) {
           );
           expect(milliseconds).not.toBeNull();
           samples.push(Number(milliseconds));
+          if (workspace.name === "Recurrentes") {
+            yield* Effect.tryPromise(() =>
+              expect(
+                page.getByRole("button", { name: workspace.ready, exact: true })
+              ).toBeDisabled()
+            );
+          }
         }
-        const median = samples.toSorted((left, right) => left - right)[Math.floor(count / 2)];
-        yield* Effect.tryPromise(() =>
-          test.info().attach("workspace-switch-duration", {
-            body: `${workspace.name}: median ${median} ms; samples ${samples.join(", ")} ms`,
-            contentType: "text/plain",
-          })
-        );
-        // Keep the 10 ms render target on built assets; repeated samples avoid a single
-        // operating-system scheduling pause deciding the benchmark on shared CI runners.
-        // Every individual switch must still reveal cached content before delayed data returns.
-        if (development === 0 && workspace.name !== "Transacciones") {
-          expect(median).toBeLessThanOrEqual(targetMilliseconds);
-        }
+        yield* Effect.tryPromise(() => recordSamples(workspace.name, samples, development));
       })
     ));
 }
+
+const recordSamples = (
+  name: string,
+  samples: ReadonlyArray<number>,
+  development: number
+): Promise<void> => {
+  const median = samples.toSorted((left, right) => left - right)[Math.floor(samples.length / 2)];
+  if (development === 0 && name !== "Transacciones") {
+    expect(median).toBeLessThanOrEqual(targetMilliseconds);
+  }
+  return test.info().attach("workspace-switch-duration", {
+    body: `${name}: median ${median} ms; samples ${samples.join(", ")} ms`,
+    contentType: "text/plain",
+  });
+};
 
 const openWorkspace = (page: Page, name: string): Promise<void> =>
   page.getByRole("link", { name: new RegExp(`^${name}(?: \\d+ pendientes)?$`, "u") }).click();
@@ -127,3 +133,48 @@ const delayedData = (route: Route): Promise<void> =>
   Effect.runPromise(
     Effect.sleep("1 second").pipe(Effect.andThen(Effect.tryPromise(() => route.continue())))
   );
+
+test("dismisses a recurring editor when leaving its retained workspace", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationThroughCore({ page, request, identity: "navigationRecurring" })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => openWorkspace(page, "Recurrentes"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Nuevo recurrente", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Nombre", { exact: true }).fill("Borrador conservado")
+      );
+      yield* Effect.tryPromise(() => page.goBack());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("dialog", { includeHidden: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => page.goForward());
+      yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Nuevo recurrente", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("")
+      );
+      yield* Effect.tryPromise(() => page.goBack());
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("navigation", { name: "Aplicación" })
+          .getByText("Ajustes", { exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Privacidad", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Nombre", { exact: true })).toHaveCount(0)
+      );
+    })
+  ));

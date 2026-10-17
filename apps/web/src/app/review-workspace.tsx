@@ -1,13 +1,12 @@
-import { useAtomSet } from "@effect/atom-react";
-import { useMatch, useRouter, useRouterState } from "@tanstack/react-router";
+import { useWorkspaceResume } from "./workspace-resume";
+import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
-import { Reactivity } from "effect/reactivity";
 import { useSession } from "@/session/session-context";
-import { type JSX, type RefCallback, Suspense, lazy, useCallback, useRef, useState } from "react";
+import { type JSX, Suspense, lazy, memo, useState } from "react";
 
 const ReviewWorkspace = lazy(() =>
   import("@/features/needs-review/feature").then((module) => ({
-    default: module.NeedsReviewFeature,
+    default: memo(module.NeedsReviewFeature),
   }))
 );
 
@@ -41,39 +40,17 @@ const VisitedReviewWorkspace = (): JSX.Element => {
   }
   const current = Option.orElse(search, () => previous);
   const active = Option.isSome(search);
-  const resume = useReviewResume(active);
+  const resume = useWorkspaceResume({ active, key: "ingestion-review" });
   if (Option.isNone(current)) return <></>;
   return (
-    <div hidden={!active} ref={resume}>
+    <div hidden={!active} inert={!active} ref={resume}>
       <Suspense fallback={<p className="p-5">Cargando elementos…</p>}>
         <ReviewWorkspace
-          active={active}
+          active={true}
           filter={current.value.status ?? "pending"}
           page={current.value.offset ?? 0}
         />
       </Suspense>
     </div>
-  );
-};
-
-const useReviewResume = (active: boolean): RefCallback<HTMLDivElement> => {
-  const apiClient = useRouter().options.context.apiClient;
-  const [operation] = useState(() =>
-    apiClient.runtime.fn<void>()(() => Reactivity.invalidate(["ingestion-review"]))
-  );
-  const refresh = useAtomSet(operation);
-  const visibility = useRef({ active, visited: false });
-  return useCallback(
-    (node) => {
-      if (node === null) return;
-      const returning = active && visibility.current.visited && !visibility.current.active;
-      visibility.current = { active, visited: true };
-      if (returning) {
-        queueMicrotask(() => {
-          if (node.isConnected && node.hidden === false) refresh();
-        });
-      }
-    },
-    [active, refresh]
   );
 };

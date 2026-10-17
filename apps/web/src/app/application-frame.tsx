@@ -2,6 +2,7 @@ import { Outlet, useRouterState } from "@tanstack/react-router";
 import { type JSX, Suspense, lazy } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
+import { RetainedRecurringWorkspace } from "./recurring-workspace";
 import { RetainedReviewWorkspace } from "./review-workspace";
 
 const ReviewPendingCount = lazy(() =>
@@ -35,6 +36,7 @@ export const ApplicationFrame = (): JSX.Element => {
       }
     >
       <RetainedReviewWorkspace />
+      <RetainedRecurringWorkspace />
     </ApplicationShell>
   );
 };

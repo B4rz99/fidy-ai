@@ -1,5 +1,9 @@
 import { playwright } from "./playwright-runtime";
-import { boundSessionRequests, visiblePairingCode } from "./real-core-fixture";
+import {
+  boundSessionRequests,
+  reloadTransactionsThroughCore,
+  visiblePairingCode,
+} from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
@@ -393,6 +397,7 @@ const expectSignupNotice = Effect.fn(function* (page: Page) {
   );
 });
 
+const completeSignupJourneyMilliseconds = 60_000;
 const acknowledgeRecovery = Effect.fn(function* (page: Page) {
   const authenticatedDocument = yield* Effect.tryPromise(() =>
     Promise.all([
@@ -414,6 +419,7 @@ export const signupJourney = ({
 }: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      playwright.test.setTimeout(completeSignupJourneyMilliseconds);
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route: Route) =>
           redirectSubject(configuration, `browser-${configuration.provider}-signup`, route)
@@ -440,7 +446,7 @@ export const signupJourney = ({
       );
       yield* acknowledgeRecovery(page);
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
-      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => reloadTransactionsThroughCore(page));
       yield* Effect.tryPromise(() =>
         expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
       );

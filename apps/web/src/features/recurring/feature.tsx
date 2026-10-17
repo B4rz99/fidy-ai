@@ -1,7 +1,7 @@
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { useRouter, useSearch } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
 import type { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
@@ -46,6 +46,7 @@ const recurringQuery = (
   apiClient
     .query("recurringPlans", "getRecurringWorkspace", {
       ...workspaceQueryRetention,
+      reactivityKeys: ["recurring-resume"],
       query: {
         month: props.month,
         ...props.filters,
@@ -59,7 +60,10 @@ const Resources = (props: Props): JSX.Element => {
   const [resource] = useState(() => recurringQuery(apiClient, props));
   const [categories] = useState(() =>
     apiClient
-      .query("categories", "listCategories", workspaceQueryRetention)
+      .query("categories", "listCategories", {
+        ...workspaceQueryRetention,
+        reactivityKeys: ["recurring-resume"],
+      })
       .pipe(revalidateWorkspaceQuery)
   );
   const [command] = useState(() => makeRecurringWrite(apiClient));
@@ -103,16 +107,20 @@ const Resources = (props: Props): JSX.Element => {
   );
 };
 
-export const RecurringFeature = (): JSX.Element => {
+export const RecurringFeature = ({
+  month: selectedMonth,
+}: Readonly<{ month: Option.Option<string> }>): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() =>
     router.options.context.apiClient
-      .query("identity", "getCurrentUser", workspaceQueryRetention)
+      .query("identity", "getCurrentUser", {
+        ...workspaceQueryRetention,
+        reactivityKeys: ["recurring-resume"],
+      })
       .pipe(revalidateWorkspaceQuery)
   );
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
-  const search = useSearch({ strict: false });
   const [now] = useState(() => DateTime.nowUnsafe());
   const [filters, setFilters] = useState<Filters>({});
   const [previous, setPrevious] = useState<Option.Option<string>>(() => Option.none());
@@ -128,7 +136,7 @@ export const RecurringFeature = (): JSX.Element => {
   const currentMonth = DateTime.formatIsoDate(
     DateTime.makeZonedUnsafe(now, { timeZone: user.timeZone })
   ).slice(0, "2026-01".length);
-  const month = "month" in search && typeof search.month === "string" ? search.month : currentMonth;
+  const month = Option.getOrElse(selectedMonth, () => currentMonth);
   return (
     <Resources
       profileStale={Option.isSome(state.refreshFailure)}
@@ -248,3 +256,6 @@ const LoadingRecurring = (): JSX.Element => (
     <Skeleton className="mt-5 h-64" />
   </div>
 );
+
+/** Application composition owns the retained workspace. This route retains code preloading. */
+export const RecurringRoute = (): JSX.Element => <></>;

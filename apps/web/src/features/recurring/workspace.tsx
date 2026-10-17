@@ -1,3 +1,4 @@
+import { useRouterState } from "@tanstack/react-router";
 import { browserCrypto } from "@/browser/crypto";
 import { Array, Effect, Option } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
@@ -322,44 +323,52 @@ const EditorSheet = ({
   Readonly<{
     panel: Option.Option<Panel>;
     setPanel: (panel: Option.Option<Panel>) => void;
-  }>): JSX.Element => (
-  <>
-    <Sheet
-      open={Option.isSome(panel)}
-      onOpenChange={(opened) => {
-        if (!opened) setPanel(Option.none());
-      }}
-    >
-      <SheetContent
-        side="right"
-        showCloseButton
-        appearance="application"
-        className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-lg"
+  }>): JSX.Element => {
+  const active = useRouterState({
+    select: (state) => state.location.pathname === "/app/recurring",
+  });
+  return (
+    <>
+      <Sheet
+        open={active && Option.isSome(panel)}
+        onOpenChangeComplete={(opened) => {
+          if (!opened) setPanel(Option.none());
+        }}
+        onOpenChange={(opened) => {
+          if (!opened) setPanel(Option.none());
+        }}
       >
-        <SheetHeader>
-          <SheetTitle>
-            {Option.isSome(panel) && panel.value.kind === "occurrence"
-              ? selectedOccurrence(view, panel.value).pipe(
-                  Option.map((item) => item.plan.name),
-                  Option.getOrElse(() => "Recurrente no disponible")
-                )
-              : "Configurar recurrente"}
-          </SheetTitle>
-        </SheetHeader>
-        {notice}
-        {Option.isSome(panel) ? (
-          <Editor
-            panel={panel.value}
-            view={view}
-            categories={categories}
-            disabled={disabled}
-            save={save}
-          />
-        ) : null}
-      </SheetContent>
-    </Sheet>
-  </>
-);
+        <SheetContent
+          side="right"
+          showCloseButton
+          appearance="application"
+          className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-lg"
+        >
+          <SheetHeader>
+            <SheetTitle>
+              {Option.isSome(panel) && panel.value.kind === "occurrence"
+                ? selectedOccurrence(view, panel.value).pipe(
+                    Option.map((item) => item.plan.name),
+                    Option.getOrElse(() => "Recurrente no disponible")
+                  )
+                : "Configurar recurrente"}
+            </SheetTitle>
+          </SheetHeader>
+          {notice}
+          {Option.isSome(panel) ? (
+            <Editor
+              panel={panel.value}
+              view={view}
+              categories={categories}
+              disabled={disabled}
+              save={save}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+};
 
 const MonthItems = ({
   filters,

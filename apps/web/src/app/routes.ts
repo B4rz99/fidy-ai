@@ -175,7 +175,7 @@ const recurringPlansRoute = createRoute({
         ),
       })
     )(search),
-  component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringFeature"),
+  component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringRoute"),
 });
 const recurringDigestRoute = createRoute({
   getParentRoute: () => authenticatedRoute,

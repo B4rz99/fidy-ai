@@ -262,3 +262,11 @@ bun run --cwd apps/server test:core
 bun run --cwd apps/server test:cloudflare cloudflare/recurring-plans/recurring-plans.test.ts cloudflare/recurring/recurring.test.ts cloudflare/insights/recurring-digest.test.ts cloudflare/oauth-agents/oauth-confirmation.test.ts --maxWorkers=1
 bun run --cwd apps/web test:browser recurring-plans.spec.ts recurring-recovery.spec.ts recurring-pagination.spec.ts recurring-report.spec.ts --workers=1
 ```
+
+The application frame retains a visited recurring workspace within the current authentication
+lifetime. Its filters survive navigation, with the active route’s month remaining
+authoritative. Hidden workspaces are inert and their portaled sheets dismiss while inactive. Returning refreshes the profile, Category list, and recurring projection together before
+editing resumes. Privacy navigation or authentication expiry disposes the retained workspace.
+Unchanged retained review and recurring displays are memoized so showing them does not rebuild their
+forms or calendars. The browser navigation benchmark uses independent Users and keeps its 10 ms
+median target while withholding fresh network results; stale editing remains disabled.

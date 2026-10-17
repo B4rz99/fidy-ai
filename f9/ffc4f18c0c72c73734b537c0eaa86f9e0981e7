@@ -1,0 +1,79 @@
+apps/server/cloudflare/maintenance/performance.test.ts
+  s_b75995d26622a8::t_ed9c605c215fad 5,58
+  s_b75995d26622a8::t_805d8d9dec7075 152-156
+apps/server/cloudflare/erasure/internal/control-objects.ts
+  s_b75995d26622a8::t_9b85b7416b25f6 52-53,57,59
+apps/server/cloudflare/runtime/release-smoke/contract.ts
+  s_b75995d26622a8::t_31bb71ef510f89 16
+apps/server/cloudflare/runtime/release-smoke/platform.test.ts
+  s_b75995d26622a8::t_3db1b3936fb568 1-4,8-16,20-22
+  s_b75995d26622a8::t_dcd96f3616a7dd 5-7,17-19,23-24
+docs/operations/cloudflare-background-work.md
+  s_b75995d26622a8::t_038a5bac135acc 9-24
+infra/cloudflare/verify-production-smoke.test.ts
+  s_b75995d26622a8::t_805d8d9dec7075 1029-1031,1033-1035,1037-1040,1045-1046,1048-1050,1052-1055,1064-1069,1073,1075-1076,1081-1082,1084,1087-1095,1100,1109,1111-1112,1114
+  s_b75995d26622a8::t_be61d1e424be3d 566,745,792,1025,1032,1036,1041-1044,1047,1051,1057-1063,1077,1083,1085-1086,1096-1099,1102-1108,1110
+  s_b75995d26622a8::t_c39003426f0943 1074
+  s_b75995d26622a8::t_5fbc43df0cc5b0 1024
+  s_b75995d26622a8::t_dcd96f3616a7dd 1026-1028,1056,1070-1072,1078-1080,1101,1113
+apps/server/cloudflare/runtime/operational-health/health-view.test.ts
+  s_b75995d26622a8::t_dea129a6b2316e 6,69,76,94,98
+  s_b75995d26622a8::t_805d8d9dec7075 70-75,77-93,95-97,99-114
+apps/web/scripts/production-workflow.test.ts
+  s_b75995d26622a8::t_dcd96f3616a7dd 87
+apps/server/cloudflare/runtime/release-smoke/internal/platform.ts
+  s_b75995d26622a8::t_805d8d9dec7075 16-19,28-38
+  s_b75995d26622a8::t_31bb71ef510f89 9-15,20-21
+infra/cloudflare/smoke-exchange.ts
+  s_b75995d26622a8::t_33f862bbca5ec9 165-177,187,192,194
+  s_b75995d26622a8::t_dcd96f3616a7dd 193
+  s_b75995d26622a8::t_31bb71ef510f89 23
+.github/workflows/production.yml
+  s_b75995d26622a8::t_31bb71ef510f89 53
+infra/cloudflare/production-release.ts
+  s_b75995d26622a8::t_5fbc43df0cc5b0 778,948,1289
+  s_b75995d26622a8::t_31bb71ef510f89 111,787-788
+apps/server/cloudflare/erasure/recovery.test.ts
+  s_b75995d26622a8::t_3db1b3936fb568 413-414
+  s_b75995d26622a8::t_805d8d9dec7075 9-13,415-452
+infra/cloudflare/verify-production-smoke.ts
+  s_b75995d26622a8::t_805d8d9dec7075 93-106,108-120,245-248,251-253,258-265,287-295,344-345
+  s_b75995d26622a8::t_dcd96f3616a7dd 233-234,236,238-240
+  s_b75995d26622a8::t_31bb71ef510f89 92,121-122,229-232,241-243,249,255-257,275,331
+  s_b75995d26622a8::t_2f266472fd2fa8 235,237,244,250,296-297,341-343,346-348
+apps/server/cloudflare/maintenance/idle-budget.test.ts
+  s_b75995d26622a8::t_022830f9c4bbbc 1-11
+  s_b75995d26622a8::t_805d8d9dec7075 12-112
+apps/server/cloudflare/runtime/operational-health/canary.test.ts
+  s_b75995d26622a8::t_4a25c2e36a9d75 116
+  s_b75995d26622a8::t_805d8d9dec7075 112-115,117,119-131
+  s_b75995d26622a8::t_dcd96f3616a7dd 118
+  s_b75995d26622a8::t_ada473ebd16a97 5,111
+apps/server/cloudflare/maintenance/monitoring-isolation.test.ts
+  s_b75995d26622a8::t_bc71bdaa15d8de 82-92,103
+apps/server/cloudflare/runtime/operational-health/operations.ts
+  s_b75995d26622a8::t_7605c875c90b2b 166
+  s_b75995d26622a8::t_4a0224cc0aa99b 167
+  s_b75995d26622a8::t_9b85b7416b25f6 41,370-373
+docs/operations/production-releases.md
+  s_b75995d26622a8::t_235621f906030d 108,125-135,140
+infra/cloudflare/production-release.test.ts
+  s_b75995d26622a8::t_5fbc43df0cc5b0 13,786
+  s_b75995d26622a8::t_805d8d9dec7075 787-828
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f9ffc4f18c0c72c73734b537c0eaa86f9e0981e7",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

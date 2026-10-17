@@ -1,3 +1,4 @@
+import type { ReviewEditWork } from "../contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { reviewedCapture } from "./review-create";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
@@ -8,7 +9,6 @@ import {
 } from "../../../src/core/ingestion/contract";
 import type {
   CanonicalMutationPreparation,
-  CanonicalPreparationWork,
   OwnerOutcome,
   PreparedCanonicalMutation,
 } from "../../canonical-operations/contract";
@@ -27,7 +27,7 @@ const operation = "ingestion.applyReviewEdit";
 const references = (command: ReviewCommand): ReadonlyArray<ReviewReference> =>
   command._tag === "SaveDraft" || command._tag === "Create" ? [command] : command.items;
 const selectionGuard = (
-  work: CanonicalPreparationWork,
+  work: ReviewEditWork["work"],
   command: ReviewCommand,
   ref: ReviewReference
 ): OwnedStatement => {
@@ -55,7 +55,7 @@ const writeReview = ({
   draft,
   transactionId,
 }: Readonly<{
-  work: CanonicalPreparationWork;
+  work: ReviewEditWork["work"];
   command: ReviewCommand;
   ref: ReviewReference;
   draft: Option.Option<string>;
@@ -111,7 +111,7 @@ const reviewOAuth = ({
   guards,
   category,
 }: Readonly<{
-  work: CanonicalPreparationWork;
+  work: ReviewEditWork["work"];
   command: ReviewCommand;
   refs: ReadonlyArray<ReviewReference>;
   guards: ReadonlyArray<OwnedStatement>;
@@ -137,7 +137,7 @@ export const prepareReviewEdit = ({
   work,
   command,
 }: Readonly<{
-  work: CanonicalPreparationWork;
+  work: ReviewEditWork["work"];
   command: ReviewCommand;
 }>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {

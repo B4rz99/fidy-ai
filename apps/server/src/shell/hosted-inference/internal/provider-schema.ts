@@ -49,10 +49,18 @@ const compositeShape = (schema: Record<string, unknown>): string => {
   return "";
 };
 
+const inlineEnumMaximum = 5;
+const enumShape = (values: ReadonlyArray<unknown>): string =>
+  values.length > inlineEnumMaximum
+    ? `one of ${JSON.stringify(values)}`
+    : values.map((item) => JSON.stringify(item)).join(" | ");
+
 const schemaShape = (value: unknown): string => {
   if (!Predicate.isObject(value)) return JSON.stringify(value);
   if ("const" in value) return JSON.stringify(value.const);
-  if (Array.isArray(value.enum)) return value.enum.map((item) => JSON.stringify(item)).join(" | ");
+  if (Array.isArray(value.enum)) {
+    return enumShape(value.enum);
+  }
   const composite = compositeShape(value);
   if (composite !== "") return composite;
   if (Predicate.isObject(value.properties)) {

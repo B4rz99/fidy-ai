@@ -51,16 +51,46 @@
     {
       "name": "@effect/tsgo",
       "manifest": "package.json",
-      "reason": "0.48.0 still introduces 1,378 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-10 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
-      "until": "2026-10-17T00:00:00Z"
+      "reason": "0.51.1 introduces 3,278 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-17 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-bun",
+      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-node",
+      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/sql-d1",
+      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/vitest",
+      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/atom-react",
+      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "until": "2026-10-19T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-browser",
+      "reason": "The 4.0.3 companion requires effect ^4.0.3, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is not yet eligible under the unchanged seven-day minimumReleaseAge. Keep the exact 4.0.2 family aligned as required by check-effect-family; upgrade the entire family together after the core release ages seven days and rerun source, typecheck and application verification.",
+      "until": "2026-10-19T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": [
     {
       "cve": "CVE-2026-93687",
       "path": "bun.lock",
-      "reason": "Temporarily retain the required shadcn 4.21.0 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; the GitHub advisory still lists no patched version as rechecked on 2026-10-10 UTC. The User explicitly approved renewal of this existing development-CLI exception through 2026-10-17 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
-      "until": "2026-10-17T00:00:00Z"
+      "reason": "Temporarily retain the required shadcn 4.21.4 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GitHub advisory GHSA-vfj7-8cjw-p6xm still lists no patched version, rechecked on 2026-10-17 UTC. The User explicitly approved renewing this existing development-only exception through 2026-10-24 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs. Recheck upstream before expiry; upgrade or replace the affected chain only after releases meet the unchanged seven-day minimumReleaseAge. Rerun CLI/application verification and SCA, and remove this record and its matching scanner exclusion when resolved.",
+      "until": "2026-10-24T00:00:00Z"
     }
   ]
 }

@@ -53,6 +53,15 @@ const installCanonicalProductRoutes = (page: Page): Promise<void> =>
       );
     })
   );
+const installReviewNavigationRoute = (page: Page): Promise<unknown> =>
+  page.route("**/ingestion/review-workspace**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      status: successStatus,
+      body: json({ data: { pendingCount: 0, total: 0, items: [] }, next: [] }),
+    })
+  );
+
 const installStartAndLogoutRoutes = (page: Page, fixture: PairingApiFixture): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -80,6 +89,7 @@ const installStartAndLogoutRoutes = (page: Page, fixture: PairingApiFixture): Pr
       );
       yield* wait(installUser(page));
       yield* wait(installCanonicalProductRoutes(page));
+      yield* wait(installReviewNavigationRoute(page));
       yield* wait(
         page.route("**/web/session/binding", (route) =>
           route.fulfill({ contentType: "application/json", body: json({ binding: pairingId }) })
@@ -223,7 +233,9 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
         ])
       );
       yield* wait(page.reload());
-      yield* wait(expect(page.getByText(/America\/Bogota/u)).toBeVisible());
+      yield* wait(
+        expect(page.getByRole("heading", { name: "Transacciones", exact: true })).toBeVisible()
+      );
       expect(api.startCount).toBe(1);
       expect(yield* wait(context.cookies())).toEqual(
         expect.arrayContaining([expect.objectContaining({ name: "__Host-fidy_session" })])

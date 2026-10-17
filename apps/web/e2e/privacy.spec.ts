@@ -23,6 +23,7 @@ const unauthenticatedStatus = 401;
 const successStatus = 200;
 const unavailableResponse = (route: Route): Promise<void> => route.fulfill({ status: 503 });
 const acceptedStatus = 202;
+const completeWithdrawalJourneyMilliseconds = 60_000;
 const withdrawalCheckbox = (page: Page): Locator =>
   page.getByRole("checkbox", {
     name: "Entiendo las consecuencias y quiero retirar mi autorización de tratamiento.",
@@ -44,6 +45,13 @@ const captureAccessResponse = (route: Route, capture: (payload: unknown) => void
       const response = yield* Effect.tryPromise(() => route.fetch());
       capture(yield* Effect.tryPromise(() => response.json()));
       yield* Effect.tryPromise(() => route.fulfill({ response }));
+    })
+  );
+
+const captureErasureReplies = (page: Page, replies: unknown[]): Promise<unknown> =>
+  page.route(`${apiOrigin}/web/privacy/erasure`, (route) =>
+    captureAccessResponse(route, (payload) => {
+      replies.push(payload);
     })
   );
 
@@ -255,6 +263,7 @@ test("an expired-trial User withdraws through real Core and can recover the same
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      test.setTimeout(completeWithdrawalJourneyMilliseconds);
       yield* Effect.tryPromise(() => signInPrivacyThroughCore({ page, request }));
       const privacyReviewRequests = observePrivacyReviewRequests(page);
       yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
@@ -542,15 +551,14 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       const button = region.getByRole("button", { name: "Solicitar eliminación", exact: true });
       yield* Effect.tryPromise(() => expect(button).toBeDisabled());
       yield* Effect.tryPromise(() => region.getByRole("checkbox").check());
-      const first = page.waitForResponse(
-        (response) =>
-          response.url() === `${apiOrigin}/web/privacy/erasure` &&
-          response.request().method() === "POST"
-      );
+      const replies: unknown[] = [];
+      yield* Effect.tryPromise(() => captureErasureReplies(page, replies));
+      const first = page.waitForResponse(`${apiOrigin}/web/privacy/erasure`);
       yield* Effect.tryPromise(() => button.click());
       const response = yield* Effect.tryPromise(() => first);
       expect(response.status()).toBe(acceptedStatus);
-      const initial: unknown = yield* Effect.tryPromise(() => response.json());
+      const initial: unknown = replies[0];
+      expect(initial).toBeDefined();
       yield* Effect.tryPromise(() =>
         expect(region.getByRole("alert")).toContainText("Aún no hemos eliminado tus datos")
       );
@@ -565,7 +573,8 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       yield* Effect.tryPromise(() => button.click());
       const repeated = yield* Effect.tryPromise(() => retry);
       expect(repeated.status()).toBe(acceptedStatus);
-      expect(yield* Effect.tryPromise(() => repeated.json())).toEqual(initial);
+      expect(replies).toHaveLength(2);
+      expect(replies[1]).toEqual(initial);
       yield* Effect.tryPromise(() => verifyAccessibility(page));
     })
   ));

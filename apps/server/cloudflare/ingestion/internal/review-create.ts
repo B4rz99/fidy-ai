@@ -2,7 +2,7 @@ import { ReviewUnavailable } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type ReviewCommand } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
-import type { CanonicalPreparationWork } from "../../canonical-operations/contract";
+import type { ReviewEditWork } from "../contract";
 import { categorizeCaptures } from "../../categories/operations";
 import { prepareReviewedCapture } from "../../transactions/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
@@ -14,7 +14,7 @@ export const reviewedCapture = ({
   command,
   guard,
 }: Readonly<{
-  work: CanonicalPreparationWork;
+  work: ReviewEditWork["work"];
   command: CreateReview;
   guard: OwnedStatement;
 }>): Effect.Effect<

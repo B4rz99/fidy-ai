@@ -11,6 +11,7 @@ export const ReviewToolbar = ({
   if (control.checked.length === 0 && control.undo.length === 0 && control.feedback === "") {
     return <></>;
   }
+  const checked = new Set(control.checked);
   const pending = view.items.some((item) => item.status === "pending");
   return (
     <div className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
@@ -23,7 +24,7 @@ export const ReviewToolbar = ({
         onClick={() =>
           control.bulk(
             !pending,
-            view.items.filter((item) => control.checked.includes(item.id))
+            view.items.filter((item) => checked.has(item.id))
           )
         }
       >

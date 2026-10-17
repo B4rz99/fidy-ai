@@ -189,31 +189,30 @@ const feedbackCopy = {
   uncertain: "No pudimos confirmar el guardado. Actualiza antes de continuar.",
 } as const;
 
-const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element => {
-  const titles = {
-    pending: "Por revisar",
-    skipped: "Elemento omitido",
-    created: "Transacción creada",
-    expired: "Este elemento venció",
-  };
-  return (
-    <div className="mt-4 grid min-h-0 min-w-0 flex-1 items-start gap-6 lg:overflow-auto xl:grid-cols-2">
-      <OriginalMaterial item={detail.item} />
-      <div className="rounded-2xl border p-6">
-        <h2 className="text-xl font-medium">{titles[detail.item.status]}</h2>
-        <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
-        {detail.item.status === "created" ? (
-          <a
-            className="mt-4 inline-block underline"
-            href={`/app/needs-review/transactions/${detail.item.transactionId}`}
-          >
-            Ver transacción
-          </a>
-        ) : null}
-      </div>
-    </div>
-  );
+const historyTitles = {
+  pending: "Por revisar",
+  skipped: "Elemento omitido",
+  created: "Transacción creada",
+  expired: "Este elemento venció",
 };
+
+const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element => (
+  <div className="mt-4 grid min-h-0 min-w-0 flex-1 items-start gap-6 lg:overflow-auto xl:grid-cols-2">
+    <OriginalMaterial item={detail.item} />
+    <div className="rounded-2xl border p-6">
+      <h2 className="text-xl font-medium">{historyTitles[detail.item.status]}</h2>
+      <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
+      {detail.item.status === "created" ? (
+        <a
+          className="mt-4 inline-block underline"
+          href={`/app/needs-review/transactions/${detail.item.transactionId}`}
+        >
+          Ver transacción
+        </a>
+      ) : null}
+    </div>
+  </div>
+);
 
 const sourceIcons = { statement: File01Icon, media: Image01Icon, email: Mail01Icon };
 const ReviewItemHeading = ({ item }: Readonly<{ item: Item }>): JSX.Element => (

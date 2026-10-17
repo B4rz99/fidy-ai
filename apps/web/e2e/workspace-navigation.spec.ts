@@ -11,6 +11,7 @@ import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
 const targetMilliseconds = 10;
+const measurementSamples = 5;
 const freshConsentTimeoutMilliseconds = 500;
 const workspaces = [
   {
@@ -58,33 +59,41 @@ for (const workspace of workspaces) {
           expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
         );
         yield* Effect.tryPromise(() => page.route(`${apiOrigin}${workspace.path}`, delayedData));
-        yield* Effect.tryPromise(() => page.evaluate(observeSwitch, workspace.ready));
-        yield* Effect.tryPromise(() => openWorkspace(page, workspace.name));
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: workspace.ready, exact: true })).toBeVisible({
-            timeout: workspace.name === "Transacciones" ? freshConsentTimeoutMilliseconds : 100,
-          })
-        );
-        yield* Effect.tryPromise(() =>
-          expect(page.locator("body")).toHaveAttribute(
-            "data-workspace-switch-milliseconds",
-            /[0-9]/u
-          )
-        );
-        const milliseconds = yield* Effect.tryPromise(() =>
-          page.locator("body").getAttribute("data-workspace-switch-milliseconds")
-        );
+        const samples: number[] = [];
+        const count = workspace.name === "Transacciones" ? 1 : measurementSamples;
+        for (let sample = 0; sample < count; sample++) {
+          if (sample > 0) yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+          yield* Effect.tryPromise(() => page.evaluate(observeSwitch, workspace.ready));
+          yield* Effect.tryPromise(() => openWorkspace(page, workspace.name));
+          yield* Effect.tryPromise(() =>
+            expect(page.getByRole("button", { name: workspace.ready, exact: true })).toBeVisible({
+              timeout: workspace.name === "Transacciones" ? freshConsentTimeoutMilliseconds : 100,
+            })
+          );
+          yield* Effect.tryPromise(() =>
+            expect(page.locator("body")).toHaveAttribute(
+              "data-workspace-switch-milliseconds",
+              /[0-9]/u
+            )
+          );
+          const milliseconds = yield* Effect.tryPromise(() =>
+            page.locator("body").getAttribute("data-workspace-switch-milliseconds")
+          );
+          expect(milliseconds).not.toBeNull();
+          samples.push(Number(milliseconds));
+        }
+        const median = samples.toSorted((left, right) => left - right)[Math.floor(count / 2)];
         yield* Effect.tryPromise(() =>
           test.info().attach("workspace-switch-duration", {
-            body: `${workspace.name}: ${milliseconds} ms`,
+            body: `${workspace.name}: median ${median} ms; samples ${samples.join(", ")} ms`,
             contentType: "text/plain",
           })
         );
-        expect(milliseconds).not.toBeNull();
-        // Development React instrumentation adds overhead; enforce the render budget on built assets.
-        // Transactions must first complete its separate fresh consent check.
+        // Keep the 10 ms render target on built assets; repeated samples avoid a single
+        // operating-system scheduling pause deciding the benchmark on shared CI runners.
+        // Every individual switch must still reveal cached content before delayed data returns.
         if (development === 0 && workspace.name !== "Transacciones") {
-          expect(Number(milliseconds)).toBeLessThanOrEqual(targetMilliseconds);
+          expect(median).toBeLessThanOrEqual(targetMilliseconds);
         }
       })
     ));
@@ -94,6 +103,7 @@ const openWorkspace = (page: Page, name: string): Promise<void> =>
   page.getByRole("link", { name: new RegExp(`^${name}(?: \\d+ pendientes)?$`, "u") }).click();
 
 const observeSwitch = (ready: string): void => {
+  delete document.body.dataset.workspaceSwitchMilliseconds;
   document.addEventListener(
     "click",
     () => {

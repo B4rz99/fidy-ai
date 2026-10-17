@@ -62,7 +62,8 @@ const migrations = [
   "0079_statement_progress",
   "0082_statement_review_capacity",
   "0108_review_suggestions",
-  "0109_ingestion_review",
+  "0109_review_state",
+  "0110_ingestion_review",
 ];
 const storage = isolatedTestStorage();
 

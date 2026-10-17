@@ -1,6 +1,6 @@
 # Erasure inventory for #1274
 
-This inventory covers the current MVP schema through migration 0110. The User coordinator composes
+This inventory covers the current MVP schema through migration 0111. The User coordinator composes
 200 owner dispositions over 201 personal-data tables. The reviewed decision selects `Delete` or a
 finite, source-backed `Retain` for each class. Identity and credentials always delete; archived
 records exclude credential digests, verifiers, proof material and tokens. Every disposition selects

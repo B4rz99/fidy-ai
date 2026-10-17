@@ -145,7 +145,8 @@ const instances: Array<Miniflare> = [];
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
 const migrationNames = [
-  "0109_ingestion_review",
+  "0109_review_state",
+  "0110_ingestion_review",
   "0001_categories",
   "0002_resource_admission",
   "0003_pending_consent",

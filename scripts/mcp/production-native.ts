@@ -1350,7 +1350,7 @@ const classifyStartup = (input: PtyInput, state: PtyState): void => {
     deadlineReached: now() >= input.deadline,
     exitCode: input.child.exitCode ?? -1,
     exitSignal: ["SIGTERM", "SIGKILL", "SIGABRT", "SIGSEGV", "SIGINT"].includes(
-      input.child.signalCode ?? ""
+      String(input.child.signalCode ?? "")
     )
       ? (input.child.signalCode ?? "none")
       : "none",

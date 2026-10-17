@@ -1,4 +1,4 @@
-import { ReviewCommand, ReviewDraft } from "@fidy/server/client";
+import { ReviewCommand, ReviewDraft } from "@/transport/client";
 import { DateTime, Option, Schema } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
 

@@ -6,6 +6,7 @@ import { playwright } from "./playwright-runtime";
 import {
   boundSessionRequests,
   browserSessionHeaders,
+  openUpgradeThroughCore,
   probeCanonicalRequest,
   reloadTransactionsThroughCore,
   signInFirstCardThroughCore,
@@ -476,7 +477,7 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
       request,
     })
   );
-  yield* fromPlaywright(page.goto("/upgrade"));
+  yield* fromPlaywright(openUpgradeThroughCore(page));
   const preparing = page.waitForResponse(
     (response) => response.url() === `${api}/web/subscription/payment-enrollments/prepare`
   );
@@ -616,7 +617,7 @@ test("tokenizes a first card without an email-login credential through real publ
       const fidyBodies: Array<string> = [];
       captureFidyBodies(page, fidyBodies);
       yield* fromPlaywright(installCardTokenRoute(page, cardNumber, capture));
-      yield* fromPlaywright(page.goto("/upgrade"));
+      yield* fromPlaywright(openUpgradeThroughCore(page));
       yield* fromPlaywright(
         page
           .getByRole("button", {
@@ -776,7 +777,7 @@ const assertDaviplataSecrecy = (bodies: ReadonlyArray<ObservedFidyBody>): void =
   expect(approved[0]?.body).toContain('"billingEmail":"daviplata@example.com"');
 };
 const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
-  yield* fromPlaywright(page.goto("/upgrade"));
+  yield* fromPlaywright(openUpgradeThroughCore(page));
   yield* fromPlaywright(page.getByRole("button", { name: "DaviPlata" }).click());
   yield* fromPlaywright(page.getByRole("button", { name: "Elegir mensual" }).click());
   yield* fromPlaywright(
@@ -988,7 +989,7 @@ test("a read-only PAT issued through the real browser session cannot capture Tra
   Effect.runPromise(
     Effect.gen(function* () {
       const bearer = yield* issueReadOnlyPat(page, request);
-      const readOnly = yield* fromPlaywright(
+      const readOnly = yield* probeCanonicalRequest(() =>
         request.post(`${api}/transactions`, {
           headers: {
             authorization: `Bearer ${bearer}`,

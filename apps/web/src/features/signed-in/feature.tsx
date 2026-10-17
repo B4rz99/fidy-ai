@@ -1,25 +1,14 @@
-import { ReviewPendingCount } from "@/features/needs-review/navigation";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Calendar03Icon,
-  Cancel01Icon,
-  CreditCardIcon,
-  Home01Icon,
-  Menu01Icon,
-  Settings01Icon,
-  Wallet01Icon,
-} from "@hugeicons/core-free-icons";
-import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
-import { Cause, Effect, Option } from "effect";
+import { Link, Outlet, useRouter } from "@tanstack/react-router";
+import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
-import { useState } from "react";
-import type { ComponentProps, JSX, MouseEvent } from "react";
+import { type ComponentProps, type JSX, type ReactNode, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { Button } from "@/ui/components/button";
-import { FidyWordmark } from "@/ui/components/wordmark";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
+import { SignedInBrand, SignedInNavigation } from "./navigation";
+import { LogoutFailure } from "./logout-failure";
+import { CompactNavigation } from "./compact-navigation";
 
 export const AccessRefused = (): JSX.Element => (
   <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
@@ -42,146 +31,13 @@ export const AccessRefused = (): JSX.Element => (
   </main>
 );
 
-const navigationLinks = [
-  { to: "/app/dashboard", label: "Tablero", icon: Home01Icon },
-  { to: "/app/transactions", label: "Transacciones", icon: CreditCardIcon },
-  { to: "/app/needs-review", label: "Por revisar", icon: CreditCardIcon },
-  { to: "/app/budgets", label: "Presupuestos", icon: Wallet01Icon },
-  { to: "/app/recurring", label: "Recurrentes", icon: Calendar03Icon },
-] as const;
-const settingsLinks = [
-  { to: "/settings/privacy", label: "Privacidad" },
-  { to: "/settings/email", label: "Correo" },
-  { to: "/settings/access", label: "Accesos" },
-  { to: "/settings/recovery", label: "Recuperación" },
-] as const;
-const dismissCompactNavigation = (event: MouseEvent<HTMLAnchorElement>): void => {
-  event.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
-};
-const SettingsNavigation = (): JSX.Element => {
-  const inSettings = useRouterState({
-    select: (state) => state.location.pathname.startsWith("/settings/"),
-  });
-  return (
-    <details className="shrink-0" open={inSettings}>
-      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted">
-        <HugeiconsIcon icon={Settings01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
-        Ajustes
-      </summary>
-      <div className="flex flex-col gap-1 py-2 pl-4">
-        {settingsLinks.map((link) => (
-          <Link
-            key={link.to}
-            to={link.to}
-            search={{}}
-            onClick={dismissCompactNavigation}
-            className="rounded-md px-4 py-2 text-sm hover:bg-muted"
-            activeProps={{ className: "bg-secondary text-secondary-foreground" }}
-          >
-            {link.label}
-          </Link>
-        ))}
-      </div>
-    </details>
-  );
-};
-
-const SignedInNavigation = ({
-  onLogout,
-  loggingOut,
-}: Readonly<{
-  onLogout: () => void;
-  loggingOut: boolean;
-}>): JSX.Element => {
-  const { authentication } = useSession();
-  const privacy = useRouterState({
-    select: (state) => state.location.pathname === "/settings/privacy",
-  });
-  const client = useRouter().options.context.webAuthClient;
-  const [binding] = useState(() => client.query("browserSession", "binding", {}));
-  const session = useAtomValue(binding);
-  const signedIn =
-    authentication !== "expired" &&
-    AsyncResult.isSuccess(session) &&
-    Option.isSome(Option.fromNullishOr(session.value.binding));
-  return (
-    <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
-      {navigationLinks.map((link) => (
-        <Link
-          key={link.to}
-          to={link.to}
-          search={{}}
-          onClick={dismissCompactNavigation}
-          className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
-          activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
-        >
-          <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
-          {link.label}
-          {link.to === "/app/needs-review" && signedIn && !privacy ? <ReviewPendingCount /> : null}
-        </Link>
-      ))}
-      <SettingsNavigation />
-      {signedIn ? (
-        <Button
-          className="justify-start md:mt-auto"
-          disabled={loggingOut}
-          onClick={onLogout}
-          type="button"
-          variant="ghost"
-        >
-          {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
-        </Button>
-      ) : (
-        <Button
-          className="justify-start md:mt-auto"
-          variant="ghost"
-          render={<Link to="/auth/pair" />}
-        >
-          Iniciar sesión
-        </Button>
-      )}
-    </nav>
-  );
-};
-
-const CompactNavigation = ({
-  loggingOut,
-  onLogout,
-}: Readonly<{ loggingOut: boolean; onLogout: () => void }>): JSX.Element => (
-  <>
-    <div className="px-2 md:hidden">
-      <Button
-        variant="outline"
-        size="icon"
-        popoverTarget="signed-in-navigation"
-        aria-label="Menú de navegación"
-      >
-        <HugeiconsIcon
-          className="signed-in-menu-bars"
-          icon={Menu01Icon}
-          size={24}
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-        <HugeiconsIcon
-          className="signed-in-menu-close"
-          icon={Cancel01Icon}
-          size={24}
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-      </Button>
-    </div>
-    <div id="signed-in-navigation" className="signed-in-compact-navigation" popover="auto">
-      <SignedInNavigation loggingOut={loggingOut} onLogout={onLogout} />
-    </div>
-  </>
-);
-
 /** Shared application navigation; privacy routes can retain it independently of product access. */
 export const ApplicationShell = ({
   children,
-}: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
+  reviewPendingCount,
+}: Readonly<
+  Pick<ComponentProps<"div">, "children"> & { reviewPendingCount: ReactNode }
+>): JSX.Element => {
   const router = useRouter();
   const { completeLogout } = useSession();
   const logoutRequest = router.options.context.webAuthClient.pipe(
@@ -207,27 +63,20 @@ export const ApplicationShell = ({
   return (
     <div className="signed-in-theme min-h-svh bg-background md:flex">
       <aside className="signed-in-sidebar flex items-center justify-between border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:items-stretch md:border-r md:border-b-0">
-        <Link
-          className="flex shrink-0 flex-col items-start gap-2 px-3 py-4 md:px-6"
-          to="/app/dashboard"
-        >
-          <FidyWordmark />
-          <span className="hidden text-xs text-muted-foreground md:block">
-            Tu dinero, más claro
-          </span>
-        </Link>
+        <SignedInBrand />
         <div className="hidden min-h-0 flex-1 md:flex">
-          <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />
+          <SignedInNavigation
+            loggingOut={status.waiting}
+            onLogout={onLogout}
+            reviewPendingCount={reviewPendingCount}
+          />
         </div>
-        <CompactNavigation loggingOut={status.waiting} onLogout={onLogout} />
-        {failed ? (
-          <Alert className="m-3" variant="destructive" role="alert">
-            <AlertTitle>No pudimos confirmar el cierre de sesión</AlertTitle>
-            <AlertDescription>
-              Revisa tu conexión e intenta cerrar sesión de nuevo.
-            </AlertDescription>
-          </Alert>
-        ) : null}
+        <CompactNavigation
+          loggingOut={status.waiting}
+          onLogout={onLogout}
+          reviewPendingCount={reviewPendingCount}
+        />
+        {failed ? <LogoutFailure /> : null}
       </aside>
       <div className="min-w-0 flex-1">
         <Outlet />

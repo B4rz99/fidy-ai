@@ -1,4 +1,4 @@
-import { TransactionId } from "@fidy/server/client";
+import { TransactionId } from "@/transport/client";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useParams, useRouter } from "@tanstack/react-router";
 import { DateTime, Option, Schema } from "effect";

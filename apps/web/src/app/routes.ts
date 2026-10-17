@@ -140,7 +140,7 @@ const createdReviewTransactionRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/needs-review/transactions/$id",
   component: lazyRouteComponent(
-    () => import("@/features/needs-review/created-transaction"),
+    () => import("@/features/needs-review/feature"),
     "CreatedReviewTransaction"
   ),
 });

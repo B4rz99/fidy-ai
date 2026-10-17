@@ -1,6 +1,6 @@
 import { TimeField } from "@/ui/components/time-field";
 import { CalendarField } from "@/ui/components/calendar-field";
-import { Currency } from "@fidy/server/client";
+import { Currency } from "@/transport/client";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { Option } from "effect";
 import type { JSX } from "react";

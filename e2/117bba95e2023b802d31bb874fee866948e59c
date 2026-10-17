@@ -1,0 +1,28 @@
+infra/cloudflare/stable-worker-identity.test.ts
+  s_ede1c3735d03b7::t_e43f701cd0b34c 1-57,59-62,64-81
+  s_ede1c3735d03b7::t_be84ff1113b7f2 58,63
+infra/cloudflare/production-release.ts
+  s_ede1c3735d03b7::t_e43f701cd0b34c 2,15,782-785
+  s_ede1c3735d03b7::t_99c003ba63de3a 1,938-944
+infra/cloudflare/stable-worker-identity.ts
+  s_ede1c3735d03b7::t_e43f701cd0b34c 3-5,7-8,12-18
+  s_ede1c3735d03b7::t_52fc14e4079b55 1-2,6,9-11
+docs/operations/production-releases.md
+  s_ede1c3735d03b7::t_24734197ff8fd4 108-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2117bba95e2023b802d31bb874fee866948e59c",
+  "prompts": {},
+  "sessions": {
+    "s_ede1c3735d03b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1429f-0c3e-7ef0-8ac2-b5634c160bce",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

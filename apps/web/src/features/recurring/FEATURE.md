@@ -194,6 +194,38 @@ The corrected wrapper is locally verified. Its deployment and live rerun status 
 [PR #1356](https://github.com/B4rz99/fidy-ai/pull/1356), separately from successful AI lifecycle
 output and irreversible fixture cleanup.
 
+### Quota-reset verification, 17-10-2026
+
+Public production health reported `available` at
+`15a3408c229e9e4365da4c6ccba377a6d8865010`, the merged PR #1356 release. The prior
+exhausted-account rerun returned HTTP 429 for both Categories and the recurring workspace,
+with matching Retry-After/body delays and no false empty result. On 17 October, a scoped
+read-only D1 diagnostic found five canonical Audit calls for the fixture User in the new UTC
+day, rather than the preceding day's exhausted 256. It wrote zero rows and changed no database
+state. This establishes budget reset, not a successful browser reread.
+
+All 47 deterministic inference checks passed. The strict remote Workers AI conformance probe
+then returned HTTP 200 with `outcome: conforming` and approval revision
+`workers-ai-gemma-4-2026-09-22`. It exercised canonical query and mutation proposals, exact Money
+and timestamp checks, Correction, deletion, date-only mutation, recurring lifecycle arguments,
+bounded invalid-output recovery and Colombian Spanish structured output. These synthetic
+proposals execute no canonical mutations and change no financial records. This closes the
+previously blocked live provider-schema check, while the actual hosted lifecycle approval and
+saved-result browser journey still need their own production rerun. The initial script attempts
+timed out during local harness readiness; the subsequent ready harness completed the strict
+probe in approximately 29 seconds. A harness startup timeout is not evidence of provider quota
+exhaustion.
+
+The 16 recurring Worker/D1 regressions also passed, including the guarded production database
+wrapper and prior-day budget reset. On the current signed-in production account the workspace
+loaded successfully, and a hosted November read correctly returned no plans. A new fictional
+`PRUEBA QA CHAT RECURRENTE 20261017` was saved through the browser with unknown COP Money,
+monthly cadence and first date 18 October. The subsequent hosted stop request entered processing,
+then exposed a public-ingress progress-route omission: browser preflight returned 404 and blocked
+the actual recovery request. Its reproduction and fix are recorded in the
+[chat audit](../agent/FEATURE.md). The plan's final stopped state and live lifecycle approval remain
+unverified until deployment and recovery; no financial Transaction was created for this test.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

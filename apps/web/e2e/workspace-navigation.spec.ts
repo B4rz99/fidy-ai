@@ -191,6 +191,9 @@ test("refreshes the retained recurring default month after midnight", ({ page, r
         expect(page.getByRole("heading", { name: /octubre de 2026/iu })).toBeVisible()
       );
       yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
+      );
       yield* Effect.tryPromise(() => page.clock.setFixedTime("2026-11-01T05:01:00Z"));
       yield* Effect.tryPromise(() => page.goBack());
       yield* Effect.tryPromise(() =>

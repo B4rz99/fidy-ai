@@ -124,6 +124,7 @@ const reservedRateLimitPaths = [
   browserSessionBindingPath,
   "/web/hosted-turns",
   "/web/hosted-turns/delivery",
+  "/web/hosted-turns/progress",
   "/web/subscription/payment-enrollments/availability",
   "/web/subscription/payment-enrollments/prepare",
   "/web/subscription/payment-enrollments/submit",

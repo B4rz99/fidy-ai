@@ -43,6 +43,35 @@ Effect 4.0.2 retest, 2026-10-14, production `6708a0e76cf9e0c82157c0caa5e3fe12b22
 
 ## Evidence and remaining checks
 
+Quota-reset provider check, 2026-10-17: the strict remote Workers AI conformance probe passed
+with HTTP 200 and `outcome: conforming`, after all 47 deterministic inference checks passed.
+The installed adapter correctly proposed query, capture, Correction, deletion, date-only and
+recurring lifecycle operations, retained exact Money/time expectations, recovered bounded
+invalid output and produced Colombian Spanish structured output. The probe executes no canonical
+mutations. Production health reported `available` at `15a3408c229e9e4365da4c6ccba377a6d8865010`.
+This establishes provider availability and the corrected lifecycle schema at the observation time;
+it does not establish successful natural-language Dashboard editing, redundant-confirmation
+removal or a completed browser lifecycle approval. Those remain separate end-to-end checks.
+
+The same release then completed two consecutive browser Turns: Bogotá today/tomorrow were
+17/18 October, and a November planning query correctly returned no plans. Each produced one
+User/assistant pair, with automatic delivery acknowledgement and no receipt-confirmation control.
+A fictional `PRUEBA QA CHAT RECURRENTE 20261017` plan was created through ordinary controls with
+an unknown COP amount, monthly cadence and first date 18 October. Its natural-language stop
+request returned `processing`. Both explicit recovery attempts failed at OPTIONS preflight with
+404 on `/web/hosted-turns/progress`; no progress POST reached Core, and the composer correctly
+remained locked rather than replaying the uncertain request. An independent public OPTIONS
+request reproduced 404. Core owned the route, but public ingress omitted it from its route,
+preflight and session-forwarding sets. A seven-check public-ingress regression failed four checks
+before the fix; all seven passed after sharing the three hosted-browser paths across those sets.
+The existing cancellation and telemetry checks also passed (11 checks total). Origin restrictions,
+POST-only methods, cookie forwarding, session binding and no-store responses remain enforced.
+A scoped read-only D1 diagnostic subsequently found the retained Turn `interrupted`, with two
+recorded tool calls and no delivery proposal; it wrote zero rows. This does not establish a
+successful lifecycle change. [PR #1358](https://github.com/B4rz99/fidy-ai/pull/1358) contains the
+ingress fix. Deployment and recovery of the retained production Turn still need verification;
+the synthetic plan has not yet been claimed as stopped.
+
 On 2026-10-11 at revision `b131e61435ec63c57470f57ed1ad3409261f0005`, the combined Transactions/chat rendered feature suite passed 50 checks; `application.test.tsx` passed 24 checks; Transactions and hosted-session Core tests passed 33 checks. Counts include neighbouring capabilities and are not all chat tests.
 
 The deterministic hosted inference suite passed 37 checks, including date-only conformance. The combined Transaction/HostedTurn actual local Worker/D1 suite passed 187 checks, including exact once-only deletion confirmation. The built-browser Transactions journeys passed 14 checks. Across these commands, 345 checks passed; no live model call was required.

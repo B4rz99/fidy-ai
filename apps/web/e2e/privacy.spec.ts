@@ -506,15 +506,18 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       const button = region.getByRole("button", { name: "Solicitar eliminación", exact: true });
       yield* Effect.tryPromise(() => expect(button).toBeDisabled());
       yield* Effect.tryPromise(() => region.getByRole("checkbox").check());
-      const first = page.waitForResponse(
-        (response) =>
-          response.url() === `${apiOrigin}/web/privacy/erasure` &&
-          response.request().method() === "POST"
-      );
+      const first = page
+        .waitForResponse(
+          (response) =>
+            response.url() === `${apiOrigin}/web/privacy/erasure` &&
+            response.request().method() === "POST"
+        )
+        .then((response) => {
+          expect(response.status()).toBe(acceptedStatus);
+          return response.json();
+        });
       yield* Effect.tryPromise(() => button.click());
-      const response = yield* Effect.tryPromise(() => first);
-      expect(response.status()).toBe(acceptedStatus);
-      const initial: unknown = yield* Effect.tryPromise(() => response.json());
+      const initial: unknown = yield* Effect.tryPromise(() => first);
       yield* Effect.tryPromise(() =>
         expect(region.getByRole("alert")).toContainText("Aún no hemos eliminado tus datos")
       );
@@ -522,14 +525,18 @@ test("an erasure intention uses fresh Core authority and an explicit retry retur
       yield* Effect.tryPromise(() => expect(region).not.toContainText("Referencia:"));
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() => region.getByRole("checkbox").check());
-      const retry = page.waitForResponse(
-        (value) =>
-          value.url() === `${apiOrigin}/web/privacy/erasure` && value.request().method() === "POST"
-      );
+      const retry = page
+        .waitForResponse(
+          (value) =>
+            value.url() === `${apiOrigin}/web/privacy/erasure` &&
+            value.request().method() === "POST"
+        )
+        .then((response) => {
+          expect(response.status()).toBe(acceptedStatus);
+          return response.json();
+        });
       yield* Effect.tryPromise(() => button.click());
-      const repeated = yield* Effect.tryPromise(() => retry);
-      expect(repeated.status()).toBe(acceptedStatus);
-      expect(yield* Effect.tryPromise(() => repeated.json())).toEqual(initial);
+      expect(yield* Effect.tryPromise(() => retry)).toEqual(initial);
       yield* Effect.tryPromise(() => verifyAccessibility(page));
     })
   ));

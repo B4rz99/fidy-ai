@@ -5,6 +5,7 @@ import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
 const successStatus = 200;
+const rateLimitedStatus = 429;
 const monthsPerYear = 12;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
   page,
@@ -208,12 +209,13 @@ test("recovers a committed save with a lost acknowledgement through an explicit 
 
 const loseAcknowledgement = (route: Route): Promise<void> =>
   route.request().method() === "POST"
-    ? route.fetch().then((response) =>
-        response.text().then((body) => {
+    ? route.fetch().then((response) => {
+        if (response.status() === rateLimitedStatus) return route.fulfill({ response });
+        return response.text().then((body) => {
           expect(response.status(), body).toBe(successStatus);
           return route.abort("failed");
-        })
-      )
+        });
+      })
     : route.continue();
 
 const expectCalendarItemFits = (page: Page): Effect.Effect<void, Cause.UnknownError> =>

@@ -60,15 +60,15 @@
     "@effect/platform-bun": "4.0.2",
     "@effect/tsgo": "0.46.1",
     "@playwright/test": "1.64.0",
-    "@shadcn/lint": "0.2.0",
+    "@shadcn/lint": "0.2.1",
     "@types/istanbul-lib-coverage": "2.0.6",
-    "bun-types": "1.4.2",
+    "bun-types": "1.4.3",
     "effect": "4.0.2",
     "istanbul-lib-coverage": "3.2.2",
     "lefthook": "2.2.1",
     "oxfmt": "0.72.0",
     "oxlint": "1.87.0",
-    "oxlint-tsgolint": "7.0.2003",
+    "oxlint-tsgolint": "7.0.2004",
     "typescript": "7.0.2"
   },
   "overrides": {

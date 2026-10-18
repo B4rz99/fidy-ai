@@ -1,0 +1,62 @@
+apps/server/cloudflare/d1-test-fixture.ts
+  s_6d017cc65783af::t_4a150f00c4730c 307
+apps/server/src/shell/subscription/contract.ts
+  s_6d017cc65783af::t_4a150f00c4730c 176
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_9d436961d32998 251-254,256
+  s_6d017cc65783af::t_99156ee414cf4e 8,101,203-240
+  s_6d017cc65783af::t_ed24eb60505e9f 255,257-260
+  s_6d017cc65783af::t_c38bd82ecacfb0 242-250,261-266
+  s_6d017cc65783af::t_f58a6d242beabf 241
+apps/server/cloudflare/subscription/payment-enrollment-migration.test.ts
+  s_6d017cc65783af::t_4a150f00c4730c 137-142
+docs/adr/0021-browser-only-payment-credential-enrollment.md
+  s_6d017cc65783af::t_4a150f00c4730c 24,29-34
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_6d017cc65783af::t_6850a41f353d88 425-429
+  s_6d017cc65783af::t_08f7408c704c4a 430-432,440,449
+apps/web/e2e/product-journeys.spec.ts
+  s_6d017cc65783af::t_ec82e86f0e9ee9 396
+  s_6d017cc65783af::t_28270f974783b1 350-363,366-378,380-395
+  s_6d017cc65783af::t_60c7ee1c7e1d15 364-365,379
+  s_6d017cc65783af::t_5dbb4267c276ca 397-398
+apps/web/ARCHITECTURE.md
+  s_6d017cc65783af::t_4a150f00c4730c 76-79
+apps/server/cloudflare/migrations/0112_failed_card_wallet_replacement.sql
+  s_6d017cc65783af::t_8c93a99af018e6 1-19
+apps/web/src/features/subscription/feature.tsx
+  s_6d017cc65783af::t_3eba0358df29ab 10
+  s_6d017cc65783af::t_a7c49ca748bdd2 1094
+  s_6d017cc65783af::t_28270f974783b1 1106-1110
+  s_6d017cc65783af::t_d57cc49190a837 1111,1136
+apps/server/ARCHITECTURE.md
+  s_6d017cc65783af::t_4a150f00c4730c 470-472
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_6d017cc65783af::t_ad20baeec12ca4 363,370-371,378,391,599-600,634
+  s_6d017cc65783af::t_845bbf41c08a4d 415,438-441,611
+  s_6d017cc65783af::t_ec82e86f0e9ee9 702,725
+  s_6d017cc65783af::t_9f937c11fa55bd 418-419,422-424
+  s_6d017cc65783af::t_53056300518cfe 213,216-217,220-222,227,229-233,242-243,260-264,280-282,289,298-302
+  s_6d017cc65783af::t_72bbb606a3912d 203-212,214-215,218-219,223-226,228,234-241,244-259,265-279,283-288,290-297,364-369,372-377,380-385,397-414,593,615,617,619-632
+  s_6d017cc65783af::t_28270f974783b1 197-202,303-362,387-390,393-395,433-437,442-448,456-458,470,475,703,706-724,727
+  s_6d017cc65783af::t_0eded55b861ffd 379,386,392,396,594-598
+  s_6d017cc65783af::t_52970d1b24b4fa 416-417,425-428,477,479-480,520,590-592,601-604,633,635-636,655,726,728-729
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_6d017cc65783af::t_8c93a99af018e6 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aa8690665eef0b1b7f4bbc04b85532dd4b38652d",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

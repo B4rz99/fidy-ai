@@ -508,3 +508,12 @@ The existing thread establishes a human support response for this enquiry. Its p
 and erasure clarification, not verification of a dedicated security desk, incident SLA or every
 notification obligation. Public DPA/security contacts remain as documented by #1276; no incident
 is filed as a drill and no support acknowledgement substitutes for the qualified per-flow review.
+
+## Resend corporate-process enquiry sent — 2026-10-18
+
+The owner-authorized reply in the existing support thread asks which supported process applies
+to using the existing team on behalf of FIDY S.A.S. after Resend clarified that it keeps no separate
+company-name record. Gmail confirmed submission; private correspondence reference
+`c067e940-4326-4810-8266-0c7ec83f11f1` preserves the bounded observation. No account change, migration, agreement acceptance,
+deletion, closure or purchase was authorized. The question requests instructions only; submission
+is not a provider answer or evidence that the corporate contracting relationship is resolved.

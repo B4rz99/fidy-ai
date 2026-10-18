@@ -93,18 +93,40 @@ preserves clocks and the coverage limitation; it does not invent another respond
 accepted recording this sole-operator arrangement. That acceptance neither extends reporting
 periods nor establishes continuous response coverage.
 
+## Bounded technical handoff available to this procedure
+
+The existing [CI alert-receipt and controlled-release evidence](provider-reconciliation-1275.md#ci-alert-receipt-and-controlled-release)
+contains actual Resend-delivered and company-inbox-observed notification evidence, private receipt
+`6ea30774-282b-4e39-b5ab-ae327e886af5`, and the linked
+[notification workflow result](https://github.com/B4rz99/fidy-ai/actions/runs/38895084735) and
+[failed controlled release](https://github.com/B4rz99/fidy-ai/actions/runs/38895079577).
+This is CI transport/failure-handling evidence, not proof of the native runtime incident pipeline.
+
+A further owner-authorized mailbox observation on 2026-10-18, private reference
+`58152d92-24e5-4e91-93cb-775a2ee0bc66`, records rendered operational-alert and release-failure
+subjects, timestamps and bounded preview metadata arriving at the designated operator's mailbox.
+No work identity, request body, tax identifier or full traffic metadata is published or retained by
+that minimized record. Individual headers/provider events and the deployed emitter revision were
+not verified in this observation, so receipt alone does not authenticate a native technical signal.
+
+The sole operator is the technical responder under [security response](security-response.md).
+Authenticate the signal, obtain the technical owner's bounded facts, and apply the privacy stages;
+a critical operational alert does not itself establish a personal-data incident. Full deployed
+native detection, containment and recovery evidence remains with [#1262](https://github.com/B4rz99/fidy-ai/issues/1262).
+This handoff neither creates another detector nor claims that technical drill completed.
+
 ## Bank evidence index
 
 Share only an authorized, reviewed projection; do not attach private company accounts or agreements
 to this repository/index. Registration or a policy does not establish overall compliance.
 
-| Outcome                       | Current evidence and limitation                                                                                                                                                                                                                                                                                             | Owner / next action                                                                                                              |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Operator/entity and RNBD      | Supplied accountant-verified financial snapshot recorded privately; below-threshold snapshot, current-year registration supported by Chamber/DIAN observations; qualified first-year determination pending. #1272 owns verified identity/route evidence.                                                                    | Use supplied asset and observed registration facts; review the explicit first-year basis and record the qualified determination. |
-| Privacy function and rights   | Existing sole operator; #1273 rights/withdrawal and #1274 erasure procedures. No backup; unattended escalation gap explicit.                                                                                                                                                                                                | Sole owner is designated; preserve unavailable-owner clocks and review the explicitly accepted coverage limitation.              |
-| Incident decisions            | Decision procedure, official-source record and synthetic tabletop. No live filing or qualified sign-off claimed.                                                                                                                                                                                                            | Reviewer applies legal/contract rules; operator rehearses and retains decision/training evidence.                                |
-| Technical response            | Existing [security response](security-response.md), [background-work monitoring](cloudflare-background-work.md) and open [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). Its referenced research files were absent in this checkout and current remote-path inspection, so are not presented as available evidence. | Technical owner supplies exact deployed detection/receipt/containment/recovery evidence; this tabletop does not replace it.      |
-| Provider and bank obligations | #1275 reconciliation and #1266 bank profile/provisioning.                                                                                                                                                                                                                                                                   | Operator obtains applicable terms/contacts; reviewer records per-flow role and notification/retention decisions.                 |
+| Outcome                       | Current evidence and limitation                                                                                                                                                                                                                                                                                                                                            | Owner / next action                                                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Operator/entity and RNBD      | Supplied accountant-verified financial snapshot recorded privately; below-threshold snapshot, current-year registration supported by Chamber/DIAN observations; qualified first-year determination pending. #1272 owns verified identity/route evidence.                                                                                                                   | Use supplied asset and observed registration facts; review the explicit first-year basis and record the qualified determination. |
+| Privacy function and rights   | Existing sole operator; #1273 rights/withdrawal and #1274 erasure procedures. No backup; unattended escalation gap explicit.                                                                                                                                                                                                                                               | Sole owner is designated; preserve unavailable-owner clocks and review the explicitly accepted coverage limitation.              |
+| Incident decisions            | Decision procedure, official-source record and synthetic tabletop. No live filing or qualified sign-off claimed.                                                                                                                                                                                                                                                           | Reviewer applies legal/contract rules; operator rehearses and retains decision/training evidence.                                |
+| Technical response            | Existing [security response](security-response.md), [background-work monitoring](cloudflare-background-work.md) and open [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). Actual bounded CI/mailbox receipt evidence is linked above; native deployment/containment/recovery remains with #1262. Its absent research files are not presented as available evidence. | Technical owner supplies exact deployed detection/receipt/containment/recovery evidence; this tabletop does not replace it.      |
+| Provider and bank obligations | #1275 reconciliation and #1266 bank profile/provisioning.                                                                                                                                                                                                                                                                                                                  | Operator obtains applicable terms/contacts; reviewer records per-flow role and notification/retention decisions.                 |
 
 Recheck every evidence date and unresolved input before institution verification. The index itself
 is not production readiness, legal certification or bank acceptance.

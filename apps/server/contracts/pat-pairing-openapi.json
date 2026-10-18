@@ -180,6 +180,8 @@
               },
               "retryAfterSeconds": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -248,7 +250,13 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "pollingIntervalSeconds": {
-            "minimum": 5,
+            "allOf": [
+              {
+                "minimum": 5
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "status": {

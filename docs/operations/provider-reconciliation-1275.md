@@ -517,3 +517,13 @@ company-name record. Gmail confirmed submission; private correspondence referenc
 `c067e940-4326-4810-8266-0c7ec83f11f1` preserves the bounded observation. No account change, migration, agreement acceptance,
 deletion, closure or purchase was authorized. The question requests instructions only; submission
 is not a provider answer or evidence that the corporate contracting relationship is resolved.
+
+## Provider-mail recheck — 2026-10-18
+
+The authorized company mailbox was checked again, including the refreshed Resend thread and
+all-folder provider-domain and Wompi/Kapso/case searches since the enquiries. No reply to the latest
+Resend corporate-process question was visible; the previously recorded substantive reply remains
+the latest provider response in that thread. No new substantive Kapso or Wompi answer was found.
+Restricted observation reference `dcdba84a-f85b-4fe3-b6ed-b53326509451` records the search scope and limits. This is a
+dated company-mail observation, not proof that no answer exists through another provider channel.
+No follow-up message, live incident report or provider configuration change was made in this recheck.

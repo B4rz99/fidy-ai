@@ -1,13 +1,14 @@
 # RNBD and reporting applicability — #1276
 
-Version 3, 2026-10-18. Use the [decision procedure](privacy-decisions-1276.md) and
+Version 4, 2026-10-18. Use the [decision procedure](privacy-decisions-1276.md) and
 [official-source record](../research/privacy-reporting-public-evidence-1276.md). This is a working
 application record, not qualified sign-off or an incident report. No registration, submission,
 account creation or third-party drill contact was performed.
 
 ## Actual RNBD determination
 
-**First-year below-threshold assessment; issue-required qualified determination remains open.**
+**NotRequiredForReviewedPeriod: no current RNBD registration obligation on the supplied facts.**
+The issue-required qualified approval remains a separate, outstanding evidence criterion.
 The owner supplied total assets and accounting dates, identified the accountant-verified figure,
 and confirmed the same amount on the registration date. Minimized Chamber of Commerce observations
 link a first-time registration filing to its successful registration; the DIAN formalization email
@@ -23,15 +24,16 @@ recorded 2026-10-18; predecessors `cf9846ce-15d8-4f1c-bb04-2c63bf4cda33` (Chambe
 under the existing operator-owned mode-0700 evidence directory. Financial particulars, registration
 identifiers, RUT contents and message-validation codes are excluded from Git and GitHub.
 
-**Reasoned application, not qualified approval:** use the supplied current-year snapshot for the
-initial assessment because the company first registered during the evaluation year. The binding
-asset threshold is not met at that snapshot. SIC's prior-December-31 interpretation is advisory and
-supplies no express substitute for a newly registered company. Therefore this is a bounded
-below-threshold assessment using current facts, not a fabricated prior-year account or a definitive
-first-year exemption. Obtain the issue-required reviewer-attributed determination of that basis;
-recheck current assets when facts change and the year-end position at the next annual review. The
-[measurement follow-up](../research/rnbd-measurement-followup-1276.md) distinguishes binding scope,
-advisory interpretation and remaining first-year uncertainty.
+**Reasoned application, not qualified approval:** the supplied current-year accounting snapshot
+is below the binding asset threshold, and the company first registered during that year. There is
+no preceding-year company balance to obtain. Record **NotRequiredForReviewedPeriod** for the
+reviewed snapshot; absence of an express first-year substitute does not itself create a registration
+obligation. This is not a permanent or first-year exemption. Recheck assets when they change and at
+year-end, and reassess before bank submission. The [conclusion recheck](../research/rnbd-conclusion-recheck-1276.md)
+distinguishes this supported practical conclusion from the narrower interpretive limitation and
+from #1276's separate qualified-review criterion. Restricted decision version 5,
+`dcdba84a-f85b-4fe3-b6ed-b53326509451`, preserves this reassessment and the bounded provider-mail check.
+Predecessor records remain unchanged. No private financial particulars are published.
 
 The reviewer records legal nature/controller role, incorporation and database-creation dates,
 corporate evidence reference, total assets/accounting date, measurement basis, UVT year and
@@ -39,11 +41,10 @@ calculation, source versions, conclusion, reviewer qualification/date, effective
 triggers. Use a balance sheet or certified asset figure; capital, sales and equity are not substitutes.
 The decree uses **above 100,000 UVT** for private companies/nonprofits; public legal entities have
 a separate rule. Current SIC consolidation contains inconsistent wording in another paragraph.
-Exact equality is a general boundary-review trigger; it is not the supplied case. First-year
-measurement review remains open for the current-year branch now supported by private evidence.
-The 2026 benchmark for 100,000 UVT is COP 5,237,400,000, but the correct UVT/asset-period pairing
-remains part of review. These are sourced rules and an arithmetic benchmark; the supplied snapshot is below the threshold,
-while the relevant measurement period remains unresolved.
+Exact equality is a general boundary-review trigger; it is not the supplied case. Qualified approval of the first-year rationale remains open; the substantive below-threshold
+conclusion can nevertheless be recorded for the supplied snapshot.
+The 2026 benchmark for 100,000 UVT is COP 5,237,400,000, with UVT/asset-period pairing retained in the decision evidence. The benchmark is public arithmetic;
+the supplied snapshot supports the present no-registration conclusion and its change/year-end rechecks.
 
 Record RegistrationRequired, NotRequiredForReviewedPeriod or Unresolved with actual supporting
 facts. If required, establish database-creation dates, the applicable registration period and actual
@@ -122,7 +123,7 @@ to this repository/index. Registration or a policy does not establish overall co
 
 | Outcome                       | Current evidence and limitation                                                                                                                                                                                                                                                                                                                                            | Owner / next action                                                                                                              |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Operator/entity and RNBD      | Supplied accountant-verified financial snapshot recorded privately; below-threshold snapshot, current-year registration supported by Chamber/DIAN observations; qualified first-year determination pending. #1272 owns verified identity/route evidence.                                                                                                                   | Use supplied asset and observed registration facts; review the explicit first-year basis and record the qualified determination. |
+| Operator/entity and RNBD      | Supplied accountant-verified financial snapshot recorded privately; NotRequiredForReviewedPeriod on the supplied snapshot; current-year registration supported by Chamber/DIAN observations; separate qualified approval pending. #1272 owns verified identity/route evidence.                                                                                             | Use supplied asset and observed registration facts; review the explicit first-year basis and record the qualified determination. |
 | Privacy function and rights   | Existing sole operator; #1273 rights/withdrawal and #1274 erasure procedures. No backup; unattended escalation gap explicit.                                                                                                                                                                                                                                               | Sole owner is designated; preserve unavailable-owner clocks and review the explicitly accepted coverage limitation.              |
 | Incident decisions            | Decision procedure, official-source record and synthetic tabletop. No live filing or qualified sign-off claimed.                                                                                                                                                                                                                                                           | Reviewer applies legal/contract rules; operator rehearses and retains decision/training evidence.                                |
 | Technical response            | Existing [security response](security-response.md), [background-work monitoring](cloudflare-background-work.md) and open [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). Actual bounded CI/mailbox receipt evidence is linked above; native deployment/containment/recovery remains with #1262. Its absent research files are not presented as available evidence. | Technical owner supplies exact deployed detection/receipt/containment/recovery evidence; this tabletop does not replace it.      |

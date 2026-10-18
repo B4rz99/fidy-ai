@@ -1,0 +1,39 @@
+infra/cloudflare/verify-edge-smoke.test.ts
+  s_b75995d26622a8::t_cccbcfa194f509 54,87,127,206,238,280,310,346-350,364
+  s_b75995d26622a8::t_69d5e21d159f09 376-427
+infra/cloudflare/verify-production-smoke.ts
+  s_b75995d26622a8::t_ebbc67d5b6fd20 127-128,131,246,302,338,352
+  s_b75995d26622a8::t_f071d1464e0c7d 141-148
+docs/operations/production-releases.md
+  s_b75995d26622a8::t_3d8ef9db323ff1 506-511
+apps/web/scripts/production-workflow.test.ts
+  s_b75995d26622a8::t_ebbc67d5b6fd20 22,279
+  s_b75995d26622a8::t_f70d81001a3eab 230-233
+infra/cloudflare/verify-production-smoke.test.ts
+  s_b75995d26622a8::t_f071d1464e0c7d 1122
+  s_b75995d26622a8::t_3050126ad24ab1 1115-1121,1123-1168
+infra/cloudflare/verify-edge-smoke.ts
+  s_b75995d26622a8::t_cccbcfa194f509 16,59,64,83-84,98-106,201-203,205
+  s_b75995d26622a8::t_275f5cc0133667 117,119,204
+  s_b75995d26622a8::t_ebbc67d5b6fd20 63,86-87,107-116,118
+.github/workflows/production.yml
+  s_b75995d26622a8::t_ebbc67d5b6fd20 309
+infra/cloudflare/production-release.ts
+  s_b75995d26622a8::t_ebbc67d5b6fd20 110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c23ba683dca30d9379e2fad30ec2ff084c0165d8",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

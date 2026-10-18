@@ -259,6 +259,10 @@ public Ingress/Core/local D1 Subscription journeys passed. The new card-to-walle
 controls enrollment responses; the native replacement matrix uses real local D1 and controlled
 Wompi. These results do not establish a deployed wallet authorization or cancellation.
 
+The same 351 native, 21 web and 12 browser checks passed again on the quota-repair candidate
+`9d2181e649d0979ae3dd907152b2a4aea7961871` with this change and Effect 4.0.3. The complete static
+verification group passed, including the reviewed edge manifest and forward-migration policy.
+
 The historical QA card still needs genuine, attributable Wompi no-charge confirmation before reuse;
 the local test's synthetic provider case is fixture data, not Production proof. This change does not
 add an operator HTTP/CLI confirmation facility, bypass the privileged confirmation ledger, retire

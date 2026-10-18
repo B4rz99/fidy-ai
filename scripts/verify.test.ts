@@ -67,14 +67,12 @@ if [[ "\${FAIL_JOURNEY:-}" == "$journey_mode" ]]; then exit 1; fi
     ).toEqual([
       "CHECK mode=cli args=run --cwd apps/web test:browser:cli ",
       "CHECK mode=shared args=run --cwd apps/web test:browser ",
-      "CHECK mode=site args=run --cwd apps/site test:browser ",
     ]);
     const failureLabels = {
       cli: "Isolated native CLI browser journey",
       shared: "Web static-shell browser checks",
-      site: "Public site browser checks",
     };
-    for (const journey of ["cli", "shared", "site"] as const) {
+    for (const journey of ["cli", "shared"] as const) {
       expect(Bun.spawnSync(["rm", `${directory}/shared`, `${directory}/cli`]).exitCode).toBe(0);
       const failed = Bun.spawnSync(
         [
@@ -114,12 +112,53 @@ it.effect(
             `${directory}/bun`,
             `#!/usr/bin/env bash
 printf 'CHECK %s\\n' "$*"
+if [[ -n "\${CHECK_FAIL_MATCH:-}" && "$*" == *"$CHECK_FAIL_MATCH"* ]]; then exit 1; fi
 exit "\${CHECK_EXIT_CODE:-0}"
 `
           ),
         catch: () => new FixtureUnavailable(),
       });
       expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
+      for (const exitCode of [0, 1]) {
+        const result = Bun.spawnSync(
+          [
+            process.execPath,
+            Bun.fileURLToPath(new URL("./verify.ts", import.meta.url)),
+            "--group",
+            "builds",
+          ],
+          {
+            env: {
+              ...Bun.env,
+              CHECK_EXIT_CODE: String(exitCode),
+              PATH: `${directory}:${Bun.env.PATH}`,
+            },
+          }
+        );
+        expect(result.exitCode).toBe(exitCode);
+        const siteChecks = new TextDecoder()
+          .decode(result.stdout)
+          .split("\n")
+          .filter((line) => line === "CHECK run --cwd apps/site test:browser");
+        expect(siteChecks).toHaveLength(1);
+      }
+      const failedSite = Bun.spawnSync(
+        [
+          process.execPath,
+          Bun.fileURLToPath(new URL("./verify.ts", import.meta.url)),
+          "--group",
+          "builds",
+        ],
+        {
+          env: {
+            ...Bun.env,
+            CHECK_FAIL_MATCH: "apps/site test:browser",
+            PATH: `${directory}:${Bun.env.PATH}`,
+          },
+        }
+      );
+      expect(failedSite.exitCode).toBe(1);
+      expect(new TextDecoder().decode(failedSite.stderr)).toContain("Public site browser checks");
       for (const shard of ["1/2", "2/2"]) {
         for (const exitCode of [0, 1]) {
           const result = Bun.spawnSync(
@@ -148,8 +187,8 @@ exit "\${CHECK_EXIT_CODE:-0}"
           expect(commands.includes("CHECK run --cwd apps/web test:browser:cli")).toBe(
             shard === "1/2"
           );
-          expect(commands).toContain("CHECK run --cwd apps/site test:browser");
-          expect(commands).toHaveLength(shard === "1/2" ? 3 : 2);
+          expect(commands).not.toContain("CHECK run --cwd apps/site test:browser");
+          expect(commands).toHaveLength(shard === "1/2" ? 2 : 1);
         }
       }
     })
@@ -234,6 +273,7 @@ if [[ "$*" == 'install --frozen-lockfile' ]]; then
   exit 0
 fi
 [[ -f "$STATIC_RENDEZVOUS/installed" ]] || exit 2
+[[ "\${GOMAXPROCS:-}" == 2 ]] || exit 4
 suite=other
 if [[ "$*" == *lint:suppressions* ]]; then suite=suppressions; fi
 if [[ "$*" == *lint:type-aware* ]]; then suite=types; fi
@@ -275,10 +315,11 @@ done
           }
         );
         expect(result.exitCode).toBe(failure === "" ? 0 : 1);
-        if (failure !== "")
-          {expect(new TextDecoder().decode(result.stderr)).toContain(
+        if (failure !== "") {
+          expect(new TextDecoder().decode(result.stderr)).toContain(
             failure === "types" ? "oxlint type-aware" : "Lint suppressions"
-          );}
+          );
+        }
       }
     })
 );

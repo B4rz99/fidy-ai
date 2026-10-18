@@ -1,6 +1,7 @@
 import { Option, Predicate, Schema } from "effect";
 
-const statementPreparation = Symbol("native D1 statement preparation");
+// A private test-transport field survives instrumentation Proxies around prepared statements.
+const statementPreparation = "__fidyNativeD1Statement";
 const Byte = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }));
 const Binding = Schema.Union([
   Schema.String,
@@ -52,6 +53,7 @@ const executor =
       .then((value: unknown) => {
         const reply = Schema.decodeUnknownSync(Reply)(value);
         if (reply.success) return reply.value;
+
         throw new Error(
           reply.error.message,
           reply.error.cause === undefined ? undefined : { cause: new Error(reply.error.cause) }
@@ -59,7 +61,8 @@ const executor =
       });
 const statements = (
   native: D1Database,
-  execute: Execute
+  execute: Execute,
+  nativeAccess: () => void
 ): Readonly<{
   prepare: (preparation: Preparation) => D1PreparedStatement;
   materialize: (preparation: Preparation) => D1PreparedStatement;
@@ -75,8 +78,10 @@ const statements = (
     first: unavailable,
     raw: unavailable,
   };
-  const materialize = ({ sql, params }: Preparation): D1PreparedStatement =>
-    native.prepare(sql).bind(...params);
+  const materialize = ({ sql, params }: Preparation): D1PreparedStatement => {
+    nativeAccess();
+    return native.prepare(sql).bind(...params);
+  };
   const prepare = (preparation: Preparation): D1PreparedStatement =>
     new Proxy(prototype, {
       get(target, key, receiver): unknown {
@@ -86,7 +91,7 @@ const statements = (
             const encoded = bindings(values);
             return Option.isSome(encoded)
               ? prepare({ sql: preparation.sql, params: encoded.value })
-              : native.prepare(preparation.sql).bind(...values);
+              : materialize({ sql: preparation.sql, params: [] }).bind(...values);
           };
         }
         if (key === "all" || key === "run") {
@@ -116,12 +121,14 @@ const statements = (
 export const asynchronousNativeDatabase = ({
   native,
   dispatch,
+  nativeAccess,
 }: Readonly<{
   native: D1Database;
   dispatch: Dispatch;
+  nativeAccess: () => void;
 }>): D1Database => {
   const execute = executor(dispatch);
-  const { prepare, materialize } = statements(native, execute);
+  const { prepare, materialize } = statements(native, execute, nativeAccess);
   const unavailable = (): never => {
     throw new Error("Unintercepted D1 fixture method");
   };
@@ -157,6 +164,7 @@ export const asynchronousNativeDatabase = ({
         };
       }
       // Sessions/bookmarks, exec and deprecated dump keep the original platform path.
+      if (key === "withSession" || key === "exec" || key === "dump") nativeAccess();
       return Reflect.get(target, key, receiver);
     },
   });

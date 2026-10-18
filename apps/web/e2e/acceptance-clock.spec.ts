@@ -1,7 +1,10 @@
 import { ResourceLimited } from "@fidy/server/client";
 import type { APIResponse } from "@playwright/test";
 import { Effect, Option, Schema } from "effect";
-import { advanceNativeRetry } from "./acceptance-clock";
+import {
+  advanceNativeRetry,
+  installAcceptanceClockWithNativePerformance,
+} from "./acceptance-clock";
 import { apiOrigin } from "./http-fixtures";
 import { browserSessionHeaders, signInBudgetEditingThroughCore } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
@@ -51,5 +54,19 @@ test("native admission still refuses the burst and recovers only after the fixtu
           page.request.get(`${apiOrigin}/categories`, { headers })
         )).status()
       ).toBe(admittedStatus);
+    })
+  ));
+
+const virtualWaitMilliseconds = 1_000;
+const browserPerformance = (): number => performance.now();
+test("virtual waiting preserves native high-resolution browser performance timing", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+      yield* Effect.tryPromise(() => installAcceptanceClockWithNativePerformance(page));
+      const before = yield* Effect.tryPromise(() => page.evaluate(browserPerformance));
+      yield* Effect.tryPromise(() => page.clock.fastForward(virtualWaitMilliseconds));
+      const after = yield* Effect.tryPromise(() => page.evaluate(browserPerformance));
+      expect(after - before).toBeLessThan(virtualWaitMilliseconds);
     })
   ));

@@ -678,7 +678,11 @@ it("allows an explicit new handoff after expiry without reusing the consumed pub
 
 const expireHandoffs = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() =>
-    db.prepare("UPDATE whatsapp_provider_handoffs SET expires_at_ms=created_at_ms").run()
+    db
+      .prepare(
+        "UPDATE whatsapp_provider_handoffs SET created_at_ms=created_at_ms-1000,expires_at_ms=created_at_ms-1000"
+      )
+      .run()
   ).pipe(Effect.asVoid);
 
 it.each(["source", "spend", "storage"] as const)(

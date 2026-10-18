@@ -718,3 +718,12 @@ that boundary. Sessions, raw results, unsupported bindings, and mixed session ba
 the original binding path. The fixture suite compares both transports, including BLOB values,
 transaction rollback, foreign keys, FTS, and isolation. No application database implementation
 or production query path uses this test transport.
+
+For a never-opened test binding, the shared fixture may clone an immutable native D1 baseline
+image captured immediately after schema installation. A separate warmup process discovers and
+closes the empty slots before use. SQLite serialization includes committed WAL pages; the
+standalone image uses SQLite's documented journal-header conversion. Any earlier query, native
+session, raw access, or caller-owned schema disables replacement. Snapshot bytes never include
+subsequent test mutations. All reads, writes, constraints, FTS, and transaction evidence still run
+inside workerd's real D1 binding; Bun only serializes and copies the pristine image. Pools own
+both Worker shutdown and removal of their temporary files.

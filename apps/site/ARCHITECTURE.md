@@ -57,3 +57,8 @@ Playwright uses Astro’s standard preview command for built HTML on port 4322, 
 checks, canonical metadata, sitemap exclusions, interactive island hydration,
 theme persistence, browser/CSP errors and serious accessibility violations. The
 repository verification groups include the site build, types and browser suite.
+
+The existing Builds runner owns the public-site browser suite and reuses the static artifact
+it built earlier in that same job. `SITE_BROWSER_PREBUILT=true` checks the artifact before
+starting preview. Standalone browser runs still build fresh output. Product browser shards do
+not repeat these independent public-site cases.

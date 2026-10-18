@@ -5,6 +5,7 @@ const measuringBrowserCost = process.env.BROWSER_COST_MEASUREMENT === "1";
 const fixtureRuntime = measuringBrowserCost ? process.execPath : "bun";
 const measurementAssertionMilliseconds = 30_000;
 const normalAssertionMilliseconds = 5_000;
+const browserWorkers = 6;
 const normalStartupMilliseconds = 120_000;
 const measurementStartupMilliseconds = 600_000;
 const viteBuild = measuringBrowserCost
@@ -17,7 +18,12 @@ export default defineConfig({
     timeout: measuringBrowserCost ? measurementAssertionMilliseconds : normalAssertionMilliseconds,
   },
   projects: [
-    { name: "admission", testMatch: "acceptance-clock.spec.ts" },
+    {
+      name: "admission",
+      testMatch: ["acceptance-clock.spec.ts", "session-binding.spec.ts"],
+      grep: /native admission|virtual waiting|rejects stale cross-tab drafts and logout/u,
+      workers: 1,
+    },
     {
       name: "performance",
       testMatch: "needs-review.spec.ts",
@@ -29,13 +35,14 @@ export default defineConfig({
       name: "browser",
       testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
       dependencies: ["performance"],
-      grepInvert: /returns from .+ with its review form and original already available/u,
+      grepInvert:
+        /returns from .+ with its review form and original already available|rejects stale cross-tab drafts and logout/u,
     },
   ],
   fullyParallel: false,
   forbidOnly: isCI,
   retries: 0,
-  workers: measuringBrowserCost ? 1 : 4,
+  workers: measuringBrowserCost ? 1 : browserWorkers,
   reporter: isCI
     ? [["line"], ["json", { outputFile: "test-results/browser-timings.json" }]]
     : "line",

@@ -7,7 +7,7 @@ import {
 } from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
-import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 
 export type ProviderJourneyConfiguration = Readonly<{
   provider: "google" | "microsoft";
@@ -238,7 +238,9 @@ export const stalledProviderJourney = ({
       yield* Effect.tryPromise(() =>
         expect(popup.getByText("Pending provider decision")).toBeVisible()
       );
-      const browserNow = yield* Clock.currentTimeMillis;
+      const browserNow = yield* Effect.tryPromise(() =>
+        page.evaluate(() => performance.timeOrigin + performance.now())
+      );
       yield* Effect.tryPromise(() => page.clock.pauseAt(browserNow + 100));
       if (outcome === "popup-close") yield* Effect.tryPromise(() => popup.close());
       if (outcome === "cancel") {

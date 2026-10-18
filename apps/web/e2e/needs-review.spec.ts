@@ -1,4 +1,4 @@
-import { signInThroughCore } from "./real-core-fixture";
+import { signInPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
 import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
@@ -809,13 +809,17 @@ for (const destination of ["Presupuestos", "Transacciones"]) {
   }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
-        yield* Effect.tryPromise(() => page.clock.resume());
+        yield* Effect.tryPromise(() => signInPerformanceThroughCore({ page, request }));
         yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
         yield* Effect.tryPromise(() =>
           page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
         );
-        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() =>
+          page
+            .getByRole("navigation", { name: "Aplicación" })
+            .getByText("Por revisar", { exact: true })
+            .click()
+        );
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
         );

@@ -1,4 +1,5 @@
 import { Miniflare } from "miniflare";
+import { type NativeImagePool, nativeImagePool } from "./d1-test-images.test-fixture";
 import { asynchronousNativeDatabase } from "./d1-test-bridge.test-fixture";
 import { Option, Schema } from "effect";
 
@@ -107,7 +108,7 @@ export const installTestSchemaWithPrefix = (
     });
 };
 
-type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
+type BindingSlot = Readonly<{ runtime: Miniflare; index: number; images: NativeImagePool }>;
 type TestDatabaseTransport = "proxy" | "fetch";
 const acquireDatabase = (
   slot: BindingSlot,
@@ -119,13 +120,16 @@ const acquireDatabase = (
         ? native
         : asynchronousNativeDatabase({
             native,
-            dispatch: (body) =>
-              slot.runtime.dispatchFetch(`http://fixture/DB_${slot.index}/query`, {
+            nativeAccess: () => slot.images.used(slot.index),
+            dispatch: (body) => {
+              slot.images.used(slot.index);
+              return slot.runtime.dispatchFetch(`http://fixture/DB_${slot.index}/query`, {
                 method: "POST",
                 body,
-              }),
+              });
+            },
           });
-    schemaInstallers.set(db, (sql) =>
+    const original = (sql: ReadonlyArray<string>): Promise<void> =>
       slot.runtime
         .dispatchFetch(`http://fixture/DB_${slot.index}`, {
           method: "POST",
@@ -133,7 +137,11 @@ const acquireDatabase = (
         })
         .then((response) => {
           if (!response.ok) throw new Error("Fixture schema installation failed");
-        })
+        });
+    schemaInstallers.set(db, (sql) =>
+      transport === "proxy"
+        ? original(sql)
+        : slot.images.install({ index: slot.index, sql, original: () => original(sql) })
     );
     return db;
   });
@@ -214,18 +222,45 @@ export default {
   }
 }`;
 
+const createBindingRuntime = ({
+  directory,
+  name,
+  env,
+}: Readonly<{
+  directory: string;
+  name: string;
+  env: Record<string, { type: "d1"; id: string } | { type: "r2"; name: string }>;
+}>): Miniflare =>
+  new Miniflare({
+    resourcePersistencePath: directory,
+    workers: [
+      {
+        config: {
+          name,
+          type: "worker",
+          compatibilityDate: "2026-09-08",
+          env,
+          manifest: {
+            mainModule: "index.mjs",
+            modules: { "index.mjs": { contents: schemaWorker, type: "esm" } },
+          },
+        },
+      },
+    ],
+  });
+
 const bindingPool = (
   withBuckets: boolean
 ): Readonly<{
-  acquire: () => BindingSlot;
+  acquire: () => Promise<BindingSlot>;
   dispose: () => Promise<void>;
 }> => {
-  const runtimes: Miniflare[] = [];
+  const runtimes: Promise<NativeImagePool>[] = [];
   const poolSize = 16;
   let nextBinding = poolSize;
   let poolSequence = 0;
-  let runtime = Option.none<Miniflare>();
-  const acquire = (): BindingSlot => {
+  let runtime = Option.none<Promise<NativeImagePool>>();
+  const acquire = (): Promise<BindingSlot> => {
     if (nextBinding === poolSize) {
       poolSequence += 1;
       const env: Record<string, { type: "d1"; id: string } | { type: "r2"; name: string }> = {};
@@ -234,35 +269,26 @@ const bindingPool = (
         env[`DB_${index}`] = { type: "d1", id: name };
         if (withBuckets) env[`BUCKET_${index}`] = { type: "r2", name };
       }
-      const created = new Miniflare({
-        workers: [
-          {
-            config: {
-              name: `isolated-${poolSequence}`,
-              type: "worker",
-              compatibilityDate: "2026-09-08",
-              env,
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: schemaWorker,
-                    type: "esm",
-                  },
-                },
-              },
-            },
-          },
-        ],
+      const name = `isolated-${poolSequence}`;
+      const created = nativeImagePool({
+        size: poolSize,
+        create: (directory) => createBindingRuntime({ directory, name, env }),
       });
       runtimes.push(created);
       runtime = Option.some(created);
       nextBinding = 0;
     }
-    return { runtime: Option.getOrThrow(runtime), index: nextBinding++ };
+    const index = nextBinding++;
+    return Option.getOrThrow(runtime).then((images) => ({
+      runtime: images.runtime,
+      index,
+      images,
+    }));
   };
   const dispose = (): Promise<void> =>
-    Promise.all(runtimes.splice(0).map((instance) => instance.dispose())).then(() => undefined);
+    Promise.all(runtimes.splice(0).map((instance) => instance.then((pool) => pool.dispose()))).then(
+      () => undefined
+    );
   return { acquire, dispose };
 };
 
@@ -278,7 +304,7 @@ export const isolatedTestDatabases = (
 }> => {
   const pool = bindingPool(false);
   return {
-    acquire: () => acquireDatabase(pool.acquire(), options.transport),
+    acquire: () => pool.acquire().then((slot) => acquireDatabase(slot, options.transport)),
     dispose: pool.dispose,
   };
 };
@@ -293,17 +319,19 @@ export const isolatedTestStorage = (): Readonly<{
 }> => {
   const pool = bindingPool(true);
   return {
-    acquire: () => {
-      const slot = pool.acquire();
-      return Promise.all([
-        acquireDatabase(slot),
-        slot.runtime
-          .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
-          .then((bindings) =>
-            Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${slot.index}`]))
-          ),
-      ]).then(([db, bucket]) => ({ db, bucket }));
-    },
+    acquire: () =>
+      pool
+        .acquire()
+        .then((slot) =>
+          Promise.all([
+            acquireDatabase(slot),
+            slot.runtime
+              .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
+              .then((bindings) =>
+                Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${slot.index}`]))
+              ),
+          ]).then(([db, bucket]) => ({ db, bucket }))
+        ),
     dispose: pool.dispose,
   };
 };

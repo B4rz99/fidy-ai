@@ -51,6 +51,11 @@ jobs:
             cat scripts/check-ci-results.sh
             echo 'FIDY_REQUIRED_CHECK_SCRIPT'
           } >> "$GITHUB_OUTPUT"
+      - name: Scan source partition 1/3 on this existing runner
+        if: ${{ steps.plan.outputs.security-sast == 'true' }}
+        run: |
+          bun scripts/partition-source-scan.ts 1/3 "$RUNNER_TEMP/source-scan.yaml"
+          docker run --rm --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
 
   static:
     name: Workspace Gate
@@ -101,9 +106,20 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
+      - name: Select installed Playwright version
+        id: playwright-version
+        run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
+      - name: Restore Playwright browser cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
+      - name: Install Chromium headless shell
+        run: bunx --bun playwright install --only-shell chromium
       - name: Build validation
         env:
           RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SITE_BROWSER_PREBUILT: "true"
         run: bun run verify -- --group builds
 
   unit:
@@ -280,6 +296,8 @@ jobs:
           retention-days: 7
 
   security-secrets:
+    needs: changes
+    if: ${{ !cancelled() }}
     name: Secrets
     runs-on: ubuntu-latest
     steps:
@@ -290,6 +308,14 @@ jobs:
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch origin "$BASE_BRANCH"
+      - uses: ./.github/actions/bun-runtime
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+      - name: Start source partition 3/3 on this existing runner
+        id: source-scan
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+        run: |
+          bun scripts/partition-source-scan.ts 3/3 "$RUNNER_TEMP/source-scan.yaml"
+          docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
       - name: Gitleaks — pattern-based secret scan
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
@@ -303,6 +329,13 @@ jobs:
         run: >-
           docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9
           ss scan --strict --config /src/.fluidattacks/secrets.yaml
+      - name: Require source partition 3/3 result
+        if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
+        run: |
+          result=$(docker wait fidy-source-scan)
+          docker logs fidy-source-scan
+          docker rm fidy-source-scan
+          [[ "$result" == 0 ]]
 
   security-sast:
     needs: changes
@@ -311,16 +344,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Semgrep SAST
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: ./.github/actions/bun-runtime
+      - name: Semgrep and source partition 2/3 on this existing runner
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          bun scripts/partition-source-scan.ts 2/3 "$RUNNER_TEMP/source-scan.yaml"
+          docker run --rm --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml > "$RUNNER_TEMP/fluid-sast.log" 2>&1 &
+          fluid_pid=$!
           docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b \
             semgrep scan --error --strict --metrics=off --baseline-commit "$BASE_SHA" \
-            --config p/owasp-top-ten --config p/typescript --config p/secrets --exclude .repos .
-      - name: Fluid Attacks SAST
-        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /src/.fluidattacks/sast.yaml
+            --config p/owasp-top-ten --config p/typescript --config p/secrets --exclude .repos . > "$RUNNER_TEMP/semgrep.log" 2>&1 &
+          semgrep_pid=$!
+          set +e
+          wait "$fluid_pid"
+          fluid_result=$?
+          wait "$semgrep_pid"
+          semgrep_result=$?
+          set -e
+          cat "$RUNNER_TEMP/fluid-sast.log"
+          cat "$RUNNER_TEMP/semgrep.log"
+          [[ "$fluid_result" == 0 && "$semgrep_result" == 0 ]]
 
   security-sca:
     needs: changes

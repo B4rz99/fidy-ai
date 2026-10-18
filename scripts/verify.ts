@@ -71,7 +71,7 @@ const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<str
   label,
   command: group === "unit" ? [...command, "--maxWorkers=2"] : command,
   cwd: workspaceRoot,
-  env: Bun.env,
+  env: group === "static" ? { ...Bun.env, GOMAXPROCS: "2", RAYON_NUM_THREADS: "2" } : Bun.env,
 });
 
 const gitRevision = new TextDecoder()
@@ -205,7 +205,7 @@ const checks: Array<Check> = [
   ]),
   rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
-  rootCheck("browser", "Public site browser checks", [
+  rootCheck("builds", "Public site browser checks", [
     "bun",
     "run",
     "--cwd",

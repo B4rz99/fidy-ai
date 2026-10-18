@@ -130,3 +130,32 @@ export const installAcceptanceClock = (page: Page): Promise<void> => {
     })
     .then(() => undefined);
 };
+
+/** Keep native high-resolution timing while virtualizing cooldown and polling timers. */
+export const installAcceptanceClockWithNativePerformance = (page: Page): Promise<void> => {
+  if (installed.has(page)) {
+    return Promise.reject(new Error("Performance clock must be captured before installation"));
+  }
+  return page
+    .evaluate(() => {
+      const nativePerformance = performance;
+      Reflect.defineProperty(globalThis, "__fidyRestoreNativePerformance", {
+        configurable: true,
+        value: () => {
+          Reflect.defineProperty(globalThis, "performance", {
+            configurable: true,
+            value: nativePerformance,
+          });
+          Reflect.deleteProperty(globalThis, "__fidyRestoreNativePerformance");
+        },
+      });
+    })
+    .then(() => installAcceptanceClock(page))
+    .then(() =>
+      page.evaluate(() => {
+        const restore: unknown = Reflect.get(globalThis, "__fidyRestoreNativePerformance");
+        if (typeof restore !== "function") throw new Error("Native performance clock was lost");
+        Reflect.apply(restore, globalThis, []);
+      })
+    );
+};

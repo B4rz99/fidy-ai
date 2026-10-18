@@ -1879,11 +1879,15 @@ it("stops unavailable alarm retries when the hosted owner settles and preserves 
         );
         unavailable = false;
         yield* Effect.tryPromise(() => service.recover());
-        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, userId: users[0] }))).results
+        ).toMatchObject([
           { status: "interrupted", kind: "user", text: "Hola" },
           { status: "interrupted", kind: "interrupted", text: null },
         ]);
-        expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, userId: users[1] }))).results
+        ).toEqual([]);
       } finally {
         release.resolve();
         try {
@@ -1997,11 +2001,15 @@ it("does not retry a recovery defect or release queued work before its hosted ow
           alarmCalls: 2,
           settled: false,
         });
-        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, userId: users[0] }))).results
+        ).toMatchObject([
           { status: "interrupted", kind: "user", text: "Hola" },
           { status: "interrupted", kind: "interrupted", text: null },
         ]);
-        expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, userId: users[1] }))).results
+        ).toEqual([]);
         releaseOwner.resolve();
         yield* Effect.tryPromise(() => ownerSettled);
         expect(settled).toBe(true);

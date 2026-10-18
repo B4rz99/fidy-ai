@@ -57,74 +57,104 @@
     {
       "name": "@effect/platform-bun",
       "manifest": "apps/cli/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/vitest",
       "manifest": "apps/cli/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/sql-d1",
       "manifest": "apps/server/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/platform-bun",
       "manifest": "apps/server/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/platform-node",
       "manifest": "apps/server/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/vitest",
       "manifest": "apps/server/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/atom-react",
       "manifest": "apps/web/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/platform-browser",
       "manifest": "apps/web/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/platform-bun",
       "manifest": "apps/web/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/platform-bun",
       "manifest": "infra/cloudflare/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/vitest",
       "manifest": "infra/cloudflare/package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     },
     {
       "name": "@effect/platform-bun",
       "manifest": "package.json",
-      "reason": "Retain the coordinated Effect family at 4.0.2: companion 4.0.3 is eligible, but effect 4.0.3 was published 2026-10-11T12:58:29.695Z and is still inside the unchanged seven-day minimumReleaseAge on 2026-10-17. The family check requires identical versions. Revisit the coordinated update after the core package clears that freeze; do not exclude it from the release-age policy.",
-      "until": "2026-10-19T00:00:00Z"
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
+      "name": "effect",
+      "manifest": "package.json",
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
+      "name": "effect",
+      "manifest": "apps/cli/package.json",
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
+      "name": "effect",
+      "manifest": "apps/server/package.json",
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
+      "name": "effect",
+      "manifest": "apps/web/package.json",
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
+    },
+    {
+      "name": "effect",
+      "manifest": "infra/cloudflare/package.json",
+      "reason": "Effect 4.0.3 changes Crypto.randomUUIDv4 and Crypto.randomUUIDv7 from Effect values to overloaded functions. Installing the coordinated 4.0.3 family makes the normal project-reference build fail at existing UUID call sites and their derived Effect contexts (reproduced on 2026-10-18 UTC). Retain the verified 4.0.2 family together until UUID invocation and crypto fixtures are migrated; then rerun the normal installer, complete project-reference build, native adapters and browser verification. Do not suppress diagnostics or mix family versions.",
+      "until": "2026-10-24T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": [

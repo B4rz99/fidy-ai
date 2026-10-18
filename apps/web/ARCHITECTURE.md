@@ -298,8 +298,11 @@ The Budget summary shows recorded monthly income and all effective expenses, inc
 `features/recurring` mounts at `/app/recurring`, using authentication-scoped canonical query atoms
 for the selected month, previous unresolved month, taxonomy and detected historical suggestions.
 Monthly list, calendar and summaries consume one server projection. Editors and transaction
-selection live in responsive sheets; drafts stay local. Accepted edits invalidate the canonical
-resource; an uncertain write requires an explicit reread before another save. The browser does not
+selection live in responsive sheets; drafts stay local. The mounted RecurringPlan editing module
+owns revision selection, synchronous write admission, query freshness and explicit reread recovery. Month and filter changes replace presentation and
+query identities without resetting pending or uncertain writes. Accepted edits invalidate active
+workspace queries; an uncertain write remains blocked until an explicit workspace and taxonomy
+reread succeeds. Failed recovery preserves the write lock. The browser does not
 generate schedules, match Transactions, sum Money or change the meaning of historical detection.
 
 The `/app/needs-review` feature composes the persistent ingestion inbox, browser-only original

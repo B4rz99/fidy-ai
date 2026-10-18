@@ -74,11 +74,6 @@ const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<str
   env: Bun.env,
 });
 
-// Two simultaneous unit commands share the runner's four CPUs instead of each
-// starting a full runner-sized Vitest pool.
-const unitCheck = (label: string, command: ReadonlyArray<string>): Check =>
-  rootCheck("unit", label, [...command, "--maxWorkers=2"]);
-
 const gitRevision = new TextDecoder()
   .decode(Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: workspaceRoot }).stdout)
   .trim();
@@ -130,11 +125,11 @@ const checks: Array<Check> = [
     ]),
     env: { ...Bun.env, RELEASE_GIT_SHA: gitRevision },
   },
-  unitCheck("CLI behavior tests", ["bun", "run", "--cwd", "apps/cli", "test"]),
+  rootCheck("unit", "CLI behavior tests", ["bun", "run", "--cwd", "apps/cli", "test"]),
   rootCheck("builds", "Portable web build", ["bun", "run", "build"]),
   rootCheck("builds", "Worker document parsing proof", ["bun", "run", "check:document-parsing"]),
   {
-    ...unitCheck("Server core tests", ["bun", "run", "test:core"]),
+    ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),
   },
   rootCheck("cloudflare-adapters", "Cloudflare adapter tests", [
     "bun",
@@ -163,14 +158,14 @@ const checks: Array<Check> = [
       ? ["--reporter=default", "--reporter=json", "--outputFile=test-results/cloudflare-infra.json"]
       : []),
   ]),
-  unitCheck("WhatsApp provider boundary tests", [
+  rootCheck("unit", "WhatsApp provider boundary tests", [
     "bun",
     "run",
     "--cwd",
     "apps/server",
     "test:whatsapp",
   ]),
-  unitCheck("Canonical declarations and policy tests", [
+  rootCheck("unit", "Canonical declarations and policy tests", [
     "bun",
     "run",
     "--cwd",
@@ -187,23 +182,29 @@ const checks: Array<Check> = [
     "src/shell/agent/tool-confirmation-model.test.ts",
     "--coverage.enabled=false",
   ]),
-  unitCheck("Notification-email interpretation tests", [
+  rootCheck("unit", "Notification-email interpretation tests", [
     "bun",
     "run",
     "--cwd",
     "apps/server",
     "test:email-interpretation",
   ]),
-  unitCheck("Memory owner policy tests", ["bun", "run", "--cwd", "apps/server", "test:memory"]),
-  unitCheck("Web tests and Istanbul coverage", [
+  rootCheck("unit", "Memory owner policy tests", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/server",
+    "test:memory",
+  ]),
+  rootCheck("unit", "Web tests and Istanbul coverage", [
     "bun",
     "run",
     "--cwd",
     "apps/web",
     "test:coverage",
   ]),
-  unitCheck("CI tooling", ["bun", "run", "test:ci-tools"]),
-  unitCheck("Contract checker tests", ["bun", "run", "test:contracts"]),
+  rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
+  rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
   rootCheck("browser", "Public site browser checks", [
     "bun",
     "run",
@@ -294,19 +295,9 @@ const runCheck = (check: Check): Effect.Effect<void> =>
 await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
-    const prerequisites = groupChecks.filter(
-      (check) =>
-        group === "static" &&
-        (check.label === "Install dependency graph analyzer" || check.label === "Format")
-    );
-    const independentChecks = groupChecks.filter((check) => !prerequisites.includes(check));
-    return Effect.gen(function* () {
-      // The format check installs the Astro toolchain also used by lint and type checking.
-      yield* Effect.forEach(prerequisites, runCheck, { discard: true });
-      yield* Effect.forEach(independentChecks, runCheck, {
-        concurrency: ["static", "unit", "browser"].includes(group) ? 2 : 1,
-        discard: true,
-      });
+    return Effect.forEach(groupChecks, runCheck, {
+      concurrency: group === "browser" ? 2 : 1,
+      discard: true,
     });
   })
 );

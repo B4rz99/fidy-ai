@@ -1,3 +1,4 @@
+import { describe } from "vitest";
 import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
 import { Config, Data, Effect, FileSystem, Schema, Stream } from "effect";
@@ -237,123 +238,125 @@ const exercise = Effect.fn(function* (
   );
 }, Effect.scoped);
 
-layer(BunServices.layer, { excludeTestServices: true })((it) => {
-  for (const scenario of [
-    "readiness-headers",
-    "post-headers",
-    "post-body",
-    "healthy",
-    "refused",
-  ] as const) {
-    it.effect(
-      `settles the native conformance script and owned resources for ${scenario}`,
-      () => exercise(scenario),
-      25_000
+describe.concurrent("native conformance lifecycle", () => {
+  layer(BunServices.layer, { excludeTestServices: true })((it) => {
+    for (const scenario of [
+      "readiness-headers",
+      "post-headers",
+      "post-body",
+      "healthy",
+      "refused",
+    ] as const) {
+      it.effect(
+        `settles the native conformance script and owned resources for ${scenario}`,
+        () => exercise(scenario),
+        25_000
+      );
+    }
+    for (const check of [
+      "canonical_correction",
+      "canonical_deletion",
+      "canonical_date_only",
+      "canonical_recurring_lifecycle",
+    ]) {
+      it.effect(`reports the closed ${check} failure without private content`, () =>
+        exercise("refused", check)
+      );
+    }
+    it.effect("keeps standalone live verification strict when provider quota is exhausted", () =>
+      exercise("refused", "canonical_query", { ...strictReport, category: "ProviderQuotaExceeded" })
     );
-  }
-  for (const check of [
-    "canonical_correction",
-    "canonical_deletion",
-    "canonical_date_only",
-    "canonical_recurring_lifecycle",
-  ]) {
-    it.effect(`reports the closed ${check} failure without private content`, () =>
-      exercise("refused", check)
-    );
-  }
-  it.effect("keeps standalone live verification strict when provider quota is exhausted", () =>
-    exercise("refused", "canonical_query", { ...strictReport, category: "ProviderQuotaExceeded" })
-  );
-  for (const check of ["canonical_query", "structured_es_co"]) {
-    it.effect(`allows a release to defer quota-exhausted ${check} verification explicitly`, () =>
-      exercise("refused", check, {
-        ...strictReport,
-        category: "ProviderQuotaExceeded",
-        allowQuotaDeferral: true,
-        deferred: true,
-      })
-    );
-  }
-  for (const check of ["configuration", "internal"]) {
-    it.effect(`refuses a quota report from ${check}`, () =>
-      exercise("refused", check, {
-        ...strictReport,
-        category: "ProviderQuotaExceeded",
-        allowQuotaDeferral: true,
-      })
-    );
-  }
-  it.effect("refuses quota reports with an unexpected approval revision", () =>
-    exercise("refused", "canonical_query", {
-      ...strictReport,
-      category: "ProviderQuotaExceeded",
-      allowQuotaDeferral: true,
-      revision: "unapproved",
-    })
-  );
-  it.effect("refuses quota reports with an inconsistent HTTP status", () =>
-    exercise("healthy", "canonical_query", {
-      ...strictReport,
-      category: "ProviderQuotaExceeded",
-      allowQuotaDeferral: true,
-    })
-  );
-  for (const trailingJson of ["{}", "not-json"]) {
-    it.effect(`refuses a quota report followed by ${trailingJson}`, () =>
+    for (const check of ["canonical_query", "structured_es_co"]) {
+      it.effect(`allows a release to defer quota-exhausted ${check} verification explicitly`, () =>
+        exercise("refused", check, {
+          ...strictReport,
+          category: "ProviderQuotaExceeded",
+          allowQuotaDeferral: true,
+          deferred: true,
+        })
+      );
+    }
+    for (const check of ["configuration", "internal"]) {
+      it.effect(`refuses a quota report from ${check}`, () =>
+        exercise("refused", check, {
+          ...strictReport,
+          category: "ProviderQuotaExceeded",
+          allowQuotaDeferral: true,
+        })
+      );
+    }
+    it.effect("refuses quota reports with an unexpected approval revision", () =>
       exercise("refused", "canonical_query", {
         ...strictReport,
         category: "ProviderQuotaExceeded",
         allowQuotaDeferral: true,
-        trailingJson,
+        revision: "unapproved",
       })
     );
-  }
-  it.effect("does not defer a failed deterministic prerequisite or start live inference", () =>
-    exercise("refused", "canonical_query", {
-      ...strictReport,
-      category: "ProviderQuotaExceeded",
-      allowQuotaDeferral: true,
-      prerequisiteFailure: true,
-    })
-  );
-  it.effect("keeps non-quota provider failures blocking releases", () =>
-    exercise("refused", "canonical_query", {
-      ...strictReport,
-      category: "ProviderUnavailable",
-      allowQuotaDeferral: true,
-    })
-  );
-  it.effect("refuses invalid or raised client deadlines before starting conformance work", () =>
-    Effect.gen(function* () {
-      for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {
-        const child = yield* ChildProcess.make(
-          "bash",
-          [new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname],
-          {
-            env: {
-              ...Bun.env,
-              HOSTED_AI_MODEL: "fixture-model",
-              WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
+    it.effect("refuses quota reports with an inconsistent HTTP status", () =>
+      exercise("healthy", "canonical_query", {
+        ...strictReport,
+        category: "ProviderQuotaExceeded",
+        allowQuotaDeferral: true,
+      })
+    );
+    for (const trailingJson of ["{}", "not-json"]) {
+      it.effect(`refuses a quota report followed by ${trailingJson}`, () =>
+        exercise("refused", "canonical_query", {
+          ...strictReport,
+          category: "ProviderQuotaExceeded",
+          allowQuotaDeferral: true,
+          trailingJson,
+        })
+      );
+    }
+    it.effect("does not defer a failed deterministic prerequisite or start live inference", () =>
+      exercise("refused", "canonical_query", {
+        ...strictReport,
+        category: "ProviderQuotaExceeded",
+        allowQuotaDeferral: true,
+        prerequisiteFailure: true,
+      })
+    );
+    it.effect("keeps non-quota provider failures blocking releases", () =>
+      exercise("refused", "canonical_query", {
+        ...strictReport,
+        category: "ProviderUnavailable",
+        allowQuotaDeferral: true,
+      })
+    );
+    it.effect("refuses invalid or raised client deadlines before starting conformance work", () =>
+      Effect.gen(function* () {
+        for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {
+          const child = yield* ChildProcess.make(
+            "bash",
+            [new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname],
+            {
+              env: {
+                ...Bun.env,
+                HOSTED_AI_MODEL: "fixture-model",
+                WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
+              },
+              stdin: "ignore",
+              stdout: "pipe",
+              stderr: "pipe",
+            }
+          );
+          const result = yield* Effect.all(
+            {
+              status: child.exitCode,
+              stdout: Stream.mkString(Stream.decodeText(child.stdout)),
+              stderr: Stream.mkString(Stream.decodeText(child.stderr)),
             },
-            stdin: "ignore",
-            stdout: "pipe",
-            stderr: "pipe",
-          }
-        );
-        const result = yield* Effect.all(
-          {
-            status: child.exitCode,
-            stdout: Stream.mkString(Stream.decodeText(child.stdout)),
-            stderr: Stream.mkString(Stream.decodeText(child.stderr)),
-          },
-          { concurrency: "unbounded" }
-        );
-        expect(result.status, timeout).toBe(1);
-        expect(result.stderr).toBe(
-          "Workers AI conformance timeout must be an integer from 1 to 180 seconds.\n"
-        );
-        expect(result.stdout).toBe("");
-      }
-    }).pipe(Effect.scoped, Effect.timeout("5 seconds"))
-  );
+            { concurrency: "unbounded" }
+          );
+          expect(result.status, timeout).toBe(1);
+          expect(result.stderr).toBe(
+            "Workers AI conformance timeout must be an integer from 1 to 180 seconds.\n"
+          );
+          expect(result.stdout).toBe("");
+        }
+      }).pipe(Effect.scoped, Effect.timeout("5 seconds"))
+    );
+  });
 });

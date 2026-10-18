@@ -481,3 +481,30 @@ bun run --cwd apps/server test src/shell/consent/current-disclosure.test.ts --co
 bun run check:policy
 bun --bun vitest run --config scripts/vitest.config.ts scripts/titular-erasure/operations.test.ts scripts/titular-requests/runtime.test.ts
 ```
+
+## Resend substantive response observed — 2026-10-18
+
+Restricted response reference: `10662190-e378-45ff-b79e-a30e1d80d888`, version 1. The authorized company
+mailbox contains a substantive response from Resend's customer-success engineer in the existing
+enquiry thread, beyond the earlier acknowledgement. The actual reply was read; no reply, account
+change, deletion request or purchase was sent in this follow-up.
+
+Resend states that Terms/DPA execution attaches to account creation, that it keeps no separate
+contracting-company name record, and that the signed copy in account Documents governs this
+account. The supplied signup date precedes the now-observed company registration. This narrows the
+unknowns: the applicable document location and account-incorporation explanation are supplied;
+it does not prove a company assignment or retroactive corporate acceptance. Do not keep requesting
+a company-name record the provider expressly says it does not keep. The actual contracting-party
+and any permitted company transition remain a separate reconciliation decision.
+
+For a bounded early-removal request, Resend asks for exact email IDs sent from the account email.
+It says removal covers content, attachments and delivery events, with API request logs on their
+normal 30-day schedule and point-in-time backups on a rolling seven-day window; confirmation is a
+reply in the existing thread. These are provider assertions, not a performed deletion, tested
+backup purge or authority to submit User identifiers. Other retained scopes not answered remain
+explicitly unresolved. No paid Enterprise review is requested merely to collect this reply.
+
+The existing thread establishes a human support response for this enquiry. Its purpose is account
+and erasure clarification, not verification of a dedicated security desk, incident SLA or every
+notification obligation. Public DPA/security contacts remain as documented by #1276; no incident
+is filed as a drill and no support acknowledgement substitutes for the qualified per-flow review.

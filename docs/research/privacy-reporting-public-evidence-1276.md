@@ -3,8 +3,8 @@
 Observed **2026-10-16**, Colombia. Research version **1**. These are public-source findings for
 FIDY S.A.S.; they do not establish its assets, RNBD status, regulated status, bank contract,
 actual reporting credentials, or qualified legal approval. No filing, account creation, provider
-contact, or company-data submission occurred. A named qualified reviewer must approve application
-to Fidy and the unresolved points below.
+contact, or company-data submission occurred. A qualified reviewer must approve application
+to Fidy under the issue acceptance criterion; this is not itself a statutory lawyer-hiring rule.
 
 ## Source hierarchy and current versions
 
@@ -38,9 +38,9 @@ section 3.2, measures total assets at **December 31 of the preceding year**. Its
 [2022-11-16 publication summary](https://sedeelectronica.sic.gov.co/publicaciones/boletin-juridico/concepto/cuales-personas-estan-obligadas-realizar-el-registro-de-bases-de-datos-personales-en-el-rnbd)
 confirms that unregistered controllers still need policies, applicable authorization, rights procedures
 and security. The owner has since supplied accountant-verified assets and their accounting date; version 2 of the
-restricted applicability record preserves them without publishing financial particulars. Fidy's
-incorporation date and the appropriate preceding-year/opening-balance measurement basis remain
-unresolved. Do not substitute a current snapshot for an unestablished historical measurement. A qualified reviewer must resolve the appropriate first-year
+restricted applicability record preserves them without publishing financial particulars. The subsequent Chamber/DIAN observation recorded in the applicability record supports the
+current-year first-registration branch. The appropriate first-year measurement rationale still
+requires a reviewer-attributed decision. Do not substitute a current snapshot for an unestablished historical measurement. A qualified reviewer must resolve the appropriate first-year
 measurement and the precise time at which registration becomes due. Total assets are not subscribed
 capital, income, net equity or a guess based on company size. Obtain a balance sheet/certified asset
 figure with its accounting date and legal entity, and verify private company legal nature from the

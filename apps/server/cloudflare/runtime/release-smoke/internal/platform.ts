@@ -6,7 +6,10 @@ export class SmokeBindingFailed extends Data.TaggedError("SmokeBindingFailed")<{
   stage: SmokeFailureStage;
 }> {}
 
+// https://developers.cloudflare.com/d1/observability/debug-d1/#list-of-d1_errors
 const quotaMessages = new Set([
+  "Your account has exceeded D1's free tier daily row read limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue. See https://developers.cloudflare.com/d1/platform/limits/ for more details.",
+  "Your account has exceeded D1's free tier daily row write limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue. See https://developers.cloudflare.com/d1/platform/limits/ for more details.",
   "Your account has exceeded D1's free tier daily row read limit.",
   "Your account has exceeded D1's free tier daily row write limit.",
   "Your account has exceeded D1's free tier daily row read limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue.",

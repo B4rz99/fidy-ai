@@ -22,6 +22,20 @@ it("classifies only closed D1 quota failures at database stages", () =>
           ),
           "d1_quota",
         ],
+        [
+          "admission",
+          new Error(
+            "D1_ERROR: Your account has exceeded D1's free tier daily row write limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue. See https://developers.cloudflare.com/d1/platform/limits/ for more details."
+          ),
+          "d1_quota",
+        ],
+        [
+          "claim",
+          new Error(
+            "Your account has exceeded D1's free tier daily row read limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue. See https://developers.cloudflare.com/d1/platform/limits/ for more details."
+          ),
+          "d1_quota",
+        ],
         ["probe_read", new Error("D1_ERROR: " + quota), "d1_quota"],
         ["claim", new Error("D1 batch failed", { cause: new Error(quota) }), "d1_quota"],
         ["admission", new Error("D1 unavailable"), "admission"],

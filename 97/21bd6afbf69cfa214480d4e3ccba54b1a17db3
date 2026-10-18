@@ -1,0 +1,29 @@
+apps/server/src/shell/hosted-inference/workers-ai.test.ts
+  s_b75995d26622a8::t_453f50df297ae5 349-352
+  s_b75995d26622a8::t_b6a90ed23c6a05 356
+  s_b75995d26622a8::t_e496ce289c36eb 364-373
+  s_b75995d26622a8::t_d90cc350f2e48e 348,353-355,357-363,374-376
+apps/server/src/shell/hosted-inference/internal/provider-schema.ts
+  s_b75995d26622a8::t_b6a90ed23c6a05 157-159
+  s_b75995d26622a8::t_453f50df297ae5 88-93,104,106
+  s_b75995d26622a8::t_7f631e1c384a4e 94-98,105,107,111
+  s_b75995d26622a8::t_befe8ec8af7010 99-103,108-110,112-116,122-124
+apps/server/cloudflare/oauth-agents/oauth-native-residency.test.ts
+  s_b75995d26622a8::t_d9803835e0323c 1092-1093,1156-1157,1159,1837,1856
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9721bd6afbf69cfa214480d4e3ccba54b1a17db3",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

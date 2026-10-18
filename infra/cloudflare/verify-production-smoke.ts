@@ -89,33 +89,37 @@ const awaitSyntheticWork = Effect.fn(function* (
     expectedGitRevision: config.RELEASE_GIT_SHA,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
-  let status = yield* Effect.gen(function* () {
-    const response = yield* exchangeSmoke({ query: "", headers, body: Option.some(request) });
-    return yield* checkSmokeExchange(
-      response,
-      expectedPair(config, expectedPublic, "cloudflare-workers-version-overrides" in headers)
+  const completed = yield* Effect.gen(function* () {
+    let status = yield* Effect.gen(function* () {
+      const response = yield* exchangeSmoke({ query: "", headers, body: Option.some(request) });
+      return yield* checkSmokeExchange(
+        response,
+        expectedPair(config, expectedPublic, "cloudflare-workers-version-overrides" in headers)
+      );
+    }).pipe(
+      Effect.retry({
+        times: 6,
+        schedule: Schedule.spaced("1500 millis"),
+        while: (error) =>
+          "cloudflare-workers-version-overrides" in headers &&
+          error instanceof CandidateRoutingPending,
+      })
     );
-  }).pipe(
-    Effect.retry({
-      times: 6,
-      schedule: Schedule.spaced("1500 millis"),
-      while: (error) =>
-        "cloudflare-workers-version-overrides" in headers &&
-        error instanceof CandidateRoutingPending,
-    })
-  );
-  for (let attempt = 0; attempt < maxAttempts && status !== "passed"; attempt++) {
-    yield* Effect.sleep(`${pollDelayMs} millis`);
-    status = yield* checkSmokeExchange(
-      yield* exchangeSmoke({ query: `?probeId=${probeId}`, headers, body: Option.none() }),
-      expectedPair(config, expectedPublic)
-    );
-  }
-  if (status !== "passed") {
-    return yield* new ReleaseSmokeFailed({
-      reason: "Synthetic Queue and Workflow probe did not complete",
-    });
-  }
+    for (let attempt = 0; attempt < maxAttempts && status !== "passed"; attempt++) {
+      yield* Effect.sleep(`${pollDelayMs} millis`);
+      status = yield* checkSmokeExchange(
+        yield* exchangeSmoke({ query: `?probeId=${probeId}`, headers, body: Option.none() }),
+        expectedPair(config, expectedPublic)
+      );
+    }
+    if (status !== "passed") {
+      return yield* new ReleaseSmokeFailed({
+        reason: "Synthetic Queue and Workflow probe did not complete",
+      });
+    }
+    return "passed" as const;
+  }).pipe(Effect.catchTag("D1QuotaDeferred", () => Effect.succeed("deferred-d1-quota" as const)));
+  return completed;
 });
 
 const checkEdge = Effect.fn(function* (
@@ -222,39 +226,43 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
   }
   const config = decoded.value;
   const headers = candidateHeaders(config, config.PUBLIC_VERSION_ID);
-  yield* Effect.all(
+  const candidate = yield* awaitSyntheticWork(config, headers, {
+    gitRevision: config.RELEASE_GIT_SHA,
+    contractDigest: config.CONTRACT_DIGEST,
+    workerVersionId: config.PUBLIC_VERSION_ID,
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new ReleaseSmokeFailed({
+          reason: `candidate pairing: ${error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending ? error.reason : "unclassified smoke failure"}`,
+        })
+    )
+  );
+  yield* checkEdge(config, headers);
+  // A previous public Worker cannot decode a newly introduced quota stage. Its exact
+  // pairing was already verified above without touching D1.
+  if (candidate === "deferred-d1-quota") {
+    yield* Effect.all(
+      [verifyReadOnlySmokeRouting(env), verifyReadOnlySmokeRouting(env, "intermediate")],
+      { concurrency: 2, discard: true }
+    );
+    return candidate;
+  }
+  return yield* awaitSyntheticWork(
+    config,
+    candidateHeaders(config, config.STABLE_PUBLIC_VERSION_ID),
     {
-      candidate: awaitSyntheticWork(config, headers, {
-        gitRevision: config.RELEASE_GIT_SHA,
-        contractDigest: config.CONTRACT_DIGEST,
-        workerVersionId: config.PUBLIC_VERSION_ID,
-      }).pipe(
-        Effect.andThen(checkEdge(config, headers)),
-        Effect.mapError(
-          (error) =>
-            new ReleaseSmokeFailed({
-              reason: `candidate pairing: ${error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending ? error.reason : "unclassified smoke failure"}`,
-            })
-        )
-      ),
-      intermediate: awaitSyntheticWork(
-        config,
-        candidateHeaders(config, config.STABLE_PUBLIC_VERSION_ID),
-        {
-          gitRevision: config.STABLE_RELEASE_GIT_SHA,
-          contractDigest: config.STABLE_CONTRACT_DIGEST,
-          workerVersionId: config.STABLE_PUBLIC_VERSION_ID,
-        }
-      ).pipe(
-        Effect.mapError(
-          (error) =>
-            new ReleaseSmokeFailed({
-              reason: `intermediate pairing: ${error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending ? error.reason : "unclassified smoke failure"}`,
-            })
-        )
-      ),
-    },
-    { concurrency: 2, discard: true }
+      gitRevision: config.STABLE_RELEASE_GIT_SHA,
+      contractDigest: config.STABLE_CONTRACT_DIGEST,
+      workerVersionId: config.STABLE_PUBLIC_VERSION_ID,
+    }
+  ).pipe(
+    Effect.mapError(
+      (error) =>
+        new ReleaseSmokeFailed({
+          reason: `intermediate pairing: ${error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending ? error.reason : "unclassified smoke failure"}`,
+        })
+    )
   );
 });
 
@@ -264,7 +272,7 @@ export const verifyCandidateSmoke = Effect.fn(function* (env: unknown) {
     [verifyReadOnlySmokeRouting(env), verifyReadOnlySmokeRouting(env, "intermediate")],
     { concurrency: 2, discard: true }
   );
-  yield* verifyProductionSmoke(env);
+  return yield* verifyProductionSmoke(env);
 });
 
 /** Probe normal traffic after promotion; an exact-version override would hide a routing failure. */
@@ -276,11 +284,17 @@ export const verifyPromotedSmoke = Effect.fn(function* (env: unknown) {
     });
   }
   const config = decoded.value;
-  yield* awaitSyntheticWork(config, smokeHeaders({ config, publicVersion: Option.none() }), {
-    gitRevision: config.RELEASE_GIT_SHA,
-    contractDigest: config.CONTRACT_DIGEST,
-    workerVersionId: config.PUBLIC_VERSION_ID,
-  });
+  const outcome = yield* awaitSyntheticWork(
+    config,
+    smokeHeaders({ config, publicVersion: Option.none() }),
+    {
+      gitRevision: config.RELEASE_GIT_SHA,
+      contractDigest: config.CONTRACT_DIGEST,
+      workerVersionId: config.PUBLIC_VERSION_ID,
+    }
+  );
+  if (outcome === "deferred-d1-quota") yield* verifyReadOnlySmokeRouting(env, "promoted");
+  return outcome;
 });
 
 if (import.meta.main) {
@@ -314,6 +328,7 @@ if (import.meta.main) {
         revision: smokeEnvironment.RELEASE_GIT_SHA,
         publicVersionId: smokeEnvironment.PUBLIC_VERSION_ID,
         coreVersionId: smokeEnvironment.CORE_VERSION_ID,
+        synthetic: result.value,
       })
     );
   }
@@ -323,9 +338,13 @@ if (import.meta.main) {
     (error.value instanceof ReleaseSmokeFailed || error.value instanceof CandidateRoutingPending)
       ? error.value.reason
       : "unclassified smoke failure (no provider response logged)";
-  await Bun.write(
-    passed ? Bun.stdout : Bun.stderr,
-    passed ? "Production smoke passed.\n" : `Production smoke failed: ${safeReason}.\n`
-  );
+  let message = `Production smoke failed: ${safeReason}.\n`;
+  if (passed) {
+    message =
+      result.value === "deferred-d1-quota"
+        ? "Production identity, routing and edge verification passed; D1 synthetic work deferred: daily quota exhausted.\n"
+        : "Production smoke passed.\n";
+  }
+  await Bun.write(passed ? Bun.stdout : Bun.stderr, message);
   if (!passed) process.exitCode = 1;
 }

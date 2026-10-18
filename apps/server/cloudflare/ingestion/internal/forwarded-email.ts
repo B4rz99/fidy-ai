@@ -310,8 +310,8 @@ export const receiveForwardedEmail = Effect.fn(function* (
     return yield* authorityUnavailable();
   }
   const cryptoService = yield* Crypto.Crypto;
-  const id = yield* cryptoService.randomUUIDv4;
-  const objectKey = `email/v1/${yield* cryptoService.randomUUIDv4}`;
+  const id = yield* cryptoService.randomUUIDv4();
+  const objectKey = `email/v1/${yield* cryptoService.randomUUIDv4()}`;
   const reservation = yield* Effect.exit(
     io(() =>
       environment.DB.batch([
@@ -526,7 +526,7 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
   const expired = Schema.decodeUnknownOption(Schema.Array(ExpiredReceipt))(rows.results);
   if (Option.isNone(expired)) return yield* authorityUnavailable();
   for (const row of expired.value) {
-    const reviewId = yield* emailCrypto.randomUUIDv4;
+    const reviewId = yield* emailCrypto.randomUUIDv4();
     yield* io(() =>
       environment.DB.batch([
         prepareCleanupReview({

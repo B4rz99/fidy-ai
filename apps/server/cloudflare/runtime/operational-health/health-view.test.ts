@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { expect } from "vitest";
 import { recordOperationalHealth } from "./operations";
+import { observeRetentionCost } from "../../d1-test-fixture";
 
 it.effect(
   "stores private, bounded capability evidence with its observation time, not a public health response",
@@ -65,6 +66,52 @@ it.effect(
               { operation: "d1", state: "healthy", observed_at_ms: 1_000_000 },
               { operation: "providerConfig", state: "unavailable", observed_at_ms: 1_000_000 },
             ]);
+            const measured = observeRetentionCost(db);
+            const signals = [
+              { component: "capability", operation: "d1", state: "healthy" },
+            ] as const;
+            yield* Effect.tryPromise(() =>
+              recordOperationalHealth({ db: measured.database, signals, observedAtMs: 1_060_000 })
+            );
+            expect(measured.cost().rowsWritten).toBe(0);
+            yield* Effect.tryPromise(() =>
+              recordOperationalHealth({
+                db: measured.database,
+                signals: [{ component: "capability", operation: "d1", state: "unavailable" }],
+                observedAtMs: 1_060_001,
+              })
+            );
+            expect(
+              yield* Effect.tryPromise(() =>
+                db
+                  .prepare("SELECT state FROM operational_health_view WHERE operation='d1'")
+                  .first("state")
+              )
+            ).toBe("unavailable");
+            yield* Effect.tryPromise(() =>
+              recordOperationalHealth({ db: measured.database, signals, observedAtMs: 1_060_002 })
+            );
+            const before = measured.cost().rowsWritten;
+            yield* Effect.tryPromise(() =>
+              recordOperationalHealth({ db: measured.database, signals, observedAtMs: 1_360_002 })
+            );
+            expect(measured.cost().rowsWritten - before).toBe(1);
+            yield* Effect.tryPromise(() =>
+              recordOperationalHealth({
+                db: measured.database,
+                signals: [{ component: "capability", operation: "d1", state: "unavailable" }],
+                observedAtMs: 1_000_000,
+              })
+            );
+            expect(
+              yield* Effect.tryPromise(() =>
+                db
+                  .prepare(
+                    "SELECT state,observed_at_ms FROM operational_health_view WHERE operation='d1'"
+                  )
+                  .first()
+              )
+            ).toEqual({ state: "healthy", observed_at_ms: 1_360_002 });
           }),
         (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
       )

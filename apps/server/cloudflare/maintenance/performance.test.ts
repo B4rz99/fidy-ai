@@ -1,7 +1,10 @@
 import { Clock, Config, Effect, Exit, Logger, Option, Schema, Tracer } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage, observeRetentionCost } from "../d1-test-fixture";
-import { maintenancePerformanceEnvironment } from "../maintenance-performance.test-fixture";
+import {
+  maintenancePerformanceDatabase,
+  maintenancePerformanceEnvironment,
+} from "../maintenance-performance.test-fixture";
 import { runCoreMaintenance, runEmailMaintenance } from "./runtime";
 
 const enabled =
@@ -54,6 +57,7 @@ it.skipIf(!enabled)(
                 .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
             })
           );
+          yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
           const now = yield* Clock.currentTimeMillis;
           yield* Effect.tryPromise(() =>
             db.batch([
@@ -147,7 +151,7 @@ it.skipIf(!enabled)(
               },
             });
             const environment = maintenancePerformanceEnvironment({
-              db: measured.database,
+              db: maintenancePerformanceDatabase({ db: measured.database, bucket }),
               bucket,
               queue,
               workflow,

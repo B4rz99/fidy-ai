@@ -84,7 +84,7 @@ describe("Production release workflow policy", () => {
       'echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/fidy-release.json" >> "$GITHUB_ENV"'
     );
     expect(workflow).toContain(
-      'echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-smoke-passed.json" >> "$GITHUB_ENV"'
+      'echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-release-verification.json" >> "$GITHUB_ENV"'
     );
   });
 

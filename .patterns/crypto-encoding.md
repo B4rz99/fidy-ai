@@ -48,7 +48,7 @@ Rules:
 - Use SHA-256 or stronger for fingerprints and lookup digests. SHA-1 exists for interoperability, not new security designs.
 - A fast digest does not make a low-entropy code safe against offline guessing. Include enough entropy or use a protocol-specific KDF/pepper design.
 - Hash the canonical bytes, not an ambiguously concatenated string. For multi-field proofs, use an unambiguous length-prefix/canonical encoding or a protocol-defined construction.
-- `randomUUIDv4`, `randomUUIDv7`, and `randomULID` produce identifiers, not bearer credentials.
+- `randomUUIDv4()`, `randomUUIDv7()`, and `randomULID` produce identifiers, not bearer credentials.
   Use explicit random bytes for secrets. ULIDs expose their creation time: their first 10 Crockford
   base32 characters encode the `Clock` timestamp in milliseconds and the remaining 16 encode 80
   random bits (see `Crypto.make` and `randomULID`). Use that sortability only when timestamp disclosure

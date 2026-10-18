@@ -38,6 +38,7 @@ const Available = Schema.Struct({ usable: Schema.Literal(1) });
 const probeUrl = "https://internal.invalid/operational/probe";
 const probeSuccessStatus = 204;
 const alertDeliveryConcurrency = 2;
+const healthHeartbeatMs = 300_000;
 
 /** An actual Queue consumer, not queue.send(), proves Queue execution. */
 export const receiveCanary = (
@@ -162,6 +163,8 @@ export const sendCanary = ({
   signal: AbortSignal;
 }>): Promise<void> => {
   const sentAtMs = Math.floor(now / periodMs) * periodMs;
+  // Core ticks every minute; publish only in the first minute of each canary period.
+  if (now - sentAtMs >= minuteMs) return Promise.resolve();
   return Effect.runPromise(
     Effect.tryPromise(() => queue.send({ version: 1, sentAtMs } satisfies CanaryPayload)).pipe(
       // Queue.send has no cancellation API. Stop waiting without retrying an ambiguous offer.
@@ -364,8 +367,10 @@ export const recordOperationalHealth = ({
             .prepare(`INSERT INTO operational_health_view
     (operation, state, observed_at_ms) VALUES (?, ?, ?)
     ON CONFLICT(operation) DO UPDATE SET state = excluded.state,
-      observed_at_ms = excluded.observed_at_ms WHERE excluded.observed_at_ms >= observed_at_ms`)
-            .bind(signal.operation, signal.state, observedAtMs)
+      observed_at_ms = excluded.observed_at_ms
+      WHERE excluded.observed_at_ms >= observed_at_ms
+        AND (state <> excluded.state OR observed_at_ms <= excluded.observed_at_ms - ?)`)
+            .bind(signal.operation, signal.state, observedAtMs, healthHeartbeatMs)
         )
       )
     ).pipe(Effect.asVoid)

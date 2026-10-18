@@ -85,13 +85,43 @@ const compactHomogeneousArray = (schema: Record<string, unknown>): Record<string
   return schema;
 };
 
+const isInclusiveBound = (value: unknown): value is Record<string, number> =>
+  Predicate.isObject(value) &&
+  Object.entries(value).every(
+    ([key, bound]) => (key === "minimum" || key === "maximum") && typeof bound === "number"
+  );
+
+const intersectBound = (key: string, previous: unknown, value: number): number => {
+  if (typeof previous !== "number") return value;
+  return key === "minimum" ? Math.max(previous, value) : Math.min(previous, value);
+};
+
+/** Intersect plain inclusive bounds; leave every other allOf constraint untouched. */
+const compactNumericBounds = (schema: Record<string, unknown>): Record<string, unknown> => {
+  if (
+    (schema.type !== "integer" && schema.type !== "number") ||
+    !Array.isArray(schema.allOf) ||
+    !schema.allOf.every(isInclusiveBound)
+  ) {
+    return schema;
+  }
+  const { allOf, ...bounded } = schema;
+  for (const node of allOf) {
+    for (const [key, value] of Object.entries(node)) {
+      bounded[key] = intersectBound(key, bounded[key], value);
+    }
+  }
+  return bounded;
+};
+
 const constraintDescription = (schema: Record<string, unknown>): string =>
   ["const", "pattern", "anyOf", "oneOf", "allOf"].some((key) => key in schema)
     ? `Required shape: ${schemaShape(schema)}`
     : "";
 
-const compactNode = (value: unknown, describe = true): unknown => {
-  if (!Predicate.isObject(value)) return value;
+const compactNode = (input: unknown, describe = true): unknown => {
+  if (!Predicate.isObject(input)) return input;
+  const value = compactNumericBounds(input);
   const describeChildren = describe && !["anyOf", "oneOf", "allOf"].some((key) => key in value);
   const schema = Object.fromEntries(
     Object.entries(value).map(([key, child]) => {
@@ -124,5 +154,7 @@ export const workersAiProviderSchema = (schema: Schema.Top): JsonSchema.JsonSche
   });
   const compacted = compactNode(document.schema);
   if (!Predicate.isObject(compacted)) throw new Error("Provider schema must remain an object");
-  return { ...compacted, $defs: document.definitions };
+  return Object.keys(document.definitions).length === 0
+    ? compacted
+    : { ...compacted, $defs: document.definitions };
 };

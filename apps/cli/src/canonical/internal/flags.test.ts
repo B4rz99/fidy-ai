@@ -78,11 +78,16 @@ it("a schema extension generates new help and assembly without a parallel field 
   });
   const plan = deriveFlags(Schema.toJsonSchemaDocument(schema));
   expect(plan.flags).toMatchObject([
-    { name: "page-size", required: false, constraints: { minimum: 1, maximum: 20 } },
+    { name: "page-size", required: false, constraints: { allOf: [{ minimum: 1, maximum: 20 }] } },
   ]);
   expect(
     Schema.decodeUnknownSync(schema)(assembleFlags({ args: ["--page-size", "12"], plan }))
   ).toEqual({ query: { pageSize: 12 } });
+  for (const value of ["0", "21"]) {
+    expect(() =>
+      Schema.decodeUnknownSync(schema)(assembleFlags({ args: ["--page-size", value], plan }))
+    ).toThrow();
+  }
 });
 
 it("keeps complex unions, arrays, unconstrained and free-text strings on structured input", () => {

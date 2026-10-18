@@ -488,7 +488,9 @@ const CreatePlan = ({
         onSubmit={(plan) =>
           save({
             kind: "create",
-            id: RecurringPlanId.make(Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie))),
+            id: RecurringPlanId.make(
+              Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie))
+            ),
             plan,
             ...(Option.isSome(panel.seriesId) ? { seriesId: panel.seriesId.value } : {}),
           })

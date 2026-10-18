@@ -87,7 +87,7 @@ const batchInput = (
 ): Option.Option<BatchInput> => {
   const calls = transactions.map((record) => ({
     callId: Schema.decodeSync(AtomicBatchCallId)(
-      Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie))
+      Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie))
     ),
     operation: "transactions.updateTransaction",
     input: { params: { id: record.id }, payload: { expectedRevision: record.revision, changes } },

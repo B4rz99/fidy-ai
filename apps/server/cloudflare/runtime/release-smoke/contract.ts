@@ -13,6 +13,7 @@ export const smokeDiagnosticRevision = "0000000000000000000000000000000000000000
 export const SmokeIdentityEquality = Schema.String.check(Schema.isPattern(/^[01]{3}$/u));
 /** Only closed stages cross the proof-admitted smoke boundary, never foreign error text. */
 export const SmokeFailureStage = Schema.Literals([
+  "d1_quota",
   "identity",
   "secrets",
   "schema",

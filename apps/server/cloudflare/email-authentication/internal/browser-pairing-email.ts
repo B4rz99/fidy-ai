@@ -43,7 +43,7 @@ const workerCrypto = Crypto.make({
         }),
     }),
 });
-const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 const digestLength = 32;
 const emailCooldownMilliseconds = 60_000;
 const emailAdmissionWindowMilliseconds = 3_600_000;

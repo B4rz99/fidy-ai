@@ -264,7 +264,7 @@ const platformUnavailable = <A>(
 
 const isSafeEpoch = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
 
-const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 
 /** Worker-generated random identity for one ingested statement record: a submission, audit, or
  * admission grant. It is never derived from User input, a digest, or a locator. */

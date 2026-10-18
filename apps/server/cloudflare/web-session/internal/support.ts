@@ -19,7 +19,7 @@ const workerCrypto = Crypto.make({
         }),
     }),
 });
-export const uuid = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+export const uuid = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 export const json = ({
   body,
   status,

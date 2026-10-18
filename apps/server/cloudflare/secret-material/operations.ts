@@ -5,7 +5,7 @@ import { workerCryptoOptions } from "./internal/worker-crypto";
 const secretBytes = 32;
 const workerCrypto = Crypto.make(workerCryptoOptions);
 /** Generate an unpredictable non-secret UUID for a new persisted identity. */
-export const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+export const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 /** Generate 256 bits of opaque one-time secret authority; disclosure belongs to the owning transport. */
 export const newSecret: Effect.Effect<
   Redacted.Redacted<string>,

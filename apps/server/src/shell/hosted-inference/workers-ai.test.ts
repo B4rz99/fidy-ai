@@ -345,6 +345,35 @@ it("keeps union discriminants and calendar constraints visible to the tool templ
   });
 });
 
+it("compacts numeric bound intersections without weakening the provider contract", () => {
+  const bounded = Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(0),
+    Schema.isLessThanOrEqualTo(20)
+  );
+  const schema = workersAiProviderSchema(bounded);
+  expect(schema).toMatchObject({ type: "integer", minimum: 0, maximum: 20 });
+  expect(schema).not.toHaveProperty("allOf");
+  expect(schema).not.toHaveProperty("$defs");
+  expect(Schema.is(bounded)(-1)).toBe(false);
+  expect(Schema.is(bounded)(21)).toBe(false);
+  expect(Schema.is(bounded)(0.5)).toBe(false);
+  expect(Schema.is(bounded)(20)).toBe(true);
+});
+
+it("leaves exclusive numeric intersections intact", () => {
+  const bounded = Schema.Int.check(
+    Schema.isGreaterThan(0),
+    Schema.isGreaterThan(1),
+    Schema.isLessThan(20)
+  );
+  expect(workersAiProviderSchema(bounded)).toMatchObject({
+    type: "integer",
+    exclusiveMinimum: 0,
+    exclusiveMaximum: 20,
+    allOf: [{ exclusiveMinimum: 1 }],
+  });
+});
+
 it("preserves nonempty homogeneous array bounds in provider schemas", () => {
   const schema = workersAiProviderSchema(
     Schema.NonEmptyArray(Schema.String).check(Schema.isMaxLength(12))

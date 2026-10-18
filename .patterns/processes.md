@@ -1,7 +1,7 @@
 # Effect native process boundaries
 
 Use for CLI browser handoff or trusted local helper execution. Import `ChildProcess` and
-`ChildProcessSpawner` from `effect/process`. Selected Effect 4.0.2 sources:
+`ChildProcessSpawner` from `effect/process`. Selected Effect 4.0.3 sources:
 `node_modules/effect/src/process/{ChildProcess,ChildProcessSpawner}.ts`; inspect `make`,
 `CommandOptions`, `KillOptions`, `ChildProcessHandle` and `ChildProcessSpawner.make`.
 These APIs describe native processes; provide the platform spawner at CLI assembly, not in Workers.

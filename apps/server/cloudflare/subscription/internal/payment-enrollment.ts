@@ -187,7 +187,7 @@ const rateLimited = (): Response =>
   Response.json(paymentEnrollmentRateLimitedBody, { status: 429, headers: noStore });
 const json = (body: unknown): Response => Response.json(body, { headers: noStore });
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
-const id = workerCrypto.randomUUIDv4.pipe(Effect.orDie);
+const id = workerCrypto.randomUUIDv4().pipe(Effect.orDie);
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))

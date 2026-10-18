@@ -48,7 +48,7 @@ const workerCrypto = Crypto.make({
         }),
     }),
 });
-const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 const digestLength = 32;
 const proofPublicLength = 9;
 const proofSecretOffset = 10;

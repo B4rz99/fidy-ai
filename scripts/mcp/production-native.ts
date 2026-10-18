@@ -1737,8 +1737,8 @@ export const nativeTools = (
       const fs = yield* FileSystem.FileSystem;
       const crypto = yield* Crypto.Crypto;
       const callIds: readonly [string, string] = [
-        yield* crypto.randomUUIDv4,
-        yield* crypto.randomUUIDv4,
+        yield* crypto.randomUUIDv4(),
+        yield* crypto.randomUUIDv4(),
       ];
       const budgetFile = join(root, `${host}-budget-private.json`);
       const budgetId = (yield* foreign(() => Bun.file(budgetFile).exists()))

@@ -170,7 +170,7 @@ const submitConversation = ({
     return;
   }
   const entry: Entry = {
-    id: Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)),
+    id: Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)),
     from: "user",
     text: displayText,
   };

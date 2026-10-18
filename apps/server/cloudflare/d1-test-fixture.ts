@@ -80,20 +80,31 @@ export const installTestSchemaWithPrefix = (
     sources: ReadonlyArray<URL>;
     prefixStatements: ReadonlyArray<string>;
   }>
-): Promise<void> =>
-  installPrivacySchema(input.db)
+): Promise<void> => {
+  const install = schemaInstallers.get(input.db);
+  if (install !== undefined && !privacySchemas.has(input.db)) {
+    const pending = Promise.all([
+      loadMigrationStatements(privacySchema),
+      testSchemaStatements(input),
+    ])
+      .then(([privacy, sql]) => install([...privacy, ...sql]))
+      .catch((cause: unknown) => {
+        privacySchemas.delete(input.db);
+        throw cause;
+      });
+    privacySchemas.set(input.db, pending);
+    return pending;
+  }
+  return installPrivacySchema(input.db)
     .then(() => testSchemaStatements(input))
-    .then((sql) =>
-      sql.length === 0
-        ? undefined
-        : Option.match(Option.fromUndefinedOr(schemaInstallers.get(input.db)), {
-            onNone: () =>
-              input.db
-                .batch(sql.map((statement) => input.db.prepare(statement)))
-                .then(() => undefined),
-            onSome: (install) => install(sql),
-          })
-    );
+    .then((sql) => {
+      if (sql.length === 0) return;
+      if (install !== undefined) return install(sql);
+      return input.db
+        .batch(sql.map((statement) => input.db.prepare(statement)))
+        .then(() => undefined);
+    });
+};
 
 type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
 const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>

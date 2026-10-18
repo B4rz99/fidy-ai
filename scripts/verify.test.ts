@@ -120,7 +120,7 @@ exit "\${CHECK_EXIT_CODE:-0}"
         catch: () => new FixtureUnavailable(),
       });
       expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
-      for (const shard of ["1/4", "2/4", "3/4", "4/4"]) {
+      for (const shard of ["1/2", "2/2"]) {
         for (const exitCode of [0, 1]) {
           const result = Bun.spawnSync(
             [
@@ -146,10 +146,10 @@ exit "\${CHECK_EXIT_CODE:-0}"
             .filter((line) => line.startsWith("CHECK "));
           expect(commands).toContain(`CHECK run --cwd apps/web test:browser --shard=${shard}`);
           expect(commands.includes("CHECK run --cwd apps/web test:browser:cli")).toBe(
-            shard === "1/4"
+            shard === "1/2"
           );
           expect(commands).toContain("CHECK run --cwd apps/site test:browser");
-          expect(commands).toHaveLength(shard === "1/4" ? 3 : 2);
+          expect(commands).toHaveLength(shard === "1/2" ? 3 : 2);
         }
       }
     })

@@ -363,3 +363,30 @@ it.live("counts native execution once and excludes batch and plan reads from dis
     expect(observed.discovery()).toBe(discovered.meta.rows_read);
   })
 );
+
+it.live("retries a failed native bootstrap without retaining partial privacy or owner schema", () =>
+  Effect.gen(function* () {
+    const db = yield* wait(() => databases.acquire());
+    const categories = new URL("./migrations/0001_categories.sql", import.meta.url);
+    const failing = new URL("./migrations/0057_recurring_offer_replacement.sql", import.meta.url);
+    yield* wait(() =>
+      expect(installTestSchema({ db, sources: [categories, failing] })).rejects.toThrow()
+    );
+    expect(
+      (yield* wait(() =>
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE name IN ('categories', 'erasure_requests')"
+          )
+          .all()
+      )).results
+    ).toEqual([]);
+    yield* wait(() => installTestSchema({ db, sources: [categories] }));
+    expect(
+      yield* wait(() => db.prepare("SELECT count(*) AS count FROM categories").first("count"))
+    ).toBe(16);
+    expect(
+      yield* wait(() => db.prepare("SELECT count(*) AS count FROM erasure_requests").first("count"))
+    ).toBe(0);
+  })
+);

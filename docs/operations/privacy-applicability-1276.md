@@ -116,6 +116,11 @@ a critical operational alert does not itself establish a personal-data incident.
 native detection, containment and recovery evidence remains with [#1262](https://github.com/B4rz99/fidy-ai/issues/1262).
 This handoff neither creates another detector nor claims that technical drill completed.
 
+The owner-authorized [bounded live drill](security-drill-1276.md) records actual refused traffic,
+rate protection, stale monitoring and above-allowance D1 usage, plus independently received CI
+test email. Native detection and live grant containment/recovery remain unverified; this is a
+partial operational result, not a passing incident drill.
+
 ## Bank evidence index
 
 Share only an authorized, reviewed projection; do not attach private company accounts or agreements

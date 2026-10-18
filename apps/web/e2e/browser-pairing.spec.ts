@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { playwright } from "./playwright-runtime";
+
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { installUser } from "./http-fixtures";
@@ -8,6 +9,7 @@ import {
   visiblePairingCode,
 } from "./real-core-fixture";
 
+const { expect, test } = playwright;
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const json = (value: object): string => JSON.stringify(value);

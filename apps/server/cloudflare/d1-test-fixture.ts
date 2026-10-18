@@ -1,4 +1,5 @@
 import { Miniflare } from "miniflare";
+import { asynchronousNativeDatabase } from "./d1-test-bridge.test-fixture";
 import { Option, Schema } from "effect";
 
 const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
@@ -107,8 +108,23 @@ export const installTestSchemaWithPrefix = (
 };
 
 type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
-const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
-  slot.runtime.getD1Database(`DB_${slot.index}`).then((db) => {
+type TestDatabaseTransport = "proxy" | "fetch";
+const acquireDatabase = (
+  slot: BindingSlot,
+  transport: TestDatabaseTransport = "fetch"
+): Promise<D1Database> =>
+  slot.runtime.getD1Database(`DB_${slot.index}`).then((native) => {
+    const db =
+      transport === "proxy"
+        ? native
+        : asynchronousNativeDatabase({
+            native,
+            dispatch: (body) =>
+              slot.runtime.dispatchFetch(`http://fixture/DB_${slot.index}/query`, {
+                method: "POST",
+                body,
+              }),
+          });
     schemaInstallers.set(db, (sql) =>
       slot.runtime
         .dispatchFetch(`http://fixture/DB_${slot.index}`, {
@@ -157,9 +173,27 @@ const snapshot = async database => {
 };
 export default {
   async fetch(request, env) {
-    const binding = new URL(request.url).pathname.slice(1);
+    const path = new URL(request.url).pathname;
+    const binding = path.split('/')[1];
     const database = env[binding];
     if (request.method !== 'POST' || !database) return new Response('missing', {status: 404});
+    if (path.endsWith('/query')) {
+      try {
+        const input = await request.json();
+        const prepared = input.statements.map(({sql, params}) => database.prepare(sql).bind(...params));
+        let value;
+        if (input.operation === 'batch') value = await database.batch(prepared);
+        else if ((input.operation === 'first' || input.operation === 'firstColumn')) value = await prepared[0].first(input.column);
+        else if (input.operation === 'all' || input.operation === 'run') value = await prepared[0][input.operation]();
+        else return new Response('missing', {status: 404});
+        return Response.json({success: true, value});
+      } catch (error) {
+        return Response.json({success: false, error: {
+          message: error.message,
+          ...(error.cause instanceof Error ? {cause: error.cause.message} : {}),
+        }});
+      }
+    }
     const statements = (await request.text()).split('\u0000');
     try {
       // Only the first install into a fresh binding can use a pristine baseline.
@@ -236,13 +270,15 @@ const bindingPool = (
  * with independent rows, schema, triggers, and sessions. Call dispose at suite teardown.
  * Tests of Worker/DO lifecycle or runtime restart must keep their own fresh runtime.
  */
-export const isolatedTestDatabases = (): Readonly<{
+export const isolatedTestDatabases = (
+  options: Readonly<{ transport: TestDatabaseTransport }> = { transport: "fetch" }
+): Readonly<{
   acquire: () => Promise<D1Database>;
   dispose: () => Promise<void>;
 }> => {
   const pool = bindingPool(false);
   return {
-    acquire: () => acquireDatabase(pool.acquire()),
+    acquire: () => acquireDatabase(pool.acquire(), options.transport),
     dispose: pool.dispose,
   };
 };

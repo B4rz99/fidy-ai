@@ -16,7 +16,14 @@ export default defineConfig({
   expect: {
     timeout: measuringBrowserCost ? measurementAssertionMilliseconds : normalAssertionMilliseconds,
   },
-  testIgnore: "cli-login.spec.ts",
+  projects: [
+    { name: "admission", testMatch: "acceptance-clock.spec.ts" },
+    {
+      name: "browser",
+      testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
+      dependencies: ["admission"],
+    },
+  ],
   fullyParallel: false,
   forbidOnly: isCI,
   retries: 0,

@@ -710,3 +710,11 @@ WebSession-only canonical policies, so originals cannot enter agent tools or imm
 They return bounded escaped text with no-store delivery; missing media bytes permit manual completion
 before expiry. Draft/suggestion retention ends at the original source deadline independently of
 hosted conversation routing. Retry never commits a Transaction or overwrites User-edited facts.
+
+The shared native D1 test fixture prepares SQL descriptors locally and sends ordinary reads,
+writes, and batches through its asynchronous Worker fetch boundary. The same Miniflare D1
+binding executes every statement and transaction; native metadata and errors return across
+that boundary. Sessions, raw results, unsupported bindings, and mixed session batches retain
+the original binding path. The fixture suite compares both transports, including BLOB values,
+transaction rollback, foreign keys, FTS, and isolation. No application database implementation
+or production query path uses this test transport.

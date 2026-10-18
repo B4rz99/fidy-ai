@@ -1,9 +1,7 @@
-import { ResourceLimited } from "@fidy/server/client";
-import { advanceNativeRetry } from "./acceptance-clock";
-import type { APIResponse, Page, Route } from "@playwright/test";
-import { type Cause, Effect, Option, Schema } from "effect";
+import type { Page, Route } from "@playwright/test";
+import { type Cause, Effect } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
-import { browserSessionHeaders, signInBudgetEditingThroughCore } from "./real-core-fixture";
+import { signInBudgetEditingThroughCore } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
 const { AxeBuilder } = await import("@axe-core/playwright");
@@ -502,50 +500,3 @@ const checkLargeReport = Effect.fn(function* (page: Page) {
 test("a thousand-cap report keeps all sixteen groups and the final Category reachable", ({
   page,
 }) => Effect.runPromise(checkLargeReport(page)));
-
-const admissionProbeRequests = 12;
-const admittedStatus = 200;
-const resourceLimitedStatus = 429;
-test("native admission still refuses the burst and recovers only after the fixture clock advances", ({
-  page,
-  request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInBudgetEditingThroughCore({ page, request }));
-      yield* Effect.tryPromise(() => page.goto("/auth/pair"));
-      const headers = yield* Effect.tryPromise(() => browserSessionHeaders(page.request));
-      let refusal = Option.none<APIResponse>();
-      for (let attempt = 0; attempt < admissionProbeRequests; attempt++) {
-        const result = yield* Effect.tryPromise(() =>
-          page.request.get(`${apiOrigin}/categories`, { headers })
-        );
-        if (result.status() === resourceLimitedStatus) {
-          refusal = Option.some(result);
-          break;
-        }
-        expect(result.status()).toBe(admittedStatus);
-      }
-      expect(Option.isSome(refusal)).toBe(true);
-      const refused = Option.getOrThrow(refusal);
-      expect(refused.headers()["retry-after"]).toBe("1");
-      expect(
-        Option.isSome(
-          Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(
-            yield* Effect.tryPromise(() => refused.json())
-          )
-        )
-      ).toBe(true);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          page.request.get(`${apiOrigin}/categories`, { headers })
-        )).status()
-      ).toBe(resourceLimitedStatus);
-      yield* Effect.tryPromise(() => advanceNativeRetry(request, 1));
-      expect(
-        (yield* Effect.tryPromise(() =>
-          page.request.get(`${apiOrigin}/categories`, { headers })
-        )).status()
-      ).toBe(admittedStatus);
-    })
-  ));

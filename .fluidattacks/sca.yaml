@@ -1,6 +1,12 @@
 namespace: fidy-ai
 working_dir: /src
 language: EN
+sbom:
+  include:
+    - .
+  exclude:
+    - glob(.repos/**)
+    - glob(**/node_modules/**)
 sca:
   include:
     - glob(*)

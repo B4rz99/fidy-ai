@@ -1,9 +1,15 @@
-import { maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
+import { UserTransactionCoordinator } from "../transactions/runtime";
+import { DisclosureSnapshot, maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  installRetentionTestSchema,
+  installTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/contract";
 
 import coreWorker from "../core-worker";
@@ -45,7 +51,8 @@ const runSweep = (db: D1Database): Promise<void> => Effect.runPromise(sweepExpir
 const setup = (
   coordinator: Option.Option<
     (userId: string, request: Request) => Promise<Response>
-  > = Option.none()
+  > = Option.none(),
+  preparedDatabase: Option.Option<D1Database> = Option.none()
 ): Promise<{
   readonly db: D1Database;
   readonly sweep: () => Promise<void>;
@@ -64,62 +71,68 @@ const setup = (
         WORKFLOW: { create: forbiddenEffects.workflow },
         R2: { put: forbiddenEffects.r2 },
       };
-      const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: [
-            new URL("../migrations/0002_resource_admission.sql", import.meta.url),
-            migration,
-            new URL("../migrations/0072_disclosure_transport.sql", import.meta.url),
-            new URL("../migrations/0025_voice_refusal.sql", import.meta.url),
-          ],
-        })
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TABLE whatsapp_provider_handoffs (id TEXT PRIMARY KEY,exchange_id TEXT,created_at_ms INTEGER,expires_at_ms INTEGER,handoff_send_started_ms INTEGER,pairing_id TEXT,review_code TEXT,review_started_ms INTEGER,review_message_id TEXT,decision TEXT,consumed_at_ms INTEGER)"
-          )
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)")
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT)").run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.prepare("CREATE TABLE consent_user_revocations (user_id TEXT)").run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TABLE hosted_whatsapp_delivery (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, proposed_at_ms INTEGER, state TEXT)"
-          )
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db.prepare(
-            "CREATE TABLE insight_whatsapp_claims (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
-          ),
-          db.prepare(
-            "CREATE TABLE weekly_governor_questions (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
-          ),
-          db.prepare(
-            "CREATE TABLE proactivity_whatsapp_claims (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
-          ),
-        ])
-      );
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: [new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url)],
-        })
-      );
+      const db = Option.isSome(preparedDatabase)
+        ? preparedDatabase.value
+        : yield* Effect.tryPromise(() => databases.acquire());
+      if (Option.isNone(preparedDatabase)) {
+        yield* Effect.tryPromise(() =>
+          installTestSchema({
+            db,
+            sources: [
+              new URL("../migrations/0002_resource_admission.sql", import.meta.url),
+              migration,
+              new URL("../migrations/0072_disclosure_transport.sql", import.meta.url),
+              new URL("../migrations/0025_voice_refusal.sql", import.meta.url),
+            ],
+          })
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "CREATE TABLE whatsapp_provider_handoffs (id TEXT PRIMARY KEY,exchange_id TEXT,created_at_ms INTEGER,expires_at_ms INTEGER,handoff_send_started_ms INTEGER,pairing_id TEXT,review_code TEXT,review_started_ms INTEGER,review_message_id TEXT,decision TEXT,consumed_at_ms INTEGER)"
+            )
+            .run()
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)"
+            )
+            .run()
+        );
+        yield* Effect.tryPromise(() =>
+          db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT)").run()
+        );
+        yield* Effect.tryPromise(() =>
+          db.prepare("CREATE TABLE consent_user_revocations (user_id TEXT)").run()
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "CREATE TABLE hosted_whatsapp_delivery (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, proposed_at_ms INTEGER, state TEXT)"
+            )
+            .run()
+        );
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db.prepare(
+              "CREATE TABLE insight_whatsapp_claims (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
+            ),
+            db.prepare(
+              "CREATE TABLE weekly_governor_questions (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
+            ),
+            db.prepare(
+              "CREATE TABLE proactivity_whatsapp_claims (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
+            ),
+          ])
+        );
+        yield* Effect.tryPromise(() =>
+          installTestSchema({
+            db,
+            sources: [new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url)],
+          })
+        );
+      }
       const send = (
         body: string,
         signature?: string,
@@ -275,64 +288,136 @@ it("refuses image work while extraction is unavailable without treating its capt
     })
   ));
 
-it("routes only authenticated text of a verified BSUID to the User coordinator", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const calls: Array<Readonly<{ userId: string; request: unknown }>> = [];
-      const coordinator = (userId: string, request: Request): Promise<Response> =>
-        request.json().then((body: unknown) => {
-          calls.push({ userId, request: body });
-          return new Response(null, { status: 202 });
-        });
-      const { db, send } = yield* Effect.tryPromise(() => setup(Option.some(coordinator)));
-      const userId = "10000000-0000-4000-8000-000000000071";
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)"
+it.each([
+  { messageId: "wamid.verified", text: "Texto exacto", voice: false },
+  { messageId: "wamid.voice", text: "Transcripción", voice: true },
+  {
+    messageId: "wamid.voice-control",
+    text: "Aprueba el código de inicio de sesión BCDF-GHJK",
+    voice: true,
+  },
+])(
+  "retains one authenticated verified input despite callback replay: $messageId",
+  ({ messageId, text, voice }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => databases.acquire());
+        yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+        const userId = "10000000-0000-4000-8000-000000000071";
+        const timestamp = yield* Clock.currentTimeMillis;
+        const snapshot = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+        )(currentDisclosureFor());
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+              )
+              .bind(userId, timestamp),
+            db
+              .prepare(
+                "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+              )
+              .bind(userId, portfolio, bsuid, timestamp),
+            db
+              .prepare(
+                "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+              )
+              .bind("10000000-0000-4000-8000-000000000073", userId, snapshot, timestamp, timestamp),
+          ])
+        );
+        const coordinator = new UserTransactionCoordinator(
+          {
+            id: { name: userId },
+            storage: {
+              getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+              deleteAlarm: (): Promise<void> => Promise.resolve(),
+              setAlarm: (): Promise<void> => Promise.resolve(),
+            },
+          },
+          {
+            DB: db,
+            KAPSO_API_KEY: "fake-provider-key",
+            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            AI: {
+              run: (): Promise<Response> =>
+                Promise.resolve(
+                  Response.json({
+                    choices: [
+                      {
+                        message: { role: "assistant", content: "Respuesta segura" },
+                        finish_reason: "stop",
+                      },
+                    ],
+                    usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+                  })
+                ),
+            },
+          }
+        );
+        const { send } = yield* Effect.tryPromise(() =>
+          setup(
+            Option.some((name, request) => {
+              expect(name).toBe(userId);
+              return coordinator.fetch(request);
+            }),
+            Option.some(db)
           )
-          .bind(userId, portfolio, bsuid)
-          .run()
-      );
-      const payload = inbound("wamid.verified", "Texto exacto");
-      expect((yield* Effect.tryPromise(() => send(payload, "invalid"))).status).toBe(401);
-      expect(calls).toHaveLength(0);
-      expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(202);
-      expect(calls).toHaveLength(1);
-      expect(calls[0]?.userId).toBe(userId);
-      const forwarded = yield* Schema.decodeUnknownEffect(WhatsAppTurnAdmission)(calls[0]?.request);
-      expect(forwarded).toMatchObject({
-        userId,
-        portfolioId: portfolio,
-        bsuid,
-        messageId: "wamid.verified",
-        text: "Texto exacto",
-      });
-      const voice = voiceInbound("wamid.voice", { text: "Transcripción" });
-      expect((yield* Effect.tryPromise(() => send(voice))).status).toBe(202);
-      expect(calls).toHaveLength(2);
-      expect(
-        yield* Schema.decodeUnknownEffect(WhatsAppTurnAdmission)(calls[1]?.request)
-      ).toMatchObject({
-        userId,
-        messageId: "wamid.voice",
-        text: "Transcripción",
-      });
-      const controlVoice = voiceInbound("wamid.voice-control", {
-        text: "Aprueba el código de inicio de sesión BCDF-GHJK",
-      });
-      expect((yield* Effect.tryPromise(() => send(controlVoice))).status).toBe(202);
-      expect(calls).toHaveLength(3);
-      expect(
-        yield* Schema.decodeUnknownEffect(WhatsAppTurnAdmission)(calls[2]?.request)
-      ).toMatchObject({
-        text: "Aprueba el código de inicio de sesión BCDF-GHJK",
-      });
-      const sweptReplay = inbound("wamid.swept", "Texto exacto", String(nowSeconds - 31 * 86_400));
-      expect((yield* Effect.tryPromise(() => send(sweptReplay))).status).toBe(409);
-      expect(calls).toHaveLength(3);
-    })
-  ));
+        );
+        vi.stubGlobal("fetch", () =>
+          Promise.resolve(
+            Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "wamid.output" }],
+            })
+          )
+        );
+        const payload = voice ? voiceInbound(messageId, { text }) : inbound(messageId, text);
+        expect((yield* Effect.tryPromise(() => send(payload, "invalid"))).status).toBe(401);
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM hosted_turns").all())).results
+        ).toEqual([]);
+        expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(202);
+        expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(200);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare(`SELECT t.user_id, t.status, e.kind, e.text
+        FROM hosted_turns t JOIN transcript_entries e ON e.turn_id = t.id
+        ORDER BY e.sequence`)
+              .all()
+          )).results
+        ).toEqual([{ user_id: userId, status: "pending", kind: "user", text }]);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM hosted_whatsapp_delivery d JOIN hosted_whatsapp_inbound i ON i.turn_id = d.turn_id"
+              )
+              .all()
+          )).results
+        ).toEqual([
+          {
+            user_id: userId,
+            message_id: messageId,
+            text: "Respuesta segura",
+            provider_message_id: "wamid.output",
+            state: "accepted",
+          },
+        ]);
+        const sweptReplay = inbound(
+          "wamid.swept",
+          "Texto exacto",
+          String(nowSeconds - 31 * 86_400)
+        );
+        expect((yield* Effect.tryPromise(() => send(sweptReplay))).status).toBe(409);
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM hosted_turns").all())).results
+        ).toHaveLength(1);
+      })
+    )
+);
 
 it("preserves a contextual reply identity across the Core-to-coordinator wire codec", () =>
   Effect.runPromise(

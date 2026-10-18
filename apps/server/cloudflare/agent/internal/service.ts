@@ -7,6 +7,7 @@ import {
   type AgentEnvironment,
   type AgentService,
   type AgentServiceInput,
+  AgentUnavailable,
   type HostedCommitFence,
   HostedDeliveryAdmission,
   HostedProgressAdmission,
@@ -36,7 +37,6 @@ import {
   Cause,
   Clock,
   Context,
-  Deferred,
   Duration,
   Effect,
   Exit,
@@ -275,12 +275,11 @@ const hostedDeadline = (
 }> => {
   let admittedTurnId = Option.none<TranscriptTurnId>();
   const preflight = new AbortController();
-  const pending = Deferred.makeUnsafe<Response>();
+  const pending = Promise.withResolvers<Response>();
   let timer = Effect.runFork(
     Effect.sleep(Duration.millis(hostedResponseDeadlineMs)).pipe(
       Effect.tap(() => Effect.sync(() => preflight.abort())),
-      Effect.flatMap(() => Deferred.succeed(pending, transactionUnavailable())),
-      Effect.asVoid
+      Effect.tap(() => Effect.sync(() => pending.resolve(transactionUnavailable())))
     )
   );
   const cancel = (): void => {
@@ -291,21 +290,21 @@ const hostedDeadline = (
     cancel();
     timer = Effect.runFork(
       Effect.sleep(Duration.millis(hostedResponseDeadlineMs)).pipe(
-        Effect.flatMap(() =>
-          Deferred.succeed(
-            pending,
-            Response.json(
-              { status: "processing", turnId },
-              { status: HTTP_ACCEPTED, headers: { "cache-control": "no-store" } }
+        Effect.tap(() =>
+          Effect.sync(() =>
+            pending.resolve(
+              Response.json(
+                { status: "processing", turnId },
+                { status: HTTP_ACCEPTED, headers: { "cache-control": "no-store" } }
+              )
             )
           )
-        ),
-        Effect.asVoid
+        )
       )
     );
   };
   return {
-    processing: Effect.runPromise(Deferred.await(pending)),
+    processing: pending.promise,
     admittedTurnId: () => admittedTurnId,
     onAdmitted,
     cancel,
@@ -314,41 +313,44 @@ const hostedDeadline = (
 };
 
 /** Recover a stalled owner before freeing the per-User queue. A later canonical commit must pass
- * the pending-Turn fence inside the same D1 batch, so it cannot commit after recovery.
+ * the pending-Turn fence inside the same D1 batch, so it cannot commit after recovery. Recovery
+ * defects leave settlement with the original owner; only unavailable recovery is retried. The
+ * supplied settlement Promise must resolve for both success and failure of the original work.
  */
 const boundedHostedOwner = ({
   ownerSettled,
   recover,
-}: Readonly<{ ownerSettled: Promise<void>; recover: () => Promise<void> }>): Promise<void> => {
-  const cancellation = new AbortController();
-  const recovered = Effect.runPromise(
-    Effect.sleep(Duration.millis(pendingExecutionRecoveryMs + hostedResponseDeadlineMs)).pipe(
-      Effect.flatMap(() =>
-        Effect.tryPromise(recover).pipe(Effect.retry(Schedule.spaced(Duration.seconds(1))))
+}: Readonly<{
+  ownerSettled: Promise<void>;
+  recover: Effect.Effect<void, AgentUnavailable>;
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.raceFirst(
+      Effect.tryPromise({
+        try: () => ownerSettled,
+        catch: () => new AgentUnavailable(),
+      }).pipe(Effect.orDie),
+      Effect.sleep(Duration.millis(pendingExecutionRecoveryMs + hostedResponseDeadlineMs)).pipe(
+        Effect.andThen(recover.pipe(Effect.retry(Schedule.spaced(Duration.seconds(1)))))
       )
-    ),
-    { signal: cancellation.signal }
-  ).then(
-    () => undefined,
-    () => ownerSettled
-  );
-  return Promise.race([ownerSettled, recovered]).finally(() => cancellation.abort());
-};
+    )
+  ).catch(() => ownerSettled);
 
-const recoverAbandonedWork = (owner: AgentServiceInput): Promise<void> => {
+const recoverAbandonedWork = (owner: AgentServiceInput): Effect.Effect<void, AgentUnavailable> => {
   const env = owner.environment;
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const next = yield* expireHostedPending({
-        db: env.DB,
-        userId: owner.userId,
-        now: yield* Clock.currentTimeMillis,
+  return Effect.gen(function* () {
+    const next = yield* expireHostedPending({
+      db: env.DB,
+      userId: owner.userId,
+      now: yield* Clock.currentTimeMillis,
+    }).pipe(Effect.mapError(() => new AgentUnavailable()));
+    if (Option.isSome(next)) {
+      yield* Effect.tryPromise({
+        try: () => owner.scheduleRecovery(next.value),
+        catch: () => new AgentUnavailable(),
       });
-      if (Option.isSome(next)) {
-        yield* Effect.tryPromise(() => owner.scheduleRecovery(next.value));
-      }
-    })
-  );
+    }
+  });
 };
 
 const runHostedReceipt = (owner: AgentServiceInput, request: Request): Promise<Response> => {
@@ -732,7 +734,7 @@ const acceptHostedRequest = (
       onNone: () => ownerSettled,
       onSome: () =>
         preceding.then(
-          () => boundedHostedOwner({ ownerSettled, recover: () => recoverAbandonedWork(owner) }),
+          () => boundedHostedOwner({ ownerSettled, recover: recoverAbandonedWork(owner) }),
           () => ownerSettled
         ),
     }),
@@ -741,6 +743,6 @@ const acceptHostedRequest = (
 
 /** Construct only the existing hosted workflow; the caller retains its shared User queue. */
 export const makeHostedService = (owner: AgentServiceInput): AgentService => ({
-  recover: () => recoverAbandonedWork(owner),
+  recover: () => Effect.runPromise(recoverAbandonedWork(owner)),
   accept: (input) => acceptHostedRequest(owner, input),
 });

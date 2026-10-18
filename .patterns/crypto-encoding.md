@@ -36,6 +36,11 @@ const makeBearer = Effect.gen(function* () {
 });
 ```
 
+`randomUUIDv4()` and `randomUUIDv7()` are methods returning Effects. Their default format is a
+lowercase, hyphenated 36-character UUID string; `{ format: "bytes" }` returns 16 bytes. `randomULID`
+remains an Effect-valued property. Verify the `Crypto` interface and `make` implementation before
+porting examples from releases where UUID generation was an Effect-valued property.
+
 `Crypto.make` validates `randomBytes(size)` as a non-negative safe integer and exposes a
 `PlatformError` channel; `digest` also exposes `PlatformError`. Its underlying synchronous entropy
 callback can still throw a defect. Decide at the owning adapter whether platform failure is

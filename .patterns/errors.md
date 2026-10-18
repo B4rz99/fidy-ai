@@ -41,6 +41,17 @@ holding the whole Cause. Keep interruption distinct from domain refusal and prov
 A cause can hold multiple Fail reasons. Ordinary typed catches select a matching error rather than
 preserving an accumulated error report. Inspect the complete Cause when accumulation matters.
 
+Use `mapError` for direct error translation. Keep internal composition in Effect: a
+`runPromise`/`tryPromise` round trip can turn a defect into a retryable foreign failure. Recovery
+must handle an actual typed failure; an infallible operation needs no typed catch. Verify the
+selected operation's error type before removing recovery, and retain intentional Cause containment.
+
+For a lazy successful fallback use `orElseSucceed`. An Option-valued operation falling back to
+absence uses `Effect.orElseSucceed(Option.none)`; `Effect.option` instead wraps successful values
+in another Option. See `mapError` and `orElseSucceed` in `src/internal/effect.ts` and the narrow
+[recovery lint rule](../scripts/oxlint/effect-recovery.js). Its binding-aware fixtures constrain
+the automated rule to trivial callbacks; it is not a blanket ban on recovery.
+
 ## Accumulation, retry, and timeout
 
 Ordinary composition fails fast. `Effect.all(..., { mode: "result" })` collects per-item Results;

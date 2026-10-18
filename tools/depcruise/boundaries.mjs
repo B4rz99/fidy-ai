@@ -7,6 +7,7 @@ const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 
 const compositionRoots = new Set([
   "src/client.ts",
+  "src/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
   "cloudflare/core-worker.test-fixture.ts",
   "cloudflare/public-worker.ts",

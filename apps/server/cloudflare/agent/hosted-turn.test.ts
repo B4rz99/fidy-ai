@@ -4452,7 +4452,7 @@ it.each([
     lostResponse: true,
   },
 ])(
-  "keeps a confirmed mutation pending past the response deadline ($recoverBeforeCommit, automatic: $automaticRecovery, retry: $transientRecoveryFailure, lost: $lostResponse)",
+  "keeps a confirmed mutation pending past the response deadline ($recoverBeforeCommit, automatic: $automaticRecovery, retry: $transientRecoveryFailure, lost: $lostResponse, request aborted during commit)",
   ({ recoverBeforeCommit, automaticRecovery, transientRecoveryFailure, lostResponse }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -4543,10 +4543,12 @@ it.each([
           }
         );
         const credential = yield* Effect.tryPromise(() => subject(0));
+        const responseCancellation = makeAbortController();
         const send = (text: string): Promise<Response> =>
           coordinator.fetch(
             new Request("https://coordinator.internal/hosted-turn", {
               method: "POST",
+              signal: responseCancellation.signal,
               body: encodeJson({
                 userId: credential.userId,
                 sessionId: credential.id,
@@ -4581,6 +4583,7 @@ it.each([
         const running = send(command);
         try {
           yield* Effect.tryPromise(() => blocked.promise);
+          responseCancellation.abort();
           yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(25_001));
           const processing = yield* Effect.tryPromise(() => running);
           expect(processing.status).toBe(202);
@@ -6797,6 +6800,221 @@ it("refuses another User's complete live proof at the Agent service before model
       expect(model).not.toHaveBeenCalled();
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toEqual([]);
       expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+    })
+  ));
+
+it("stops unavailable alarm retries when the hosted owner settles and preserves durable recovery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const scheduling = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let alarmCalls = 0;
+      let unavailable = true;
+      let settled = false;
+      const service = makeAgentService({
+        environment: {
+          DB: db,
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          AI: { run: () => Promise.resolve(reply("Propuesta sin entregar")) },
+        },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => {
+          alarmCalls += 1;
+          if (alarmCalls === 2) {
+            scheduling.resolve();
+            return release.promise;
+          }
+          return alarmCalls > 2 && unavailable
+            ? Promise.reject(new Error("private alarm failure"))
+            : Promise.resolve();
+        },
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const ownerSettled = accepted.settled.then(() => {
+        settled = true;
+      });
+      try {
+        yield* Effect.tryPromise(() => scheduling.promise);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(25_001));
+        const response = yield* Effect.tryPromise(() => accepted.response);
+        expect(response.status).toBe(202);
+        const progress = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ status: Schema.Literal("processing"), turnId: TranscriptTurnId })
+        )(yield* Effect.tryPromise(() => response.json()));
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(135_001));
+        yield* Effect.tryPromise(() => waitForInterrupted(db, progress.turnId));
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(alarmCalls).toBeGreaterThanOrEqual(3))
+        );
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(1_001));
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(alarmCalls).toBeGreaterThanOrEqual(4))
+        );
+        expect(settled).toBe(false);
+        release.resolve();
+        yield* Effect.tryPromise(() => ownerSettled);
+        const callsAtSettlement = alarmCalls;
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(5_001));
+        expect(alarmCalls).toBe(callsAtSettlement);
+        yield* Effect.tryPromise(() =>
+          service.recover().then(
+            () => assert.fail("unavailable durable alarm must reject"),
+            (failure: unknown) => assert.deepStrictEqual(failure, new AgentUnavailable())
+          )
+        );
+        unavailable = false;
+        yield* Effect.tryPromise(() => service.recover());
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "interrupted", kind: "user", text: "Hola" },
+          { status: "interrupted", kind: "interrupted", text: null },
+        ]);
+        expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+      } finally {
+        release.resolve();
+        try {
+          yield* Effect.tryPromise(() => ownerSettled);
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+    })
+  ));
+
+it("does not retry a recovery defect or release queued work before its hosted owner settles", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const scheduling = Promise.withResolvers<void>();
+      const releaseOwner = Promise.withResolvers<void>();
+      const snapshotRead = Promise.withResolvers<void>();
+      const releaseSnapshot = Promise.withResolvers<void>();
+      const recoveryBatchFinished = Promise.withResolvers<void>();
+      let observeRecovery = false;
+      let snapshotReleased = false;
+      let recoveryReads = 0;
+      let alarmCalls = 0;
+      let settled = false;
+      const delayedDb = new Proxy(db, {
+        get(target, key): unknown {
+          if (key === "batch") {
+            return (statements: D1PreparedStatement[]): Promise<D1Result[]> =>
+              target.batch(statements).then((results) => {
+                if (snapshotReleased) recoveryBatchFinished.resolve();
+                return results;
+              });
+          }
+          if (key === "prepare") {
+            return (sql: string): D1PreparedStatement => {
+              const prepared = target.prepare(sql);
+              if (!observeRecovery || !sql.startsWith("SELECT id, started_at_ms,")) return prepared;
+              recoveryReads += 1;
+              const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
+                new Proxy(statement, {
+                  get(native, method): unknown {
+                    if (method === "bind") {
+                      return (...values: unknown[]): D1PreparedStatement =>
+                        wrap(native.bind(...values));
+                    }
+                    if (method === "first" && recoveryReads === 1) {
+                      return (): Promise<unknown> =>
+                        native.first().then((row) => {
+                          snapshotRead.resolve();
+                          return releaseSnapshot.promise.then(() => row);
+                        });
+                    }
+                    const value: unknown = Reflect.get(native, method, native);
+                    return typeof value === "function" ? value.bind(native) : value;
+                  },
+                });
+              return wrap(prepared);
+            };
+          }
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const service = makeAgentService({
+        environment: {
+          DB: delayedDb,
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          AI: { run: () => Promise.resolve(reply("Propuesta sin entregar")) },
+        },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => {
+          alarmCalls += 1;
+          if (alarmCalls !== 2) return Promise.resolve();
+          scheduling.resolve();
+          return releaseOwner.promise;
+        },
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const ownerSettled = accepted.settled.then(() => {
+        settled = true;
+      });
+      try {
+        yield* Effect.tryPromise(() => scheduling.promise);
+        observeRecovery = true;
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(160_001));
+        yield* Effect.tryPromise(() => snapshotRead.promise);
+        yield* makeAgentRetention({ db }).sweep(now());
+        snapshotReleased = true;
+        releaseSnapshot.resolve();
+        yield* Effect.tryPromise(() => recoveryBatchFinished.promise);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(5_001));
+        expect((yield* Effect.tryPromise(() => accepted.response)).status).toBe(202);
+        expect({ recoveryReads, alarmCalls, settled }).toEqual({
+          recoveryReads: 1,
+          alarmCalls: 2,
+          settled: false,
+        });
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "interrupted", kind: "user", text: "Hola" },
+          { status: "interrupted", kind: "interrupted", text: null },
+        ]);
+        expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+        releaseOwner.resolve();
+        yield* Effect.tryPromise(() => ownerSettled);
+        expect(settled).toBe(true);
+      } finally {
+        releaseSnapshot.resolve();
+        releaseOwner.resolve();
+        try {
+          yield* Effect.tryPromise(() => ownerSettled);
+        } finally {
+          vi.useRealTimers();
+        }
+      }
     })
   ));
 

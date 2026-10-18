@@ -85,46 +85,48 @@ const compactHomogeneousArray = (schema: Record<string, unknown>): Record<string
   return schema;
 };
 
-const isInclusiveBound = (value: unknown): value is Record<string, number> =>
-  Predicate.isObject(value) &&
-  Object.entries(value).every(
-    ([key, bound]) => (key === "minimum" || key === "maximum") && typeof bound === "number"
-  );
-
-const intersectBound = (key: string, previous: unknown, value: number): number => {
-  if (typeof previous !== "number") return value;
-  return key === "minimum" ? Math.max(previous, value) : Math.min(previous, value);
-};
-
-/** Intersect plain inclusive bounds; leave every other allOf constraint untouched. */
-const compactNumericBounds = (schema: Record<string, unknown>): Record<string, unknown> => {
-  if (
-    (schema.type !== "integer" && schema.type !== "number") ||
-    !Array.isArray(schema.allOf) ||
-    !schema.allOf.every(isInclusiveBound)
-  ) {
-    return schema;
-  }
-  const { allOf, ...bounded } = schema;
-  for (const node of allOf) {
-    for (const [key, value] of Object.entries(node)) {
-      bounded[key] = intersectBound(key, bounded[key], value);
-    }
-  }
-  return bounded;
-};
-
 const constraintDescription = (schema: Record<string, unknown>): string =>
   ["const", "pattern", "anyOf", "oneOf", "allOf"].some((key) => key in schema)
     ? `Required shape: ${schemaShape(schema)}`
     : "";
 
-const compactNode = (input: unknown, describe = true): unknown => {
-  if (!Predicate.isObject(input)) return input;
-  const value = compactNumericBounds(input);
-  const describeChildren = describe && !["anyOf", "oneOf", "allOf"].some((key) => key in value);
+const compactNumericBounds = (schema: Record<string, unknown>): Record<string, unknown> => {
+  if ((schema.type !== "integer" && schema.type !== "number") || !Array.isArray(schema.allOf)) {
+    return schema;
+  }
+  const members = schema.allOf.filter(Predicate.isObject);
+  if (
+    members.length !== schema.allOf.length ||
+    !members.every(
+      (member) =>
+        Object.keys(member).length > 0 &&
+        Object.entries(member).every(
+          ([key, value]) =>
+            (key === "minimum" || key === "maximum") &&
+            Predicate.isNumber(value) &&
+            Number.isFinite(value)
+        )
+    )
+  ) {
+    return schema;
+  }
+  const bounds = [schema, ...members];
+  const minimum = bounds.map((bound) => bound.minimum).filter(Predicate.isNumber);
+  const maximum = bounds.map((bound) => bound.maximum).filter(Predicate.isNumber);
+  const { allOf: _allOf, ...scalar } = schema;
+  return {
+    ...scalar,
+    ...(minimum.length === 0 ? {} : { minimum: Math.max(...minimum) }),
+    ...(maximum.length === 0 ? {} : { maximum: Math.min(...maximum) }),
+  };
+};
+
+const compactNode = (value: unknown, describe = true): unknown => {
+  if (!Predicate.isObject(value)) return value;
+  const source = compactNumericBounds(value);
+  const describeChildren = describe && !["anyOf", "oneOf", "allOf"].some((key) => key in source);
   const schema = Object.fromEntries(
-    Object.entries(value).map(([key, child]) => {
+    Object.entries(source).map(([key, child]) => {
       if (schemaMaps.has(key) && Predicate.isObject(child)) {
         return [
           key,
@@ -141,7 +143,7 @@ const compactNode = (input: unknown, describe = true): unknown => {
   );
   // Gemma's tool template omits unions, constants, and patterns but renders descriptions.
   // Derive its guidance from the canonical schema; decoding still enforces the original contract.
-  const constraints = describe ? constraintDescription(value) : "";
+  const constraints = describe ? constraintDescription(source) : "";
   if (constraints !== "") {
     schema.description = [schema.description, constraints].filter(Boolean).join("\n");
   }

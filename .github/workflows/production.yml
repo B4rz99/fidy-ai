@@ -306,7 +306,7 @@ jobs:
 
       - name: Probe production edge without valid User or provider authority
         working-directory: infra/cloudflare
-        run: bun ./verify-edge-smoke.ts
+        run: bun verify-production-smoke.ts promoted
 
       - name: Retire obsolete resources after verified promotion
         if: ${{ success() && steps.post_smoke.outcome == 'success' }}

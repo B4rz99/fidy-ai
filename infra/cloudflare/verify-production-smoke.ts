@@ -124,9 +124,11 @@ const awaitSyntheticWork = Effect.fn(function* (
 
 const checkEdge = Effect.fn(function* (
   config: RunnerConfig,
-  headers: Readonly<Record<string, string>>
+  headers: Readonly<Record<string, string>>,
+  outcome: "passed" | "deferred-d1-quota"
 ) {
   const result = yield* verifyEdgeSmoke({
+    d1QuotaVerified: outcome === "deferred-d1-quota",
     probe: ({ method, path, headers: probeHeaders }) =>
       Effect.gen(function* () {
         const response = yield* callEdge(
@@ -136,11 +138,14 @@ const checkEdge = Effect.fn(function* (
         );
         return response;
       }),
-    candidate: Option.some({
-      proof: config.SMOKE_PROOF,
-      override: headers["cloudflare-workers-version-overrides"] ?? "",
-      publicVersionId: config.PUBLIC_VERSION_ID,
-    }),
+    candidate: Option.map(
+      Option.fromNullishOr(headers["cloudflare-workers-version-overrides"]),
+      (override) => ({
+        proof: config.SMOKE_PROOF,
+        override,
+        publicVersionId: config.PUBLIC_VERSION_ID,
+      })
+    ),
   }).pipe(
     Effect.mapError(
       (failure) =>
@@ -238,7 +243,7 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
         })
     )
   );
-  yield* checkEdge(config, headers);
+  yield* checkEdge(config, headers, candidate);
   // A previous public Worker cannot decode a newly introduced quota stage. Its exact
   // pairing was already verified above without touching D1.
   if (candidate === "deferred-d1-quota") {
@@ -294,6 +299,7 @@ export const verifyPromotedSmoke = Effect.fn(function* (env: unknown) {
     }
   );
   if (outcome === "deferred-d1-quota") yield* verifyReadOnlySmokeRouting(env, "promoted");
+  yield* checkEdge(config, smokeHeaders({ config, publicVersion: Option.none() }), outcome);
   return outcome;
 });
 
@@ -329,6 +335,7 @@ if (import.meta.main) {
         publicVersionId: smokeEnvironment.PUBLIC_VERSION_ID,
         coreVersionId: smokeEnvironment.CORE_VERSION_ID,
         synthetic: result.value,
+        oauthAvailability: result.value,
       })
     );
   }
@@ -342,7 +349,7 @@ if (import.meta.main) {
   if (passed) {
     message =
       result.value === "deferred-d1-quota"
-        ? "Production identity, routing and edge verification passed; D1 synthetic work deferred: daily quota exhausted.\n"
+        ? "Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.\n"
         : "Production smoke passed.\n";
   }
   await Bun.write(passed ? Bun.stdout : Bun.stderr, message);

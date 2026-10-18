@@ -51,6 +51,7 @@ it.effect("overlaps independent edge probes with at most four requests in flight
     let maximumActive = 0;
     let completed = 0;
     yield* verifyEdgeSmoke({
+      d1QuotaVerified: false,
       candidate: Option.none(),
       probe: ({ path, headers }) =>
         Effect.gen(function* () {
@@ -83,6 +84,7 @@ it.effect(
       let started = 0;
       let closed = 0;
       const outcome = yield* verifyEdgeSmoke({
+        d1QuotaVerified: false,
         candidate: Option.some({
           proof: "reserved-proof",
           override: "candidate",
@@ -122,6 +124,7 @@ it.effect("refuses missing OAuth discovery and unsafe MCP exposure before promot
     for (const fault of faults) {
       let inspected = false;
       const outcome = yield* verifyEdgeSmoke({
+        d1QuotaVerified: false,
         candidate: Option.none(),
         probe: ({ path, headers }) => {
           if (path === fault.path) {
@@ -200,6 +203,7 @@ it.effect("aborts every unconsumed native edge response on success and mismatch"
         { preconnect: globalThis.fetch.preconnect }
       );
       const outcome = yield* verifyEdgeSmoke({
+        d1QuotaVerified: false,
         probe: productionProbe,
         candidate: Option.none(),
       }).pipe(
@@ -231,6 +235,7 @@ describe("production edge smoke", () => {
           headers: Readonly<Record<string, string>>;
         }> = [];
         yield* verifyEdgeSmoke({
+          d1QuotaVerified: false,
           probe: (input) => {
             observed.push(input);
             return Effect.succeed(respond(expectedStatus(input.path, input.headers)));
@@ -272,6 +277,7 @@ describe("production edge smoke", () => {
         const healthHasNoProof: Array<boolean> = [];
         const result = yield* Effect.exit(
           verifyEdgeSmoke({
+            d1QuotaVerified: false,
             probe: ({ path, headers }) => {
               if (path === "/health") {
                 healthHasNoProof.push(headers["x-fidy-smoke-proof"] === undefined);
@@ -301,6 +307,7 @@ describe("production edge smoke", () => {
       const healthHeaders: Array<boolean> = [];
       const result = yield* Effect.exit(
         verifyEdgeSmoke({
+          d1QuotaVerified: false,
           probe: ({ path, headers }) => {
             if (path === "/health") {
               healthHeaders.push(headers["x-fidy-smoke-proof"] === undefined);
@@ -336,7 +343,11 @@ describe("production edge smoke", () => {
         ];
         for (const response of challenges) {
           const result = yield* Effect.exit(
-            verifyEdgeSmoke({ probe: () => Effect.succeed(response), candidate: Option.none() })
+            verifyEdgeSmoke({
+              probe: () => Effect.succeed(response),
+              candidate: Option.none(),
+              d1QuotaVerified: false,
+            })
           );
           expect(result._tag).toBe("Failure");
         }
@@ -350,6 +361,7 @@ it.effect(
     Effect.gen(function* () {
       const result = yield* Effect.exit(
         verifyEdgeSmoke({
+          d1QuotaVerified: false,
           candidate: Option.none(),
           probe: ({ path, headers }) => {
             const response = respond(expectedStatus(path, headers));
@@ -360,4 +372,56 @@ it.effect(
       );
       expect(result._tag).toBe("Failure");
     })
+);
+
+it.effect("defers only D1-dependent OAuth availability after confirmed quota exhaustion", () =>
+  Effect.gen(function* () {
+    yield* verifyEdgeSmoke({
+      candidate: Option.none(),
+      d1QuotaVerified: true,
+      probe: ({ path, headers }) =>
+        Effect.succeed(
+          respond(
+            headers.origin === undefined &&
+              [
+                "/.well-known/oauth-protected-resource/mcp",
+                "/.well-known/oauth-authorization-server",
+                "/oauth/authorize",
+                "/oauth/register",
+                "/oauth/token",
+                "/mcp",
+              ].includes(path)
+              ? 503
+              : expectedStatus(path, headers)
+          )
+        ),
+    });
+    for (const [path, status, headers, confirmed] of [
+      ["/.well-known/oauth-protected-resource/mcp", 503, safeHeaders, false],
+      ["/.well-known/oauth-protected-resource/mcp", 500, safeHeaders, true],
+      ["/categories", 503, safeHeaders, true],
+      ["/mcp", 503, safeHeaders, true],
+      ["/.well-known/oauth-protected-resource/mcp", 401, safeHeaders, true],
+      [
+        "/.well-known/oauth-protected-resource/mcp",
+        503,
+        { ...safeHeaders, "cache-control": "public" },
+        true,
+      ],
+    ] as const) {
+      const result = yield* Effect.exit(
+        verifyEdgeSmoke({
+          candidate: Option.none(),
+          d1QuotaVerified: confirmed,
+          probe: (request) =>
+            Effect.succeed(
+              request.path === path
+                ? respond(status, headers)
+                : respond(expectedStatus(request.path, request.headers))
+            ),
+        })
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+    }
+  })
 );

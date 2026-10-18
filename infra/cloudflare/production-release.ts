@@ -107,6 +107,7 @@ const SmokeAttestation = Schema.Struct({
   publicVersionId: VersionId,
   coreVersionId: VersionId,
   synthetic: Schema.Literals(["passed", "deferred-d1-quota"]),
+  oauthAvailability: Schema.Literals(["passed", "deferred-d1-quota"]),
 });
 const healthSchema = Schema.Struct({
   status: Schema.Literal("available"),

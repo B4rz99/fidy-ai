@@ -19,7 +19,7 @@ describe("Production release workflow policy", () => {
     const upload = workflow.indexOf("bun production-resources.ts upload");
     const promote = workflow.indexOf("bun production-release.ts promote");
     const postSmoke = workflow.indexOf("id: post_smoke");
-    const edge = workflow.indexOf("bun ./verify-edge-smoke.ts");
+    const edge = workflow.lastIndexOf("bun verify-production-smoke.ts promoted");
     const retire = workflow.indexOf("bun production-resources.ts retire");
     const drift = workflow.indexOf("- name: Reject post-deployment Cloudflare drift");
     expect(upload).toBeGreaterThan(0);
@@ -227,7 +227,10 @@ describe("Production release workflow policy", () => {
 
   it("probes normal traffic before guarded rollback and alerts when release recovery fails", () => {
     const promote = workflow.indexOf("bun production-release.ts promote");
-    const probe = workflow.lastIndexOf("bun verify-production-smoke.ts promoted");
+    const probe = workflow.indexOf(
+      "bun verify-production-smoke.ts promoted",
+      workflow.indexOf("id: post_smoke")
+    );
     const rollback = workflow.indexOf("bun production-release.ts rollback");
     const alert = workflow.indexOf("Email operator if deployment failed");
     expect(promote).toBeGreaterThan(0);
@@ -273,7 +276,7 @@ describe("Production release workflow policy", () => {
   it("checks bounded, rejected machine requests only after the deployed topology is available", () => {
     const deploy = workflow.indexOf("bun production-resources.ts upload");
     const topology = workflow.indexOf("Verify the migrated public topology");
-    const smoke = workflow.indexOf("bun ./verify-edge-smoke.ts");
+    const smoke = workflow.lastIndexOf("bun verify-production-smoke.ts promoted");
     const record = workflow.indexOf("Record the release");
 
     expect(deploy).toBeLessThan(topology);

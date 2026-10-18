@@ -295,6 +295,13 @@ const runCheck = (check: Check): Effect.Effect<void> =>
 await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
+    if (group === "static") {
+      const [install, ...validation] = groupChecks;
+      return Effect.gen(function* () {
+        if (install !== undefined) yield* runCheck(install);
+        yield* Effect.forEach(validation, runCheck, { concurrency: 2, discard: true });
+      });
+    }
     return Effect.forEach(groupChecks, runCheck, {
       concurrency: group === "browser" || group === "unit" ? 2 : 1,
       discard: true,

@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { Option } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { PATLifetimeDays, PATRecipientLabel, PATScopes } from "@/transport/client";

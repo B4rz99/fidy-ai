@@ -1,10 +1,12 @@
 import { ResourceLimited } from "@fidy/server/client";
-import type { APIRequestContext, Page, Response } from "@playwright/test";
+import type { APIRequestContext, Frame, Page, Response } from "@playwright/test";
 import { Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 
 type ClockScope = {
   active: boolean;
+  generation: number;
+  readonly navigation: (frame: Frame) => void;
   readonly tasks: Set<Promise<void>>;
   readonly failures: unknown[];
   readonly response: (response: Response) => void;
@@ -31,6 +33,19 @@ export const advanceNativeRetry = ({
     .then((response) => {
       if (response.status() !== successStatus) throw new Error("Acceptance clock advance failed");
     });
+
+/** Advance an explicitly observed polling delay in the native fixture and the browser. */
+export const advanceAcceptancePoll = ({
+  page,
+  milliseconds,
+}: Readonly<{ page: Page; milliseconds: number }>): Promise<void> =>
+  page.request
+    .post(`${operator}/clock/advance`, { data: { milliseconds } })
+    .then((response) => {
+      if (response.status() !== successStatus) throw new Error("Acceptance clock advance failed");
+    })
+    .then(() => page.evaluate(() => Promise.resolve()))
+    .then(() => page.clock.fastForward(milliseconds));
 
 const advanceBrowserRetry = (response: Response, page: Page, scope: ClockScope): Promise<void> => {
   if (
@@ -68,6 +83,7 @@ export const disposeAcceptanceClock = (page: Page): Promise<void> => {
   if (scope === undefined) return Promise.resolve();
   scope.active = false;
   page.off("response", scope.response);
+  page.off("framenavigated", scope.navigation);
   installed.delete(page);
   return Promise.all(scope.tasks).then(() => {
     if (scope.failures.length > 0) {
@@ -81,13 +97,23 @@ export const installAcceptanceClock = (page: Page): Promise<void> => {
   if (installed.has(page)) return Promise.resolve();
   const scope: ClockScope = {
     active: true,
+    generation: 0,
+    navigation: (frame) => {
+      if (frame === page.mainFrame()) scope.generation++;
+    },
     tasks: new Set(),
     failures: [],
     response: (response) => {
+      const generation = scope.generation;
       const task = Promise.resolve()
         .then(() => advanceBrowserRetry(response, page, scope))
         .catch((cause: unknown) => {
-          if (scope.active && !page.isClosed() && response.request().failure() === null) {
+          if (
+            scope.active &&
+            generation === scope.generation &&
+            !page.isClosed() &&
+            response.request().failure() === null
+          ) {
             scope.failures.push(cause);
           }
         })
@@ -98,6 +124,9 @@ export const installAcceptanceClock = (page: Page): Promise<void> => {
   installed.set(page, scope);
   return page.clock
     .install()
-    .then(() => page.on("response", scope.response))
+    .then(() => {
+      page.on("response", scope.response);
+      page.on("framenavigated", scope.navigation);
+    })
     .then(() => undefined);
 };

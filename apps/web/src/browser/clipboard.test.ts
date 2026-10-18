@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { Deferred, Effect, Exit, Option, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { it as effectIt, expect } from "@effect/vitest";

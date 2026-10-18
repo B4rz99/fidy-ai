@@ -4,6 +4,9 @@ inputs:
   cache:
     description: Restore the package archive cache before the frozen install.
     default: "false"
+  scope:
+    description: Select workspace, server-tests, or unit-tests dependencies from the frozen lock.
+    default: workspace
   cli-release:
     description: Install only CLI production dependencies, without development lifecycle scripts.
     default: "false"
@@ -29,9 +32,12 @@ runs:
       shell: bash
       env:
         CLI_RELEASE: ${{ inputs.cli-release }}
+        INSTALL_SCOPE: ${{ inputs.scope }}
       run: |
         if [[ "$CLI_RELEASE" == true ]]; then
           bash scripts/install-workspace.sh --cli-release
-        else
+        elif [[ "$INSTALL_SCOPE" == workspace ]]; then
           bash scripts/install-workspace.sh
+        else
+          bash scripts/install-workspace.sh "--$INSTALL_SCOPE"
         fi

@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Exit, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";

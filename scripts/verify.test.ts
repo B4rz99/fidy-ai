@@ -214,3 +214,71 @@ done
     }
   })
 );
+
+it.effect(
+  "installs static prerequisites before overlapping independent checks and retains failures",
+  () =>
+    Effect.gen(function* () {
+      const temporary = Bun.spawnSync(["mktemp", "-d"]);
+      expect(temporary.exitCode).toBe(0);
+      const directory = new TextDecoder().decode(temporary.stdout).trim();
+      fixtures.push(directory);
+      yield* Effect.tryPromise({
+        try: () =>
+          Bun.write(
+            `${directory}/bun`,
+            `#!/usr/bin/env bash
+set -eu
+if [[ "$*" == 'install --frozen-lockfile' ]]; then
+  touch "$STATIC_RENDEZVOUS/installed"
+  exit 0
+fi
+[[ -f "$STATIC_RENDEZVOUS/installed" ]] || exit 2
+suite=other
+if [[ "$*" == *lint:suppressions* ]]; then suite=suppressions; fi
+if [[ "$*" == *lint:type-aware* ]]; then suite=types; fi
+if [[ "$suite" == other ]]; then exit 0; fi
+touch "$STATIC_RENDEZVOUS/$suite"
+for attempt in {1..100}; do
+  if [[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/types" ]]; then break; fi
+  sleep 0.01
+done
+[[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/types" ]] || exit 3
+[[ "\${FAIL_STATIC:-}" != "$suite" ]] || exit 1
+`
+          ),
+        catch: () => new FixtureUnavailable(),
+      });
+      expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
+      for (const failure of ["", "suppressions", "types"]) {
+        Bun.spawnSync([
+          "rm",
+          "-f",
+          `${directory}/installed`,
+          `${directory}/suppressions`,
+          `${directory}/types`,
+        ]);
+        const result = Bun.spawnSync(
+          [
+            process.execPath,
+            Bun.fileURLToPath(new URL("./verify.ts", import.meta.url)),
+            "--group",
+            "static",
+          ],
+          {
+            env: {
+              ...Bun.env,
+              STATIC_RENDEZVOUS: directory,
+              FAIL_STATIC: failure,
+              PATH: `${directory}:${Bun.env.PATH}`,
+            },
+          }
+        );
+        expect(result.exitCode).toBe(failure === "" ? 0 : 1);
+        if (failure !== "")
+          {expect(new TextDecoder().decode(result.stderr)).toContain(
+            failure === "types" ? "oxlint type-aware" : "Lint suppressions"
+          );}
+      }
+    })
+);

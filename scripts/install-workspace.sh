@@ -6,7 +6,9 @@ case "$*" in
   '') ;;
   --ignore-scripts) install_arguments+=(--ignore-scripts) ;;
   --cli-release) install_arguments+=(--production --ignore-scripts --filter @fidy/cli) ;;
-  *) printf 'Use --ignore-scripts or --cli-release with the frozen workspace installer.\n' >&2; exit 2 ;;
+  --server-tests) install_arguments+=(--filter @fidy/server) ;;
+  --unit-tests) install_arguments+=(--filter @fidy/server --filter @fidy/cli --filter @fidy/web) ;;
+  *) printf 'Use --ignore-scripts, --cli-release, --server-tests, or --unit-tests with the frozen workspace installer.\n' >&2; exit 2 ;;
 esac
 if command -v sha256sum >/dev/null; then
   actual="$(sha256sum bun.lock | cut -d ' ' -f 1)"

@@ -114,6 +114,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+        with:
+          scope: unit-tests
       - name: Unit and artifact validation
         run: bun run verify -- --group unit
       - name: Preserve core coverage evidence
@@ -144,6 +146,7 @@ jobs:
       - uses: ./.github/actions/bun-install
         with:
           save-cache: "false"
+          scope: server-tests
       - name: Cloudflare adapter validation
         env:
           CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
@@ -237,27 +240,33 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
-      - name: Install Chromium system dependencies
-        run: time sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
       - name: Install Chromium headless shell
         env:
           BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
         run: |
           echo "Browser cache hit: $BROWSER_CACHE_HIT"
           time bunx --bun playwright install --only-shell chromium
+      - name: Verify Chromium system dependencies
+        run: |
+          node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();' ||
+            sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
       - name: Static-shell browser validation
         env:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
-          sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
           export TMPDIR="$(mktemp -d /dev/shm/fidy-browser.XXXXXX)"
           trap 'rm -rf "$TMPDIR"' EXIT
-          dbus-run-session -- bash -euc '
-            printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
-            if [[ "$BROWSER_TEST_SHARD" == 1/* ]]; then bun run --cwd apps/cli test:native; fi
+          if [[ "$BROWSER_TEST_SHARD" == 1/* ]]; then
+            sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
+            dbus-run-session -- bash -euc '
+              printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
+              bun run --cwd apps/cli test:native
+              bun run verify -- --group browser
+            '
+          else
             bun run verify -- --group browser
-          '
+          fi
       - name: Preserve browser timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -303,12 +312,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Semgrep SAST
-        uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1
-        with:
-          config: >-
-            p/owasp-top-ten
-            p/typescript
-            p/secrets
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b \
+            semgrep scan --error --strict --metrics=off --baseline-commit "$BASE_SHA" \
+            --config p/owasp-top-ten --config p/typescript --config p/secrets --exclude .repos .
       - name: Fluid Attacks SAST
         run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /src/.fluidattacks/sast.yaml
 

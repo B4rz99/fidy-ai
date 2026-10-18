@@ -91,3 +91,25 @@ it.effect("installs only the frozen CLI production closure without development h
     );
   })
 );
+
+it.effect(
+  "keeps frozen native and unit test closures while preserving ordinary lifecycle scripts",
+  () =>
+    Effect.gen(function* () {
+      for (const [scope, filters] of [
+        ["--server-tests", ["@fidy/server"]],
+        ["--unit-tests", ["@fidy/server", "@fidy/cli", "@fidy/web"]],
+      ] as const) {
+        const result = yield* runInstaller(authorizedLock, "2026-10-10", [scope]);
+        expect(result.exitCode).toBe(0);
+        expect(new TextDecoder().decode(result.stdout)).toBe(
+          [
+            "install",
+            "--frozen-lockfile",
+            ...filters.flatMap((filter) => ["--filter", filter]),
+            "",
+          ].join("\n")
+        );
+      }
+    })
+);

@@ -1,6 +1,6 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import {
   installTestSchema,
   installTestSchemaWithPrefix,
@@ -438,12 +438,23 @@ it.live(
           yield* wait(() => db.prepare("SELECT count(*) FROM transport_probe").first())
         ).toEqual({ "count(*)": 1 });
         yield* wait(() =>
-          expect(db.prepare("SELECT missing FROM transport_probe").all()).rejects.toMatchObject({
-            message: expect.stringContaining("D1_ERROR: no such column: missing"),
-            cause: expect.objectContaining({
-              message: expect.stringContaining("no such column: missing"),
-            }),
-          })
+          db
+            .prepare("SELECT missing FROM transport_probe")
+            .all()
+            .then(
+              () => {
+                throw new Error("Invalid native SQL unexpectedly succeeded");
+              },
+              (cause: unknown) => {
+                expect(Predicate.isError(cause)).toBe(true);
+                if (!Predicate.isError(cause)) throw cause;
+                expect(cause.message).toContain("D1_ERROR: no such column: missing");
+                expect(Predicate.isError(cause.cause)).toBe(true);
+                if (Predicate.isError(cause.cause)) {
+                  expect(cause.cause.message).toContain("no such column: missing");
+                }
+              }
+            )
         );
         expect(() => db.prepare("SELECT ?").bind(undefined)).toThrow("D1_TYPE_ERROR");
         const session = db.withSession("first-primary");

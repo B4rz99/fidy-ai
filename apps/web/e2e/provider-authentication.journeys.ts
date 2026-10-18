@@ -1,5 +1,5 @@
 import { playwright } from "./playwright-runtime";
-import { installAcceptanceClock } from "./acceptance-clock";
+import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
 import {
   boundSessionRequests,
   reloadTransactionsThroughCore,
@@ -476,11 +476,12 @@ const retryPendingProvider = Effect.fn(function* (page: Page) {
   );
   expect(yield* Effect.tryPromise(() => popup.evaluate(() => window.opener === null))).toBe(true);
   for (const _ of [0, 1]) {
-    yield* Effect.tryPromise(() =>
-      page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/status"), {
-        timeout: 5_000,
-      })
+    const status = page.waitForResponse(
+      (response) => new URL(response.url()).pathname.endsWith("/status"),
+      { timeout: 5_000 }
     );
+    yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1_000 }));
+    yield* Effect.tryPromise(() => status);
   }
   yield* Effect.tryPromise(() => expect(page.getByText("Esperando confirmación…")).toBeVisible());
   return popup;
@@ -508,6 +509,7 @@ export const denialAndCancellationJourney = ({
   }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route: Route) =>
           denyProvider(configuration, route)

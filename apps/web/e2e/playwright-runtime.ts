@@ -7,7 +7,14 @@ export const playwright: typeof runtime = {
   ...runtime,
   test: runtime.test.extend<{ acceptanceClockScope: void }>({
     acceptanceClockScope: [
-      ({ page }, use): Promise<void> => use().finally(() => disposeAcceptanceClock(page)),
+      ({ page }, use): Promise<void> =>
+        use().then(
+          () => disposeAcceptanceClock(page),
+          (cause: unknown) =>
+            disposeAcceptanceClock(page).then(() => {
+              throw cause;
+            })
+        ),
       { auto: true },
     ],
   }),

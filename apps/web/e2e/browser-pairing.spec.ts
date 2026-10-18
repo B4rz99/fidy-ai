@@ -1,5 +1,5 @@
 import { playwright } from "./playwright-runtime";
-
+import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { installUser } from "./http-fixtures";
@@ -479,6 +479,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* wait(installAcceptanceClock(page));
       yield* wait(page.goto("/auth/pair"));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       const code = yield* wait(visiblePairingCode(page));
@@ -486,6 +487,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
         request.post(`http://127.0.0.1:4175/approve?code=${code}&pairing=true`)
       );
       expect(approval.status()).toBe(noContentStatus);
+      yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       yield* wait(
         expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
@@ -527,12 +529,14 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* wait(installAcceptanceClock(page));
       const pending = page.waitForResponse(
         (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
       );
       yield* wait(page.goto("/auth/pair"));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       const code = yield* wait(visiblePairingCode(page));
+      yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
       yield* wait(pending);
       const signed = yield* wait(
         (yield* wait(request.get("http://127.0.0.1:4175/assertion"))).text()
@@ -544,6 +548,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
         });
       expect((yield* wait(decision())).status()).toBe(successStatus);
       expect((yield* wait(decision())).status()).toBe(invalidStatus);
+      yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       const recovered = yield* wait(
         boundSessionRequests(page.request).get("https://127.0.0.1:4174/user", {

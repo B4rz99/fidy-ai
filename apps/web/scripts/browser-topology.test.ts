@@ -33,8 +33,15 @@ it("partitions the complete browser suite across both runners without dropping o
     cases(listTests("playwright.config.ts", "shared", [`--shard=${shard}`]))
   );
   for (const shard of shards) expect(shard.length).toBeGreaterThan(0);
-  expect(shards.flat().sort()).toEqual([...complete].sort());
-  expect(new Set(shards.flat()).size).toBe(complete.length);
+  const browser = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    tests.filter((line) => line.includes("[browser]"));
+  const admission = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    tests.filter((line) => line.includes("[admission]") || line.includes("[performance]"));
+  // Every runner proves real admission before starting its own concurrent browser shard.
+  expect(admission(complete)).toHaveLength(3);
+  for (const shard of shards) expect(admission(shard)).toEqual(admission(complete));
+  expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
+  expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);
 });
 
 it("selects only the native CLI journey for its isolated public/Core and Audit fixture", () => {

@@ -19,9 +19,17 @@ export default defineConfig({
   projects: [
     { name: "admission", testMatch: "acceptance-clock.spec.ts" },
     {
+      name: "performance",
+      testMatch: "needs-review.spec.ts",
+      grep: /returns from .+ with its review form and original already available/u,
+      dependencies: ["admission"],
+      workers: 1,
+    },
+    {
       name: "browser",
       testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
-      dependencies: ["admission"],
+      dependencies: ["performance"],
+      grepInvert: /returns from .+ with its review form and original already available/u,
     },
   ],
   fullyParallel: false,

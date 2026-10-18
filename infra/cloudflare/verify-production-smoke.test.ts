@@ -9,6 +9,7 @@ import {
   Option,
   Predicate,
   Schema,
+  type Scope,
 } from "effect";
 import { it as effectIt } from "@effect/vitest";
 import { TestClock } from "effect/testing";
@@ -23,6 +24,15 @@ import {
 } from "./verify-production-smoke";
 
 afterEach(() => vi.restoreAllMocks());
+
+const advanceSmokeClock = <A, E, R>(
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R | Scope.Scope> =>
+  Effect.gen(function* () {
+    const pending = yield* Effect.forkScoped(work);
+    yield* TestClock.adjust("45 seconds");
+    return yield* Fiber.join(pending);
+  });
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const previousRevision = "fedcba9876543210fedcba9876543210fedcba98";
@@ -149,68 +159,71 @@ const heldSmokeBody = (
   );
 for (const phase of ["readiness", "synthetic"] as const) {
   for (const hostileBody of ["overflow", "malformed"] as const) {
-    it(
+    effectIt.effect(
       `withholds attestation and further work after ${hostileBody} ${phase} bytes`,
       () =>
-        Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              let attested = false;
-              let syntheticCalls = 0;
-              const mockedFetch = vi
-                .spyOn(globalThis, "fetch")
-                .mockImplementation((input, init) => {
-                  const request = new Request(input, init);
-                  if (request.method === "POST") syntheticCalls++;
-                  return Promise.resolve(
-                    new Response(
-                      hostileBody === "overflow" ? "x".repeat(4097) : "private-provider-body",
-                      {
-                        headers: {
-                          ...securityHeaders,
-                          "x-fidy-smoke-worker-version": intermediateRequest(request)
-                            ? publicStable
-                            : publicCandidate,
-                        },
-                      }
-                    )
-                  );
-                });
-              try {
-                const services = yield* Layer.build(FetchHttpClient.layer);
-                const exit = yield* Effect.exit(
-                  (phase === "readiness"
-                    ? verifyCandidateSmoke(config)
-                    : verifyProductionSmoke(config)
-                  ).pipe(
-                    Effect.andThen(
-                      Effect.sync(() => {
-                        attested = true;
-                      })
-                    ),
-                    Effect.provideService(
-                      HttpClient.HttpClient,
-                      Context.get(services, HttpClient.HttpClient)
-                    ),
-                    Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
-                  )
-                );
-                expect(Exit.isFailure(exit)).toBe(true);
-                expect(attested).toBe(false);
-                if (phase === "readiness") expect(syntheticCalls).toBe(0);
-                const error = Exit.isFailure(exit)
-                  ? Cause.findErrorOption(exit.cause)
-                  : Option.none();
-                expect(
-                  Option.isSome(error) && "reason" in error.value && error.value.reason
-                ).not.toContain("private-provider-body");
-              } finally {
-                mockedFetch.mockRestore();
-              }
-            })
-          )
-        ),
-      40_000
+        Effect.gen(function* () {
+          let attested = false;
+          let syntheticCalls = 0;
+          const attempts = new Map<boolean, number>();
+          const firstRequest = yield* Deferred.make<void>();
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            Deferred.doneUnsafe(firstRequest, Effect.void);
+            const request = new Request(input, init);
+            if (request.method === "POST") syntheticCalls++;
+            const intermediate = intermediateRequest(request);
+            attempts.set(intermediate, (attempts.get(intermediate) ?? 0) + 1);
+            return Promise.resolve(
+              new Response(
+                hostileBody === "overflow" ? "x".repeat(4097) : "private-provider-body",
+                {
+                  headers: {
+                    ...securityHeaders,
+                    "x-fidy-smoke-worker-version": intermediateRequest(request)
+                      ? publicStable
+                      : publicCandidate,
+                  },
+                }
+              )
+            );
+          });
+          try {
+            const services = yield* Layer.build(FetchHttpClient.layer);
+            const pending = yield* Effect.exit(
+              (phase === "readiness"
+                ? verifyCandidateSmoke(config)
+                : verifyProductionSmoke(config)
+              ).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    attested = true;
+                  })
+                ),
+                Effect.provideService(
+                  HttpClient.HttpClient,
+                  Context.get(services, HttpClient.HttpClient)
+                ),
+                Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+              )
+            ).pipe(Effect.forkScoped);
+            yield* Deferred.await(firstRequest);
+            yield* TestClock.adjust("45 seconds");
+            const exit = yield* Fiber.join(pending);
+            expect(Exit.isFailure(exit)).toBe(true);
+            expect(attested).toBe(false);
+            if (phase === "readiness") {
+              expect(syntheticCalls).toBe(0);
+              expect(attempts.size).toBe(2);
+              expect(Math.max(...attempts.values())).toBe(hostileBody === "malformed" ? 20 : 1);
+            }
+            const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+            expect(
+              Option.isSome(error) && "reason" in error.value && error.value.reason
+            ).not.toContain("private-provider-body");
+          } finally {
+            mockedFetch.mockRestore();
+          }
+        }).pipe(Effect.scoped)
     );
   }
 }
@@ -438,61 +451,67 @@ describe("read-only routing readiness", () => {
         })
       )
     ));
-  it.each(routingModes)("waits for both Worker identities without synthetic work (%s)", (mode) =>
-    Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          let attempts = 0;
-          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-            const request = new Request(input, init);
-            expect(request.method).toBe("GET");
-            expect(new URL(request.url).searchParams.get("readiness")).toBe("1");
-            expect(request.headers.has("cloudflare-workers-version-overrides")).toBe(
-              mode !== "promoted"
-            );
-            const expectedVersion = mode === "intermediate" ? publicStable : publicCandidate;
-            if (mode !== "promoted") {
-              expect(request.headers.get("cloudflare-workers-version-overrides")).toBe(
-                `fidy-public="${expectedVersion}", fidy-core="${coreCandidate}"`
+  effectIt.effect.each(routingModes)(
+    "waits for both Worker identities without synthetic work (%s)",
+    (mode) =>
+      advanceSmokeClock(
+        Effect.scoped(
+          Effect.gen(function* () {
+            let attempts = 0;
+            const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+              const request = new Request(input, init);
+              expect(request.method).toBe("GET");
+              expect(new URL(request.url).searchParams.get("readiness")).toBe("1");
+              expect(request.headers.has("cloudflare-workers-version-overrides")).toBe(
+                mode !== "promoted"
               );
-            }
-            attempts++;
-            if (attempts === 1) {
-              return Promise.resolve(new Response(null, { status: 503, headers: securityHeaders }));
-            }
-            return Promise.resolve(
-              Response.json(
-                {
-                  status: "pending",
-                  public: {
-                    gitRevision: mode === "intermediate" ? previousRevision : revision,
-                    contractDigest: digest,
-                    workerVersionId: expectedVersion,
+              const expectedVersion = mode === "intermediate" ? publicStable : publicCandidate;
+              if (mode !== "promoted") {
+                expect(request.headers.get("cloudflare-workers-version-overrides")).toBe(
+                  `fidy-public="${expectedVersion}", fidy-core="${coreCandidate}"`
+                );
+              }
+              attempts++;
+              if (attempts === 1) {
+                return Promise.resolve(
+                  new Response(null, { status: 503, headers: securityHeaders })
+                );
+              }
+              return Promise.resolve(
+                Response.json(
+                  {
+                    status: "pending",
+                    public: {
+                      gitRevision: mode === "intermediate" ? previousRevision : revision,
+                      contractDigest: digest,
+                      workerVersionId: expectedVersion,
+                    },
+                    core: {
+                      gitRevision: attempts === 2 ? previousRevision : revision,
+                      contractDigest: digest,
+                      workerVersionId: coreCandidate,
+                    },
+                    manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
                   },
-                  core: {
-                    gitRevision: attempts === 2 ? previousRevision : revision,
-                    contractDigest: digest,
-                    workerVersionId: coreCandidate,
-                  },
-                  manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
-                },
-                { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": expectedVersion } }
-              )
+                  {
+                    headers: { ...securityHeaders, "x-fidy-smoke-worker-version": expectedVersion },
+                  }
+                )
+              );
+            });
+            const services = yield* Layer.build(FetchHttpClient.layer);
+            yield* verifyReadOnlySmokeRouting(config, mode).pipe(
+              Effect.provideService(
+                HttpClient.HttpClient,
+                Context.get(services, HttpClient.HttpClient)
+              ),
+              Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
             );
-          });
-          const services = yield* Layer.build(FetchHttpClient.layer);
-          yield* verifyReadOnlySmokeRouting(config, mode).pipe(
-            Effect.provideService(
-              HttpClient.HttpClient,
-              Context.get(services, HttpClient.HttpClient)
-            ),
-            Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
-          );
-          expect(attempts).toBe(3);
-          mockedFetch.mockRestore();
-        })
+            expect(attempts).toBe(3);
+            mockedFetch.mockRestore();
+          })
+        )
       )
-    )
   );
 });
 
@@ -650,10 +669,10 @@ describe("intermediate production smoke", () => {
       )
     ));
 
-  it.each(["001", "secret-provider-body"])(
+  effectIt.effect.each(["001", "secret-provider-body"])(
     "bounds persistent pre-admission identity retries and reports only equality bits (%s)",
     (equality) =>
-      Effect.runPromise(
+      advanceSmokeClock(
         Effect.scoped(
           Effect.gen(function* () {
             const bodies: string[] = [];
@@ -858,10 +877,10 @@ describe("intermediate production smoke", () => {
         }
       })
     ));
-  it(
+  effectIt.effect(
     "refuses a stable-public override that actually reaches another public Worker",
     () =>
-      Effect.runPromise(
+      advanceSmokeClock(
         Effect.gen(function* () {
           const calls: string[] = [];
           const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {

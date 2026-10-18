@@ -154,3 +154,76 @@ exit "\${CHECK_EXIT_CODE:-0}"
       }
     })
 );
+
+it.effect(
+  "finishes static tool installation before overlapping checks and keeps failures required",
+  () =>
+    Effect.gen(function* () {
+      const temporary = Bun.spawnSync(["mktemp", "-d"]);
+      expect(temporary.exitCode).toBe(0);
+      const directory = new TextDecoder().decode(temporary.stdout).trim();
+      fixtures.push(directory);
+      yield* Effect.tryPromise({
+        try: () =>
+          Bun.write(
+            `${directory}/bun`,
+            `#!/usr/bin/env bash
+set -eu
+case "$*" in
+  'install --frozen-lockfile') touch "$STATIC_RENDEZVOUS/dependencies"; exit 0 ;;
+  'run format:check') touch "$STATIC_RENDEZVOUS/format"; exit 0 ;;
+esac
+[[ -f "$STATIC_RENDEZVOUS/dependencies" && -f "$STATIC_RENDEZVOUS/format" ]] || exit 2
+case "$*" in
+  'run lint:suppressions') marker=suppressions ;;
+  'run lint:type-aware') marker=lint ;;
+  *) printf 'CHECK %s\\n' "$*"; exit 0 ;;
+esac
+touch "$STATIC_RENDEZVOUS/$marker"
+for attempt in {1..100}; do
+  if [[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/lint" ]]; then break; fi
+  sleep 0.01
+done
+[[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/lint" ]] || exit 2
+[[ "$marker" != lint || "\${FAIL_STATIC:-}" != lint ]] || exit 1
+`
+          ),
+        catch: () => new FixtureUnavailable(),
+      });
+      expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
+      for (const failure of [undefined, "lint"]) {
+        const result = Bun.spawnSync(
+          [
+            process.execPath,
+            Bun.fileURLToPath(new URL("./verify.ts", import.meta.url)),
+            "--group",
+            "static",
+          ],
+          {
+            env: {
+              ...Bun.env,
+              STATIC_RENDEZVOUS: directory,
+              FAIL_STATIC: failure,
+              PATH: `${directory}:${Bun.env.PATH}`,
+            },
+          }
+        );
+        expect(result.exitCode).toBe(failure === undefined ? 0 : 1);
+        expect(new TextDecoder().decode(result.stdout)).toContain(
+          "CHECK run check:credential-evidence"
+        );
+        if (failure !== undefined) {
+          expect(new TextDecoder().decode(result.stderr)).toContain("oxlint type-aware");
+        }
+        expect(
+          Bun.spawnSync([
+            "rm",
+            `${directory}/dependencies`,
+            `${directory}/format`,
+            `${directory}/suppressions`,
+            `${directory}/lint`,
+          ]).exitCode
+        ).toBe(0);
+      }
+    })
+);

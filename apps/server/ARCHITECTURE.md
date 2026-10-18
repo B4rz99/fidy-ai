@@ -620,6 +620,10 @@ coordinators across cases; cached immutable setup data is not shared application
 and runtime-lifecycle evidence must exercise the actual boundaries rather than infer them from a
 faster ordinary fixture.
 
+Hosted Turn integration evidence is split into transport, statement, canonical-tool and continuity
+suites. Their private `agent/hosted-turn.test-fixture.ts` constructs the same native runtimes and
+registers cleanup separately in each test process; every case retains an isolated database.
+
 Verification combines dependency/publication checks, generated contracts, browser graph checks, and
 behavioral evidence. Passing a fake or portable test never establishes a production adapter's
 existence, durable guarantees, or launch readiness.

@@ -4823,7 +4823,7 @@ it("prefills independently known facts when a statement date is missing", () =>
     })
   ));
 
-it("physically erases expired drafts and suggestions without erasing another User's unexpired data", () =>
+it("a delayed hourly tick erases expired drafts and suggestions without erasing another User's unexpired data", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const runtime = yield* fromTestPromise(() => setup());
@@ -4860,13 +4860,14 @@ it("physically erases expired drafts and suggestions without erasing another Use
         { user_id: userA, drafts: 2, suggestions: 2 },
         { user_id: userB, drafts: 2, suggestions: 2 },
       ]);
-      vi.setSystemTime(started + dayMilliseconds + 1);
+      const cleanupAt = started + dayMilliseconds + 1;
+      vi.setSystemTime(cleanupAt);
       yield* fromTestPromise(() =>
         coreWorker.scheduled(
           {
             cron: "* * * * *",
             noRetry: () => undefined,
-            scheduledTime: started + dayMilliseconds + 1,
+            scheduledTime: Math.floor(cleanupAt / 3_600_000) * 3_600_000,
           },
           coreEnvironment(runtime)
         )

@@ -28,7 +28,7 @@ it(
           })
         );
         yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
-        let current = 3_005_000;
+        let current = 86_405_000;
         const live = yield* Clock.Clock;
         const clock: Clock.Clock = {
           currentTimeMillis: Effect.sync(() => current),
@@ -55,7 +55,11 @@ it(
         const queue: Queue = {
           send: () => {
             queueOffers++;
-            return Promise.resolve({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } });
+            return db
+              .prepare("UPDATE operational_canary SET last_succeeded_ms = ?")
+              .bind(current)
+              .run()
+              .then(() => ({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } }));
           },
           sendBatch: unexpected,
           metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
@@ -88,17 +92,18 @@ it(
         yield* tick;
         const warm = measured.cost();
         const warmOffers = queueOffers;
-        for (let minute = 1; minute <= 5; minute++) {
+        for (let minute = 1; minute <= 60; minute++) {
           current += 60_000;
           yield* tick;
         }
         const total = measured.cost();
         // Account for two downstream canary executions (up to four indexed writes each).
         const canaryWrites = (queueOffers - warmOffers) * 8;
-        const dailyWrites = (total.rowsWritten - warm.rowsWritten + canaryWrites) * 288;
+        const dailyWrites =
+          (total.rowsWritten - warm.rowsWritten + canaryWrites) * 24 + warm.rowsWritten;
         expect(dailyWrites).toBeLessThan(10_000);
-        expect((total.rowsRead - warm.rowsRead) * 288).toBeLessThan(750_000);
-        expect(queueOffers - warmOffers).toBe(1);
+        expect((total.rowsRead - warm.rowsRead) * 24 + warm.rowsRead).toBeLessThan(750_000);
+        expect(queueOffers - warmOffers).toBe(12);
         expect(
           yield* Effect.tryPromise(() =>
             db.prepare("SELECT count(*) AS n FROM erasure_control_sweeps").first("n")
@@ -106,5 +111,5 @@ it(
         ).toBe(0);
       })
     ),
-  30_000
+  60_000
 );

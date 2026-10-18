@@ -1,5 +1,6 @@
 import { Cause, Effect, Exit } from "effect";
 import { type ScheduledActivity, ScheduledWorkFailed } from "./contract";
+import { activityDue } from "./internal/cadence";
 
 /**
  * Attempt independent activities in order and report a closed failure only after the last one.
@@ -21,3 +22,15 @@ export const executeSchedule = <E>(
     }
     if (failed) return yield* new ScheduledWorkFailed();
   });
+
+export const executeDueSchedule = <E>(
+  input: Readonly<{
+    activities: ReadonlyArray<ScheduledActivity<E>>;
+    nowEpochMs: number;
+  }>
+): Effect.Effect<void, ScheduledWorkFailed> =>
+  executeSchedule(
+    input.activities.filter(({ operation }) =>
+      activityDue({ operation, nowEpochMs: input.nowEpochMs })
+    )
+  );

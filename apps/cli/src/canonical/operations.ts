@@ -40,34 +40,42 @@ type OperationDescription = Readonly<{
   output: ReturnType<typeof Schema.toJsonSchemaDocument>;
 }>;
 
+const describeOperation = ({
+  operation,
+  scopes,
+}: Readonly<{
+  operation: (typeof operationCatalog.operations)[number];
+  scopes: ReadonlyArray<PATScope>;
+}>): OperationDescription => {
+  const schemas =
+    operation.id === atomicBatchOperation
+      ? projectAtomicBatchSchemas({
+          catalog: operationCatalog,
+          includeChild: (child) => eligibleOperation(child.id, scopes),
+        })
+      : { input: operation.input, output: operation.success };
+  const input = Schema.toJsonSchemaDocument(schemas.input);
+  const plan = deriveFlags(input);
+  return {
+    id: operation.id,
+    description: operation.description,
+    policy: operation.policy,
+    requiresInput: Option.isSome(operation.partialInput),
+    flags: plan.flags,
+    structured: plan.structured,
+    flagHelp,
+    input,
+    output: Schema.toJsonSchemaDocument(schemas.output),
+  };
+};
+
 /** Saved capabilities select presentation only; each invocation still requires live server authority. */
 export const discoverOperations = (
   scopes: ReadonlyArray<PATScope>
 ): ReadonlyArray<OperationDescription> =>
   operationCatalog.operations
     .filter((operation) => eligibleOperation(operation.id, scopes))
-    .map((operation) => {
-      const schemas =
-        operation.id === atomicBatchOperation
-          ? projectAtomicBatchSchemas({
-              catalog: operationCatalog,
-              includeChild: (child) => eligibleOperation(child.id, scopes),
-            })
-          : { input: operation.input, output: operation.success };
-      const input = Schema.toJsonSchemaDocument(schemas.input);
-      const plan = deriveFlags(input);
-      return {
-        id: operation.id,
-        description: operation.description,
-        policy: operation.policy,
-        requiresInput: Option.isSome(operation.partialInput),
-        flags: plan.flags,
-        structured: plan.structured,
-        flagHelp,
-        input,
-        output: Schema.toJsonSchemaDocument(schemas.output),
-      };
-    });
+    .map((operation) => describeOperation({ operation, scopes }));
 
 const loadCredential = Effect.fn(function* (dependencies: CanonicalDependencies) {
   const saved = yield* dependencies.store.load;
@@ -352,8 +360,10 @@ export const runOperationCommand = Effect.fn(function* (
     Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
   );
   const credential = yield* loadCredential(dependencies);
-  const catalog = discoverOperations(credential.grant.pat.scopes);
-  if (args.length === 1 && (args[0] === "commands" || args[0] === "--help")) {
+  const listing = args.length === 1 && (args[0] === "commands" || args[0] === "--help");
+  const id = `${args[0]}.${args[1]}`;
+  if (listing) {
+    const catalog = discoverOperations(credential.grant.pat.scopes);
     yield* dependencies.stdout(
       dependencies.json
         ? terminalSafe(encodeJson({ commands: catalog })) + "\n"
@@ -365,9 +375,16 @@ export const runOperationCommand = Effect.fn(function* (
     );
     return false;
   }
-  const id = `${args[0]}.${args[1]}`;
-  const command = catalog.find((candidate) => candidate.id === id);
-  if (command === undefined) return yield* new CliFailure({ reason: "OperationUnavailable" });
+  const operation = yield* Option.match(
+    Option.fromUndefinedOr(operationCatalog.byId.get(id)).pipe(
+      Option.filter((candidate) => eligibleOperation(candidate.id, credential.grant.pat.scopes))
+    ),
+    {
+      onNone: () => new CliFailure({ reason: "OperationUnavailable" }),
+      onSome: Effect.succeed,
+    }
+  );
+  const command = describeOperation({ operation, scopes: credential.grant.pat.scopes });
   if (args.length === 3 && args[2] === "--help") {
     yield* dependencies.stdout(terminalSafe(encodeJson(command)) + "\n");
     return false;

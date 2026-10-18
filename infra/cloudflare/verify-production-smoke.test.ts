@@ -1112,3 +1112,57 @@ it.each(["wrong-version", "cacheable", "readiness-refused"])(
       )
     )
 );
+
+effectIt.effect(
+  "verifies promoted edge while explicitly deferring quota-dependent OAuth availability",
+  () =>
+    Effect.gen(function* () {
+      const seen = new Set<string>();
+      const client = HttpClient.make((request) => {
+        expect(request.headers["cloudflare-workers-version-overrides"]).toBeUndefined();
+        const probe = new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+        });
+        const path = new URL(probe.url).pathname;
+        seen.add(path);
+        let response = edgeResponse(probe);
+        if (path === "/internal/release-smoke") {
+          response =
+            request.method === "GET"
+              ? pairingResponse({ oldPublic: false, coreRevision: revision, readiness: true })
+              : new Response(null, {
+                  status: 503,
+                  headers: {
+                    ...securityHeaders,
+                    "x-fidy-smoke-worker-version": publicCandidate,
+                    "x-fidy-smoke-failure": "d1_quota",
+                  },
+                });
+        } else if (
+          !probe.headers.has("origin") &&
+          [
+            "/.well-known/oauth-protected-resource/mcp",
+            "/.well-known/oauth-authorization-server",
+            "/oauth/authorize",
+            "/oauth/register",
+            "/oauth/token",
+            "/mcp",
+          ].includes(path)
+        ) {
+          response = new Response(null, {
+            status: 503,
+            headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
+          });
+        }
+        return Effect.succeed(HttpClientResponse.fromWeb(request, response));
+      });
+      const outcome = yield* verifyPromotedSmoke(config).pipe(
+        Effect.provideService(HttpClient.HttpClient, client)
+      );
+      expect(outcome).toBe("deferred-d1-quota");
+      expect(seen.has("/categories")).toBe(true);
+      expect(seen.has("/mcp")).toBe(true);
+      expect(seen.has("/.well-known/oauth-protected-resource/mcp")).toBe(true);
+    })
+);

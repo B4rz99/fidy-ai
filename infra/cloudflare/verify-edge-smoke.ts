@@ -13,6 +13,7 @@ import { oauthPaths } from "../../apps/server/src/shell/oauth-agents/contract";
 const apiOrigin = `https://${productionTopology.ingress.hostname}`;
 const healthyStatus = 200;
 const unauthorizedStatus = 401;
+const unavailableStatus = 503;
 const probes = [
   { method: "GET", path: "/health", expectedStatus: healthyStatus, headers: {} },
   { method: "GET", path: "/categories", expectedStatus: 401, headers: {} },
@@ -55,9 +56,12 @@ class EdgeSmokeFailure extends Data.TaggedError("EdgeSmokeFailure")<{
 export const verifyEdgeSmoke = <E, R>({
   probe,
   candidate,
+  d1QuotaVerified,
 }: Readonly<{
   probe: (input: EdgeRequest) => Effect.Effect<EdgeResponse, E, R>;
   candidate: Option.Option<Candidate>;
+  /** Set only after authenticated exact-pair smoke returns its closed D1 quota stage. */
+  d1QuotaVerified: boolean;
 }>): Effect.Effect<void, EdgeSmokeFailure, R> =>
   Effect.gen(function* () {
     yield* Effect.forEach(
@@ -76,9 +80,11 @@ export const verifyEdgeSmoke = <E, R>({
                 "cloudflare-workers-version-overrides": candidate.value.override,
               },
         }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
+        const deferred = deferOAuthAvailability(response, entry, d1QuotaVerified);
+        const status = deferred ? unavailableStatus : entry.expectedStatus;
         if (
-          !isExpectedResponse(response, entry.expectedStatus) ||
-          !hasExpectedChallenge(response, entry.path, entry.expectedStatus) ||
+          !isExpectedResponse(response, status) ||
+          (!deferred && !hasExpectedChallenge(response, entry.path, entry.expectedStatus)) ||
           !candidateResponseMatches(response, entry.path, candidate)
         ) {
           return yield* new EdgeSmokeFailure({ path: entry.path });
@@ -88,6 +94,28 @@ export const verifyEdgeSmoke = <E, R>({
     );
     if (Option.isSome(candidate)) yield* verifyCandidateHealth(probe, candidate.value);
   });
+
+const deferOAuthAvailability = (
+  response: EdgeResponse,
+  request: EdgeRequest,
+  confirmed: boolean
+): boolean =>
+  confirmed &&
+  response.status === unavailableStatus &&
+  databaseDependent(request.path, request.headers);
+
+// These requests reach OAuth's D1 resource admission before their functional response.
+// Cross-origin MCP and first-party origin refusals remain independently verifiable.
+const databaseDependent = (path: string, headers: Readonly<Record<string, string>>): boolean =>
+  headers.origin === undefined &&
+  [
+    oauthPaths.resource,
+    oauthPaths.issuer,
+    oauthPaths.authorize,
+    oauthPaths.register,
+    oauthPaths.token,
+    oauthPaths.mcp,
+  ].some((owned) => owned === path);
 
 const hasExpectedChallenge = (response: EdgeResponse, path: string, status: number): boolean =>
   path !== oauthPaths.mcp ||
@@ -170,7 +198,11 @@ if (import.meta.main) {
     Effect.scoped(
       Effect.gen(function* () {
         const services = yield* Layer.build(ReleaseHttpLive);
-        return yield* verifyEdgeSmoke({ probe: productionProbe, candidate: Option.none() }).pipe(
+        return yield* verifyEdgeSmoke({
+          probe: productionProbe,
+          candidate: Option.none(),
+          d1QuotaVerified: false,
+        }).pipe(
           Effect.provideService(
             HttpClient.HttpClient,
             Context.get(services, HttpClient.HttpClient)

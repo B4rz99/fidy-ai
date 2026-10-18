@@ -503,3 +503,9 @@ repair requires fresh inspection; do not reuse stale deployment IDs.
 After successful recovery, dispatch the ordinary Production workflow for current `trunk`. Capture,
 exact-pair smoke and promotion remain mandatory. Do not run the repair from a workstation or use it
 to bypass a failed candidate proof.
+
+### OAuth availability during a confirmed D1 quota outage
+
+OAuth bootstrap charges D1 resource admission before returning public discovery metadata or rejecting several malformed machine requests. After authenticated smoke proves a closed D1 daily-quota refusal for the exact Worker pair, release verification may defer those OAuth availability proofs when they return 503. It still probes every route and requires no-store, CSP, HSTS, framing, MIME, referrer, CORS and exact candidate-version checks. Cross-origin MCP and first-party-origin refusals, provider rejection, categories authentication and hosted-turn rejection remain mandatory. Any other status or independent-route failure blocks promotion. This does not change application admission, grant authority or financial access.
+
+The release attestation records `oauthAvailability` alongside `synthetic`; both explicitly report `deferred-d1-quota` during this outage. Promoted normal traffic and the final edge step obtain a fresh authenticated quota proof rather than trusting a flag or stale attestation. A full successful synthetic result restores all expected OAuth statuses automatically.

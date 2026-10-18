@@ -9,6 +9,11 @@ The ordinary adapter/proof-helper tests use synthetic transport premises, not re
 Credentials, checked-in tests and a manual workflow do not establish merchant eligibility or actual
 OTP origins, paths, browser CORS, recovery or reusable-source behavior.
 
+The [2026-10-18 rerun](https://github.com/B4rz99/fidy-ai/actions/runs/39155519593) passed all four
+selected scenarios at `1195aeb38737c77e9ed6e360d98f140b1bb8b2f9` with Effect 4.0.3; the other 76
+cases were excluded. It verified real Sandbox OTP, reusable sources and matching approved/declined
+settlement with local D1/activity execution. Deployed browser and Queue/Workflow proofs remain open.
+
 On 2026-10-15, bounded manual tokenization with the browser-published Sandbox public key and
 documented synthetic CC/product returned 201/PENDING. Both service URLs used
 `https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox`, with exactly the

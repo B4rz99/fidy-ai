@@ -263,6 +263,13 @@ The same 351 native, 21 web and 12 browser checks passed again on the quota-repa
 `9d2181e649d0979ae3dd907152b2a4aea7961871` with this change and Effect 4.0.3. The complete static
 verification group passed, including the reviewed edge manifest and forward-migration policy.
 
+Real-provider reruns on trunk `1195aeb38737c77e9ed6e360d98f140b1bb8b2f9` with Effect 4.0.3 passed
+all four selected cases each for [Nequi](https://github.com/B4rz99/fidy-ai/actions/runs/39155516916)
+and [DaviPlata](https://github.com/B4rz99/fidy-ai/actions/runs/39155519593): weekly/monthly/yearly
+approved first payments and a weekly decline without a paid period. DaviPlata also verified actual
+Sandbox OTP. These use isolated local D1/activity execution, not deployed wallet or Queue/Workflow
+proof; no real money or deployed QA account was involved.
+
 The historical QA card still needs genuine, attributable Wompi no-charge confirmation before reuse;
 the local test's synthetic provider case is fixture data, not Production proof. This change does not
 add an operator HTTP/CLI confirmation facility, bypass the privileged confirmation ledger, retire

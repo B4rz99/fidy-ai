@@ -104,7 +104,9 @@ effectIt.effect("closing its owner interrupts pending sensitive callbacks immedi
   Effect.gen(function* () {
     const stub = clipboardStub();
     const copied = yield* Deferred.make<void>();
-    const owner = yield* Scope.make();
+    const owner = yield* Effect.acquireRelease(Scope.make(), (scope, exit) =>
+      Scope.close(scope, exit)
+    );
     const context = yield* Effect.context<never>();
     let expired = 0;
     const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes").pipe(

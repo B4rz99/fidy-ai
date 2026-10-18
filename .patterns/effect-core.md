@@ -43,9 +43,17 @@ compose the work instead of starting another runtime.
 | Register low-level scope cleanup       | `Effect.addFinalizer`        |
 
 `acquireRelease` acquisition is uninterruptible by default; release is registered only after
-successful acquisition and receives the closing Exit. `Layer.effect` already supplies a construction
-scope. Adding an inner `Effect.scoped` closes resources before the layer's service escapes.
+successful acquisition and receives the closing Exit. Acquisition owns cleanup for partial work
+before a failure. `{ interruptible: true }` restores the caller's previous interruption status;
+an already masked caller remains masked. Verify `acquireRelease` and `uninterruptibleMask` in
+`internal/effect.ts`.
+
+`Layer.effect` already supplies a construction scope. Adding an inner `Effect.scoped` closes
+resources before the layer's service escapes.
 
 Every adapter must establish who owns cleanup and what interruption does to external work. Preserve
 interruption rather than turning it into a validation/domain failure. A provider timeout does not
-prove the provider rejected the request; reconciliation belongs to the owning operation.
+prove the provider rejected the request; reconciliation belongs to the owning operation. A timeout
+requests interruption and waits for local cleanup; an uninterruptible acquisition or non-settling
+finalizer can delay its result. Verify `timeoutOption`, `raceAllFirst`, and `fiberInterruptAs` in
+`internal/effect.ts` before treating a timeout as a hard elapsed-time bound.

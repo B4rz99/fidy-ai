@@ -80,6 +80,13 @@ required fields, and calendar formats reach the model. Keep the original schema 
 decoding; these descriptions provide guidance, never execution authority. Do not duplicate a
 handwritten command catalog. Test the complete tool catalog against the request capacity bound.
 
+Measure the serialized request after schema projection, including multi-Turn history. Numeric
+refinements emitted under `allOf` can increase tool bytes after an Effect upgrade. The
+[provider schema adapter](../apps/server/src/shell/hosted-inference/internal/provider-schema.ts)
+compacts only equivalent finite inclusive numeric conjunctions and omits empty definition maps;
+preserve richer constraints and referenced definitions. Test preservation and full-catalog capacity
+instead of increasing the budget to absorb redundant guidance.
+
 Provider-specific wire details remain inside the adapter. Do not leak a provider SDK type, token
 counter, error class, model name, or request shape into core or the provider-neutral contract unless
 that fact is deliberately part of the closed application contract.

@@ -1,6 +1,7 @@
 # Services, Layers, Config & Cloudflare adapters
 
-Selected sources: `node_modules/effect/src/{Context,Layer,Config,ConfigProvider,ManagedRuntime}.ts`.
+Selected sources: `node_modules/effect/src/{Context,Layer,Config,ConfigProvider,ManagedRuntime}.ts`,
+plus `src/internal/{layer,effect}.ts` for memoization and scope teardown.
 Use this pattern when composing a Worker adapter, a deterministic test layer, or a provider boundary.
 
 ## Defining services (v4 = `Context.Service`)
@@ -31,19 +32,29 @@ constructor. `Effect.acquireRelease` inside `Layer.effect` is released when the 
 `Layer.succeed`/`sync` are for pure values, `Layer.effectDiscard` for scoped side effects,
 `Layer.unwrap` for configuration-selected layers, and `Layer.suspend` for lazy composition.
 
-Background fibers must be forked with `forkScoped` so request or adapter shutdown interrupts them.
-Never use a detached fiber for correctness-critical queues, locks, retries, or retention. Finalizers
-run in reverse registration order; dependencies outlive their dependents during teardown.
+Background fibers need an explicit lifetime owner: use `forkScoped` for the construction scope,
+`forkIn` for a designated owner scope, or `forkChild` when the parent fiber owns the whole task.
+Choose the owner whose shutdown must interrupt the work; verify `forkIn` and `forkScoped` in
+`internal/effect.ts`. Never use a detached fiber for correctness-critical queues, locks, retries,
+or retention. The default
+sequential scope awaits finalizers in reverse registration order. Parallel scope finalizers overlap;
+use sequential teardown when a dependent must finish releasing before its dependency closes. Verify
+`scopeCloseFinalizers` in `internal/effect.ts` when choosing a scope strategy.
 
 Layer construction failures stay in the error channel. A missing or malformed Cloudflare binding must
 make the adapter unavailable; it must not silently create a process-local replacement.
 
 ## Composition and memoization
 
-`Layer.provide` hides supplied requirements; `Layer.provideMerge` retains them. Memoization is keyed
-by Layer object identity and reference-counted across overlapping scopes. Export stable layer values
-when a resource should be shared, use a factory when each caller needs isolation, and use `Layer.fresh`
-or `Effect.provide(..., { local: true })` for test isolation.
+`Layer.provide` hides supplied requirements; `Layer.provideMerge` retains them. Memoization reuses
+Layer object identity within the same or inherited memo map, with reference-counted observing scopes.
+Stable layer values permit sharing within that map; independent builds without an ambient map can
+still acquire separately. A factory creates a new layer identity but may reuse stable dependencies.
+Verify `MemoMapImpl`, `CurrentMemoMap.forkOrCreate`, and `buildWithScope` in `Layer.ts`.
+
+Use `Layer.fresh` or `Effect.provide(..., { local: true })` to build a graph with a fresh memo map.
+This isolates acquisition, not mutable objects already captured by `Layer.succeed` or services
+supplied outside that graph. See `Layer.fresh` in `Layer.ts` and `provideLayer` in `internal/layer.ts`.
 
 `ManagedRuntime` is for embedding Effect at a foreign edge only. A Worker request handler should
 construct or reuse the adapter layer according to the Worker lifecycle and ensure all request-scoped

@@ -49,9 +49,10 @@ confirmation decline/expiry/replay, client disconnect during streaming and dispo
 Assert safe protocol failures and no additional operation execution. Source-backed assembly describes
 library mechanics; OAuth authority, canonical admission and residency limits are Fidy policy.
 
-In the selected 4.0.3 SDK, a cancelled stateful request with no emitted JSON-RPC reply settles as an
-empty HTTP 202. `McpServer.ts` suppresses cancelled replies and its pre-response handler maps an
-empty 200 to 202. Residency tests assert that response separately from SQL settlement and public
-Scope disposal; a 202 does not prove mutation completion or release admission capacity. Newer
-upstream [#8888](https://github.com/Effect-TS/effect/pull/8888) uses an empty SSE response instead;
-that behavior is outside the pinned 4.0.3 release.
+In the selected 4.0.3 SDK, a fully cancelled request POST with no emitted JSON-RPC reply
+settles as an empty HTTP 200 with `text/event-stream`. `McpServer.ts` suppresses cancelled replies,
+tracks the POST's remaining expected replies and emits an empty SSE stream when that count reaches
+zero. Notification acknowledgments remain HTTP 202. Residency tests distinguish transport completion
+from SQL settlement and public Scope disposal; an empty response does not prove mutation completion
+or release admission capacity. This incorporates upstream
+[#8888](https://github.com/Effect-TS/effect/pull/8888); the prior 4.0.2 behavior was an empty HTTP 202.

@@ -73,7 +73,7 @@ const parseRefund = (
       if (data.status === "ERROR" || data.status === "PENDING") return Option.none();
       return Option.some({ providerId: data.v2_refund_id ?? String(data.id), status: data.status });
     }),
-    Effect.catch(() => Effect.succeedNone)
+    Effect.orElseSucceed(Option.none)
   );
 const parseVoid = (
   body: Uint8Array,
@@ -90,7 +90,7 @@ const parseVoid = (
         ? Option.some({ providerId: data.id, status: "VOIDED" as const })
         : Option.none()
     ),
-    Effect.catch(() => Effect.succeedNone)
+    Effect.orElseSucceed(Option.none)
   );
 /** One claimed mutation only. Unknown/malformed responses cannot authorize release or settlement. */
 export const submitCorrection = ({
@@ -117,10 +117,7 @@ export const submitCorrection = ({
     return yield* input.kind === "refund"
       ? parseRefund(response.body, input)
       : parseVoid(response.body, input);
-  }).pipe(
-    Effect.timeout("14 seconds"),
-    Effect.catch(() => Effect.succeedNone)
-  );
+  }).pipe(Effect.timeout("14 seconds"), Effect.orElseSucceed(Option.none));
 /** Voids can be reconciled through the documented transaction lookup, never by disabling a source. */
 export const verifyCardVoid = ({
   http,
@@ -135,5 +132,5 @@ export const verifyCardVoid = ({
         : Effect.succeedNone
     ),
     Effect.timeout("14 seconds"),
-    Effect.catch(() => Effect.succeedNone)
+    Effect.orElseSucceed(Option.none)
   );

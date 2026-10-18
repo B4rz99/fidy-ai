@@ -1,6 +1,16 @@
-import { BigDecimal, Clock, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import {
+  BigDecimal,
+  Clock,
+  DateTime,
+  Deferred,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 import { HttpClient, type HttpClientError, HttpClientResponse } from "effect/http";
-import { afterEach, expect, it, vi } from "vitest";
+import { type Mock, afterEach, expect, it, vi } from "vitest";
 import {
   BillingEmail,
   PaymentEnrollmentId,
@@ -9,6 +19,7 @@ import {
 } from "@/transport/client";
 import { type WompiFetch } from "@/transport/wompi-tokenization";
 import { UnknownJsonString } from "@/schema-compatibility";
+import { type DaviplataChallenge } from "./daviplata-challenge";
 import { type PreparedEnrollment, makeEnrollmentGateway } from "./enrollment-gateway";
 
 const policy = {
@@ -73,11 +84,14 @@ const initial = (): Response =>
       },
     },
   });
-const otpResponse = (status: "PENDING" | "APPROVED"): Response =>
+const otpResponse = (
+  status: "PENDING" | "APPROVED",
+  bearer = `synthetic-${status}-bearer`
+): Response =>
   Response.json({
     data: {
       subscription: { PK: token, status },
-      authorization: { access_token: `synthetic-${status}-bearer` },
+      authorization: { access_token: bearer },
       attempts: {
         currentSendCode: 1,
         limitSendCode: 2,
@@ -86,10 +100,19 @@ const otpResponse = (status: "PENDING" | "APPROVED"): Response =>
       },
     },
   });
-afterEach(() => {
-  vi.unstubAllGlobals();
-  sessionStorage.clear();
-});
+const clients: Array<ReturnType<typeof makeSubscriptionEnrollmentClient>> = [];
+afterEach(() =>
+  Effect.runPromise(
+    Effect.forEach(clients.splice(0), (client) => Effect.tryPromise(() => client.dispose())).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          vi.unstubAllGlobals();
+          sessionStorage.clear();
+        })
+      )
+    )
+  )
+);
 
 it.each(["wrong-method", "reused-source"] as const)(
   "refuses DaviPlata authorization for %s and wipes drafts before any external effect",
@@ -184,7 +207,13 @@ it.each(["missing-fields", "nequi-fields"] as const)(
 
 const submissionBoundary = (
   enrollment: PreparedEnrollment,
-  payloads: Array<unknown>
+  payloads: Array<unknown>,
+  respond: (attempt: number) => Effect.Effect<Response> = (attempt) =>
+    Effect.succeed(
+      attempt === 1
+        ? new Response(null, { status: 503 })
+        : Response.json({ status: "source-verifying", enrollmentId: enrollment.enrollmentId })
+    )
 ): HttpClient.HttpClient =>
   HttpClient.makeWith<
     HttpClientError.HttpClientError,
@@ -198,24 +227,193 @@ const submissionBoundary = (
           const text =
             request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
           payloads.push(yield* Schema.decodeEffect(UnknownJsonString)(text).pipe(Effect.orDie));
-          return HttpClientResponse.fromWeb(
-            request,
-            payloads.length === 1
-              ? new Response(null, { status: 503 })
-              : Response.json({ status: "source-verifying", enrollmentId: enrollment.enrollmentId })
-          );
+          return HttpClientResponse.fromWeb(request, yield* respond(payloads.length));
         })
       ),
     Effect.succeed
   );
 const mountedSignal = (): AbortSignal => new AbortController().signal;
-const providerFixture = (): WompiFetch =>
+const providerFixture = (): Mock<WompiFetch> =>
   vi
     .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
       Promise.resolve(otpResponse("APPROVED"))
     )
     .mockResolvedValueOnce(initial())
     .mockResolvedValueOnce(otpResponse("PENDING"));
+
+type ChallengeFixture = Readonly<{
+  payloads: Array<unknown>;
+  provider: Mock<WompiFetch>;
+  client: ReturnType<typeof makeSubscriptionEnrollmentClient>;
+  controller: AbortController;
+  start: () => Promise<DaviplataChallenge>;
+}>;
+const challengeFixture = (
+  enrollment: PreparedEnrollment,
+  respond?: (attempt: number) => Effect.Effect<Response>
+): ChallengeFixture => {
+  const payloads: Array<unknown> = [];
+  const client = makeSubscriptionEnrollmentClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(
+      HttpClient.HttpClient,
+      submissionBoundary(enrollment, payloads, respond)
+    ),
+  });
+  clients.push(client);
+  const provider = providerFixture();
+  vi.stubGlobal("fetch", provider);
+  const controller = new AbortController();
+  return {
+    payloads,
+    provider,
+    client,
+    controller,
+    start: (): Promise<DaviplataChallenge> =>
+      makeEnrollmentGateway(client).startDaviplata(enrollment, "synthetic@example.invalid", {
+        documentNumber: Redacted.make("1122233"),
+        productNumber: Redacted.make("3991111111"),
+        signal: controller.signal,
+      }),
+  };
+};
+
+it("serializes OTP confirmation and permits a resend after a retryable provider refusal without submitting authority", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = challengeFixture(prepared(yield* Clock.currentTimeMillis));
+      const started = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<Response>();
+      input.provider.mockImplementationOnce(() => {
+        started.resolve();
+        return pending.promise;
+      });
+      const challenge = yield* Effect.tryPromise(input.start);
+      const firstOtp = Redacted.make("574829");
+      const first = challenge.confirm(firstOtp);
+      yield* Effect.tryPromise(() => started.promise);
+      const duplicateOtp = Redacted.make("574829");
+      expect(yield* Effect.tryPromise(() => challenge.confirm(duplicateOtp))).toEqual({
+        status: "retry-allowed",
+      });
+      expect(() => Redacted.value(duplicateOtp)).toThrow();
+      expect(yield* Effect.tryPromise(() => challenge.resend())).toEqual({
+        status: "retry-allowed",
+      });
+      expect(input.provider).toHaveBeenCalledTimes(3);
+      pending.resolve(otpResponse("PENDING", "synthetic-retry-bearer"));
+      expect(yield* Effect.tryPromise(() => first)).toEqual({ status: "retry-allowed" });
+      expect(() => Redacted.value(firstOtp)).toThrow();
+      input.provider.mockResolvedValueOnce(otpResponse("PENDING", "synthetic-resend-bearer"));
+      expect(yield* Effect.tryPromise(() => challenge.resend())).toEqual({
+        status: "retry-allowed",
+      });
+      expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
+        status: "refused",
+      });
+      expect(input.payloads).toEqual([]);
+      expect(input.provider).toHaveBeenCalledTimes(4);
+      challenge.dispose();
+    })
+  ));
+
+it("stops ambiguous provider authorization without offering Fidy submission recovery or replaying an OTP", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = challengeFixture(prepared(yield* Clock.currentTimeMillis));
+      input.provider.mockResolvedValueOnce(new Response(null, { status: 503 }));
+      const challenge = yield* Effect.tryPromise(input.start);
+      const otp = Redacted.make("574829");
+      expect(yield* Effect.tryPromise(() => challenge.confirm(otp))).toEqual({
+        status: "uncertain",
+        retrySubmission: false,
+      });
+      expect(() => Redacted.value(otp)).toThrow();
+      expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
+        status: "refused",
+      });
+      expect(yield* Effect.tryPromise(() => challenge.confirm(Redacted.make("574829")))).toEqual({
+        status: "refused",
+      });
+      expect(yield* Effect.tryPromise(() => challenge.resend())).toEqual({ status: "refused" });
+      expect(input.provider).toHaveBeenCalledTimes(3);
+      expect(input.payloads).toEqual([]);
+      challenge.dispose();
+    })
+  ));
+
+it.each(["completed", "cancelled"] as const)(
+  "keeps pending approved submission exclusive and handles its %s lifetime without another OTP or submission",
+  (outcome) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const enrollment = prepared(yield* Clock.currentTimeMillis);
+        const started = yield* Deferred.make<void>();
+        const pending = yield* Deferred.make<Response>();
+        const input = challengeFixture(enrollment, () =>
+          Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(pending)))
+        );
+        const challenge = yield* Effect.tryPromise(input.start);
+        const otp = Redacted.make("574829");
+        const first = challenge.confirm(otp);
+        yield* Deferred.await(started);
+        expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
+          status: "uncertain",
+          retrySubmission: true,
+        });
+        const duplicateOtp = Redacted.make("574829");
+        expect(yield* Effect.tryPromise(() => challenge.confirm(duplicateOtp))).toEqual({
+          status: "refused",
+        });
+        expect(() => Redacted.value(duplicateOtp)).toThrow();
+        expect(yield* Effect.tryPromise(() => challenge.resend())).toEqual({ status: "refused" });
+        expect(input.payloads).toHaveLength(1);
+        expect(input.provider).toHaveBeenCalledTimes(3);
+        if (outcome === "cancelled") input.controller.abort();
+        yield* Deferred.succeed(
+          pending,
+          Response.json({
+            status: "source-verifying",
+            enrollmentId: enrollment.enrollmentId,
+          })
+        );
+        expect(yield* Effect.tryPromise(() => first)).toEqual(
+          outcome === "cancelled"
+            ? { status: "uncertain", retrySubmission: false }
+            : {
+                status: "submitted",
+                submission: { status: "source-verifying", enrollmentId: enrollment.enrollmentId },
+              }
+        );
+        expect(() => Redacted.value(otp)).toThrow();
+        expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
+          status: "refused",
+        });
+        expect(input.payloads).toHaveLength(1);
+        expect(input.provider).toHaveBeenCalledTimes(3);
+        challenge.dispose();
+      })
+    )
+);
+
+it("refuses actions and consumes OTPs after the mounted challenge is disposed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = challengeFixture(prepared(yield* Clock.currentTimeMillis));
+      const challenge = yield* Effect.tryPromise(input.start);
+      challenge.dispose();
+      const otp = Redacted.make("574829");
+      expect(yield* Effect.tryPromise(() => challenge.confirm(otp))).toEqual({ status: "refused" });
+      expect(() => Redacted.value(otp)).toThrow();
+      expect(yield* Effect.tryPromise(() => challenge.resend())).toEqual({ status: "refused" });
+      expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
+        status: "refused",
+      });
+      expect(input.provider).toHaveBeenCalledTimes(2);
+      expect(input.payloads).toEqual([]);
+      challenge.dispose();
+    })
+  ));
 
 it("rejects duplicate authorization, never recovers an unapproved token, and revokes idle authority on auth disposal", () =>
   Effect.runPromise(

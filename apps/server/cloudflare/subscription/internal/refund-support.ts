@@ -93,7 +93,7 @@ const authorize = (
       expiresAtMs: claims.exp * millisecondsPerSecond,
       permission: "billing.refund" as const,
     });
-  }).pipe(Effect.catch(() => Effect.succeedNone));
+  }).pipe(Effect.orElseSucceed(Option.none));
 const submit = (
   input: Readonly<{
     request: Request;

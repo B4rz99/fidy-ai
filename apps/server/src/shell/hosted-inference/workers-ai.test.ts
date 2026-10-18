@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { expect, it } from "@effect/vitest";
-import { Brand, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Brand, Deferred, Effect, Exit, Fiber, Option, Predicate, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { operationCatalog } from "~/shell/api";
@@ -283,6 +283,10 @@ it.effect("fits every canonical tool in one request with self-contained schemas"
     });
     for (const tool of request.tools) {
       const schema = tool.function.parameters;
+      if (schema.$defs !== undefined) {
+        assert(Predicate.isObject(schema.$defs));
+        expect(Object.keys(schema.$defs), tool.function.name).not.toHaveLength(0);
+      }
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(schema);
       const references = encoded.matchAll(/"\$ref":"#\/\$defs\/([^"/]+)"/g);
       for (const [, name] of references) {
@@ -315,6 +319,45 @@ it("publishes recurring month constraints for provider queries", () => {
     type: "string",
     pattern: "^20\\d{2}-(0[1-9]|1[0-2])$",
   });
+});
+
+it("compacts integer conjunctions without losing the narrower range or safe-integer limits", () => {
+  const schema = workersAiProviderSchema(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 31 }))
+  );
+  expect(schema).toMatchObject({ type: "integer", minimum: 1, maximum: 31 });
+  expect(schema).not.toHaveProperty("allOf");
+  expect(schema).not.toHaveProperty("description");
+  expect(schema).not.toHaveProperty("$defs");
+  expect(workersAiProviderSchema(Schema.Int)).toMatchObject({
+    type: "integer",
+    minimum: -9_007_199_254_740_991,
+    maximum: 9_007_199_254_740_991,
+  });
+});
+
+it.each([
+  { name: "strict bounds", allOf: [{ minimum: 1 }, { exclusiveMaximum: 5 }] },
+  { name: "multiples", allOf: [{ minimum: 1 }, { multipleOf: 2 }] },
+  { name: "references", allOf: [{ minimum: 1 }, { $ref: "#" }] },
+  { name: "annotations", allOf: [{ minimum: 1, description: "Retained bound" }] },
+  { name: "booleans", allOf: [{ minimum: 1 }, false] },
+  { name: "mixed types", allOf: [{ minimum: 1 }, { type: "string", pattern: "^x$" }] },
+])("preserves provider conjunctions containing $name", ({ allOf }) => {
+  const schema = workersAiProviderSchema(
+    Schema.Finite.check(Schema.makeFilter(() => undefined, { toJsonSchema: () => ({ allOf }) }))
+  );
+  expect(schema.allOf).toEqual(allOf);
+});
+
+it("preserves numeric constraints when the root type is nonnumeric", () => {
+  const schema = workersAiProviderSchema(
+    Schema.String.check(
+      Schema.makeFilter(() => undefined, { toJsonSchema: () => ({ allOf: [{ minimum: 1 }] }) })
+    )
+  );
+  expect(schema.allOf).toEqual([{ minimum: 1 }]);
+  expect(schema.type).toBe("string");
 });
 
 it("keeps union discriminants and calendar constraints visible to the tool template", () => {
@@ -944,6 +987,48 @@ it.effect("strictly decodes bounded structured output", () =>
     expect(binding.calls[0]?.request.response_format).toMatchObject({
       type: "json_schema",
       json_schema: { strict: true },
+    });
+  })
+);
+
+it.effect("retains recursive definitions in a prepared structured request", () =>
+  Effect.gen(function* () {
+    type Node = { readonly children: ReadonlyArray<Node> };
+    const Node: Schema.Codec<Node> = Schema.suspend(() =>
+      Schema.Struct({ children: Schema.Array(Node) })
+    ).annotate({ identifier: "Node" });
+    const binding = captureRun(() =>
+      Promise.resolve(
+        completed({
+          choices: [
+            {
+              message: { role: "assistant", content: '{"children":[]}' },
+              finish_reason: "stop",
+            },
+          ],
+        })
+      )
+    );
+    const inference = yield* makeConfiguredInference(binding.run);
+    const prepared = yield* inference.prepareStructured({
+      context: { prior: Option.none(), entries: [] },
+      purpose: "conversation-compaction",
+      outputSchema: Node,
+    });
+    expect(yield* prepared.execute).toEqual({ children: [] });
+    const format = binding.calls[0]?.request.response_format;
+    assert(format?.type === "json_schema");
+    const schema = format.json_schema.schema;
+    assert(typeof schema.$ref === "string");
+    expect(schema.$ref).toMatch(/^#\/\$defs\//u);
+    const name = schema.$ref.slice("#/$defs/".length);
+    assert(Predicate.isObject(schema.$defs));
+    expect(schema.$defs).toHaveProperty(name);
+    expect(schema.$defs[name]).toMatchObject({
+      type: "object",
+      required: ["children"],
+      additionalProperties: true,
+      properties: { children: { type: "array", items: { $ref: schema.$ref } } },
     });
   })
 );

@@ -20,10 +20,21 @@ not prove asynchronous initialization completed: use `Deferred` or `Latch` for r
 fiber reports itself. Scoped `FiberMap` / `FiberHandle` provide keyed/single-slot ownership;
 replacement normally interrupts the prior fiber.
 
+Choose `FiberMap.make` for keyed workers and `FiberHandle.make` for one replaceable worker;
+both acquire scoped owners (see `FiberMap.ts` / `FiberHandle.ts`). A two-way race or a map of
+ordinary values does not need a fiber registry. Observe replacement and shutdown in tests.
+
 Use finite concurrency with `Effect.all` / `forEach` based on the capacity being protected.
 `race` selects the first success; `raceFirst` selects the first completion, including failure.
 Losers are interrupted. `timeout` adds a typed timeout and interrupts local work; it does not prove
 an external mutation was rejected.
+
+Cancellation-safe publication needs an explicit commit point and stale-generation fence. Keep
+any local uninterruptible state transition short; it cannot make a remote commit atomic. Fidy's
+durable Agent owner retains its D1 fence and original work settlement even after request abort.
+Native Promises without cancellation keep running when an Effect waiter loses a race. See
+[Agent ownership](../apps/server/cloudflare/agent/internal/service.ts) and its
+[blocked-commit race tests](../apps/server/cloudflare/agent/hosted-turn.test.ts).
 
 ## Volatile state and bounded buffers
 

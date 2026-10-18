@@ -88,6 +88,12 @@ Avoid broad snapshots of Effect internals or generated implementation details.
 
 ## Boundaries
 
+Run locally available first-party decisions, codecs, and service composition through their real
+implementations. Substitute the external transport or platform binding at the smallest owned seam.
+For local-only behavior such as byte counting, use a binding that fails if external work is attempted.
+Keep deliberate defective-collaborator fixtures when testing defect containment, and narrow fakes
+when proving forbidden effects; these are different evidence from a successful integration path.
+
 Core tests prove domain transitions, authorization, retention, redaction, and validation. Contract
 tests prove reflected operation ids, access metadata, OpenAPI, browser declarations, and compatibility
 artifacts. Provider tests use the published transport contract and deterministic bounded responses.
@@ -107,6 +113,12 @@ provider implementation are removed rather than replaced with a local fake.
 Fork only when the test owns the fiber; use scoped forks so interruption and layer teardown close all
 resources. Advance TestClock instead of sleeping in deterministic tests. Await every assertion and
 restore environment/configuration in teardown.
+
+Register cleanup before assertions or interruptible work. Acquire an explicit test Scope with
+`Effect.acquireRelease` when an early close is itself under test, so failure still closes it;
+see [the clipboard tests](../apps/web/src/browser/clipboard.test.ts). Coordinate races with
+Deferreds or controlled transport settlement, then assert both the result and owner disposal.
+An abort test must abort the real request while the competing operation is blocked.
 
 When a test fails, inspect the full Cause and preserve the typed failure boundary. Do not assert on
 secret values, raw provider bodies, prompts, replies, uploaded content, or implementation stack

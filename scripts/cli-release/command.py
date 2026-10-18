@@ -30,6 +30,10 @@ def stop_owned(process):
                 os.killpg(process.pid, 0)
             except ProcessLookupError:
                 break
+            except PermissionError:
+                # macOS can refuse the existence probe after the owned leader exits.
+                if process.poll() is not None:
+                    break
             time.sleep(.01)
         send(signal.SIGKILL)
     elif process.poll() is None:

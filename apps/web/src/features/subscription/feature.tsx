@@ -7,7 +7,7 @@ import {
   useAtomValue,
 } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Cause, Data, Effect, Array as EffectArray, Option, Predicate, Redacted } from "effect";
+import { Cause, Data, Effect, Array as EffectArray, Option, Redacted } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { makeEnrollmentCommand } from "./enrollment-command";
 import { SubscriptionConsentBoundary } from "./consent-boundary";
@@ -1091,7 +1091,7 @@ const makeOfferSelectionActions = (
     input.interaction.reset();
     Option.map(input.selectedId, (id) =>
       input.interaction.start((gateway) =>
-        preparePaymentFlow(gateway, id, { method: choice, replaceFailedSource: false })
+        preparePaymentFlow(gateway, id, { method: choice, replaceFailedSource: true })
       )
     );
   },
@@ -1103,6 +1103,12 @@ const makeOfferSelectionActions = (
     );
   },
 });
+const paymentSelectionIsLocked = (current: PaymentFlowState): boolean =>
+  current._tag === "PaymentSubmission" &&
+  (isAwaitingPaymentStatus(current.value) ||
+    (current.value.status === "payment-pending" &&
+      current.value.billingAttempt.status === "succeeded"));
+
 const ReadyOffersContent = ({
   offers,
   gateway,
@@ -1127,7 +1133,7 @@ const ReadyOffersContent = ({
   const presented = offers.map(presentSubscriptionOffer);
   const sharedTerms = presentSubscriptionOffer(offers[0]);
   const selectionDisabled =
-    authorizationLocked || Option.exists(enrollment, Predicate.isTagged("PaymentSubmission"));
+    authorizationLocked || Option.exists(enrollment, paymentSelectionIsLocked);
   const selectedOffer = Option.flatMap(selectedId, (id) =>
     EffectArray.findFirst(presented, (offer) => offer.id === id)
   );

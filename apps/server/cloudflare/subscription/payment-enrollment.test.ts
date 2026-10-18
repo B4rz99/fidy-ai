@@ -194,24 +194,258 @@ const setup = (): Promise<{
     })
   );
 
-it.each([
-  { replaceFailedSource: false, outcome: "DECLINED", creationLost: false },
-  { replaceFailedSource: true, outcome: "DECLINED", creationLost: false },
-  { replaceFailedSource: true, outcome: "PENDING", creationLost: false },
-  { replaceFailedSource: true, outcome: "APPROVED", creationLost: false },
-  { replaceFailedSource: true, outcome: "DECLINED", creationLost: true },
-  { replaceFailedSource: true, outcome: "ERROR", creationLost: false },
-] as const)(
-  "guards explicit card retry: $outcome, replacement $replaceFailedSource, lost response $creationLost",
-  ({ replaceFailedSource, outcome, creationLost }) =>
-    Effect.runPromise(
+const replacementTokens = {
+  card: { method: "card", cardToken: "tok_test_replacement" },
+  nequi: { method: "nequi", nequiToken: "nequi_test_replacement" },
+  daviplata: { method: "daviplata", daviplataToken: "daviplata_test_replacement" },
+} as const;
+
+const retainHistoricalConfirmation = Effect.fn(function* (
+  input: Readonly<{
+    db: D1Database;
+    attemptId: string;
+    reference: string;
+    now: number;
+    supportConfirmed: boolean;
+    lateEvidence: "none" | "PENDING" | "APPROVED";
+  }>
+) {
+  if (input.supportConfirmed) {
+    yield* fromTestPromise(() =>
+      input.db
+        .prepare(`INSERT INTO billing_no_charge_confirmations
+      (attempt_id,wompi_reference,wompi_environment,provider_case_id,operator_id,confirmed_at_ms)
+      VALUES (?,?,'sandbox','synthetic-provider-case','synthetic-operator',?)`)
+        .bind(input.attemptId, input.reference, input.now)
+        .run()
+    );
+  }
+  if (input.lateEvidence !== "none") {
+    // Retained historical evidence precedes repair of the derived failed-attempt projection.
+    yield* fromTestPromise(() =>
+      input.db
+        .prepare("UPDATE billing_transaction_evidence SET status=? WHERE attempt_id=?")
+        .bind(input.lateEvidence, input.attemptId)
+        .run()
+    );
+  }
+});
+
+const retainUnclearedRetry = Effect.fn(function* (
+  fixture: Awaited<ReturnType<typeof setup>>,
+  advanceRetryWindow: () => void
+) {
+  const preparedResponse = yield* fromTestPromise(() =>
+    handlePaymentEnrollment({
+      environment: fixture.environment,
+      request: fixture.request("/web/subscription/payment-enrollments/prepare", "POST", {
+        priceId,
+      }),
+    })
+  );
+  const prepared = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+    yield* fromTestPromise(() => preparedResponse.json())
+  );
+  const submitted = yield* fromTestPromise(() =>
+    handlePaymentEnrollment({
+      environment: fixture.environment,
+      request: fixture.request("/web/subscription/payment-enrollments/submit", "POST", {
+        enrollmentId: prepared.enrollmentId,
+        paymentRequestId: "30000000-0000-4000-8000-000000000083",
+        paymentSourceMode: "reuse",
+        billingEmail: "payer@example.com",
+        decisions: {
+          acceptedEndUserPolicy: true,
+          acceptedPersonalDataAuthorization: true,
+          authorizedRecurringCharges: true,
+        },
+      }),
+    })
+  );
+  const payment = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+    yield* fromTestPromise(() => submitted.json())
+  );
+  if (payment.status !== "payment-pending") throw new Error("Expected pending second attempt");
+  const activity = (_name: string, _options: unknown, work: () => Promise<void>): Promise<void> =>
+    work();
+  yield* fromTestPromise(() =>
+    runBillingCollectionWorkflow({
+      environment: fixture.environment,
+      activity,
+      payload: { version: 1, attemptId: payment.billingAttempt.id },
+    })
+  );
+  const lookup = (): Promise<void> =>
+    runBillingCollectionWorkflow({
+      environment: fixture.environment,
+      activity,
+      payload: { version: 1, kind: "lookup", transactionId: "checkout-declined-2" },
+    });
+  yield* fromTestPromise(lookup);
+  advanceRetryWindow();
+  yield* fromTestPromise(lookup);
+  const standing = yield* fromTestPromise(() =>
+    handlePaymentEnrollment({
+      environment: fixture.environment,
+      request: fixture.request(`/web/subscription/billing-attempts/${payment.billingAttempt.id}`),
+    })
+  );
+  expect(yield* fromTestPromise(() => standing.json())).toMatchObject({ status: "failed" });
+  const retained = yield* fromTestPromise(() =>
+    handlePaymentEnrollment({
+      environment: fixture.environment,
+      request: fixture.request("/web/subscription/payment-enrollments/prepare", "POST", {
+        priceId,
+      }),
+    })
+  );
+  return yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+    yield* fromTestPromise(() => retained.json())
+  );
+});
+
+it.each(
+  (
+    [
+      { replaceFailedSource: false, outcome: "DECLINED", creationLost: false },
+      { replaceFailedSource: true, outcome: "DECLINED", creationLost: false },
+      { replaceFailedSource: true, outcome: "PENDING", creationLost: false },
+      { replaceFailedSource: true, outcome: "APPROVED", creationLost: false },
+      { replaceFailedSource: true, outcome: "DECLINED", creationLost: true },
+      { replaceFailedSource: true, outcome: "ERROR", creationLost: false },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: false,
+        replacementMethod: "nequi",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "nequi",
+        supportConfirmed: true,
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: false,
+        replacementMethod: "daviplata",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "daviplata",
+        supportConfirmed: true,
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "nequi",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "PENDING",
+        creationLost: false,
+        replacementMethod: "nequi",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "PENDING",
+        creationLost: false,
+        replacementMethod: "nequi",
+        supportConfirmed: true,
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "APPROVED",
+        creationLost: false,
+        replacementMethod: "daviplata",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "nequi",
+        supportConfirmed: true,
+        lateEvidence: "PENDING",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: true,
+        replacementMethod: "daviplata",
+        supportConfirmed: true,
+        lateEvidence: "APPROVED",
+      },
+      {
+        replaceFailedSource: true,
+        outcome: "DECLINED",
+        creationLost: false,
+        replacementMethod: "nequi",
+        supportConfirmed: true,
+        unclearedRetry: true,
+      },
+    ] as const
+  ).map((testCase) => ({
+    replacementMethod: "card" as const,
+    supportConfirmed: false,
+    lateEvidence: "none" as const,
+    unclearedRetry: false,
+    ...testCase,
+  }))
+)(
+  "guards explicit card retry: $outcome, replacement $replaceFailedSource, lost response $creationLost, method $replacementMethod, confirmed $supportConfirmed, later $lateEvidence, uncleared retry $unclearedRetry",
+  ({
+    replaceFailedSource,
+    outcome,
+    creationLost,
+    replacementMethod,
+    supportConfirmed,
+    lateEvidence,
+    unclearedRetry,
+  }) => {
+    const expectedToProceed =
+      outcome === "DECLINED" &&
+      (!creationLost || supportConfirmed) &&
+      lateEvidence === "none" &&
+      !unclearedRetry;
+    const lostCreationResponses = new Set([
+      ...(creationLost ? [1] : []),
+      ...(unclearedRetry ? [2] : []),
+    ]);
+    return Effect.runPromise(
       Effect.gen(function* () {
         vi.useFakeTimers({ toFake: ["Date"] });
-        const { environment, request } = yield* fromTestPromise(setup);
+        const fixture = yield* fromTestPromise(setup);
+        const { request } = fixture;
+        const environment = {
+          ...fixture.environment,
+          WOMPI_DAVIPLATA_OTP_SEND_URL: "https://sandbox.wompi.co/otp/send",
+          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: "https://sandbox.wompi.co/otp/confirm",
+        };
         let now = yield* Clock.currentTimeMillis;
         let reference = "";
         let sourceCreations = 0;
         let collections = 0;
+        const transactionBody = (): string => {
+          const currentOutcome = collections > 1 && !unclearedRetry ? "APPROVED" : outcome;
+          return JSON.stringify({
+            data: {
+              id: `checkout-declined-${Math.max(1, collections)}`,
+              reference,
+              status: currentOutcome,
+              amount_in_cents: 990000,
+              currency: "COP",
+              finalized_at:
+                currentOutcome === "PENDING"
+                  ? null
+                  : DateTime.formatIso(DateTime.makeUnsafe(now - 1000)),
+            },
+          });
+        };
         const provider = vi.fn((url: URL, init?: RequestInit): Promise<Response> =>
           (url.pathname === "/v1/transactions" && init?.method === "POST"
             ? new Request(url, init).json().then((body: unknown) => {
@@ -219,7 +453,9 @@ it.each([
                   body
                 ).reference;
                 collections += 1;
-                if (creationLost) throw new Error("Synthetic lost creation response");
+                if (lostCreationResponses.has(collections)) {
+                  throw new Error("Synthetic lost creation response");
+                }
               })
             : Promise.resolve()
           ).then(() => {
@@ -231,26 +467,17 @@ it.each([
               body = JSON.stringify({
                 data: {
                   id: 3890 + sourceCreations,
-                  type: "CARD",
+                  type: sourceCreations > 1 ? replacementMethod.toUpperCase() : "CARD",
                   status: "AVAILABLE",
                   customer_email: "payer@example.com",
                 },
               });
-            } else if (url.pathname.startsWith("/v1/transactions")) {
-              const currentOutcome = collections > 1 ? "APPROVED" : outcome;
+            } else if (url.pathname.startsWith("/v1/tokens/")) {
               body = JSON.stringify({
-                data: {
-                  id: `checkout-declined-${Math.max(1, collections)}`,
-                  reference,
-                  status: currentOutcome,
-                  amount_in_cents: 990000,
-                  currency: "COP",
-                  finalized_at:
-                    currentOutcome === "PENDING"
-                      ? null
-                      : DateTime.formatIso(DateTime.makeUnsafe(now - 1000)),
-                },
+                data: { id: `${replacementMethod}_test_replacement`, status: "APPROVED" },
               });
+            } else if (url.pathname.startsWith("/v1/transactions")) {
+              body = transactionBody();
             } else {
               body = providerBody(url, "AVAILABLE");
             }
@@ -290,7 +517,7 @@ it.each([
         );
         if (payment.status !== "payment-pending") throw new Error("Expected pending payment");
         const pendingPreparation = yield* fromTestPromise(prepare);
-        const pendingEnrollment = yield* Schema.decodeUnknownEffect(
+        let pendingEnrollment = yield* Schema.decodeUnknownEffect(
           Schema.toCodecJson(PaymentEnrollment)
         )(yield* fromTestPromise(() => pendingPreparation.json()));
         const refusedReplacement = yield* fromTestPromise(() =>
@@ -360,18 +587,53 @@ it.each([
             } as const
           )[outcome],
         });
+        yield* retainHistoricalConfirmation({
+          db: environment.DB,
+          attemptId: payment.billingAttempt.id,
+          reference,
+          now,
+          supportConfirmed,
+          lateEvidence,
+        });
+        if (unclearedRetry) {
+          pendingEnrollment = yield* retainUnclearedRetry({ ...fixture, environment }, () => {
+            now += 181_000;
+            vi.setSystemTime(now);
+          });
+        }
+        const providerCallsBeforeReplacement = provider.mock.calls.length;
         const next = yield* fromTestPromise(() =>
           handlePaymentEnrollment({
             environment,
             request: request("/web/subscription/payment-enrollments/prepare", "POST", {
               priceId,
               replaceFailedSource,
+              method: replacementMethod,
             }),
           })
         );
-        if (outcome !== "DECLINED" || creationLost) {
+        if (!expectedToProceed) {
           expect(next.status).not.toBe(200);
+          expect(provider.mock.calls).toHaveLength(providerCallsBeforeReplacement);
           expect(sourceCreations).toBe(1);
+          const preserved = yield* fromTestPromise(() =>
+            handlePaymentEnrollment({
+              environment,
+              request: request(
+                `/web/subscription/payment-enrollments/${pendingEnrollment.enrollmentId}`
+              ),
+            })
+          );
+          expect(yield* fromTestPromise(() => preserved.json())).toMatchObject({
+            status: "prepared",
+          });
+          expect(
+            yield* fromTestPromise(() =>
+              environment.DB.prepare(
+                "SELECT count(*) AS count FROM card_payment_sources WHERE retired_at_ms IS NOT NULL"
+              ).first("count")
+            )
+          ).toBe(0);
           return;
         }
         expect(next.status).toBe(200);
@@ -390,7 +652,7 @@ it.each([
               paymentSourceMode: replaceFailedSource ? "create" : "reuse",
               billingEmail: "payer@example.com",
               decisions,
-              ...(replaceFailedSource ? { cardToken: "tok_test_replacement" } : {}),
+              ...(replaceFailedSource ? replacementTokens[replacementMethod] : {}),
             }),
           })
         );
@@ -437,8 +699,33 @@ it.each([
           )
         ).toBe(replaceFailedSource ? 2 : 1);
       })
-    )
+    );
+  }
 );
+
+it("prepares a fresh wallet when explicit method selection has no retained card to replace", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { environment, request } = yield* fromTestPromise(setup);
+      vi.stubGlobal("fetch", () => Promise.resolve(new Response(merchant)));
+      const response = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          environment,
+          request: request("/web/subscription/payment-enrollments/prepare", "POST", {
+            priceId,
+            method: "nequi",
+            replaceFailedSource: true,
+          }),
+        })
+      );
+      expect(response.status).toBe(200);
+      expect(yield* fromTestPromise(() => response.json())).toMatchObject({
+        status: "prepared",
+        method: "nequi",
+        paymentSourceMode: "create",
+      });
+    })
+  ));
 
 it("shows enrollment availability to a signed-in User without an optional mailbox credential", () =>
   Effect.runPromise(

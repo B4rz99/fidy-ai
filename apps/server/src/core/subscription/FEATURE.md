@@ -5,7 +5,7 @@ derived for each decision from the original TrialPeriod, a settled paid period, 
 three-day renewal grace. It is never a separately stored entitlement. PaymentSource approval
 alone does not grant Pro. Quota exhaustion is distinct from a Paywall.
 
-| Functionality                               | Local verification                                                                                                                                                     | Production verification, 2026-10-15                                                                  |
+| Functionality                               | Local verification                                                                                                                                                     | Production verification, through 2026-10-16                                                          |
 | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Offers, upgrade guidance and billing status | Complete immutable weekly/monthly/yearly COP offers; bounded same-User history; expired/revoked/under-scoped credentials                                               | Anonymous reads return 401 and `no-store`; signed-in offers/status return 200 (2026-10-15)           |
 | Trial and AccessTier                        | Half-open trial/paid/grace boundaries, User isolation, immutable original trial, refund adjustments and independent trial preservation                                 | Boundary manipulation not induced on real accounts                                                   |
@@ -98,7 +98,7 @@ has no paid Subscription eligible for canonical cancellation, so that path canno
 for a different card. A successful deployed card payment and cancellation were subsequently verified
 on the other approved QA account, as detailed below.
 
-Remaining safe live work: verify the declined-card retry/replacement fix after deployment; complete deployed DaviPlata browser/CORS checks;
+At that point, remaining safe live work included deployed declined-card retry/replacement (subsequently passed below), successful DaviPlata browser OTP authorization,
 and isolated deployed Queue/Workflow/callback recovery evidence before
 claiming the entire payment lifecycle is verified. Real charges, live refunds, recurring debit
 authorization and changing existing subscriptions are excluded from this audit.
@@ -199,6 +199,70 @@ unauthenticated, and its isolated native credential and local grant metadata wer
 Four rendered payment regressions also passed against a freshly built isolated browser/Core topology,
 including explicit retry, replacement and replacement after reload. This completes the approved
 live card sequence; the deployed wallet browser and recovery checks above remain separate gaps.
+
+Unattended Production follow-up on 2026-10-16, 13:43–13:48 UTC, confirmed revision
+`17d62a7ae6143615fdc48b911da79305f44e0e6b` and contract digest
+`cf1813f589f1c81fc8e96b395631f1fafdfb128e99c2557709b6b1b5a50cd812` on API health and the web artifact.
+Ten bounded HTTP probes passed: anonymous billing reads/enrollment returned 401/no-store,
+foreign-Origin preparation/submission returned 403 without credential CORS, and malformed/forged
+Wompi callbacks returned 400/no-store. An indexed read confirmed zero evidence for the forged
+synthetic transaction. The existing three QA attempts still had two failures without paid periods
+and one success with exactly one paid period; their outboxes were published and none had armed
+collections, follow-ups or renewals. Cancellation remained detached with no later attempts.
+The approved and retry Cloudflare Workflow instances both reported complete, each with one collection
+step attempt; this is ordinary execution evidence, not interruption/replay proof.
+
+Core version `c321abfc-0208-460f-be71-4be1a50e2937` served 100% traffic with compatibility date
+`2026-09-08`, flag `new_module_registry`, Sandbox billing and real DaviPlata activation disabled.
+Wrangler version: `4.149.0`. The deployed browser exposed 401 responses from both Sandbox OTP
+operations using an intentionally invalid synthetic credential, verifying the CSP/CORS rejection
+path. Successful OTP authorization remains unverified. Restricted local evidence:
+`/tmp/fidy-subscription-public-production-results.json`,
+`/tmp/fidy-subscription-passive-attempts.json`, `/tmp/fidy-subscription-passive-cancellation.json`
+and the approved/declined Workflow inspection files. These checks created no source, payment or grant.
+
+Remaining live checks: successful wallet browser OTP and DaviPlata source cancellation need a fresh
+session on an eligible unpaid QA account; scheduled renewal/grace needs an approved Sandbox
+Subscription left active until its real due boundary; fault recovery needs an isolated approved
+fixture/procedure; price-change email needs an isolated notice to an approved test mailbox.
+Global offer changes and arbitrary D1 timestamp/state edits are not substitutes for those proofs.
+
+On 2026-10-17, API health and the web artifact agreed on deployed revision
+`15a3408c229e9e4365da4c6ccba377a6d8865010` and the same contract digest above. The prior QA
+cancellation remained detached overnight, with zero later attempts, armed collections or follow-ups
+(17 rows read, zero written); its paid period is not yet due, so this does not prove scheduled renewal.
+Fresh returning Google login on the unpaid QA account allowed Consent, offers, status and enrollment
+availability reads (200); availability included DaviPlata. Explicit weekly DaviPlata preparation
+returned 400 before provider work. Scoped metadata confirmed a retained older failed Sandbox card
+source, no paid period, and no checkout-response or retry-clearance evidence. The one-source guard
+therefore blocks a method switch; this account is not a clean wallet fixture. No source, payment or
+grant was created, and no billing evidence was edited. Full wallet proof still needs an eligible
+account without that retained source, or a separately supported reconciliation path.
+
+Local lifecycle follow-up, 2026-10-18: explicit replacement can reserve Nequi or DaviPlata after
+retiring a cleared failed card. Migration `0112_failed_card_wallet_replacement.sql` preserves source,
+attempt and authorization history. Each old attempt must have verified retry clearance or an
+attributable provider no-charge confirmation matching its reference/environment; pending or approved
+evidence, a paid Subscription and wallet retirement remain blocked. A failed state or missing POST
+response alone never clears replacement. Fresh Users can choose a wallet without a source to retire.
+The rendered decline flow permits method selection, opens fresh terms/authorization, and submits no
+second payment automatically. Native local D1 tests cover both wallets, ordinary card retry,
+unconfirmed lost responses, pending outcomes (including an existing no-charge confirmation), paid
+outcomes and retained original history. Later pending/approved evidence invalidates historical
+confirmation even while an attempt still reads failed; clearing one attempt cannot clear a second
+unresolved attempt on that source. Rejected replacement preserves source/enrollment state and makes
+zero provider calls. Production use of this change remains unverified.
+Rerun at local base `226dd9363662cb98d158e351c287c9419ebe3e98` plus this change:
+351 native billing checks passed (eight opt-in real-provider cases skipped), 21 web Subscription
+checks passed, all nine Upgrade presentation journeys passed, and the three existing built-browser
+public Ingress/Core/local D1 Subscription journeys passed. The new card-to-wallet browser check
+controls enrollment responses; the native replacement matrix uses real local D1 and controlled
+Wompi. These results do not establish a deployed wallet authorization or cancellation.
+
+The historical QA card still needs genuine, attributable Wompi no-charge confirmation before reuse;
+the local test's synthetic provider case is fixture data, not Production proof. This change does not
+add an operator HTTP/CLI confirmation facility, bypass the privileged confirmation ledger, retire
+wallets or change paid Subscriptions. No live billing state or provider authorization was changed.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

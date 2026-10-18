@@ -467,7 +467,9 @@ A direct-card creation response retains its transaction identity separately from
 Only that known transaction, authenticated final decline after the retry window, no other candidate
 and no paid period permit another explicit first-payment attempt. Unknown sends remain blocked.
 Source replacement atomically rechecks fresh browser authority, retires only a definitively declined
-card and reserves a new enrollment; rejection preserves the existing form and source. A partial
+card and reserves a new card or wallet enrollment; attributable no-charge confirmation can clear a
+historical failed card without fabricating its missing creation response. Pending/approved evidence,
+wallet retirement and paid Subscriptions remain excluded. Rejection preserves the existing form and source. A partial
 unique index retains one active source while original source identities and billing history survive.
 AccessTier is derived at the decision instant, never persisted as a separate authority. Automatic
 renewal includes a fixed three-day grace after the paid boundary, excluding stopped renewals and

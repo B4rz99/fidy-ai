@@ -347,6 +347,55 @@ const installDeclinedEnrollment = (page: Page): Effect.Effect<() => number, Caus
     return () => submissions;
   });
 
+test("a declined card can explicitly switch to a newly reviewed wallet without submitting another payment", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const submissions = yield* installDeclinedEnrollment(page);
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Elegir mensual" }).click());
+      yield* Effect.tryPromise(() => page.getByLabel(/Acepto el reglamento/iu).check());
+      yield* Effect.tryPromise(() => page.getByLabel(/Autorizo el tratamiento/iu).check());
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Activar Pro" }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText(/Wompi rechazó el pago/u)).toBeVisible()
+      );
+      yield* installRoute(
+        page,
+        `${apiOrigin}/web/subscription/payment-enrollments/prepare`,
+        (route) => {
+          expect(route.request().postDataJSON()).toMatchObject({
+            method: "nequi",
+            replaceFailedSource: true,
+          });
+          return route.fulfill({
+            status: ok,
+            contentType: "application/json",
+            body: JSON.stringify({
+              ...prepared,
+              method: "nequi",
+              paymentSourceMode: "create",
+            }),
+          });
+        }
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Nequi", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Pago con Nequi" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel(/Acepto el reglamento/iu)).not.toBeChecked()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Autorizar con Nequi" })).toBeDisabled()
+      );
+      expect(submissions()).toBe(1);
+    })
+  ));
+
 for (const { replaceFailedSource, reload } of [
   { replaceFailedSource: false, reload: false },
   { replaceFailedSource: true, reload: false },

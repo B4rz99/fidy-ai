@@ -139,7 +139,10 @@ jobs:
           CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
           CLOUDFLARE_TEST_REPORT: "true"
           VERIFY_TIMING_REPORT: apps/server/test-results/verify-adapters.json
-        run: bun run verify -- --group cloudflare-adapters
+        run: |
+          export TMPDIR="$(mktemp -d /dev/shm/fidy-adapters.XXXXXX)"
+          trap 'rm -rf "$TMPDIR"' EXIT
+          bun run verify -- --group cloudflare-adapters
       - name: Summarize adapter file timings
         if: ${{ !cancelled() }}
         run: |
@@ -175,7 +178,10 @@ jobs:
         env:
           CLOUDFLARE_TEST_REPORT: "true"
           VERIFY_TIMINGS_PATH: infra/cloudflare/test-results/verify-infra.json
-        run: bun run verify -- --group cloudflare-infra
+        run: |
+          export TMPDIR="$(mktemp -d /dev/shm/fidy-infra.XXXXXX)"
+          trap 'rm -rf "$TMPDIR"' EXIT
+          bun run verify -- --group cloudflare-infra
       - name: Upload infrastructure timings
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -225,6 +231,8 @@ jobs:
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
           sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
+          export TMPDIR="$(mktemp -d /dev/shm/fidy-browser.XXXXXX)"
+          trap 'rm -rf "$TMPDIR"' EXIT
           dbus-run-session -- bash -euc '
             printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
             if [[ "$BROWSER_TEST_SHARD" == 1/* ]]; then bun run --cwd apps/cli test:native; fi

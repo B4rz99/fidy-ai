@@ -54,6 +54,7 @@ const compositionRoots = new Set([
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/onboarding/browser-authentication.test.ts",
   "cloudflare/provider-authentication/whatsapp.test.ts",
+  "cloudflare/provider-authentication/whatsapp-association.test.ts",
   "cloudflare/subscription/payment-enrollment.test.ts",
   "cloudflare/subscription/refund-support.test.ts",
   "cloudflare/subscription/refunds.test.ts",

@@ -1,6 +1,9 @@
 name: Bun install
 description: Pin Bun, restore its install cache, and install the root dependencies.
 inputs:
+  cli-release:
+    description: Install only CLI production dependencies, without development lifecycle scripts.
+    default: "false"
   save-cache:
     description: Save a missing cache after the job; disable when another job publishes the same key.
     default: "true"
@@ -21,4 +24,11 @@ runs:
         key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'tools/*/bun.lock') }}
     - name: Install dependencies
       shell: bash
-      run: bash scripts/install-workspace.sh
+      env:
+        CLI_RELEASE: ${{ inputs.cli-release }}
+      run: |
+        if [[ "$CLI_RELEASE" == true ]]; then
+          bash scripts/install-workspace.sh --cli-release
+        else
+          bash scripts/install-workspace.sh
+        fi

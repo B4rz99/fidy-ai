@@ -491,7 +491,8 @@
         "**/*.test.ts",
         "**/*.test.js",
         "apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts",
-        "apps/server/cloudflare/agent/hosted-turn.test-fixture.ts"
+        "apps/server/cloudflare/agent/hosted-turn.test-fixture.ts",
+        "apps/server/cloudflare/provider-authentication/whatsapp-messages.test-fixture.ts"
       ],
       "rules": {
         "max-nested-callbacks": ["error", 4],

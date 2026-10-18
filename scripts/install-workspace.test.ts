@@ -53,7 +53,7 @@ it.effect(
       const result = yield* runInstaller(authorizedLock, "2026-10-09", ["--ignore-scripts"]);
       expect(result.exitCode).toBe(0);
       expect(new TextDecoder().decode(result.stdout)).toBe(
-        "install\n--frozen-lockfile\n--minimum-release-age=0\n--ignore-scripts\n"
+        "install\n--frozen-lockfile\n--ignore-scripts\n--minimum-release-age=0\n"
       );
     })
 );
@@ -79,5 +79,15 @@ it.effect("refuses arguments that could change the admitted install graph", () =
     const result = yield* runInstaller(authorizedLock, "2026-10-09", ["--no-save"]);
     expect(result.exitCode).toBe(2);
     expect(new TextDecoder().decode(result.stdout)).toBe("");
+  })
+);
+
+it.effect("installs only the frozen CLI production closure without development hooks", () =>
+  Effect.gen(function* () {
+    const result = yield* runInstaller(authorizedLock, "2026-10-10", ["--cli-release"]);
+    expect(result.exitCode).toBe(0);
+    expect(new TextDecoder().decode(result.stdout)).toBe(
+      "install\n--frozen-lockfile\n--production\n--ignore-scripts\n--filter\n@fidy/cli\n"
+    );
   })
 );

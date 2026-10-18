@@ -23,7 +23,7 @@ it("separates the two slowest suites and fills spare capacity with smaller suite
 
 it("assigns new and measured files exactly once regardless of discovery order", () => {
   const files = [file("new-feature"), file("transactions/transactions"), file("another-feature")];
-  for (const count of [1, 2, 3, 4, 8, 24]) {
+  for (const count of [1, 2, 3, 4, 8, 12]) {
     const shards = cloudflareTestShards({ files, cloudflareRoot: root, count });
     expect(shards).toHaveLength(count);
     expect(shards).toEqual(

@@ -1,5 +1,6 @@
 const estimatedSeconds: Readonly<Record<string, number>> = {
-  "provider-authentication/whatsapp.test.ts": 133.8,
+  "provider-authentication/whatsapp.test.ts": 89.5,
+  "provider-authentication/whatsapp-association.test.ts": 44.3,
   "dashboard/dashboard.test.ts": 124.4,
   "transactions/transactions.test.ts": 121.2,
   "oauth-agents/oauth-ingress.test.ts": 116.0,

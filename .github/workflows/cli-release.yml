@@ -54,6 +54,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/bun-install
         with:
+          cli-release: "true"
           save-cache: ${{ runner.os != 'Linux' }}
       - name: Build and verify the native release
         shell: bash

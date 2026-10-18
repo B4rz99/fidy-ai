@@ -69,7 +69,7 @@ const groupIsSelected = (group: VerifyGroup): boolean =>
 const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<string>): Check => ({
   group,
   label,
-  command,
+  command: group === "unit" ? [...command, "--maxWorkers=2"] : command,
   cwd: workspaceRoot,
   env: Bun.env,
 });
@@ -296,7 +296,7 @@ await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
     return Effect.forEach(groupChecks, runCheck, {
-      concurrency: group === "browser" ? 2 : 1,
+      concurrency: group === "browser" || group === "unit" ? 2 : 1,
       discard: true,
     });
   })

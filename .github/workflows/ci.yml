@@ -109,6 +109,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+        with:
+          cache: "false"
       - name: Unit and artifact validation
         run: bun run verify -- --group unit
       - name: Preserve core coverage evidence

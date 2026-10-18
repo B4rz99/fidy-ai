@@ -154,3 +154,63 @@ exit "\${CHECK_EXIT_CODE:-0}"
       }
     })
 );
+
+it.effect("overlaps unit suites within four workers and propagates either suite's failure", () =>
+  Effect.gen(function* () {
+    const temporary = Bun.spawnSync(["mktemp", "-d"]);
+    expect(temporary.exitCode).toBe(0);
+    const directory = new TextDecoder().decode(temporary.stdout).trim();
+    fixtures.push(directory);
+    yield* Effect.tryPromise({
+      try: () =>
+        Bun.write(
+          `${directory}/bun`,
+          `#!/usr/bin/env bash
+set -eu
+[[ "$*" == *"--maxWorkers=2"* ]] || exit 3
+suite=other
+if [[ "$*" == *"apps/cli"* ]]; then suite=cli; fi
+if [[ "$*" == *"test:core"* ]]; then suite=core; fi
+printf 'CHECK %s\\n' "$*"
+if [[ "$suite" == other ]]; then exit 0; fi
+touch "\${UNIT_RENDEZVOUS}/$suite"
+for attempt in {1..100}; do
+  if [[ -e "\${UNIT_RENDEZVOUS}/cli" && -e "\${UNIT_RENDEZVOUS}/core" ]]; then break; fi
+  sleep 0.01
+done
+[[ -e "\${UNIT_RENDEZVOUS}/cli" && -e "\${UNIT_RENDEZVOUS}/core" ]] || exit 2
+[[ "\${FAIL_SUITE:-}" != "$suite" ]] || exit 1
+`
+        ),
+      catch: () => new FixtureUnavailable(),
+    });
+    expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
+    for (const failure of ["", "cli", "core"]) {
+      Bun.spawnSync(["rm", "-f", `${directory}/cli`, `${directory}/core`]);
+      const result = Bun.spawnSync(
+        [
+          process.execPath,
+          Bun.fileURLToPath(new URL("./verify.ts", import.meta.url)),
+          "--group",
+          "unit",
+        ],
+        {
+          env: {
+            ...Bun.env,
+            UNIT_RENDEZVOUS: directory,
+            FAIL_SUITE: failure,
+            PATH: `${directory}:${Bun.env.PATH}`,
+          },
+        }
+      );
+      expect(result.exitCode).toBe(failure === "" ? 0 : 1);
+      if (failure === "") {
+        expect(new TextDecoder().decode(result.stdout).match(/^CHECK /gmu)).toHaveLength(9);
+      } else {
+        expect(new TextDecoder().decode(result.stderr)).toContain(
+          failure === "cli" ? "CLI behavior tests" : "Server core tests"
+        );
+      }
+    }
+  })
+);

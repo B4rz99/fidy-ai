@@ -4,6 +4,7 @@ import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
+import { installAcceptanceClock } from "./acceptance-clock";
 
 const { expect } = playwright;
 
@@ -96,8 +97,7 @@ const signInWithIdentity = (
     | "navigationClock"
     | "navigationDashboard"
 ): Promise<void> =>
-  page.clock
-    .install()
+  installAcceptanceClock(page)
     .then(() => page.goto("/auth/pair"))
     .then(() => page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click())
     .then(() => visiblePairingCode(page))
@@ -129,6 +129,7 @@ export const signInWithVerifiedEmailThroughCore = ({
 }: SignInFixture & Readonly<{ email: string }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() => page.goto("/auth/pair"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()

@@ -5,6 +5,7 @@ import { apiOrigin, installCategories, installUser, response } from "./http-fixt
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
+test.describe.configure({ mode: "parallel" });
 const id = "24000000-0000-4000-8000-000000001350";
 const item = {
   id,

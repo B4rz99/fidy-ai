@@ -1,4 +1,5 @@
 import { playwright } from "./playwright-runtime";
+import { installAcceptanceClock } from "./acceptance-clock";
 import {
   boundSessionRequests,
   reloadTransactionsThroughCore,
@@ -420,6 +421,7 @@ export const signupJourney = ({
   Effect.runPromise(
     Effect.gen(function* () {
       playwright.test.setTimeout(completeSignupJourneyMilliseconds);
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route: Route) =>
           redirectSubject(configuration, `browser-${configuration.provider}-signup`, route)

@@ -20,7 +20,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: isCI,
   retries: 0,
-  workers: measuringBrowserCost ? 1 : 2,
+  workers: measuringBrowserCost ? 1 : 4,
   reporter: isCI
     ? [["line"], ["json", { outputFile: "test-results/browser-timings.json" }]]
     : "line",

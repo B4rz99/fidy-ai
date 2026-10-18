@@ -620,6 +620,12 @@ coordinators across cases; cached immutable setup data is not shared application
 and runtime-lifecycle evidence must exercise the actual boundaries rather than infer them from a
 faster ordinary fixture.
 
+The loopback browser harness controls its process clock for admission cooldowns. After a real,
+declared resource refusal, browser fixtures advance that clock and the browser's timer before the
+application retries. Native D1 grants, request limits and all production clocks remain unchanged.
+The clock operator is confined to the loopback fixture; browser evidence explicitly proves burst
+refusal before advancement and readmission afterward.
+
 Hosted Turn integration evidence is split into transport, statement, canonical-tool and continuity
 suites. Their private `agent/hosted-turn.test-fixture.ts` constructs the same native runtimes and
 registers cleanup separately in each test process; every case retains an isolated database.

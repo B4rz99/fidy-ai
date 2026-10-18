@@ -1,4 +1,9 @@
 import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
+import {
+  AcceptanceClockAdvance,
+  advanceAcceptanceClock,
+  synchronizeAcceptanceClock,
+} from "./browser-acceptance-clock.test-fixture";
 import { Array, Clock, Effect, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import {
@@ -318,6 +323,19 @@ const cliEvidence = (): Promise<Response> =>
         headers: { "cache-control": "no-store" },
       })
     );
+const clockOperator = (request: Request): Option.Option<Promise<Response>> => {
+  if (operatorRoute(request, "/clock/advance", "POST")) {
+    return Option.some(
+      request.json().then((body: unknown) => {
+        const input = Schema.decodeUnknownOption(AcceptanceClockAdvance)(body);
+        if (Option.isNone(input)) return new Response(null, { status: 400 });
+        advanceAcceptanceClock(input.value.milliseconds);
+        return new Response(null, { status: noContent });
+      })
+    );
+  }
+  return Option.none();
+};
 const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
   if (Option.isSome(browserCost) && operatorRoute(request, "/browser-cost", "GET")) {
     return Option.some(
@@ -422,6 +440,7 @@ const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: operatorPort,
   fetch: (request) => {
+    synchronizeAcceptanceClock();
     if (request.headers.has("origin")) return new Response(null, { status: 403 });
 
     if (operatorRoute(request, "/assertion", "GET")) {
@@ -432,9 +451,12 @@ const operator = Bun.serve({
     if (operatorRoute(request, "/email/replacement/deliver", "POST")) {
       return deliverReplacementProof();
     }
-    const setup = Option.orElse(whatsappOperator(request), () =>
-      Option.orElse(googleOperator(request), () => operatorSetup(request))
-    );
+    const setup = Option.firstSomeOf([
+      clockOperator(request),
+      whatsappOperator(request),
+      googleOperator(request),
+      operatorSetup(request),
+    ]);
     if (Option.isSome(setup)) return setup.value;
     const loginCode = operatorCode(request, "/email/login/deliver");
     if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
@@ -508,6 +530,7 @@ const server = Bun.serve({
   port: publicPort,
   tls: { cert: Bun.file(certificate), key: Bun.file(key) },
   fetch: (request) => {
+    synchronizeAcceptanceClock();
     const ingress = new Request(request);
     ingress.headers.set(
       "cf-connecting-ip",
@@ -527,7 +550,11 @@ const server = Bun.serve({
           fetch: (forwarded) => core.fetch(new Request(forwarded), coreEnvironment),
         },
       })
-      .then(bridgeBrowserOrigin);
+      .then(bridgeBrowserOrigin)
+      .then((response) => {
+        response.headers.set("x-acceptance-clock", "controlled");
+        return response;
+      });
   },
 });
 

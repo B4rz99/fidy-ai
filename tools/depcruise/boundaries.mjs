@@ -17,6 +17,7 @@ const compositionRoots = new Set([
   "cloudflare/ai/workers-ai-evaluation-worker.ts",
   "cloudflare/coordinator-test-harness.ts",
   "cloudflare/browser-acceptance-core-module.ts",
+  "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "cloudflare/browser-acceptance-preview.ts",
   "cloudflare/browser-acceptance-whatsapp.ts",
   "cloudflare/resource-admission/resource-admission-worker.fixture.ts",
@@ -81,6 +82,7 @@ const testRunner = new Set([
   "cloudflare/test-shards.test.ts",
 ]);
 const sharedTestSupport = new Set([
+  "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",
   "src/shell/testing/crypto-harness.ts",
   "src/shell/outbound-http/testing.ts",

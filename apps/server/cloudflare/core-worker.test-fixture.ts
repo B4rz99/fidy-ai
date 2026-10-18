@@ -49,7 +49,8 @@ export const scheduledFixture = {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return Effect.gen(function* () {
-      const scheduledTime = yield* Clock.currentTimeMillis;
+      const hourMs = 3_600_000;
+      const scheduledTime = Math.floor((yield* Clock.currentTimeMillis) / hourMs) * hourMs;
       return yield* Effect.tryPromise({
         try: () =>
           coreWorker.scheduled(

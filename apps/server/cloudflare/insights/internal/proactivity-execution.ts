@@ -1,3 +1,4 @@
+import { summariesDue } from "./cadence";
 import { continueQueuedDelivery, queuedDeliveryQuery } from "./queued-delivery";
 import { advance as advanceRecurringDigest } from "./recurring-generation";
 import { findRecurringDiscovery } from "../../recurring/operations";
@@ -45,7 +46,9 @@ export const generateProactivity = (
     yield* generateReminderQuestion(input);
     const schedule = yield* findSchedule(input);
     if (Option.isSome(schedule)) yield* materialize({ ...input, id: schedule.value.id });
-    if (Option.isSome(yield* findRecurringDiscovery(input))) yield* advanceRecurringDigest(input);
+    if (summariesDue(input.now) && Option.isSome(yield* findRecurringDiscovery(input))) {
+      yield* advanceRecurringDigest(input);
+    }
     return { _tag: "Done" } as const;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 

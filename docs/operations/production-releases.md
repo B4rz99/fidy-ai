@@ -105,7 +105,11 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 8. Recheck trunk through the bounded Git reference response (not commit patches), then capture each
    active public/Core deployment and its sole stable 100% version. Independent public/Core capture
    reads overlap with concurrency capped at two;
-   prove both stable identities through the reserved smoke path. Refuse an ambiguous deployment.
+   prove both stable identities through proof-admitted normal-traffic
+   `GET /internal/release-smoke?readiness=1`. Require the exact public/Core versions, revision,
+   digest, no-store response and public identity header. This read-only baseline capture does not
+   admit a synthetic job or depend on Queue/Workflow publication. It creates no smoke attestation;
+   candidate, compatibility and post-promotion synthetic smoke remain mandatory. Refuse an ambiguous deployment.
    Alchemy may retain a replacement receipt while old-generation cleanup is pending; use its current
    generation only when the Worker identity and rollout hash are present. For an interrupted update,
    capture may use its persisted output only when its Worker identity matches the last-applied output;

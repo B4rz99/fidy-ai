@@ -1,8 +1,10 @@
 import { Clock, Config, Effect, Exit, Logger, Option, Schema, Tracer } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage, observeRetentionCost } from "../d1-test-fixture";
-import { maintenancePerformanceEnvironment } from "../maintenance-performance.test-fixture";
-import { withErasureRecovery } from "../erasure/runtime";
+import {
+  maintenancePerformanceDatabase,
+  maintenancePerformanceEnvironment,
+} from "../maintenance-performance.test-fixture";
 import { runCoreMaintenance, runEmailMaintenance } from "./runtime";
 
 const enabled =
@@ -149,11 +151,7 @@ it.skipIf(!enabled)(
               },
             });
             const environment = maintenancePerformanceEnvironment({
-              db: withErasureRecovery({
-                DB: measured.database,
-                ERASURE_REQUIRED: "true",
-                ERASURE_BUCKET: bucket,
-              }).DB,
+              db: maintenancePerformanceDatabase({ db: measured.database, bucket }),
               bucket,
               queue,
               workflow,

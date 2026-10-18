@@ -1,3 +1,4 @@
+import { withErasureRecovery } from "./erasure/runtime";
 import { Option } from "effect";
 import type { CoreMaintenanceInput } from "./maintenance/contract";
 
@@ -61,3 +62,10 @@ export const maintenancePerformanceEnvironment = ({
   SMOKE_PROOF: Option.some("fixture"),
   CF_VERSION_METADATA: Option.some({ id: "fixture" }),
 });
+
+/** Production recovery policy for the complete native maintenance composition. */
+export const maintenancePerformanceDatabase = ({
+  db,
+  bucket,
+}: Readonly<{ db: D1Database; bucket: R2Bucket }>): D1Database =>
+  withErasureRecovery({ DB: db, ERASURE_REQUIRED: "true", ERASURE_BUCKET: bucket }).DB;

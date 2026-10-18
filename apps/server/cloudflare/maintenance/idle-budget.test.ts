@@ -1,8 +1,10 @@
 import { Clock, Effect, Logger, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage, observeRetentionCost } from "../d1-test-fixture";
-import { maintenancePerformanceEnvironment } from "../maintenance-performance.test-fixture";
-import { withErasureRecovery } from "../erasure/runtime";
+import {
+  maintenancePerformanceDatabase,
+  maintenancePerformanceEnvironment,
+} from "../maintenance-performance.test-fixture";
 import { sweepErasureControlObjects } from "../erasure/operations";
 import { runCoreMaintenance, runEmailMaintenance } from "./runtime";
 
@@ -46,11 +48,7 @@ it(
             .run()
         );
         const measured = observeRetentionCost(db);
-        const guarded = withErasureRecovery({
-          DB: measured.database,
-          ERASURE_REQUIRED: "true",
-          ERASURE_BUCKET: bucket,
-        }).DB;
+        const guarded = maintenancePerformanceDatabase({ db: measured.database, bucket });
         let queueOffers = 0;
         const unexpected = (): Promise<never> =>
           Promise.reject(new Error("Idle maintenance attempted product work"));

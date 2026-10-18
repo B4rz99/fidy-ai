@@ -9,6 +9,8 @@ export class SmokeBindingFailed extends Data.TaggedError("SmokeBindingFailed")<{
 const quotaMessages = new Set([
   "Your account has exceeded D1's free tier daily row read limit.",
   "Your account has exceeded D1's free tier daily row write limit.",
+  "Your account has exceeded D1's free tier daily row read limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue.",
+  "Your account has exceeded D1's free tier daily row write limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue.",
 ]);
 /** Recognize only the provider's closed daily-limit messages, including its native cause. */
 const dailyQuota = (cause: unknown, depth = 0): boolean => {

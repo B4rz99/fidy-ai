@@ -1,9 +1,9 @@
 name: Bun install
-description: Pin Bun, restore its install cache, and install the root dependencies.
+description: Pin Bun and install frozen dependencies, with an optional package archive cache.
 inputs:
   cache:
     description: Restore the package archive cache before the frozen install.
-    default: "true"
+    default: "false"
   cli-release:
     description: Install only CLI production dependencies, without development lifecycle scripts.
     default: "false"

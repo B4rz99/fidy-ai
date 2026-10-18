@@ -3,7 +3,8 @@ working_dir: /src
 language: EN
 sca:
   include:
-    - .
+    - glob(*)
+    - glob(**)
   exclude:
     - glob(.repos/**)
     - glob(**/node_modules/**)

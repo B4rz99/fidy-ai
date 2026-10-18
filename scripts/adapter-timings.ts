@@ -27,7 +27,6 @@ export const timingRuns = Schema.Array(timingRun);
 
 const millisecondsPerSecond = 1000;
 const runSamples = (run: typeof timingRun.Type): ReadonlyMap<string, number> => {
-  if (run.reports.length !== 4) throw new Error("Each run must contain all four shards");
   const files = new Map<string, number>();
   for (const result of run.reports.flatMap((report) => report.testResults)) {
     const marker = "/apps/server/cloudflare/";
@@ -62,7 +61,11 @@ export const medianAdapterTimings = (
   if (new Set(runs.map((run) => run.runId)).size !== runs.length) {
     throw new Error("Runs must have distinct IDs (include the attempt for reruns)");
   }
+  if (first.reports.length === 0) throw new Error("Each run must contain shard reports");
   const samples = runs.map((run) => {
+    if (run.reports.length !== first.reports.length) {
+      throw new Error("Each run must contain the same number of shards");
+    }
     if (run.revision !== first.revision || run.configuration !== first.configuration) {
       throw new Error("Runs must use the same revision and configuration");
     }

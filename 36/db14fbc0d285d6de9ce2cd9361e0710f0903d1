@@ -1,0 +1,29 @@
+tools/depcruise/boundaries.mjs
+  s_b75995d26622a8::t_ce2647e262317b 27
+apps/server/cloudflare/runtime/release-smoke/platform.test.ts
+  s_b75995d26622a8::t_ce2647e262317b 11-24
+apps/server/cloudflare/runtime/release-smoke/internal/platform.ts
+  s_b75995d26622a8::t_ce2647e262317b 12-13
+apps/server/cloudflare/maintenance-performance.test-fixture.ts
+  s_b75995d26622a8::t_73cd46232fae00 1,65-71
+apps/server/cloudflare/maintenance/idle-budget.test.ts
+  s_b75995d26622a8::t_0ef5b2090f6c4d 4-7,51
+apps/server/cloudflare/maintenance/performance.test.ts
+  s_b75995d26622a8::t_70d50038f69f1f 4-7,154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36db14fbc0d285d6de9ce2cd9361e0710f0903d1",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

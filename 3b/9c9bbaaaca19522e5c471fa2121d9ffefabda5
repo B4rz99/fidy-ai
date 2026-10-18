@@ -1,0 +1,96 @@
+.patterns/effect-4-stable.md
+  s_b75995d26622a8::t_da22e7bb4c4074 3-4,18,22
+apps/server/package.json
+  s_b75995d26622a8::t_a149bc0e394131 288,290,300-303
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_b75995d26622a8::t_183c878bba5432 190
+dependency-policy.json
+  s_b75995d26622a8::t_36f2475e238259 4,7,12
+scripts/document-parsing/xlsx-work.ts
+  s_b75995d26622a8::t_dff8e95b45838f 481
+apps/web/src/session/authentication-events.ts
+  s_b75995d26622a8::t_183c878bba5432 5
+apps/server/cloudflare/web-session/internal/support.ts
+  s_b75995d26622a8::t_183c878bba5432 22
+package.json
+  s_b75995d26622a8::t_5735d06c37d522 60,66,75-77
+apps/server/cloudflare/ingestion/internal/forwarded-email.ts
+  s_b75995d26622a8::t_183c878bba5432 313-314,529
+.patterns/http-api.md
+  s_b75995d26622a8::t_a5d033fa0e3cd0 3,59
+apps/server/cloudflare/ingestion/internal/forwarded-email-processing.ts
+  s_b75995d26622a8::t_183c878bba5432 216,295,313
+apps/server/cloudflare/browser-login/internal/pairing.ts
+  s_b75995d26622a8::t_183c878bba5432 90
+apps/web/package.json
+  s_b75995d26622a8::t_15126cb7a3dba9 25-26,35,48
+apps/server/cloudflare/email-authentication/internal/email-replacement.ts
+  s_b75995d26622a8::t_183c878bba5432 51
+.patterns/streams.md
+  s_b75995d26622a8::t_fb832c4f31501d 27
+.patterns/processes.md
+  s_b75995d26622a8::t_7bfb4f7f7501da 4
+.patterns/INDEX.md
+  s_b75995d26622a8::t_725205867d99da 6
+scripts/document-parsing/hosted-worker.ts
+  s_b75995d26622a8::t_2c3b64ca9b31a0 103
+scripts/mcp/production-native.ts
+  s_b75995d26622a8::t_183c878bba5432 1740-1741
+apps/server/cloudflare/email-authentication/internal/browser-pairing-email.ts
+  s_b75995d26622a8::t_183c878bba5432 46
+apps/server/cloudflare/subscription/internal/subscription-renewal.ts
+  s_b75995d26622a8::t_183c878bba5432 142,156
+apps/server/cloudflare/secret-material/operations.ts
+  s_b75995d26622a8::t_183c878bba5432 8
+apps/web/src/features/recurring/workspace.tsx
+  s_b75995d26622a8::t_162aeff7f0378b 491-493
+.patterns/sources.json
+  s_b75995d26622a8::t_05157589348a71 4,10,17,22
+bun.lock
+  s_b75995d26622a8::t_702c80e1738499 11,17,33,35,38,46,48,58-61,98-99,108,121,143,146-148,161-163,344,410,412,414,416,418,420,422,440,1286
+.patterns/crypto-encoding.md
+  s_b75995d26622a8::t_183c878bba5432 51
+apps/web/e2e/titular-case-fixture.ts
+  s_b75995d26622a8::t_183c878bba5432 38
+apps/server/cloudflare/ingestion/internal/statement-staging.ts
+  s_b75995d26622a8::t_183c878bba5432 267
+.patterns/ai.md
+  s_b75995d26622a8::t_51d975525ac1d9 3
+.patterns/mcp.md
+  s_b75995d26622a8::t_36315e15abfd02 5,52,57
+apps/web/src/features/recurring/details.tsx
+  s_b75995d26622a8::t_e9aaa4acb8b89d 266,302
+apps/web/src/features/agent/conversation.ts
+  s_b75995d26622a8::t_183c878bba5432 173
+infra/cloudflare/package.json
+  s_b75995d26622a8::t_b761a53837f4c4 17,20-22
+apps/web/src/features/pats/issuance.ts
+  s_b75995d26622a8::t_183c878bba5432 57
+apps/cli/package.json
+  s_b75995d26622a8::t_d962ab7258bd4d 18,20,23
+apps/server/cloudflare/consent/ingress/internal/ingress.ts
+  s_b75995d26622a8::t_4ae6cfd1a366d7 682
+  s_b75995d26622a8::t_183c878bba5432 678-680
+.patterns/http-client.md
+  s_b75995d26622a8::t_39611ed30de632 3,49,102
+.patterns/observability.md
+  s_b75995d26622a8::t_77a128a089e396 3
+apps/web/src/features/transactions/bulk-correction.tsx
+  s_b75995d26622a8::t_698e20a4dc4398 90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3b9c9bbaaaca19522e5c471fa2121d9ffefabda5",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

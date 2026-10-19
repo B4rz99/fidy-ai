@@ -4,6 +4,7 @@ import { type Cause, Clock, Effect, Layer, ManagedRuntime, Option, Schema } from
 import { currentDisclosureFor } from "../src/shell/consent/operations";
 import { newId } from "./secret-material/operations";
 import { db } from "./browser-acceptance-seed";
+import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 
 const digestLength = 64;
 const beforeInitiationMs = 10000;
@@ -132,7 +133,7 @@ const sendText = (
       byte.toString(hexRadix).padStart(2, "0")
     ).join("");
     return yield* Effect.tryPromise(() =>
-      sendNative("https://127.0.0.1:4174/providers/kapso/callback", {
+      sendNative(`${browserAcceptanceTopology().api}/providers/kapso/callback`, {
         method: "POST",
         headers: {
           "content-type": "application/json",

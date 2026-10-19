@@ -761,7 +761,7 @@ const confirmBrowserAssociation = ({
         (cookie) => cookie.name === "__Host-fidy_session"
       )
     ).toBe(false);
-    yield* Effect.sleep("1100 millis");
+    yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1_100 }));
     const confirmation = yield* Effect.tryPromise(() =>
       request.post(
         `${operator}/whatsapp/confirm?caller=${caller}&code=${code}&reply=${review.reviewMessageId}`

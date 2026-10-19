@@ -1,5 +1,6 @@
 import type { Page, Response } from "@playwright/test";
 import { Effect } from "effect";
+import { settleAcceptanceClock } from "./acceptance-clock";
 import { playwright } from "./playwright-runtime";
 
 const { expect } = playwright;
@@ -41,7 +42,8 @@ const readPrivacyThroughCore = ({
         response.status() === resourceLimitedStatus && attempt < maximumReadRetries;
         attempt++
       ) {
-        yield* Effect.sleep("1 second");
+        yield* Effect.tryPromise(() => response.finished());
+        yield* Effect.tryPromise(() => settleAcceptanceClock(page));
         response = yield* Effect.tryPromise(() => read(retry));
       }
       expect(response.status()).toBe(successStatus);

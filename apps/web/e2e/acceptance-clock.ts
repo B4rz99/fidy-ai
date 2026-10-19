@@ -1,5 +1,12 @@
 import { ResourceLimited } from "@fidy/server/client";
-import type { APIRequestContext, Frame, Page, Request, Response } from "@playwright/test";
+import type {
+  APIRequestContext,
+  APIResponse,
+  Frame,
+  Page,
+  Request,
+  Response,
+} from "@playwright/test";
 import { Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 
@@ -33,6 +40,32 @@ export const advanceNativeRetry = ({
     .then((response) => {
       if (response.status() !== successStatus) throw new Error("Acceptance clock advance failed");
     });
+
+/** Only a controlled, decoded non-admission permits advancing time before retrying a probe. */
+export const advanceRefusedRequest = ({
+  response,
+  request,
+}: Readonly<{ response: APIResponse; request: APIRequestContext }>): Promise<boolean> => {
+  if (
+    response.status() !== resourceLimitedStatus ||
+    response.headers()["x-acceptance-clock"] !== "controlled"
+  ) {
+    return Promise.resolve(false);
+  }
+  const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers()["retry-after"]);
+  if (Option.isNone(seconds)) return Promise.resolve(false);
+  return response
+    .json()
+    .then((body: unknown) =>
+      Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))
+        ? false
+        : advanceNativeRetry({ request, seconds: seconds.value }).then(() => true)
+    );
+};
+
+/** Join cooldown callbacks after the observed browser response has finished downloading. */
+export const settleAcceptanceClock = (page: Page): Promise<void> =>
+  Promise.all(installed.get(page)?.tasks ?? []).then(() => undefined);
 
 /** Advance an explicitly observed polling delay in the native fixture and the browser. */
 export const advanceAcceptancePoll = ({

@@ -118,9 +118,11 @@ const inspectCanonicalSnapshot = (
   Cause.UnknownError | Cause.TimeoutError
 > =>
   Effect.gen(function* () {
-    const response = yield* probeCanonicalRequest(() =>
-      boundSessionRequests(page.context().request).get(path, { headers: { origin: appOrigin } })
-    );
+    const response = yield* probeCanonicalRequest({
+      request: page.request,
+      send: () =>
+        boundSessionRequests(page.context().request).get(path, { headers: { origin: appOrigin } }),
+    });
     return { status: response.status(), body: yield* fromPlaywright(response.text()) };
   });
 const assertUnderScopedBrowser = (
@@ -130,13 +132,15 @@ const assertUnderScopedBrowser = (
 ): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const refused = yield* probeCanonicalRequest(() =>
-        request.get(`${api}/transactions`, {
-          headers: {
-            authorization: `Bearer ${bearer}`,
-          },
-        })
-      );
+      const refused = yield* probeCanonicalRequest({
+        request: page.request,
+        send: () =>
+          request.get(`${api}/transactions`, {
+            headers: {
+              authorization: `Bearer ${bearer}`,
+            },
+          }),
+      });
       expect(refused.status()).toBe(forbidden);
       const browserRefusal = yield* inspectBrowserSnapshot(
         page,
@@ -149,13 +153,15 @@ const assertUnderScopedBrowser = (
       yield* fromPlaywright(
         page.route(`${api}/transactions?*`, (route) =>
           runProbe(
-            probeCanonicalRequest(() =>
-              request.get(route.request().url(), {
-                headers: {
-                  authorization: `Bearer ${bearer}`,
-                },
-              })
-            )
+            probeCanonicalRequest({
+              request: page.request,
+              send: () =>
+                request.get(route.request().url(), {
+                  headers: {
+                    authorization: `Bearer ${bearer}`,
+                  },
+                }),
+            })
           ).then((coreResponse) => {
             expect(coreResponse.status()).toBe(forbidden);
             return route.fulfill({
@@ -310,13 +316,15 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
           request,
         })
       );
-      const categories = yield* probeCanonicalRequest(() =>
-        boundSessionRequests(page.request).get(`${api}/categories`, {
-          headers: {
-            origin: "https://127.0.0.1:4173",
-          },
-        })
-      );
+      const categories = yield* probeCanonicalRequest({
+        request: page.request,
+        send: () =>
+          boundSessionRequests(page.request).get(`${api}/categories`, {
+            headers: {
+              origin: "https://127.0.0.1:4173",
+            },
+          }),
+      });
       expect(categories.status()).toBe(ok);
       expect(yield* fromPlaywright(categories.json())).toMatchObject({
         data: expect.arrayContaining([
@@ -327,23 +335,25 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
         ]),
       });
       const occurredAt = DateTime.formatIso(yield* DateTime.now);
-      const captured = yield* probeCanonicalRequest(() =>
-        boundSessionRequests(page.request).post(`${api}/transactions`, {
-          headers: {
-            origin: "https://127.0.0.1:4173",
-          },
-          data: {
-            money: {
-              amount: "12500",
-              currency: "COP",
+      const captured = yield* probeCanonicalRequest({
+        request: page.request,
+        send: () =>
+          boundSessionRequests(page.request).post(`${api}/transactions`, {
+            headers: {
+              origin: "https://127.0.0.1:4173",
             },
-            counterparty: "La Cocina real",
-            direction: "outflow",
-            categoryId: "10000000-0000-4000-8000-000000000001",
-            occurredAt,
-          },
-        })
-      );
+            data: {
+              money: {
+                amount: "12500",
+                currency: "COP",
+              },
+              counterparty: "La Cocina real",
+              direction: "outflow",
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              occurredAt,
+            },
+          }),
+      });
       expect(captured.status()).toBe(created);
       yield* fromPlaywright(reloadTransactionsThroughCore(page));
       yield* fromPlaywright(expect(page.getByText("La Cocina real").first()).toBeVisible());
@@ -546,13 +556,15 @@ test("submits reused-source Subscription enrollment through real public and Core
       expect(yield* fromPlaywright(settled.json())).toMatchObject({
         status: "succeeded",
       });
-      const standing = yield* probeCanonicalRequest(() =>
-        boundSessionRequests(page.request).get(`${api}/subscription/status`, {
-          headers: {
-            origin: "https://127.0.0.1:4173",
-          },
-        })
-      );
+      const standing = yield* probeCanonicalRequest({
+        request: page.request,
+        send: () =>
+          boundSessionRequests(page.request).get(`${api}/subscription/status`, {
+            headers: {
+              origin: "https://127.0.0.1:4173",
+            },
+          }),
+      });
       expect(standing.status()).toBe(ok);
       expect(yield* fromPlaywright(standing.json())).toMatchObject({
         data: {
@@ -991,19 +1003,21 @@ test("a read-only PAT issued through the real browser session cannot capture Tra
   Effect.runPromise(
     Effect.gen(function* () {
       const bearer = yield* issueReadOnlyPat(page, request);
-      const readOnly = yield* probeCanonicalRequest(() =>
-        request.post(`${api}/transactions`, {
-          headers: {
-            authorization: `Bearer ${bearer}`,
-          },
-          data: {
-            money: {
-              amount: "1",
-              currency: "COP",
+      const readOnly = yield* probeCanonicalRequest({
+        request: page.request,
+        send: () =>
+          request.post(`${api}/transactions`, {
+            headers: {
+              authorization: `Bearer ${bearer}`,
             },
-          },
-        })
-      );
+            data: {
+              money: {
+                amount: "1",
+                currency: "COP",
+              },
+            },
+          }),
+      });
       expect(readOnly.status()).toBe(forbidden);
       yield* revokeReadOnlyPat(page, request, bearer);
     })

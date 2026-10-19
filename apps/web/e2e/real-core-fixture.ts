@@ -1,12 +1,13 @@
-import { ResourceLimited } from "@fidy/server/client";
-import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page, Response } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 import {
+  advanceRefusedRequest,
   installAcceptanceClock,
   installAcceptanceClockWithNativePerformance,
+  settleAcceptanceClock,
 } from "./acceptance-clock";
 
 const { expect } = playwright;
@@ -35,7 +36,7 @@ export const openBrowserLogin = (page: Page): Promise<void> =>
     .then(() => page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
-type ConsentRead = Readonly<{ status: number }>;
+type ConsentRead = Response;
 const observeConsentRead = (page: Page): Promise<ConsentRead> =>
   page
     .waitForRequest(
@@ -44,7 +45,7 @@ const observeConsentRead = (page: Page): Promise<ConsentRead> =>
     .then((request) => request.response())
     .then((response) => {
       if (response === null) throw new Error("Expected the new consent read response");
-      return { status: response.status() };
+      return response;
     });
 const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
   Effect.runPromise(
@@ -53,17 +54,18 @@ const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
       const maximumRetries = 6;
       for (
         let retry = 0;
-        response.status === resourceLimitedStatus && retry < maximumRetries;
+        response.status() === resourceLimitedStatus && retry < maximumRetries;
         retry++
       ) {
-        yield* Effect.sleep("1 second");
+        yield* Effect.tryPromise(() => response.finished());
+        yield* Effect.tryPromise(() => settleAcceptanceClock(page));
         const refreshed = observeConsentRead(page);
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Reintentar", exact: true }).click()
         );
         response = yield* Effect.tryPromise(() => refreshed);
       }
-      expect(response.status).toBe(successStatus);
+      expect(response.status()).toBe(successStatus);
     }).pipe(Effect.timeout("15 seconds"))
   );
 export const reloadTransactionsThroughCore = (page: Page): Promise<void> => {
@@ -246,29 +248,19 @@ export const boundSessionRequests = (
 
 const canonicalRecoveryMilliseconds = 15_000;
 const resourceProbeRetries = 6;
-const maximumProbeDelaySeconds = 5;
-const RetrySeconds = Schema.NumberFromString.check(
-  Schema.isInt(),
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(maximumProbeDelaySeconds)
-);
-
-export const probeCanonicalRequest = (
-  send: () => Promise<APIResponse>
-): Effect.Effect<APIResponse, Cause.UnknownError | Cause.TimeoutError> =>
+export const probeCanonicalRequest = ({
+  request,
+  send,
+}: Readonly<{ request: APIRequestContext; send: () => Promise<APIResponse> }>): Effect.Effect<
+  APIResponse,
+  Cause.UnknownError | Cause.TimeoutError
+> =>
   Effect.gen(function* () {
-    const limited = 429;
-    const millisecondsPerSecond = 1_000;
     for (let retry = 0; retry < resourceProbeRetries; retry++) {
       const response = yield* Effect.tryPromise(() => send());
-      if (response.status() !== limited) return response;
-      const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers()["retry-after"]);
-      if (Option.isNone(seconds)) return response;
-      const body: unknown = yield* Effect.tryPromise(() => response.json());
-      if (Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))) {
+      if (!(yield* Effect.tryPromise(() => advanceRefusedRequest({ request, response })))) {
         return response;
       }
-      yield* Effect.sleep(seconds.value * millisecondsPerSecond);
     }
     return yield* Effect.tryPromise(() => send());
   }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));

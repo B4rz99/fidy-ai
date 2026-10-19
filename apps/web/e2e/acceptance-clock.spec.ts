@@ -2,7 +2,7 @@ import { ResourceLimited } from "@fidy/server/client";
 import type { APIResponse } from "@playwright/test";
 import { Effect, Option, Schema } from "effect";
 import {
-  advanceNativeRetry,
+  advanceRefusedRequest,
   installAcceptanceClockWithNativePerformance,
 } from "./acceptance-clock";
 import { apiOrigin } from "./http-fixtures";
@@ -52,7 +52,9 @@ test("native admission still refuses the burst and recovers only after the fixtu
           page.request.get(`${apiOrigin}/categories`, { headers })
         )).status()
       ).toBe(resourceLimitedStatus);
-      yield* Effect.tryPromise(() => advanceNativeRetry({ request, seconds: 1 }));
+      expect(
+        yield* Effect.tryPromise(() => advanceRefusedRequest({ request, response: refused }))
+      ).toBe(true);
       expect(
         (yield* Effect.tryPromise(() =>
           page.request.get(`${apiOrigin}/categories`, { headers })

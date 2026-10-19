@@ -51,11 +51,13 @@ const expectSessionUnchanged = Effect.fn(function* (other: Page, binding: string
     (yield* Schema.decodeUnknownEffect(Binding)(yield* Effect.tryPromise(() => afterLogout.json())))
       .binding
   ).toBe(binding);
-  const transactions = yield* probeCanonicalRequest(() =>
-    other.request.get(`${apiOrigin}/transactions`, {
-      headers: { origin: new URL(other.url()).origin, "Fidy-Session-Binding": binding },
-    })
-  );
+  const transactions = yield* probeCanonicalRequest({
+    request: other.request,
+    send: () =>
+      other.request.get(`${apiOrigin}/transactions`, {
+        headers: { origin: new URL(other.url()).origin, "Fidy-Session-Binding": binding },
+      }),
+  });
   expect(transactions.status()).toBe(okStatus);
   expect(yield* Effect.tryPromise(() => transactions.text())).not.toContain(
     "Old session private draft"

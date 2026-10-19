@@ -22,8 +22,8 @@ type VerificationEmail = Readonly<{ subject: string; text: string; html: string 
 
 const replacementVerificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
   subject: replacementSubject,
-  text: `Tu código para cambiar el correo de acceso a Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/settings/email. Este código vence en 10 minutos.\n\nSi no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
-  html: `<p>Tu código para cambiar el correo de acceso a Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/settings/email">https://fidyapp.com/settings/email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
+  text: `Tu código para cambiar el correo de acceso a Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://app.fidyapp.com/settings/account. Este código vence en 10 minutos.\n\nSi no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
+  html: `<p>Tu código para cambiar el correo de acceso a Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://app.fidyapp.com/settings/account">https://app.fidyapp.com/settings/account</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
 });
 
 /** Fixed login projection; no pairing identity, mailbox, or verifier enters provider content. */
@@ -31,8 +31,8 @@ const browserPairingVerificationEmail = (
   combinedCode: EmailVerificationCode
 ): VerificationEmail => ({
   subject: browserPairingSubject,
-  text: `Tu código para iniciar sesión en Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/auth/pair. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
-  html: `<p>Tu código para iniciar sesión en Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/auth/pair">https://fidyapp.com/auth/pair</a>. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
+  text: `Tu código para iniciar sesión en Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://app.fidyapp.com/login. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
+  html: `<p>Tu código para iniciar sesión en Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://app.fidyapp.com/login">https://app.fidyapp.com/login</a>. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
 });
 
 const verificationEmailByPurpose: Readonly<

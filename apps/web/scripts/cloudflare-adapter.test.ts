@@ -24,6 +24,12 @@ describe("Cloudflare static artifact policy", () => {
         expect(headers).toContain("frame-ancestors 'none'");
         expect(headers).toContain("worker-src 'none'");
         expectStaticSecurityHeaders(headers);
+        expect(headers).toContain("/login\n");
+        expect(headers).not.toContain("/auth/google\n");
+        expect(headers).not.toContain("/auth/microsoft\n");
+        expect(
+          matchingLines(headers, "Cross-Origin-Opener-Policy: same-origin-allow-popups")
+        ).toHaveLength(1);
         expect(headers).not.toContain("X-Robots-Tag: noindex");
         expect(matchingLines(headers, "Cache-Control: no-cache")).toHaveLength(1);
         expect(matchingLines(headers, "! Cache-Control")).toHaveLength(1);

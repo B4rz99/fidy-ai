@@ -419,7 +419,7 @@ test("replaces a verified EmailCredential through public operations after fixtur
           request,
         })
       );
-      yield* fromPlaywright(page.goto("/settings/email"));
+      yield* fromPlaywright(page.goto("/settings/account"));
       yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("nuevo@example.com"));
       yield* fromPlaywright(
         page
@@ -881,7 +881,7 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
 
 const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
   yield* fromPlaywright(signInThroughCore({ page, request }));
-  yield* fromPlaywright(page.goto("/settings/pats"));
+  yield* fromPlaywright(page.goto("/settings/access"));
   yield* fromPlaywright(
     page
       .getByLabel("Nombre", {

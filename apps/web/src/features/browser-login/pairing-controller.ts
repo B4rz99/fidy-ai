@@ -1,17 +1,15 @@
+import { destinationAfterLogin } from "@/session/login-destination";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { type Context, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import type { Atom } from "effect/reactivity";
-import { useState } from "react";
+import { Atom } from "effect/reactivity";
+import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
 import {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
-  ConnectionAttemptReference,
   type EmailAddress,
   type EmailVerificationCode,
-  OAuthRequestId,
-  PATPairingPublicCode,
   type WebAuthClient,
   type WebAuthSuccess,
 } from "@/transport/client";
@@ -216,6 +214,7 @@ const makeStartPairingCommand = (
           if (secrets.generation() === generation) input.onStateChange(invalidState);
           return;
         }
+        if (secrets.generation() !== generation) return;
         const pairing = started.value;
         secrets.setActive(pairing);
         const onCurrentStateChange = (state: BrowserLoginPairingViewState): void => {
@@ -357,6 +356,7 @@ const makeBrowserLoginPairingController = (
 };
 
 export type BrowserLoginPairing = Readonly<{
+  mounted: RefCallback<HTMLElement>;
   state: BrowserLoginPairingViewState;
   start: () => void;
   restart: () => void;
@@ -365,34 +365,6 @@ export type BrowserLoginPairing = Readonly<{
   completeEmail: (combinedCode: VerifiedEmailCombinedCode) => void;
   logout: () => void;
 }>;
-
-type LoginDestination =
-  | Readonly<{ to: "/connect/cli"; search: { cliCode: PATPairingPublicCode } }>
-  | Readonly<{ to: "/oauth/review/$requestId"; params: { requestId: typeof OAuthRequestId.Type } }>
-  | Readonly<{
-      to: "/connections/continue";
-      search: { attempt: typeof ConnectionAttemptReference.Type };
-    }>
-  | Readonly<{ to: "/app/transactions" }>;
-const destinationAfterLogin = (search: unknown): LoginDestination => {
-  const requested = Schema.decodeUnknownOption(
-    Schema.Struct({
-      cliCode: Schema.OptionFromOptionalKey(PATPairingPublicCode),
-      oauthRequest: Schema.OptionFromOptionalKey(OAuthRequestId),
-      connectionAttempt: Schema.OptionFromOptionalKey(ConnectionAttemptReference),
-    })
-  )(search);
-  if (Option.isNone(requested)) return { to: "/app/transactions" };
-  const { oauthRequest, connectionAttempt, cliCode } = requested.value;
-  if (Option.isSome(cliCode)) return { to: "/connect/cli", search: { cliCode: cliCode.value } };
-  if (Option.isSome(oauthRequest)) {
-    return { to: "/oauth/review/$requestId", params: { requestId: oauthRequest.value } };
-  }
-  if (Option.isSome(connectionAttempt)) {
-    return { to: "/connections/continue", search: { attempt: connectionAttempt.value } };
-  }
-  return { to: "/app/transactions" };
-};
 
 /**
  * Owns browser-pairing presentation, command execution, and authentication-lifetime transitions.
@@ -410,6 +382,17 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
   const runRequestEmail = useAtomSet(controller.requestEmail);
   const runCompleteEmail = useAtomSet(controller.completeEmail);
   const runLogout = useAtomSet(controller.logout);
+  const clear = useCallback(() => {
+    controller.clear();
+    startPairing(Atom.Interrupt);
+    runRequestEmail(Atom.Interrupt);
+    runCompleteEmail(Atom.Interrupt);
+    runLogout(Atom.Interrupt);
+  }, [controller, startPairing, runRequestEmail, runCompleteEmail, runLogout]);
+  const mounted = useCallback(
+    (node: Parameters<RefCallback<HTMLElement>>[0]) => (node !== null ? clear : undefined),
+    [clear]
+  );
   const state: BrowserLoginPairingViewState =
     authentication === "signed-in" ? { _tag: "Authenticated" } : pairingState;
 
@@ -417,7 +400,7 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     startPairing({
       onAuthenticated: () => {
         completeLogin();
-        router.navigate(destinationAfterLogin(router.state.location.search)).catch(() => undefined);
+        window.location.assign(destinationAfterLogin(router.state.location.search));
       },
       onStateChange: setPairingState,
     });
@@ -443,5 +426,5 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     runCompleteEmail({ onStateChange: setPairingState });
   };
 
-  return { state, start, restart, requestEmail, resendEmail, completeEmail, logout };
+  return { mounted, state, start, restart, requestEmail, resendEmail, completeEmail, logout };
 };

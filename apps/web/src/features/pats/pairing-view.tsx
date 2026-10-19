@@ -73,7 +73,7 @@ const InvalidPairingCard = ({
           render={
             <a
               aria-label="Iniciar sesión para revisar la solicitud"
-              href={`/auth/pair?cliCode=${encodeURIComponent(publicCode.value)}`}
+              href={`/login?cliCode=${encodeURIComponent(publicCode.value)}`}
             />
           }
         >

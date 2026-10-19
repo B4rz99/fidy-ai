@@ -152,7 +152,7 @@ const start = Effect.fn(function* () {
     Effect.onExit((exit) => (exit._tag === "Failure" ? stop() : Effect.void))
   );
   print(
-    `Ready: ${app}/app/recurring\nTest login: ${app}/auth/pair\nLogs: ${directory}/server.log\nStop: bun run dev:browser stop`
+    `Ready: ${app}/app/recurring\nTest login: ${app}/login\nLogs: ${directory}/server.log\nStop: bun run dev:browser stop`
   );
 });
 

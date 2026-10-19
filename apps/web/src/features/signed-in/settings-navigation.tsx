@@ -6,9 +6,8 @@ import { dismissCompactNavigation } from "./dismiss-navigation";
 
 const settingsLinks = [
   { to: "/settings/privacy", label: "Privacidad" },
-  { to: "/settings/email", label: "Correo" },
+  { to: "/settings/account", label: "Cuenta" },
   { to: "/settings/access", label: "Accesos" },
-  { to: "/settings/recovery", label: "Recuperación" },
 ] as const;
 
 export const SettingsNavigation = (): JSX.Element => {

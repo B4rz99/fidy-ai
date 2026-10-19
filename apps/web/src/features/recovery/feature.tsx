@@ -83,7 +83,7 @@ const RotationAction = (props: {
   if (props.state._tag === "FreshSessionRequired") {
     return (
       <CardFooter>
-        <Button render={<a aria-label="Iniciar sesión" href="/auth/google" />}>
+        <Button render={<a aria-label="Iniciar sesión" href="/login?resume=account" />}>
           Iniciar sesión
         </Button>
       </CardFooter>
@@ -124,10 +124,12 @@ export const BackupRecoveryRotationView = ({
   };
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6">
+    <section aria-label="Recuperación">
       <Card>
         <CardHeader>
-          <CardTitle>Código de recuperación</CardTitle>
+          <CardTitle>
+            <h2>Código de recuperación</h2>
+          </CardTitle>
           <CardDescription>
             Reemplaza el código anterior después de recuperar tu acceso. El código anterior dejará
             de funcionar de inmediato.
@@ -136,7 +138,7 @@ export const BackupRecoveryRotationView = ({
         <RotationFeedback state={state} />
         <RotationAction onCopy={copyCode} onStart={start} state={state} />
       </Card>
-    </main>
+    </section>
   );
 };
 

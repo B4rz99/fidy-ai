@@ -1,5 +1,5 @@
 import { ResourceLimited } from "@fidy/server/client";
-import type { APIRequestContext, Frame, Page, Response } from "@playwright/test";
+import type { APIRequestContext, Frame, Page, Request, Response } from "@playwright/test";
 import { Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 
@@ -9,7 +9,7 @@ type ClockScope = {
   readonly navigation: (frame: Frame) => void;
   readonly tasks: Set<Promise<void>>;
   readonly failures: Array<Readonly<{ generation: number; cause: unknown }>>;
-  readonly response: (response: Response) => void;
+  readonly finished: (request: Request) => void;
 };
 const installed = new WeakMap<Page, ClockScope>();
 const successStatus = 204;
@@ -80,7 +80,7 @@ export const disposeAcceptanceClock = (page: Page): Promise<void> => {
   const scope = installed.get(page);
   if (scope === undefined) return Promise.resolve();
   scope.active = false;
-  page.off("response", scope.response);
+  page.off("requestfinished", scope.finished);
   page.off("framenavigated", scope.navigation);
   installed.delete(page);
   return Promise.all(scope.tasks).then(() => {
@@ -109,16 +109,20 @@ export const installAcceptanceClock = (page: Page): Promise<void> => {
     },
     tasks: new Set(),
     failures: [],
-    response: (response) => {
+    finished: (request) => {
+      if (!request.url().startsWith(`${api}/`)) return;
       const generation = scope.generation;
-      const task = Promise.resolve()
-        .then(() => advanceBrowserRetry(response, page, scope))
+      const task = request
+        .response()
+        .then((response) =>
+          response === null ? undefined : advanceBrowserRetry(response, page, scope)
+        )
         .catch((cause: unknown) => {
           if (
             scope.active &&
             generation === scope.generation &&
             !page.isClosed() &&
-            response.request().failure() === null
+            request.failure() === null
           ) {
             scope.failures.push({ generation, cause });
           }
@@ -131,7 +135,8 @@ export const installAcceptanceClock = (page: Page): Promise<void> => {
   return page.clock
     .install()
     .then(() => {
-      page.on("response", scope.response);
+      // Playwright emits this after the body downloads; aborted navigations cannot strand body reads.
+      page.on("requestfinished", scope.finished);
       page.on("framenavigated", scope.navigation);
     })
     .then(() => undefined);

@@ -280,10 +280,9 @@ const schemaDocument = (schema: Schema.Top): Schema.Json => {
   return Schema.decodeUnknownSync(Schema.Json)({ ...document.schema, $defs: document.definitions });
 };
 type RegisteredTool = Readonly<{ operation: CatalogOperation; tool: McpSchema.Tool }>;
-const catalogProjections = new Map<string, ReadonlyArray<RegisteredTool>>();
-const catalogTools = (
-  scopes: PATScopes
-): Effect.Effect<ReadonlyArray<RegisteredTool>, Schema.SchemaError> =>
+type CatalogProjection = Readonly<{ tools: ReadonlyArray<RegisteredTool>; fingerprint: string }>;
+const catalogProjections = new Map<string, CatalogProjection>();
+const catalogTools = (scopes: PATScopes): Effect.Effect<CatalogProjection, Schema.SchemaError> =>
   Effect.gen(function* () {
     const available = (operation: CatalogOperation): boolean =>
       decideOperationAccess(operation.policy.access, {
@@ -311,8 +310,14 @@ const catalogTools = (
       });
       tools.push({ operation, tool });
     }
-    catalogProjections.set(projectionKey, tools);
-    return tools;
+    const projection = {
+      tools,
+      fingerprint: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(McpSchema.Tool)))(
+        tools.map(({ tool }) => tool)
+      ),
+    };
+    catalogProjections.set(projectionKey, projection);
+    return projection;
   });
 const forwardMcp = (
   input: Readonly<{ request: Request; coordinator: Coordinator }>,
@@ -548,12 +553,6 @@ type ResidentTool = Readonly<{
   owner: ResidentOwner;
   operation: CatalogOperation;
 }>;
-const fingerprint = (
-  tools: ReadonlyArray<RegisteredTool>
-): Effect.Effect<string, Schema.SchemaError> =>
-  Schema.encodeEffect(Schema.fromJsonString(Schema.Array(McpSchema.Tool)))(
-    tools.map(({ tool }) => tool)
-  );
 type OwnerDisposalSettlement =
   | Readonly<{ _tag: "Success" }>
   | Readonly<{ _tag: "Failure"; error: unknown }>;
@@ -615,10 +614,10 @@ const executeResidentTool = (
       target.owner.retiring = true;
       return yield* toolFailure(target.operation);
     }
-    const currentTools = yield* catalogTools(live.value.scopes);
+    const currentCatalog = yield* catalogTools(live.value.scopes);
     if (
       callerBinding(current.subject) !== target.owner.binding ||
-      (yield* fingerprint(currentTools)) !== target.owner.fingerprint ||
+      currentCatalog.fingerprint !== target.owner.fingerprint ||
       (yield* Clock.currentTimeMillis) >= target.owner.expiresAtMilliseconds
     ) {
       target.owner.retiring = true;
@@ -928,8 +927,7 @@ const handleResidentRequest = (
       retireBinding(registry, callerBinding(subject));
       return denied();
     }
-    const tools = yield* catalogTools(live.value.scopes);
-    const catalogFingerprint = yield* fingerprint(tools);
+    const { tools, fingerprint: catalogFingerprint } = yield* catalogTools(live.value.scopes);
     const selectedAt = yield* Clock.currentTimeMillis;
     const expiresAtMilliseconds = Math.min(
       DateTime.toEpochMillis(live.value.credentialExpiresAt),

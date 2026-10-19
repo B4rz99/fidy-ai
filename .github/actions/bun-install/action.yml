@@ -4,9 +4,6 @@ inputs:
   cache:
     description: Restore the package archive cache before the frozen install.
     default: "false"
-  workspace-cache:
-    description: Restore exact workspace modules; use write on the existing publisher and read on consumers.
-    default: "false"
   scope:
     description: Select workspace, server-tests, or unit-tests dependencies from the frozen lock.
     default: workspace
@@ -21,22 +18,6 @@ runs:
   using: composite
   steps:
     - uses: ./.github/actions/bun-runtime
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-      if: ${{ inputs.workspace-cache == 'write' && inputs.scope == 'workspace' && inputs.cli-release != 'true' }}
-      with:
-        path: |
-          node_modules
-          apps/*/node_modules
-          infra/*/node_modules
-        key: ${{ runner.os }}-${{ runner.arch }}-workspace-bun-13a98b0db-v1-${{ hashFiles('bun.lock', 'package.json', 'patches/*') }}
-    - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-      if: ${{ inputs.workspace-cache == 'read' && inputs.scope == 'workspace' && inputs.cli-release != 'true' }}
-      with:
-        path: |
-          node_modules
-          apps/*/node_modules
-          infra/*/node_modules
-        key: ${{ runner.os }}-${{ runner.arch }}-workspace-bun-13a98b0db-v1-${{ hashFiles('bun.lock', 'package.json', 'patches/*') }}
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       if: ${{ inputs.cache == 'true' && inputs.cli-release != 'true' && runner.os != 'Windows' && inputs.save-cache == 'true' }}
       with:

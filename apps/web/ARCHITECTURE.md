@@ -121,7 +121,7 @@ the popup at a parameter-free URL. Only the login document uses
 `same-origin-allow-popups` so the parent can observe a manually closed cross-origin popup.
 The blank popup's opener is cleared before provider navigation. Pending verification with a
 closed popup shows cancellation; verified status and native association confirmation take precedence.
-Successful authentication loads a new Transactions document to restore strict `same-origin` isolation.
+Successful authentication loads a new Transactions document to restore strict `same-origin` isolation. Logout and every application link into `/login` load a new document so the login opener policy is installed before opening a provider; an SPA route change retains the previous document’s policy and can falsely report an open provider popup as closed.
 Cancellation, timeout
 and uncertain completion discard private proof and explain fresh sign-in; no mutation auto-retry or
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work

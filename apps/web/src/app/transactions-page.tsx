@@ -58,7 +58,7 @@ export const TransactionsPage = (): JSX.Element => {
   return (
     <main className="p-5">
       <p>No pudimos verificar tu acceso a las transacciones.</p>
-      <Button variant="outline" render={<Link to="/login" />}>
+      <Button variant="outline" render={<Link to="/login" reloadDocument />}>
         Iniciar sesión
       </Button>
       <Button variant="outline" onClick={refresh}>

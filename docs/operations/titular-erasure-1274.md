@@ -152,6 +152,11 @@ and the last financial-data backup window. Do not erase an unresolved case merel
 
 ## Actual processors and manual disposition
 
+The [#1275 provider reconciliation](provider-reconciliation-1275.md) records the per-flow account
+evidence and review still needed. Its [provider request draft](provider-rights-1275.md) supplies
+minimized identifiers and disposable rehearsal steps; it is not evidence of provider acceptance,
+review approval or completed deletion.
+
 The operator must examine the case's actual disclosures. Do not send full User exports or credentials
 just to open a deletion request. Use the processor's authorized account channel and exact provider
 subject/message/payment identifiers from restricted evidence, for the minimum reviewed scope.

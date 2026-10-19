@@ -1,9 +1,15 @@
 # Security incident response
 
-Repository procedure established by #1260. **No incident exercise or live alert receipt is claimed.**
+Repository procedure established by #1260. The [2026-10-19 bounded drill](security-drill-1276.md#resumption--2026-10-19)
+records scheduled alert receipt/resolution and synthetic PAT containment/cleanup, with explicit
+detection and acknowledgement limits.
 Use with [production recovery](production-recovery.md) and
 [background-work monitoring](cloudflare-background-work.md).
 This procedure does not widen production access, permit destructive recovery, or enable MCP launch.
+
+Use [privacy decisions](privacy-decisions-1276.md) for the separate privacy assessment, RNBD
+applicability and recipient-specific reporting decision. It consumes this technical handoff and
+#1262's actual evidence; a privacy tabletop does not verify technical detection or live response.
 
 ## Ownership and detection
 
@@ -22,8 +28,7 @@ through reviewed release changes; do not assume a second responder exists.
 
 The Core warning detects concentrated HTTP, callback and MCP canonical refusals within each
 HTTP assembly or User coordinator residency; it is not a complete
-security-event correlation service. Distributed, edge and other protocol/status abuse detection and
-verified live notification receipt remain explicit
+security-event correlation service. Distributed, edge and other protocol/status abuse detection remain explicit
 outstanding requirements tracked in [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). Manual inspection does not close those requirements.
 
 ## Triage and containment

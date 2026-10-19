@@ -315,10 +315,10 @@ jobs:
             dbus-run-session -- bash -euc '
               printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
               bun run --cwd apps/cli test:native
-              bun run verify -- --group browser
+              /usr/bin/time -p bun run verify -- --group browser
             '
           else
-            bun run verify -- --group browser
+            /usr/bin/time -p bun run verify -- --group browser
           fi
       - name: Preserve browser timing evidence
         if: ${{ !cancelled() }}

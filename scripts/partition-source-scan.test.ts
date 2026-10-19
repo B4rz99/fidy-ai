@@ -32,7 +32,7 @@ it("keeps every partition on an already selected runner for every change plan", 
   for (const unit of [false, true]) {
     for (const sca of [false, true]) {
       const plan = sourceScanPlan({ unit, sca });
-      const indices = [1, 2, 3, ...(unit ? [4] : []), ...(sca ? [plan.sca] : [])];
+      const indices = [1, 2, ...(unit ? [3] : []), ...(sca ? [plan.sca] : [])];
       expect(indices).toEqual(Array.from({ length: plan.count }, (_, index) => index + 1));
     }
   }

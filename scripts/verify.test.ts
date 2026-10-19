@@ -310,23 +310,19 @@ if [[ "$*" == *lint:rules* ]]; then
   exit 0
 fi
 [[ -f "$STATIC_RENDEZVOUS/rules-complete" ]] || exit 6
-if [[ "$*" == *lint:type-aware* ]]; then
-  [[ ! -f "$STATIC_RENDEZVOUS/suppressions" && ! -f "$STATIC_RENDEZVOUS/types" ]] || exit 7
-  touch "$STATIC_RENDEZVOUS/compiler-complete"
-  [[ "\${FAIL_STATIC:-}" != compiler ]] || exit 1
-  exit 0
-fi
-[[ -f "$STATIC_RENDEZVOUS/compiler-complete" ]] || exit 8
 suite=other
+if [[ "$*" == *lint:type-aware* ]]; then suite=compiler; fi
 if [[ "$*" == *lint:suppressions* ]]; then suite=suppressions; fi
 if [[ "$*" == *format:check* ]]; then suite=types; fi
 if [[ "$suite" == other ]]; then exit 0; fi
 touch "$STATIC_RENDEZVOUS/$suite"
-for attempt in {1..100}; do
-  if [[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/types" ]]; then break; fi
-  sleep 0.01
-done
-[[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/types" ]] || exit 3
+if [[ "$suite" != types ]]; then
+  for attempt in {1..100}; do
+    if [[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/compiler" ]]; then break; fi
+    sleep 0.01
+  done
+  [[ -f "$STATIC_RENDEZVOUS/suppressions" && -f "$STATIC_RENDEZVOUS/compiler" ]] || exit 3
+fi
 [[ "\${FAIL_STATIC:-}" != "$suite" ]] || exit 1
 `
           ),
@@ -339,7 +335,7 @@ done
           "-f",
           `${directory}/installed`,
           `${directory}/rules-complete`,
-          `${directory}/compiler-complete`,
+          `${directory}/compiler`,
           `${directory}/suppressions`,
           `${directory}/types`,
         ]);

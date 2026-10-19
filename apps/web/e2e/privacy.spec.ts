@@ -19,6 +19,7 @@ import { exerciseTitularCase } from "./titular-case-fixture";
 
 const { AxeBuilder } = await import("@axe-core/playwright");
 const { expect, test } = playwright;
+test.describe.configure({ mode: "parallel" });
 const unauthenticatedStatus = 401;
 const successStatus = 200;
 const unavailableResponse = (route: Route): Promise<void> => route.fulfill({ status: 503 });

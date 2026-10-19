@@ -25,27 +25,6 @@ const trackStatement = (
   return tracked;
 };
 
-const traceReleaseFailure = ({
-  cause,
-  statements,
-  sources,
-}: Readonly<{
-  cause: unknown;
-  statements: ReadonlyArray<D1PreparedStatement>;
-  sources: WeakMap<D1PreparedStatement, StatementSource>;
-}>): never => {
-  if (
-    statements.some((statement) =>
-      (sources.get(statement)?.sql ?? "").includes("SET released_at_epoch_ms")
-    )
-  ) {
-    process.stderr.write(
-      `[DEBUG-oauth-release] Native admission release failed: ${String(cause)}\n`
-    );
-  }
-  throw cause;
-};
-
 /** Hold one protected native mutation batch after preparation, before D1 executes any statement. */
 export const makeMutationCommitGate = (
   database: D1Database
@@ -57,11 +36,9 @@ export const makeMutationCommitGate = (
   const sources = new WeakMap<D1PreparedStatement, StatementSource>();
   const batch = <Result>(statements: D1PreparedStatement[]): Promise<D1Result<Result>[]> => {
     const run = (): Promise<D1Result<Result>[]> =>
-      database
-        .batch<Result>(
-          statements.map((statement) => sources.get(statement)?.statement ?? statement)
-        )
-        .catch((cause: unknown) => traceReleaseFailure({ cause, statements, sources }));
+      database.batch<Result>(
+        statements.map((statement) => sources.get(statement)?.statement ?? statement)
+      );
     const held = gate;
     const protectedMutation = statements.some((statement) => {
       const sql = sources.get(statement)?.sql ?? "";

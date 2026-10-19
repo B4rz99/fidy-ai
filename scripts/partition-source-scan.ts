@@ -5,8 +5,8 @@ export const sourceScanPlan = ({
   unit,
   sca,
 }: Readonly<{ unit: boolean; sca: boolean }>): Readonly<{ count: number; sca: number }> => ({
-  count: 3 + Number(unit) + Number(sca),
-  sca: 4 + Number(unit),
+  count: 2 + Number(unit) + Number(sca),
+  sca: 3 + Number(unit),
 });
 
 /** Distribute the complete source scope over existing jobs; never select only changed files. */
@@ -99,8 +99,8 @@ const sourceEntries = (
   return entries;
 };
 
-const minimumPartitions = 3;
-const maximumPartitions = 5;
+const minimumPartitions = 2;
+const maximumPartitions = 4;
 const validPartitionCount = (count: number): boolean =>
   [minimumPartitions, minimumPartitions + 1, maximumPartitions].includes(count);
 const sourceSelection = (selection: string): Readonly<{ index: number; count: number }> => {
@@ -112,7 +112,7 @@ const sourceSelection = (selection: string): Readonly<{ index: number; count: nu
     index < 1 ||
     index > count
   ) {
-    throw new Error("Use one complete source partition from a 3–5 runner plan");
+    throw new Error("Use one complete source partition from a 2–4 runner plan");
   }
   return { index, count };
 };

@@ -332,13 +332,13 @@ jobs:
         run: git fetch origin "$BASE_BRANCH"
       - uses: ./.github/actions/bun-runtime
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
-      - name: Start source partition 3 on this existing runner
+      - name: Start source partition 2 on this existing runner
         id: source-scan
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
         env:
           SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
         run: |
-          bun scripts/partition-source-scan.ts "3/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          bun scripts/partition-source-scan.ts "2/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
           docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
       - name: Gitleaks — pattern-based secret scan
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
@@ -353,7 +353,7 @@ jobs:
         run: >-
           docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9
           ss scan --strict --config /src/.fluidattacks/secrets.yaml
-      - name: Require source partition 3 result
+      - name: Require source partition 2 result
         if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
         run: |
           result=$(docker wait fidy-source-scan)
@@ -371,30 +371,13 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-      - uses: ./.github/actions/bun-runtime
-      - name: Semgrep and source partition 2 on this existing runner
+      - name: Semgrep
         env:
-          SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          bun scripts/partition-source-scan.ts "2/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
-          docker run --rm --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml > "$RUNNER_TEMP/fluid-sast.log" 2>&1 &
-          fluid_pid=$!
-          docker run --rm --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" -w /src docker.io/semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b \
-            semgrep scan --error --strict --metrics=off --json-output=/ci/semgrep.json --baseline-commit "$BASE_SHA" \
-            --config p/owasp-top-ten --config p/typescript --config p/secrets --exclude .repos . > "$RUNNER_TEMP/semgrep.log" 2>&1 &
-          semgrep_pid=$!
-          set +e
-          wait "$fluid_pid"
-          fluid_result=$?
-          wait "$semgrep_pid"
-          semgrep_result=$?
-          set -e
-          cat "$RUNNER_TEMP/fluid-sast.log"
-          cat "$RUNNER_TEMP/semgrep.log"
-          bun -e 'const r=await Bun.file(process.argv[1]).json(); console.log(JSON.stringify(r.errors));' "$RUNNER_TEMP/semgrep.json"
-          echo "Source scanner exit: $fluid_result; Semgrep exit: $semgrep_result"
-          [[ "$fluid_result" == 0 && "$semgrep_result" == 0 ]]
+          docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b \
+            semgrep scan --error --strict --metrics=off --baseline-commit "$BASE_SHA" \
+            --config p/owasp-top-ten --config p/typescript --config p/secrets --exclude .repos .
 
   security-sca:
     needs: changes
@@ -437,13 +420,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-runtime
-      - name: Start source partition 4 on this existing runner
+      - name: Start source partition 3 on this existing runner
         id: source-scan
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
         env:
           SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
         run: |
-          bun scripts/partition-source-scan.ts "4/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          bun scripts/partition-source-scan.ts "3/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
           docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
       - uses: ./.github/actions/bun-install
         with:
@@ -457,7 +440,7 @@ jobs:
           path: apps/cli/dist/native-store/
           if-no-files-found: error
           retention-days: 1
-      - name: Require source partition 4 result
+      - name: Require source partition 3 result
         if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
         run: |
           result=$(docker wait fidy-source-scan)

@@ -353,8 +353,7 @@ await Effect.runPromise(
       const bootstrap = groupChecks.filter(
         (check) =>
           check.label === "Install dependency graph analyzer" ||
-          check.label === "Lint rule regressions" ||
-          check.label === "oxlint type-aware"
+          check.label === "Lint rule regressions"
       );
       const validation = groupChecks.filter((check) => !bootstrap.includes(check));
       return Effect.gen(function* () {

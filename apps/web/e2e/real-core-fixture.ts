@@ -107,6 +107,8 @@ const signInWithIdentity = ({
       | "recurringChat"
       | "recurringPagination"
       | "recurringEditing"
+      | "recurringTracking"
+      | "recurringExceptions"
       | "navigationTransactions"
       | "navigationBudget"
       | "navigationRecurring"
@@ -292,6 +294,8 @@ export const signInRecurringThroughCore = (
         | "recurringSummary"
         | "recurringRecovery"
         | "recurringEditing"
+        | "recurringTracking"
+        | "recurringExceptions"
         | "recurringChat"
         | "recurringPagination";
     }>

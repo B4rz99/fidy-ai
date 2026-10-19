@@ -27,9 +27,8 @@ revision with the implementation evidence. This assessment itself starts no publ
 
 ## Work that still needs accepted bank semantics
 
-Cryptographic key possession can be verified independently using the
-[protected signing proof](bancolombia-signing-proof-1266.md). That command is not a production signer
-or private-key JWT adapter.
+Matching private signing-key possession remains unverified. The published JWKS and protected
+secret metadata alone do not prove it; the profile worksheet retains that distinction.
 
 PKCE/S256 has a public standards definition, but its integration still needs the accepted request
 fields and lifecycle. Do not add a detached helper or a second state store solely to make an empty

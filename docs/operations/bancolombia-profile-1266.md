@@ -76,10 +76,8 @@ questions until the current accepted profile and bounded sandbox observations re
 
 ## Safe signing proof and separate rotation lifecycles
 
-The 2026-10-19 preflight did not perform signing possession. The
-[protected signing proof](bancolombia-signing-proof-1266.md) supplies the independent command/workflow;
-its later execution receipt belongs in [#1266](https://github.com/B4rz99/fidy-ai/issues/1266).
-The proof runs without bank traffic: inside the existing protected secret execution environment, fetch the approved public JWKS,
+The signing possession proof is **not yet performed**. The maintainer can prepare it without bank
+traffic: inside the existing protected secret execution environment, fetch the approved public JWKS,
 select the exact expected key, sign a fresh domain-separated random challenge using RS256 and the
 existing protected private key, and verify locally against that public key. The challenge must not
 be a bank assertion or contain `client_id`, audience or authorization payloads. Do not emit private
@@ -120,7 +118,6 @@ work in #1267–#1270 blocked at those dependencies.
 
 Public/source research, reachable registration metadata, a read-only disabled-gate check and this
 missing-evidence/ownership register can be completed now. Accepted client/profile, bank-specific
-certificate policy and authorized bank scenarios were unverified in this preflight. Signing possession
-requires its separate protected-run receipt; source or local fixtures alone do not establish it.
+certificate policy, protected signing possession proof and authorized bank scenarios are unverified.
 No bank contact, credential/certificate provisioning, live bank flow, deployment or gate change was
 performed by this review. The checklist is a record of gaps, not successful provisioning.

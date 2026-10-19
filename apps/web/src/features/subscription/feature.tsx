@@ -1183,7 +1183,7 @@ const AuthenticationRequired = (): JSX.Element => (
     <AlertTitle>Inicia sesión para activar Pro</AlertTitle>
     <AlertDescription className="flex flex-col items-start gap-3">
       <p>Vincula este navegador con tu cuenta de Fidy para continuar.</p>
-      <Button render={<a aria-label="Iniciar sesión" href="/auth/pair" />} size="sm">
+      <Button render={<a aria-label="Iniciar sesión" href="/login" />} size="sm">
         Iniciar sesión
       </Button>
     </AlertDescription>

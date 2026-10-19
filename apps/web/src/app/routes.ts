@@ -1,17 +1,12 @@
-import {
-  ProviderAuthenticationFeature,
-  ProviderReturnFeature,
-} from "@/features/provider-authentication/feature";
+import { LoginSearch } from "@/session/login-destination";
+import { ProviderReturnFeature } from "@/features/provider-authentication/feature";
 import { Option, Schema } from "effect";
 import {
   BudgetMonth,
-  ConnectionAttemptReference,
   type FidyClient,
   type HostedTurnClient,
   OAuthConnectionListQuery,
-  OAuthRequestId,
   PATPairingPublicCode,
-  ProviderHandoffSearch,
   RecurringMonth,
   type WebAuthClient,
 } from "@/transport/client";
@@ -49,14 +44,6 @@ const OAuthReviewFeature = lazyRouteComponent(
   () => import("@/features/oauth-connections/feature"),
   "OAuthReviewFeature"
 );
-const BrowserLoginPairingFeature = lazyRouteComponent(
-  () => import("@/features/browser-login/feature"),
-  "BrowserLoginPairingFeature"
-);
-const EmailReplacementFeature = lazyRouteComponent(
-  () => import("@/features/email-replacement/feature"),
-  "EmailReplacementFeature"
-);
 const CLIConnectionFeature = lazyRouteComponent(
   () => import("@/features/pats/feature"),
   "CLIConnectionFeature"
@@ -64,10 +51,6 @@ const CLIConnectionFeature = lazyRouteComponent(
 const AccessManagementPage = lazyRouteComponent(
   () => import("./access-page"),
   "AccessManagementPage"
-);
-const BackupRecoveryFeature = lazyRouteComponent(
-  () => import("@/features/recovery/feature"),
-  "BackupRecoveryFeature"
 );
 const SubscriptionOffersFeature = lazyRouteComponent(
   () => import("@/features/subscription/feature"),
@@ -136,14 +119,6 @@ const budgetsRoute = createRoute({
     )(search),
   component: lazyRouteComponent(() => import("@/features/budgets/feature"), "BudgetsFeature"),
 });
-const createdReviewTransactionRoute = createRoute({
-  getParentRoute: () => signedInRoute,
-  path: "/needs-review/transactions/$id",
-  component: lazyRouteComponent(
-    () => import("@/features/needs-review/feature"),
-    "CreatedReviewTransaction"
-  ),
-});
 const needsReviewRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/needs-review",
@@ -182,24 +157,12 @@ const recurringDigestRoute = createRoute({
   path: "/insights/recurring/$id",
   component: RecurringDigestFeature,
 });
-const patManagementRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: "/settings/pats",
-  beforeLoad: () => redirect({ to: "/settings/access", search: {} }),
-});
 const cliConnectionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connect/cli",
   validateSearch: (search) =>
     Schema.decodeSync(Schema.Struct({ cliCode: Schema.optionalKey(PATPairingPublicCode) }))(search),
   component: CLIConnectionFeature,
-});
-const oauthManagementRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: "/settings/agents",
-  validateSearch: (search) =>
-    Schema.decodeSync(Schema.Struct({ after: OAuthConnectionListQuery.fields.after.from }))(search),
-  beforeLoad: ({ search }) => redirect({ to: "/settings/access", search }),
 });
 const accessManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -227,33 +190,10 @@ const privacyRoute = createRoute({
   path: "/settings/privacy",
   component: lazyRouteComponent(() => import("@/features/privacy/feature"), "PrivacyFeature"),
 });
-const emailReplacementRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: "/settings/email",
-  component: EmailReplacementFeature,
-});
-const backupRecoveryRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: "/settings/recovery",
-  component: BackupRecoveryFeature,
-});
 const subscriptionOffersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/upgrade",
   component: SubscriptionOffersFeature,
-});
-const browserLoginPairingRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/auth/pair",
-  validateSearch: (search) =>
-    Schema.decodeSync(
-      Schema.Struct({
-        cliCode: Schema.optionalKey(PATPairingPublicCode),
-        oauthRequest: Schema.optionalKey(OAuthRequestId),
-        connectionAttempt: Schema.optionalKey(ConnectionAttemptReference),
-      })
-    )(search),
-  component: BrowserLoginPairingFeature,
 });
 const oauthReviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -268,52 +208,26 @@ const connectionContinuationRoute = createRoute({
   component: ConnectionContinuationFeature,
 });
 
-const GoogleAuthentication = (): JSX.Element =>
-  createElement(ProviderAuthenticationFeature, {
-    provider: "google",
-    handoffReference: Option.fromUndefinedOr(googleRoute.useSearch().handoff),
-  });
-const MicrosoftAuthentication = (): JSX.Element =>
-  createElement(ProviderAuthenticationFeature, {
-    provider: "microsoft",
-    handoffReference: Option.fromUndefinedOr(microsoftRoute.useSearch().handoff),
-  });
-
-const googleRoute = createRoute({
+const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/auth/google",
-  validateSearch: (search) =>
-    Schema.decodeSync(
-      Schema.Struct({
-        ...ProviderHandoffSearch.fields,
-        resume: Schema.optionalKey(Schema.Literal("pat")),
-        cliCode: Schema.optionalKey(PATPairingPublicCode),
-      })
-    )(search),
-  component: GoogleAuthentication,
+  path: "/login",
+  validateSearch: (search) => Schema.decodeSync(LoginSearch)(search),
+  component: lazyRouteComponent(() => import("./login-page"), "LoginPage"),
+});
+const accountRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/settings/account",
+  component: lazyRouteComponent(() => import("./account-page"), "AccountPage"),
 });
 const googleReturnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/google-return",
-  component: () => createElement(ProviderReturnFeature, { provider: "google" }),
-});
-const microsoftRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/auth/microsoft",
-  validateSearch: (search) =>
-    Schema.decodeSync(
-      Schema.Struct({
-        ...ProviderHandoffSearch.fields,
-        resume: Schema.optionalKey(Schema.Literal("pat")),
-        cliCode: Schema.optionalKey(PATPairingPublicCode),
-      })
-    )(search),
-  component: MicrosoftAuthentication,
+  component: ProviderReturnFeature,
 });
 const microsoftReturnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/microsoft-return",
-  component: () => createElement(ProviderReturnFeature, { provider: "microsoft" }),
+  component: ProviderReturnFeature,
 });
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -322,11 +236,9 @@ const indexRoute = createRoute({
 });
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  browserLoginPairingRoute,
+  loginRoute,
   cliConnectionRoute,
-  googleRoute,
   googleReturnRoute,
-  microsoftRoute,
   microsoftReturnRoute,
   oauthReviewRoute,
   connectionContinuationRoute,
@@ -339,14 +251,10 @@ const routeTree = rootRoute.addChildren([
       budgetsRoute,
       recurringPlansRoute,
       needsReviewRoute,
-      createdReviewTransactionRoute,
     ]),
     accessManagementRoute,
-    patManagementRoute,
-    oauthManagementRoute,
+    accountRoute,
     recurringDigestRoute,
-    emailReplacementRoute,
-    backupRecoveryRoute,
   ]),
 ]);
 

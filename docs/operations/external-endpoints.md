@@ -23,8 +23,8 @@ unavailable endpoint. Add the corresponding Worker binding and typed adapter ins
 ## Runtime configuration
 
 The public HTTP contract derives stable web and API origins from these variables. The web build
-validates `VITE_API_ORIGIN` separately. Browser login uses `/auth/pair`; PAT management uses
-`/settings/pats`. The retired `/auth/magic` path is not an endpoint.
+validates `VITE_API_ORIGIN` separately. Browser login uses `/login`; PAT management uses
+`/settings/access`. The retired `/auth/magic` path is not an endpoint.
 
 | Variable            | Local example           | Production value          |
 | ------------------- | ----------------------- | ------------------------- |

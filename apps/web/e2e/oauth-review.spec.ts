@@ -82,6 +82,9 @@ const loginFromReview = (
       page.getByRole("link", { name: "Iniciar sesión", exact: true }).click()
     );
     yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "WhatsApp o correo verificado" }).click()
+    );
+    yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
     );
     const code = yield* Effect.tryPromise(() => visiblePairingCode(page));

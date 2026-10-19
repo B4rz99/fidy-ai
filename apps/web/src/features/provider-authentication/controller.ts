@@ -1,7 +1,7 @@
-import { PATPairingPublicCode } from "@/transport/client";
+import { destinationAfterLogin } from "@/session/login-destination";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Cause, type Context, Effect, Option, Redacted, Schema } from "effect";
+import { Cause, type Context, Effect, Option, Redacted } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
@@ -22,8 +22,13 @@ export type ProviderViewState =
   | Readonly<{ status: "uncertain" }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "cancelled" }>;
-type Submission = Readonly<{ intent: "signup" | "login"; revision: string; popup: Window }>;
-type RetryInput = Pick<Submission, "intent" | "revision">;
+type Submission = Readonly<{
+  provider: AuthenticationProvider;
+  intent: "signup" | "login";
+  revision: string;
+  popup: Window;
+}>;
+type RetryInput = Pick<Submission, "provider" | "intent" | "revision">;
 const providerClient = (
   client: Client,
   provider: AuthenticationProvider
@@ -36,7 +41,8 @@ const providerClient = (
 const awaitProviderVerification = (
   client: Client,
   pairing: Pairing,
-  input: Pick<ControllerInput, "provider" | "setState"> & Readonly<{ popup: Window }>
+  input: Pick<ControllerInput, "setState"> &
+    Readonly<{ popup: Window; provider: AuthenticationProvider }>
 ): Effect.Effect<void, "rejected" | "cancelled"> =>
   Effect.gen(function* () {
     for (;;) {
@@ -93,7 +99,6 @@ type ControllerInput = Readonly<{
   webAuthClient: WebAuthClient;
   setState: (state: ProviderViewState) => void;
   authenticated: () => void;
-  provider: AuthenticationProvider;
   handoffReference: Option.Option<string>;
 }>;
 type ActiveAttempt = {
@@ -145,7 +150,7 @@ const executeStart = (
       return;
     }
     active.pairing = Option.some(started);
-    const authorization = yield* providerClient(client, input.provider).start({
+    const authorization = yield* providerClient(client, staged.value.provider).start({
       payload: {
         ...proof(started),
         intent: staged.value.intent,
@@ -160,13 +165,17 @@ const executeStart = (
       return;
     }
     yield* navigateProviderPopup(staged.value.popup, authorization.authorizationUrl);
-    yield* awaitProviderVerification(client, started, { ...input, popup: staged.value.popup });
+    yield* awaitProviderVerification(client, started, {
+      ...input,
+      provider: staged.value.provider,
+      popup: staged.value.popup,
+    });
     staged.value.popup.close();
     if (active.generation !== current) {
       return;
     }
     active.completionRequested = true;
-    const result = yield* providerClient(client, input.provider).complete({
+    const result = yield* providerClient(client, staged.value.provider).complete({
       payload: proof(started),
     });
     if (active.generation !== current) {
@@ -243,8 +252,9 @@ const makeProviderController = (input: ControllerInput): ProviderController => {
 /** Owns one mounted Provider attempt; proofs and recovery are discarded on navigation or restart. */
 type ProviderAuthentication = Readonly<{
   state: ProviderViewState;
+  provider: AuthenticationProvider;
   mounted: RefCallback<HTMLElement>;
-  start: (intent: "signup" | "login", revision: string) => void;
+  start: (provider: AuthenticationProvider, intent: "signup" | "login", revision: string) => void;
   retry: () => void;
   restart: () => void;
   cancel: () => void;
@@ -254,6 +264,7 @@ const startProvider = ({
   controller,
   runStart,
   setState,
+  provider,
   intent,
   revision,
 }: Readonly<{
@@ -261,21 +272,19 @@ const startProvider = ({
   runStart: (value: void) => void;
   setState: ControllerInput["setState"];
 }> &
-  Pick<Submission, "intent" | "revision">): void => {
+  Pick<Submission, "provider" | "intent" | "revision">): void => {
   const popup = window.open("about:blank", "_blank", "popup,width=500,height=700");
   if (popup === null) {
     setState({ status: "refused" });
     return;
   }
   popup.opener = null;
-  controller.stage({ intent, revision, popup });
+  controller.stage({ provider, intent, revision, popup });
   runStart(undefined);
 };
 export const useProviderAuthentication = ({
-  provider,
   handoffReference,
 }: Readonly<{
-  provider: AuthenticationProvider;
   handoffReference: Option.Option<string>;
 }>): ProviderAuthentication => {
   const router = useRouter();
@@ -286,11 +295,10 @@ export const useProviderAuthentication = ({
     makeProviderController({
       webAuthClient: router.options.context.webAuthClient,
       setState,
-      provider,
       handoffReference,
       authenticated: () => {
         session.completeLogin();
-        window.location.assign(destinationAfterProviderLogin(router.state.location.search));
+        window.location.assign(destinationAfterLogin(router.state.location.search));
       },
     })
   );
@@ -305,17 +313,21 @@ export const useProviderAuthentication = ({
     (node: Parameters<RefCallback<HTMLElement>>[0]) => (node !== null ? clear : undefined),
     [clear]
   );
-  const start = (intent: "signup" | "login", revision: string): void => {
-    setRetryInput(Option.some({ intent, revision }));
-    startProvider({ controller, runStart, setState, intent, revision });
+  const start: ProviderAuthentication["start"] = (provider, intent, revision) => {
+    setRetryInput(Option.some({ provider, intent, revision }));
+    startProvider({ controller, runStart, setState, provider, intent, revision });
   };
   return {
     state,
+    provider: Option.match(retryInput, {
+      onNone: () => "google",
+      onSome: (input) => input.provider,
+    }),
     mounted,
     start,
     retry: (): void => {
       if (state.status !== "refused" && state.status !== "cancelled") return;
-      Option.map(retryInput, ({ intent, revision }) => start(intent, revision));
+      Option.map(retryInput, ({ provider, intent, revision }) => start(provider, intent, revision));
     },
     cancel: (): void => {
       const cancellation = controller.cancellation();
@@ -334,19 +346,4 @@ export const useProviderAuthentication = ({
 export const closeProviderReturn = (node: Parameters<RefCallback<HTMLElement>>[0]): void => {
   if (node === null) return;
   window.close();
-};
-
-const destinationAfterProviderLogin = (input: unknown): string => {
-  const search = Schema.decodeUnknownOption(
-    Schema.Struct({
-      resume: Schema.optionalKey(Schema.Literal("pat")),
-      cliCode: Schema.optionalKey(PATPairingPublicCode),
-    })
-  )(input);
-  if (Option.isNone(search)) return "/app/transactions";
-  if (search.value.resume === "pat") return "/settings/access?resume=pat";
-  return Option.match(Option.fromUndefinedOr(search.value.cliCode), {
-    onNone: () => "/app/transactions",
-    onSome: (code) => `/connect/cli?cliCode=${encodeURIComponent(code)}`,
-  });
 };

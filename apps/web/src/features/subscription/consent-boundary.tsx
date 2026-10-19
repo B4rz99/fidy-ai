@@ -77,7 +77,7 @@ export const SubscriptionConsentBoundary = ({
       <Alert>
         <AlertTitle>Inicia sesión para activar Pro</AlertTitle>
         <AlertDescription>
-          <Button render={<Link to="/auth/pair" />} size="sm">
+          <Button render={<Link to="/login" />} size="sm">
             Iniciar sesión
           </Button>
         </AlertDescription>

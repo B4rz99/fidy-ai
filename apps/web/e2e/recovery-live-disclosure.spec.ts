@@ -18,7 +18,7 @@ test("discloses a real rotated recovery code only in its mounted settings view",
           email: "recovery-disclosure@example.com",
         })
       );
-      yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
+      yield* Effect.tryPromise(() => page.goto("/settings/account"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Crear un código nuevo" }).click()
       );
@@ -35,7 +35,7 @@ test("discloses a real rotated recovery code only in its mounted settings view",
       expect(code).not.toBeNull();
       expect(page.url()).not.toContain(code);
       yield* Effect.tryPromise(() => page.goto("/app/transactions"));
-      yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
+      yield* Effect.tryPromise(() => page.goto("/settings/account"));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Crear un código nuevo" })).toBeVisible()
       );

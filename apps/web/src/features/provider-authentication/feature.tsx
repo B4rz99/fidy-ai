@@ -1,9 +1,9 @@
-import { Option, Schema } from "effect";
-import { type AuthenticationProvider, PATPairingPublicCode } from "@/transport/client";
+import { Option } from "effect";
+import type { AuthenticationProvider } from "@/transport/client";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
-import { type JSX, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { closeProviderReturn, useProviderAuthentication } from "./controller";
@@ -11,31 +11,6 @@ import { closeProviderReturn, useProviderAuthentication } from "./controller";
 const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boolean): boolean =>
   intent === "login" || (accepted && ready);
 type Authentication = ReturnType<typeof useProviderAuthentication>;
-const ProviderChoice = ({
-  provider,
-  handoffReference,
-}: Readonly<{
-  provider: AuthenticationProvider;
-  handoffReference: Option.Option<string>;
-}>): JSX.Element => {
-  const router = useRouter();
-  const cliCode = Schema.decodeUnknownOption(PATPairingPublicCode)(
-    router.state.location.search.cliCode
-  );
-  const search = new URLSearchParams();
-  if (Option.isSome(handoffReference)) search.set("handoff", handoffReference.value);
-  if (Option.isSome(cliCode)) search.set("cliCode", cliCode.value);
-  if (router.state.location.search.resume === "pat") search.set("resume", "pat");
-  const query = search.toString();
-  return (
-    <a
-      className="text-center underline"
-      href={`${provider === "google" ? "/auth/microsoft" : "/auth/google"}${query.length > 0 ? `?${query}` : ""}`}
-    >
-      {provider === "google" ? "Microsoft" : "Google"}
-    </a>
-  );
-};
 const ConsentNotice = ({
   accepted,
   setAccepted,
@@ -92,13 +67,11 @@ const EditingForm = ({
   intent,
   setIntent,
   start,
-  provider,
   handoffReference,
 }: Readonly<{
   intent: "signup" | "login";
   setIntent: (intent: "signup" | "login") => void;
   start: Authentication["start"];
-  provider: AuthenticationProvider;
   handoffReference: Option.Option<string>;
 }>): JSX.Element => {
   const router = useRouter();
@@ -111,19 +84,25 @@ const EditingForm = ({
       {intent === "signup" && Option.isNone(handoffReference) && (
         <ConsentNotice accepted={accepted} setAccepted={setAccepted} />
       )}
-      <Button
-        disabled={
-          Option.isNone(handoffReference) &&
-          !canContinue(intent, accepted, AsyncResult.isSuccess(disclosure))
-        }
-        onClick={() =>
-          start(intent, AsyncResult.isSuccess(disclosure) ? disclosure.value.revision : "")
-        }
-      >
-        Continuar con {provider === "google" ? "Google" : "Microsoft"}
-      </Button>
-      <ProviderChoice provider={provider} handoffReference={handoffReference} />
-      {Option.isNone(handoffReference) && router.state.location.search.resume !== "pat" && (
+      {(["google", "microsoft"] as const).map((provider) => (
+        <Button
+          key={provider}
+          disabled={
+            Option.isNone(handoffReference) &&
+            !canContinue(intent, accepted, AsyncResult.isSuccess(disclosure))
+          }
+          onClick={() =>
+            start(
+              provider,
+              intent,
+              AsyncResult.isSuccess(disclosure) ? disclosure.value.revision : ""
+            )
+          }
+        >
+          Continuar con {provider === "google" ? "Google" : "Microsoft"}
+        </Button>
+      ))}
+      {Option.isNone(handoffReference) && router.state.location.search.resume === undefined && (
         <Button
           variant="ghost"
           onClick={() => {
@@ -229,16 +208,17 @@ const AttemptStatus = ({
   </>
 );
 export const ProviderAuthenticationFeature = ({
-  provider,
   handoffReference,
+  children,
 }: Readonly<{
-  provider: AuthenticationProvider;
   handoffReference: Option.Option<string>;
+  children: ReactNode;
 }>): JSX.Element => {
   const router = useRouter();
-  const confirmingIdentity = router.state.location.search.resume === "pat";
+  const confirmingIdentity = router.state.location.search.resume !== undefined;
+  const confirmingToken = router.state.location.search.resume === "pat";
   const [intent, setIntent] = useState<"signup" | "login">(confirmingIdentity ? "login" : "signup");
-  const { mounted, ...authentication } = useProviderAuthentication({ provider, handoffReference });
+  const { mounted, ...authentication } = useProviderAuthentication({ handoffReference });
   return (
     <main ref={mounted} className="flex min-h-svh items-center justify-center px-4 py-12">
       <Card className="w-full max-w-lg">
@@ -248,19 +228,18 @@ export const ProviderAuthenticationFeature = ({
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {confirmingIdentity && (
+          {confirmingToken && (
             <p>
               Usa la misma cuenta para volver a crear el token con el formulario que ya completaste.
             </p>
           )}
-          {confirmingIdentity && (
+          {confirmingToken && (
             <a href="/settings/access?resume=pat" className="underline">
               Volver al token
             </a>
           )}
           {authentication.state.status === "editing" ? (
             <EditingForm
-              provider={provider}
               handoffReference={handoffReference}
               intent={intent}
               setIntent={setIntent}
@@ -268,11 +247,12 @@ export const ProviderAuthenticationFeature = ({
             />
           ) : (
             <AttemptStatus
-              provider={provider}
+              provider={authentication.provider}
               authentication={{ ...authentication, mounted }}
               setIntent={setIntent}
             />
           )}
+          {authentication.state.status === "editing" ? children : null}
         </CardContent>
       </Card>
     </main>
@@ -280,12 +260,10 @@ export const ProviderAuthenticationFeature = ({
 };
 
 /** Clean provider return page; refreshing it cannot repeat provider completion or reveal recovery. */
-export const ProviderReturnFeature = ({
-  provider,
-}: Readonly<{ provider: AuthenticationProvider }>): JSX.Element => (
+export const ProviderReturnFeature = (): JSX.Element => (
   <main ref={closeProviderReturn}>
     <p>Puedes volver a la ventana de Fidy para continuar.</p>
-    <a href={`/auth/${provider}`}>Iniciar sesión</a>
+    <a href="/login">Iniciar sesión</a>
   </main>
 );
 

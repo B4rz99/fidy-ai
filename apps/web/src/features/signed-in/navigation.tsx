@@ -72,11 +72,7 @@ export const SignedInNavigation = ({
           {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
         </Button>
       ) : (
-        <Button
-          className="justify-start md:mt-auto"
-          variant="ghost"
-          render={<Link to="/auth/pair" />}
-        >
+        <Button className="justify-start md:mt-auto" variant="ghost" render={<Link to="/login" />}>
           Iniciar sesión
         </Button>
       )}

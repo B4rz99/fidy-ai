@@ -22,6 +22,9 @@ const browserContext = (
     (context) => attempt("Cannot close isolated browser", () => context.close()).pipe(Effect.orDie)
   );
 const login = Effect.fn(function* (scope: ApprovedScope, page: Page) {
+  yield* attempt("Browser login method unavailable", () =>
+    page.getByRole("button", { name: "WhatsApp o correo verificado" }).click()
+  );
   yield* attempt("Browser sign-in button unavailable", () =>
     page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
   );
@@ -143,14 +146,14 @@ export const approveNativeLogin = Effect.fn(function* (options: Approval) {
 const revoke = Effect.fn(function* (scope: ApprovedScope, context: BrowserContext) {
   const page = yield* attempt("Cannot open revocation page", () => context.newPage());
   yield* attempt("Cannot open first-party sign-in", () =>
-    page.goto("https://app.fidyapp.com/auth/pair")
+    page.goto("https://app.fidyapp.com/login")
   );
   yield* login(scope, page);
   yield* attempt("Fresh synthetic browser login failed", () =>
     page.waitForURL(/\/app\/transactions$/u, { timeout: 20_000 })
   );
   yield* attempt("Cannot open connected agents", () =>
-    page.goto("https://app.fidyapp.com/settings/agents")
+    page.goto("https://app.fidyapp.com/settings/access")
   );
   yield* attempt("Cannot revoke synthetic agents", () =>
     page.getByRole("button", { name: "Revocar todos los agentes conectados" }).click()

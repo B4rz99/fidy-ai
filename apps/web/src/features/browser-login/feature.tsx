@@ -1,7 +1,6 @@
-import { EmailAddress, EmailVerificationCode, PATPairingPublicCode } from "@/transport/client";
+import { EmailAddress, EmailVerificationCode } from "@/transport/client";
 import { KeyRoundIcon, MessageCircleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useRouter } from "@tanstack/react-router";
 import { Option, Schema } from "effect";
 import type { FormEvent, JSX } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -263,19 +262,16 @@ const PairingStatus = ({
 };
 
 /** Pairing starts only after an explicit primary-button press. */
-export const BrowserLoginPairingFeature = (): JSX.Element => {
-  const pairing = useBrowserLoginPairing();
-  const router = useRouter();
-  const cliCode = Schema.decodeUnknownOption(PATPairingPublicCode)(
-    router.state.location.search.cliCode
-  );
-  const providerUrl = Option.match(cliCode, {
-    onNone: () => "/auth/google",
-    onSome: (code) => `/auth/google?cliCode=${encodeURIComponent(code)}`,
-  });
+export const BrowserLoginPairingFeature = ({
+  onChooseProvider,
+}: Readonly<{ onChooseProvider: () => void }>): JSX.Element => {
+  const { mounted, ...pairing } = useBrowserLoginPairing();
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
+    <main
+      ref={mounted}
+      className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12"
+    >
       <Card className="w-full max-w-md">
         <CardHeader>
           <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -294,9 +290,9 @@ export const BrowserLoginPairingFeature = (): JSX.Element => {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          <a href={providerUrl} className="text-center underline">
-            Crear cuenta o iniciar sesión con Google o Microsoft
-          </a>
+          <Button variant="ghost" onClick={onChooseProvider}>
+            Google o Microsoft
+          </Button>
           <PairingStatus
             onCompleteEmail={pairing.completeEmail}
             onLogout={pairing.logout}

@@ -118,7 +118,7 @@ test("Upgrade requests sign-in when the browser has no session", ({ page }) =>
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("link", { name: "Iniciar sesión", exact: true })).toHaveAttribute(
           "href",
-          "/auth/pair"
+          "/login"
         )
       );
     })

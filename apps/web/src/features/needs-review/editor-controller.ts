@@ -13,6 +13,8 @@ import {
   mergeSuggestions,
 } from "./model";
 
+const { toast } = await import("sonner");
+
 const autosaveMilliseconds = 650;
 type Feedback = "saved" | "saving" | "unsaved" | "failed" | "uncertain";
 type Queue = {
@@ -212,7 +214,10 @@ const runDecision = ({
   }
   return send({
     command: command.value,
-    saved: (items) => finished(items, kind === "Skip"),
+    saved: (items) => {
+      if (kind === "Create") toast.success("Transacción creada");
+      finished(items, kind === "Skip");
+    },
     failed: (uncertain) => {
       owner.blocked = true;
       setFeedback(uncertain ? "uncertain" : "failed");

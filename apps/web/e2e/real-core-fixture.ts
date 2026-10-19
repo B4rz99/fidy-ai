@@ -82,6 +82,17 @@ export const openUpgradeThroughCore = (page: Page): Promise<void> => {
     .then(() => consent)
     .then((response) => confirmConsentRead(page, response));
 };
+type RecurringIdentity =
+  | "recurring"
+  | "recurringSummary"
+  | "recurringRecovery"
+  | "recurringEditing"
+  | "recurringLifecycle"
+  | "recurringTracking"
+  | "recurringExceptions"
+  | "recurringChat"
+  | "recurringPagination";
+
 const signInWithIdentity = ({
   page,
   request,
@@ -101,14 +112,7 @@ const signInWithIdentity = ({
       | "privacy"
       | "privacyRenewal"
       | "privacyErasure"
-      | "recurring"
-      | "recurringSummary"
-      | "recurringRecovery"
-      | "recurringChat"
-      | "recurringPagination"
-      | "recurringEditing"
-      | "recurringTracking"
-      | "recurringExceptions"
+      | RecurringIdentity
       | "navigationTransactions"
       | "navigationBudget"
       | "navigationRecurring"
@@ -279,15 +283,7 @@ export const signInPrivacyRenewalThroughCore = (input: SignInFixture): Promise<v
 export const signInRecurringThroughCore = (
   input: SignInFixture &
     Readonly<{
-      identity:
-        | "recurring"
-        | "recurringSummary"
-        | "recurringRecovery"
-        | "recurringEditing"
-        | "recurringTracking"
-        | "recurringExceptions"
-        | "recurringChat"
-        | "recurringPagination";
+      identity: RecurringIdentity;
     }>
 ): Promise<void> => signInWithIdentity({ ...input, clockMode: "controlled" });
 

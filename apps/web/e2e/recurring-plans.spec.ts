@@ -399,7 +399,7 @@ test("pause, resume and stop survive reload", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringSummary" })
+        signInRecurringThroughCore({ page, request, identity: "recurringLifecycle" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({

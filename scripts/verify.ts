@@ -359,7 +359,7 @@ await Effect.runPromise(
       return Effect.gen(function* () {
         yield* Effect.forEach(bootstrap, (check) => runCheck(check), { discard: true });
         yield* Effect.forEach(validation, (check) => runCheck(check), {
-          concurrency: 2,
+          concurrency: 4,
           discard: true,
         });
       });

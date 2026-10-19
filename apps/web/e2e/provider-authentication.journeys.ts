@@ -3,7 +3,6 @@ import { playwright } from "./playwright-runtime";
 import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
 import {
   boundSessionRequests,
-  openBrowserLogin,
   reloadTransactionsThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
@@ -848,11 +847,14 @@ const providerRecoveryJourney = Effect.fn(function* ({
   );
   const before: unknown = yield* Effect.tryPromise(() => identity.json());
   yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
+  yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login$/u));
   const pending = page.waitForResponse(
     (response) =>
       response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
   );
-  yield* Effect.tryPromise(() => openBrowserLogin(page));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "WhatsApp o correo verificado" }).click()
+  );
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
   );
@@ -899,7 +901,7 @@ const returningProviderLogin = ({
 > =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
-    yield* Effect.tryPromise(() => page.goto("/login"));
+    yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login$/u));
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
     );

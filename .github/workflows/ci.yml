@@ -38,6 +38,10 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-runtime
       - name: Plan checks from the complete PR diff
         id: plan
@@ -326,6 +330,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - name: Fetch base ref
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
@@ -371,6 +379,10 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - name: Semgrep
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -419,6 +431,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-runtime
       - name: Start source partition 3 on this existing runner
         id: source-scan

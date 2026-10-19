@@ -130,7 +130,7 @@ export const waitForToolResult = ({
     () =>
       db
         .prepare(
-          "SELECT outcome_json FROM transcript_entries WHERE user_id = ? AND kind = 'tool_result'"
+          "SELECT e.outcome_json FROM transcript_entries e JOIN hosted_turns t ON t.id=e.turn_id AND t.user_id=e.user_id WHERE e.user_id = ? AND e.kind = 'tool_result' AND t.status = 'failed'"
         )
         .bind(userId)
         .first()

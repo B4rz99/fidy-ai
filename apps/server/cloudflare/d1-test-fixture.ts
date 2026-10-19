@@ -125,6 +125,8 @@ const acquireDatabase = (
               slot.images.used(slot.index);
               return slot.runtime.dispatchFetch(`http://fixture/DB_${slot.index}/query`, {
                 method: "POST",
+                // Avoid stale Bun fixture sockets across deadlines; SQL writes are never retried.
+                headers: { connection: "close" },
                 body,
               });
             },
@@ -644,6 +646,10 @@ export const coordinatorTestDatabase = ({
       native,
       nativeAccess: () => undefined,
       dispatch: (body) =>
-        runtime.dispatchFetch(`http://fixture/${binding}/query`, { method: "POST", body }),
+        runtime.dispatchFetch(`http://fixture/${binding}/query`, {
+          method: "POST",
+          headers: { connection: "close" },
+          body,
+        }),
     })
   );

@@ -1,14 +1,16 @@
 # RNBD and reporting applicability — #1276
 
-Version 5, 2026-10-19. Use the [decision procedure](privacy-decisions-1276.md) and
-[official-source record](../research/privacy-reporting-public-evidence-1276.md). This is a working
-application record, not qualified sign-off or an incident report. No registration, submission,
+Version 6, 2026-10-19. Use the [decision procedure](privacy-decisions-1276.md) and
+[official-source record](../research/privacy-reporting-public-evidence-1276.md). This records the owner-confirmed completed RNBD review and
+ongoing reporting reconciliation; it is not an independent professional certification or incident report. No registration, submission,
 account creation or third-party drill contact was performed.
 
 ## Actual RNBD determination
 
 **NotRequiredForReviewedPeriod: no current RNBD registration obligation on the supplied facts.**
-The issue-required qualified approval remains a separate, outstanding evidence criterion.
+The owner has explicitly confirmed that the RNBD review and approval are complete. Do not reopen
+that approval as a missing input. This records the owner’s confirmation, without inventing an
+external reviewer, professional credentials or an independent legal opinion.
 The owner supplied total assets and accounting dates, identified the accountant-verified figure,
 and confirmed the same amount on the registration date. Minimized Chamber of Commerce observations
 link a first-time registration filing to its successful registration; the DIAN formalization email
@@ -24,16 +26,20 @@ recorded 2026-10-18; predecessors `cf9846ce-15d8-4f1c-bb04-2c63bf4cda33` (Chambe
 under the existing operator-owned mode-0700 evidence directory. Financial particulars, registration
 identifiers, RUT contents and message-validation codes are excluded from Git and GitHub.
 
-**Reasoned application, not qualified approval:** the supplied current-year accounting snapshot
+**Approved assessment on the supplied facts:** the supplied current-year accounting snapshot
 is below the binding asset threshold, and the company first registered during that year. There is
 no preceding-year company balance to obtain. Record **NotRequiredForReviewedPeriod** for the
 reviewed snapshot; absence of an express first-year substitute does not itself create a registration
 obligation. This is not a permanent or first-year exemption. Recheck assets when they change and at
 year-end, and reassess before bank submission. The [conclusion recheck](../research/rnbd-conclusion-recheck-1276.md)
 distinguishes this supported practical conclusion from the narrower interpretive limitation and
-from #1276's separate qualified-review criterion. Restricted decision version 5,
+from the approval status recorded at that time. Restricted decision version 5,
 `dcdba84a-f85b-4fe3-b6ed-b53326509451`, preserves this reassessment and the bounded provider-mail check.
 Predecessor records remain unchanged. No private financial particulars are published.
+
+The owner reconfirmed completion on 2026-10-19. Restricted decision version 6,
+`17774436-23c6-4ef8-a138-ff520a4cb58c`, records that confirmation and supersedes the earlier pending-approval
+status. The source-backed conclusion and change/year-end rechecks are preserved.
 
 The reviewer records legal nature/controller role, incorporation and database-creation dates,
 corporate evidence reference, total assets/accounting date, measurement basis, UVT year and
@@ -41,8 +47,8 @@ calculation, source versions, conclusion, reviewer qualification/date, effective
 triggers. Use a balance sheet or certified asset figure; capital, sales and equity are not substitutes.
 The decree uses **above 100,000 UVT** for private companies/nonprofits; public legal entities have
 a separate rule. Current SIC consolidation contains inconsistent wording in another paragraph.
-Exact equality is a general boundary-review trigger; it is not the supplied case. Qualified approval of the first-year rationale remains open; the substantive below-threshold
-conclusion can nevertheless be recorded for the supplied snapshot.
+Exact equality is a general boundary-review trigger; it is not the supplied case. The approved
+below-threshold assessment applies to the supplied snapshot, with the documented rechecks.
 The 2026 benchmark for 100,000 UVT is COP 5,237,400,000, with UVT/asset-period pairing retained in the decision evidence. The benchmark is public arithmetic;
 the supplied snapshot supports the present no-registration conclusion and its change/year-end rechecks.
 
@@ -129,13 +135,13 @@ This is actual bounded technical evidence, not completion of all #1262 requireme
 Share only an authorized, reviewed projection; do not attach private company accounts or agreements
 to this repository/index. Registration or a policy does not establish overall compliance.
 
-| Outcome                       | Current evidence and limitation                                                                                                                                                                                                                                                                                                                                                                                              | Owner / next action                                                                                                              |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Operator/entity and RNBD      | Supplied accountant-verified financial snapshot recorded privately; NotRequiredForReviewedPeriod on the supplied snapshot; current-year registration supported by Chamber/DIAN observations; separate qualified approval pending. #1272 owns verified identity/route evidence.                                                                                                                                               | Use supplied asset and observed registration facts; review the explicit first-year basis and record the qualified determination. |
-| Privacy function and rights   | Existing sole operator; #1273 rights/withdrawal and #1274 erasure procedures. No backup; unattended escalation gap explicit.                                                                                                                                                                                                                                                                                                 | Sole owner is designated; preserve unavailable-owner clocks and review the explicitly accepted coverage limitation.              |
-| Incident decisions            | Decision procedure, official-source record and synthetic tabletop. No live filing or qualified sign-off claimed.                                                                                                                                                                                                                                                                                                             | Reviewer applies legal/contract rules; operator rehearses and retains decision/training evidence.                                |
-| Technical response            | Existing [security response](security-response.md), [background-work monitoring](cloudflare-background-work.md) and open [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). Actual bounded native notification, synthetic PAT containment and recovery/cleanup evidence is linked above; broader detection/fallback verification remains with #1262. Its absent research files are not presented as available evidence. | Technical owner supplies exact deployed detection/receipt/containment/recovery evidence; this tabletop does not replace it.      |
-| Provider and bank obligations | #1275 reconciliation and #1266 bank profile/provisioning.                                                                                                                                                                                                                                                                                                                                                                    | Operator obtains applicable terms/contacts; reviewer records per-flow role and notification/retention decisions.                 |
+| Outcome                       | Current evidence and limitation                                                                                                                                                                                                                                                                                                                                                                                              | Owner / next action                                                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Operator/entity and RNBD      | Supplied accountant-verified financial snapshot recorded privately; NotRequiredForReviewedPeriod on the supplied snapshot; current-year registration supported by Chamber/DIAN observations; owner-confirmed review complete. #1272 owns verified identity/route evidence.                                                                                                                                                   | Preserve the approved assessment and its documented change/year-end rechecks.                                               |
+| Privacy function and rights   | Existing sole operator; #1273 rights/withdrawal and #1274 erasure procedures. No backup; unattended escalation gap explicit.                                                                                                                                                                                                                                                                                                 | Sole owner is designated; preserve unavailable-owner clocks and review the explicitly accepted coverage limitation.         |
+| Incident decisions            | Decision procedure, official-source record and synthetic tabletop. No live filing or qualified sign-off claimed.                                                                                                                                                                                                                                                                                                             | Reviewer applies legal/contract rules; operator rehearses and retains decision/training evidence.                           |
+| Technical response            | Existing [security response](security-response.md), [background-work monitoring](cloudflare-background-work.md) and open [#1262](https://github.com/B4rz99/fidy-ai/issues/1262). Actual bounded native notification, synthetic PAT containment and recovery/cleanup evidence is linked above; broader detection/fallback verification remains with #1262. Its absent research files are not presented as available evidence. | Technical owner supplies exact deployed detection/receipt/containment/recovery evidence; this tabletop does not replace it. |
+| Provider and bank obligations | #1275 reconciliation and #1266 bank profile/provisioning.                                                                                                                                                                                                                                                                                                                                                                    | Operator obtains applicable terms/contacts; reviewer records per-flow role and notification/retention decisions.            |
 
 Recheck every evidence date and unresolved input before institution verification. The index itself
 is not production readiness, legal certification or bank acceptance.

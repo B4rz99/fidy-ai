@@ -64,3 +64,11 @@ not establish a statutory requirement to hire a lawyer or buy a non-registration
 Record the substantive conclusion and its rechecks separately from whether the issue's chosen
 approval evidence has been obtained. RNBD non-registration does not remove privacy, security,
 Titular-rights or applicable incident-reporting duties.
+
+## Approval status reconciled — 2026-10-19
+
+The owner explicitly reconfirmed that the RNBD review was already completed and directed updating
+#1276 and its evidence accordingly. This supersedes the earlier pending-approval status above;
+it does not change the source-backed conclusion or its change/year-end rechecks. The applicability
+record links restricted decision version 6. No separate professional opinion or reviewer credentials
+are asserted, and no further sign-off is requested as a missing owner input.

@@ -118,5 +118,5 @@ any reporting decision remain separate assessments.
 This result supplies actual deployed alert receipt, scoped containment and recovery/cleanup evidence
 at the stated seams. It does not close all of [#1262](https://github.com/B4rz99/fidy-ai/issues/1262):
 raw public detection, other required monitoring coverage and unexercised fallback remain separate.
-It also does not supply qualified RNBD approval or unresolved provider-contract/contact evidence
-for [#1276](https://github.com/B4rz99/fidy-ai/issues/1276).
+RNBD review completion is separately owner-confirmed in the applicability record. This drill does
+not supply unresolved provider-contract/contact evidence for [#1276](https://github.com/B4rz99/fidy-ai/issues/1276).

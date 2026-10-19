@@ -126,6 +126,7 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "strictEffectProvide:./apps/web/e2e/titular-case-fixture.ts",
           "strictEffectProvide:./apps/server/cloudflare/browser-acceptance-core-module.ts",
           "strictEffectProvide:./scripts/browser-core-bundle.test.ts",
+          "strictEffectProvide:./scripts/bancolombia-signing-proof.ts",
           "strictEffectProvide:./scripts/titular-requests/main.ts",
           "strictEffectProvide:./scripts/titular-erasure/main.ts",
           "strictEffectProvide:./scripts/dev-browser.ts",

@@ -1,3 +1,4 @@
+import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 import { LoginSearch } from "@/session/login-destination";
 import { ProviderReturnFeature } from "@/features/provider-authentication/feature";
 import { Option, Schema } from "effect";
@@ -133,6 +134,7 @@ const needsReviewRoute = createRoute({
         ),
       })
     )(search),
+  loader: () => ReviewWorkspace.preload?.(),
   component: lazyRouteComponent(
     () => import("@/features/needs-review/feature"),
     "NeedsReviewRoute"
@@ -150,6 +152,7 @@ const recurringPlansRoute = createRoute({
         ),
       })
     )(search),
+  loader: () => RecurringWorkspace.preload?.(),
   component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringRoute"),
 });
 const recurringDigestRoute = createRoute({

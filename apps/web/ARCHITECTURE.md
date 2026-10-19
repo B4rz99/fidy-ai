@@ -326,6 +326,8 @@ resource results do not authorize editing: freshness and refresh failures still 
 Dashboard initialization remains exclusive to a declared uninitialized response during an
 actual visit. Consent, session binding and security settings reads retain their fresh access
 checks. Router intent preloading loads destination code without executing workspace commands.
+Needs Review and Recurring route loaders preload the same presentation component used by their
+retained workspace, so resolving destination code does not introduce another lazy suspension.
 
 The root application frame owns one shared shell across authenticated and independently authorized
 application routes, including Transactions; each route retains its own access checks. It retains a

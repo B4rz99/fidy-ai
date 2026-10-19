@@ -116,6 +116,8 @@ const signInWithIdentity = ({
       | "navigationTransactions"
       | "navigationBudget"
       | "navigationRecurring"
+      | "navigationReviewBudget"
+      | "navigationReviewTransactions"
       | "navigationClock"
       | "navigationDashboard";
   }>): Promise<void> =>
@@ -293,6 +295,8 @@ type NavigationFixture = SignInFixture &
       | "navigationTransactions"
       | "navigationBudget"
       | "navigationRecurring"
+      | "navigationReviewBudget"
+      | "navigationReviewTransactions"
       | "navigationClock"
       | "navigationDashboard";
   }>;
@@ -306,7 +310,3 @@ export const signInNavigationPerformanceThroughCore = (input: NavigationFixture)
 /** Budget editor journeys cannot race the Budget Widget's cap mutations. */
 export const signInBudgetEditingThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity({ ...input, identity: "budgetEditing", clockMode: "controlled" });
-
-/** Performance probes retain native high-resolution timing and virtualize only waiting. */
-export const signInPerformanceThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity({ ...input, identity: "primary", clockMode: "native-performance" });

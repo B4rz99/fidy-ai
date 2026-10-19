@@ -5,7 +5,7 @@ inputs:
     description: Restore the package archive cache before the frozen install.
     default: "false"
   scope:
-    description: Select workspace, server-tests, infra-tests, or unit-tests dependencies from the frozen lock.
+    description: Select workspace, server-tests, or unit-tests dependencies from the frozen lock.
     default: workspace
   cli-release:
     description: Install only CLI production dependencies, without development lifecycle scripts.

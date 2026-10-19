@@ -242,8 +242,6 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
-        with:
-          scope: infra-tests
       - name: Cloudflare infrastructure validation
         env:
           CLOUDFLARE_TEST_REPORT: "true"

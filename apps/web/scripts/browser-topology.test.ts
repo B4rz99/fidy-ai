@@ -53,12 +53,12 @@ it("partitions the complete browser suite across both runners without dropping o
   const performance = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
     tests.filter((line) => line.includes("[performance]"));
   expect(admission(complete)).toHaveLength(3);
-  for (const shard of shards) {
+  for (const [index, shard] of shards.entries()) {
     expect(admission(shard)).toEqual(admission(complete));
-    expect(performance(shard)).toHaveLength(3);
+    expect(performance(shard)).toHaveLength(index === 0 ? 3 : 4);
   }
   expect(performance(shards.flat()).toSorted()).toEqual([...performance(complete)].sort());
-  expect(new Set(performance(shards.flat())).size).toBe(6);
+  expect(new Set(performance(shards.flat())).size).toBe(7);
   expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
   expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);
 });

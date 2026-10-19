@@ -66,7 +66,7 @@ const ReviewUnavailable = ({ requestId }: Readonly<{ requestId: string }>): JSX.
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <Button render={<Link to="/login" search={{ oauthRequest: requestId }} />}>
+      <Button render={<Link to="/login" reloadDocument search={{ oauthRequest: requestId }} />}>
         Iniciar sesión
       </Button>
     </CardContent>

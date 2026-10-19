@@ -45,7 +45,7 @@ export const PrivacyTransactions = (): JSX.Element => {
             Necesitas un inicio de sesión reciente. Tu autorización no se ha reactivado.
           </AlertDescription>
         </Alert>
-        <Button variant="outline" render={<Link to="/login" />}>
+        <Button variant="outline" render={<Link to="/login" reloadDocument />}>
           Iniciar sesión
         </Button>
         <Button variant="outline" onClick={() => dispatch("reset")}>

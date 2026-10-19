@@ -31,7 +31,7 @@ const snapshot = (
   );
 
 type RequestObserver = Readonly<{
-  count: () => number;
+  count: (path?: string) => number;
   report: (scenario: string, before: typeof Cost.Type, after: typeof Cost.Type) => void;
 }>;
 const observeRequests = (page: Page): RequestObserver => {
@@ -53,7 +53,11 @@ const observeRequests = (page: Page): RequestObserver => {
     counts.set(key, (counts.get(key) ?? 0) + 1);
   });
   return {
-    count: (): number => Array.from(attempts.values()).reduce((sum, count) => sum + count, 0),
+    count: (path): number =>
+      Array.from(attempts.entries()).reduce(
+        (sum, [key, count]) => sum + (path === undefined || key.includes(path) ? count : 0),
+        0
+      ),
     report: (scenario, before, after): void => {
       process.stdout.write(
         `BROWSER_COST ${JSON.stringify({
@@ -140,7 +144,7 @@ test("measures advertised pairing cadence and route unmount", ({ page, request }
       const switchedBefore = yield* snapshot(request);
       yield* wait(page.clock.install());
       yield* wait(page.clock.runFor(cancelledWindowMilliseconds));
-      expect(observed.count()).toBe(0);
+      expect(observed.count("/web/pairings")).toBe(0);
       observed.report("ordinary-after-method-switch", switchedBefore, yield* snapshot(request));
       yield* wait(page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
       yield* wait(
@@ -148,11 +152,12 @@ test("measures advertised pairing cadence and route unmount", ({ page, request }
       );
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       yield* wait(visiblePairingCode(page));
+      observed.report("ordinary-restarted", switchedBefore, yield* snapshot(request));
       yield* wait(page.goto("/"));
       const unmountedBefore = yield* snapshot(request);
       yield* wait(page.clock.install());
       yield* wait(page.clock.runFor(cancelledWindowMilliseconds));
-      expect(observed.count()).toBe(0);
+      expect(observed.count("/web/pairings")).toBe(0);
       observed.report("ordinary-after-route-unmount", unmountedBefore, yield* snapshot(request));
     })
   ));

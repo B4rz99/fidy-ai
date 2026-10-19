@@ -131,10 +131,13 @@ const acquireDatabase = (
           });
     const original = (sql: ReadonlyArray<string>): Promise<void> =>
       slot.runtime
-        .dispatchFetch(`http://fixture/DB_${slot.index}`, {
-          method: "POST",
-          body: sql.join("\u0000"),
-        })
+        .dispatchFetch(
+          `http://fixture/DB_${slot.index}${transport === "fetch" ? "?native-image=true" : ""}`,
+          {
+            method: "POST",
+            body: sql.join("\u0000"),
+          }
+        )
         .then((response) => {
           if (!response.ok) throw new Error("Fixture schema installation failed");
         });
@@ -206,7 +209,7 @@ export default {
     try {
       // Only the first install into a fresh binding can use a pristine baseline.
       // Subsequent schema additions still execute their actual migration statements.
-      const pristine = !installed.has(binding) && (await database.prepare(
+      const pristine = !new URL(request.url).searchParams.has("native-image") && !installed.has(binding) && (await database.prepare(
         "SELECT count(*) AS count FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'"
       ).first('count')) === 0;
       const baseline = pristine ? baselines.get(statements.join('\\u0000')) : undefined;
@@ -273,6 +276,7 @@ const bindingPool = (
       const created = nativeImagePool({
         size: poolSize,
         create: (directory) => createBindingRuntime({ directory, name, env }),
+        layoutKey: name,
       });
       runtimes.push(created);
       runtime = Option.some(created);
@@ -325,11 +329,7 @@ export const isolatedTestStorage = (): Readonly<{
         .then((slot) =>
           Promise.all([
             acquireDatabase(slot),
-            slot.runtime
-              .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
-              .then((bindings) =>
-                Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${slot.index}`]))
-              ),
+            slot.runtime.getR2Bucket(`BUCKET_${slot.index}`),
           ]).then(([db, bucket]) => ({ db, bucket }))
         ),
     dispose: pool.dispose,

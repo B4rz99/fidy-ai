@@ -135,9 +135,9 @@ export const asynchronousNativeDatabase = ({
   const target: D1Database = {
     prepare: unavailable,
     batch: unavailable,
-    exec: native.exec.bind(native),
-    dump: native.dump.bind(native),
-    withSession: native.withSession.bind(native),
+    exec: unavailable,
+    dump: unavailable,
+    withSession: unavailable,
   };
   return new Proxy(target, {
     get(target, key, receiver): unknown {
@@ -164,7 +164,10 @@ export const asynchronousNativeDatabase = ({
         };
       }
       // Sessions/bookmarks, exec and deprecated dump keep the original platform path.
-      if (key === "withSession" || key === "exec" || key === "dump") nativeAccess();
+      if (key === "withSession" || key === "exec" || key === "dump") {
+        nativeAccess();
+        return native[key].bind(native);
+      }
       return Reflect.get(target, key, receiver);
     },
   });

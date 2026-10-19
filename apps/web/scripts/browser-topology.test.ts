@@ -14,7 +14,14 @@ const listTests = (
     [process.execPath, "--bun", "playwright", "test", "--config", config, "--list", ...args],
     {
       env: Record.filter(
-        { PATH: Bun.env.PATH, HOME: Bun.env.HOME, CLI_ACCEPTANCE_MODE: mode },
+        {
+          PATH: Bun.env.PATH,
+          HOME: Bun.env.HOME,
+          CLI_ACCEPTANCE_MODE: mode,
+          BROWSER_TEST_SHARD: args
+            .find((argument) => argument.startsWith("--shard="))
+            ?.slice("--shard=".length),
+        },
         Predicate.isString
       ),
     }
@@ -42,10 +49,16 @@ it("partitions the complete browser suite across both runners without dropping o
   const browser = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
     tests.filter((line) => line.includes("[browser]"));
   const admission = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
-    tests.filter((line) => line.includes("[admission]") || line.includes("[performance]"));
-  // Every runner proves real admission before starting its own concurrent browser shard.
-  expect(admission(complete)).toHaveLength(9);
-  for (const shard of shards) expect(admission(shard)).toEqual(admission(complete));
+    tests.filter((line) => line.includes("[admission]"));
+  const performance = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    tests.filter((line) => line.includes("[performance]"));
+  expect(admission(complete)).toHaveLength(3);
+  for (const shard of shards) {
+    expect(admission(shard)).toEqual(admission(complete));
+    expect(performance(shard)).toHaveLength(3);
+  }
+  expect(performance(shards.flat()).toSorted()).toEqual([...performance(complete)].sort());
+  expect(new Set(performance(shards.flat())).size).toBe(6);
   expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
   expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);
 });

@@ -6,6 +6,7 @@ const premiseCodec = Schema.fromJsonString(
     pairingCode: Schema.String,
     backupRecoveryCode: Schema.String,
     assertion: Schema.String,
+    endpoint: Schema.String,
   })
 );
 const maximumOutputBytes = 4096;

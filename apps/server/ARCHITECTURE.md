@@ -620,6 +620,10 @@ coordinators across cases; cached immutable setup data is not shared application
 and runtime-lifecycle evidence must exercise the actual boundaries rather than infer them from a
 faster ordinary fixture.
 
+The isolated native coordinator harness exposes a bounded fixture clock advance so restore tests
+can cross a retention deadline in both the operator process and real Durable Object without
+changing retained rows or production clocks. Its clock control exists only in the test entry point.
+
 The loopback browser harness controls its process clock for admission cooldowns. After a real,
 declared resource refusal, browser fixtures advance that clock and the browser's timer before the
 application retries. Native D1 grants, request limits and all production clocks remain unchanged.

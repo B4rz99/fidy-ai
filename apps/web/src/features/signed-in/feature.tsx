@@ -9,6 +9,7 @@ import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 import { SignedInBrand, SignedInNavigation } from "./navigation";
 import { LogoutFailure } from "./logout-failure";
 import { CompactNavigation } from "./compact-navigation";
+import { useDesktopNavigation } from "./navigation-viewport";
 
 export const AccessRefused = (): JSX.Element => (
   <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
@@ -38,6 +39,7 @@ export const ApplicationShell = ({
 }: Readonly<
   Pick<ComponentProps<"div">, "children"> & { reviewPendingCount: ReactNode }
 >): JSX.Element => {
+  const desktop = useDesktopNavigation();
   const router = useRouter();
   const { completeLogout } = useSession();
   const logoutRequest = router.options.context.webAuthClient.pipe(
@@ -64,18 +66,21 @@ export const ApplicationShell = ({
     <div className="signed-in-theme min-h-svh bg-background md:flex">
       <aside className="signed-in-sidebar flex items-center justify-between border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:items-stretch md:border-r md:border-b-0">
         <SignedInBrand />
-        <div className="hidden min-h-0 flex-1 md:flex">
-          <SignedInNavigation
+        {desktop ? (
+          <div className="hidden min-h-0 flex-1 md:flex">
+            <SignedInNavigation
+              loggingOut={status.waiting}
+              onLogout={onLogout}
+              reviewPendingCount={reviewPendingCount}
+            />
+          </div>
+        ) : (
+          <CompactNavigation
             loggingOut={status.waiting}
             onLogout={onLogout}
             reviewPendingCount={reviewPendingCount}
           />
-        </div>
-        <CompactNavigation
-          loggingOut={status.waiting}
-          onLogout={onLogout}
-          reviewPendingCount={reviewPendingCount}
-        />
+        )}
         {failed ? <LogoutFailure /> : null}
       </aside>
       <div className="min-w-0 flex-1">

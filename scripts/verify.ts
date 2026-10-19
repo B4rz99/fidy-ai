@@ -71,7 +71,7 @@ const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<str
   label,
   command: group === "unit" ? [...command, "--maxWorkers=2"] : command,
   cwd: workspaceRoot,
-  env: group === "static" ? { ...Bun.env, GOMAXPROCS: "2", RAYON_NUM_THREADS: "2" } : Bun.env,
+  env: group === "static" ? { ...Bun.env, GOMAXPROCS: "4", RAYON_NUM_THREADS: "4" } : Bun.env,
 });
 
 const gitRevision = new TextDecoder()
@@ -86,6 +86,7 @@ const checks: Array<Check> = [
     cwd: `${workspaceRoot}/tools/depcruise`,
     env: Bun.env,
   },
+  rootCheck("static", "Lint rule regressions", ["bun", "run", "lint:rules"]),
   rootCheck("static", "Lint suppressions", ["bun", "run", "lint:suppressions"]),
   rootCheck("static", "oxlint type-aware", ["bun", "run", "lint:type-aware"]),
   rootCheck("static", "Format", ["bun", "run", "format:check"]),
@@ -295,9 +296,15 @@ await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
     if (group === "static") {
-      const [install, ...validation] = groupChecks;
+      const bootstrap = groupChecks.filter(
+        (check) =>
+          check.label === "Install dependency graph analyzer" ||
+          check.label === "Lint rule regressions" ||
+          check.label === "oxlint type-aware"
+      );
+      const validation = groupChecks.filter((check) => !bootstrap.includes(check));
       return Effect.gen(function* () {
-        if (install !== undefined) yield* runCheck(install);
+        yield* Effect.forEach(bootstrap, runCheck, { discard: true });
         yield* Effect.forEach(validation, runCheck, { concurrency: 2, discard: true });
       });
     }

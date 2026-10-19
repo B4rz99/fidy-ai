@@ -273,10 +273,24 @@ if [[ "$*" == 'install --frozen-lockfile' ]]; then
   exit 0
 fi
 [[ -f "$STATIC_RENDEZVOUS/installed" ]] || exit 2
-[[ "\${GOMAXPROCS:-}" == 2 ]] || exit 4
+[[ "\${GOMAXPROCS:-}" == 4 ]] || exit 4
+if [[ "$*" == *lint:rules* ]]; then
+  [[ ! -f "$STATIC_RENDEZVOUS/suppressions" && ! -f "$STATIC_RENDEZVOUS/types" ]] || exit 5
+  touch "$STATIC_RENDEZVOUS/rules-complete"
+  [[ "\${FAIL_STATIC:-}" != rules ]] || exit 1
+  exit 0
+fi
+[[ -f "$STATIC_RENDEZVOUS/rules-complete" ]] || exit 6
+if [[ "$*" == *lint:type-aware* ]]; then
+  [[ ! -f "$STATIC_RENDEZVOUS/suppressions" && ! -f "$STATIC_RENDEZVOUS/types" ]] || exit 7
+  touch "$STATIC_RENDEZVOUS/compiler-complete"
+  [[ "\${FAIL_STATIC:-}" != compiler ]] || exit 1
+  exit 0
+fi
+[[ -f "$STATIC_RENDEZVOUS/compiler-complete" ]] || exit 8
 suite=other
 if [[ "$*" == *lint:suppressions* ]]; then suite=suppressions; fi
-if [[ "$*" == *lint:type-aware* ]]; then suite=types; fi
+if [[ "$*" == *format:check* ]]; then suite=types; fi
 if [[ "$suite" == other ]]; then exit 0; fi
 touch "$STATIC_RENDEZVOUS/$suite"
 for attempt in {1..100}; do
@@ -290,11 +304,13 @@ done
         catch: () => new FixtureUnavailable(),
       });
       expect(Bun.spawnSync(["chmod", "+x", `${directory}/bun`]).exitCode).toBe(0);
-      for (const failure of ["", "suppressions", "types"]) {
+      for (const failure of ["", "rules", "compiler", "suppressions", "types"] as const) {
         Bun.spawnSync([
           "rm",
           "-f",
           `${directory}/installed`,
+          `${directory}/rules-complete`,
+          `${directory}/compiler-complete`,
           `${directory}/suppressions`,
           `${directory}/types`,
         ]);
@@ -316,9 +332,13 @@ done
         );
         expect(result.exitCode).toBe(failure === "" ? 0 : 1);
         if (failure !== "") {
-          expect(new TextDecoder().decode(result.stderr)).toContain(
-            failure === "types" ? "oxlint type-aware" : "Lint suppressions"
-          );
+          const labels = {
+            rules: "Lint rule regressions",
+            types: "Format",
+            compiler: "oxlint type-aware",
+            suppressions: "Lint suppressions",
+          };
+          expect(new TextDecoder().decode(result.stderr)).toContain(labels[failure]);
         }
       }
     })

@@ -145,7 +145,8 @@ storage, or application-wide state.
 withdrawal through the server-declared browser client. It remains accessible without ordinary
 canonical work and exposes the public rights contact without login. Its route composes the shared
 ApplicationShell without the ordinary access-expiry guard or Hosted Agent, preserving the sidebar
-and compact navigation after withdrawal or session expiry. The sidebar does not mount the canonical
+and compact navigation after withdrawal or session expiry. The shell mounts only the navigation
+for its current `md` viewport, with a scoped media-query subscription for viewport changes. The sidebar does not mount the canonical
 pending-count query on Privacy, so a product refusal cannot retire a live privacy interaction.
 WorkspaceHeader and WorkspaceColumns align the controls and rights-contact panel with the settings layout.
 Transactions likewise evaluates its independent cookie-only Consent read before choosing read-only

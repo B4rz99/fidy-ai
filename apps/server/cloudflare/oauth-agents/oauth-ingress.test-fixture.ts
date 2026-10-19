@@ -501,11 +501,12 @@ export const assertReleased = (db: D1Database): Effect.Effect<void, TestFailure>
       yield* wait(
         db
           .prepare(
-            "SELECT count(*) FROM resource_admission_events WHERE policy_key = 'oauth.concurrent.v1' AND released_at_epoch_ms IS NULL"
+            "SELECT admitted_at_epoch_ms, expires_at_epoch_ms, released_at_epoch_ms FROM resource_admission_events WHERE policy_key = 'oauth.concurrent.v1' AND released_at_epoch_ms IS NULL"
           )
-          .first<number>("count(*)")
+          .all()
+          .then(({ results }) => results)
       )
-    ).toBe(0);
+    ).toEqual([]);
   });
 
 export type FixtureHeaders = Readonly<{

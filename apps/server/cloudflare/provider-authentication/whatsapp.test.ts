@@ -7,6 +7,14 @@ import { disposeJourneys, setup, setupWhatsApp } from "./journey.test-fixture";
 afterAll(disposeJourneys);
 afterEach(() => vi.restoreAllMocks());
 
+const advanceConsentClock = (): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const elapsedMilliseconds = 3_100;
+    const now = yield* Clock.currentTimeMillis;
+    // Cross the same cooldown using the ingress Clock; native D1 and proof checks still execute.
+    vi.spyOn(Date, "now").mockReturnValue(now + elapsedMilliseconds);
+  });
+
 it("acknowledges uncorrelated sent, delivered and failed receipts without delivery or association effects", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -261,7 +269,7 @@ it.each([
         })).status
       ).toBe(status);
       expect(providerReads).toBe(reads);
-      yield* Effect.sleep("3100 millis");
+      yield* advanceConsentClock();
       const acceptedAt = yield* Clock.currentTimeMillis;
       expect(
         (yield* whatsappMessages.sendChat(journey, "Acepto", {
@@ -336,7 +344,7 @@ it("cannot open A's Consent decision with B's delivered provider correlation", (
           phone: "573009876543",
         })).status
       ).toBe(409);
-      yield* Effect.sleep("3100 millis");
+      yield* advanceConsentClock();
       const now = yield* Clock.currentTimeMillis;
       expect(
         (yield* whatsappMessages.sendChat(journey, "Acepto", {
@@ -441,7 +449,7 @@ it.each(["callback", "missing_callback"])(
         expect(
           (yield* whatsappMessages.sendChat(journey, "Acepto", { phone: "573001234567" })).status
         ).toBe(409);
-        yield* Effect.sleep("3100 millis");
+        yield* advanceConsentClock();
         const acceptedAt = yield* Clock.currentTimeMillis;
         expect(
           (yield* whatsappMessages.sendChat(journey, "Acepto", {

@@ -8,7 +8,7 @@ type ClockScope = {
   generation: number;
   readonly navigation: (frame: Frame) => void;
   readonly tasks: Set<Promise<void>>;
-  readonly failures: unknown[];
+  readonly failures: Array<Readonly<{ generation: number; cause: unknown }>>;
   readonly response: (response: Response) => void;
 };
 const installed = new WeakMap<Page, ClockScope>();
@@ -86,8 +86,16 @@ export const disposeAcceptanceClock = (page: Page): Promise<void> => {
   page.off("framenavigated", scope.navigation);
   installed.delete(page);
   return Promise.all(scope.tasks).then(() => {
-    if (scope.failures.length > 0) {
-      throw new AggregateError(scope.failures, "Acceptance clock failed");
+    const failures = scope.failures.filter(
+      ({ generation, cause }) =>
+        generation === scope.generation ||
+        !(cause instanceof Error && cause.message.includes("Execution context was destroyed"))
+    );
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures.map(({ cause }) => cause),
+        "Acceptance clock failed"
+      );
     }
   });
 };
@@ -114,7 +122,7 @@ export const installAcceptanceClock = (page: Page): Promise<void> => {
             !page.isClosed() &&
             response.request().failure() === null
           ) {
-            scope.failures.push(cause);
+            scope.failures.push({ generation, cause });
           }
         })
         .finally(() => scope.tasks.delete(task));

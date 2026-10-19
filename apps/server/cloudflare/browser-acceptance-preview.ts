@@ -29,7 +29,6 @@ import {
   privacyUserId,
   recurringEditingUserId,
   recurringIsolatedIdentities,
-  recurringRecoveryUserId,
   recurringSummaryUserId,
   recurringUserId,
 } from "./browser-acceptance-seed";
@@ -422,7 +421,6 @@ const fixtureIdentities = [
   { key: "recurring", userId: recurringUserId },
   { key: "recurringSummary", userId: recurringSummaryUserId },
   { key: "recurringEditing", userId: recurringEditingUserId },
-  { key: "recurringRecovery", userId: recurringRecoveryUserId },
   { key: "privacy", userId: privacyUserId },
   { key: "privacyRenewal", userId: privacyRenewalUserId },
   { key: "privacyErasure", userId: privacyErasureUserId },

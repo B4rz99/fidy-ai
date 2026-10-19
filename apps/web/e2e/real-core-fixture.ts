@@ -85,7 +85,10 @@ export const openUpgradeThroughCore = (page: Page): Promise<void> => {
 type RecurringIdentity =
   | "recurring"
   | "recurringSummary"
-  | "recurringRecovery"
+  | "recurringRecoveryUnavailable"
+  | "recurringRecoveryMalformed"
+  | "recurringRecoveryLimited"
+  | "recurringRecoveryPressure"
   | "recurringEditing"
   | "recurringLifecycle"
   | "recurringTracking"

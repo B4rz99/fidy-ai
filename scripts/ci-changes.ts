@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { sourceScanPlan } from "./partition-source-scan";
+
 const conditionalJobs = [
   "builds",
   "unit",
@@ -103,6 +105,8 @@ if (import.meta.main) {
   const paths = new TextDecoder().decode(diff.stdout).split("\0").filter(Boolean);
   const plan = selectChecks(paths);
   const lines = Object.entries(plan).map(([job, selected]) => `${job}=${selected}`);
+  const source = sourceScanPlan({ unit: plan.unit, sca: plan["security-sca"] });
+  lines.push(`source-partitions=${source.count}`, `source-sca-partition=${source.sca}`);
   const file = Bun.file(output);
   await Bun.write(output, `${(await file.exists()) ? await file.text() : ""}${lines.join("\n")}\n`);
   process.stdout.write(`${lines.join("\n")}\n`);

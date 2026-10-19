@@ -1,11 +1,15 @@
 import { expect, it } from "vitest";
 import { Predicate, Record } from "effect";
 
+const listed = new Map<string, string>();
 const listTests = (
   config: string,
   mode: "shared" | "cli",
   args: ReadonlyArray<string> = []
 ): string => {
+  const key = JSON.stringify([config, mode, args]);
+  const cached = listed.get(key);
+  if (cached !== undefined) return cached;
   const result = Bun.spawnSync(
     [process.execPath, "--bun", "playwright", "test", "--config", config, "--list", ...args],
     {
@@ -16,7 +20,9 @@ const listTests = (
     }
   );
   expect(result.exitCode).toBe(0);
-  return new TextDecoder().decode(result.stdout);
+  const output = new TextDecoder().decode(result.stdout);
+  listed.set(key, output);
+  return output;
 };
 
 it("keeps the native CLI mutation journey out of the shared User's browser suite", () => {
@@ -38,7 +44,7 @@ it("partitions the complete browser suite across both runners without dropping o
   const admission = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
     tests.filter((line) => line.includes("[admission]") || line.includes("[performance]"));
   // Every runner proves real admission before starting its own concurrent browser shard.
-  expect(admission(complete)).toHaveLength(5);
+  expect(admission(complete)).toHaveLength(9);
   for (const shard of shards) expect(admission(shard)).toEqual(admission(complete));
   expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
   expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);

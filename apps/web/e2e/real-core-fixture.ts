@@ -99,6 +99,8 @@ const signInWithIdentity = ({
       | "recurring"
       | "recurringSummary"
       | "recurringRecovery"
+      | "recurringChat"
+      | "recurringPagination"
       | "recurringEditing"
       | "navigationTransactions"
       | "navigationBudget"
@@ -281,22 +283,31 @@ export const signInPrivacyRenewalThroughCore = (input: SignInFixture): Promise<v
 export const signInRecurringThroughCore = (
   input: SignInFixture &
     Readonly<{
-      identity: "recurring" | "recurringSummary" | "recurringRecovery" | "recurringEditing";
+      identity:
+        | "recurring"
+        | "recurringSummary"
+        | "recurringRecovery"
+        | "recurringEditing"
+        | "recurringChat"
+        | "recurringPagination";
     }>
 ): Promise<void> => signInWithIdentity({ ...input, clockMode: "controlled" });
 
-/** Navigation benchmarks cannot share admission budgets or mutable data with other journeys. */
-export const signInNavigationThroughCore = (
-  input: SignInFixture &
-    Readonly<{
-      identity:
-        | "navigationTransactions"
-        | "navigationBudget"
-        | "navigationRecurring"
-        | "navigationClock"
-        | "navigationDashboard";
-    }>
-): Promise<void> => signInWithIdentity({ ...input, clockMode: "controlled" });
+type NavigationFixture = SignInFixture &
+  Readonly<{
+    identity:
+      | "navigationTransactions"
+      | "navigationBudget"
+      | "navigationRecurring"
+      | "navigationClock"
+      | "navigationDashboard";
+  }>;
+/** Navigation journeys own their User and retained data. */
+export const signInNavigationThroughCore = (input: NavigationFixture): Promise<void> =>
+  signInWithIdentity({ ...input, clockMode: "controlled" });
+/** Timing probes preserve native performance while virtualizing polling and cooldowns. */
+export const signInNavigationPerformanceThroughCore = (input: NavigationFixture): Promise<void> =>
+  signInWithIdentity({ ...input, clockMode: "native-performance" });
 
 /** Budget editor journeys cannot race the Budget Widget's cap mutations. */
 export const signInBudgetEditingThroughCore = (input: SignInFixture): Promise<void> =>

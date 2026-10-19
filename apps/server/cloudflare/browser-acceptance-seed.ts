@@ -32,6 +32,10 @@ export const recurringUserId = "24000000-0000-4000-8000-000000000401";
 export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
 export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
 export const recurringRecoveryUserId = "24000000-0000-4000-8000-000000000421";
+export const recurringIsolatedIdentities = [
+  { key: "recurringChat", userId: "24000000-0000-4000-8000-000000000541" },
+  { key: "recurringPagination", userId: "24000000-0000-4000-8000-000000000551" },
+] as const;
 export const navigationIdentities = [
   { key: "navigationClock", userId: "24000000-0000-4000-8000-000000000511" },
   { key: "navigationTransactions", userId: "24000000-0000-4000-8000-000000000451" },
@@ -102,7 +106,7 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
 };
 await seedIdentity();
 await Promise.all(
-  navigationIdentities.map((identity) =>
+  [...navigationIdentities, ...recurringIsolatedIdentities].map((identity) =>
     seedIdentity({
       userId: identity.userId,
       bsuid: `CO.${identity.key}`,

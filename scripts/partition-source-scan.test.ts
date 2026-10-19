@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { partitionSourceFiles } from "./partition-source-scan";
+import { partitionSourceFiles, sourceScanPlan } from "./partition-source-scan";
 
 it("balances the complete source scope without duplication, omissions, or input-order dependence", () => {
   const files = [
@@ -26,4 +26,14 @@ it("refuses invalid partition counts and duplicated source targets", () => {
   expect(() => partitionSourceFiles({ files: [...files, ...files], count: 3 })).toThrow(
     "Duplicate"
   );
+});
+
+it("keeps every partition on an already selected runner for every change plan", () => {
+  for (const unit of [false, true]) {
+    for (const sca of [false, true]) {
+      const plan = sourceScanPlan({ unit, sca });
+      const indices = [1, 2, 3, ...(unit ? [4] : []), ...(sca ? [plan.sca] : [])];
+      expect(indices).toEqual(Array.from({ length: plan.count }, (_, index) => index + 1));
+    }
+  }
 });

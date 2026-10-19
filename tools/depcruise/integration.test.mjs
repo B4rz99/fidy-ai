@@ -9,8 +9,12 @@ import serverConfig from "../../apps/server/.dependency-cruiser.mjs";
 import webConfig from "../../apps/web/.dependency-cruiser.mjs";
 
 const toolsRoot = dirname(fileURLToPath(import.meta.url));
-/** @param {string} application - Fixture application. @param {Record<string, string>} files - Fixture sources. @param {{entrypoint?: string, exclude?: string}} [options] - CLI and coverage fault. */
-const inspect = (application, files, { entrypoint = "run.mjs", exclude } = {}) => {
+/** @param {string} application - Fixture application. @param {Record<string, string>} files - Fixture sources. @param {{entrypoint?: string, exclude?: string, publication?: boolean}} [options] - CLI and coverage fault. */
+const inspect = (
+  application,
+  files,
+  { entrypoint = "run.mjs", exclude, publication = false } = {}
+) => {
   const temporary = mkdtempSync(join(tmpdir(), "fidy-architecture-"));
   const root = join(temporary, "apps", application);
   const config = application === "server" ? serverConfig : webConfig;
@@ -28,9 +32,13 @@ const inspect = (application, files, { entrypoint = "run.mjs", exclude } = {}) =
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, source);
     }
-    const result = spawnSync("bun", [join(toolsRoot, entrypoint), root, "src"], {
-      encoding: "utf8",
-    });
+    const result = spawnSync(
+      "bun",
+      [join(toolsRoot, entrypoint), root, "src", ...(publication ? ["--publication"] : [])],
+      {
+        encoding: "utf8",
+      }
+    );
     assert.equal(result.error, undefined);
     return { status: result.status, output: result.stdout + result.stderr };
   } finally {
@@ -76,6 +84,17 @@ await test("publication is checked separately from legal owner-private imports",
   const rejected = inspect("server", files, { entrypoint: "check-publication.mjs" });
   assert.equal(rejected.status, 1);
   assert.match(rejected.output, /published-interface-reexports-internal/);
+  const combined = inspect("server", files, { publication: true });
+  assert.equal(combined.status, 1);
+  assert.match(combined.output, /published-interface-reexports-internal/);
+  assert.equal(
+    inspect(
+      "server",
+      { "src/core/example/operations.ts": "export const read = () => 1;" },
+      { publication: true }
+    ).status,
+    0
+  );
 });
 
 await test("empty, incomplete and unresolved graphs cannot pass either command", () => {

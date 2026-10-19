@@ -1,5 +1,14 @@
 #!/usr/bin/env bun
 
+/** Use only runners that the ordinary change plan already selects. */
+export const sourceScanPlan = ({
+  unit,
+  sca,
+}: Readonly<{ unit: boolean; sca: boolean }>): Readonly<{ count: number; sca: number }> => ({
+  count: 3 + Number(unit) + Number(sca),
+  sca: 4 + Number(unit),
+});
+
 /** Distribute the complete source scope over existing jobs; never select only changed files. */
 export const partitionSourceFiles = ({
   files,
@@ -90,21 +99,30 @@ const sourceEntries = (
   return entries;
 };
 
+const minimumPartitions = 3;
+const maximumPartitions = 5;
+const validPartitionCount = (count: number): boolean =>
+  [minimumPartitions, minimumPartitions + 1, maximumPartitions].includes(count);
+const sourceSelection = (selection: string): Readonly<{ index: number; count: number }> => {
+  const [index = 0, count = 0, extra] = selection.split("/").map(Number);
+  if (
+    extra !== undefined ||
+    !validPartitionCount(count) ||
+    !Number.isInteger(index) ||
+    index < 1 ||
+    index > count
+  ) {
+    throw new Error("Use one complete source partition from a 3–5 runner plan");
+  }
+  return { index, count };
+};
+
 const generate = ({
   selection,
   output,
   source,
 }: Readonly<{ selection: string; output: string; source: string }>): Promise<void> => {
-  const [index, count] = selection.split("/").map(Number);
-  if (
-    index === undefined ||
-    count !== 3 ||
-    !Number.isInteger(index) ||
-    index < 1 ||
-    index > count
-  ) {
-    throw new Error("Use source partition 1/3, 2/3, or 3/3");
-  }
+  const { index, count } = sourceSelection(selection);
   const { policy, sast, exclude } = readPolicy(Bun.YAML.parse(source));
   const entries = sourceEntries(exclude);
   return Promise.all(
@@ -146,7 +164,7 @@ if (import.meta.main) {
   const selection = Bun.argv[2];
   const output = Bun.argv[3];
   if (selection === undefined || output === undefined || Bun.argv.length !== 4) {
-    throw new Error("Usage: bun scripts/partition-source-scan.ts 1/3 output.yaml");
+    throw new Error("Usage: bun scripts/partition-source-scan.ts index/count output.yaml");
   }
   const source = await Bun.file(".fluidattacks/sast.yaml").text();
   await generate({ selection, output, source });

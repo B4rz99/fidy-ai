@@ -1,9 +1,11 @@
 import { loadGraph } from "./graph.mjs";
 import { boundaryViolations } from "./boundaries.mjs";
+import { launderingViolations } from "./laundering.mjs";
 
+const publication = process.argv.includes("--publication");
 const { forbiddenRules, packageRoot, report } = await loadGraph(
   process.argv[2] ?? process.cwd(),
-  process.argv.slice(3)
+  process.argv.slice(3).filter((argument) => argument !== "--publication")
 );
 
 /** @param {string} name - Rule identifier; every rule must explain its boundary. */
@@ -41,12 +43,16 @@ const reportViolations = (report) => {
 const boundaries = packageRoot.endsWith("/apps/server")
   ? boundaryViolations(report, packageRoot)
   : [];
-for (const { name, from, to, reason } of boundaries) {
+const publications =
+  publication && packageRoot.endsWith("/apps/server")
+    ? launderingViolations(report, packageRoot)
+    : [];
+for (const { name, from, to, reason } of [...boundaries, ...publications]) {
   console.error(`error ${name}: ${displayPath(from)} → ${displayPath(to)}`);
   console.error(`  ${reason}\n`);
 }
 reportViolations(report);
-if (boundaries.length > 0) process.exit(1);
+if (boundaries.length + publications.length > 0) process.exit(1);
 console.log(
   `module graph clean: ${report.summary.totalCruised} modules, ${report.summary.totalDependenciesCruised} dependencies.`
 );

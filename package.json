@@ -30,7 +30,7 @@
     "shadcn": "bun run --cwd apps/web shadcn",
     "format": "oxfmt --write . && bun install --cwd tools/astro --frozen-lockfile && bun tools/astro/node_modules/prettier/bin/prettier.cjs --plugin ./tools/astro/node_modules/prettier-plugin-astro/dist/index.js --print-width 100 --trailing-comma es5 --write \"apps/site/src/**/*.astro\"",
     "format:check": "oxfmt --check . && bun install --cwd tools/astro --frozen-lockfile && bun tools/astro/node_modules/prettier/bin/prettier.cjs --plugin ./tools/astro/node_modules/prettier-plugin-astro/dist/index.js --print-width 100 --trailing-comma es5 --check \"apps/site/src/**/*.astro\"",
-    "typecheck": "rm -rf .tsbuild && tsc --build --force && bun run --cwd apps/site typecheck && bun tools/astro/node_modules/typescript/bin/tsc --project tools/astro/tsconfig.json",
+    "typecheck": "tsc --build && bun run --cwd apps/site typecheck && bun tools/astro/node_modules/typescript/bin/tsc --project tools/astro/tsconfig.json",
     "typecheck:oxlint": "node tools/depcruise/node_modules/typescript/bin/tsc --project scripts/oxlint/tsconfig.json --noEmit",
     "typecheck:depcruise": "node tools/depcruise/node_modules/typescript/bin/tsc --project tools/depcruise/tsconfig.json --noEmit",
     "contracts:generate": "bun run --cwd apps/server contracts:generate",

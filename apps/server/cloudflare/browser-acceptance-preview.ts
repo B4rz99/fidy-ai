@@ -28,6 +28,7 @@ import {
   privacyRenewalUserId,
   privacyUserId,
   recurringEditingUserId,
+  recurringIsolatedIdentities,
   recurringRecoveryUserId,
   recurringSummaryUserId,
   recurringUserId,
@@ -416,6 +417,7 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
 const fixtureIdentities = [
+  ...recurringIsolatedIdentities,
   ...navigationIdentities,
   { key: "recurring", userId: recurringUserId },
   { key: "recurringSummary", userId: recurringSummaryUserId },

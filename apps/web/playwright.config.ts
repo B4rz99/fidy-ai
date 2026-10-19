@@ -26,8 +26,8 @@ export default defineConfig({
     },
     {
       name: "performance",
-      testMatch: "needs-review.spec.ts",
-      grep: /returns from .+ with its review form and original already available/u,
+      testMatch: ["needs-review.spec.ts", "workspace-navigation.spec.ts"],
+      grep: /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing/u,
       dependencies: ["admission"],
       workers: 1,
     },
@@ -36,7 +36,7 @@ export default defineConfig({
       testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
       dependencies: ["performance"],
       grepInvert:
-        /returns from .+ with its review form and original already available|rejects stale cross-tab drafts and logout/u,
+        /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|rejects stale cross-tab drafts and logout/u,
     },
   ],
   fullyParallel: false,

@@ -666,24 +666,22 @@ const installExpiringPairingRoutes = (
   page
     .route("**/web/pairings", (route: Route) => {
       counts.start += 1;
-      return runFixture(
-        DateTime.now.pipe(
-          Effect.map((now) => DateTime.add(now, { seconds: 6 })),
-          Effect.map(DateTime.formatIso)
-        )
-      ).then((shortExpiry) =>
-        route.fulfill({
-          contentType: "application/json",
-          status: successStatus,
-          body: json({
-            pairingId,
-            privateVerifier,
-            publicCode,
-            expiresAt: shortExpiry,
-            pollingIntervalSeconds: 5,
-          }),
-        })
-      );
+      return page
+        .evaluate(() => performance.timeOrigin + performance.now())
+        .then((now) => DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(now), { seconds: 6 })))
+        .then((shortExpiry) =>
+          route.fulfill({
+            contentType: "application/json",
+            status: successStatus,
+            body: json({
+              pairingId,
+              privateVerifier,
+              publicCode,
+              expiresAt: shortExpiry,
+              pollingIntervalSeconds: 5,
+            }),
+          })
+        );
     })
     .then(() =>
       page.route("**/web/pairings/redeem", () => {

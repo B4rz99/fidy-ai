@@ -252,10 +252,13 @@ Successful fixture tests do not prove merchant activation, provider destinations
 Production readiness; those remain separate operator-evidence gates. The server contract gate owns
 generated OpenAPI freshness, while browser checks prove that neither host publishes that artifact.
 
-Browser journey sign-in fixtures advance only the browser's initial polling timer after operator
-approval; real Core proof verification, rate limits, and session creation are unchanged. Dedicated
-pairing journeys retain real-time cadence and real approval/redemption evidence. The mocked expiry
-case advances the browser clock through a pending request and its deadline rather than sleeping.
+Browser journey sign-in fixtures advance the initial polling timer after operator approval;
+Core proof verification, rate limits, and session creation stay active. A loopback-only operator
+advances the fixture clock through observed short cooldowns. Clock-sensitive admission probes run
+before concurrent journeys, and recurring read, chat, and pagination journeys own separate seeded
+Users. Latency probes preserve native browser performance timing while virtualizing timers and run
+without competing browser cases. Mocked expiry derives its deadline from the same browser clock
+that the test advances. All production admission and timeout policies remain active.
 The browser verification group also runs the native CLI journey through
 `bun run test:browser:cli` in its dedicated `4183–4185` public/Core topology, with fresh D1 and
 isolated native credentials. The shared suite excludes that journey: other tests must not change

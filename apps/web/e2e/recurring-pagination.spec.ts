@@ -75,7 +75,7 @@ test("all 100 recurring items remain reachable in list pages and a crowded calen
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringRecovery" })
+        signInRecurringThroughCore({ page, request, identity: "recurringPagination" })
       );
       yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
       yield* Effect.tryPromise(() => page.route(`${apiOrigin}/recurring-plans?*`, serveWorkspace));

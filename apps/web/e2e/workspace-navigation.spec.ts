@@ -1,7 +1,10 @@
 import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin } from "./http-fixtures";
-import { signInNavigationThroughCore } from "./real-core-fixture";
+import {
+  signInNavigationPerformanceThroughCore,
+  signInNavigationThroughCore,
+} from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -40,9 +43,8 @@ for (const workspace of workspaces) {
     Effect.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() =>
-          signInNavigationThroughCore({ page, request, identity: workspace.identity })
+          signInNavigationPerformanceThroughCore({ page, request, identity: workspace.identity })
         );
-        yield* Effect.tryPromise(() => page.clock.resume());
         const development = yield* Effect.tryPromise(() =>
           page.locator('script[src="/@vite/client"]').count()
         );

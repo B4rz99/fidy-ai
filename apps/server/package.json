@@ -280,7 +280,7 @@
     "test:email-interpretation": "bun --bun vitest run --config vitest.email-interpretation.config.ts",
     "test:mutation": "node ../../tools/mutation/run.mjs",
     "check:browser-client": "bun scripts/check-browser-client.ts",
-    "lint:deps": "bun scripts/check-module-layout.ts && bun ../../tools/depcruise/run.mjs . src scripts tools cloudflare",
+    "lint:deps": "bun scripts/check-module-layout.ts && bun ../../tools/depcruise/run.mjs . src scripts tools cloudflare --publication",
     "check:lint-guards": "bun scripts/check-lint-guards.ts",
     "test:memory": "bun --bun vitest run --config vitest.config.ts src/shell/memory --coverage.enabled=false"
   },

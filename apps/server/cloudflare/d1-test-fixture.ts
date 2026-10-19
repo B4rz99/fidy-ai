@@ -329,7 +329,11 @@ export const isolatedTestStorage = (): Readonly<{
         .then((slot) =>
           Promise.all([
             acquireDatabase(slot),
-            slot.runtime.getR2Bucket(`BUCKET_${slot.index}`),
+            slot.runtime
+              .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
+              .then((bindings) =>
+                Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${slot.index}`]))
+              ),
           ]).then(([db, bucket]) => ({ db, bucket }))
         ),
     dispose: pool.dispose,

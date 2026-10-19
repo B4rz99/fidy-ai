@@ -191,7 +191,7 @@ const cachedNativeFiles = ({
   const artifact = `layout-${new Bun.CryptoHasher("sha256").update(`${layoutKey}:${size}`).digest("hex")}.json`;
   return filesystem.readArtifact(artifact).then((cached) => {
     if (Option.isSome(cached)) {
-      const paths = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(
+      const paths = Schema.decodeSync(Schema.fromJsonString(Schema.Array(Schema.String)))(
         new TextDecoder().decode(cached.value)
       );
       if (
@@ -241,8 +241,8 @@ export const nativeImagePool = ({
   layoutKey: string;
 }>): Promise<NativeImagePool> => {
   const filesystem = imageFiles();
-  return filesystem.temporary().then((directory) => {
-    return cachedNativeFiles({ create, directory, size, layoutKey, filesystem })
+  return filesystem.temporary().then((directory) =>
+    cachedNativeFiles({ create, directory, size, layoutKey, filesystem })
       .then((files) => {
         const runtime = create(directory);
         return {
@@ -258,6 +258,6 @@ export const nativeImagePool = ({
           .then(() => {
             throw cause;
           })
-      );
-  });
+      )
+  );
 };

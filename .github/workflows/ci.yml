@@ -116,7 +116,7 @@ jobs:
           VERIFY_TIMING_REPORT: test-results/verify-static.json
         run: |
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
-          bun run verify -- --group static
+          /usr/bin/time -p bun run verify -- --group static
       - name: Preserve Workspace Gate phase timings
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

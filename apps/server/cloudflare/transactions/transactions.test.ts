@@ -220,48 +220,43 @@ const setup = (platform = false, userCount = 2): Promise<D1Database> =>
         Array.from({ length: userCount }, (_, index) => loadUserId(index)),
         (user, index) =>
           Effect.gen(function* () {
-            yield* fromTestPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-                )
-                .bind(user, current)
-                .run()
-            );
             const verifierDigest = yield* fromTestPromise(() => digest(`verifier${index}`));
-            yield* fromTestPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
-                )
-                .bind(
-                  `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
-                  `ABCD-${String(1230 + index)}`,
-                  verifierDigest,
-                  user,
-                  current,
-                  current + 600000
-                )
-                .run()
-            );
             const sessionDigest = yield* fromTestPromise(() => digest(bearer(index)));
             yield* fromTestPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                )
-                .bind(
-                  sessions[index] ??
-                    `10000000-0000-4000-8000-${String(61 + index).padStart(12, "0")}`,
-                  `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
-                  user,
-                  sessionDigest,
-                  current,
-                  current + 600000,
-                  current + 3600000,
-                  current + 7776000000
-                )
-                .run()
+              db.batch([
+                db
+                  .prepare(
+                    "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+                  )
+                  .bind(user, current),
+                db
+                  .prepare(
+                    "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
+                  )
+                  .bind(
+                    `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
+                    `ABCD-${String(1230 + index)}`,
+                    verifierDigest,
+                    user,
+                    current,
+                    current + 600000
+                  ),
+                db
+                  .prepare(
+                    "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                  )
+                  .bind(
+                    sessions[index] ??
+                      `10000000-0000-4000-8000-${String(61 + index).padStart(12, "0")}`,
+                    `10000000-0000-4000-8000-${String(70 + index).padStart(12, "0")}`,
+                    user,
+                    sessionDigest,
+                    current,
+                    current + 600000,
+                    current + 3600000,
+                    current + 7776000000
+                  ),
+              ])
             );
           }),
         { concurrency: "unbounded" }

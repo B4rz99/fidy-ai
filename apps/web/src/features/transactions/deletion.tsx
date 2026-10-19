@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomSet } from "@effect/atom-react";
 import { Cause, Effect, Predicate } from "effect";
 import type * as Atom from "effect/reactivity/Atom";
@@ -91,9 +92,11 @@ export const TransactionDeletion = (
       </p>
       <DeletionFeedback status={props.status} />
       {props.status === "rejected" || props.status === "uncertain" ? (
-        <Button variant="outline" onClick={props.onRefresh}>
-          Actualizar transacciones
-        </Button>
+        <RefreshButton
+          variant="outline"
+          onClick={props.onRefresh}
+          label="Actualizar transacciones"
+        />
       ) : (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={props.status === "saving"} onClick={props.onCancel}>

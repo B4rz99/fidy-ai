@@ -21,6 +21,7 @@ const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 export const pairingUserId = "24000000-0000-4000-8000-000000000321";
 export const dashboardUserId = "24000000-0000-4000-8000-000000000351";
+export const budgetEditingUserId = "24000000-0000-4000-8000-000000000491";
 export const budgetUserId = "24000000-0000-4000-8000-000000000371";
 export const privacyUserId = "24000000-0000-4000-8000-000000000381";
 export const privacyErasureUserId = "24000000-0000-4000-8000-000000000441";
@@ -29,7 +30,15 @@ export const accessUserId = "24000000-0000-4000-8000-000000000361";
 export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 export const recurringUserId = "24000000-0000-4000-8000-000000000401";
 export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
+export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
 export const recurringRecoveryUserId = "24000000-0000-4000-8000-000000000421";
+export const navigationIdentities = [
+  { key: "navigationClock", userId: "24000000-0000-4000-8000-000000000511" },
+  { key: "navigationTransactions", userId: "24000000-0000-4000-8000-000000000451" },
+  { key: "navigationBudget", userId: "24000000-0000-4000-8000-000000000461" },
+  { key: "navigationRecurring", userId: "24000000-0000-4000-8000-000000000471" },
+  { key: "navigationDashboard", userId: "24000000-0000-4000-8000-000000000481" },
+] as const;
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
 const expiredTrialAgeMs = 691_200_000;
@@ -92,6 +101,16 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+await Promise.all(
+  navigationIdentities.map((identity) =>
+    seedIdentity({
+      userId: identity.userId,
+      bsuid: `CO.${identity.key}`,
+      email: `${identity.key}@example.com`,
+      consentId: `${identity.userId.slice(0, -1)}2`,
+    })
+  )
+);
 await seedIdentity({
   userId: recurringUserId,
   bsuid: "CO.Recurring",
@@ -103,6 +122,12 @@ await seedIdentity({
   bsuid: "CO.RecurringSummary",
   email: "resumen-recurrentes@example.com",
   consentId: "24000000-0000-4000-8000-000000000412",
+});
+await seedIdentity({
+  userId: recurringEditingUserId,
+  bsuid: "CO.RecurringEditing",
+  email: "edicion-recurrentes@example.com",
+  consentId: "24000000-0000-4000-8000-000000000502",
 });
 await seedIdentity({
   userId: recurringRecoveryUserId,
@@ -142,6 +167,12 @@ await seedIdentity({
   bsuid: "CO.Dashboard",
   email: "tablero@example.com",
   consentId: "24000000-0000-4000-8000-000000000352",
+});
+await seedIdentity({
+  userId: budgetEditingUserId,
+  bsuid: "CO.BudgetEditing",
+  email: "budget-editing@example.com",
+  consentId: "24000000-0000-4000-8000-000000000492",
 });
 await seedIdentity({
   userId: budgetUserId,

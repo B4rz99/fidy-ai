@@ -27,7 +27,7 @@ export const expireStatementReviewEvidence = ({
             maximumRetainedReviewEvidence
           ),
           DB.prepare(`UPDATE statement_needs_review
-    SET status = 'expired', original_evidence = NULL, known_money = NULL
+    SET status = 'expired', original_evidence = NULL, known_money = NULL, review_suggestions_json = NULL
     WHERE id IN (SELECT id FROM statement_needs_review
       WHERE status = 'pending' AND evidence_expires_at_ms <= ?
       ORDER BY evidence_expires_at_ms, id LIMIT ?)`).bind(current, maximumRetainedReviewEvidence),

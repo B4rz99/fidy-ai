@@ -11,7 +11,7 @@ import {
 import { Message, MessageContent } from "@/ui/components/ai-elements/message";
 import { ChatComposer, ChatWindow } from "@/ui/components/chat";
 import { Button } from "@/ui/components/button";
-import { useHostedConversation } from "./conversation";
+import { type VisibleAgentReply, useHostedConversation } from "./conversation";
 import { VisibleReply } from "./visible-reply";
 
 /** Retains chat through dismissal/navigation; authenticated-layout unmount discards it. */
@@ -36,14 +36,13 @@ export const HostedAgentFeature = (): JSX.Element => {
             </Message>
           ))}
           {Option.isSome(view.reply) && (
-            <VisibleReply
-              active={open && view.reply.value.awaitingVisibility}
+            <AgentReply
+              reply={view.reply.value}
+              active={open}
+              canSubmit={view.canSubmit}
               onVisible={conversation.replyVisible}
-            >
-              <Message from="assistant" aria-label="Respuesta del agente">
-                <MessageContent>{view.reply.value.text}</MessageContent>
-              </Message>
-            </VisibleReply>
+              confirm={conversation.confirm}
+            />
           )}
           {view.status !== "" && (
             <p aria-live="polite" className="text-xs text-muted-foreground">
@@ -72,3 +71,28 @@ export const HostedAgentFeature = (): JSX.Element => {
     </ChatWindow>
   );
 };
+
+const AgentReply = ({
+  reply,
+  active,
+  canSubmit,
+  onVisible,
+  confirm,
+}: Readonly<{
+  reply: VisibleAgentReply;
+  active: boolean;
+  canSubmit: boolean;
+  onVisible: () => void;
+  confirm: () => void;
+}>): JSX.Element => (
+  <VisibleReply active={active && reply.awaitingVisibility} onVisible={onVisible}>
+    <Message from="assistant" aria-label="Respuesta del agente">
+      <MessageContent>{reply.text}</MessageContent>
+      {reply.confirmation && (
+        <Button type="button" disabled={!canSubmit} onClick={confirm}>
+          Confirmar cambio
+        </Button>
+      )}
+    </Message>
+  </VisibleReply>
+);

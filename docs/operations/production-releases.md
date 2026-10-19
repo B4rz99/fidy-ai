@@ -105,7 +105,11 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 8. Recheck trunk through the bounded Git reference response (not commit patches), then capture each
    active public/Core deployment and its sole stable 100% version. Independent public/Core capture
    reads overlap with concurrency capped at two;
-   prove both stable identities through the reserved smoke path. Refuse an ambiguous deployment.
+   prove both stable identities through proof-admitted normal-traffic
+   `GET /internal/release-smoke?readiness=1`. Require the exact public/Core versions, revision,
+   digest, no-store response and public identity header. This read-only baseline capture does not
+   admit a synthetic job or depend on Queue/Workflow publication. It creates no smoke attestation;
+   candidate, compatibility and post-promotion verification remain mandatory under the closed quota-deferral policy below. Refuse an ambiguous deployment.
    Alchemy may retain a replacement receipt while old-generation cleanup is pending; use its current
    generation only when the Worker identity and rollout hash are present. For an interrupted update,
    capture may use its persisted output only when its Worker identity matches the last-applied output;
@@ -122,19 +126,22 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
     routing controller uses Wrangler's 0% deployment primitive to install each candidate alongside
     its captured stable version (100%). It re-reads Cloudflare after each write. Never replace 0%
     with a nonzero percentage to accommodate a differing API schema.
-11. Run `verify-production-smoke.ts` against the exact candidate pair **and** the old-public/new-Core
-    pairing concurrently (at most two), using explicit version overrides and distinct synthetic probe
-    IDs. Each probe owns its D1 status and Queue/Workflow identity; both use the same fixed, idempotent
-    R2 marker and compatibility-only Durable Object check. Candidate edge rejection checks still
-    follow successful candidate synthetic work. Both pairings and edge checks must succeed before
-    any normal traffic changes. Failure interrupts the sibling's runner-side work, never qualifies a
-    partial success as an attestation, and does not cancel already admitted platform work; its
-    existing admission cap and five-minute expiry remain unchanged.
+11. Run `verify-production-smoke.ts` after read-only identity/routing verification of both the
+    candidate pair and old-public/new-Core pairing. Run candidate synthetic work and edge rejection
+    checks first, then compatibility synthetic work with a distinct probe ID. Each synthetic probe
+    owns its D1 status and Queue/Workflow identity; the R2 marker remains fixed and idempotent.
+    A closed `d1_quota` refusal (only Cloudflare's exact daily read/write limit errors at D1 stages)
+    defers synthetic work. Reverify both exact identities without D1 before accepting deferral;
+    previous ingress versions need not understand the new quota stage. The release attestation
+    records `synthetic: deferred-d1-quota`, never a fabricated synthetic pass. All identity, routing,
+    authority, schema, storage, transport and unknown failures still block. No User authority or
+    billing change is granted by this exception. D1-dependent functionality remains unavailable
+    until the daily reset; verification after reset is still required for feature audit evidence.
 12. Recheck trunk and current deployment IDs before each promotion. Route the tested Core candidate
     to 100%, then the tested public candidate to 100%. No mutable tag or latest-version selector
     participates. Verify the redirect, static metadata, and bound health response afterward.
 13. Retain the captured rollback receipt in a private, seven-day GitHub Actions artifact. Probe
-    **normal traffic without version overrides** using the same synthetic smoke protocol. Retry a
+    **normal traffic without version overrides** using the same synthetic smoke protocol and closed quota-deferral policy. Quota deferral requires normal-traffic identity verification and does not trigger code rollback. Retry a
     bounded three times for convergence; a confirmed failure attempts guarded code-only rollback,
     public first and then Core. A failed post-promotion probe fails the release even if code traffic
     was successfully restored. The failure email includes the observed traffic state.
@@ -496,3 +503,9 @@ repair requires fresh inspection; do not reuse stale deployment IDs.
 After successful recovery, dispatch the ordinary Production workflow for current `trunk`. Capture,
 exact-pair smoke and promotion remain mandatory. Do not run the repair from a workstation or use it
 to bypass a failed candidate proof.
+
+### OAuth availability during a confirmed D1 quota outage
+
+OAuth bootstrap charges D1 resource admission before returning public discovery metadata or rejecting several malformed machine requests. After authenticated smoke proves a closed D1 daily-quota refusal for the exact Worker pair, release verification may defer those OAuth availability proofs when they return 503. It still probes every route and requires no-store, CSP, HSTS, framing, MIME, referrer, CORS and exact candidate-version checks. Cross-origin MCP and first-party-origin refusals, provider rejection, categories authentication and hosted-turn rejection remain mandatory. Any other status or independent-route failure blocks promotion. This does not change application admission, grant authority or financial access.
+
+The release attestation records `oauthAvailability` alongside `synthetic`; both explicitly report `deferred-d1-quota` during this outage. Promoted normal traffic and the final edge step obtain a fresh authenticated quota proof rather than trusting a flag or stale attestation. A full successful synthetic result restores all expected OAuth statuses automatically.

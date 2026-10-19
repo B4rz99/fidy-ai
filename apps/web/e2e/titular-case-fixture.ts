@@ -35,7 +35,7 @@ const runCaseRegister = Effect.fn(function* (
 
 const reference = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
-  return yield* crypto.randomUUIDv4;
+  return yield* crypto.randomUUIDv4();
 });
 
 const observeDelivery = Effect.fn(function* (

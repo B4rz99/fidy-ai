@@ -12,10 +12,14 @@ export const HostedTurnProcessing = Schema.Struct({
   turnId: TranscriptTurnId,
 }).annotate({ httpApiStatus: 202 });
 export const HostedTurnProgressRequest = Schema.Struct({ turnId: TranscriptTurnId });
+export const HostedTurnConfirmation = Schema.Struct({
+  command: Schema.String.check(Schema.isPattern(/^CONFIRMAR [a-f0-9]{64}$/u)),
+});
 export const HostedTurnProposal = Schema.Struct({
   text: TranscriptText,
   turnId: TranscriptTurnId,
   receipt: HostedTurnReceipt.fields.receipt,
+  confirmation: Schema.optionalKey(HostedTurnConfirmation),
 });
 const HostedTurnReply = Schema.Union([HostedTurnProposal, HostedTurnProcessing]).annotate({
   httpApiStatus: 202,

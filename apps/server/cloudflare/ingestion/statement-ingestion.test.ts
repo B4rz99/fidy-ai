@@ -1,3 +1,12 @@
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import type { OAuthReviewBinding } from "../oauth-confirmation/contract";
+import { prepareOAuthConfirmation } from "../oauth-confirmation/operations";
+import {
+  WhatsAppBusinessPhoneNumberId,
+  WhatsAppMediaId,
+  WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/contract";
+import { ReviewCommand, ReviewWorkspace } from "../../src/core/ingestion/contract";
 import {
   StatementContentDigest,
   StatementSourceFormat,
@@ -7,9 +16,9 @@ import {
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { StatementWork } from "./contract";
 import { DurableTraceContext } from "../../src/shell/observability/contract";
-import { Clock, Data, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { afterAll, afterEach, expect, it } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
@@ -18,7 +27,12 @@ import {
 } from "../d1-test-fixture";
 import { BatchEnvelope, batchCallId, competingWriteDb } from "./statement-batch.test-fixture";
 import { getCanonicalOperationInput } from "../../src/shell/canonical-operations/operations";
-import { CanonicalToolEvidence, ToolCallId, TranscriptTurnId } from "../../src/core/agent/contract";
+import {
+  CanonicalToolEvidence,
+  ToolCallId,
+  TranscriptText,
+  TranscriptTurnId,
+} from "../../src/core/agent/contract";
 import {
   UserId,
   WhatsAppBusinessPortfolioId,
@@ -34,9 +48,12 @@ import {
 } from "../canonical-operations/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
+  acceptWhatsAppMedia,
   prepareHeldStatementReviewDecision,
+  prepareReviewEdit,
   prepareStatementAbandonment,
   prepareStatementReviewDecision,
+  processForwardedEmail,
   readStatementSubmission,
 } from "./operations";
 import type {
@@ -50,8 +67,10 @@ import {
 } from "../../src/core/oauth-agents/contract";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import {
+  dispatchForwardedEmail,
   dispatchStatementExtraction,
   executeStatementExtraction,
+  receiveForwardedEmail,
   receiveStatementExtraction,
   reconcileStatementExtraction,
   sweepExpiredUploadAdmission,
@@ -126,6 +145,8 @@ const instances: Array<Miniflare> = [];
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
 const migrationNames = [
+  "0109_review_state",
+  "0110_ingestion_review",
   "0001_categories",
   "0002_resource_admission",
   "0003_pending_consent",
@@ -392,6 +413,7 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
   KAPSO_WEBHOOK_SECRET: "",
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   STATEMENT_STAGING_BUCKET: runtime.bucket,
+  EMAIL_BUCKET: runtime.bucket,
   USER_TRANSACTION_COORDINATOR: Option.getOrElse(runtime.coordinator, () => ({
     getByName: (name: string): Pick<Fetcher, "fetch"> => ({
       fetch: (command: Request): Promise<Response> =>
@@ -1651,22 +1673,29 @@ it("omits untrusted trace fields before delegating statement Work to the User co
 
 const clarifyStatement = (
   runtime: Runtime,
-  csv: string
+  csv: string,
+  index = 0
 ): Promise<Readonly<{ submissionId: string; reviewIds: ReadonlyArray<string> }>> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const owner =
+        index === 0
+          ? { userId: userA, grantId: "30000000-0000-4000-8000-000000000198" }
+          : { userId: userB, grantId: "30000000-0000-4000-8000-000000000199" };
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(`INSERT INTO onboarding_consent_records
     (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
-    VALUES ('30000000-0000-4000-8000-000000000198', ?, '{}', 'fixture', 'fixture', 1, 1)`)
-          .bind(userA)
+    VALUES (?, ?, '{}', 'fixture', 'fixture', 1, 1)`)
+          .bind(owner.grantId, owner.userId)
           .run()
       );
-      const { staged } = yield* fromTestPromise(() => stageOne(runtime, 0, statementBytes(csv)));
+      const { staged } = yield* fromTestPromise(() =>
+        stageOne(runtime, index, statementBytes(csv))
+      );
       const accepted = yield* fromTestPromise(() =>
         publishFixture(runtime, {
-          index: 0,
+          index,
           idempotencyKey: "20000000-0000-4000-8000-000000000698",
           reference: staged,
         })
@@ -1675,7 +1704,7 @@ const clarifyStatement = (
       const submission = yield* fromTestPromise(() => submissionOf(accepted));
       const coordinator = new UserTransactionCoordinator(
         {
-          id: { name: userA },
+          id: { name: owner.userId },
           storage: {
             getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
             deleteAlarm: (): Promise<void> => Promise.resolve(),
@@ -1696,7 +1725,7 @@ const clarifyStatement = (
             body: JSON.stringify({
               _tag: "StatementWork",
               version: 1,
-              userId: userA,
+              userId: owner.userId,
               submissionId: submission.id,
             }),
           })
@@ -4104,3 +4133,756 @@ it("Core scheduling expires only old terminal Agent content and preserves curren
       }
     })
   ));
+
+it("shows an isolated ingestion inbox with the original evidence deadline", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      const read = (index: number): Promise<Response> =>
+        send(
+          runtime,
+          new Request(
+            "https://api.fidyapp.com/ingestion/review-workspace?status=pending&offset=0",
+            {
+              headers: sessionHeaders(index),
+            }
+          )
+        );
+      const own = yield* fromTestPromise(() => read(0));
+      expect(own.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            pendingCount: Schema.Int,
+            items: Schema.Array(
+              Schema.Struct({
+                source: Schema.String,
+                status: Schema.String,
+                expiresAt: Schema.DateTimeUtcFromString,
+                createdAt: Schema.DateTimeUtcFromString,
+              })
+            ),
+          }),
+        })
+      )(yield* fromTestPromise(() => own.json()));
+      expect(body.data.pendingCount).toBe(1);
+      expect(body.data.items).toHaveLength(1);
+      expect(body.data.items[0]?.source).toBe("statement");
+      expect(body.data.items[0]?.status).toBe("pending");
+      const foreign = yield* fromTestPromise(() => read(1));
+      expect(foreign.status).toBe(200);
+      expect(yield* fromTestPromise(() => foreign.json())).toMatchObject({
+        data: { pendingCount: 0, items: [] },
+      });
+    })
+  ));
+
+const WorkspaceIds = Schema.Struct({
+  data: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: Schema.String })) }),
+});
+const reviewWorkspaceRequest = (runtime: Runtime): Promise<Response> =>
+  send(
+    runtime,
+    new Request("https://api.fidyapp.com/ingestion/review-workspace", {
+      headers: sessionHeaders(0),
+    })
+  );
+const editReview = (runtime: Runtime, payload: unknown, index = 0): Promise<Response> =>
+  send(
+    runtime,
+    new Request("https://api.fidyapp.com/ingestion/review-workspace/edits", {
+      method: "POST",
+      headers: { ...sessionHeaders(index), "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+  );
+const reviewDetail = (runtime: Runtime, id: string, index = 0): Promise<Response> =>
+  send(
+    runtime,
+    new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}`, {
+      headers: sessionHeaders(index),
+    })
+  );
+
+it("autosaves a revision-bound draft and retains it through skip and restore", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      const response = yield* fromTestPromise(() => reviewWorkspaceRequest(runtime));
+      const workspace = yield* Schema.decodeUnknownEffect(WorkspaceIds)(
+        yield* fromTestPromise(() => response.json())
+      );
+      const id = workspace.data.items[0]?.id ?? "";
+      const draft = {
+        amount: "13500",
+        counterparty: "Café",
+        occurredAt: "2026-08-01T15:00:00.000Z",
+        direction: "outflow",
+        userProvidedFields: ["money", "counterparty", "occurredAt", "direction"],
+      };
+      const saved = yield* fromTestPromise(() =>
+        editReview(runtime, { _tag: "SaveDraft", id, revision: 0, draft })
+      );
+      expect(saved.status).toBe(200);
+      const stale = yield* fromTestPromise(() =>
+        editReview(runtime, {
+          _tag: "SaveDraft",
+          id,
+          revision: 0,
+          draft: { ...draft, amount: "1" },
+        })
+      );
+      expect(stale.status).toBe(400);
+      const foreign = yield* fromTestPromise(() =>
+        editReview(runtime, { _tag: "Skip", items: [{ id, revision: 1 }] }, 1)
+      );
+      expect(foreign.status).toBe(400);
+      const skipped = yield* fromTestPromise(() =>
+        editReview(runtime, { _tag: "Skip", items: [{ id, revision: 1 }] })
+      );
+      expect(skipped.status).toBe(200);
+      const restored = yield* fromTestPromise(() =>
+        editReview(runtime, { _tag: "Restore", items: [{ id, revision: 2 }] })
+      );
+      expect(restored.status).toBe(200);
+      const detail = yield* fromTestPromise(() => reviewDetail(runtime, id));
+      expect(detail.status).toBe(200);
+      expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
+        data: { item: { id, status: "pending" }, revision: 3, draft },
+      });
+    })
+  ));
+
+it("creates one reviewed Transaction and reads its retained history after an uncertain acknowledgement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      const listing = yield* fromTestPromise(() => reviewWorkspaceRequest(runtime));
+      const workspace = yield* Schema.decodeUnknownEffect(WorkspaceIds)(
+        yield* fromTestPromise(() => listing.json())
+      );
+      const id = workspace.data.items[0]?.id ?? "";
+      const command = {
+        _tag: "Create",
+        id,
+        revision: 0,
+        extraction: {
+          money: { amount: "12345.67", currency: "COP" },
+          direction: "outflow",
+          occurredAt: "2026-08-01T15:00:00.000Z",
+        },
+      };
+      const created = yield* fromTestPromise(() => editReview(runtime, command));
+      expect(created.status).toBe(200);
+      const detail = yield* fromTestPromise(() => reviewDetail(runtime, id));
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            item: Schema.Struct({
+              id: Schema.String,
+              status: Schema.String,
+              transactionId: Schema.String,
+            }),
+          }),
+        })
+      )(yield* fromTestPromise(() => detail.json()));
+      expect(body.data.item).toMatchObject({ id, status: "created" });
+      const replay = yield* fromTestPromise(() => editReview(runtime, command));
+      expect(replay.status).toBe(400);
+      const transaction = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/transactions/${body.data.item.transactionId}`, {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(transaction.status).toBe(200);
+      expect(yield* fromTestPromise(() => transaction.json())).toMatchObject({
+        data: { money: { amount: "12345.67", currency: "COP" }, direction: "outflow" },
+      });
+    })
+  ));
+
+it("delivers retained original material only to its browser owner", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe original\n")
+      );
+      const response = yield* fromTestPromise(() => reviewWorkspaceRequest(runtime));
+      const workspace = yield* Schema.decodeUnknownEffect(WorkspaceIds)(
+        yield* fromTestPromise(() => response.json())
+      );
+      const id = workspace.data.items[0]?.id ?? "";
+      const read = (index: number): Promise<Response> =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}/material`, {
+            headers: sessionHeaders(index),
+          })
+        );
+      const own = yield* fromTestPromise(() => read(0));
+      expect(own.status).toBe(200);
+      expect(own.headers.get("cache-control")).toContain("no-store");
+      const original = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ text: Schema.String }) })
+      )(yield* fromTestPromise(() => own.clone().json()));
+      expect(original.data.text).toContain("Cafe original");
+      expect(yield* fromTestPromise(() => own.json())).toMatchObject({
+        data: { available: true },
+      });
+      const foreign = yield* fromTestPromise(() => read(1));
+      expect(foreign.status).toBe(404);
+      const retry = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}/suggestions`, {
+            headers: sessionHeaders(1),
+          })
+        )
+      );
+      expect(retry.status).toBe(404);
+      const audit = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT outcome FROM pat_audit WHERE user_id=? AND operation IN ('ingestion.getReviewMaterial','ingestion.getReviewSuggestions')"
+          )
+          .bind(userB)
+          .all()
+      );
+      expect(audit.results).toEqual([{ outcome: "rejected" }, { outcome: "rejected" }]);
+    })
+  ));
+
+it("expires skipped drafts at the original deadline and refuses restoration or creation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        runtime.db.prepare("UPDATE web_sessions SET idle_expires_at_ms = hard_expires_at_ms").run()
+      );
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      const response = yield* fromTestPromise(() => reviewWorkspaceRequest(runtime));
+      const workspace = yield* Schema.decodeUnknownEffect(WorkspaceIds)(
+        yield* fromTestPromise(() => response.json())
+      );
+      const id = workspace.data.items[0]?.id ?? "";
+      const draft = {
+        amount: "25000",
+        currency: "COP",
+        counterparty: "",
+        occurredAt: "",
+        userProvidedFields: ["money"],
+      };
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, { _tag: "SaveDraft", id, revision: 0, draft })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, { _tag: "Skip", items: [{ id, revision: 1 }] })
+        )).status
+      ).toBe(200);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime((yield* Clock.currentTimeMillis) + dayMilliseconds + 1);
+      return yield* Effect.gen(function* () {
+        const detail = yield* fromTestPromise(() => reviewDetail(runtime, id));
+        expect(detail.status).toBe(200);
+        const body = yield* fromTestPromise(() => detail.json());
+        expect(body).toMatchObject({ data: { item: { status: "expired" } } });
+        expect(body).not.toHaveProperty("data.draft");
+        expect(body).not.toHaveProperty("data.item.preview");
+        const history = yield* readReviewInbox(runtime, "expired");
+        expect(history.items[0]?.preview).toEqual(Option.none());
+        expect(
+          (yield* fromTestPromise(() =>
+            editReview(runtime, { _tag: "Restore", items: [{ id, revision: 2 }] })
+          )).status
+        ).toBe(400);
+      }).pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())));
+    })
+  ));
+
+it("preserves an edited draft when extraction retry is temporarily unavailable", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      const listing = yield* fromTestPromise(() => reviewWorkspaceRequest(runtime));
+      const workspace = yield* Schema.decodeUnknownEffect(WorkspaceIds)(
+        yield* fromTestPromise(() => listing.json())
+      );
+      const id = workspace.data.items[0]?.id ?? "";
+      const draft = {
+        amount: "7500",
+        currency: "COP",
+        counterparty: "Mi dato",
+        occurredAt: "",
+        userProvidedFields: ["money", "counterparty"],
+      };
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, { _tag: "SaveDraft", id, revision: 0, draft })
+        )).status
+      ).toBe(200);
+      const retry = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}/suggestions`, {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(retry.status).toBe(503);
+      const detail = yield* fromTestPromise(() => reviewDetail(runtime, id));
+      expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
+        data: { revision: 1, draft },
+      });
+    })
+  ));
+
+const readReviewInbox = (
+  runtime: Runtime,
+  status = "pending"
+): Effect.Effect<typeof ReviewWorkspace.Type> =>
+  Effect.gen(function* () {
+    const response = yield* fromTestPromise(() =>
+      send(
+        runtime,
+        new Request(`https://api.fidyapp.com/ingestion/review-workspace?status=${status}`, {
+          headers: sessionHeaders(0),
+        })
+      )
+    );
+    expect(response.status).toBe(200);
+    return (yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.toCodecJson(ReviewWorkspace) })
+    )(yield* fromTestPromise(() => response.json()))).data;
+  }).pipe(Effect.orDie);
+const admitReviewImage = (runtime: Runtime): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    yield* fromTestPromise(() =>
+      runtime.db
+        .prepare(
+          "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,'review-portfolio','CO.reviewfixture',?)"
+        )
+        .bind(userA, current)
+        .run()
+    );
+    const accepted = yield* acceptWhatsAppMedia({
+      db: runtime.db,
+      userId: UserId.make(userA),
+      event: {
+        caller: {
+          businessPortfolioId: WhatsAppBusinessPortfolioId.make("review-portfolio"),
+          businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.reviewfixture"),
+          parentBusinessScopedUserId: Option.none(),
+          username: Option.none(),
+          phoneNumber: Option.none(),
+        },
+        businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123"),
+        messageEvidence: {
+          channel: "whatsapp",
+          provider: "kapso",
+          providerMessageId: WhatsAppProviderMessageId.make("review-photo"),
+        },
+        occurredAt: DateTime.makeUnsafe(current),
+        receivedAt: DateTime.makeUnsafe(current),
+        replyToMessageId: Option.none(),
+        content: {
+          _tag: "Image",
+          mediaId: WhatsAppMediaId.make("review-media"),
+          caption: Option.some(TranscriptText.make("Un comprobante")),
+        },
+      },
+    });
+    expect(accepted.status).toBe(202);
+  });
+const admitReviewEmail = (runtime: Runtime): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const addressResponse = yield* fromTestPromise(() =>
+      send(
+        runtime,
+        new Request("https://api.fidyapp.com/ingestion/email-forwarding", {
+          headers: sessionHeaders(0),
+        })
+      )
+    );
+    const address = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.Struct({ address: Schema.Struct({ address: Schema.String }) }) })
+    )(yield* fromTestPromise(() => addressResponse.json()));
+    const bytes = new TextEncoder().encode(
+      `From: bank@example.test\r\nTo: ${address.data.address.address}\r\nSubject: Para revisar\r\nContent-Type: text/plain\r\n\r\nOriginal desconocido`
+    );
+    const jobs: Array<{ receiptId: string; userId: string }> = [];
+    yield* receiveForwardedEmail({
+      message: {
+        from: "bank@example.test",
+        to: address.data.address.address,
+        rawSize: bytes.length,
+        raw: new Blob([bytes]).stream(),
+        setReject: () => {
+          throw new Error("Unexpected ingestion rejection");
+        },
+      },
+      environment: {
+        DB: runtime.db,
+        EMAIL_BUCKET: runtime.bucket,
+        EMAIL_QUEUE: {
+          send: (job) => {
+            jobs.push(job);
+            return Promise.resolve();
+          },
+        },
+      },
+    }).pipe(Effect.orDie);
+    yield* dispatchForwardedEmail({
+      DB: runtime.db,
+      EMAIL_BUCKET: runtime.bucket,
+      EMAIL_QUEUE: {
+        send: (job) => {
+          jobs.push(job);
+          return Promise.resolve();
+        },
+      },
+    });
+    const job = jobs[0];
+    if (job === undefined) return yield* Effect.die("No admitted email");
+    yield* fromTestPromise(() =>
+      processForwardedEmail({
+        DB: runtime.db,
+        EMAIL_BUCKET: { get: (key) => runtime.bucket.get(key).then(Option.fromNullishOr) },
+        ...job,
+      })
+    );
+  }).pipe(Effect.orDie);
+it("supports every ingestion source with atomic bulk decisions and individual creation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      yield* admitReviewImage(runtime);
+      yield* admitReviewEmail(runtime);
+      const inbox = yield* readReviewInbox(runtime);
+      expect(inbox.items.map((item) => item.source)).toEqual(["statement", "media", "email"]);
+      expect(inbox.pendingCount).toBe(3);
+      const refs = inbox.items.map(({ id, revision }) => ({ id, revision }));
+      const invalid = yield* fromTestPromise(() =>
+        editReview(runtime, {
+          _tag: "Skip",
+          items: [...refs, { id: "99999999-0000-4000-8000-000000000001", revision: 0 }],
+        })
+      );
+      expect(invalid.status).toBe(400);
+      expect((yield* readReviewInbox(runtime)).pendingCount).toBe(3);
+      expect(
+        (yield* fromTestPromise(() => editReview(runtime, { _tag: "Skip", items: refs }))).status
+      ).toBe(200);
+      const history = yield* readReviewInbox(runtime, "history");
+      expect(history.items.map((item) => item.status)).toEqual(["skipped", "skipped", "skipped"]);
+      expect(history.pendingCount).toBe(0);
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Restore",
+            items: history.items.map(({ id, revision }) => ({ id, revision })),
+          })
+        )).status
+      ).toBe(200);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      for (const item of (yield* readReviewInbox(runtime)).items) {
+        vi.setSystemTime((yield* Clock.currentTimeMillis) + 60_000);
+        const created = yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Create",
+            id: item.id,
+            revision: item.revision,
+            extraction: {
+              money: { amount: "10000", currency: "COP" },
+              direction: "outflow",
+              occurredAt: "2026-08-01T12:00:00Z",
+            },
+          })
+        );
+        expect(created.status).toBe(200);
+      }
+      const createdHistory = yield* readReviewInbox(runtime, "created");
+      expect(createdHistory.pendingCount).toBe(0);
+      expect(createdHistory.items).toHaveLength(3);
+      expect(createdHistory.items.every((item) => item.status === "created")).toBe(true);
+    })
+  ));
+
+afterEach(() => vi.useRealTimers());
+
+it("denies agent originals and refuses review reads and writes after Consent revocation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Private original\n")
+      );
+      const inbox = yield* readReviewInbox(runtime);
+      const id = inbox.items[0]?.id ?? "";
+      const token = agentToken("w");
+      const current = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        issuePat({
+          current,
+          db: runtime.db,
+          label: "Review reader",
+          scopes: '["read"]',
+          seed: 1350,
+          token,
+        })
+      );
+      const original = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}/material`, {
+            headers: { authorization: `Bearer ${token}` },
+          })
+        )
+      );
+      expect(original.status).toBe(403);
+      expect(yield* fromTestPromise(() => original.text())).not.toContain("Private original");
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms) SELECT ?,user_id,id,?,? FROM onboarding_consent_records WHERE user_id=?"
+          )
+          .bind(newId(), sessionA, current, userA)
+          .run()
+      );
+      const refused = yield* fromTestPromise(() => reviewDetail(runtime, id));
+      expect(refused.status).not.toBe(200);
+      expect(yield* fromTestPromise(() => refused.text())).not.toContain("Private original");
+      const write = yield* fromTestPromise(() =>
+        editReview(runtime, { _tag: "Skip", items: [{ id, revision: 0 }] })
+      );
+      expect(write.status).not.toBe(200);
+    })
+  ));
+
+it("invalidates OAuth review when automatic Category changes without creating a Transaction", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const source = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      const current = yield* Clock.currentTimeMillis;
+      const subject = yield* oauthClarificationSubject(runtime.db, current);
+      const operation = CanonicalOperationId.make("ingestion.applyReviewEdit");
+      const input = {
+        payload: {
+          _tag: "Create",
+          id: source.reviewIds[0] ?? "",
+          revision: 0,
+          extraction: {
+            money: { amount: "13500", currency: "COP" },
+            direction: "outflow",
+            counterparty: "Cafe",
+            occurredAt: "2026-08-01T12:00:00Z",
+          },
+        },
+      };
+      const command = yield* Schema.decodeEffect(Schema.toCodecJson(ReviewCommand))(input.payload);
+      const work: CanonicalPreparationWork = {
+        db: runtime.db,
+        subject,
+        current,
+        bucket: Option.some(runtime.bucket),
+        input,
+      };
+      const first = yield* prepareReviewEdit({ work, command });
+      const firstBinding = reviewBinding(first);
+      const issued = yield* prepareOAuthConfirmation({
+        db: runtime.db,
+        subject,
+        binding: firstBinding,
+        work: { operation, input, attempt: { _tag: "Review" } },
+      });
+      if (issued._tag !== "Review") return yield* Effect.die("Missing review intent");
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+          )
+          .bind(newId(), userA, "10000000-0000-4000-8000-000000000003")
+          .run()
+      );
+      const changed = yield* prepareReviewEdit({ work, command });
+      const changedBinding = reviewBinding(changed);
+      expect(changedBinding).not.toEqual(firstBinding);
+      expect(changedBinding[0]?.effect).toContain("10000000-0000-4000-8000-000000000003");
+      const accepted = yield* prepareOAuthConfirmation({
+        db: runtime.db,
+        subject,
+        binding: changedBinding,
+        work: {
+          operation,
+          input,
+          attempt: {
+            _tag: "Decision",
+            reference: issued.review.reference,
+            response: { action: "accept", content: { confirm: true } },
+          },
+        },
+      });
+      expect(accepted._tag).toBe("Prepared");
+      if (accepted._tag !== "Prepared" || changed._tag !== "Prepared") {
+        return yield* Effect.die("Missing guarded acceptance");
+      }
+      const rejected = yield* Effect.tryPromise(() =>
+        runtime.db.batch([
+          ...accepted.statements,
+          ...Option.getOrThrow(changed.mutation.oauthReview).guards,
+          ...changed.mutation.statements,
+        ])
+      ).pipe(Effect.result);
+      expect(Result.isFailure(rejected)).toBe(true);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+    })
+  ));
+const reviewBinding = (preparation: CanonicalMutationPreparation): OAuthReviewBinding => {
+  if (preparation._tag !== "Prepared") throw new Error("Missing mutation preparation");
+  const review = Option.getOrThrow(preparation.mutation.oauthReview);
+  return [
+    {
+      operation: CanonicalOperationId.make("ingestion.applyReviewEdit"),
+      scope: "write" as const,
+      effect: review.effect,
+      revision: review.revision,
+    },
+  ];
+};
+
+it("prefills independently known facts when a statement date is missing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const source = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,moneda,contraparte\n?,-13500,COP,Cafe\n")
+      );
+      const suggestedCategory = "10000000-0000-4000-8000-000000000003";
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO keyword_rules(id,user_id,keyword,normalized_keyword,category_id,created_at,updated_at) VALUES (?,?,'Cafe','cafe',?,'2026-08-01T00:00:00.000Z','2026-08-01T00:00:00.000Z')"
+          )
+          .bind(newId(), userA, suggestedCategory)
+          .run()
+      );
+      const inbox = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request("https://api.fidyapp.com/ingestion/review-workspace?offset=0", {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(inbox.status).toBe(200);
+      expect(yield* fromTestPromise(() => inbox.json())).toMatchObject({
+        data: { items: [{ preview: { counterparty: "Cafe", amount: "13500", currency: "COP" } }] },
+      });
+      const detail = yield* fromTestPromise(() => reviewDetail(runtime, source.reviewIds[0] ?? ""));
+      expect(detail.status).toBe(200);
+      expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
+        data: {
+          suggestions: {
+            amount: "13500",
+            currency: "COP",
+            direction: "outflow",
+            counterparty: "Cafe",
+            categoryId: suggestedCategory,
+            occurredAt: "",
+            userProvidedFields: [],
+          },
+        },
+      });
+    })
+  ));
+
+it("a delayed hourly tick erases expired drafts and suggestions without erasing another User's unexpired data", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const started = yield* Clock.currentTimeMillis;
+      const staggerMilliseconds = 120_000;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const csv = "fecha,valor,moneda,contraparte\n?,-13500,COP,Cafe\n?,-25000,COP,Tienda\n";
+      for (const index of [0, 1]) {
+        vi.setSystemTime(started + index * staggerMilliseconds);
+        const source = yield* fromTestPromise(() => clarifyStatement(runtime, csv, index));
+        for (const id of source.reviewIds) {
+          const saved = yield* fromTestPromise(() =>
+            editReview(
+              runtime,
+              {
+                _tag: "SaveDraft",
+                id,
+                revision: 0,
+                draft: {
+                  amount: "7000",
+                  currency: "COP",
+                  counterparty: "Saved",
+                  occurredAt: "",
+                  userProvidedFields: ["money", "counterparty"],
+                },
+              },
+              index
+            )
+          );
+          expect(saved.status).toBe(200);
+        }
+      }
+      expect(yield* reviewRetentionRows(runtime.db)).toEqual([
+        { user_id: userA, drafts: 2, suggestions: 2 },
+        { user_id: userB, drafts: 2, suggestions: 2 },
+      ]);
+      const cleanupAt = started + dayMilliseconds + 1;
+      vi.setSystemTime(cleanupAt);
+      yield* fromTestPromise(() =>
+        coreWorker.scheduled(
+          {
+            cron: "* * * * *",
+            noRetry: () => undefined,
+            scheduledTime: Math.floor(cleanupAt / 3_600_000) * 3_600_000,
+          },
+          coreEnvironment(runtime)
+        )
+      );
+      expect(yield* reviewRetentionRows(runtime.db)).toEqual([
+        { user_id: userA, drafts: 0, suggestions: 0 },
+        { user_id: userB, drafts: 2, suggestions: 2 },
+      ]);
+    })
+  ));
+const reviewRetentionRows = (db: D1Database): Effect.Effect<ReadonlyArray<unknown>> =>
+  fromTestPromise(() =>
+    db
+      .prepare(
+        "SELECT r.user_id,sum(n.draft_json IS NOT NULL) AS drafts,sum(r.review_suggestions_json IS NOT NULL) AS suggestions FROM statement_needs_review r JOIN ingestion_review_state n ON n.id=r.id AND n.user_id=r.user_id GROUP BY r.user_id ORDER BY r.user_id"
+      )
+      .all()
+  ).pipe(Effect.map((result) => result.results));

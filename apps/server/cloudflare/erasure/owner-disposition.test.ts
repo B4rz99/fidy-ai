@@ -1,6 +1,7 @@
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
 import { installRetentionTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { sweepReviewDrafts } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
 
 const databases = isolatedTestDatabases();
@@ -23,35 +24,34 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
           },
         },
       });
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          ...[userId, foreignUser].map((id) =>
-            db.prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)").bind(id)
-          ),
+      const statements = [
+        ...[userId, foreignUser].map((id) =>
+          db.prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)").bind(id)
+        ),
+        db
+          .prepare(
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'AwaitingReview',?)"
+          )
+          .bind(reference, userId, decision),
+        db
+          .prepare(
+            "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'memories','memory')"
+          )
+          .bind(reference),
+        ...Array.from({ length: 70 }, (_, index) =>
           db
             .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,decision_json) VALUES(?,?,1,'AwaitingReview',?)"
+              "INSERT INTO memories VALUES(?,?,'Contexto económico','2026-10-15','2026-10-15')"
             )
-            .bind(reference, userId, decision),
-          db
-            .prepare(
-              "INSERT INTO erasure_steps(request_id,store_id,data_class) VALUES(?,'memories','memory')"
-            )
-            .bind(reference),
-          ...Array.from({ length: 70 }, (_, index) =>
-            db
-              .prepare(
-                "INSERT INTO memories VALUES(?,?,'Contexto económico','2026-10-15','2026-10-15')"
-              )
-              .bind(`memory-${index}`, userId)
-          ),
-          db
-            .prepare(
-              "INSERT INTO memories VALUES('foreign-memory',?,'Privado','2026-10-15','2026-10-15')"
-            )
-            .bind(foreignUser),
-        ])
-      );
+            .bind(`memory-${index}`, userId)
+        ),
+        db
+          .prepare(
+            "INSERT INTO memories VALUES('foreign-memory',?,'Privado','2026-10-15','2026-10-15')"
+          )
+          .bind(foreignUser),
+      ];
+      yield* Effect.tryPromise(() => db.batch(statements));
       yield* Effect.tryPromise(() =>
         db.prepare("UPDATE erasure_requests SET state='Archiving' WHERE id=?").bind(reference).run()
       );
@@ -94,5 +94,52 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
           db.prepare("SELECT count(*) FROM erasure_permits").first("count(*)")
         )
       ).toBe(0);
+    })
+  ));
+
+it("expires ordinary review drafts while a sealed User remains under erasure disposition", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      const current = yield* Clock.currentTimeMillis;
+      const statements = [
+        ...[userId, foreignUser].map((id) =>
+          db.prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)").bind(id)
+        ),
+        ...[userId, foreignUser].flatMap((id) =>
+          [0, 1].map((index) =>
+            db
+              .prepare(`INSERT INTO ingestion_review_state
+        (id,user_id,status,revision,draft_json,expires_at_ms,updated_at_ms,created_at_ms)
+        VALUES(?,?,'pending',1,'{"counterparty":"Personal draft"}',?,?,?)`)
+              .bind(`${id}-${index}`, id, current - 1, current, index === 0 ? current : 1)
+          )
+        ),
+        db
+          .prepare(
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Sealing')"
+          )
+          .bind(reference, userId),
+      ];
+      yield* Effect.tryPromise(() => db.batch(statements));
+      yield* sweepReviewDrafts({ db, current });
+      const retained = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT draft_json FROM ingestion_review_state WHERE user_id=? ORDER BY id")
+          .bind(userId)
+          .all()
+      );
+      expect(retained.results).toEqual([
+        { draft_json: '{"counterparty":"Personal draft"}' },
+        { draft_json: '{"counterparty":"Personal draft"}' },
+      ]);
+      const expired = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT draft_json FROM ingestion_review_state WHERE user_id=? ORDER BY id")
+          .bind(foreignUser)
+          .all()
+      );
+      expect(expired.results).toEqual([{ draft_json: null }]);
     })
   ));

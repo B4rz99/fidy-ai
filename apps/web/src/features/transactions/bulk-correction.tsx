@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { browserCrypto } from "@/browser/crypto";
 import { useAtomSet } from "@effect/atom-react";
 import type * as Atom from "effect/reactivity/Atom";
@@ -86,7 +87,7 @@ const batchInput = (
 ): Option.Option<BatchInput> => {
   const calls = transactions.map((record) => ({
     callId: Schema.decodeSync(AtomicBatchCallId)(
-      Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie))
+      Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie))
     ),
     operation: "transactions.updateTransaction",
     input: { params: { id: record.id }, payload: { expectedRevision: record.revision, changes } },
@@ -266,9 +267,7 @@ const BulkFeedback = ({ props }: Readonly<{ props: BulkProps }>): JSX.Element =>
             ? "No se guardó ningún cambio. Actualiza el historial y revisa la selección."
             : "No pudimos confirmar los cambios. Actualiza el historial antes de volver a editar."}
         </p>
-        <Button variant="outline" onClick={props.onRefresh}>
-          Actualizar historial
-        </Button>
+        <RefreshButton variant="outline" onClick={props.onRefresh} label="Actualizar historial" />
       </div>
     ) : null}
   </>

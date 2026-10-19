@@ -1,8 +1,13 @@
+import type { ReviewCommand } from "../../src/core/ingestion/contract";
 import type { UserId } from "../../src/core/identity/contract";
 import type { WhatsAppInboundEvent } from "../../src/shell/channels/whatsapp/contract";
 import { Data, type Effect, type Option, Schema } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import type { TransactionAuthority } from "../canonical-work/contract";
+import type {
+  QueryCaller,
+  TransactionAuthority,
+  TransactionCaller,
+} from "../canonical-work/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
 import type { PrivateObjectBucket } from "../private-objects/contract";
 import {
@@ -86,3 +91,22 @@ export const maximumSubmissionInputBytes = 4096;
 export class StatementProcessingUnavailable extends Data.TaggedError(
   "StatementProcessingUnavailable"
 ) {}
+
+export class ReviewUnavailable extends Data.TaggedError("ReviewUnavailable") {}
+export type ReviewQueryWork = Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  request: Request;
+  bucket: Option.Option<R2Bucket>;
+}>;
+export type ReviewEditWork = Readonly<{
+  work: Readonly<{
+    db: D1Database;
+    subject: TransactionCaller;
+    current: number;
+    bucket: Option.Option<R2Bucket>;
+  }>;
+  command: ReviewCommand;
+}>;
+export type ReviewAuditWork = Readonly<{ db: D1Database; subject: QueryCaller; current: number }>;
+export type ReviewRetentionWork = Readonly<{ db: D1Database; current: number }>;

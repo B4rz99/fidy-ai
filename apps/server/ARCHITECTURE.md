@@ -127,10 +127,18 @@ D1, private original buckets, restricted retained copies and processor work have
 checkpoints. Reviewed cases, original locators, held records and recovery generation live in the
 private erasure bucket outside D1. Every normal native database unit asserts that external generation
 with its D1 work, including Sessions. Missing registry/checkpoint configuration refuses normal reads
-and writes. First-release initialization is a separate operator action; it cannot reset a registry
-after an approved case. A restored D1 remains fenced until independent case replay has finished
-native dispositions and the operator release predicate succeeds. The maintenance escape path reads
+and writes. The assertion is a read-only SQL expression that raises a native error on mismatch;
+it remains inside the same atomic batch, so guarded reads do not consume D1 writes and a failed
+assertion rolls back the whole batch. First-release initialization is a separate operator action;
+it cannot reset a registry after an approved case. A restored D1 remains fenced until independent
+case replay has finished native dispositions and the operator release predicate succeeds. The maintenance escape path reads
 only purpose-qualified erasure controls, never ordinary restored User content.
+
+For first-release bootstrap, native POSTs to the dedicated erasure operator path may preserve
+candidate version-routing metadata when carrying an Access assertion. This selects a staged Core;
+it does not authenticate the caller. Core still verifies the dedicated operator authority before
+every action, including Initialize. Browser-Origin requests remain refused, and ordinary paths or
+requests without an assertion cannot borrow these overrides without the existing smoke proof.
 
 The receipt is operator-accessible after User credentials disappear and names completed, retained
 and pending scope. External acceptance, unresolved Kapso Free retention/capability, lawful holds and
@@ -455,6 +463,12 @@ routing bucket, provider representation or credential authority.
 Payment enrollment requires fresh browser authority and Consent and stays outside canonical/PAT
 access. Transient payment authorization material goes directly from the browser to Wompi. Paid Pro
 requires independently verified matching settlement, not authorization or PaymentSource availability.
+A direct-card creation response retains its transaction identity separately from callback hints.
+Only that known transaction, authenticated final decline after the retry window, no other candidate
+and no paid period permit another explicit first-payment attempt. Unknown sends remain blocked.
+Source replacement atomically rechecks fresh browser authority, retires only a definitively declined
+card and reserves a new enrollment; rejection preserves the existing form and source. A partial
+unique index retains one active source while original source identities and billing history survive.
 AccessTier is derived at the decision instant, never persisted as a separate authority. Automatic
 renewal includes a fixed three-day grace after the paid boundary, excluding stopped renewals and
 refunded periods; grace never alters paid history. See
@@ -671,5 +685,18 @@ reimplements Reconciliation. Unique fixed exact matches are derived without quer
 writes. Explicit mutations snapshot established effective completions before changing schedules or
 allocations; bounded incomplete matching reads fail closed. Corrections invalidate retained links
 visibly. Canonical declarations derive browser, hosted-agent, PAT/OAuth and MCP capabilities.
-Historical RecurringSeries and frozen digest reports keep their existing meaning. See
+The owner supplies revision-bound lifecycle descriptions for hosted review without exposing
+planning storage to the agent. Browser review metadata is derived from a live same-User,
+same-Turn host challenge; model text cannot install it. Exact-input, expiry, channel and one-use
+confirmation guards remain at canonical execution. Historical RecurringSeries and frozen digest reports keep their existing meaning. See
 [ADR 0036](../../docs/adr/0036-recurring-planning.md).
+
+The ingestion review workspace projects statement rows, forwarded email and media into an
+expiry-ordered, metadata-only inbox and retained history. Revision-bound drafts and reversible
+skip/restore decisions live with Ingestion; individual reviewed capture composes Transaction and
+manual SourceAttestation writes in the canonical D1 unit. The source context and original expiry
+never come from the browser. Original material and deterministic suggestion reads use explicit
+WebSession-only canonical policies, so originals cannot enter agent tools or immutable transcripts.
+They return bounded escaped text with no-store delivery; missing media bytes permit manual completion
+before expiry. Draft/suggestion retention ends at the original source deadline independently of
+hosted conversation routing. Retry never commits a Transaction or overwrites User-edited facts.

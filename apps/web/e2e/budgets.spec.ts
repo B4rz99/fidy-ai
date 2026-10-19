@@ -1,11 +1,12 @@
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
-import { signInThroughCore } from "./real-core-fixture";
+import { signInBudgetEditingThroughCore } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
 const { AxeBuilder } = await import("@axe-core/playwright");
 const { expect, test } = playwright;
+const budgetJourneyMilliseconds = 60_000;
 const categories = [
   { id: "24000000-0000-4000-8000-000000000301", label: "Vivienda" },
   { id: "24000000-0000-4000-8000-000000000302", label: "Restaurantes" },
@@ -340,7 +341,9 @@ test("saves a monthly cap from the view through real Core and retains it after r
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      test.setTimeout(budgetJourneyMilliseconds);
+      yield* Effect.tryPromise(() => signInBudgetEditingThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => page.clock.resume());
       yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: "Presupuestos", exact: true })).toBeVisible()

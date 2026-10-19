@@ -1,9 +1,9 @@
 import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
 import { allowancePeriod } from "~/core/quotas/operations";
 import type { AccessTier } from "~/core/access-tier/contract";
-import { Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
+import { Currency, Money, type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
 import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
-import { TransactionExtraction } from "~/core/transactions/contract";
+import { Counterparty, TransactionExtraction } from "~/core/transactions/contract";
 import {
   type CaptureInterpretation,
   type CaptureInterpretationEvidence,
@@ -14,6 +14,7 @@ import {
   type NeedsReviewReason,
   type NeedsReviewStatementRow,
   type ParsedStatementRow,
+  ReviewDraft,
   type StatementAccounting,
   StatementColumnMapping,
   captureInterpretationRevision,
@@ -302,6 +303,7 @@ export const unmappedStatementRow = (row: ParsedStatementRow): NeedsReviewStatem
   evidence: row.evidence,
   reason: "mapping-unavailable",
   knownMoney: Option.none(),
+  suggestions: Option.none(),
   issues: [{ path: "", message: "Statement mapping is unavailable." }],
 });
 
@@ -402,6 +404,7 @@ const review = (row: ParsedStatementRow, input: ReviewInput): NeedsReviewStateme
   recordNumber: row.recordNumber,
   reason: input.reason,
   knownMoney: input.knownMoney,
+  suggestions: Option.none(),
   issues: [{ path: "", message: input.message }],
   evidence: row.evidence,
 });
@@ -548,7 +551,7 @@ type InterpretRow = <Extraction>(
   }>
 ) => Effect.Effect<InterpretedStatementRow<Extraction>>;
 
-const interpretRow: InterpretRow = (row, mapping, context) =>
+const interpretMappedRow: InterpretRow = (row, mapping, context) =>
   Effect.gen(function* () {
     const known = yield* decodeKnownMoney(row, mapping);
     if ("outcome" in known) return known;
@@ -580,6 +583,78 @@ const interpretRow: InterpretRow = (row, mapping, context) =>
       moneyAmount: encodeMoneyAmount(known.money.amount),
       currency: known.money.currency,
     });
+  });
+
+const safeReviewColumn = (
+  row: ParsedStatementRow,
+  index: Option.Option<number>
+): Option.Option<number> => Option.filter(index, (column) => !unsafeXlsxCells(row, [column]));
+const reviewText = (value: string): string =>
+  Option.getOrElse(Schema.decodeOption(ReviewDraft.fields.amount)(value), () => "");
+const reviewCounterparty = (row: ParsedStatementRow, mapping: StatementColumnMapping): string =>
+  Option.getOrElse(
+    Option.flatMap(safeReviewColumn(row, mapping.counterpartyColumn), (index) =>
+      Schema.decodeOption(Counterparty)((row.fields[index] ?? "").trim())
+    ),
+    () => ""
+  );
+const statementReviewDraft = ({
+  row,
+  mapping,
+  timeZone,
+  knownMoney,
+}: Readonly<{
+  row: ParsedStatementRow;
+  mapping: StatementColumnMapping;
+  timeZone: string;
+  knownMoney: Option.Option<Money>;
+}>): ReviewDraft => {
+  const amountSource = row.fields[mapping.amountColumn] ?? "";
+  const amount = Option.flatMap(safeReviewColumn(row, Option.some(mapping.amountColumn)), () =>
+    normalizedAmount(amountSource, mapping)
+  );
+  const currencySafe =
+    Option.isNone(mapping.currencyColumn) ||
+    Option.isSome(safeReviewColumn(row, mapping.currencyColumn));
+  const currency = currencySafe
+    ? Option.flatMap(currencyFor(row, mapping), Schema.decodeUnknownOption(Currency))
+    : Option.none();
+  const date = Option.flatMap(safeReviewColumn(row, Option.some(mapping.dateColumn)), () =>
+    parsedDate(row.fields[mapping.dateColumn] ?? "", mapping.dateFormat, timeZone)
+  );
+  const directionSafe = Option.match(mapping.directionColumn, {
+    onNone: () => Option.isSome(amount),
+    onSome: (index) => Option.isSome(safeReviewColumn(row, Option.some(index))),
+  });
+  return {
+    amount: Option.match(knownMoney, {
+      onSome: (money: ReadonlyMoney) => money.amount.pipe(encodeMoneyAmount, reviewText),
+      onNone: () => (Option.isNone(currency) ? reviewText(Option.getOrElse(amount, () => "")) : ""),
+    }),
+    currency,
+    direction: directionSafe ? mappedDirection(row.fields, amountSource, mapping) : Option.none(),
+    counterparty: reviewCounterparty(row, mapping),
+    occurredAt: Option.match(date, { onNone: () => "", onSome: DateTime.formatIso }),
+    categoryId: Option.none(),
+    userProvidedFields: [],
+  };
+};
+const interpretRow: InterpretRow = (row, mapping, context) =>
+  Effect.gen(function* () {
+    const result = yield* interpretMappedRow(row, mapping, context);
+    return result.outcome === "accepted"
+      ? result
+      : {
+          ...result,
+          suggestions: Option.some(
+            statementReviewDraft({
+              row,
+              mapping,
+              timeZone: context.timeZone,
+              knownMoney: result.knownMoney,
+            })
+          ),
+        };
   });
 
 /**

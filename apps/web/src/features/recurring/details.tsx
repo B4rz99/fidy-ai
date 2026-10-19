@@ -263,7 +263,7 @@ const paymentCommand = (form: FormData, item: Occurrence): Option.Option<Recurri
       kind: "fulfill",
       ...(replaces === "" ? {} : { replaces }),
       fulfillment: {
-        id: Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)),
+        id: Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)),
         planId: item.planId,
         date: item.date,
         actualDate: form.get("actualDate"),
@@ -299,7 +299,7 @@ const LinkTransaction = ({
             kind: "fulfill",
             ...(replaces === "" ? {} : { replaces }),
             fulfillment: {
-              id: Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)),
+              id: Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)),
               planId: item.planId,
               date: item.date,
               actualDate: DateTime.formatIsoDate(

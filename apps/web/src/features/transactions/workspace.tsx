@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
 import { useState } from "react";
 import type { JSX, ReactNode, RefCallback } from "react";
@@ -35,6 +36,7 @@ type WorkspaceProps = Readonly<{
   transactions: ReadonlyArray<Transaction>;
   period: Readonly<{ monthLabel: string; timeZone: string }>;
   queryNotice: ReactNode;
+  dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
   onRefresh: () => void;
   continuation: HistoryState["continuation"];
   onMore: () => void;
@@ -42,7 +44,10 @@ type WorkspaceProps = Readonly<{
 }> &
   (
     | Readonly<{ readOnly: true; editable: false }>
-    | Readonly<{ readOnly: false; editable: boolean }>
+    | Readonly<{
+        readOnly: false;
+        editable: boolean;
+      }>
   );
 type WorkspaceFilters = Readonly<{
   search: string;
@@ -50,12 +55,8 @@ type WorkspaceFilters = Readonly<{
   categoryId: string;
   date: string;
 }>;
-const emptyFilters: WorkspaceFilters = {
-  search: "",
-  direction: "all",
-  categoryId: "all",
-  date: "",
-};
+const emptyLocalFilters = { search: "", direction: "all", categoryId: "all" };
+const emptyFilters: WorkspaceFilters = { ...emptyLocalFilters, date: "" };
 const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.search.trim() !== "" ||
   filters.direction !== "all" ||
@@ -403,9 +404,7 @@ const WorkspaceHeader = ({
       onChange={onDate}
     />
     <FilterButton disabled={disabled} onClick={() => onTool("category")} />
-    <Button variant="ghost" disabled={disabled} onClick={onRefresh}>
-      Actualizar transacciones
-    </Button>
+    <RefreshButton disabled={disabled} onClick={onRefresh} label="Actualizar transacciones" />
     {readOnly ? null : (
       <Button disabled={disabled} onClick={onCapture}>
         + Registrar
@@ -614,9 +613,14 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [searching, onSearchOpen] = useState(false);
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
-  const [filters, setFilters] = useState<WorkspaceFilters>(emptyFilters);
+  const [localFilters, setFilters] = useState(emptyLocalFilters);
+  const filters = {
+    ...localFilters,
+    date: props.dateFilter.value,
+  };
   const onFilters = (next: WorkspaceFilters): void => {
-    setFilters(next);
+    setFilters({ search: next.search, direction: next.direction, categoryId: next.categoryId });
+    props.dateFilter.onChange(next.date);
     if (panel._tag === "Bulk") onPanel({ _tag: "Summary" });
   };
   const visible = props.transactions.filter((transaction) =>

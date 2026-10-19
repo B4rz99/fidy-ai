@@ -9,7 +9,7 @@ import {
   type ScheduledOperation,
   type ScheduledWorkFailed,
 } from "./contract";
-import { executeSchedule } from "./operations";
+import { executeDueSchedule } from "./operations";
 import { sweepCanonicalAdmission } from "../canonical-admission/runtime";
 import { sweepCommercialAllowances } from "../quotas/runtime";
 import type { ForwardedEmailEnvironment } from "../ingestion/contract";
@@ -43,6 +43,7 @@ import {
   sweepExpiredUploadAdmission,
   sweepForwardedEmail,
   sweepMediaSubmissions,
+  sweepReviewDrafts,
 } from "../ingestion/runtime";
 import { sweepProactivityConsentOffers } from "../consent/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
@@ -281,38 +282,56 @@ const statementActivities = (
  * independent failures are reported only after the remaining activities have been attempted.
  */
 export const runCoreMaintenance = (
-  environment: CoreMaintenanceInput
+  input:
+    | CoreMaintenanceInput
+    | Readonly<{ environment: CoreMaintenanceInput; scheduledAtEpochMs: number }>
 ): Effect.Effect<void, ScheduledWorkFailed> =>
   Effect.gen(function* () {
     const nowEpochMs = yield* Clock.currentTimeMillis;
+    const environment = "environment" in input ? input.environment : input;
     const platform = makePlatformMaintenance(environment);
-    yield* executeSchedule([
-      activity("async.health", platform.inspectHealth()),
-      activity(
-        "audit.retention",
-        makeAuditRetention({ database: environment.DB }).sweep(nowEpochMs)
-      ),
-      activity("operational.events.retention", platform.retainEventBuckets(nowEpochMs)),
-      activity("recovery.retention", sweepRecoveryEvidence({ db: environment.DB, nowEpochMs })),
-      activity("operational.canary.publish", platform.publishCanary(nowEpochMs)),
-      ...emailActivities(environment),
-      ...billingActivities(environment),
-      ...channelActivities(environment, nowEpochMs),
-      activity("patPairing.sweep", sweepExpiredPATPairings(environment.DB)),
-      activity("dashboard.projectionRepair", repairDashboardProjections(environment.DB)),
-      activity("recurring.evaluate", advanceRecurringWork(environment)),
-      activity("insights.weekly.dispatch", advanceProactivityWork(environment)),
-      ...stagingActivities(environment, nowEpochMs),
-      ...admissionActivities(environment, nowEpochMs, platform),
-      ...statementActivities(environment),
-    ]);
+    yield* executeDueSchedule({
+      activities: [
+        activity("async.health", platform.inspectHealth()),
+        activity(
+          "ingestion.reviewDraftExpiry",
+          sweepReviewDrafts({ db: environment.DB, current: nowEpochMs })
+        ),
+        activity(
+          "audit.retention",
+          makeAuditRetention({ database: environment.DB }).sweep(nowEpochMs)
+        ),
+        activity("operational.events.retention", platform.retainEventBuckets(nowEpochMs)),
+        activity("recovery.retention", sweepRecoveryEvidence({ db: environment.DB, nowEpochMs })),
+        activity("operational.canary.publish", platform.publishCanary(nowEpochMs)),
+        ...emailActivities(environment),
+        ...billingActivities(environment),
+        ...channelActivities(environment, nowEpochMs),
+        activity("patPairing.sweep", sweepExpiredPATPairings(environment.DB)),
+        activity("dashboard.projectionRepair", repairDashboardProjections(environment.DB)),
+        activity("recurring.evaluate", advanceRecurringWork(environment)),
+        activity("insights.weekly.dispatch", advanceProactivityWork(environment)),
+        ...stagingActivities(environment, nowEpochMs),
+        ...admissionActivities(environment, nowEpochMs, platform),
+        ...statementActivities(environment),
+      ],
+      nowEpochMs: "environment" in input ? input.scheduledAtEpochMs : nowEpochMs,
+    });
   });
 
 /** Attempt Email retention and delivery independently without widening the Email Worker's bindings. */
 export const runEmailMaintenance = (
-  environment: ForwardedEmailEnvironment
+  input:
+    | ForwardedEmailEnvironment
+    | Readonly<{ environment: ForwardedEmailEnvironment; scheduledAtEpochMs: number }>
 ): Effect.Effect<void, EmailScheduleUnavailable> =>
-  executeSchedule([
-    activity("forwarded-email.sweep", sweepForwardedEmail(environment)),
-    activity("forwarded-email.dispatch", dispatchForwardedEmail(environment)),
-  ]).pipe(Effect.mapError(() => new EmailScheduleUnavailable()));
+  Effect.flatMap(Clock.currentTimeMillis, (nowEpochMs) => {
+    const environment = "environment" in input ? input.environment : input;
+    return executeDueSchedule({
+      activities: [
+        activity("forwarded-email.sweep", sweepForwardedEmail(environment)),
+        activity("forwarded-email.dispatch", dispatchForwardedEmail(environment)),
+      ],
+      nowEpochMs: "environment" in input ? input.scheduledAtEpochMs : nowEpochMs,
+    });
+  }).pipe(Effect.mapError(() => new EmailScheduleUnavailable()));

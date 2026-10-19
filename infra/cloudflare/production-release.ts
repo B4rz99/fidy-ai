@@ -1,9 +1,10 @@
+import { ReleaseSmokeFailed } from "./smoke-exchange";
+import { verifyStableWorkerIdentity } from "./stable-worker-identity";
 import { RecoveryRequest, recoverStaged } from "./staged-recovery";
 import { ReleaseHttpLive } from "./release-http";
 /// <reference types="bun-types" />
 
 import { Cause, Context, Data, Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
-import { Hex } from "effect/encoding";
 import {
   FetchHttpClient,
   HttpBody,
@@ -11,12 +12,7 @@ import {
   HttpClientRequest,
   type HttpClientResponse,
 } from "effect/http";
-import {
-  SmokeIdentity,
-  SmokeRequest,
-  SmokeResponse,
-  smokePath,
-} from "../../apps/server/cloudflare/runtime/release-smoke/contract";
+import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   type RetentionCompatibilityPort,
   decodeRetentionVersionRevision,
@@ -110,17 +106,17 @@ const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
   publicVersionId: VersionId,
   coreVersionId: VersionId,
+  synthetic: Schema.Literals(["passed", "deferred-d1-quota"]),
+  oauthAvailability: Schema.Literals(["passed", "deferred-d1-quota"]),
 });
 const healthSchema = Schema.Struct({
   status: Schema.Literal("available"),
   gitRevision: SmokeIdentity.fields.gitRevision,
   contractDigest: SmokeIdentity.fields.contractDigest,
 });
-const smokeResultSchema = Schema.Struct({ ...SmokeResponse.fields, public: SmokeIdentity });
 const responseLimit = 100_000;
 const successStatusStart = 200;
 const successStatusEnd = 300;
-const probeEntropyBytes = 16;
 const inspectionHistoryLimit = 5;
 const recoveryUnavailableStatus = 503;
 const origin = "https://api.fidyapp.com";
@@ -785,33 +781,11 @@ const stableIdentity = Effect.fn(function* (input: {
   const health = yield* Schema.decodeUnknownEffect(healthSchema)(
     yield* providerJson(HttpClientRequest.get(`${origin}/health`))
   );
-  const request = yield* Schema.decodeEffect(SmokeRequest)({
-    protocolVersion: 1,
-    probeId: Hex.encode(crypto.getRandomValues(new Uint8Array(probeEntropyBytes))),
-    expectedPublicVersionId: input.publicVersionId,
-    expectedCoreVersionId: input.coreVersionId,
-    expectedGitRevision: health.gitRevision,
-    expectedContractDigest: health.contractDigest,
+  yield* verifyStableWorkerIdentity({
+    public: { ...health, workerVersionId: input.publicVersionId },
+    core: { ...health, workerVersionId: input.coreVersionId },
+    proof: input.proof,
   });
-  const raw = yield* providerJson(
-    HttpClientRequest.post(`${origin}${smokePath}`, {
-      headers: { "x-fidy-smoke-proof": input.proof, "content-type": "application/json" },
-      body: HttpBody.text(encodeJson(request), "application/json"),
-    })
-  );
-  const observed = yield* Schema.decodeUnknownEffect(smokeResultSchema)(raw);
-  const identities = [observed.public, observed.core];
-  if (
-    observed.public.workerVersionId !== input.publicVersionId ||
-    observed.core.workerVersionId !== input.coreVersionId ||
-    identities.some(
-      (identity) =>
-        identity.gitRevision !== health.gitRevision ||
-        identity.contractDigest !== health.contractDigest
-    )
-  ) {
-    return yield* Effect.fail(Error("Stable Worker release identities disagree"));
-  }
   return { stableRevision: health.gitRevision, stableContractDigest: health.contractDigest };
 });
 
@@ -963,8 +937,13 @@ const readStablePair = Effect.fn(function* ({
   }).pipe(
     Effect.provideService(HttpClient.HttpClient, client),
     Effect.mapError(
-      () =>
-        new ReleaseFailure({ message: "Release capture could not verify the stable Worker pair" })
+      (failure) =>
+        new ReleaseFailure({
+          message:
+            failure instanceof ReleaseSmokeFailed
+              ? `Stable Worker capture rejected: ${failure.reason}`
+              : "Release capture could not verify the stable Worker pair",
+        })
     )
   );
   return { publicStable, coreStable, identity };

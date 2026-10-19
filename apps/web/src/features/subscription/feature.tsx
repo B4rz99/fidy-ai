@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import {
   make as makeScopedAtom,
   useAtom,
@@ -425,7 +426,7 @@ const EnrollmentStatusAction = ({
 }: Readonly<{
   current: Exclude<Enrollment, PreparedEnrollment>;
   busy: boolean;
-  prepare: () => void;
+  prepare: (replaceFailedSource?: boolean) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
 }>): JSX.Element => {
   if (current.status === "available") {
@@ -439,7 +440,7 @@ const EnrollmentStatusAction = ({
             ? "No pudimos inscribir la fuente de pago."
             : "La inscripción venció."}
         </p>
-        <Button disabled={busy} onClick={prepare} type="button">
+        <Button disabled={busy} onClick={() => prepare()} type="button">
           Preparar una inscripción nueva
         </Button>
       </div>
@@ -512,10 +513,14 @@ const submissionFlow = (
 const preparePaymentFlow = Effect.fn(function* (
   gateway: EnrollmentGateway,
   priceId: PriceId,
-  method: EnrollmentMethod
+  options: Readonly<{ method: EnrollmentMethod; replaceFailedSource: boolean }>
 ) {
   const prepared = yield* Effect.tryPromise({
-    try: (signal) => gateway.prepare(priceId, method, signal),
+    try: (signal) =>
+      gateway.prepare(priceId, options.method, {
+        signal,
+        replaceFailedSource: options.replaceFailedSource,
+      }),
     catch: () => new EnrollmentInteractionFailed(),
   });
   if (prepared.status !== "verifying" && prepared.status !== "creating") {
@@ -606,11 +611,41 @@ const PaymentFlow = makeScopedAtom(() =>
   Atom.make<Option.Option<ScopedPaymentFlow>>(Option.none())
 );
 
+const TerminalPaymentFeedback = ({
+  current,
+  busy,
+  prepare,
+}: Readonly<{
+  current: PaymentSubmissionFlowState;
+  busy: boolean;
+  prepare: (replaceFailedSource?: boolean) => void;
+}>): JSX.Element => {
+  const canRetry =
+    current.value.status === "refused" ||
+    (current.value.status === "payment-pending" &&
+      current.value.billingAttempt.status === "failed");
+  return (
+    <div className="flex flex-col gap-3">
+      <PaymentSubmissionStatus submission={current.value} />
+      {canRetry && (
+        <Button disabled={busy} onClick={() => prepare()} type="button">
+          Volver a intentar
+        </Button>
+      )}
+      {canRetry && Option.exists(current.prepared, (prepared) => prepared.method === "card") && (
+        <Button disabled={busy} onClick={() => prepare(true)} type="button" variant="outline">
+          Usar otra tarjeta
+        </Button>
+      )}
+    </div>
+  );
+};
+
 const renderPaymentEnrollment = (
   input: DaviplataFormActions & {
     current: PaymentFlowState;
     busy: boolean;
-    prepare: () => void;
+    prepare: (replaceFailedSource?: boolean) => void;
     submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
     refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
   }
@@ -618,7 +653,7 @@ const renderPaymentEnrollment = (
   const { current, busy, prepare, submit, refresh } = input;
   if (current._tag === "PaymentSubmission") {
     if (!isAwaitingPaymentStatus(current.value)) {
-      return <PaymentSubmissionStatus submission={current.value} />;
+      return <TerminalPaymentFeedback current={current} busy={busy} prepare={prepare} />;
     }
     const prepared = current.prepared;
     return (
@@ -647,6 +682,11 @@ const renderPaymentEnrollment = (
           enrollment={enrollment}
           submit={(email, fields) => submit(enrollment, email, fields)}
         />
+        {enrollment.method === "card" && enrollment.paymentSourceMode === "reuse" && (
+          <Button disabled={busy} onClick={() => prepare(true)} type="button" variant="outline">
+            Usar otra tarjeta
+          </Button>
+        )}
       </div>
     );
   }
@@ -666,7 +706,7 @@ const EnrollmentContent = ({
 }: Readonly<{
   enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
-  prepare: () => void;
+  prepare: (replaceFailedSource?: boolean) => void;
   submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
 }> &
@@ -710,7 +750,7 @@ const PaymentDetails = ({
   enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
   failed: boolean;
-  prepare: () => void;
+  prepare: (replaceFailedSource?: boolean) => void;
   submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
   method: EnrollmentMethod;
@@ -999,7 +1039,11 @@ const PaymentFlowDetails = ({
     busy={interaction.busy}
     enrollment={interaction.enrollment}
     failed={interaction.failed}
-    prepare={() => interaction.start((gateway) => preparePaymentFlow(gateway, offer.id, method))}
+    prepare={(replacing = false) =>
+      interaction.start((gateway) =>
+        preparePaymentFlow(gateway, offer.id, { method, replaceFailedSource: replacing })
+      )
+    }
     refresh={(id) => interaction.start((gateway) => refreshEnrollmentFlow(gateway, id))}
     submit={(prepared, email, fields) =>
       interaction.start((gateway) =>
@@ -1046,13 +1090,17 @@ const makeOfferSelectionActions = (
     input.setMethod(choice);
     input.interaction.reset();
     Option.map(input.selectedId, (id) =>
-      input.interaction.start((gateway) => preparePaymentFlow(gateway, id, choice))
+      input.interaction.start((gateway) =>
+        preparePaymentFlow(gateway, id, { method: choice, replaceFailedSource: false })
+      )
     );
   },
   price: (id) => {
     input.setSelectedId(Option.some(id));
     input.interaction.reset();
-    input.interaction.start((gateway) => preparePaymentFlow(gateway, id, input.method));
+    input.interaction.start((gateway) =>
+      preparePaymentFlow(gateway, id, { method: input.method, replaceFailedSource: false })
+    );
   },
 });
 const ReadyOffersContent = ({
@@ -1301,9 +1349,12 @@ export const SubscriptionStandingView = ({
           Tu historial permanece disponible aunque termine el acceso Pro. Las cuotas no son un
           bloqueo de suscripción.
         </p>
-        <Button type="button" variant="outline" onClick={onRetry}>
-          Actualizar estado
-        </Button>
+        <RefreshButton
+          type="button"
+          variant="outline"
+          onClick={onRetry}
+          label="Actualizar estado"
+        />
       </CardContent>
     </Card>
   );

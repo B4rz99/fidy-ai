@@ -213,7 +213,7 @@ const acceptedStatements = (
       extraction,
       categoryId: fallbackCaptureCategory(extraction.direction),
       attestation: {
-        id: yield* emailCrypto.randomUUIDv4,
+        id: yield* emailCrypto.randomUUIDv4(),
         serviceMarket: "CO",
         locale: "es-CO",
         timeZone: settlement.receipt.time_zone,
@@ -292,7 +292,7 @@ const settle = (
   EmailProcessingUnavailable | Schema.SchemaError | PlatformError.PlatformError
 > =>
   Effect.gen(function* () {
-    const id = yield* emailCrypto.randomUUIDv4;
+    const id = yield* emailCrypto.randomUUIDv4();
     const now = yield* Clock.currentTimeMillis;
     const settlement: Settlement = {
       input,
@@ -310,7 +310,7 @@ const settle = (
     // The deterministic, versioned, allowlisted structural transform is the approval policy.
     // Do not retain uncertain/unrecognized email structure indefinitely.
     if (Option.isSome(material.html) && material.interpretation._tag === "Interpreted") {
-      const sampleId = yield* emailCrypto.randomUUIDv4;
+      const sampleId = yield* emailCrypto.randomUUIDv4();
       statements.push(sampleStatement(settlement, sampleId, material.html.value));
     }
     statements.push(

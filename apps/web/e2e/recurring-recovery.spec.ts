@@ -8,9 +8,37 @@ const { expect, test } = playwright;
 const workspaceRoute = `${apiOrigin}/recurring-plans?*`;
 const unavailableStatus = 503;
 const successStatus = 200;
+const limitedStatus = 429;
+const expectReadFailure = expect.configure({ timeout: 10000 });
 
-for (const failure of ["unavailable", "malformed"] as const) {
-  test(`a ${failure} recurring read refuses false empty facts and recovers through explicit retry`, ({
+const failures = [
+  {
+    kind: "unavailable",
+    retry: "3600",
+    status: unavailableStatus,
+    body: '{"error":{"code":"unavailable","message":"private-recurring-diagnostic"},"next":[]}',
+  },
+  {
+    kind: "malformed",
+    retry: "3600",
+    status: successStatus,
+    body: '{"data":{"month":"2026-10","occurrences":[{"name":"Untrusted partial fact"}]},"next":[]}',
+  },
+  {
+    kind: "limited",
+    retry: "3600",
+    status: limitedStatus,
+    body: '{"_tag":"ResourceLimited","error":{"code":"rate_limited","message":"private-recurring-diagnostic","retryAfterSeconds":3600},"next":[]}',
+  },
+  {
+    kind: "pressure",
+    retry: "1",
+    status: limitedStatus,
+    body: '{"_tag":"ResourceLimited","error":{"code":"rate_limited","message":"Too many concurrent or recent requests. Retry later.","retryAfterSeconds":1},"next":[]}',
+  },
+] as const;
+for (const failure of failures) {
+  test(`a ${failure.kind} recurring read refuses false empty facts and recovers through explicit retry`, ({
     page,
     request,
   }) =>
@@ -19,19 +47,21 @@ for (const failure of ["unavailable", "malformed"] as const) {
         yield* Effect.tryPromise(() =>
           signInRecurringThroughCore({ page, request, identity: "recurringRecovery" })
         );
+        const title =
+          failure.status === limitedStatus
+            ? "Alcanzaste el límite de solicitudes"
+            : "No pudimos cargar tus recurrentes";
         const handler = (route: Route): Promise<void> =>
           route.fulfill({
-            status: failure === "unavailable" ? unavailableStatus : successStatus,
+            status: failure.status,
             contentType: "application/json",
-            body:
-              failure === "unavailable"
-                ? '{"error":{"code":"unavailable","message":"private-recurring-diagnostic"},"next":[]}'
-                : '{"data":{"month":"2026-10","occurrences":[{"name":"Untrusted partial fact"}]},"next":[]}',
+            headers: { "retry-after": failure.retry },
+            body: failure.body,
           });
         yield* Effect.tryPromise(() => page.route(workspaceRoute, handler));
         yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
         yield* Effect.tryPromise(() =>
-          expect(page.getByText("No pudimos cargar tus recurrentes", { exact: true })).toBeVisible()
+          expectReadFailure(page.getByText(title, { exact: true })).toBeVisible()
         );
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Sin recurrentes para este mes", { exact: true })).toHaveCount(0)
@@ -50,9 +80,7 @@ for (const failure of ["unavailable", "malformed"] as const) {
           expect(page.getByRole("heading", { name: "Recurrentes", exact: true })).toBeVisible()
         );
         yield* Effect.tryPromise(() =>
-          expect(page.getByText("No pudimos cargar tus recurrentes", { exact: true })).toHaveCount(
-            0
-          )
+          expect(page.getByText(title, { exact: true })).toHaveCount(0)
         );
       })
     ));

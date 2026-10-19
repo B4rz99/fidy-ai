@@ -1,3 +1,4 @@
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -40,9 +41,15 @@ const Failure = ({
 const MonthlyBudgets = ({
   user,
   month,
-}: Readonly<{ user: CurrentUser; month: string }>): JSX.Element => {
+  profileCurrent,
+}: Readonly<{ user: CurrentUser; month: string; profileCurrent: boolean }>): JSX.Element => {
   const router = useRouter();
-  const state = useMonthlyBudgets({ apiClient: router.options.context.apiClient, user, month });
+  const state = useMonthlyBudgets({
+    apiClient: router.options.context.apiClient,
+    user,
+    month,
+    profileCurrent,
+  });
   if (state._tag === "Failure") return <Failure retry={state.refresh} waiting={state.waiting} />;
   if (state._tag !== "Ready") return <Loading />;
   return (
@@ -57,17 +64,29 @@ const MonthlyBudgets = ({
   );
 };
 
-const UserBudgets = ({ user }: Readonly<{ user: CurrentUser }>): JSX.Element => {
+const UserBudgets = ({
+  user,
+  profileCurrent,
+}: Readonly<{ user: CurrentUser; profileCurrent: boolean }>): JSX.Element => {
   const search = useSearch({ strict: false });
   const currentMonth = currentBudgetMonth(user);
   const month = "month" in search && typeof search.month === "string" ? search.month : currentMonth;
-  return <MonthlyBudgets key={`${user.id}:${user.timeZone}:${month}`} user={user} month={month} />;
+  return (
+    <MonthlyBudgets
+      key={`${user.id}:${user.timeZone}:${month}`}
+      user={user}
+      month={month}
+      profileCurrent={profileCurrent}
+    />
+  );
 };
 
 export const BudgetsFeature = (): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() =>
-    router.options.context.apiClient.query("identity", "getCurrentUser", {})
+    router.options.context.apiClient
+      .query("identity", "getCurrentUser", workspaceQueryRetention)
+      .pipe(revalidateWorkspaceQuery)
   );
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
@@ -82,8 +101,15 @@ export const BudgetsFeature = (): JSX.Element => {
       </>
     );
   }
-  if (state.waiting || Option.isSome(state.refreshFailure)) {
-    return <Failure retry={refresh} waiting={state.waiting} />;
-  }
-  return <UserBudgets user={state.value.data} />;
+  return (
+    <>
+      {Option.isSome(state.refreshFailure) ? (
+        <Failure retry={refresh} waiting={state.waiting} />
+      ) : null}
+      <UserBudgets
+        user={state.value.data}
+        profileCurrent={!state.waiting && Option.isNone(state.refreshFailure)}
+      />
+    </>
+  );
 };

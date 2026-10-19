@@ -15,15 +15,15 @@ import {
   RecurringMonth,
   type WebAuthClient,
 } from "@/transport/client";
-import { type JSX, Suspense, createElement, lazy } from "react";
+import { type JSX, createElement } from "react";
 import {
+  Outlet,
   type RouterHistory,
   createRootRouteWithContext,
   createRoute,
   createRouter,
   lazyRouteComponent,
   redirect,
-  useRouter,
 } from "@tanstack/react-router";
 import { RouteFailure } from "./route-failure";
 
@@ -78,23 +78,10 @@ const TransactionListFeature = lazyRouteComponent(
   "TransactionsPage"
 );
 
-const DashboardRouteContent = lazy(() =>
-  import("@/features/dashboard/feature").then((module) => ({
-    default: module.DashboardFeature,
-  }))
-);
-const DashboardRoute = (): JSX.Element => {
-  const router = useRouter();
-  return createElement(
-    Suspense,
-    { fallback: createElement("p", { "aria-live": "polite" }, "Cargando tablero…") },
-    createElement(DashboardRouteContent, {
-      apiClient: router.options.context.apiClient,
-    })
-  );
-};
+const DashboardRoute = lazyRouteComponent(() => import("./dashboard-page"), "DashboardPage");
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
+  component: lazyRouteComponent(() => import("./application-frame"), "ApplicationFrame"),
   notFoundComponent: () =>
     createElement(
       "main",
@@ -107,7 +94,12 @@ const AuthenticatedRoute = lazyRouteComponent(() =>
   Promise.all([import("@/features/signed-in/feature"), import("@/features/agent/feature")]).then(
     ([signedIn, agent]) => ({
       default: (): JSX.Element =>
-        createElement(signedIn.SignedInFeature, null, createElement(agent.HostedAgentFeature)),
+        createElement(
+          signedIn.SignedInContent,
+          null,
+          createElement(Outlet),
+          createElement(agent.HostedAgentFeature)
+        ),
     })
   )
 );
@@ -144,6 +136,33 @@ const budgetsRoute = createRoute({
     )(search),
   component: lazyRouteComponent(() => import("@/features/budgets/feature"), "BudgetsFeature"),
 });
+const createdReviewTransactionRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/needs-review/transactions/$id",
+  component: lazyRouteComponent(
+    () => import("@/features/needs-review/feature"),
+    "CreatedReviewTransaction"
+  ),
+});
+const needsReviewRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/needs-review",
+  validateSearch: (search) =>
+    Schema.decodeSync(
+      Schema.Struct({
+        status: Schema.optionalKey(
+          Schema.Literals(["pending", "history", "created", "skipped", "expired"])
+        ),
+        offset: Schema.optionalKey(
+          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }))
+        ),
+      })
+    )(search),
+  component: lazyRouteComponent(
+    () => import("@/features/needs-review/feature"),
+    "NeedsReviewRoute"
+  ),
+});
 const recurringPlansRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/recurring",
@@ -156,7 +175,7 @@ const recurringPlansRoute = createRoute({
         ),
       })
     )(search),
-  component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringFeature"),
+  component: lazyRouteComponent(() => import("@/features/recurring/feature"), "RecurringRoute"),
 });
 const recurringDigestRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
@@ -197,7 +216,6 @@ const accessManagementRoute = createRoute({
 const independentApplicationRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "independent-application",
-  component: lazyRouteComponent(() => import("@/features/signed-in/feature"), "ApplicationShell"),
 });
 const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
@@ -320,6 +338,8 @@ const routeTree = rootRoute.addChildren([
       dashboardRoute,
       budgetsRoute,
       recurringPlansRoute,
+      needsReviewRoute,
+      createdReviewTransactionRoute,
     ]),
     accessManagementRoute,
     patManagementRoute,
@@ -332,6 +352,8 @@ const routeTree = rootRoute.addChildren([
 
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
+    defaultPreload: "intent",
+    defaultPreloadDelay: 0,
     defaultErrorComponent: RouteFailure,
     routeTree,
     context: {

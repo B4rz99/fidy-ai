@@ -50,6 +50,17 @@ const scalarType = (node: JsonSchema.JsonSchema): Option.Option<ScalarFlag["type
       return Option.none();
   }
 };
+const numericConstraints = (node: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
+  const members = Array.isArray(node.allOf) ? node.allOf.filter(Predicate.isObject) : [];
+  const constraints = [node, ...members.map(numericConstraints)];
+  const minimum = constraints.map((constraint) => constraint.minimum).filter(Predicate.isNumber);
+  const maximum = constraints.map((constraint) => constraint.maximum).filter(Predicate.isNumber);
+  return {
+    ...node,
+    ...(minimum.length === 0 ? {} : { minimum: Math.max(...minimum) }),
+    ...(maximum.length === 0 ? {} : { maximum: Math.min(...maximum) }),
+  };
+};
 type Candidate = { flag: ScalarFlag; parts: ReadonlyArray<string>; width: number };
 const candidateName = ({ parts, width }: Candidate): string =>
   parts.slice(-width).map(kebabCase).join("-");
@@ -107,7 +118,10 @@ export const deriveFlags = (document: Document): FlagPlan => {
     }
     const type = scalarType(node);
     if (Option.isNone(type)) structured.push({ path, required });
-    else flags.push({ name: "", path, required, constraints: node, type: type.value });
+    else {
+      const constraints = numericConstraints(node);
+      flags.push({ name: "", path, required, constraints, type: type.value });
+    }
   };
   const visitObject = (
     node: JsonSchema.JsonSchema,

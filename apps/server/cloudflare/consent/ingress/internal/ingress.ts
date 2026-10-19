@@ -675,9 +675,11 @@ const startExchange = (
     const disclosure = yield* Effect.exit(Effect.sync(() => currentDisclosureFor()));
     if (Exit.isFailure(disclosure)) return answer(HTTP_UNAVAILABLE);
     const cryptoService = yield* Crypto.Crypto;
-    const id = PendingConsentExchangeId.make(yield* cryptoService.randomUUIDv4.pipe(Effect.orDie));
+    const id = PendingConsentExchangeId.make(
+      yield* cryptoService.randomUUIDv4().pipe(Effect.orDie)
+    );
     const correlationToken = DisclosureDeliveryCorrelationToken.make(
-      yield* cryptoService.randomUUIDv4.pipe(Effect.orDie)
+      yield* cryptoService.randomUUIDv4().pipe(Effect.orDie)
     );
     const exchange = {
       input,

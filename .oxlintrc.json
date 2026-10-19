@@ -1,7 +1,11 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "jsdoc", "react", "jsx-a11y"],
-  "jsPlugins": ["./scripts/oxlint/effect-guards.js", "./scripts/oxlint/test-guards.js"],
+  "jsPlugins": [
+    "./scripts/oxlint/effect-guards.js",
+    "./scripts/oxlint/test-guards.js",
+    "./scripts/oxlint/effect-recovery.js"
+  ],
   "extends": ["./.oxlintrc.ui.json"],
   "ignorePatterns": [
     "**/node_modules/**",
@@ -34,6 +38,7 @@
     "effect-guards/no-sql-type-parameter": "error",
     "effect-guards/no-disable-validation": "error",
     "effect-guards/no-effect-promise": "error",
+    "effect-recovery/no-catch-succeed-none": "error",
     "effect-guards/no-type-cast": "error",
     "effect-guards/no-react-use-effect": "error",
     "capitalized-comments": [

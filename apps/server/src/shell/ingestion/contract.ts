@@ -9,6 +9,12 @@ import {
   NeedsReviewStatus,
   NotificationEmailInterpretationReviewReason,
   type ParsedStatementRow,
+  ReviewCommand,
+  ReviewDetail,
+  ReviewDraft,
+  ReviewEditResult,
+  ReviewWorkspace,
+  ReviewWorkspaceQuery,
   type StatementSourceFormat,
   StatementSubmission,
   StatementSubmissionId,
@@ -32,6 +38,7 @@ import {
   operationPolicy,
   userOwnedAgentScoped,
   verifiedWhatsAppHostedOnly,
+  webSessionOnly,
 } from "~/shell/canonical-policy/contract";
 /** Canonical Transaction facts supplied to resolve one pending statement row. */
 export const ResolveNeedsReviewItemInput = Schema.Struct({
@@ -64,7 +71,94 @@ const confirmedWrite = operationPolicy({
   kind: "mutation",
 });
 
+const maximumReviewMaterialCharacters = 100_000;
+export const ReviewMaterial = Schema.Union([
+  Schema.Struct({
+    available: Schema.Literal(true),
+    text: Schema.String.check(Schema.isMaxLength(maximumReviewMaterialCharacters)),
+    truncated: Schema.Boolean,
+  }),
+  Schema.Struct({
+    available: Schema.Literal(false),
+    reason: Schema.Literals(["expired", "unavailable"]),
+  }),
+]);
+
 export const IngestionGroup = HttpApiGroup.make("ingestion")
+  .add(
+    HttpApiEndpoint.get("getReviewSuggestions", "/ingestion/review-workspace/:id/suggestions", {
+      params: Schema.Struct({ id: NeedsReviewItemId }),
+      success: OperationResponse(ReviewDraft),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Explicitly rerun available deterministic extraction against this browser owner's unexpired retained material. Returns suggestions only; never changes drafts or creates a Transaction. Unavailable processing remains retryable."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: webSessionOnly,
+          requiredTier: "free",
+          agentConfirmation: "not-required",
+          kind: "query",
+        })
+      )
+  )
+  .add(
+    HttpApiEndpoint.get("getReviewMaterial", "/ingestion/review-workspace/:id/material", {
+      params: Schema.Struct({ id: NeedsReviewItemId }),
+      success: OperationResponse(ReviewMaterial),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Browser-only, no-store original evidence delivery while the original purpose remains unexpired. Escaped text only; media locators never promise retained bytes. Unavailable as an agent tool."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: webSessionOnly,
+          requiredTier: "free",
+          agentConfirmation: "not-required",
+          kind: "query",
+        })
+      )
+  )
+  .add(
+    HttpApiEndpoint.get("getReviewItem", "/ingestion/review-workspace/:id", {
+      params: Schema.Struct({ id: NeedsReviewItemId }),
+      success: OperationResponse(ReviewDetail),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Read one owned ingestion item and its revision-bound draft. Expired drafts are not disclosed; the original deadline never extends."
+      )
+      .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.post("applyReviewEdit", "/ingestion/review-workspace/edits", {
+      payload: ReviewCommand,
+      success: OperationResponse(ReviewEditResult),
+      error: ValidationFailed,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Autosave a draft, skip pending items, or restore skipped items using their observed revisions. Every item must remain unexpired. Bulk decisions are atomic; an uncertain outcome requires a reread."
+      )
+      .annotateMerge(confirmedWrite)
+  )
+  .add(
+    HttpApiEndpoint.get("getReviewWorkspace", "/ingestion/review-workspace", {
+      query: ReviewWorkspaceQuery,
+      success: OperationResponse(ReviewWorkspace),
+      error: ValidationFailed,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns metadata only, with a complete pending count and bounded pagination."
+      )
+      .annotateMerge(read)
+  )
   .add(
     HttpApiEndpoint.post("enableEmailForwarding", "/ingestion/email-forwarding", {
       success: OperationResponse(EmailForwardingAddress),

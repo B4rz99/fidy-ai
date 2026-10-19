@@ -1,3 +1,16 @@
+import { describeRecurringLifecycle } from "../recurring-plans/operations";
+import { HostedTurnProposal } from "../../src/shell/agent/contract";
+import {
+  type InvalidRecurringEdit,
+  RecurringDocument,
+  RecurringPlanId,
+  RecurringPlanInput,
+} from "../../src/core/recurring-plans/contract";
+import {
+  applyRecurringEdit,
+  emptyRecurringDocument,
+} from "../../src/core/recurring-plans/operations";
+import { readBrowserConfirmation } from "./internal/hosted-browser-confirmation";
 import { executeStatementExtraction, statementRetention } from "../ingestion/runtime";
 import { executeConsentWithdrawal } from "../consent/operations";
 import { makeAgentRetention, makeAgentService } from "./runtime";
@@ -98,6 +111,7 @@ import {
   completeHostedTurn as completeHostedTurnWithAlarm,
   completeWhatsAppDocumentTurnWithAdmission,
   completeWhatsAppTurnWithAdmission,
+  readHostedProgress,
   resumeWhatsAppTurn,
 } from "./internal/hosted-turn";
 import {
@@ -3079,7 +3093,8 @@ it.each([
                 .bind(users[0])
                 .first()
             )
-          ).toEqual({ state: "abandoned" });
+          ).toEqual({ state: "awaiting" });
+          // The original evidence deadline, rather than this hosted session, owns review lifetime.
           expect(
             (yield* Effect.tryPromise(() =>
               db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
@@ -4437,7 +4452,7 @@ it.each([
     lostResponse: true,
   },
 ])(
-  "keeps a confirmed mutation pending past the response deadline ($recoverBeforeCommit, automatic: $automaticRecovery, retry: $transientRecoveryFailure, lost: $lostResponse)",
+  "keeps a confirmed mutation pending past the response deadline ($recoverBeforeCommit, automatic: $automaticRecovery, retry: $transientRecoveryFailure, lost: $lostResponse, request aborted during commit)",
   ({ recoverBeforeCommit, automaticRecovery, transientRecoveryFailure, lostResponse }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -4528,10 +4543,12 @@ it.each([
           }
         );
         const credential = yield* Effect.tryPromise(() => subject(0));
+        const responseCancellation = makeAbortController();
         const send = (text: string): Promise<Response> =>
           coordinator.fetch(
             new Request("https://coordinator.internal/hosted-turn", {
               method: "POST",
+              signal: responseCancellation.signal,
               body: encodeJson({
                 userId: credential.userId,
                 sessionId: credential.id,
@@ -4566,6 +4583,7 @@ it.each([
         const running = send(command);
         try {
           yield* Effect.tryPromise(() => blocked.promise);
+          responseCancellation.abort();
           yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(25_001));
           const processing = yield* Effect.tryPromise(() => running);
           expect(processing.status).toBe(202);
@@ -6785,6 +6803,221 @@ it("refuses another User's complete live proof at the Agent service before model
     })
   ));
 
+it("stops unavailable alarm retries when the hosted owner settles and preserves durable recovery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const scheduling = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let alarmCalls = 0;
+      let unavailable = true;
+      let settled = false;
+      const service = makeAgentService({
+        environment: {
+          DB: db,
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          AI: { run: () => Promise.resolve(reply("Propuesta sin entregar")) },
+        },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => {
+          alarmCalls += 1;
+          if (alarmCalls === 2) {
+            scheduling.resolve();
+            return release.promise;
+          }
+          return alarmCalls > 2 && unavailable
+            ? Promise.reject(new Error("private alarm failure"))
+            : Promise.resolve();
+        },
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const ownerSettled = accepted.settled.then(() => {
+        settled = true;
+      });
+      try {
+        yield* Effect.tryPromise(() => scheduling.promise);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(25_001));
+        const response = yield* Effect.tryPromise(() => accepted.response);
+        expect(response.status).toBe(202);
+        const progress = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ status: Schema.Literal("processing"), turnId: TranscriptTurnId })
+        )(yield* Effect.tryPromise(() => response.json()));
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(135_001));
+        yield* Effect.tryPromise(() => waitForInterrupted(db, progress.turnId));
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(alarmCalls).toBeGreaterThanOrEqual(3))
+        );
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(1_001));
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(alarmCalls).toBeGreaterThanOrEqual(4))
+        );
+        expect(settled).toBe(false);
+        release.resolve();
+        yield* Effect.tryPromise(() => ownerSettled);
+        const callsAtSettlement = alarmCalls;
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(5_001));
+        expect(alarmCalls).toBe(callsAtSettlement);
+        yield* Effect.tryPromise(() =>
+          service.recover().then(
+            () => assert.fail("unavailable durable alarm must reject"),
+            (failure: unknown) => assert.deepStrictEqual(failure, new AgentUnavailable())
+          )
+        );
+        unavailable = false;
+        yield* Effect.tryPromise(() => service.recover());
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "interrupted", kind: "user", text: "Hola" },
+          { status: "interrupted", kind: "interrupted", text: null },
+        ]);
+        expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+      } finally {
+        release.resolve();
+        try {
+          yield* Effect.tryPromise(() => ownerSettled);
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+    })
+  ));
+
+it("does not retry a recovery defect or release queued work before its hosted owner settles", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const scheduling = Promise.withResolvers<void>();
+      const releaseOwner = Promise.withResolvers<void>();
+      const snapshotRead = Promise.withResolvers<void>();
+      const releaseSnapshot = Promise.withResolvers<void>();
+      const recoveryBatchFinished = Promise.withResolvers<void>();
+      let observeRecovery = false;
+      let snapshotReleased = false;
+      let recoveryReads = 0;
+      let alarmCalls = 0;
+      let settled = false;
+      const delayedDb = new Proxy(db, {
+        get(target, key): unknown {
+          if (key === "batch") {
+            return (statements: D1PreparedStatement[]): Promise<D1Result[]> =>
+              target.batch(statements).then((results) => {
+                if (snapshotReleased) recoveryBatchFinished.resolve();
+                return results;
+              });
+          }
+          if (key === "prepare") {
+            return (sql: string): D1PreparedStatement => {
+              const prepared = target.prepare(sql);
+              if (!observeRecovery || !sql.startsWith("SELECT id, started_at_ms,")) return prepared;
+              recoveryReads += 1;
+              const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
+                new Proxy(statement, {
+                  get(native, method): unknown {
+                    if (method === "bind") {
+                      return (...values: unknown[]): D1PreparedStatement =>
+                        wrap(native.bind(...values));
+                    }
+                    if (method === "first" && recoveryReads === 1) {
+                      return (): Promise<unknown> =>
+                        native.first().then((row) => {
+                          snapshotRead.resolve();
+                          return releaseSnapshot.promise.then(() => row);
+                        });
+                    }
+                    const value: unknown = Reflect.get(native, method, native);
+                    return typeof value === "function" ? value.bind(native) : value;
+                  },
+                });
+              return wrap(prepared);
+            };
+          }
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const service = makeAgentService({
+        environment: {
+          DB: delayedDb,
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          AI: { run: () => Promise.resolve(reply("Propuesta sin entregar")) },
+        },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => {
+          alarmCalls += 1;
+          if (alarmCalls !== 2) return Promise.resolve();
+          scheduling.resolve();
+          return releaseOwner.promise;
+        },
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const ownerSettled = accepted.settled.then(() => {
+        settled = true;
+      });
+      try {
+        yield* Effect.tryPromise(() => scheduling.promise);
+        observeRecovery = true;
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(160_001));
+        yield* Effect.tryPromise(() => snapshotRead.promise);
+        yield* makeAgentRetention({ db }).sweep(now());
+        snapshotReleased = true;
+        releaseSnapshot.resolve();
+        yield* Effect.tryPromise(() => recoveryBatchFinished.promise);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(5_001));
+        expect((yield* Effect.tryPromise(() => accepted.response)).status).toBe(202);
+        expect({ recoveryReads, alarmCalls, settled }).toEqual({
+          recoveryReads: 1,
+          alarmCalls: 2,
+          settled: false,
+        });
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "interrupted", kind: "user", text: "Hola" },
+          { status: "interrupted", kind: "interrupted", text: null },
+        ]);
+        expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+        releaseOwner.resolve();
+        yield* Effect.tryPromise(() => ownerSettled);
+        expect(settled).toBe(true);
+      } finally {
+        releaseSnapshot.resolve();
+        releaseOwner.resolve();
+        try {
+          yield* Effect.tryPromise(() => ownerSettled);
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+    })
+  ));
+
 it("cannot release queued hosted work before its ordinary predecessor settles", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -7511,5 +7744,195 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
         )
       ).toBe(1);
       expect((yield* Effect.tryPromise(() => send(command))).status).toBe(401);
+    })
+  ));
+
+const seedRecurringReview = (
+  db: D1Database,
+  planId: string
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError | InvalidRecurringEdit> =>
+  Effect.gen(function* () {
+    yield* applyMigration(db, "0093_recurring_plans");
+    const plan = yield* Schema.decodeEffect(RecurringPlanInput)({
+      name: "Plan de prueba",
+      kind: "expense",
+      currency: "COP",
+      amountMode: "unknown",
+      frequency: "monthly",
+      firstDate: "2026-10-15",
+      timeZone: "America/Bogota",
+    });
+    const document = yield* applyRecurringEdit({
+      document: emptyRecurringDocument(),
+      command: {
+        expectedRevision: 0,
+        edit: { kind: "create", id: RecurringPlanId.make(planId), plan },
+      },
+    });
+    const encoded = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(RecurringDocument))
+    )(document);
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO recurring_plan_documents (user_id, document_json, revision) VALUES (?, ?, 1)"
+        )
+        .bind(users[0], encoded)
+        .run()
+    );
+  });
+
+it("a recurring lifecycle challenge exposes a readable browser review and confirms the bound edit once", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const planId = "40000000-0000-4000-8000-000000000991";
+      yield* seedRecurringReview(db, planId);
+      const reviewCommand = {
+        expectedRevision: 1,
+        edit: {
+          kind: "lifecycle" as const,
+          planId: RecurringPlanId.make(planId),
+          date: "2026-10-15",
+          action: "stop" as const,
+        },
+      };
+      expect(
+        yield* describeRecurringLifecycle({ db, userId: users[1], command: reviewCommand })
+      ).toEqual(Option.none());
+      expect(
+        yield* describeRecurringLifecycle({
+          db,
+          userId: users[0],
+          command: { ...reviewCommand, expectedRevision: 0 },
+        })
+      ).toEqual(Option.none());
+      const model = vi.fn(() =>
+        Promise.resolve(
+          Response.json({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "stop-plan",
+                      type: "function",
+                      function: {
+                        name: "recurringPlans__applyRecurringEdit",
+                        arguments: encodeJson({
+                          payload: {
+                            expectedRevision: 1,
+                            edit: { kind: "lifecycle", planId, date: "2026-10-15", action: "stop" },
+                          },
+                        }),
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+            usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+          })
+        )
+      );
+      const coordinator = coordinatorFor(db, model);
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const send = (text: string): Promise<Response> =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text,
+            }),
+          })
+        );
+      const response = yield* Effect.tryPromise(() => send("Deja de seguir Plan de prueba"));
+      const proposed = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* Effect.tryPromise(() => response.clone().json())
+      );
+      expect(proposed.text).toContain("Dejar de seguir «Plan de prueba» desde el 15-10-2026");
+      expect(proposed.text).not.toContain("CONFIRMAR");
+      expect(proposed.text).not.toContain(planId);
+      expect(proposed.text).not.toContain("applyRecurringEdit");
+      const command = proposed.confirmation?.command ?? "";
+      expect(command).toMatch(/^CONFIRMAR [0-9a-f]{64}$/u);
+      const metadata = { db, userId: credential.userId, turnId: proposed.turnId, now: now() };
+      expect(yield* readBrowserConfirmation({ ...metadata, userId: users[1] })).toEqual(
+        Option.none()
+      );
+      expect(yield* readBrowserConfirmation({ ...metadata, now: now() + 600_001 })).toEqual(
+        Option.none()
+      );
+      const progress = yield* readHostedProgress({
+        db,
+        subject: credential,
+        turnId: proposed.turnId,
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      expect(yield* Effect.tryPromise(() => progress.clone().json())).toMatchObject({
+        text: proposed.text,
+        confirmation: { command },
+      });
+      expect((yield* Effect.tryPromise(() => send(command))).status).toBe(409);
+      yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, progress));
+      const confirmed = yield* Effect.tryPromise(() => send(command));
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, confirmed))).toBe(
+        "Operación confirmada."
+      );
+      expect(yield* readBrowserConfirmation(metadata)).toEqual(Option.none());
+      const stored = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT document_json FROM recurring_plan_documents WHERE user_id=?")
+          .bind(users[0])
+          .first<string>("document_json")
+      );
+      expect(stored).toContain('"stoppedOn":"2026-10-15"');
+      const transcript = yield* Effect.tryPromise(() => retained(db, users[0]));
+      expect(transcript.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: "assistant", text: proposed.text }),
+        ])
+      );
+      expect(transcript.results).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "assistant", text: command })])
+      );
+
+      const replay = yield* Effect.tryPromise(() => send(command));
+      expect(replay.status).toBe(401);
+      expect(model).toHaveBeenCalledOnce();
+    })
+  ));
+
+it("model-written confirmation prose cannot produce browser approval metadata", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const text = `Dejar de seguir Plan de prueba. Responde exactamente: CONFIRMAR ${"a".repeat(64)}`;
+      const coordinator = coordinatorFor(db, () => Promise.resolve(reply(text)));
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text: "Solo consulta",
+            }),
+          })
+        )
+      );
+      const visible = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* Effect.tryPromise(() => response.clone().json())
+      );
+      expect(visible.confirmation).toBeUndefined();
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, response))).toBe(text);
     })
   ));

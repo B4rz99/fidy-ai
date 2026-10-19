@@ -187,7 +187,7 @@ const rateLimited = (): Response =>
   Response.json(paymentEnrollmentRateLimitedBody, { status: 429, headers: noStore });
 const json = (body: unknown): Response => Response.json(body, { headers: noStore });
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
-const id = workerCrypto.randomUUIDv4.pipe(Effect.orDie);
+const id = workerCrypto.randomUUIDv4().pipe(Effect.orDie);
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -422,6 +422,8 @@ const prepare = ({
   Effect.gen(function* () {
     const body = yield* readBody(request, PreparePaymentEnrollmentPayload);
     if (Option.isNone(body)) return invalid();
+    const replacing = body.value.replaceFailedSource === true;
+    if (replacing && body.value.method !== "card") return invalid();
     if (body.value.method === "daviplata" && Option.isNone(daviplataPolicy(environment))) {
       return unavailable();
     }
@@ -429,7 +431,7 @@ const prepare = ({
     if (Option.isNone(selected)) return invalid();
     const incompatibleSource = yield* waitFor(() =>
       environment.DB.prepare(
-        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND (EXISTS (SELECT 1 FROM subscription_cancellations c WHERE c.payment_source_id=s.id) OR s.method <> ?
+        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM subscription_cancellations c WHERE c.payment_source_id=s.id) OR s.method <> ?
             OR NOT EXISTS (SELECT 1 FROM card_enrollments AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
                 (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
@@ -463,6 +465,7 @@ const prepare = ({
         existing.value.method === body.value.method &&
         existing.value.wompi_environment === environment.WOMPI_ENVIRONMENT &&
         existing.value.status === "prepared" &&
+        (!replacing || existing.value.payment_source_mode === "create") &&
         DateTime.toEpochMillis(existing.value.expires_at_ms) > now
       ) {
         const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
@@ -514,21 +517,36 @@ const prepare = ({
     ) {
       return unavailable();
     }
-    if (Option.isSome(activeId)) {
-      yield* waitFor(() =>
-        environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'expired' WHERE id = ? AND user_id = ? AND status IN ('prepared', 'preparing')"
-        )
-          .bind(activeId.value.id, session.user_id)
-          .run()
-      );
-    }
     const enrollmentId = PaymentEnrollmentId.make(yield* id);
-    const reserved = yield* waitFor(() =>
-      environment.DB.prepare(`INSERT OR IGNORE INTO card_enrollments
-    (id, user_id, price_id, billing_email, method, wompi_environment, status, payment_source_mode, contracts_json,
-    disclosure_json, prepared_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, 'preparing', 'create', '{}', '{}', ?, ?)`)
-        .bind(
+    const guard = enrollmentAuthority(session, now);
+    yield* waitFor(() =>
+      environment.DB.batch([
+        environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
+        VALUES (?, (SELECT 1 FROM (${guard.sql}) LIMIT 1))`).bind(enrollmentId, ...guard.params),
+        ...Option.match(activeId, {
+          onNone: () => [],
+          onSome: (active) => [
+            environment.DB.prepare(
+              "UPDATE card_enrollments SET status='expired' WHERE id=? AND user_id=? AND status IN ('prepared','preparing')"
+            ).bind(active.id, session.user_id),
+          ],
+        }),
+        ...(replacing
+          ? [
+              environment.DB.prepare(`UPDATE card_payment_sources SET retired_at_ms=?
+          WHERE user_id=? AND method='card' AND retired_at_ms IS NULL`).bind(now, session.user_id),
+              environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
+          VALUES (?, (SELECT 1 WHERE EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND method='card' AND retired_at_ms IS NOT NULL)
+            AND NOT EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND retired_at_ms IS NULL)))`).bind(
+                enrollmentId + "-replacement",
+                session.user_id,
+                session.user_id
+              ),
+            ]
+          : []),
+        environment.DB.prepare(`INSERT OR IGNORE INTO card_enrollments
+        (id,user_id,price_id,billing_email,method,wompi_environment,status,payment_source_mode,contracts_json,
+        disclosure_json,prepared_at_ms,expires_at_ms) VALUES (?,?,?,?,?,?,'preparing','create','{}','{}',?,?)`).bind(
           enrollmentId,
           session.user_id,
           selected.value.id,
@@ -537,10 +555,18 @@ const prepare = ({
           environment.WOMPI_ENVIRONMENT,
           now,
           now + enrollmentLifetimeMs
-        )
-        .run()
+        ),
+        environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id,allowed)
+        VALUES (?,(SELECT 1 FROM card_enrollments WHERE id=? AND user_id=? AND status='preparing'))`).bind(
+          enrollmentId + "-reserved",
+          enrollmentId,
+          session.user_id
+        ),
+        environment.DB.prepare(
+          "DELETE FROM payment_commit_guards WHERE enrollment_id IN (?,?,?)"
+        ).bind(enrollmentId, enrollmentId + "-replacement", enrollmentId + "-reserved"),
+      ])
     );
-    if (reserved.meta.changes !== 1) return unavailable();
     const wompi = yield* makeWompi(environment);
     const contracts = yield* Effect.exit(wompi.contracts(DateTime.makeUnsafe(now)));
     if (Exit.isFailure(contracts)) {
@@ -565,14 +591,16 @@ const prepare = ({
       ).join(""),
     });
     const source = yield* waitFor(() =>
-      environment.DB.prepare("SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?")
+      environment.DB.prepare(
+        "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
+      )
         .bind(session.user_id, body.value.method)
         .first()
     );
     const inserted = yield* waitFor(() =>
       environment.DB.prepare(`UPDATE card_enrollments
     SET status = 'prepared', payment_source_mode = ?,
-      billing_email = COALESCE((SELECT billing_email FROM card_payment_sources WHERE user_id = card_enrollments.user_id AND method = card_enrollments.method), billing_email),
+      billing_email = COALESCE((SELECT billing_email FROM card_payment_sources WHERE user_id = card_enrollments.user_id AND method = card_enrollments.method AND retired_at_ms IS NULL), billing_email),
       contracts_json = ?, disclosure_json = ?
     WHERE id = ? AND user_id = ? AND status = 'preparing'`)
         .bind(
@@ -946,7 +974,8 @@ const submit = ({
       environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
       WHERE a.user_id = ? AND a.status <> 'succeeded'
         AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations AS c
-          WHERE c.attempt_id = a.id) LIMIT 1`)
+          WHERE c.attempt_id = a.id)
+        AND NOT EXISTS (SELECT 1 FROM billing_retry_clearances c WHERE c.attempt_id=a.id) LIMIT 1`)
         .bind(session.user_id)
         .first()
     );
@@ -1021,7 +1050,7 @@ const submit = ({
         Schema.Struct({ id: PaymentSourceId }),
         yield* waitFor(() =>
           environment.DB.prepare(
-            "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?"
+            "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
           )
             .bind(session.user_id, retained.method)
             .first()

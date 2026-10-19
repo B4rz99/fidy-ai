@@ -478,7 +478,7 @@ const program = Effect.gen(function* () {
     }).pipe(Effect.orDie)
   );
   const suffix = remote
-    ? (yield* (yield* Crypto.Crypto).randomUUIDv4).slice(0, proofNameSuffixLength)
+    ? (yield* (yield* Crypto.Crypto).randomUUIDv4()).slice(0, proofNameSuffixLength)
     : "local";
   const name = `xlsx-proof-${suffix}`;
   yield* buildWorker(name);

@@ -48,13 +48,13 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_15"
+            "$ref": "#/components/schemas/Union_19"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
           },
           "scopes": {
-            "$ref": "#/components/schemas/Arrays_5"
+            "$ref": "#/components/schemas/Arrays_7"
           },
           "shortId": {
             "$ref": "#/components/schemas/TokenShortId"
@@ -74,7 +74,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_8"
+            "$ref": "#/components/schemas/Union_9"
           },
           "op": {
             "enum": [
@@ -138,7 +138,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "requested": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_6"
           },
           "timeZone": {
             "$ref": "#/components/schemas/IanaTimeZone"
@@ -223,6 +223,19 @@
       },
       "Arrays_2": {
         "items": {
+          "$ref": "#/components/schemas/Objects_"
+        },
+        "maxItems": 100,
+        "minItems": 1,
+        "prefixItems": [
+          {
+            "$ref": "#/components/schemas/Objects_"
+          }
+        ],
+        "type": "array"
+      },
+      "Arrays_3": {
+        "items": {
           "$ref": "#/components/schemas/CategoryId"
         },
         "maxItems": 16,
@@ -235,19 +248,32 @@
         "type": "array",
         "uniqueItems": true
       },
-      "Arrays_3": {
-        "items": {
-          "$ref": "#/components/schemas/Objects_29"
-        },
-        "type": "array"
-      },
       "Arrays_4": {
         "items": {
-          "$ref": "#/components/schemas/Objects_29"
+          "$ref": "#/components/schemas/Objects_32"
         },
+        "maxItems": 100,
+        "minItems": 1,
+        "prefixItems": [
+          {
+            "$ref": "#/components/schemas/Objects_32"
+          }
+        ],
         "type": "array"
       },
       "Arrays_5": {
+        "items": {
+          "$ref": "#/components/schemas/Objects_35"
+        },
+        "type": "array"
+      },
+      "Arrays_6": {
+        "items": {
+          "$ref": "#/components/schemas/Objects_35"
+        },
+        "type": "array"
+      },
+      "Arrays_7": {
         "items": {
           "$ref": "#/components/schemas/PATScope"
         },
@@ -283,7 +309,13 @@
                 "type": "string"
               },
               "failedCallIndex": {
-                "minimum": 0,
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "fields": {
@@ -328,7 +360,7 @@
         "additionalProperties": false,
         "properties": {
           "axis": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_8"
           },
           "besideWidget": {
             "$ref": "#/components/schemas/WidgetId"
@@ -604,6 +636,8 @@
               },
               "retryAfterSeconds": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -1456,7 +1490,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_2"
           },
           "money": {
             "$ref": "#/components/schemas/Money_2"
@@ -1984,10 +2018,10 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_5"
+            "$ref": "#/components/schemas/Union_7"
           },
           "categories": {
-            "$ref": "#/components/schemas/Arrays_2"
+            "$ref": "#/components/schemas/Arrays_3"
           },
           "label": {
             "maxLength": 80,
@@ -1996,7 +2030,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_6"
           },
           "title": {
             "maxLength": 80,
@@ -2023,10 +2057,10 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_5"
+            "$ref": "#/components/schemas/Union_7"
           },
           "categories": {
-            "$ref": "#/components/schemas/Arrays_2"
+            "$ref": "#/components/schemas/Arrays_3"
           },
           "id": {
             "$ref": "#/components/schemas/WidgetId"
@@ -2038,7 +2072,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_6"
           },
           "title": {
             "maxLength": 80,
@@ -2222,7 +2256,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_2"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -2354,20 +2388,20 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_6"
+                "$ref": "#/components/schemas/Union_8"
               },
               "children": {
                 "items": {
-                  "$ref": "#/components/schemas/Objects_16"
+                  "$ref": "#/components/schemas/Objects_17"
                 },
                 "maxItems": 24,
                 "minItems": 2,
                 "prefixItems": [
                   {
-                    "$ref": "#/components/schemas/Objects_16"
+                    "$ref": "#/components/schemas/Objects_17"
                   },
                   {
-                    "$ref": "#/components/schemas/Objects_16"
+                    "$ref": "#/components/schemas/Objects_17"
                   }
                 ],
                 "type": "array"
@@ -2559,18 +2593,36 @@
             "$ref": "#/components/schemas/EmailForwardingAddress"
           },
           "deferredCapacityRemaining": {
-            "maximum": 50,
-            "minimum": 0,
+            "allOf": [
+              {
+                "maximum": 50,
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "deferredEmails": {
-            "maximum": 50,
-            "minimum": 0,
+            "allOf": [
+              {
+                "maximum": 50,
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "remainingThisMonth": {
-            "maximum": 50,
-            "minimum": 0,
+            "allOf": [
+              {
+                "maximum": 50,
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "resetsAt": {
@@ -2602,7 +2654,7 @@
                 "$ref": "#/components/schemas/IngestSampleId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_4"
+                "$ref": "#/components/schemas/Arrays_6"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -2696,7 +2748,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_4"
+                "$ref": "#/components/schemas/Arrays_6"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -2711,7 +2763,7 @@
                 "$ref": "#/components/schemas/InterpretationRevision"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_15"
               },
               "receivedEmailId": {
                 "maxLength": 256,
@@ -2782,7 +2834,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_4"
+                "$ref": "#/components/schemas/Arrays_6"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -2809,7 +2861,7 @@
                     "type": "string"
                   },
                   {
-                    "$ref": "#/components/schemas/Union_11"
+                    "$ref": "#/components/schemas/Union_15"
                   }
                 ]
               },
@@ -2906,7 +2958,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_18"
+            "$ref": "#/components/schemas/Objects_19"
           }
         },
         "required": [
@@ -2918,7 +2970,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_18"
+            "$ref": "#/components/schemas/Objects_19"
           }
         },
         "required": [
@@ -2930,7 +2982,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_18"
+            "$ref": "#/components/schemas/Objects_19"
           }
         },
         "required": [
@@ -2957,7 +3009,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_18"
+            "$ref": "#/components/schemas/Objects_19"
           }
         },
         "required": [
@@ -3215,7 +3267,7 @@
                 ]
               },
               "scopes": {
-                "$ref": "#/components/schemas/Arrays_5"
+                "$ref": "#/components/schemas/Arrays_7"
               },
               "shortId": {
                 "$ref": "#/components/schemas/TokenShortId"
@@ -3330,20 +3382,20 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_6"
+                "$ref": "#/components/schemas/Union_8"
               },
               "children": {
                 "items": {
-                  "$ref": "#/components/schemas/Objects_15"
+                  "$ref": "#/components/schemas/Objects_16"
                 },
                 "maxItems": 24,
                 "minItems": 2,
                 "prefixItems": [
                   {
-                    "$ref": "#/components/schemas/Objects_15"
+                    "$ref": "#/components/schemas/Objects_16"
                   },
                   {
-                    "$ref": "#/components/schemas/Objects_15"
+                    "$ref": "#/components/schemas/Objects_16"
                   }
                 ],
                 "type": "array"
@@ -3411,7 +3463,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "scopes": {
-            "$ref": "#/components/schemas/Arrays_5"
+            "$ref": "#/components/schemas/Arrays_7"
           }
         },
         "required": [
@@ -3488,6 +3540,8 @@
               },
               "retryAfterSeconds": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -3819,7 +3873,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_8"
+            "$ref": "#/components/schemas/Union_9"
           },
           "op": {
             "enum": [
@@ -3949,12 +4003,189 @@
         "additionalProperties": false,
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/InsightEventId"
+            "$ref": "#/components/schemas/NeedsReviewItemId"
+          },
+          "revision": {
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
           }
         },
         "type": "object"
       },
       "Objects_1": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/InsightEventId"
+          }
+        },
+        "type": "object"
+      },
+      "Objects_10": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/BudgetId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_11": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Budget"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_12": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/BudgetId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_13": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BudgetId"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_14": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConnectInstitutionResult"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_15": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DashboardDocument"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_16": {
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/LayoutNode"
+          },
+          "weight": {
+            "$ref": "#/components/schemas/SplitWeight"
+          }
+        },
+        "required": [
+          "weight",
+          "node"
+        ],
+        "type": "object"
+      },
+      "Objects_17": {
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/DashboardViewLayout"
+          },
+          "weight": {
+            "$ref": "#/components/schemas/SplitWeight"
+          }
+        },
+        "required": [
+          "weight",
+          "node"
+        ],
+        "type": "object"
+      },
+      "Objects_18": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DashboardDocument"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_19": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "verification_invalid"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "enum": [
+              "El código no es válido. Revisa el correo o solicita uno nuevo."
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "Objects_2": {
         "additionalProperties": false,
         "properties": {
           "accountId": {
@@ -3988,9 +4219,11 @@
             "$ref": "#/components/schemas/CurrencyPartial"
           },
           "endDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "firstDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "frequency": {
@@ -4035,8 +4268,14 @@
               {
                 "anyOf": [
                   {
-                    "maximum": 31,
-                    "minimum": 1,
+                    "allOf": [
+                      {
+                        "maximum": 31,
+                        "minimum": 1
+                      }
+                    ],
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
                     "type": "integer"
                   },
                   {
@@ -4050,8 +4289,14 @@
               {
                 "anyOf": [
                   {
-                    "maximum": 31,
-                    "minimum": 1,
+                    "allOf": [
+                      {
+                        "maximum": 31,
+                        "minimum": 1
+                      }
+                    ],
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
                     "type": "integer"
                   },
                   {
@@ -4077,153 +4322,7 @@
         },
         "type": "object"
       },
-      "Objects_10": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Budget"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_11": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/BudgetId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_12": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/BudgetId"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_13": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ConnectInstitutionResult"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_14": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DashboardDocument"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_15": {
-        "additionalProperties": false,
-        "properties": {
-          "node": {
-            "$ref": "#/components/schemas/LayoutNode"
-          },
-          "weight": {
-            "$ref": "#/components/schemas/SplitWeight"
-          }
-        },
-        "required": [
-          "weight",
-          "node"
-        ],
-        "type": "object"
-      },
-      "Objects_16": {
-        "additionalProperties": false,
-        "properties": {
-          "node": {
-            "$ref": "#/components/schemas/DashboardViewLayout"
-          },
-          "weight": {
-            "$ref": "#/components/schemas/SplitWeight"
-          }
-        },
-        "required": [
-          "weight",
-          "node"
-        ],
-        "type": "object"
-      },
-      "Objects_17": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DashboardDocument"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_18": {
-        "additionalProperties": false,
-        "properties": {
-          "code": {
-            "enum": [
-              "verification_invalid"
-            ],
-            "type": "string"
-          },
-          "message": {
-            "enum": [
-              "El código no es válido. Revisa el correo o solicita uno nuevo."
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "message"
-        ],
-        "type": "object"
-      },
-      "Objects_19": {
+      "Objects_20": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4239,23 +4338,7 @@
         ],
         "type": "object"
       },
-      "Objects_2": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/User"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_20": {
+      "Objects_21": {
         "additionalProperties": false,
         "properties": {
           "kind": {
@@ -4270,7 +4353,7 @@
         ],
         "type": "object"
       },
-      "Objects_21": {
+      "Objects_22": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4286,7 +4369,7 @@
         ],
         "type": "object"
       },
-      "Objects_22": {
+      "Objects_23": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4302,7 +4385,7 @@
         ],
         "type": "object"
       },
-      "Objects_23": {
+      "Objects_24": {
         "additionalProperties": false,
         "properties": {
           "categoryId": {
@@ -4319,7 +4402,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_2"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -4337,10 +4420,16 @@
             "$ref": "#/components/schemas/TransactionOccurredAt"
           },
           "presentation": {
-            "$ref": "#/components/schemas/Objects_20"
+            "$ref": "#/components/schemas/Objects_21"
           },
           "revision": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -4356,7 +4445,7 @@
         ],
         "type": "object"
       },
-      "Objects_24": {
+      "Objects_25": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4368,7 +4457,7 @@
         ],
         "type": "object"
       },
-      "Objects_25": {
+      "Objects_26": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4384,7 +4473,7 @@
         ],
         "type": "object"
       },
-      "Objects_26": {
+      "Objects_27": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4396,7 +4485,7 @@
         ],
         "type": "object"
       },
-      "Objects_27": {
+      "Objects_28": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4412,7 +4501,162 @@
         ],
         "type": "object"
       },
-      "Objects_28": {
+      "Objects_29": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          },
+          "counterparty": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Union_2"
+          },
+          "occurredAt": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "userProvidedFields": {
+            "items": {
+              "enum": [
+                "money",
+                "direction",
+                "counterparty",
+                "occurredAt",
+                "categoryId"
+              ],
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array"
+          }
+        },
+        "required": [
+          "amount",
+          "counterparty",
+          "occurredAt",
+          "userProvidedFields"
+        ],
+        "type": "object"
+      },
+      "Objects_3": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/User"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_30": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/Objects_29"
+          },
+          "item": {
+            "$ref": "#/components/schemas/Union_11"
+          },
+          "revision": {
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "suggestions": {
+            "$ref": "#/components/schemas/Objects_29"
+          }
+        },
+        "required": [
+          "item",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "Objects_31": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "counterparty": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          }
+        },
+        "required": [
+          "counterparty",
+          "amount"
+        ],
+        "type": "object"
+      },
+      "Objects_32": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/NeedsReviewItemId"
+          },
+          "revision": {
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "Objects_33": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Objects_30"
+            },
+            "type": "array"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_34": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4428,7 +4672,7 @@
         ],
         "type": "object"
       },
-      "Objects_29": {
+      "Objects_35": {
         "additionalProperties": false,
         "properties": {
           "message": {
@@ -4444,23 +4688,7 @@
         ],
         "type": "object"
       },
-      "Objects_3": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/KeywordRule"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_30": {
+      "Objects_36": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4472,7 +4700,7 @@
         ],
         "type": "object"
       },
-      "Objects_31": {
+      "Objects_37": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4488,7 +4716,7 @@
         ],
         "type": "object"
       },
-      "Objects_32": {
+      "Objects_38": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4500,7 +4728,7 @@
         ],
         "type": "object"
       },
-      "Objects_33": {
+      "Objects_39": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4516,7 +4744,23 @@
         ],
         "type": "object"
       },
-      "Objects_34": {
+      "Objects_4": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/KeywordRule"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_40": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4528,7 +4772,7 @@
         ],
         "type": "object"
       },
-      "Objects_35": {
+      "Objects_41": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4544,7 +4788,7 @@
         ],
         "type": "object"
       },
-      "Objects_36": {
+      "Objects_42": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -4563,7 +4807,7 @@
         ],
         "type": "object"
       },
-      "Objects_37": {
+      "Objects_43": {
         "additionalProperties": false,
         "properties": {
           "kind": {
@@ -4578,7 +4822,7 @@
         ],
         "type": "object"
       },
-      "Objects_38": {
+      "Objects_44": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4594,7 +4838,7 @@
         ],
         "type": "object"
       },
-      "Objects_39": {
+      "Objects_45": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4606,19 +4850,7 @@
         ],
         "type": "object"
       },
-      "Objects_4": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/KeywordRuleId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_40": {
+      "Objects_46": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4647,7 +4879,7 @@
         ],
         "type": "object"
       },
-      "Objects_41": {
+      "Objects_47": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4663,7 +4895,7 @@
         ],
         "type": "object"
       },
-      "Objects_42": {
+      "Objects_48": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4679,7 +4911,7 @@
         ],
         "type": "object"
       },
-      "Objects_43": {
+      "Objects_49": {
         "additionalProperties": false,
         "properties": {
           "exceptions": {
@@ -4687,6 +4919,7 @@
               "additionalProperties": false,
               "properties": {
                 "date": {
+                  "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                   "type": "string"
                 },
                 "planId": {
@@ -4695,7 +4928,7 @@
                   "type": "string"
                 },
                 "replacement": {
-                  "$ref": "#/components/schemas/Objects_45"
+                  "$ref": "#/components/schemas/Objects_51"
                 },
                 "skipped": {
                   "type": "boolean"
@@ -4722,7 +4955,7 @@
           },
           "fulfillments": {
             "items": {
-              "$ref": "#/components/schemas/Objects_47"
+              "$ref": "#/components/schemas/Objects_53"
             },
             "maxItems": 4096,
             "type": "array"
@@ -4741,9 +4974,11 @@
                     "additionalProperties": false,
                     "properties": {
                       "from": {
+                        "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                         "type": "string"
                       },
                       "through": {
+                        "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                         "type": "string"
                       }
                     },
@@ -4757,18 +4992,19 @@
                 },
                 "revisions": {
                   "items": {
-                    "$ref": "#/components/schemas/Objects_44"
+                    "$ref": "#/components/schemas/Objects_50"
                   },
                   "maxItems": 100,
                   "minItems": 1,
                   "prefixItems": [
                     {
-                      "$ref": "#/components/schemas/Objects_44"
+                      "$ref": "#/components/schemas/Objects_50"
                     }
                   ],
                   "type": "array"
                 },
                 "stoppedOn": {
+                  "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                   "type": "string"
                 }
               },
@@ -4783,7 +5019,13 @@
             "type": "array"
           },
           "revision": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "suggestions": {
@@ -4828,14 +5070,27 @@
         ],
         "type": "object"
       },
-      "Objects_44": {
+      "Objects_5": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/KeywordRuleId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_50": {
         "additionalProperties": false,
         "properties": {
           "from": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "plan": {
-            "$ref": "#/components/schemas/Objects_45"
+            "$ref": "#/components/schemas/Objects_51"
           }
         },
         "required": [
@@ -4844,7 +5099,7 @@
         ],
         "type": "object"
       },
-      "Objects_45": {
+      "Objects_51": {
         "additionalProperties": false,
         "properties": {
           "accountId": {
@@ -4878,19 +5133,21 @@
             "$ref": "#/components/schemas/Currency"
           },
           "endDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "firstDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "frequency": {
-            "$ref": "#/components/schemas/Union_13"
+            "$ref": "#/components/schemas/Union_17"
           },
           "kind": {
-            "$ref": "#/components/schemas/Union_12"
+            "$ref": "#/components/schemas/Union_16"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_46"
+            "$ref": "#/components/schemas/Objects_52"
           },
           "monthDays": {
             "maxItems": 2,
@@ -4899,8 +5156,14 @@
               {
                 "anyOf": [
                   {
-                    "maximum": 31,
-                    "minimum": 1,
+                    "allOf": [
+                      {
+                        "maximum": 31,
+                        "minimum": 1
+                      }
+                    ],
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
                     "type": "integer"
                   },
                   {
@@ -4914,8 +5177,14 @@
               {
                 "anyOf": [
                   {
-                    "maximum": 31,
-                    "minimum": 1,
+                    "allOf": [
+                      {
+                        "maximum": 31,
+                        "minimum": 1
+                      }
+                    ],
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
                     "type": "integer"
                   },
                   {
@@ -4950,7 +5219,7 @@
         ],
         "type": "object"
       },
-      "Objects_46": {
+      "Objects_52": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -4969,16 +5238,18 @@
         ],
         "type": "object"
       },
-      "Objects_47": {
+      "Objects_53": {
         "additionalProperties": false,
         "properties": {
           "actualDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "automatic": {
             "type": "boolean"
           },
           "date": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "id": {
@@ -4987,7 +5258,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_46"
+            "$ref": "#/components/schemas/Objects_52"
           },
           "planId": {
             "format": "uuid",
@@ -5013,26 +5284,28 @@
         ],
         "type": "object"
       },
-      "Objects_48": {
+      "Objects_54": {
         "additionalProperties": false,
         "properties": {
           "completed": {
             "$ref": "#/components/schemas/Money_2"
           },
           "date": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "expectedDate": {
+            "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "fulfillments": {
             "items": {
-              "$ref": "#/components/schemas/Objects_47"
+              "$ref": "#/components/schemas/Objects_53"
             },
             "type": "array"
           },
           "plan": {
-            "$ref": "#/components/schemas/Objects_45"
+            "$ref": "#/components/schemas/Objects_51"
           },
           "planId": {
             "format": "uuid",
@@ -5064,7 +5337,7 @@
         ],
         "type": "object"
       },
-      "Objects_49": {
+      "Objects_55": {
         "additionalProperties": false,
         "properties": {
           "edit": {
@@ -5084,7 +5357,7 @@
                     "type": "string"
                   },
                   "plan": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_51"
                   },
                   "seriesId": {
                     "format": "uuid",
@@ -5103,6 +5376,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "date": {
+                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                     "type": "string"
                   },
                   "kind": {
@@ -5112,7 +5386,7 @@
                     "type": "string"
                   },
                   "plan": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_51"
                   },
                   "planId": {
                     "format": "uuid",
@@ -5148,6 +5422,7 @@
                     "type": "string"
                   },
                   "date": {
+                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                     "type": "string"
                   },
                   "kind": {
@@ -5174,6 +5449,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "date": {
+                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                     "type": "string"
                   },
                   "kind": {
@@ -5203,7 +5479,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "fulfillment": {
-                    "$ref": "#/components/schemas/Objects_47"
+                    "$ref": "#/components/schemas/Objects_53"
                   },
                   "kind": {
                     "enum": [
@@ -5282,6 +5558,8 @@
             ]
           },
           "expectedRevision": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -5291,115 +5569,11 @@
         ],
         "type": "object"
       },
-      "Objects_5": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/KeywordRule"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_50": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Objects_43"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_51": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Memory"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_52": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_53": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Memory"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_54": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_55": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/MemoryId"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
       "Objects_56": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SubscriptionCancellation"
+            "$ref": "#/components/schemas/Objects_49"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5415,7 +5589,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/IssuedManualPATResponse"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5430,6 +5604,110 @@
       "Objects_58": {
         "additionalProperties": false,
         "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_59": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Memory"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_6": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/KeywordRule"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_60": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_61": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MemoryId"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_62": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SubscriptionCancellation"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_63": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/IssuedManualPATResponse"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_64": {
+        "additionalProperties": false,
+        "properties": {
           "publicCode": {
             "type": "string"
           }
@@ -5439,7 +5717,7 @@
         ],
         "type": "object"
       },
-      "Objects_59": {
+      "Objects_65": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5455,19 +5733,7 @@
         ],
         "type": "object"
       },
-      "Objects_6": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/KeywordRuleId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_60": {
+      "Objects_66": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5486,16 +5752,12 @@
       "Objects_7": {
         "additionalProperties": false,
         "properties": {
-          "data": {
+          "id": {
             "$ref": "#/components/schemas/KeywordRuleId"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
           }
         },
         "required": [
-          "data",
-          "next"
+          "id"
         ],
         "type": "object"
       },
@@ -5503,7 +5765,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Budget"
+            "$ref": "#/components/schemas/KeywordRuleId"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -5518,12 +5780,16 @@
       "Objects_9": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/BudgetId"
+          "data": {
+            "$ref": "#/components/schemas/Budget"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
           }
         },
         "required": [
-          "id"
+          "data",
+          "next"
         ],
         "type": "object"
       },
@@ -5630,7 +5896,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_15"
+            "$ref": "#/components/schemas/Union_19"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -5646,7 +5912,7 @@
             ]
           },
           "scopes": {
-            "$ref": "#/components/schemas/Arrays_5"
+            "$ref": "#/components/schemas/Arrays_7"
           },
           "shortId": {
             "$ref": "#/components/schemas/TokenShortId"
@@ -5698,7 +5964,7 @@
             "$ref": "#/components/schemas/PATRecipientLabel"
           },
           "scopes": {
-            "$ref": "#/components/schemas/Arrays_5"
+            "$ref": "#/components/schemas/Arrays_7"
           }
         },
         "required": [
@@ -5736,6 +6002,8 @@
               },
               "retryAfterSeconds": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -5993,7 +6261,7 @@
         "additionalProperties": false,
         "properties": {
           "cadence": {
-            "$ref": "#/components/schemas/Objects_37"
+            "$ref": "#/components/schemas/Objects_43"
           },
           "confirmationId": {
             "format": "uuid",
@@ -6010,7 +6278,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_36"
+            "$ref": "#/components/schemas/Objects_42"
           },
           "seriesId": {
             "format": "uuid",
@@ -6131,7 +6399,7 @@
             ]
           },
           "cadence": {
-            "$ref": "#/components/schemas/Objects_37"
+            "$ref": "#/components/schemas/Objects_43"
           },
           "confirmedAt": {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -6154,7 +6422,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "money": {
-            "$ref": "#/components/schemas/Objects_36"
+            "$ref": "#/components/schemas/Objects_42"
           }
         },
         "required": [
@@ -6328,8 +6596,14 @@
                 "type": "string"
               },
               "weekday": {
-                "maximum": 6,
-                "minimum": 0,
+                "allOf": [
+                  {
+                    "maximum": 6,
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -6392,8 +6666,14 @@
                 "type": "string"
               },
               "weekday": {
-                "maximum": 6,
-                "minimum": 0,
+                "allOf": [
+                  {
+                    "maximum": 6,
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -6491,13 +6771,25 @@
         "additionalProperties": false,
         "properties": {
           "hour": {
-            "maximum": 23,
-            "minimum": 0,
+            "allOf": [
+              {
+                "maximum": 23,
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "minute": {
-            "maximum": 59,
-            "minimum": 0,
+            "allOf": [
+              {
+                "maximum": 59,
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -6511,13 +6803,25 @@
         "additionalProperties": false,
         "properties": {
           "hour": {
-            "maximum": 23,
-            "minimum": 0,
+            "allOf": [
+              {
+                "maximum": 23,
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "minute": {
-            "maximum": 59,
-            "minimum": 0,
+            "allOf": [
+              {
+                "maximum": 59,
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -6778,6 +7082,8 @@
               },
               "retryAfterSeconds": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -6801,10 +7107,10 @@
         "additionalProperties": false,
         "properties": {
           "firstTransaction": {
-            "$ref": "#/components/schemas/Objects_23"
+            "$ref": "#/components/schemas/Objects_24"
           },
           "secondTransaction": {
-            "$ref": "#/components/schemas/Objects_23"
+            "$ref": "#/components/schemas/Objects_24"
           }
         },
         "required": [
@@ -6850,7 +7156,13 @@
         "additionalProperties": false,
         "properties": {
           "revokedCount": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -6889,6 +7201,8 @@
       },
       "ScheduleVersion": {
         "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
         "type": "integer"
       },
       "ScopeMissingEncoded": {
@@ -7002,6 +7316,11 @@
               "locale": {
                 "$ref": "#/components/schemas/Locale"
               },
+              "reviewItemId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                "type": "string"
+              },
               "serviceMarket": {
                 "$ref": "#/components/schemas/ServiceMarket"
               },
@@ -7022,6 +7341,19 @@
               },
               "transactionId": {
                 "$ref": "#/components/schemas/TransactionId"
+              },
+              "userProvidedFields": {
+                "items": {
+                  "enum": [
+                    "money",
+                    "direction",
+                    "counterparty",
+                    "occurredAt",
+                    "categoryId"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
               }
             },
             "required": [
@@ -7070,7 +7402,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "sourceProvider": {
                 "maxLength": 80,
@@ -7084,6 +7416,8 @@
               },
               "statementRecordNumber": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "statementSubmissionId": {
@@ -7301,13 +7635,13 @@
         "additionalProperties": false,
         "properties": {
           "categories": {
-            "$ref": "#/components/schemas/Arrays_2"
+            "$ref": "#/components/schemas/Arrays_3"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_5"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_6"
           },
           "title": {
             "maxLength": 80,
@@ -7333,16 +7667,16 @@
         "additionalProperties": false,
         "properties": {
           "categories": {
-            "$ref": "#/components/schemas/Arrays_2"
+            "$ref": "#/components/schemas/Arrays_3"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_5"
           },
           "id": {
             "$ref": "#/components/schemas/WidgetId"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_6"
           },
           "title": {
             "maxLength": 80,
@@ -7409,8 +7743,14 @@
         "additionalProperties": false,
         "properties": {
           "byteLength": {
-            "maximum": 5242880,
-            "minimum": 1,
+            "allOf": [
+              {
+                "maximum": 5242880,
+                "minimum": 1
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "sha256": {
@@ -7431,23 +7771,53 @@
         "additionalProperties": false,
         "properties": {
           "abandonedRows": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "acceptedRows": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "inputRows": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "needsReviewRows": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           },
           "skippedRows": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -7478,7 +7848,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_3"
+                "$ref": "#/components/schemas/Arrays_5"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -7491,10 +7861,12 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "serviceMarket": {
@@ -7507,7 +7879,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -7558,7 +7930,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_3"
+                "$ref": "#/components/schemas/Arrays_5"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -7571,10 +7943,12 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "serviceMarket": {
@@ -7587,7 +7961,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -7638,7 +8012,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_3"
+                "$ref": "#/components/schemas/Arrays_5"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -7653,6 +8027,8 @@
                     "properties": {
                       "endLine": {
                         "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
                         "type": "integer"
                       },
                       "fields": {
@@ -7666,6 +8042,8 @@
                       },
                       "recordNumber": {
                         "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
                         "type": "integer"
                       },
                       "sourceFormat": {
@@ -7676,6 +8054,8 @@
                       },
                       "startLine": {
                         "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
                         "type": "integer"
                       }
                     },
@@ -7738,10 +8118,18 @@
                       },
                       "rowNumber": {
                         "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
                         "type": "integer"
                       },
                       "sheetIndex": {
-                        "minimum": 0,
+                        "allOf": [
+                          {
+                            "minimum": 0
+                          }
+                        ],
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
                         "type": "integer"
                       },
                       "sheetName": {
@@ -7772,10 +8160,12 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "serviceMarket": {
@@ -7788,7 +8178,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -7839,7 +8229,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_3"
+                "$ref": "#/components/schemas/Arrays_5"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -7852,10 +8242,12 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "serviceMarket": {
@@ -7868,7 +8260,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -7919,7 +8311,7 @@
                 "$ref": "#/components/schemas/NeedsReviewItemId"
               },
               "issues": {
-                "$ref": "#/components/schemas/Arrays_3"
+                "$ref": "#/components/schemas/Arrays_5"
               },
               "knownMoney": {
                 "$ref": "#/components/schemas/Money_2"
@@ -7932,10 +8324,12 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_14"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "resolvedAt": {
@@ -7951,7 +8345,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8013,7 +8407,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "status": {
                 "enum": [
@@ -8045,7 +8439,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8084,7 +8478,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8127,7 +8521,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8171,7 +8565,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8225,7 +8619,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -9410,6 +9804,249 @@
           {
             "additionalProperties": false,
             "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/NeedsReviewItemId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "ingestion.getReviewItem"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "_tag": {
+                            "enum": [
+                              "Create"
+                            ],
+                            "type": "string"
+                          },
+                          "categoryId": {
+                            "$ref": "#/components/schemas/CategoryId"
+                          },
+                          "extraction": {
+                            "$ref": "#/components/schemas/TransactionExtraction"
+                          },
+                          "id": {
+                            "$ref": "#/components/schemas/NeedsReviewItemId"
+                          },
+                          "revision": {
+                            "allOf": [
+                              {
+                                "minimum": 0
+                              }
+                            ],
+                            "maximum": 9007199254740991,
+                            "minimum": -9007199254740991,
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "_tag": {
+                            "enum": [
+                              "SaveDraft"
+                            ],
+                            "type": "string"
+                          },
+                          "draft": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "maxLength": 120,
+                                "type": "string"
+                              },
+                              "categoryId": {
+                                "$ref": "#/components/schemas/CategoryId"
+                              },
+                              "counterparty": {
+                                "maxLength": 120,
+                                "type": "string"
+                              },
+                              "currency": {
+                                "$ref": "#/components/schemas/Currency"
+                              },
+                              "direction": {
+                                "$ref": "#/components/schemas/Union_2"
+                              },
+                              "occurredAt": {
+                                "maxLength": 120,
+                                "type": "string"
+                              },
+                              "userProvidedFields": {
+                                "items": {
+                                  "enum": [
+                                    "money",
+                                    "direction",
+                                    "counterparty",
+                                    "occurredAt",
+                                    "categoryId"
+                                  ],
+                                  "type": "string"
+                                },
+                                "maxItems": 5,
+                                "type": "array"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "id": {
+                            "$ref": "#/components/schemas/NeedsReviewItemId"
+                          },
+                          "revision": {
+                            "allOf": [
+                              {
+                                "minimum": 0
+                              }
+                            ],
+                            "maximum": 9007199254740991,
+                            "minimum": -9007199254740991,
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "_tag": {
+                            "enum": [
+                              "Skip"
+                            ],
+                            "type": "string"
+                          },
+                          "items": {
+                            "$ref": "#/components/schemas/Arrays_2"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "_tag": {
+                            "enum": [
+                              "Restore"
+                            ],
+                            "type": "string"
+                          },
+                          "items": {
+                            "$ref": "#/components/schemas/Arrays_2"
+                          }
+                        },
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "ingestion.applyReviewEdit"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "query": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "offset": {
+                        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+                        "type": "string"
+                      },
+                      "status": {
+                        "$ref": "#/components/schemas/Union_3"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "ingestion.getReviewWorkspace"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
               "hint": {
                 "maxLength": 140,
                 "minLength": 1,
@@ -9511,7 +10148,7 @@
                         "type": "string"
                       },
                       "status": {
-                        "$ref": "#/components/schemas/Union_2"
+                        "$ref": "#/components/schemas/Union_4"
                       }
                     },
                     "type": "object"
@@ -9808,7 +10445,7 @@
                 "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_"
+                    "$ref": "#/components/schemas/Objects_1"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInputPartial"
@@ -9844,7 +10481,7 @@
                 "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_"
+                    "$ref": "#/components/schemas/Objects_1"
                   }
                 },
                 "type": "object"
@@ -9877,7 +10514,7 @@
                 "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_"
+                    "$ref": "#/components/schemas/Objects_1"
                   }
                 },
                 "type": "object"
@@ -9982,9 +10619,11 @@
                         "type": "string"
                       },
                       "month": {
+                        "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                         "type": "string"
                       },
                       "previousMonth": {
+                        "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                         "type": "string"
                       },
                       "search": {
@@ -10054,7 +10693,7 @@
                                 "type": "string"
                               },
                               "plan": {
-                                "$ref": "#/components/schemas/Objects_1"
+                                "$ref": "#/components/schemas/Objects_2"
                               },
                               "seriesId": {
                                 "format": "uuid",
@@ -10068,6 +10707,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "date": {
+                                "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                 "type": "string"
                               },
                               "kind": {
@@ -10077,7 +10717,7 @@
                                 "type": "string"
                               },
                               "plan": {
-                                "$ref": "#/components/schemas/Objects_1"
+                                "$ref": "#/components/schemas/Objects_2"
                               },
                               "planId": {
                                 "format": "uuid",
@@ -10106,6 +10746,7 @@
                                 "type": "string"
                               },
                               "date": {
+                                "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                 "type": "string"
                               },
                               "kind": {
@@ -10126,6 +10767,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "date": {
+                                "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                 "type": "string"
                               },
                               "kind": {
@@ -10152,12 +10794,14 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "actualDate": {
+                                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                     "type": "string"
                                   },
                                   "automatic": {
                                     "type": "boolean"
                                   },
                                   "date": {
+                                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                     "type": "string"
                                   },
                                   "id": {
@@ -10260,6 +10904,8 @@
                         ]
                       },
                       "expectedRevision": {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
                         "type": "integer"
                       }
                     },
@@ -10614,7 +11260,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_2"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -10632,7 +11278,13 @@
             "$ref": "#/components/schemas/TransactionOccurredAt"
           },
           "revision": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -10691,7 +11343,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_2"
           },
           "money": {
             "$ref": "#/components/schemas/Money_2"
@@ -10713,8 +11365,14 @@
         "type": "string"
       },
       "TransactionListLimit": {
-        "maximum": 50,
-        "minimum": 1,
+        "allOf": [
+          {
+            "maximum": 50,
+            "minimum": 1
+          }
+        ],
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
         "type": "integer"
       },
       "TransactionListResult": {
@@ -10736,7 +11394,7 @@
         "additionalProperties": false,
         "properties": {
           "categories": {
-            "$ref": "#/components/schemas/Arrays_2"
+            "$ref": "#/components/schemas/Arrays_3"
           },
           "limit": {
             "$ref": "#/components/schemas/TransactionListLimit"
@@ -10770,7 +11428,7 @@
         "additionalProperties": false,
         "properties": {
           "categories": {
-            "$ref": "#/components/schemas/Arrays_2"
+            "$ref": "#/components/schemas/Arrays_3"
           },
           "id": {
             "$ref": "#/components/schemas/WidgetId"
@@ -10888,7 +11546,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_2"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -10908,7 +11566,7 @@
           "presentation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Objects_20"
+                "$ref": "#/components/schemas/Objects_21"
               },
               {
                 "anyOf": [
@@ -10951,7 +11609,13 @@
             ]
           },
           "revision": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -11052,6 +11716,8 @@
               },
               "retryAfterSeconds": {
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -11098,6 +11764,253 @@
       },
       "Union_10": {
         "enum": [
+          "csv",
+          "xlsx"
+        ],
+        "type": "string"
+      },
+      "Union_11": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "expiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "preview": {
+                "$ref": "#/components/schemas/Objects_31"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "revision": {
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "source": {
+                "$ref": "#/components/schemas/Union_12"
+              },
+              "status": {
+                "enum": [
+                  "created"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "$ref": "#/components/schemas/TransactionId"
+              }
+            },
+            "required": [
+              "revision",
+              "id",
+              "source",
+              "timeZone",
+              "reason",
+              "createdAt",
+              "expiresAt",
+              "status",
+              "transactionId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "expiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "preview": {
+                "$ref": "#/components/schemas/Objects_31"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "revision": {
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "source": {
+                "$ref": "#/components/schemas/Union_12"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "skipped",
+                  "expired"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "not": {}
+              }
+            },
+            "required": [
+              "revision",
+              "id",
+              "source",
+              "timeZone",
+              "reason",
+              "createdAt",
+              "expiresAt",
+              "status"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_12": {
+        "enum": [
+          "statement",
+          "email",
+          "media"
+        ],
+        "type": "string"
+      },
+      "Union_13": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Create"
+                ],
+                "type": "string"
+              },
+              "categoryId": {
+                "$ref": "#/components/schemas/CategoryId"
+              },
+              "extraction": {
+                "$ref": "#/components/schemas/TransactionExtraction_1"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "revision": {
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "_tag",
+              "id",
+              "revision",
+              "extraction"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "SaveDraft"
+                ],
+                "type": "string"
+              },
+              "draft": {
+                "$ref": "#/components/schemas/Objects_29"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "revision": {
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "_tag",
+              "id",
+              "revision",
+              "draft"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Skip"
+                ],
+                "type": "string"
+              },
+              "items": {
+                "$ref": "#/components/schemas/Arrays_4"
+              }
+            },
+            "required": [
+              "_tag",
+              "items"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Restore"
+                ],
+                "type": "string"
+              },
+              "items": {
+                "$ref": "#/components/schemas/Arrays_4"
+              }
+            },
+            "required": [
+              "_tag",
+              "items"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_14": {
+        "enum": [
           "malformed-source-row",
           "missing-required-fact",
           "ambiguous-direction",
@@ -11108,7 +12021,7 @@
         ],
         "type": "string"
       },
-      "Union_11": {
+      "Union_15": {
         "enum": [
           "provider-retrieval-failed",
           "processing-interrupted",
@@ -11116,7 +12029,7 @@
         ],
         "type": "string"
       },
-      "Union_12": {
+      "Union_16": {
         "enum": [
           "income",
           "expense",
@@ -11124,7 +12037,7 @@
         ],
         "type": "string"
       },
-      "Union_13": {
+      "Union_17": {
         "enum": [
           "weekly",
           "fortnightly",
@@ -11136,7 +12049,7 @@
         ],
         "type": "string"
       },
-      "Union_14": {
+      "Union_18": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -11148,11 +12061,23 @@
                 "type": "string"
               },
               "consumed": {
-                "minimum": 0,
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "limit": {
-                "minimum": 0,
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               },
               "period": {
@@ -11172,7 +12097,13 @@
                 "type": "object"
               },
               "remaining": {
-                "minimum": 0,
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ],
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
                 "type": "integer"
               }
             },
@@ -11202,7 +12133,7 @@
           }
         ]
       },
-      "Union_15": {
+      "Union_19": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -11212,7 +12143,15 @@
           }
         ]
       },
-      "Union_16": {
+      "Union_2": {
+        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+        "enum": [
+          "inflow",
+          "outflow"
+        ],
+        "type": "string"
+      },
+      "Union_20": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -11288,7 +12227,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_4"
+                    "$ref": "#/components/schemas/Objects_5"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/UpdateKeywordRuleInput"
@@ -11324,7 +12263,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_6"
+                    "$ref": "#/components/schemas/Objects_7"
                   }
                 },
                 "required": [
@@ -11388,7 +12327,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_9"
+                    "$ref": "#/components/schemas/Objects_10"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/UpdateBudgetInput_1"
@@ -11424,7 +12363,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_11"
+                    "$ref": "#/components/schemas/Objects_12"
                   }
                 },
                 "required": [
@@ -11640,7 +12579,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_24"
+                    "$ref": "#/components/schemas/Objects_25"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/UpdateTransactionInput"
@@ -11676,7 +12615,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_26"
+                    "$ref": "#/components/schemas/Objects_27"
                   }
                 },
                 "required": [
@@ -11687,6 +12626,38 @@
               "operation": {
                 "enum": [
                   "transactions.deleteTransaction"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "input"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "input": {
+                "additionalProperties": false,
+                "properties": {
+                  "payload": {
+                    "$ref": "#/components/schemas/Union_13"
+                  }
+                },
+                "required": [
+                  "payload"
+                ],
+                "type": "object"
+              },
+              "operation": {
+                "enum": [
+                  "ingestion.applyReviewEdit"
                 ],
                 "type": "string"
               }
@@ -11732,7 +12703,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_30"
+                    "$ref": "#/components/schemas/Objects_36"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ResolveNeedsReviewItemInput"
@@ -11768,7 +12739,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_32"
+                    "$ref": "#/components/schemas/Objects_38"
                   }
                 },
                 "required": [
@@ -11800,7 +12771,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_34"
+                    "$ref": "#/components/schemas/Objects_40"
                   }
                 },
                 "required": [
@@ -11864,7 +12835,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_39"
+                    "$ref": "#/components/schemas/Objects_45"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInput"
@@ -11900,7 +12871,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_39"
+                    "$ref": "#/components/schemas/Objects_45"
                   }
                 },
                 "required": [
@@ -11932,7 +12903,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_39"
+                    "$ref": "#/components/schemas/Objects_45"
                   }
                 },
                 "required": [
@@ -11964,7 +12935,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_49"
+                    "$ref": "#/components/schemas/Objects_55"
                   }
                 },
                 "required": [
@@ -12028,7 +12999,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_52"
+                    "$ref": "#/components/schemas/Objects_58"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ReviseInput"
@@ -12064,7 +13035,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_54"
+                    "$ref": "#/components/schemas/Objects_60"
                   }
                 },
                 "required": [
@@ -12152,7 +13123,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_58"
+                    "$ref": "#/components/schemas/Objects_64"
                   }
                 },
                 "required": [
@@ -12208,7 +13179,7 @@
           }
         ]
       },
-      "Union_17": {
+      "Union_21": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -12219,29 +13190,6 @@
               "operation": {
                 "enum": [
                   "identity.updateUserPreferences"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_2"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "categories.createKeywordRule"
                 ],
                 "type": "string"
               },
@@ -12264,12 +13212,35 @@
               },
               "operation": {
                 "enum": [
+                  "categories.createKeywordRule"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_4"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
                   "categories.updateKeywordRule"
                 ],
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_5"
+                "$ref": "#/components/schemas/Objects_6"
               }
             },
             "required": [
@@ -12292,7 +13263,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_7"
+                "$ref": "#/components/schemas/Objects_8"
               }
             },
             "required": [
@@ -12315,7 +13286,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_8"
+                "$ref": "#/components/schemas/Objects_9"
               }
             },
             "required": [
@@ -12338,7 +13309,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_10"
+                "$ref": "#/components/schemas/Objects_11"
               }
             },
             "required": [
@@ -12361,7 +13332,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_12"
+                "$ref": "#/components/schemas/Objects_13"
               }
             },
             "required": [
@@ -12384,7 +13355,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_13"
+                "$ref": "#/components/schemas/Objects_14"
               }
             },
             "required": [
@@ -12407,7 +13378,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_14"
+                "$ref": "#/components/schemas/Objects_15"
               }
             },
             "required": [
@@ -12430,7 +13401,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_17"
+                "$ref": "#/components/schemas/Objects_18"
               }
             },
             "required": [
@@ -12453,7 +13424,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_19"
+                "$ref": "#/components/schemas/Objects_20"
               }
             },
             "required": [
@@ -12476,7 +13447,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_21"
+                "$ref": "#/components/schemas/Objects_22"
               }
             },
             "required": [
@@ -12499,7 +13470,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_22"
+                "$ref": "#/components/schemas/Objects_23"
               }
             },
             "required": [
@@ -12522,7 +13493,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_25"
+                "$ref": "#/components/schemas/Objects_26"
               }
             },
             "required": [
@@ -12545,29 +13516,6 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_27"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "ingestion.enableEmailForwarding"
-                ],
-                "type": "string"
-              },
-              "output": {
                 "$ref": "#/components/schemas/Objects_28"
               }
             },
@@ -12586,30 +13534,7 @@
               },
               "operation": {
                 "enum": [
-                  "ingestion.resolveNeedsReviewItem"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_31"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "ingestion.skipNeedsReviewItem"
+                  "ingestion.applyReviewEdit"
                 ],
                 "type": "string"
               },
@@ -12632,76 +13557,76 @@
               },
               "operation": {
                 "enum": [
+                  "ingestion.enableEmailForwarding"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_34"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
+                  "ingestion.resolveNeedsReviewItem"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_37"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
+                  "ingestion.skipNeedsReviewItem"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_39"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
                   "ingestion.abandonStatementSubmission"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_35"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "insights.updateReminderSchedule"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_38"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "insights.markInsightDelivered"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_40"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "insights.markInsightRead"
                 ],
                 "type": "string"
               },
@@ -12724,12 +13649,81 @@
               },
               "operation": {
                 "enum": [
+                  "insights.updateReminderSchedule"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_44"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
+                  "insights.markInsightDelivered"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_46"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
+                  "insights.markInsightRead"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_47"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
                   "insights.dismissInsight"
                 ],
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_42"
+                "$ref": "#/components/schemas/Objects_48"
               }
             },
             "required": [
@@ -12752,7 +13746,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_50"
+                "$ref": "#/components/schemas/Objects_56"
               }
             },
             "required": [
@@ -12775,7 +13769,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_51"
+                "$ref": "#/components/schemas/Objects_57"
               }
             },
             "required": [
@@ -12798,7 +13792,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_53"
+                "$ref": "#/components/schemas/Objects_59"
               }
             },
             "required": [
@@ -12821,7 +13815,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_55"
+                "$ref": "#/components/schemas/Objects_61"
               }
             },
             "required": [
@@ -12844,7 +13838,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_56"
+                "$ref": "#/components/schemas/Objects_62"
               }
             },
             "required": [
@@ -12867,7 +13861,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_57"
+                "$ref": "#/components/schemas/Objects_63"
               }
             },
             "required": [
@@ -12890,7 +13884,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_59"
+                "$ref": "#/components/schemas/Objects_65"
               }
             },
             "required": [
@@ -12913,7 +13907,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_60"
+                "$ref": "#/components/schemas/Objects_66"
               }
             },
             "required": [
@@ -12925,7 +13919,17 @@
           }
         ]
       },
-      "Union_2": {
+      "Union_3": {
+        "enum": [
+          "pending",
+          "created",
+          "skipped",
+          "expired",
+          "history"
+        ],
+        "type": "string"
+      },
+      "Union_4": {
         "enum": [
           "pending",
           "expired",
@@ -12935,7 +13939,7 @@
         ],
         "type": "string"
       },
-      "Union_3": {
+      "Union_5": {
         "enum": [
           "category",
           "day",
@@ -12943,7 +13947,7 @@
         ],
         "type": "string"
       },
-      "Union_4": {
+      "Union_6": {
         "enum": [
           "this-week",
           "this-month",
@@ -12954,7 +13958,7 @@
         ],
         "type": "string"
       },
-      "Union_5": {
+      "Union_7": {
         "enum": [
           "sum",
           "average",
@@ -12962,22 +13966,14 @@
         ],
         "type": "string"
       },
-      "Union_6": {
+      "Union_8": {
         "enum": [
           "row",
           "column"
         ],
         "type": "string"
       },
-      "Union_7": {
-        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-        "enum": [
-          "inflow",
-          "outflow"
-        ],
-        "type": "string"
-      },
-      "Union_8": {
+      "Union_9": {
         "anyOf": [
           {
             "enum": [
@@ -12990,13 +13986,6 @@
             "$ref": "#/components/schemas/BesidePlacement"
           }
         ]
-      },
-      "Union_9": {
-        "enum": [
-          "csv",
-          "xlsx"
-        ],
-        "type": "string"
       },
       "UpdateBudgetInput": {
         "additionalProperties": false,
@@ -13115,7 +14104,7 @@
                 ]
               },
               "direction": {
-                "$ref": "#/components/schemas/Union_7"
+                "$ref": "#/components/schemas/Union_2"
               },
               "money": {
                 "$ref": "#/components/schemas/Money_2"
@@ -13140,7 +14129,13 @@
             "type": "object"
           },
           "expectedRevision": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -13203,7 +14198,13 @@
             "type": "object"
           },
           "expectedRevision": {
-            "minimum": 0,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
             "type": "integer"
           }
         },
@@ -13950,7 +14951,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_8"
+                  "$ref": "#/components/schemas/Objects_9"
                 }
               }
             },
@@ -14086,7 +15087,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_12"
+                  "$ref": "#/components/schemas/Objects_13"
                 }
               }
             },
@@ -14377,7 +15378,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_10"
+                  "$ref": "#/components/schemas/Objects_11"
                 }
               }
             },
@@ -14778,7 +15779,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_3"
+                  "$ref": "#/components/schemas/Objects_4"
                 }
               }
             },
@@ -14914,7 +15915,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_7"
+                  "$ref": "#/components/schemas/Objects_8"
                 }
               }
             },
@@ -15058,7 +16059,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_5"
+                  "$ref": "#/components/schemas/Objects_6"
                 }
               }
             },
@@ -15326,7 +16327,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_13"
+                  "$ref": "#/components/schemas/Objects_14"
                 }
               }
             },
@@ -15898,7 +16899,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_17"
+                  "$ref": "#/components/schemas/Objects_18"
                 }
               }
             },
@@ -16025,7 +17026,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_14"
+                  "$ref": "#/components/schemas/Objects_15"
                 }
               }
             },
@@ -16546,7 +17547,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_28"
+                  "$ref": "#/components/schemas/Objects_34"
                 }
               }
             },
@@ -16663,7 +17664,7 @@
             "name": "status",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_2"
+              "$ref": "#/components/schemas/Union_4"
             }
           },
           {
@@ -16842,7 +17843,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_31"
+                  "$ref": "#/components/schemas/Objects_37"
                 }
               }
             },
@@ -16978,7 +17979,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_33"
+                  "$ref": "#/components/schemas/Objects_39"
                 }
               }
             },
@@ -17043,6 +18044,802 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/ingestion/review-workspace": {
+      "get": {
+        "description": "Read the ingestion inbox ordered by original evidence expiry, or retained created, skipped and expired history. Returns metadata only, with a complete pending count and bounded pagination.",
+        "operationId": "ingestion.getReviewWorkspace",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Union_3"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/Union_11"
+                          },
+                          "type": "array"
+                        },
+                        "pendingCount": {
+                          "allOf": [
+                            {
+                              "minimum": 0
+                            }
+                          ],
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "allOf": [
+                            {
+                              "minimum": 0
+                            }
+                          ],
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "pendingCount",
+                        "total",
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/ingestion/review-workspace/{id}": {
+      "get": {
+        "description": "Read one owned ingestion item and its revision-bound draft. Expired drafts are not disclosed; the original deadline never extends.",
+        "operationId": "ingestion.getReviewItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/NeedsReviewItemId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Objects_30"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/ingestion/review-workspace/{id}/material": {
+      "get": {
+        "description": "Browser-only, no-store original evidence delivery while the original purpose remains unexpired. Escaped text only; media locators never promise retained bytes. Unavailable as an agent tool.",
+        "operationId": "ingestion.getReviewMaterial",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/NeedsReviewItemId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "available": {
+                              "enum": [
+                                true
+                              ],
+                              "type": "boolean"
+                            },
+                            "text": {
+                              "maxLength": 100000,
+                              "type": "string"
+                            },
+                            "truncated": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "text",
+                            "truncated"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "available": {
+                              "enum": [
+                                false
+                              ],
+                              "type": "boolean"
+                            },
+                            "reason": {
+                              "enum": [
+                                "expired",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "reason"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "type": "web-session-only"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/ingestion/review-workspace/{id}/suggestions": {
+      "get": {
+        "description": "Explicitly rerun available deterministic extraction against this browser owner's unexpired retained material. Returns suggestions only; never changes drafts or creates a Transaction. Unavailable processing remains retryable.",
+        "operationId": "ingestion.getReviewSuggestions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/NeedsReviewItemId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Objects_29"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "type": "web-session-only"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/ingestion/review-workspace/edits": {
+      "post": {
+        "description": "Autosave a draft, skip pending items, or restore skipped items using their observed revisions. Every item must remain unexpired. Bulk decisions are atomic; an uncertain outcome requires a reread.",
+        "operationId": "ingestion.applyReviewEdit",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Union_13"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Objects_33"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "429": {
             "content": {
@@ -17399,7 +19196,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_35"
+                  "$ref": "#/components/schemas/Objects_41"
                 }
               }
             },
@@ -17545,7 +19342,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_40"
+                  "$ref": "#/components/schemas/Objects_46"
                 }
               }
             },
@@ -17681,7 +19478,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_42"
+                  "$ref": "#/components/schemas/Objects_48"
                 }
               }
             },
@@ -17817,7 +19614,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_41"
+                  "$ref": "#/components/schemas/Objects_47"
                 }
               }
             },
@@ -18387,7 +20184,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_38"
+                  "$ref": "#/components/schemas/Objects_44"
                 }
               }
             },
@@ -18785,7 +20582,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_51"
+                  "$ref": "#/components/schemas/Objects_57"
                 }
               }
             },
@@ -18921,7 +20718,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_55"
+                  "$ref": "#/components/schemas/Objects_61"
                 }
               }
             },
@@ -19065,7 +20862,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_53"
+                  "$ref": "#/components/schemas/Objects_59"
                 }
               }
             },
@@ -19205,13 +21002,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_16"
+                      "$ref": "#/components/schemas/Union_20"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_16"
+                        "$ref": "#/components/schemas/Union_20"
                       }
                     ],
                     "type": "array"
@@ -19238,13 +21035,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_17"
+                            "$ref": "#/components/schemas/Union_21"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_17"
+                              "$ref": "#/components/schemas/Union_21"
                             }
                           ],
                           "type": "array"
@@ -19644,7 +21441,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_57"
+                  "$ref": "#/components/schemas/Objects_63"
                 }
               }
             },
@@ -20083,7 +21880,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_60"
+                  "$ref": "#/components/schemas/Objects_66"
                 }
               }
             },
@@ -20205,7 +22002,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_58"
+                "$ref": "#/components/schemas/Objects_64"
               }
             }
           },
@@ -20216,7 +22013,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_59"
+                  "$ref": "#/components/schemas/Objects_65"
                 }
               }
             },
@@ -20348,16 +22145,16 @@
                           "$ref": "#/components/schemas/AccessTier"
                         },
                         "canonicalCalls": {
-                          "$ref": "#/components/schemas/Union_14"
+                          "$ref": "#/components/schemas/Union_18"
                         },
                         "forwardedEmails": {
-                          "$ref": "#/components/schemas/Union_14"
+                          "$ref": "#/components/schemas/Union_18"
                         },
                         "hostedHistoryTurns": {
-                          "$ref": "#/components/schemas/Union_14"
+                          "$ref": "#/components/schemas/Union_18"
                         },
                         "mediaSubmissions": {
-                          "$ref": "#/components/schemas/Union_14"
+                          "$ref": "#/components/schemas/Union_18"
                         }
                       },
                       "required": [
@@ -20620,6 +22417,7 @@
             "name": "month",
             "required": true,
             "schema": {
+              "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
               "type": "string"
             }
           },
@@ -20628,6 +22426,7 @@
             "name": "previousMonth",
             "required": false,
             "schema": {
+              "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
               "type": "string"
             }
           },
@@ -20645,7 +22444,7 @@
             "name": "kind",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_12"
+              "$ref": "#/components/schemas/Union_16"
             }
           },
           {
@@ -20653,7 +22452,7 @@
             "name": "frequency",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_13"
+              "$ref": "#/components/schemas/Union_17"
             }
           },
           {
@@ -20707,7 +22506,7 @@
                       "additionalProperties": false,
                       "properties": {
                         "document": {
-                          "$ref": "#/components/schemas/Objects_43"
+                          "$ref": "#/components/schemas/Objects_49"
                         },
                         "invalidFulfillmentIds": {
                           "items": {
@@ -20729,6 +22528,7 @@
                                     "type": "string"
                                   },
                                   "date": {
+                                    "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
                                     "type": "string"
                                   },
                                   "direction": {
@@ -20757,7 +22557,7 @@
                                 "type": "object"
                               },
                               "item": {
-                                "$ref": "#/components/schemas/Objects_48"
+                                "$ref": "#/components/schemas/Objects_54"
                               }
                             },
                             "required": [
@@ -20772,21 +22572,23 @@
                           "type": "boolean"
                         },
                         "month": {
+                          "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                           "type": "string"
                         },
                         "occurrences": {
                           "items": {
-                            "$ref": "#/components/schemas/Objects_48"
+                            "$ref": "#/components/schemas/Objects_54"
                           },
                           "type": "array"
                         },
                         "previous": {
                           "items": {
-                            "$ref": "#/components/schemas/Objects_48"
+                            "$ref": "#/components/schemas/Objects_54"
                           },
                           "type": "array"
                         },
                         "previousMonth": {
+                          "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$",
                           "type": "string"
                         },
                         "summary": {
@@ -20803,12 +22605,14 @@
                                 "$ref": "#/components/schemas/Money_2"
                               },
                               "kind": {
-                                "$ref": "#/components/schemas/Union_12"
+                                "$ref": "#/components/schemas/Union_16"
                               },
                               "remaining": {
                                 "$ref": "#/components/schemas/Money_2"
                               },
                               "unknown": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
                                 "type": "integer"
                               }
                             },
@@ -20958,14 +22762,14 @@
     },
     "/recurring-plans/edits": {
       "post": {
-        "description": "Explicitly create, edit, pause, resume or stop a recurring plan; skip an occurrence; record/reverse a tracking mark or associate an effective Transaction; dismiss, restore or link a detected suggestion. Supply the observed document revision and stable UUIDs. Unknown outcomes require a reread, never blind replay. Manual marks create no Transactions; stopping tracking never cancels external services. All agent changes require exact User confirmation.",
+        "description": "Explicitly create, edit, pause, resume or stop a recurring plan; skip an occurrence; record/reverse a tracking mark or associate an effective Transaction; dismiss, restore or link a detected suggestion. Supply the observed document revision and stable UUIDs. Unknown outcomes require a reread, never blind replay. Manual marks create no Transactions; stopping tracking never cancels external services. Propose a clearly requested edit directly; the host obtains exact User confirmation before execution. Do not ask for a separate informal confirmation.",
         "operationId": "recurringPlans.applyRecurringEdit",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_49"
+                "$ref": "#/components/schemas/Objects_55"
               }
             }
           },
@@ -20976,7 +22780,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_50"
+                  "$ref": "#/components/schemas/Objects_56"
                 }
               }
             },
@@ -21233,7 +23037,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_56"
+                  "$ref": "#/components/schemas/Objects_62"
                 }
               }
             },
@@ -21785,7 +23589,7 @@
             "name": "direction",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_7"
+              "$ref": "#/components/schemas/Union_2"
             }
           },
           {
@@ -21952,7 +23756,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_19"
+                  "$ref": "#/components/schemas/Objects_20"
                 }
               }
             },
@@ -22088,7 +23892,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_27"
+                  "$ref": "#/components/schemas/Objects_28"
                 }
               }
             },
@@ -22379,7 +24183,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_25"
+                  "$ref": "#/components/schemas/Objects_26"
                 }
               }
             },
@@ -22668,7 +24472,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_21"
+                  "$ref": "#/components/schemas/Objects_22"
                 }
               }
             },
@@ -22958,7 +24762,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_22"
+                  "$ref": "#/components/schemas/Objects_23"
                 }
               }
             },
@@ -23225,7 +25029,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_2"
+                  "$ref": "#/components/schemas/Objects_3"
                 }
               }
             },

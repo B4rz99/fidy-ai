@@ -1,12 +1,17 @@
+import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { withErasureRecovery } from "../erasure/runtime";
 import { originalKeys } from "./internal/erasure-originals";
-
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureOriginals, makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureOriginals, ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Crypto, Effect, type Option } from "effect";
-import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
+import type {
+  ForwardedEmailEnvironment,
+  ForwardedEmailMessage,
+  ReviewRetentionWork,
+  ReviewUnavailable,
+} from "./contract";
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
@@ -133,6 +138,9 @@ export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) 
 /** Clear expired personal review evidence while retaining classification and conserved accounting. */
 export const expireStatementReviewEvidence: typeof expireReview = (input) => expireReview(input);
 
+export const sweepReviewDrafts = (
+  input: ReviewRetentionWork
+): Effect.Effect<void, ReviewUnavailable> => sweepDrafts(input);
 export const makeIngestionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
 

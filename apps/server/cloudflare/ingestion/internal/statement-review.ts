@@ -147,7 +147,7 @@ const loadStatementItems = ({
       WHEN r.evidence_expires_at_ms > ? THEN r.status ELSE 'expired' END) AS status,
     d.transaction_id, d.decided_at_ms, r.created_at_ms, r.service_market, r.locale, r.time_zone,
     r.source_format, r.parser_revision, r.extractor_revision
-    FROM statement_needs_review r LEFT JOIN statement_review_decisions d ON d.review_id = r.id
+    FROM statement_needs_review r LEFT JOIN ingestion_statement_review_decisions d ON d.review_id = r.id
     LEFT JOIN statement_clarifications c ON c.submission_id = r.submission_id
     WHERE r.user_id = ? AND (${guard.sql})
     ) AS projected WHERE (? IS NULL OR status = ?)
@@ -187,7 +187,7 @@ const loadEmailItems = (
           .prepare(`SELECT e.id, e.receipt_id, e.reason,
     e.created_at_ms, e.evidence_expires_at_ms, r.time_zone FROM forwarded_email_needs_review e
     JOIN forwarded_email_receipts r ON r.id = e.receipt_id AND r.user_id = e.user_id
-    WHERE e.user_id = ? ORDER BY e.created_at_ms DESC, e.id DESC LIMIT ?`)
+    WHERE e.user_id = ? AND NOT EXISTS (SELECT 1 FROM ingestion_review_state n WHERE n.id=e.id AND n.user_id=e.user_id AND n.status!='pending') ORDER BY e.created_at_ms DESC, e.id DESC LIMIT ?`)
           .bind(userId, maximumOffset + pageSize)
           .all(),
       catch: () => new ReviewReadUnavailable(),

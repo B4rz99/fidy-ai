@@ -40,7 +40,9 @@ export const generationAssertion = (
   input: Readonly<{ db: D1Database; generation: typeof ErasureGeneration.Type }>
 ): D1PreparedStatement =>
   input.db
-    .prepare(`INSERT INTO erasure_runtime_assertion(id,accepted)
-  SELECT 1,EXISTS(SELECT 1 FROM erasure_generation WHERE id=1 AND generation=?)
-  ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted`)
+    // Invalid JSON raises a native SQL error on mismatch, rolling back the enclosing batch.
+    // Keeping the assertion read-only avoids charging a write for every guarded read.
+    .prepare(`SELECT json(CASE
+  WHEN EXISTS(SELECT 1 FROM erasure_generation WHERE id=1 AND generation=?)
+  THEN 'true' ELSE '' END) AS accepted`)
     .bind(input.generation);

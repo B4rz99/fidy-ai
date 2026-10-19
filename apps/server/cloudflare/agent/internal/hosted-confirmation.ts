@@ -1,6 +1,6 @@
 import {
   CanonicalToolEvidence,
-  TranscriptText,
+  type TranscriptText,
   type TranscriptTurnId,
 } from "../../../src/core/agent/contract";
 import { type UserId } from "../../../src/core/identity/contract";
@@ -10,6 +10,8 @@ import { Hex } from "effect/encoding";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { newId } from "../../secret-material/operations";
+
+import { hostedChallengeText } from "./hosted-browser-confirmation";
 
 const lifetimeMs = 600_000;
 const nonceBytes = 32;
@@ -56,10 +58,14 @@ export const issueHostedConfirmation = ({
     const inputJson = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolEvidence))(
       input
     );
-    const text = Schema.decodeOption(TranscriptText)(
-      `Vas a ejecutar ${operation.id} con estos argumentos exactos: ${inputJson}.\n` +
-        `Responde exactamente: ${command}`
-    );
+    const text = yield* hostedChallengeText({
+      db,
+      userId,
+      operation: operation.id,
+      input,
+      inputJson,
+      command,
+    });
     if (Option.isNone(text)) return Option.none();
     const issued = yield* Effect.tryPromise(() =>
       db

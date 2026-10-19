@@ -268,6 +268,7 @@ describe("browser HTTP policy", () => {
           { boundary: "canonical", status: 503, code: "unavailable", retry: "1" },
           { boundary: "canonical", status: 429, code: "quota_exhausted", retry: "1" },
           { boundary: "canonical", status: 429, code: "rate_limited", retry: "invalid" },
+          { boundary: "canonical", status: 429, code: "rate_limited", retry: "3600" },
           { boundary: "web-auth", status: 429, code: "rate_limited", retry: "1" },
           { boundary: "enrollment", status: 429, code: "rate_limited", retry: "1" },
         ] as const;

@@ -36,6 +36,11 @@ const makeBearer = Effect.gen(function* () {
 });
 ```
 
+`randomUUIDv4()` and `randomUUIDv7()` are methods returning Effects. Their default format is a
+lowercase, hyphenated 36-character UUID string; `{ format: "bytes" }` returns 16 bytes. `randomULID`
+remains an Effect-valued property. Verify the `Crypto` interface and `make` implementation before
+porting examples from releases where UUID generation was an Effect-valued property.
+
 `Crypto.make` validates `randomBytes(size)` as a non-negative safe integer and exposes a
 `PlatformError` channel; `digest` also exposes `PlatformError`. Its underlying synchronous entropy
 callback can still throw a defect. Decide at the owning adapter whether platform failure is
@@ -48,7 +53,7 @@ Rules:
 - Use SHA-256 or stronger for fingerprints and lookup digests. SHA-1 exists for interoperability, not new security designs.
 - A fast digest does not make a low-entropy code safe against offline guessing. Include enough entropy or use a protocol-specific KDF/pepper design.
 - Hash the canonical bytes, not an ambiguously concatenated string. For multi-field proofs, use an unambiguous length-prefix/canonical encoding or a protocol-defined construction.
-- `randomUUIDv4`, `randomUUIDv7`, and `randomULID` produce identifiers, not bearer credentials.
+- `randomUUIDv4()`, `randomUUIDv7()`, and `randomULID` produce identifiers, not bearer credentials.
   Use explicit random bytes for secrets. ULIDs expose their creation time: their first 10 Crockford
   base32 characters encode the `Clock` timestamp in milliseconds and the remaining 16 encode 80
   random bits (see `Crypto.make` and `randomULID`). Use that sortability only when timestamp disclosure

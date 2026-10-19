@@ -1,10 +1,12 @@
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { signInRecurringThroughCore } from "./real-core-fixture";
+import { apiOrigin } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
 const successStatus = 200;
+const rateLimitedStatus = 429;
 const monthsPerYear = 12;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
   page,
@@ -171,14 +173,14 @@ const inspectMobile = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
     );
   });
 
-test("recovers a committed save with a lost acknowledgement through an explicit reread", ({
+test("keeps an uncertain save blocked across navigation until an explicit reread succeeds", ({
   page,
   request,
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringRecovery" })
+        signInRecurringThroughCore({ page, request, identity: "recurringEditing" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* Effect.tryPromise(() => page.route("**/recurring-plans/edits", loseAcknowledgement));
@@ -188,32 +190,89 @@ test("recovers a committed save with a lost acknowledgement through an explicit 
       yield* Effect.tryPromise(() =>
         page.getByLabel("Nombre", { exact: true }).fill("Guardado sin respuesta")
       );
+      yield* Effect.tryPromise(() => chooseDate(page, "Primera fecha", "2026-10-31"));
+      yield* Effect.tryPromise(() => chooseCurrency(page, "USD"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Guardar recurrente" }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("alert")).toContainText("No pudimos confirmar si se guardó")
       );
+      yield* Effect.tryPromise(() => page.keyboard.press("Escape"));
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Guardar recurrente" })).toBeDisabled()
+        expect(page.getByRole("button", { name: "Nuevo recurrente" })).toBeDisabled()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Actualizar recurrentes" }).click()
-      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Mes siguiente" }).click());
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/month=2026-11/u));
       yield* Effect.tryPromise(() =>
         expect(recurringItem(page, /Guardado sin respuesta/u)).toHaveCount(1)
       );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Nuevo recurrente" })).toBeDisabled()
+      );
+      yield* filterUsd(page);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar si se guardó")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Nuevo recurrente" })).toBeDisabled()
+      );
+      yield* recoverUncertainSave(page);
     })
   ));
 
+const recoverUncertainSave = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const workspaceRoute = `${apiOrigin}/recurring-plans?*`;
+    const refuseReread = (route: Route): Promise<void> =>
+      route.fulfill({
+        status: rateLimitedStatus,
+        contentType: "application/json",
+        headers: { "retry-after": "3600" },
+        body: '{"_tag":"ResourceLimited","error":{"code":"rate_limited","message":"Try again later.","retryAfterSeconds":3600},"next":[]}',
+      });
+    yield* Effect.tryPromise(() => page.route(workspaceRoute, refuseReread));
+    yield* Effect.tryPromise(() =>
+      Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.url().startsWith(`${apiOrigin}/recurring-plans?`) &&
+            response.status() === rateLimitedStatus
+        ),
+        page.getByRole("button", { name: "Actualizar recurrentes" }).click(),
+      ])
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Actualizar recurrentes" })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("alert")).toContainText("No pudimos confirmar si se guardó")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Nuevo recurrente" })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() => page.unroute(workspaceRoute, refuseReread));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Actualizar recurrentes" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Guardado sin respuesta/u)).toHaveCount(1)
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Nuevo recurrente" })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
+  });
+
 const loseAcknowledgement = (route: Route): Promise<void> =>
   route.request().method() === "POST"
-    ? route.fetch().then((response) =>
-        response.text().then((body) => {
+    ? route.fetch().then((response) => {
+        if (response.status() === rateLimitedStatus) return route.fulfill({ response });
+        return response.text().then((body) => {
           expect(response.status(), body).toBe(successStatus);
           return route.abort("failed");
-        })
-      )
+        });
+      })
     : route.continue();
 
 const expectCalendarItemFits = (page: Page): Effect.Effect<void, Cause.UnknownError> =>

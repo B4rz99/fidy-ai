@@ -87,7 +87,7 @@ const workerCrypto = Crypto.make({
         }),
     }),
 });
-const uuid = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+const uuid = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 const instant = (epochMs: number): string => DateTime.formatIso(DateTime.makeUnsafe(epochMs));
 const json = (body: object, status = 200, headers?: HeadersInit): Response => {
   const responseHeaders = new Headers(headers);

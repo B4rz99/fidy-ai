@@ -1,13 +1,16 @@
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
+import { refusedByAuditBudget } from "../../src/shell/audit/operations";
 import {
   RecurringWorkspace,
   RecurringWorkspaceQuery,
 } from "../../src/shell/recurring-plans/contract";
 import { RecurringCommand } from "../../src/core/recurring-plans/contract";
-import { applyRecurringEdit } from "../../src/core/recurring-plans/operations";
+import { applyRecurringEdit, planAt } from "../../src/core/recurring-plans/operations";
 import {
   type QueryCaller,
+  boundaryFailure,
   callerScope,
+  canonicalAuditRateLimitedResponse,
   credentialRefusedPreparation,
   failedPreparation,
   isOAuthCaller,
@@ -29,6 +32,8 @@ import { workspaceValue } from "./internal/query";
 import { outcome, validReversal, validateReferences } from "./internal/mutation";
 import { audit, credentialUse } from "./internal/audit";
 import { completion, encodeDocument, readDocument, writeDocument } from "./internal/store";
+
+import { TransactionBoundaryFailure } from "../canonical-work/contract";
 
 const operation = "recurringPlans.applyRecurringEdit";
 
@@ -72,19 +77,27 @@ export const browseRecurringPlans = ({
       query: query.value,
     });
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))(view);
-    yield* Effect.tryPromise(() =>
-      db.batch([
-        ...credentialUse({ db, subject, current }),
-        audit({
-          work: { db, subject, current },
-          operation: "recurringPlans.getRecurringWorkspace",
-          outcome: "accepted",
-        }),
-        db.prepare(completion),
-      ])
-    );
+    yield* Effect.tryPromise({
+      try: () =>
+        db.batch([
+          ...credentialUse({ db, subject, current }),
+          audit({
+            work: { db, subject, current },
+            operation: "recurringPlans.getRecurringWorkspace",
+            outcome: "accepted",
+          }),
+          db.prepare(completion),
+        ]),
+      catch: boundaryFailure,
+    });
     return Response.json({ data, next: [] }, { headers: transactionNoStore });
-  }).pipe(Effect.orElseSucceed(transactionUnavailable));
+  }).pipe(
+    Effect.catch((cause) =>
+      cause instanceof TransactionBoundaryFailure && refusedByAuditBudget(cause.cause)
+        ? Effect.map(Clock.currentTimeMillis, canonicalAuditRateLimitedResponse)
+        : Effect.succeed(transactionUnavailable())
+    )
+  );
 
 /** Prepare, never commit, a revision-bound User mutation inside the existing canonical unit. */
 export const prepareRecurringEdit = ({
@@ -172,3 +185,26 @@ export const recurringRefusal = (work: RecurringAuditWork): CanonicalMutationRef
         : transactionUnavailable()
     ),
 });
+
+/** Describe an owned, revision-bound lifecycle decision without exposing storage identities. */
+export const describeRecurringLifecycle = ({
+  db,
+  userId,
+  command,
+}: Readonly<{ db: D1Database; userId: string; command: RecurringCommand }>): Effect.Effect<
+  Option.Option<string>
+> =>
+  Effect.gen(function* () {
+    const edit = command.edit;
+    if (edit.kind !== "lifecycle") return Option.none();
+    const document = yield* readDocument({ db, userId });
+    if (document.revision !== command.expectedRevision) return Option.none();
+    const plan = document.plans.find((entry) => entry.id === edit.planId);
+    if (plan === undefined) return Option.none();
+    const actions = { pause: "Pausar", resume: "Reanudar", stop: "Dejar de seguir" };
+    const date = edit.date.split("-").reverse().join("-");
+    return Option.some(
+      `${actions[edit.action]} «${planAt({ plan, date: edit.date }).name}» desde el ${date}. ` +
+        "Conserva el historial y no cancela servicios ni mueve dinero."
+    );
+  }).pipe(Effect.orElseSucceed(() => Option.none()));

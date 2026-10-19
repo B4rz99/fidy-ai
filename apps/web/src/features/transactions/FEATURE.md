@@ -1,5 +1,22 @@
 # Transactions
 
+Historical-date audit, 2026-10-16: production displayed an empty October history even after selecting
+15-09-2026, although the recurring fixture had a retained September Transaction. The calendar only
+filtered already-loaded current-month records. The follow-up makes the selected calendar date own
+the canonical query month, retaining the User's IANA time zone and half-open month bounds. A changed
+month replaces query/continuation/editing state, while clearing the day keeps that month. The
+privacy read-only history retains its existing unbounded query. All 21 browser checks across
+privacy read-only history, pagination, deletion and actual Core/D1 persistence passed, including selected-month fetch and
+clearing the day without returning to the current month. Five Transaction presentation/scroll unit
+checks and repository lint, typed lint, format and type gates passed. Deployment and live historical
+fixture deletion evidence remain pending.
+
+The historical-date fix merged in [PR #1354](https://github.com/B4rz99/fidy-ai/pull/1354) and
+deployed successfully through [run 38912895285](https://github.com/B4rz99/fidy-ai/actions/runs/38912895285).
+Public health reported `available` at exact revision `6c0f5fff24b47985c213329bb141e70a4ae469ef`.
+Populated live historical-date verification and fixture cleanup remain blocked by the fixture
+User's separate 256-call canonical UTC-day budget; this is not recorded as a passing live read.
+
 Effect 4.0.2 continuation, 2026-10-14, baseline `30f585ceb1a811a97c523251ea6bd0bee13fc07f`: all seven built-browser checks across deletion, Budgets and the Budget Widget passed. Production capture created the fictional `PRUEBA QA AUDITORIA 20261014`, COP 1 expense dated 14-10-2026. Changing Otros to Restaurantes in the table saved directly without opening the editor; reload retained the Category, amount and date. Opening deletion displayed the explicit irreversible-deletion review; cancellation retained the record. After action-time approval, the browser deleted only this fixture through “Eliminar definitivamente”. A full reload returned an empty history with zero Transactions, income and expense counts. This closes current-artifact production deletion and reload persistence for the fixture; direct Audit/SourceAttestation retention for this new deletion was not inspected.
 
 Rebased audit, 2026-10-14, release baseline `a387f50fb5`: seven built-browser journeys passed across Transactions deletion/pagination, Budgets, and the Dashboard Budget Widget. The Transactions checks include cancellation, pending submission locks, rejected deletion, lost acknowledgement followed by canonical refresh without replay, and an actual Core/D1 105-record history whose second-page correction and deletion persist after reload. Controlled HTTP refusal journeys and actual persistence journeys remain distinct. The Transaction and Budget Worker/D1 suites passed alongside onboarding (the latter needed the browser session-binding header in its restored recovery fixture). No production Transaction was created or deleted in this rerun.
@@ -10,7 +27,9 @@ Broad non-AI audit, 2026-10-12, baseline `9aafe8db54`: all 449 web checks, 427 C
 
 Current local pagination regression, 2026-10-12, trunk baseline `9aafe8db54`: the native Core/D1 browser journey passed again within the 24-check provider/OAuth/pagination run (1.9 minutes). It loaded 105 retained Transactions across the 100-record boundary and verified a second-page correction after reload. The currently selected production User has zero visible Transactions; that empty result cannot establish live multi-page continuation.
 
-`/app/transactions` displays the User's current local month. This is a capability and verification map, not a separate specification.
+`/app/transactions` initially displays the User's current local month. Selecting a calendar date loads
+that date's local month and filters its records to the selected day. Clearing the day retains the
+selected month. A full reload starts in the current month. This is a capability and verification map, not a separate specification.
 
 | Capability              | Behaviour                                                                                                                                                                                                                                                                                                                                                          | Verification                                                                                                                                                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

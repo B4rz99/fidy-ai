@@ -2,7 +2,7 @@ import { Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
 import { Clock, Effect } from "effect";
 import { expect } from "vitest";
-import { completeCanary, readCanaryHealth, receiveCanary } from "./operations";
+import { completeCanary, readCanaryHealth, receiveCanary, sendCanary } from "./operations";
 
 it.live(
   "reports unexecuted Queue and Workflow canaries as unavailable, then separates their actual completions",
@@ -107,4 +107,25 @@ it.live(
         (instance) => Effect.tryPromise(() => instance.dispose()).pipe(Effect.orDie)
       )
     )
+);
+
+it.effect("publishes once across the five minute ticks of a canary period", () =>
+  Effect.gen(function* () {
+    const sent: unknown[] = [];
+    const queue = {
+      send: (body: unknown): Promise<QueueSendResponse> => {
+        sent.push(body);
+        return Promise.resolve({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } });
+      },
+    };
+    for (const now of [3_005_000, 3_065_000, 3_125_000, 3_185_000, 3_245_000, 3_305_000]) {
+      yield* Effect.tryPromise(() =>
+        sendCanary({ queue, now, signal: new AbortController().signal })
+      );
+    }
+    expect(sent).toEqual([
+      { version: 1, sentAtMs: 3_000_000 },
+      { version: 1, sentAtMs: 3_300_000 },
+    ]);
+  })
 );

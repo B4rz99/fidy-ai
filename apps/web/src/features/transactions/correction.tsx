@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomSet } from "@effect/atom-react";
 import { BigDecimal, DateTime, Option } from "effect";
@@ -236,9 +237,7 @@ const CorrectionFeedback = ({
           No se guardaron los cambios. Actualiza el historial y vuelve a abrir la transacción para
           revisar su versión actual.
         </p>
-        <Button variant="outline" onClick={onRefresh}>
-          Actualizar historial
-        </Button>
+        <RefreshButton variant="outline" onClick={onRefresh} label="Actualizar historial" />
       </div>
     ) : null}
     {status === "uncertain" ? (
@@ -247,9 +246,7 @@ const CorrectionFeedback = ({
           No pudimos confirmar los cambios. Actualiza el historial y revisa la transacción antes de
           volver a editarla.
         </p>
-        <Button variant="outline" onClick={onRefresh}>
-          Actualizar historial
-        </Button>
+        <RefreshButton variant="outline" onClick={onRefresh} label="Actualizar historial" />
       </div>
     ) : null}
   </>

@@ -15,10 +15,37 @@ import { fileURLToPath } from "node:url";
 import { RuleTester } from "oxlint/plugins-dev";
 import effectGuards from "./effect-guards.js";
 import testGuards from "./test-guards.js";
+import effectRecovery from "./effect-recovery.js";
 
 const routeFile = fileURLToPath(new URL("../../apps/web/src/app/routes.ts", import.meta.url));
 const otherFile = fileURLToPath(new URL("../../apps/web/src/app/other.ts", import.meta.url));
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
+
+tester.run("effect-recovery/no-catch-succeed-none", effectRecovery.rules["no-catch-succeed-none"], {
+  valid: [
+    'import { Effect, Option } from "effect"; work.pipe(Effect.orElseSucceed(Option.none));',
+    'import { Effect } from "effect"; Effect.catch(() => Effect.succeed(1));',
+    'import { Effect } from "effect"; Effect.catch(() => { observe(); return Effect.succeedNone; });',
+    'import { Effect } from "effect"; Effect.catch((failure) => Effect.succeedNone);',
+    'import { Effect } from "effect"; Effect.catch(async () => Effect.succeedNone);',
+    'import { Effect } from "effect"; Effect.catch(() => other.succeedNone);',
+    'import { Effect } from "effect"; other.catch(() => Effect.succeedNone);',
+    'import { Effect } from "effect"; function inspect(Effect) { Effect.catch(() => Effect.succeedNone); }',
+    'import { Effect } from "effect"; Effect.catch(() => { const Effect = other; return Effect.succeedNone; });',
+    'import { Effect } from "other"; Effect.catch(() => Effect.succeedNone);',
+    "const Effect = other; Effect.catch(() => Effect.succeedNone);",
+    "Effect.catch(() => Effect.succeedNone);",
+    'import { Effect } from "effect"; Effect.catch(() => Effect[method]);',
+    'import type { Effect } from "effect"; Effect.catch(() => Effect.succeedNone);',
+  ],
+  invalid: [
+    'import { Effect } from "effect"; work.pipe(Effect.catch(() => Effect.succeedNone));',
+    'import { Effect as Fx } from "effect"; Fx.catch(work, () => Fx.succeedNone);',
+    'import * as Fx from "effect/Effect"; Fx.catch(() => Fx.succeedNone);',
+    'import { catch as recover, succeedNone as empty } from "effect/Effect"; recover(() => empty);',
+    'import { Effect } from "effect"; Effect["catch"](() => Effect["succeedNone"]);',
+  ].map((code) => ({ code, errors: [{ messageId: "catchSucceedNone" }] })),
+});
 
 tester.run("test-guards/no-tsx-tests", testGuards.rules["no-tsx-tests"], {
   valid: [
@@ -230,7 +257,7 @@ const testProbe = join(workspaceRoot, `apps/web/src/.lint-test-probe-${process.p
 try {
   writeFileSync(
     testProbe,
-    'import { vi } from "vitest";\nimport { render } from "@testing-library/react";\nvi.mock("./owner", () => ({}));\n'
+    'import { vi } from "vitest";\nimport { render } from "@testing-library/react";\nimport { Effect } from "effect";\nvi.mock("./owner", () => ({}));\nEffect.catch(() => Effect.succeedNone);\n'
   );
   const result = spawnSync(
     "./node_modules/.bin/oxlint",
@@ -241,6 +268,7 @@ try {
   for (const rule of ["no-tsx-tests", "no-module-mocks", "no-react-test-tools"]) {
     assert.ok(report.includes(`test-guards(${rule})`), report);
   }
+  assert.ok(report.includes("effect-recovery(no-catch-succeed-none)"), report);
   assert.notEqual(result.status, 0);
 } finally {
   unlinkSync(testProbe);

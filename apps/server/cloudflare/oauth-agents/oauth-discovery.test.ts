@@ -233,6 +233,7 @@ it.each(discoveryCases)(
 
 const expectedQueryFailure = (id: string, peer: boolean): boolean =>
   id === "ingestion.getStatementSubmission" ||
+  id === "ingestion.getReviewItem" ||
   id === "insights.getRecurringDigestReport" ||
   (peer &&
     [

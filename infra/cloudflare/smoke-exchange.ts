@@ -20,6 +20,7 @@ const refusedStatus = 503;
 export class ReleaseSmokeFailed extends Data.TaggedError("ReleaseSmokeFailed")<{
   readonly reason: string;
 }> {}
+export class D1QuotaDeferred extends Data.TaggedError("D1QuotaDeferred")<{}> {}
 export class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingPending")<{
   readonly reason: string;
 }> {}
@@ -161,6 +162,19 @@ const publicAccepted = (response: SmokeExchange, expectedPublic: SmokeIdentity):
   response.noStore &&
   Option.contains(response.publicVersion, expectedPublic.workerVersionId);
 
+const isQuotaRefusal = (response: SmokeExchange, expectedPublic: SmokeIdentity): boolean =>
+  response.status === refusedStatus &&
+  response.noStore &&
+  Option.contains(response.publicVersion, expectedPublic.workerVersionId) &&
+  Option.contains(response.failureStage, "d1_quota");
+
+const shouldReplay = (
+  response: SmokeExchange,
+  expected: Readonly<{ public: SmokeIdentity; replayIdentity: boolean }>
+): boolean =>
+  isRoutingFallback(response, expected.public) ||
+  (expected.replayIdentity && isIdentityRefusal(response, expected.public));
+
 /** Classifies only pre-admission routing evidence as replayable. The runner decides whether and how to retry. */
 export const checkSmokeExchange = Effect.fn(function* (
   response: SmokeExchange,
@@ -170,13 +184,13 @@ export const checkSmokeExchange = Effect.fn(function* (
     replayIdentity: boolean;
   }>
 ) {
-  if (
-    isRoutingFallback(response, expected.public) ||
-    (expected.replayIdentity && isIdentityRefusal(response, expected.public))
-  ) {
+  if (shouldReplay(response, expected)) {
     return yield* new CandidateRoutingPending({
       reason: smokeDiagnostic(response, expected.public),
     });
+  }
+  if (isQuotaRefusal(response, expected.public)) {
+    return yield* new D1QuotaDeferred();
   }
   if (!publicAccepted(response, expected.public)) {
     return yield* new ReleaseSmokeFailed({ reason: smokeDiagnostic(response, expected.public) });

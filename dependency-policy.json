@@ -1,15 +1,15 @@
 {
   "$comment": [
     "Updates this repo has decided not to take yet. Read by scripts/check-dependency-updates.ts,",
-    "which fails on any compatible update \u2014 patch, minor, or prerelease-to-stable \u2014 that a pin has",
+    "which fails on any compatible update — patch, minor, or prerelease-to-stable — that a pin has",
     "not taken. An entry here downgrades that failure to a warning until its date; it never hides it.",
     "`until` is exclusive: a deferral dated 2026-09-01 stops applying on 2026-09-01. Give a reason a",
-    "reader in three months can act on \u2014 what breaks, and what has to happen first.",
+    "reader in three months can act on — what breaks, and what has to happen first.",
     "`manifest` scopes an entry to one manifest; omit it and the entry speaks for every pin of that",
     "name, which is wrong whenever the same package is pinned twice for different reasons.",
     "",
     "`acceptedVulnerabilities` is the other half: a vulnerability this repo ships with, because the",
-    "install delay in bunfig.toml is never punctured \u2014 not even to reach a fix. A release published",
+    "install delay in bunfig.toml is never punctured — not even to reach a fix. A release published",
     "days ago is how a compromised package arrives, so the delay outranks a known CVE, and when the",
     "only fix is too young the vulnerability is carried instead. Each entry pairs one advisory with",
     "one lockfile, matching an `sca.exclusions` entry in .fluidattacks/sca.yaml, which is where the",
@@ -32,6 +32,12 @@
     },
     {
       "name": "typescript",
+      "manifest": "tools/astro/package.json",
+      "reason": "AstroCheck from @astrojs/language-server 2.17.2 rejects TypeScript 7.0.2 before checking any files because findConfigFile and sys are absent. Reproduced with the installed workspace compiler on 2026-10-16 UTC; the isolated TypeScript 6.0.3 checker remains operational. TypeScript 7.0 intentionally ships no programmatic API (https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/); revisit when Astro supports its replacement API, then rerun the site checker and repository typecheck before updating.",
+      "until": "2026-12-20T00:00:00Z"
+    },
+    {
+      "name": "typescript",
       "manifest": "tools/depcruise/package.json",
       "reason": "With TypeScript 7.0.2, dependency-cruiser silently cruises zero modules and the repo's tripwire exits because no architecture rules ran. Revisit after TypeScript 7.1 ships the replacement compiler API and dependency-cruiser adopts it.",
       "until": "2026-12-20T00:00:00Z"
@@ -45,16 +51,16 @@
     {
       "name": "@effect/tsgo",
       "manifest": "package.json",
-      "reason": "0.48.0 still introduces 1,378 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-10 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
-      "until": "2026-10-17T00:00:00Z"
+      "reason": "0.51.1 introduces 3,278 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits with status 2. Reproduced by normal installation and bun run typecheck on 2026-10-17 UTC. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
+      "until": "2026-10-24T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": [
     {
       "cve": "CVE-2026-93687",
       "path": "bun.lock",
-      "reason": "Temporarily retain the required shadcn 4.21.0 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; the GitHub advisory still lists no patched version as rechecked on 2026-10-10 UTC. The User explicitly approved renewal of this existing development-CLI exception through 2026-10-17 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
-      "until": "2026-10-17T00:00:00Z"
+      "reason": "Temporarily retain the required shadcn 4.21.4 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GitHub advisory GHSA-vfj7-8cjw-p6xm still lists no patched version, rechecked on 2026-10-17 UTC. The User explicitly approved renewing this existing development-only exception through 2026-10-24 UTC. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs. Recheck upstream before expiry; upgrade or replace the affected chain only after releases meet the unchanged seven-day minimumReleaseAge. Rerun CLI/application verification and SCA, and remove this record and its matching scanner exclusion when resolved.",
+      "until": "2026-10-24T00:00:00Z"
     }
   ]
 }

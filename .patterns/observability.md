@@ -1,6 +1,6 @@
 # Effect v4 observability at the Cloudflare boundary
 
-Import from `effect`. Selected Effect 4.0.2 sources: `node_modules/effect/src/{Effect,Tracer,Logger,Metric,ErrorReporter}.ts`.
+Import from `effect`. Selected Effect 4.0.3 sources: `node_modules/effect/src/{Effect,Tracer,Logger,Metric,ErrorReporter}.ts`.
 
 Telemetry is a closed, provider-neutral metadata contract. Cloudflare logs, traces, metrics, and
 alerts are adapters; core and domain code do not import an observability SDK.

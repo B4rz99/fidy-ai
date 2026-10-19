@@ -1,3 +1,4 @@
+import { CategoryId } from "~/core/categories/contract";
 import { freeAllowanceLimits } from "~/core/quotas/contract";
 import { Option, Schema, Struct } from "effect";
 import {
@@ -7,7 +8,7 @@ import {
 import { Money } from "~/core/_shared/money";
 import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { TransactionExtraction, TransactionId } from "~/core/transactions/contract";
+import { Direction, TransactionExtraction, TransactionId } from "~/core/transactions/contract";
 
 /**
  * An explicit source instant or normalized local date, interpreted in captured context. An absent
@@ -616,6 +617,7 @@ export type NeedsReviewStatementRow = Readonly<{
   recordNumber: number;
   reason: NeedsReviewReason;
   knownMoney: Option.Option<Money>;
+  suggestions: Option.Option<ReviewDraft>;
   issues: ReadonlyArray<typeof CapturedFieldIssue.Type>;
   evidence: StatementRowEvidence;
 }>;
@@ -682,3 +684,95 @@ export const StatementStagingFailureReason = Schema.Literals([
   "paywall",
 ]);
 export type StatementStagingFailureReason = typeof StatementStagingFailureReason.Type;
+
+export const ReviewStatus = Schema.Literals(["pending", "created", "skipped", "expired"]);
+const maximumReviewPreviewLength = 120;
+const ReviewPreview = Schema.Struct({
+  counterparty: Schema.String.check(Schema.isMaxLength(maximumReviewPreviewLength)),
+  amount: Schema.String.check(Schema.isMaxLength(maximumReviewPreviewLength)),
+  currency: Schema.OptionFromOptionalKey(Money.fields.currency),
+});
+export const ReviewMetadata = Schema.Struct({
+  preview: Schema.OptionFromOptionalKey(ReviewPreview),
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  id: NeedsReviewItemId,
+  source: Schema.Literals(["statement", "email", "media"]),
+  timeZone: CapturedInterpretationContext.fields.timeZone,
+  reason: Schema.String,
+  createdAt: UtcTimestamp,
+  expiresAt: UtcTimestamp,
+});
+export const ReviewSummary = Schema.Union([
+  Schema.Struct({
+    ...ReviewMetadata.fields,
+    status: Schema.Literal("created"),
+    transactionId: TransactionId,
+  }),
+  Schema.Struct({
+    ...ReviewMetadata.fields,
+    status: Schema.Literals(["pending", "skipped", "expired"]),
+    transactionId: Schema.OptionFromOptionalKey(Schema.Never),
+  }),
+]);
+export type ReviewSummary = typeof ReviewSummary.Type;
+export const ReviewWorkspace = Schema.Struct({
+  pendingCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  items: Schema.Array(ReviewSummary),
+});
+export const ReviewWorkspaceQuery = Schema.Struct({
+  status: Schema.OptionFromOptionalKey(
+    Schema.Literals(["pending", "created", "skipped", "expired", "history"])
+  ),
+  offset: Schema.OptionFromOptionalKey(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }))
+  ),
+});
+export const reviewPageSize = 50;
+
+const maximumReviewDraftFieldLength = 120;
+const maximumReviewProvidedFields = 5;
+export const ReviewField = Schema.Literals([
+  "money",
+  "direction",
+  "counterparty",
+  "occurredAt",
+  "categoryId",
+]);
+export const ReviewDraft = Schema.Struct({
+  amount: Schema.String.check(Schema.isMaxLength(maximumReviewDraftFieldLength)),
+  currency: Schema.OptionFromOptionalKey(Money.fields.currency),
+  direction: Schema.OptionFromOptionalKey(Direction),
+  counterparty: Schema.String.check(Schema.isMaxLength(maximumReviewDraftFieldLength)),
+  occurredAt: Schema.String.check(Schema.isMaxLength(maximumReviewDraftFieldLength)),
+  categoryId: Schema.OptionFromOptionalKey(CategoryId),
+  userProvidedFields: Schema.Array(ReviewField).check(
+    Schema.isMaxLength(maximumReviewProvidedFields)
+  ),
+});
+export type ReviewDraft = typeof ReviewDraft.Type;
+export const ReviewReference = Schema.Struct({
+  id: NeedsReviewItemId,
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type ReviewReference = typeof ReviewReference.Type;
+export const ReviewDetail = Schema.Struct({
+  item: ReviewSummary,
+  revision: ReviewReference.fields.revision,
+  draft: Schema.OptionFromOptionalKey(ReviewDraft),
+  suggestions: Schema.OptionFromOptionalKey(ReviewDraft),
+});
+export type ReviewDetail = typeof ReviewDetail.Type;
+const ReviewReferences = Schema.NonEmptyArray(ReviewReference).check(Schema.isMaxLength(100));
+export const ReviewCommand = Schema.Union([
+  Schema.TaggedStruct("Create", {
+    ...ReviewReference.fields,
+    extraction: TransactionExtraction,
+    categoryId: Schema.OptionFromOptionalKey(CategoryId),
+  }),
+  Schema.TaggedStruct("SaveDraft", { ...ReviewReference.fields, draft: ReviewDraft }),
+  Schema.TaggedStruct("Skip", { items: ReviewReferences }),
+  Schema.TaggedStruct("Restore", { items: ReviewReferences }),
+]);
+export type ReviewCommand = typeof ReviewCommand.Type;
+export const ReviewEditResult = Schema.Array(ReviewDetail);

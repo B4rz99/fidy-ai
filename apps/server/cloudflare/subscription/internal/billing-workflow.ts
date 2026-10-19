@@ -562,10 +562,16 @@ const collect = (
     }
     const candidate = created.value.transactionId;
     yield* attempt(() =>
-      environment.DB.prepare(`INSERT OR IGNORE INTO billing_transaction_candidates
-      (transaction_id, attempt_id) VALUES (?, ?)`)
-        .bind(candidate, attemptId)
-        .run()
+      environment.DB.batch([
+        environment.DB.prepare(`INSERT OR IGNORE INTO billing_transaction_candidates
+      (transaction_id, attempt_id) VALUES (?, ?)`).bind(candidate, attemptId),
+        ...(captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)
+          ? [
+              environment.DB.prepare(`INSERT INTO billing_checkout_responses (attempt_id, transaction_id)
+              VALUES (?, ?)`).bind(attemptId, candidate),
+            ]
+          : []),
+      ])
     );
     yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId: candidate });
   }).pipe(Effect.withSpan("billing.collection.collect"));

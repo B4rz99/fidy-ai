@@ -6,15 +6,102 @@ import {
 } from "./operations";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Option, Schema } from "effect";
-import { installRetentionTestSchema, isolatedTestStorage } from "../d1-test-fixture";
+import {
+  installRetentionTestSchema,
+  isolatedTestStorage,
+  observeRetentionCost,
+} from "../d1-test-fixture";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { withErasureRecovery } from "./runtime";
 import { writePrivateObject } from "../private-objects/operations";
+import { generationAssertion } from "./internal/generation";
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
 const userId = "12740000-0000-4000-8000-000000000001";
 const generation = "12740000-0000-4000-8000-000000000088";
+
+it("checks the recovery generation without spending writes on guarded reads", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+      const rows = yield* Effect.tryPromise(() =>
+        db.batch([
+          generationAssertion({ db, generation: "initial" }),
+          db.prepare("SELECT generation FROM erasure_generation WHERE id=1"),
+        ])
+      );
+      expect(rows.map((row) => row.meta.rows_written)).toEqual([0, 0]);
+      const guarded = withErasureRecovery({
+        DB: db,
+        ERASURE_REQUIRED: "true",
+        ERASURE_BUCKET: bucket,
+      }).DB;
+      expect(
+        yield* Effect.tryPromise(() =>
+          guarded
+            .prepare("SELECT generation FROM erasure_generation WHERE id=1")
+            .first("generation")
+        )
+      ).toBe("initial");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM erasure_runtime_assertion").first("count")
+        )
+      ).toBe(0);
+    })
+  ));
+
+it("rolls back an earlier write when a later recovery assertion fails", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      expect(
+        (yield* Effect.result(
+          Effect.tryPromise(() =>
+            db.batch([
+              db
+                .prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)")
+                .bind(userId),
+              db.prepare("UPDATE erasure_generation SET generation=? WHERE id=1").bind(generation),
+              generationAssertion({ db, generation: "initial" }),
+            ])
+          )
+        ))._tag
+      ).toBe("Failure");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM users").first("count")
+        )
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT generation FROM erasure_generation WHERE id=1").first("generation")
+        )
+      ).toBe("initial");
+      yield* Effect.tryPromise(() => db.prepare("DELETE FROM erasure_generation WHERE id=1").run());
+      expect(
+        (yield* Effect.result(
+          Effect.tryPromise(() =>
+            db.batch([
+              generationAssertion({ db, generation: "initial" }),
+              db
+                .prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)")
+                .bind(userId),
+            ])
+          )
+        ))._tag
+      ).toBe("Failure");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM users").first("count")
+        )
+      ).toBe(0);
+    })
+  ));
 
 it("fences reads, writes and native Sessions after an interrupted checkpoint or D1 rollback", () =>
   Effect.runPromise(
@@ -321,5 +408,45 @@ it("initializes an empty local registry but refuses to recreate a lost approved-
       yield* Effect.tryPromise(() => bucket.delete("recovery/generation"));
       expect((yield* Effect.result(initialize))._tag).toBe("Failure");
       expect(yield* Effect.tryPromise(() => bucket.head("recovery/generation"))).toBeNull();
+    })
+  ));
+
+it("avoids empty cursor writes and resumes a multi-page control sweep", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      const measured = observeRetentionCost(db);
+      const sweep = sweepErasureControlObjects({
+        db: measured.database,
+        buckets: [{ id: "erasure", bucket: Option.some(bucket) }],
+      });
+      yield* sweep;
+      yield* sweep;
+      expect(measured.cost().rowsWritten).toBe(0);
+      for (let index = 0; index < 40; index++) {
+        yield* Effect.tryPromise(() =>
+          bucket.put(`held-${String(index).padStart(2, "0")}`, "held", {
+            customMetadata: { purpose: "titular-held-record" },
+          })
+        );
+      }
+      yield* sweep;
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT cursor FROM erasure_control_sweeps WHERE bucket='erasure'")
+            .first("cursor")
+        )
+      ).not.toBe("");
+      yield* sweep;
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT cursor FROM erasure_control_sweeps WHERE bucket='erasure'")
+            .first("cursor")
+        )
+      ).toBe("");
+      expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(40);
     })
   ));

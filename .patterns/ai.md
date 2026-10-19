@@ -1,6 +1,6 @@
 # Effect v4 AI boundaries and Workers AI
 
-Use this reference for `effect/ai`, backed by Effect 4.0.2's
+Use this reference for `effect/ai`, backed by Effect 4.0.3's
 `node_modules/effect/src/ai/{LanguageModel,Prompt,Tool,Toolkit}.ts`. Fidy's provider-neutral hosted
 inference contract lives in `apps/server/src/shell/hosted-inference/operations.ts`; its implemented
 Workers AI adapter lives under `apps/server/cloudflare/ai/`. Effect's `LanguageModel` is a library
@@ -72,6 +72,20 @@ The Workers AI adapter owns binding lookup, model selection, request/response bo
 cancellation behavior, provider error mapping, and metadata-only telemetry. It must fail closed when
 the binding or configured model is absent. It must not expose raw prompts, replies, tool arguments, or
 provider payloads to logs or telemetry.
+
+Gemma's [canonical tool template](https://huggingface.co/google/gemma-4-26B-A4B-it/blob/2dc3dccd5a7e302f0ac2a185a4e7e5265e0868d8/chat_template.jinja)
+renders parameter descriptions but omits JSON Schema union branches and patterns. The provider-schema
+adapter derives compact shape descriptions from the reflected canonical schema so discriminants,
+required fields, and calendar formats reach the model. Keep the original schema and canonical
+decoding; these descriptions provide guidance, never execution authority. Do not duplicate a
+handwritten command catalog. Test the complete tool catalog against the request capacity bound.
+
+Measure the serialized request after schema projection, including multi-Turn history. Numeric
+refinements emitted under `allOf` can increase tool bytes after an Effect upgrade. The
+[provider schema adapter](../apps/server/src/shell/hosted-inference/internal/provider-schema.ts)
+compacts only equivalent finite inclusive numeric conjunctions and omits empty definition maps;
+preserve richer constraints and referenced definitions. Test preservation and full-catalog capacity
+instead of increasing the budget to absorb redundant guidance.
 
 Provider-specific wire details remain inside the adapter. Do not leak a provider SDK type, token
 counter, error class, model name, or request shape into core or the provider-neutral contract unless

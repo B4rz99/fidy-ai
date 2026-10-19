@@ -50,7 +50,7 @@ jobs:
       - name: Configure release file paths
         run: |
           echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/fidy-release.json" >> "$GITHUB_ENV"
-          echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-smoke-passed.json" >> "$GITHUB_ENV"
+          echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-release-verification.json" >> "$GITHUB_ENV"
 
       - name: Set up Bun for build tooling
         uses: ./.github/actions/bun-runtime
@@ -306,7 +306,7 @@ jobs:
 
       - name: Probe production edge without valid User or provider authority
         working-directory: infra/cloudflare
-        run: bun ./verify-edge-smoke.ts
+        run: bun verify-production-smoke.ts promoted
 
       - name: Retire obsolete resources after verified promotion
         if: ${{ success() && steps.post_smoke.outcome == 'success' }}

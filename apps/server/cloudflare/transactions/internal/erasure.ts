@@ -127,7 +127,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'kind',r.\"kind\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'interpretation_revision',r.\"interpretation_revision\",'created_at',r.\"created_at\",'statement_submission_id',r.\"statement_submission_id\",'statement_record_number',r.\"statement_record_number\",'statement_content_hash',r.\"statement_content_hash\",'source_format',r.\"source_format\",'received_email_id',r.\"received_email_id\",'message_content_sha256',r.\"message_content_sha256\",'message_evidence',r.\"message_evidence\",'deterministic_interpretation',r.\"deterministic_interpretation\",'extractor_revision',r.\"extractor_revision\") AS body FROM source_attestations r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'kind',r.\"kind\",'service_market',r.\"service_market\",'locale',r.\"locale\",'time_zone',r.\"time_zone\",'interpretation_revision',r.\"interpretation_revision\",'created_at',r.\"created_at\",'statement_submission_id',r.\"statement_submission_id\",'statement_record_number',r.\"statement_record_number\",'statement_content_hash',r.\"statement_content_hash\",'source_format',r.\"source_format\",'received_email_id',r.\"received_email_id\",'message_content_sha256',r.\"message_content_sha256\",'message_evidence',r.\"message_evidence\",'deterministic_interpretation',r.\"deterministic_interpretation\",'extractor_revision',r.\"extractor_revision\",'review_item_id',r.\"review_item_id\",'user_provided_fields',r.\"user_provided_fields\") AS body FROM source_attestations r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -253,6 +253,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     id: "transactions",
     dataClass: "transactions",
     dependencies: [
+      "ingestion_review_state",
       "forwarded_email_outcomes",
       "source_attestations",
       "statement_record_outcomes",

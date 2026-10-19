@@ -61,11 +61,6 @@ const recordingResponse = (input: {
     return input.response;
   });
 
-const gatedResponse = (
-  ready: Promise<void>,
-  input: Parameters<typeof recordingResponse>[0]
-): Promise<Response> => ready.then(() => recordingResponse(input));
-
 const intermediateRequest = (request: Request): boolean =>
   (request.headers.get("cloudflare-workers-version-overrides") ?? "").includes(
     `fidy-public="${publicStable}"`
@@ -540,7 +535,6 @@ describe("intermediate production smoke", () => {
         Effect.gen(function* () {
           const bodies: string[] = [];
           const pairings = new Set<string>();
-          const bothStarted = Promise.withResolvers<void>();
           const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
             const request = new Request(input, init);
             const path = new URL(request.url).pathname;
@@ -549,7 +543,6 @@ describe("intermediate production smoke", () => {
             if (path === "/internal/release-smoke") {
               const publicVersion = oldPublic ? publicStable : publicCandidate;
               pairings.add(publicVersion);
-              if (pairings.size === 2) bothStarted.resolve();
               const response = Response.json(
                 {
                   status: "passed",
@@ -570,7 +563,7 @@ describe("intermediate production smoke", () => {
                   headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicVersion },
                 }
               );
-              return gatedResponse(bothStarted.promise, { request, bodies, response });
+              return recordingResponse({ request, bodies, response });
             }
             return Promise.resolve(edgeResponse(request));
           });
@@ -601,7 +594,6 @@ describe("intermediate production smoke", () => {
               true
             );
           } finally {
-            bothStarted.resolve();
             mockedFetch.mockRestore();
           }
         })
@@ -750,7 +742,7 @@ describe("intermediate production smoke", () => {
           })
         );
         expect(Exit.isFailure(exit)).toBe(true);
-        expect(mockedFetch).toHaveBeenCalledTimes(2);
+        expect(mockedFetch).toHaveBeenCalledTimes(1);
         mockedFetch.mockRestore();
       })
     )
@@ -797,7 +789,7 @@ describe("intermediate production smoke", () => {
               expect(reason).not.toContain("secret-provider-body");
             }
           }
-          expect(mockedFetch).toHaveBeenCalledTimes(2);
+          expect(mockedFetch).toHaveBeenCalledTimes(1);
           mockedFetch.mockRestore();
         })
       )
@@ -1029,3 +1021,148 @@ describe("post-promotion production smoke", () => {
       })
     ));
 });
+
+it.each(["d1_quota", "admission", "schema"])("defers only the closed quota refusal (%s)", (stage) =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const methods: string[] = [];
+        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+          const request = new Request(input, init);
+          if (new URL(request.url).pathname !== "/internal/release-smoke") {
+            return Promise.resolve(edgeResponse(request));
+          }
+          methods.push(request.method);
+          if (request.method === "GET") {
+            return Promise.resolve(
+              pairingResponse({
+                oldPublic: intermediateRequest(request),
+                coreRevision: revision,
+                readiness: true,
+              })
+            );
+          }
+          return Promise.resolve(
+            new Response(null, {
+              status: 503,
+              headers: {
+                ...securityHeaders,
+                "x-fidy-smoke-worker-version": publicCandidate,
+                "x-fidy-smoke-failure": stage,
+              },
+            })
+          );
+        });
+        const services = yield* Layer.build(FetchHttpClient.layer);
+        const result = yield* verifyProductionSmoke(config).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            Context.get(services, HttpClient.HttpClient)
+          ),
+          Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
+          Effect.exit
+        );
+        expect(Exit.isSuccess(result)).toBe(stage === "d1_quota");
+        if (Exit.isSuccess(result)) {
+          expect(result.value).toBe("deferred-d1-quota");
+          expect(methods).toEqual(["POST", "GET", "GET"]);
+        }
+      })
+    )
+  )
+);
+
+it.each(["wrong-version", "cacheable", "readiness-refused"])(
+  "does not defer an unverified quota response (%s)",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            if (new URL(request.url).pathname !== "/internal/release-smoke") {
+              return Promise.resolve(edgeResponse(request));
+            }
+            if (request.method === "GET") {
+              return Promise.resolve(new Response(null, { status: 403 }));
+            }
+            return Promise.resolve(
+              new Response(null, {
+                status: 503,
+                headers: {
+                  "cache-control": scenario === "cacheable" ? "public" : "no-store",
+                  "x-fidy-smoke-worker-version":
+                    scenario === "wrong-version" ? publicStable : publicCandidate,
+                  "x-fidy-smoke-failure": "d1_quota",
+                },
+              })
+            );
+          });
+          const services = yield* Layer.build(FetchHttpClient.layer);
+          const result = yield* verifyProductionSmoke(config).pipe(
+            Effect.provideService(
+              HttpClient.HttpClient,
+              Context.get(services, HttpClient.HttpClient)
+            ),
+            Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
+            Effect.exit
+          );
+          expect(Exit.isFailure(result)).toBe(true);
+        })
+      )
+    )
+);
+
+effectIt.effect(
+  "verifies promoted edge while explicitly deferring quota-dependent OAuth availability",
+  () =>
+    Effect.gen(function* () {
+      const seen = new Set<string>();
+      const client = HttpClient.make((request) => {
+        expect(request.headers["cloudflare-workers-version-overrides"]).toBeUndefined();
+        const probe = new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+        });
+        const path = new URL(probe.url).pathname;
+        seen.add(path);
+        let response = edgeResponse(probe);
+        if (path === "/internal/release-smoke") {
+          response =
+            request.method === "GET"
+              ? pairingResponse({ oldPublic: false, coreRevision: revision, readiness: true })
+              : new Response(null, {
+                  status: 503,
+                  headers: {
+                    ...securityHeaders,
+                    "x-fidy-smoke-worker-version": publicCandidate,
+                    "x-fidy-smoke-failure": "d1_quota",
+                  },
+                });
+        } else if (
+          !probe.headers.has("origin") &&
+          [
+            "/.well-known/oauth-protected-resource/mcp",
+            "/.well-known/oauth-authorization-server",
+            "/oauth/authorize",
+            "/oauth/register",
+            "/oauth/token",
+            "/mcp",
+          ].includes(path)
+        ) {
+          response = new Response(null, {
+            status: 503,
+            headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
+          });
+        }
+        return Effect.succeed(HttpClientResponse.fromWeb(request, response));
+      });
+      const outcome = yield* verifyPromotedSmoke(config).pipe(
+        Effect.provideService(HttpClient.HttpClient, client)
+      );
+      expect(outcome).toBe("deferred-d1-quota");
+      expect(seen.has("/categories")).toBe(true);
+      expect(seen.has("/mcp")).toBe(true);
+      expect(seen.has("/.well-known/oauth-protected-resource/mcp")).toBe(true);
+    })
+);

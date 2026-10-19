@@ -54,7 +54,7 @@ type ManualPATCreationState =
   | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
 
 const makeManualPATRequestId = (): ManualPATRequestIdType =>
-  ManualPATRequestId.make(Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)));
+  ManualPATRequestId.make(Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)));
 
 const initialState: ManualPATCreationState = {
   _tag: "Editing",

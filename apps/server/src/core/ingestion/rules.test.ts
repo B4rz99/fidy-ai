@@ -388,6 +388,18 @@ it.effect(
         mapping: markerMapping,
         timeZone: "America/Bogota",
       });
+      expect(marked.outcomes[1]).toMatchObject({
+        suggestions: {
+          _tag: "Some",
+          value: {
+            amount: "25",
+            currency: Option.some(Currency.make("COP")),
+            direction: Option.none(),
+            counterparty: "Shop",
+            occurredAt: "2026-02-05T05:00:00.000Z",
+          },
+        },
+      });
       expect(marked.outcomes).toMatchObject([
         { outcome: "accepted", extraction: { direction: "inflow" } },
         { outcome: "needs-review", reason: "ambiguous-direction" },

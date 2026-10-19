@@ -43,6 +43,55 @@ Effect 4.0.2 retest, 2026-10-14, production `6708a0e76cf9e0c82157c0caa5e3fe12b22
 
 ## Evidence and remaining checks
 
+Quota-reset provider check, 2026-10-17: the strict remote Workers AI conformance probe passed
+with HTTP 200 and `outcome: conforming`, after all 47 deterministic inference checks passed.
+The installed adapter correctly proposed query, capture, Correction, deletion, date-only and
+recurring lifecycle operations, retained exact Money/time expectations, recovered bounded
+invalid output and produced Colombian Spanish structured output. The probe executes no canonical
+mutations. Production health reported `available` at `15a3408c229e9e4365da4c6ccba377a6d8865010`.
+This establishes provider availability and the corrected lifecycle schema at the observation time;
+it does not establish successful natural-language Dashboard editing, redundant-confirmation
+removal or a completed browser lifecycle approval. Those remain separate end-to-end checks.
+
+The same release then completed two consecutive browser Turns: Bogotá today/tomorrow were
+17/18 October, and a November planning query correctly returned no plans. Each produced one
+User/assistant pair, with automatic delivery acknowledgement and no receipt-confirmation control.
+A fictional `PRUEBA QA CHAT RECURRENTE 20261017` plan was created through ordinary controls with
+an unknown COP amount, monthly cadence and first date 18 October. Its natural-language stop
+request returned `processing`. Both explicit recovery attempts failed at OPTIONS preflight with
+404 on `/web/hosted-turns/progress`; no progress POST reached Core, and the composer correctly
+remained locked rather than replaying the uncertain request. An independent public OPTIONS
+request reproduced 404. Core owned the route, but public ingress omitted it from its route,
+preflight and session-forwarding sets. A seven-check public-ingress regression failed four checks
+before the fix; all seven passed after sharing the three hosted-browser paths across those sets.
+The existing cancellation and telemetry checks also passed (11 checks total). Origin restrictions,
+POST-only methods, cookie forwarding, session binding and no-store responses remain enforced.
+A scoped read-only D1 diagnostic subsequently found the retained Turn `interrupted`, with two
+recorded tool calls and no delivery proposal; it wrote zero rows. This does not establish a
+successful lifecycle change. [PR #1358](https://github.com/B4rz99/fidy-ai/pull/1358) contains the
+ingress fix. Deployment and recovery of the retained production Turn still need verification;
+the synthetic plan has not yet been claimed as stopped.
+
+The merged ingress fix at `6ebada00c01afa5b33acd06f99657a1dc0487099` passed CI, but both
+attempts of [production run 39054872325](https://github.com/B4rz99/fidy-ai/actions/runs/39054872325)
+failed the stable Worker-pair capture before candidate upload. The live release remained
+`15a3408c229e9e4365da4c6ccba377a6d8865010`. Session binding and consent returned HTTP 503;
+scoped Core telemetry showed platform outcome `ok`, 4–5 ms CPU and no platform exception.
+The independently read D1 and R2 recovery generations matched. D1 analytics over an 18-hour
+window reported 102,734 rows written across the ten returned query groups, including 71,018
+recovery-assertion writes in the earlier top-five query sample. This suggests D1 write-quota
+exhaustion; it does not establish a provider quota error or an exact UTC-day account total.
+The authenticated Cloudflare dashboard was unavailable without sign-in. No quota, registry,
+deployment safeguard or billing setting was changed.
+
+A native D1 regression reproduced one write for a successful recovery assertion. Replacing its
+INSERT with a read-only SQL assertion reduced that batch to zero rows written. The assertion
+still runs inside the native atomic batch and aborts on missing or mismatched generations;
+an additional regression proves that a later failed assertion rolls back earlier writes and
+the generation update. The combined recovery, restore, orchestration and recurring-plan suite
+passed 25 checks. This is local evidence; deployment and the retained hosted Turn still require
+production verification.
+
 On 2026-10-11 at revision `b131e61435ec63c57470f57ed1ad3409261f0005`, the combined Transactions/chat rendered feature suite passed 50 checks; `application.test.tsx` passed 24 checks; Transactions and hosted-session Core tests passed 33 checks. Counts include neighbouring capabilities and are not all chat tests.
 
 The deterministic hosted inference suite passed 37 checks, including date-only conformance. The combined Transaction/HostedTurn actual local Worker/D1 suite passed 187 checks, including exact once-only deletion confirmation. The built-browser Transactions journeys passed 14 checks. Across these commands, 345 checks passed; no live model call was required.
@@ -85,3 +134,10 @@ Further production diagnosis, 2026-10-12: an ordinary-language Dashboard-title r
 A separate synthetic, non-mutating proposal probe used the installed Workers AI adapter and the approved model through Wrangler's remote AI binding. It returned the closed category `ProviderQuotaExceeded`; no canonical mutation executed and no raw model output was recorded. That refusal does not classify the earlier production HTTP 503 failures. Wrangler's local harness initially stalled under Bun and ran after switching to Node. A foreign Dashboard test token subsequently appeared in the newly selected account, so production mutation tests paused pending confirmation that the account is isolated from the other active task.
 
 After the User confirmed the other agent had paused, production testing resumed on release `9aafe8db5498df4f875d65371239d877b6a24abf`. An ordinary-language title request and a separate read-only greeting both received HTTP 429 from `/web/hosted-turns`; the title response contained only the closed status `provider_quota_exceeded`. The UI displayed the daily-limit explanation, retained each failed draft and allowed explicit resubmission. No assistant success message or Dashboard mutation appeared. This closes the live quota-feedback check, while leaving the earlier intermittent ordinary-language edit failure undiagnosed until inference is available.
+
+Recurring planning audit, 2026-10-15: production release `d4a7c1cc0d` answered a November request
+with the exact owned COP 2 and USD 3 plans and dates in one assistant reply. The write request
+then exposed an informal question followed by an internal JSON/CONFIRMAR challenge. The current
+follow-up adds structured, host-issued browser lifecycle approval with a readable owner-supplied
+summary, preserves exact confirmation authority and stage/recovery semantics, and prevents model
+prose from creating an approval button. Live write verification remains pending its deployment.

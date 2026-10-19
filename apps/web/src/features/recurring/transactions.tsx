@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option, Schema } from "effect";
@@ -83,9 +84,12 @@ const TransactionResults = ({
   return (
     <div className="grid gap-2">
       {stale ? (
-        <Button contentLayout="wrap" focusAppearance="subtle" variant="outline" onClick={refresh}>
-          Actualizar transacciones
-        </Button>
+        <RefreshButton
+          focusAppearance="subtle"
+          variant="outline"
+          onClick={refresh}
+          label="Actualizar transacciones"
+        />
       ) : null}
       {page.data.map((transaction) => (
         <Button

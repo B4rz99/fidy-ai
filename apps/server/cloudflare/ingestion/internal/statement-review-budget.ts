@@ -2,7 +2,8 @@ import {
   maximumMaterializedHeaderBytes,
   maximumMaterializedStatementBytes,
 } from "./statement-processing-limits";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
+import { ReviewDraft } from "../../../src/core/ingestion/contract";
 import type {
   NeedsReviewStatementRow,
   ParsedStatementRow,
@@ -245,6 +246,10 @@ export const statementReviewAdmission = (
         { bytes: 0, serial: 0 },
         textValue(issues),
         ...afterIssues,
+        // D1 trims the trailing NULL (covered natively); retained JSON adds its serial header.
+        ...Option.toArray(row.suggestions).map((draft) =>
+          text(Schema.encodeSync(Schema.fromJsonString(ReviewDraft))(draft))
+        ),
       ]) <= maximumRowBytes
     );
   };

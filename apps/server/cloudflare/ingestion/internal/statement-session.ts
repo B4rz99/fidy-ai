@@ -2,7 +2,7 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
 /** Copy Agent's verified lifecycle projection inside the very same admission or terminal unit.
  * The source exposes only session_id, user_id, expires_at_ms. It grants no publication authority.
- * Crossing a deadline or changing sessions permanently settles clarification before any extension.
+ * Crossing a deadline or changing sessions closes hosted routing; the inbox retains its independent evidence deadline.
  */
 export const prepareStatementSessionActivity = ({
   db,
@@ -38,18 +38,4 @@ export const prepareStatementSessionActivity = ({
       userId,
       userId
     ),
-  db
-    .prepare(`UPDATE statement_clarifications SET state = 'abandoned', ended_at_ms = ?
-    WHERE user_id = ? AND state = 'awaiting' AND EXISTS
-      (SELECT 1 FROM statement_hosted_origins o WHERE o.submission_id = statement_clarifications.submission_id
-        AND o.user_id = ? AND o.abandoned_at_ms IS NOT NULL)`)
-    .bind(current, userId, userId),
-  db
-    .prepare(`UPDATE statement_clarifications SET expires_at_ms = min(
-      (SELECT expires_at_ms FROM statement_hosted_origins o WHERE o.submission_id = statement_clarifications.submission_id),
-      (SELECT min(evidence_expires_at_ms) FROM statement_needs_review r WHERE r.submission_id = statement_clarifications.submission_id))
-    WHERE user_id = ? AND state = 'awaiting' AND EXISTS
-      (SELECT 1 FROM statement_hosted_origins o WHERE o.submission_id = statement_clarifications.submission_id
-        AND o.user_id = ? AND o.abandoned_at_ms IS NULL)`)
-    .bind(userId, userId),
 ];

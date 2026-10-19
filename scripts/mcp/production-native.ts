@@ -1335,6 +1335,7 @@ const allowClient = (input: PtyInput, state: PtyState, compact: string): void =>
 };
 const classifyStartup = (input: PtyInput, state: PtyState): void => {
   const compact = compactOutput(state.output);
+  const signal = input.child.signalCode;
   Object.assign(input.model.startup, {
     apiKeyPrompt: compact.includes("DoyouwanttousethisAPIkey?"),
     mcpApprovalPrompt: compact.includes("AllowthefidyMCPserver"),
@@ -1349,11 +1350,11 @@ const classifyStartup = (input: PtyInput, state: PtyState): void => {
     processExited: input.child.exitCode !== null,
     deadlineReached: now() >= input.deadline,
     exitCode: input.child.exitCode ?? -1,
-    exitSignal: ["SIGTERM", "SIGKILL", "SIGABRT", "SIGSEGV", "SIGINT"].includes(
-      input.child.signalCode ?? ""
-    )
-      ? (input.child.signalCode ?? "none")
-      : "none",
+    exitSignal:
+      typeof signal === "string" &&
+      ["SIGTERM", "SIGKILL", "SIGABRT", "SIGSEGV", "SIGINT"].includes(signal)
+        ? signal
+        : "none",
     terminalBytes: new TextEncoder().encode(state.output).byteLength,
     failureClasses: startupFailures(compact),
   });
@@ -1736,8 +1737,8 @@ export const nativeTools = (
       const fs = yield* FileSystem.FileSystem;
       const crypto = yield* Crypto.Crypto;
       const callIds: readonly [string, string] = [
-        yield* crypto.randomUUIDv4,
-        yield* crypto.randomUUIDv4,
+        yield* crypto.randomUUIDv4(),
+        yield* crypto.randomUUIDv4(),
       ];
       const budgetFile = join(root, `${host}-budget-private.json`);
       const budgetId = (yield* foreign(() => Bun.file(budgetFile).exists()))

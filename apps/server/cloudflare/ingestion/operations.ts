@@ -1,3 +1,14 @@
+import { browseReviewWorkspace as browseInbox } from "./internal/review-workspace";
+import { browseReviewItem as browseItem } from "./internal/review-detail";
+import { browseReviewMaterial as browseMaterial } from "./internal/review-material";
+import { browseReviewSuggestions as browseSuggestions } from "./internal/review-suggestions";
+import { prepareReviewEdit as prepareEdit } from "./internal/review-edit";
+import { reviewRefusal as refuseReview } from "./internal/review-audit";
+import type { ReviewAuditWork, ReviewEditWork, ReviewQueryWork } from "./contract";
+import type {
+  CanonicalMutationPreparation,
+  CanonicalMutationRefusal,
+} from "../canonical-operations/contract";
 import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
 import type { WhatsAppBusinessPhoneNumberId } from "../../src/shell/channels/whatsapp/contract";
 import type { HostedCanonicalCaller } from "../canonical-work/contract";
@@ -21,9 +32,9 @@ import { prepareStatementSessionActivity as sessionActivity } from "./internal/s
 import {
   prepareHeldStatementAbandonment as heldAbandon,
   prepareHeldStatementReviewDecision as heldReview,
+  clarificationRefusal as legacyReviewRefusal,
   prepareStatementAbandonment as prepareAbandon,
   prepareStatementReviewDecision as prepareReview,
-  clarificationRefusal as reviewRefusal,
 } from "./internal/statement-clarification-mutation";
 
 import {
@@ -139,7 +150,8 @@ export const prepareStatementReviewDecision: typeof prepareReview = (input) => p
 /** Prepare permanent explicit abandonment under live caller authority. */
 export const prepareStatementAbandonment: typeof prepareAbandon = (work) => prepareAbandon(work);
 /** Attribute a stale or foreign clarification without exposing source evidence. */
-export const statementClarificationRefusal: typeof reviewRefusal = (input) => reviewRefusal(input);
+export const statementClarificationRefusal: typeof legacyReviewRefusal = (input) =>
+  legacyReviewRefusal(input);
 
 /** Publish staged bytes and verified origin through the shared hosted canonical unit. */
 export const prepareHeldStatementSubmission: typeof heldSubmission = (work) => heldSubmission(work);
@@ -200,3 +212,17 @@ export const prepareIngestionRetentionObservation: typeof overdueIngestionRetent
 
 /** Reject malformed statement input without echoing hostile bytes or diagnostics. */
 export const validationFailed: typeof validation = (message) => validation(message);
+
+export const browseReviewWorkspace = (input: ReviewQueryWork): Effect.Effect<Response> =>
+  browseInbox(input);
+export const browseReviewItem = (input: ReviewQueryWork): Effect.Effect<Response> =>
+  browseItem(input);
+export const browseReviewMaterial = (input: ReviewQueryWork): Effect.Effect<Response> =>
+  browseMaterial(input);
+export const browseReviewSuggestions = (input: ReviewQueryWork): Effect.Effect<Response> =>
+  browseSuggestions(input);
+export const prepareReviewEdit = (
+  input: ReviewEditWork
+): Effect.Effect<CanonicalMutationPreparation> => prepareEdit(input);
+export const reviewRefusal = (input: ReviewAuditWork): CanonicalMutationRefusal =>
+  refuseReview(input);

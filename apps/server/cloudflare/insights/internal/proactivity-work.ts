@@ -8,6 +8,7 @@ import { UserId } from "../../../src/core/identity/contract";
 import { InsightUnavailable } from "../contract";
 
 import { offerWindowOpen, recoverableOfferRequests } from "./proactivity-offers";
+import { summariesDue } from "./cadence";
 
 const maximumGenerationUsers = 16;
 /** Bounded identities only; discovery does not read content or grant execution authority. */
@@ -46,14 +47,16 @@ export const discoverProactivityUsers = (
       )
     )(offersRaw.results)).map((row) => row.user_id);
     const source = recurringDigestSourceIdentities();
-    const recurringRaw = yield* Effect.tryPromise(() =>
-      input.db
-        .prepare(
-          `SELECT i.user_id FROM recurring_digest_instructions AS i JOIN (${source.sql}) AS s ON s.user_id=i.user_id WHERE i.enabled=1 AND (i.last_source_identity IS NULL OR i.last_source_identity<>s.source_identity OR i.next_closed_at_ms<=?) ORDER BY i.last_evaluated_at_ms,i.user_id LIMIT ?`
+    const recurringRaw = summariesDue(input.now)
+      ? yield* Effect.tryPromise(() =>
+          input.db
+            .prepare(
+              `SELECT i.user_id FROM recurring_digest_instructions AS i JOIN (${source.sql}) AS s ON s.user_id=i.user_id WHERE i.enabled=1 AND (i.last_source_identity IS NULL OR i.last_source_identity<>s.source_identity OR i.next_closed_at_ms<=?) ORDER BY i.last_evaluated_at_ms,i.user_id LIMIT ?`
+            )
+            .bind(...source.params, input.now.epochMilliseconds, maximumGenerationUsers)
+            .all()
         )
-        .bind(...source.params, input.now.epochMilliseconds, maximumGenerationUsers)
-        .all()
-    );
+      : { results: [] };
     const recurring = (yield* Schema.decodeUnknownEffect(
       Schema.Array(Schema.Struct({ user_id: UserId }))
     )(recurringRaw.results)).map((row) => row.user_id);

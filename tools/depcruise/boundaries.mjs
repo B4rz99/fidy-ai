@@ -7,6 +7,7 @@ const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 
 const compositionRoots = new Set([
   "src/client.ts",
+  "src/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
   "cloudflare/core-worker.test-fixture.ts",
   "cloudflare/public-worker.ts",
@@ -24,6 +25,7 @@ const compositionRoots = new Set([
   "tools/email-formats/generate-runtime.ts",
   "cloudflare/maintenance/admission-retention.test.ts",
   "cloudflare/maintenance/monitoring-isolation.test.ts",
+  "cloudflare/maintenance-performance.test-fixture.ts",
   "cloudflare/transactions/performance.test.ts",
   "cloudflare/erasure/orchestration.test.ts",
   "cloudflare/erasure/restore.test.ts",
@@ -44,6 +46,7 @@ const compositionRoots = new Set([
   "cloudflare/agent/proactive-transcript.test.ts",
   "cloudflare/whatsapp/insight-delivery.test.ts",
   "cloudflare/recurring/recurring.test-fixture.ts",
+  "cloudflare/recurring-plans/recurring-plans.test.ts",
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/onboarding/browser-authentication.test.ts",

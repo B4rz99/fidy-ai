@@ -225,8 +225,11 @@ const callbackPath = "/providers/kapso/callback";
 const wompiBillingEventPath = "/providers/wompi/billing-events";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
-const hostedTurnPath = "/web/hosted-turns";
-const hostedReceiptPath = "/web/hosted-turns/delivery";
+const hostedBrowserPaths = new Set<string>([
+  "/web/hosted-turns",
+  "/web/hosted-turns/delivery",
+  "/web/hosted-turns/progress",
+]);
 const enrollmentPath = (path: string): boolean => Option.isSome(paymentEnrollmentTransport(path));
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
 const replacementPaths = [
@@ -261,8 +264,7 @@ const postPaths = new Set<string>([
   ...pairingPaths,
   statementStagingPath,
   smokePath,
-  hostedTurnPath,
-  hostedReceiptPath,
+  ...hostedBrowserPaths,
 ]);
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
@@ -276,8 +278,7 @@ const browserMutationPaths = new Set<string>([
   ...emailAuthenticationPaths,
   ...pairingPaths,
   statementStagingPath,
-  hostedTurnPath,
-  hostedReceiptPath,
+  ...hostedBrowserPaths,
 ]);
 const sessionPaths = new Set<string>([
   userPath,
@@ -363,8 +364,7 @@ const cookieForwardPaths = new Set<string>([
   "/web/session/logout",
   rotateRecoveryPath,
   statementStagingPath,
-  hostedTurnPath,
-  hostedReceiptPath,
+  ...hostedBrowserPaths,
 ]);
 
 const browserHeaders = (request: Request, path: string): Headers => {
@@ -386,8 +386,7 @@ const supportHeaders = (request: Request): Headers =>
 const forwardsSession = (request: Request, path: string): boolean =>
   path === browserSessionBindingPath ||
   path === userPath ||
-  path === hostedTurnPath ||
-  path === hostedReceiptPath ||
+  hostedBrowserPaths.has(path) ||
   transactionPath(path) ||
   memoryPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
@@ -518,13 +517,19 @@ const preservesCoreQuery = (path: string): boolean =>
   dedicatedBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
-const forwardSmokeVersionOverride = (
+const forwardCandidateVersionOverride = (
   request: Request,
   environment: PublicEnvironment,
   headers: Headers
 ): void => {
   headers.delete(smokeVersionHeader);
-  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return;
+  const operatorRoute =
+    new URL(request.url).pathname === erasureSupportPath &&
+    request.method === "POST" &&
+    (request.headers.get("cf-access-jwt-assertion") ?? "") !== "";
+  if (!operatorRoute && !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) {
+    return;
+  }
   const override = request.headers.get(smokeVersionHeader);
   if (override !== null) headers.set(smokeVersionHeader, override);
 };
@@ -537,7 +542,7 @@ const coreRequest = (
     const headers = forwardedHeaders(request, path);
     const binding = request.headers.get(browserSessionBindingHeader);
     if (binding !== null) headers.set(browserSessionBindingHeader, binding);
-    forwardSmokeVersionOverride(request, environment, headers);
+    forwardCandidateVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");
     if (

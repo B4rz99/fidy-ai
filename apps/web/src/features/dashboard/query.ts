@@ -1,3 +1,4 @@
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { Effect, Schema } from "effect";
 import { HttpClientError } from "effect/http";
 import { type AsyncResult, Atom } from "effect/reactivity";
@@ -36,10 +37,22 @@ const loadDashboard = Effect.fnUntraced(function* (
   );
 });
 
-export const dashboardQuery = (apiClient: FidyClient): DashboardLoad => {
-  const phase = Atom.make<DashboardLoadPhase>("reading");
+const dashboardPhase = Atom.family((_apiClient: FidyClient) =>
+  Atom.make<DashboardLoadPhase>("reading")
+);
+const retainedDashboardQuery = Atom.family((apiClient: FidyClient): DashboardLoad["result"] => {
+  const phase = dashboardPhase(apiClient);
   const result = apiClient.runtime
     .atom((get) => loadDashboard(apiClient, (value) => get.set(phase, value)))
-    .pipe(apiClient.runtime.factory.withReactivity(["dashboard"]));
-  return { phase, result };
+    .pipe(
+      Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
+      apiClient.runtime.factory.withReactivity(["dashboard"]),
+      Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
+    );
+  return result;
+});
+
+export const dashboardQuery = (apiClient: FidyClient): DashboardLoad => {
+  const query = retainedDashboardQuery(apiClient);
+  return { phase: dashboardPhase(apiClient), result: revalidateWorkspaceQuery(query) };
 };

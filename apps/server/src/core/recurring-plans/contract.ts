@@ -9,14 +9,14 @@ const maximumRecords = 4096;
 const maximumDay = 31;
 /** Local calendar identity, independent of browser timezone or daylight-saving transitions. */
 export const RecurringDate = Schema.String.check(
-  Schema.isPattern(/^20\d{2}-\d{2}-\d{2}$/),
+  Schema.isPattern(/^20\d{2}-\d{2}-\d{2}$/u),
   Schema.makeFilter(
     (value: string) =>
       Option.exists(DateTime.make(value), (date) => DateTime.formatIsoDateUtc(date) === value) ||
       "Expected a valid local calendar date"
   )
 );
-export const RecurringMonth = Schema.String.check(Schema.isPattern(/^20\d{2}-(0[1-9]|1[0-2])$/));
+export const RecurringMonth = Schema.String.check(Schema.isPattern(/^20\d{2}-(0[1-9]|1[0-2])$/u));
 export const RecurringPlanId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("RecurringPlanId")
 );

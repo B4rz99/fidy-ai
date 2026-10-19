@@ -1,3 +1,5 @@
+import { browserConfirmationText, readBrowserConfirmation } from "./hosted-browser-confirmation";
+import type { HostedTurnProposal } from "../../../src/shell/agent/contract";
 import { observeApplicationOperation } from "../../runtime/application-observation/operations";
 import { Telemetry } from "../../../src/shell/observability/operations";
 import { TelemetryAttempt, boundedTelemetryCount } from "../../../src/shell/observability/contract";
@@ -195,17 +197,11 @@ const inferenceRefused = (error: Option.Option<unknown>): Response => {
 };
 
 /** Construct a proposed reply. Only a separate browser-visible receipt permits completion. */
-export type HostedDelivery = (
-  proposal: Readonly<{
-    text: TranscriptText;
-    turnId: TranscriptTurnId;
-    receipt: string;
-  }>
-) => Promise<Response>;
+export type HostedDelivery = (proposal: typeof HostedTurnProposal.Type) => Promise<Response>;
 
 /** Return an inert reply for the authenticated browser to render before acknowledging it. */
-export const browserHostedDelivery: HostedDelivery = ({ text, turnId, receipt }) =>
-  Promise.resolve(Response.json({ text, turnId, receipt }, { status: 202, headers: noStore }));
+export const browserHostedDelivery: HostedDelivery = (proposal) =>
+  Promise.resolve(Response.json(proposal, { status: 202, headers: noStore }));
 
 type WhatsAppHostedDelivery = Readonly<{
   _tag: "WhatsApp";
@@ -1856,11 +1852,29 @@ const proposeChannelDelivery = ({
   deliver._tag === "WhatsApp"
     ? proposeWhatsAppDelivery({ db, userId, turnId, answer, deliver, finish, scheduleRecovery })
     : Effect.gen(function* () {
-        const receipt = yield* stageHostedDelivery({ db, userId, turnId, text: answer });
+        const confirmation = yield* readBrowserConfirmation({
+          db,
+          userId,
+          turnId,
+          now: yield* Clock.currentTimeMillis,
+        });
+        const visible = Option.isSome(confirmation)
+          ? browserConfirmationText({ text: answer, command: confirmation.value.command })
+          : Option.some(answer);
+        if (Option.isNone(visible)) return unavailable();
+        const receipt = yield* stageHostedDelivery({ db, userId, turnId, text: visible.value });
         const recoveryAt = (yield* Clock.currentTimeMillis) + deliveryAcknowledgmentWindowMs;
         yield* Effect.tryPromise(() => scheduleRecovery(recoveryAt));
         const delivered = yield* Effect.tryPromise(() =>
-          deliver.propose({ text: answer, turnId, receipt })
+          deliver.propose({
+            text: visible.value,
+            turnId,
+            receipt,
+            ...Option.match(confirmation, {
+              onNone: () => ({}),
+              onSome: (value) => ({ confirmation: value }),
+            }),
+          })
         ).pipe(Effect.option);
         if (Option.isSome(delivered) && delivered.value.ok) return delivered.value;
         yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
@@ -1946,7 +1960,22 @@ export const readHostedProgress = ({
     const refreshed = yield* refreshHostedDelivery({ db, subject, turnId });
     if (Option.isNone(refreshed)) return unavailable();
     yield* Effect.tryPromise(() => scheduleRecovery(due));
-    return yield* Effect.tryPromise(() => browserHostedDelivery({ ...refreshed.value, turnId }));
+    const confirmation = yield* readBrowserConfirmation({
+      db,
+      userId: subject.userId,
+      turnId,
+      now,
+    });
+    return yield* Effect.tryPromise(() =>
+      browserHostedDelivery({
+        ...refreshed.value,
+        turnId,
+        ...Option.match(confirmation, {
+          onNone: () => ({}),
+          onSome: (value) => ({ confirmation: value }),
+        }),
+      })
+    );
   });
 /** No model or D1 work is bought for invalid input. */
 export const invalidHostedTurn = invalid;

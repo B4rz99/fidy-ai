@@ -48,10 +48,12 @@ import {
   prepareHeldStatementAbandonment,
   prepareHeldStatementReviewDecision,
   prepareHeldStatementSubmission,
+  prepareReviewEdit,
   prepareStatementAbandonment,
   prepareStatementReviewDecision,
   presentForwardingAddress,
   presentStatementSubmission,
+  reviewRefusal,
   statementClarificationRefusal,
 } from "../../ingestion/operations";
 import {
@@ -433,6 +435,17 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
           operation: "budgets.deleteBudget",
           code: "not_found",
         }),
+    },
+  ],
+  [
+    CanonicalOperationId.make("ingestion.applyReviewEdit"),
+    {
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("ingestion.applyReviewEdit"),
+        ({ payload }, work) => prepareReviewEdit({ work, command: payload })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: reviewRefusal,
     },
   ],
   ...(["ingestion.resolveNeedsReviewItem", "ingestion.skipNeedsReviewItem"] as const).map(

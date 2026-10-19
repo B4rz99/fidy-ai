@@ -15,24 +15,17 @@ const executeBatch =
     }>
   ): Batch =>
   <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const expected = yield* expectedGeneration(input.configuration);
-        const assertion = generationAssertion({
-          db: input.configuration.db,
-          generation: expected.generation,
-        });
-        const rows = yield* Effect.tryPromise({
-          try: () =>
-            input.source.batch<Row>([
-              assertion,
-              ...statements.map((statement) => input.originals.get(statement) ?? statement),
-            ]),
-          catch: () => new ErasureUnavailable(),
-        });
-        return rows.slice(1);
-      })
-    );
+    Effect.runPromise(expectedGeneration(input.configuration))
+      .then((expected) =>
+        // Preserve native D1 refusals for the operation owner; the generation assertion remains
+        // first in the same atomic unit, including when that unit is refused by an Audit trigger.
+        input.source.batch<Row>([
+          generationAssertion({ db: input.configuration.db, generation: expected.generation }),
+          ...statements.map((statement) => input.originals.get(statement) ?? statement),
+        ])
+      )
+      .then((rows) => rows.slice(1));
+
 const firstRow = (result: D1Result, column: Option.Option<string>): unknown => {
   const row = result.results[0];
   if (row === undefined) return null;

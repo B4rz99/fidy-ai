@@ -264,7 +264,7 @@ const platformUnavailable = <A>(
 
 const isSafeEpoch = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
 
-const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
 
 /** Worker-generated random identity for one ingested statement record: a submission, audit, or
  * admission grant. It is never derived from User input, a digest, or a locator. */
@@ -1551,13 +1551,13 @@ export const readOwnedStatementSubmission: {
         .prepare(
           `SELECT s.id, s.source_format, s.parser_revision,
            CASE WHEN s.status = 'failed' THEN s.status ELSE
-             CASE c.state WHEN 'awaiting' THEN 'awaiting-clarification' WHEN 'abandoned' THEN 'abandoned' ELSE s.status END END AS status,
+             CASE WHEN c.state='awaiting' AND s.needs_review_rows=(SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id=s.id) THEN 'completed' ELSE CASE c.state WHEN 'awaiting' THEN 'awaiting-clarification' WHEN 'abandoned' THEN 'abandoned' ELSE s.status END END END AS status,
            s.submitted_at_ms, s.started_at_ms, coalesce(c.ended_at_ms, s.completed_at_ms) AS completed_at_ms,
            s.failure_reason, s.input_rows,
-           s.accepted_rows + (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'resolved') AS accepted_rows,
-           s.needs_review_rows - (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id) AS needs_review_rows,
-           (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'skipped') AS skipped_rows,
-           (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
+           s.accepted_rows + (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'resolved') AS accepted_rows,
+           s.needs_review_rows - (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id) AS needs_review_rows,
+           (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'skipped') AS skipped_rows,
+           (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
          FROM statement_submissions s LEFT JOIN statement_clarifications c ON c.submission_id = s.id AND c.user_id = s.user_id
          WHERE s.id = ? AND s.user_id = ?`
         )

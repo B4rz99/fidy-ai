@@ -43,7 +43,10 @@ EOF
 cleanup() {
   if [[ -n "$worker_pid" ]]; then
     kill "$worker_pid" 2>/dev/null || true
-    sleep 3
+    for _settle_attempt in {1..60}; do
+      if ! kill -0 "$worker_pid" 2>/dev/null; then break; fi
+      sleep 0.05
+    done
     kill -KILL "$worker_pid" 2>/dev/null || true
     wait "$worker_pid" 2>/dev/null || true
   fi

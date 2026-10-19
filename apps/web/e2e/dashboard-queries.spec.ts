@@ -4,6 +4,7 @@ import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
+test.describe.configure({ mode: "parallel" });
 const ok = 200;
 const absentStatus = 404;
 const view = {

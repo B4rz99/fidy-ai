@@ -5,6 +5,7 @@ import { apiOrigin } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
+test.describe.configure({ mode: "parallel" });
 const successStatus = 200;
 const rateLimitedStatus = 429;
 const monthsPerYear = 12;
@@ -358,7 +359,7 @@ test("manual tracking can be reversed and skipped", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurring" })
+        signInRecurringThroughCore({ page, request, identity: "recurringTracking" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({
@@ -398,7 +399,7 @@ test("pause, resume and stop survive reload", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringSummary" })
+        signInRecurringThroughCore({ page, request, identity: "recurringLifecycle" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({
@@ -474,7 +475,7 @@ test("one-occurrence edits stay local and forward edits preserve earlier monthly
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringSummary" })
+        signInRecurringThroughCore({ page, request, identity: "recurringExceptions" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
       yield* createPlan({

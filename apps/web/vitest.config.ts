@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "jsdom",
+    environment: "node",
     clearMocks: true,
     // Vitest 5's failure for unawaited asynchronous assertions is deliberate: assertion failures
     // must remain attached to their owning test.

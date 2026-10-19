@@ -1,9 +1,10 @@
-import { FidyApi, ResourceLimited } from "@fidy/server/client";
+import { FidyApi } from "@fidy/server/client";
 import type { CanonicalSuccess } from "@fidy/server/client";
 import type { APIResponse, Page } from "@playwright/test";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import type { Cause, Scope } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
+import { advanceRefusedRequest } from "./acceptance-clock";
 import { playwright } from "./playwright-runtime";
 import { browserSessionHeaders, signInBudgetThroughCore } from "./real-core-fixture";
 
@@ -12,10 +13,7 @@ const { api } = browserAcceptanceTopology();
 const ok = 200;
 const created = 201;
 const notFound = 404;
-const limited = 429;
 const probeRetries = 6;
-const maximumDelaySeconds = 5;
-const millisecondsPerSecond = 1_000;
 const canonicalRecoveryMilliseconds = 15_000;
 const fixtureOperations = {
   budgets: FidyApi.groups.budgets.endpoints.createBudget,
@@ -23,25 +21,20 @@ const fixtureOperations = {
 };
 type FixtureSuccess = CanonicalSuccess<"budgets.createBudget" | "transactions.createTransaction">;
 const categoryId = "10000000-0000-4000-8000-000000000001";
-const RetrySeconds = Schema.NumberFromString.check(
-  Schema.isInt(),
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(maximumDelaySeconds)
-);
 const admittedRequest = (
+  page: Page,
   send: () => Promise<APIResponse>
 ): Effect.Effect<APIResponse, Cause.UnknownError> =>
   Effect.gen(function* () {
     for (let retry = 0; retry < probeRetries; retry++) {
       const response = yield* Effect.tryPromise(send);
-      if (response.status() !== limited) return response;
-      const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers()["retry-after"]);
-      if (Option.isNone(seconds)) return response;
-      const body: unknown = yield* Effect.tryPromise(() => response.json());
-      if (Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))) {
+      if (
+        !(yield* Effect.tryPromise(() =>
+          advanceRefusedRequest({ request: page.request, response })
+        ))
+      ) {
         return response;
       }
-      yield* Effect.sleep(seconds.value * millisecondsPerSecond);
     }
     return yield* Effect.tryPromise(send);
   });
@@ -53,7 +46,7 @@ const acquireFixture = (
 ): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.gen(function* () {
-      const response = yield* admittedRequest(() =>
+      const response = yield* admittedRequest(page, () =>
         browserSessionHeaders(page.request).then((headers) =>
           page.request.post(`${api}/${path}`, { headers, data })
         )
@@ -68,7 +61,7 @@ const acquireFixture = (
       )).data.id;
     }),
     (id) =>
-      admittedRequest(() =>
+      admittedRequest(page, () =>
         browserSessionHeaders(page.request).then((headers) =>
           page.request.delete(`${api}/${path}/${id}`, { headers })
         )
@@ -96,7 +89,7 @@ const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cau
       { amount: "80", message: /Presupuesto alcanzado/u },
       { amount: "70", message: /Excedido por.*10,00/u },
     ]) {
-      const response = yield* admittedRequest(() =>
+      const response = yield* admittedRequest(page, () =>
         browserSessionHeaders(page.request).then((headers) =>
           page.request.put(`${api}/budgets/${budgetId}`, {
             headers,
@@ -113,7 +106,7 @@ const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cau
         expect(widget.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100")
       );
     }
-    const deleted = yield* admittedRequest(() =>
+    const deleted = yield* admittedRequest(page, () =>
       browserSessionHeaders(page.request).then((headers) =>
         page.request.delete(`${api}/budgets/${budgetId}`, { headers })
       )

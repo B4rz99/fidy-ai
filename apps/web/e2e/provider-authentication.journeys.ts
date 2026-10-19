@@ -1,13 +1,14 @@
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
+import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
 import {
   boundSessionRequests,
-  openBrowserLogin,
   reloadTransactionsThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
-import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 
 export type ProviderJourneyConfiguration = Readonly<{
   provider: "google" | "microsoft";
@@ -21,6 +22,7 @@ type ProviderJourney = Readonly<{
   request: APIRequestContext;
 }>;
 const { expect } = playwright;
+const { api, operator } = browserAcceptanceTopology();
 /** Keep each journey's source stable while isolating independent tests sharing loopback ingress. */
 export const isolateProviderSource = (context: BrowserContext): Promise<void> => {
   const info = playwright.test.info();
@@ -238,7 +240,9 @@ export const stalledProviderJourney = ({
       yield* Effect.tryPromise(() =>
         expect(popup.getByText("Pending provider decision")).toBeVisible()
       );
-      const browserNow = yield* Clock.currentTimeMillis;
+      const browserNow = yield* Effect.tryPromise(() =>
+        page.evaluate(() => performance.timeOrigin + performance.now())
+      );
       yield* Effect.tryPromise(() => page.clock.pauseAt(browserNow + 100));
       if (outcome === "popup-close") yield* Effect.tryPromise(() => popup.close());
       if (outcome === "cancel") {
@@ -269,7 +273,7 @@ const redirectSubject = (
 ): Promise<void> => {
   const query = new URL(route.request().url()).searchParams;
   const code = btoa(JSON.stringify({ nonce: query.get("nonce"), subject }));
-  const callback = new URL(`https://127.0.0.1:4174/providers/${configuration.provider}/callback`);
+  const callback = new URL(`${api}/providers/${configuration.provider}/callback`);
   callback.searchParams.set("state", query.get("state") ?? "");
   callback.searchParams.set("code", code);
   return route.fulfill({ status: redirectStatus, headers: { location: callback.href } });
@@ -291,7 +295,7 @@ const returningSessionPolicies = (
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       request.post(
-        `http://127.0.0.1:4175/${configuration.provider}/expire?subject=browser-${configuration.provider}-signup`
+        `${operator}/${configuration.provider}/expire?subject=browser-${configuration.provider}-signup`
       )
     );
     yield* Effect.tryPromise(() => page.reload());
@@ -308,7 +312,7 @@ const returningSessionPolicies = (
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
     const revocation = yield* Effect.tryPromise(() =>
       request.post(
-        `http://127.0.0.1:4175/${configuration.provider}/revoke?subject=browser-${configuration.provider}-signup`
+        `${operator}/${configuration.provider}/revoke?subject=browser-${configuration.provider}-signup`
       )
     );
     expect(revocation.status()).toBe(noContentStatus);
@@ -321,7 +325,7 @@ const returningSessionPolicies = (
     );
     yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
     const blocked = yield* Effect.tryPromise(() =>
-      boundSessionRequests(context.request).get("https://127.0.0.1:4174/transactions")
+      boundSessionRequests(context.request).get(`${api}/transactions`)
     );
     expect(blocked.status()).toBe(unauthorizedStatus);
     expect(yield* Effect.tryPromise(() => blocked.json())).toMatchObject({
@@ -359,7 +363,7 @@ const staleRecoverySessionJourney = Effect.fn(function* (
 ) {
   yield* Effect.tryPromise(() =>
     request.post(
-      `http://127.0.0.1:4175/${configuration.provider}/stale?subject=browser-${configuration.provider}-signup`
+      `${operator}/${configuration.provider}/stale?subject=browser-${configuration.provider}-signup`
     )
   );
   yield* Effect.tryPromise(() => page.goto("/settings/account"));
@@ -419,6 +423,7 @@ export const signupJourney = ({
   Effect.runPromise(
     Effect.gen(function* () {
       playwright.test.setTimeout(completeSignupJourneyMilliseconds);
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route: Route) =>
           redirectSubject(configuration, `browser-${configuration.provider}-signup`, route)
@@ -473,11 +478,12 @@ const retryPendingProvider = Effect.fn(function* (page: Page) {
   );
   expect(yield* Effect.tryPromise(() => popup.evaluate(() => window.opener === null))).toBe(true);
   for (const _ of [0, 1]) {
-    yield* Effect.tryPromise(() =>
-      page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/status"), {
-        timeout: 5_000,
-      })
+    const status = page.waitForResponse(
+      (response) => new URL(response.url()).pathname.endsWith("/status"),
+      { timeout: 5_000 }
     );
+    yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1_000 }));
+    yield* Effect.tryPromise(() => status);
   }
   yield* Effect.tryPromise(() => expect(page.getByText("Esperando confirmación…")).toBeVisible());
   return popup;
@@ -500,6 +506,7 @@ export const denialAndCancellationJourney = ({
   }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route: Route) =>
           denyProvider(configuration, route)
@@ -549,7 +556,7 @@ export const denialAndCancellationJourney = ({
   );
 const denyProvider = (configuration: ProviderJourneyConfiguration, route: Route): Promise<void> => {
   const query = new URL(route.request().url()).searchParams;
-  const callback = new URL(`https://127.0.0.1:4174/providers/${configuration.provider}/callback`);
+  const callback = new URL(`${api}/providers/${configuration.provider}/callback`);
   callback.searchParams.set("state", query.get("state") ?? "");
   callback.searchParams.set("error", "access_denied");
   return route.fulfill({ status: redirectStatus, headers: { location: callback.href } });
@@ -742,7 +749,7 @@ const confirmBrowserAssociation = ({
       page.getByLabel("Identificador de asociación").innerText()
     );
     const reviewResponse = yield* Effect.tryPromise(() =>
-      request.post(`http://127.0.0.1:4175/whatsapp/review?caller=${caller}`)
+      request.post(`${operator}/whatsapp/review?caller=${caller}`)
     );
     expect(reviewResponse.status()).toBe(successStatus);
     const review = yield* Schema.decodeUnknownEffect(
@@ -754,10 +761,10 @@ const confirmBrowserAssociation = ({
         (cookie) => cookie.name === "__Host-fidy_session"
       )
     ).toBe(false);
-    yield* Effect.sleep("1100 millis");
+    yield* Effect.tryPromise(() => advanceAcceptancePoll({ page, milliseconds: 1_100 }));
     const confirmation = yield* Effect.tryPromise(() =>
       request.post(
-        `http://127.0.0.1:4175/whatsapp/confirm?caller=${caller}&code=${code}&reply=${review.reviewMessageId}`
+        `${operator}/whatsapp/confirm?caller=${caller}&code=${code}&reply=${review.reviewMessageId}`
       )
     );
     expect(confirmation.status()).toBe(successStatus);
@@ -781,7 +788,7 @@ export const whatsappAssociationJourney = ({
       if (existing) yield* createWebUserForAssociation({ page, context, configuration });
       const caller = `CO.Browser${configuration.provider}${existing ? "existing" : "new"}`;
       const start = yield* Effect.tryPromise(() =>
-        request.post(`http://127.0.0.1:4175/whatsapp/start?caller=${caller}`)
+        request.post(`${operator}/whatsapp/start?caller=${caller}`)
       );
       const handoff = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ handoffReference: Schema.String })
@@ -812,44 +819,7 @@ export const whatsappAssociationJourney = ({
     })
   );
 
-const providerRecoveryJourney = Effect.fn(function* ({
-  page,
-  context,
-  request,
-  backupRecoveryCode,
-}: ProviderJourney & Readonly<{ backupRecoveryCode: string }>) {
-  const identity = yield* Effect.tryPromise(() =>
-    boundSessionRequests(context.request).get("https://127.0.0.1:4174/user")
-  );
-  const before: unknown = yield* Effect.tryPromise(() => identity.json());
-  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
-  const pending = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
-  );
-  yield* Effect.tryPromise(() => openBrowserLogin(page));
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
-  );
-  const pairingCode = yield* Effect.tryPromise(() => visiblePairingCode(page));
-  yield* Effect.tryPromise(() => pending);
-  const assertion = yield* Effect.tryPromise(() =>
-    request.get("http://127.0.0.1:4175/assertion").then((response) => response.text())
-  );
-  const decision = invokeRecoveryOperator({ assertion, pairingCode, backupRecoveryCode });
-  const approval = yield* decision;
-  expect(approval.exitCode).toBe(0);
-  expect(approval.output).toContain("Recuperación aprobada");
-  expect(approval.output).not.toContain(backupRecoveryCode);
-  expect(approval.output).not.toContain(assertion);
-  expect((yield* decision).exitCode).toBe(1);
-  yield* Effect.tryPromise(() =>
-    expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 })
-  );
-  const recovered = yield* Effect.tryPromise(() =>
-    boundSessionRequests(context.request).get("https://127.0.0.1:4174/user")
-  );
-  expect(yield* Effect.tryPromise(() => recovered.json())).toEqual(before);
+const verifyRecoveredSecretRotation = Effect.fn(function* (page: Page, backupRecoveryCode: string) {
   yield* Effect.tryPromise(() => page.goto("/settings/account"));
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Crear un código nuevo" }).click()
@@ -866,6 +836,62 @@ const providerRecoveryJourney = Effect.fn(function* ({
   yield* Effect.tryPromise(() => page.goto("/app/transactions"));
 });
 
+const providerRecoveryJourney = Effect.fn(function* ({
+  page,
+  context,
+  request,
+  backupRecoveryCode,
+}: ProviderJourney & Readonly<{ backupRecoveryCode: string }>) {
+  const identity = yield* Effect.tryPromise(() =>
+    boundSessionRequests(context.request).get(`${api}/user`)
+  );
+  const before: unknown = yield* Effect.tryPromise(() => identity.json());
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
+  yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login$/u));
+  const pending = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "WhatsApp o correo verificado" }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
+  );
+  const pairingCode = yield* Effect.tryPromise(() => visiblePairingCode(page));
+  const pairingPollMilliseconds = 5_000;
+  yield* Effect.tryPromise(() =>
+    advanceAcceptancePoll({ page, milliseconds: pairingPollMilliseconds })
+  );
+  yield* Effect.tryPromise(() => pending);
+  const assertion = yield* Effect.tryPromise(() =>
+    request.get(`${operator}/assertion`).then((response) => response.text())
+  );
+  const decision = invokeRecoveryOperator({
+    assertion,
+    pairingCode,
+    backupRecoveryCode,
+    endpoint: `${api}/internal/support-recovery`,
+  });
+  const approval = yield* decision;
+  expect(approval.exitCode).toBe(0);
+  expect(approval.output).toContain("Recuperación aprobada");
+  expect(approval.output).not.toContain(backupRecoveryCode);
+  expect(approval.output).not.toContain(assertion);
+  expect((yield* decision).exitCode).toBe(1);
+  yield* Effect.tryPromise(() =>
+    advanceAcceptancePoll({ page, milliseconds: pairingPollMilliseconds })
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 })
+  );
+  const recovered = yield* Effect.tryPromise(() =>
+    boundSessionRequests(context.request).get(`${api}/user`)
+  );
+  expect(yield* Effect.tryPromise(() => recovered.json())).toEqual(before);
+  yield* verifyRecoveredSecretRotation(page, backupRecoveryCode);
+});
+
 const returningProviderLogin = ({
   configuration,
   page,
@@ -875,7 +901,7 @@ const returningProviderLogin = ({
 > =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
-    yield* Effect.tryPromise(() => page.goto("/login"));
+    yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/login$/u));
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
     );
@@ -920,7 +946,7 @@ const reauthenticatePATJourney = Effect.fn(function* (
 ) {
   yield* Effect.tryPromise(() =>
     request.post(
-      `http://127.0.0.1:4175/${configuration.provider}/stale?subject=browser-${configuration.provider}-signup`
+      `${operator}/${configuration.provider}/stale?subject=browser-${configuration.provider}-signup`
     )
   );
   yield* Effect.tryPromise(() => page.goto("/settings/access"));

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInThroughCore } from "./real-core-fixture";
+import { signInNavigationThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const successStatus = 200;
@@ -11,7 +11,9 @@ test("persists the Dashboard title through the visible editor and browser reload
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInNavigationThroughCore({ page, request, identity: "navigationDashboard" })
+      );
       yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
       yield* Effect.tryPromise(() => expect(page.getByRole("heading", { level: 1 })).toBeVisible());
       yield* Effect.tryPromise(() =>

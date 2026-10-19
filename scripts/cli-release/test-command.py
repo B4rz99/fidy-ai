@@ -5,6 +5,8 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
+import os
 from command import run_owned
 
 
@@ -36,9 +38,24 @@ class CommandTests(unittest.TestCase):
             time.sleep(.1)
             self.assertEqual(heartbeat.read_text(), settled)
 
-    def test_read_deadline_reaps_owned_process(self):
+    def test_read_deadline_reaps_owned_process_without_waiting_out_escalation(self):
+        started = time.monotonic()
         with self.assertRaisesRegex(RuntimeError, 'bound exceeded'):
             run_owned([sys.executable, '-c', 'import time;time.sleep(30)'], timeout=.05)
+        self.assertLess(time.monotonic() - started, 1.5)
+
+    @unittest.skipUnless(sys.platform != 'win32', 'Owned POSIX process-group behavior')
+    def test_reaped_group_permission_refusal_still_reaps_the_owned_child(self):
+        native_killpg = os.killpg
+
+        def probe_permission(pid, value):
+            if value == 0:
+                raise PermissionError('reaped session group')
+            return native_killpg(pid, value)
+
+        with patch('command.os.killpg', side_effect=probe_permission):
+            with self.assertRaisesRegex(RuntimeError, 'bound exceeded'):
+                run_owned([sys.executable, '-c', 'import time;time.sleep(30)'], timeout=.05)
 
     def test_begun_write_settles_after_deadline_and_overflow(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,4 +1,6 @@
 import { Miniflare } from "miniflare";
+import { type NativeImagePool, nativeImagePool } from "./d1-test-images.test-fixture";
+import { asynchronousNativeDatabase } from "./d1-test-bridge.test-fixture";
 import { Option, Schema } from "effect";
 
 const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
@@ -80,25 +82,56 @@ export const installTestSchemaWithPrefix = (
     sources: ReadonlyArray<URL>;
     prefixStatements: ReadonlyArray<string>;
   }>
-): Promise<void> =>
-  installPrivacySchema(input.db)
+): Promise<void> => {
+  const install = schemaInstallers.get(input.db);
+  if (install !== undefined && !privacySchemas.has(input.db)) {
+    const pending = Promise.all([
+      loadMigrationStatements(privacySchema),
+      testSchemaStatements(input),
+    ])
+      .then(([privacy, sql]) => install([...privacy, ...sql]))
+      .catch((cause: unknown) => {
+        privacySchemas.delete(input.db);
+        throw cause;
+      });
+    privacySchemas.set(input.db, pending);
+    return pending;
+  }
+  return installPrivacySchema(input.db)
     .then(() => testSchemaStatements(input))
-    .then((sql) =>
-      sql.length === 0
-        ? undefined
-        : Option.match(Option.fromUndefinedOr(schemaInstallers.get(input.db)), {
-            onNone: () =>
-              input.db
-                .batch(sql.map((statement) => input.db.prepare(statement)))
-                .then(() => undefined),
-            onSome: (install) => install(sql),
-          })
-    );
+    .then((sql) => {
+      if (sql.length === 0) return;
+      if (install !== undefined) return install(sql);
+      return input.db
+        .batch(sql.map((statement) => input.db.prepare(statement)))
+        .then(() => undefined);
+    });
+};
 
-type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
-const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
-  slot.runtime.getD1Database(`DB_${slot.index}`).then((db) => {
-    schemaInstallers.set(db, (sql) =>
+type BindingSlot = Readonly<{ runtime: Miniflare; index: number; images: NativeImagePool }>;
+type TestDatabaseTransport = "proxy" | "fetch";
+const acquireDatabase = (
+  slot: BindingSlot,
+  transport: TestDatabaseTransport = "fetch"
+): Promise<D1Database> =>
+  slot.runtime.getD1Database(`DB_${slot.index}`).then((native) => {
+    const db =
+      transport === "proxy"
+        ? native
+        : asynchronousNativeDatabase({
+            native,
+            nativeAccess: () => slot.images.used(slot.index),
+            dispatch: (body) => {
+              slot.images.used(slot.index);
+              return slot.runtime.dispatchFetch(`http://fixture/DB_${slot.index}/query`, {
+                method: "POST",
+                // Avoid stale Bun fixture sockets across deadlines; SQL writes are never retried.
+                headers: { connection: "close" },
+                body,
+              });
+            },
+          });
+    const original = (sql: ReadonlyArray<string>): Promise<void> =>
       slot.runtime
         .dispatchFetch(`http://fixture/DB_${slot.index}`, {
           method: "POST",
@@ -106,62 +139,41 @@ const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
         })
         .then((response) => {
           if (!response.ok) throw new Error("Fixture schema installation failed");
-        })
+        });
+    schemaInstallers.set(db, (sql) =>
+      transport === "proxy"
+        ? original(sql)
+        : slot.images.install({ index: slot.index, sql, original: () => original(sql) })
     );
     return db;
   });
 const schemaWorker = `
-const baselines = new Map();
-const installed = new Set();
-const identifier = value => '"' + value.replaceAll('"', '""') + '"';
-const snapshot = async database => {
-  const catalog = (await database.prepare(
-    "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY rowid"
-  ).all()).results;
-  // FTS creates its own shadow tables; replay only its original virtual-table declaration.
-  const tableList = (await database.prepare('PRAGMA table_list').all()).results;
-  const shadows = new Set(tableList.filter(table => table.type === 'shadow').map(table => table.name));
-  const objects = catalog.filter(object => !shadows.has(object.name));
-  const tables = objects.filter(object => object.type === 'table');
-  const dataTables = tableList.some(table => table.name === 'sqlite_sequence')
-    ? [...tables, {name: 'sqlite_sequence'}] : tables;
-  const columns = await database.batch(dataTables.map(table =>
-    database.prepare('PRAGMA table_info(' + identifier(table.name) + ')')
-  ));
-  const data = await database.batch(dataTables.map((table, index) => {
-    const names = columns[index].results.map(column => identifier(column.name));
-    const prefix = 'INSERT INTO ' + identifier(table.name) + '(' + names.join(',') + ') VALUES (';
-    const values = names.map(name => 'quote(' + name + ')').join(" || ',' || ");
-    return database.prepare('SELECT ? || ' + values + " || ')' AS sql FROM " + identifier(table.name)).bind(prefix);
-  }));
-  return [
-    'PRAGMA defer_foreign_keys = ON',
-    ...tables.map(table => table.sql),
-    ...data.flatMap((result, index) => [
-      ...(dataTables[index].name === 'sqlite_sequence' ? ['DELETE FROM sqlite_sequence'] : []),
-      ...result.results.map(row => row.sql),
-    ]),
-    ...objects.filter(object => object.type !== 'table').map(object => object.sql),
-  ];
-};
 export default {
   async fetch(request, env) {
-    const binding = new URL(request.url).pathname.slice(1);
+    const path = new URL(request.url).pathname;
+    const binding = path.split('/')[1];
     const database = env[binding];
     if (request.method !== 'POST' || !database) return new Response('missing', {status: 404});
+    if (path.endsWith('/query')) {
+      try {
+        const input = await request.json();
+        const prepared = input.statements.map(({sql, params}) => database.prepare(sql).bind(...params));
+        let value;
+        if (input.operation === 'batch') value = await database.batch(prepared);
+        else if ((input.operation === 'first' || input.operation === 'firstColumn')) value = await prepared[0].first(input.column);
+        else if (input.operation === 'all' || input.operation === 'run') value = await prepared[0][input.operation]();
+        else return new Response('missing', {status: 404});
+        return Response.json({success: true, value});
+      } catch (error) {
+        return Response.json({success: false, error: {
+          message: error.message,
+          ...(error.cause instanceof Error ? {cause: error.cause.message} : {}),
+        }});
+      }
+    }
     const statements = (await request.text()).split('\u0000');
     try {
-      // Only the first install into a fresh binding can use a pristine baseline.
-      // Subsequent schema additions still execute their actual migration statements.
-      const pristine = !installed.has(binding) && (await database.prepare(
-        "SELECT count(*) AS count FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'"
-      ).first('count')) === 0;
-      const baseline = pristine ? baselines.get(statements.join('\\u0000')) : undefined;
-      await database.batch((baseline ?? statements).map(sql => database.prepare(sql)));
-      if (pristine && !baseline) {
-        baselines.set(statements.join('\\u0000'), await snapshot(database));
-      }
-      installed.add(binding);
+      await database.batch(statements.map(sql => database.prepare(sql)));
       return new Response(null, {status: 204});
     } catch {
       return new Response('Fixture schema installation failed', {status: 500});
@@ -169,18 +181,45 @@ export default {
   }
 }`;
 
+const createBindingRuntime = ({
+  directory,
+  name,
+  env,
+}: Readonly<{
+  directory: string;
+  name: string;
+  env: Record<string, { type: "d1"; id: string } | { type: "r2"; name: string }>;
+}>): Miniflare =>
+  new Miniflare({
+    resourcePersistencePath: directory,
+    workers: [
+      {
+        config: {
+          name,
+          type: "worker",
+          compatibilityDate: "2026-09-08",
+          env,
+          manifest: {
+            mainModule: "index.mjs",
+            modules: { "index.mjs": { contents: schemaWorker, type: "esm" } },
+          },
+        },
+      },
+    ],
+  });
+
 const bindingPool = (
   withBuckets: boolean
 ): Readonly<{
-  acquire: () => BindingSlot;
+  acquire: () => Promise<BindingSlot>;
   dispose: () => Promise<void>;
 }> => {
-  const runtimes: Miniflare[] = [];
+  const runtimes: Promise<NativeImagePool>[] = [];
   const poolSize = 16;
   let nextBinding = poolSize;
   let poolSequence = 0;
-  let runtime = Option.none<Miniflare>();
-  const acquire = (): BindingSlot => {
+  let runtime = Option.none<Promise<NativeImagePool>>();
+  const acquire = (): Promise<BindingSlot> => {
     if (nextBinding === poolSize) {
       poolSequence += 1;
       const env: Record<string, { type: "d1"; id: string } | { type: "r2"; name: string }> = {};
@@ -189,35 +228,27 @@ const bindingPool = (
         env[`DB_${index}`] = { type: "d1", id: name };
         if (withBuckets) env[`BUCKET_${index}`] = { type: "r2", name };
       }
-      const created = new Miniflare({
-        workers: [
-          {
-            config: {
-              name: `isolated-${poolSequence}`,
-              type: "worker",
-              compatibilityDate: "2026-09-08",
-              env,
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: schemaWorker,
-                    type: "esm",
-                  },
-                },
-              },
-            },
-          },
-        ],
+      const name = `isolated-${poolSequence}`;
+      const created = nativeImagePool({
+        size: poolSize,
+        create: (directory) => createBindingRuntime({ directory, name, env }),
+        layoutKey: name,
       });
       runtimes.push(created);
       runtime = Option.some(created);
       nextBinding = 0;
     }
-    return { runtime: Option.getOrThrow(runtime), index: nextBinding++ };
+    const index = nextBinding++;
+    return Option.getOrThrow(runtime).then((images) => ({
+      runtime: images.runtime,
+      index,
+      images,
+    }));
   };
   const dispose = (): Promise<void> =>
-    Promise.all(runtimes.splice(0).map((instance) => instance.dispose())).then(() => undefined);
+    Promise.all(runtimes.splice(0).map((instance) => instance.then((pool) => pool.dispose()))).then(
+      () => undefined
+    );
   return { acquire, dispose };
 };
 
@@ -225,13 +256,15 @@ const bindingPool = (
  * with independent rows, schema, triggers, and sessions. Call dispose at suite teardown.
  * Tests of Worker/DO lifecycle or runtime restart must keep their own fresh runtime.
  */
-export const isolatedTestDatabases = (): Readonly<{
+export const isolatedTestDatabases = (
+  options: Readonly<{ transport: TestDatabaseTransport }> = { transport: "fetch" }
+): Readonly<{
   acquire: () => Promise<D1Database>;
   dispose: () => Promise<void>;
 }> => {
   const pool = bindingPool(false);
   return {
-    acquire: () => acquireDatabase(pool.acquire()),
+    acquire: () => pool.acquire().then((slot) => acquireDatabase(slot, options.transport)),
     dispose: pool.dispose,
   };
 };
@@ -246,17 +279,19 @@ export const isolatedTestStorage = (): Readonly<{
 }> => {
   const pool = bindingPool(true);
   return {
-    acquire: () => {
-      const slot = pool.acquire();
-      return Promise.all([
-        acquireDatabase(slot),
-        slot.runtime
-          .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
-          .then((bindings) =>
-            Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${slot.index}`]))
-          ),
-      ]).then(([db, bucket]) => ({ db, bucket }));
-    },
+    acquire: () =>
+      pool
+        .acquire()
+        .then((slot) =>
+          Promise.all([
+            acquireDatabase(slot),
+            slot.runtime
+              .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
+              .then((bindings) =>
+                Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${slot.index}`]))
+              ),
+          ]).then(([db, bucket]) => ({ db, bucket }))
+        ),
     dispose: pool.dispose,
   };
 };
@@ -554,3 +589,21 @@ export const observeRetentionCost = (
     plans: () => explainRetentionPlans(db, queries),
   };
 };
+
+/** Uses the coordinator harness's query endpoint without replacing its database or Durable Objects. */
+export const coordinatorTestDatabase = ({
+  runtime,
+  binding,
+}: Readonly<{ runtime: Miniflare; binding: "DB" | "SNAPSHOT_DB" }>): Promise<D1Database> =>
+  runtime.getD1Database(binding).then((native) =>
+    asynchronousNativeDatabase({
+      native,
+      nativeAccess: () => undefined,
+      dispatch: (body) =>
+        runtime.dispatchFetch(`http://fixture/${binding}/query`, {
+          method: "POST",
+          headers: { connection: "close" },
+          body,
+        }),
+    })
+  );

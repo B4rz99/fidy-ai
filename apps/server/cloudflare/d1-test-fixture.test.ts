@@ -1,6 +1,6 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import {
   installTestSchema,
   installTestSchemaWithPrefix,
@@ -10,8 +10,9 @@ import {
 } from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
+const proxyDatabases = isolatedTestDatabases({ transport: "proxy" });
 const storage = isolatedTestStorage();
-afterAll(() => Promise.all([databases.dispose(), storage.dispose()]));
+afterAll(() => Promise.all([databases.dispose(), proxyDatabases.dispose(), storage.dispose()]));
 const wait = <A>(work: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise(work).pipe(Effect.orDie);
 
@@ -362,4 +363,116 @@ it.live("counts native execution once and excludes batch and plan reads from dis
     expect(observed.cost()).toEqual(expected);
     expect(observed.discovery()).toBe(discovered.meta.rows_read);
   })
+);
+
+it.live("retries a failed native bootstrap without retaining partial privacy or owner schema", () =>
+  Effect.gen(function* () {
+    const db = yield* wait(() => databases.acquire());
+    const categories = new URL("./migrations/0001_categories.sql", import.meta.url);
+    const failing = new URL("./migrations/0057_recurring_offer_replacement.sql", import.meta.url);
+    yield* wait(() =>
+      expect(installTestSchema({ db, sources: [categories, failing] })).rejects.toThrow()
+    );
+    expect(
+      (yield* wait(() =>
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE name IN ('categories', 'erasure_requests')"
+          )
+          .all()
+      )).results
+    ).toEqual([]);
+    yield* wait(() => installTestSchema({ db, sources: [categories] }));
+    expect(
+      yield* wait(() => db.prepare("SELECT count(*) AS count FROM categories").first("count"))
+    ).toBe(16);
+    expect(
+      yield* wait(() => db.prepare("SELECT count(*) AS count FROM erasure_requests").first("count"))
+    ).toBe(0);
+  })
+);
+
+it.live(
+  "preserves native query values, metadata, raw rows, errors, sessions and transactional rollback across transports",
+  () =>
+    Effect.gen(function* () {
+      const outputs = [];
+      for (const pool of [proxyDatabases, databases]) {
+        const db = yield* wait(() => pool.acquire());
+        yield* wait(() =>
+          db
+            .prepare(
+              "CREATE TABLE transport_probe (id INTEGER PRIMARY KEY, bytes BLOB, enabled INTEGER)"
+            )
+            .run()
+        );
+        const inserted = yield* wait(() =>
+          db
+            .prepare("INSERT INTO transport_probe VALUES (?, ?, ?)")
+            .bind(1, new Uint8Array([0, 127, 255]), true)
+            .run()
+        );
+        expect(inserted.meta.changes).toBe(1);
+        const rows = yield* wait(() => db.prepare("SELECT * FROM transport_probe").all());
+        expect(rows.meta.rows_read).toBe(1);
+        expect(rows.meta.rows_written).toBe(0);
+        outputs.push(rows.results);
+        expect(
+          yield* wait(() => db.prepare("SELECT bytes FROM transport_probe").first("bytes"))
+        ).toEqual([0, 127, 255]);
+        expect(
+          yield* wait(() => db.prepare("SELECT id FROM transport_probe").raw({ columnNames: true }))
+        ).toEqual([["id"], [1]]);
+        expect(yield* wait(() => db.prepare("SELECT id FROM transport_probe").raw())).toEqual([
+          [1],
+        ]);
+        yield* wait(() =>
+          expect(
+            db.batch([
+              db.prepare("INSERT INTO transport_probe(id) VALUES (2)"),
+              db.prepare("INSERT INTO transport_probe(id) VALUES (1)"),
+            ])
+          ).rejects.toThrow("UNIQUE constraint failed")
+        );
+        expect(
+          yield* wait(() => db.prepare("SELECT count(*) FROM transport_probe").first())
+        ).toEqual({ "count(*)": 1 });
+        yield* wait(() =>
+          db
+            .prepare("SELECT missing FROM transport_probe")
+            .all()
+            .then(
+              () => {
+                throw new Error("Invalid native SQL unexpectedly succeeded");
+              },
+              (cause: unknown) => {
+                expect(Predicate.isError(cause)).toBe(true);
+                if (!Predicate.isError(cause)) throw cause;
+                expect(cause.message).toContain("D1_ERROR: no such column: missing");
+                expect(Predicate.isError(cause.cause)).toBe(true);
+                if (Predicate.isError(cause.cause)) {
+                  expect(cause.cause.message).toContain("no such column: missing");
+                }
+              }
+            )
+        );
+        expect(() => db.prepare("SELECT ?").bind(undefined)).toThrow("D1_TYPE_ERROR");
+        const session = db.withSession("first-primary");
+        expect(
+          yield* wait(() => session.prepare("SELECT id FROM transport_probe").first("id"))
+        ).toBe(1);
+        // A session statement takes the original binding path, including in a mixed batch.
+        const mixed = yield* wait(() =>
+          db.batch([
+            db.prepare("SELECT bytes FROM transport_probe"),
+            session.prepare("SELECT id FROM transport_probe"),
+          ])
+        );
+        expect(mixed.map(({ results }) => results)).toEqual([
+          [{ bytes: [0, 127, 255] }],
+          [{ id: 1 }],
+        ]);
+      }
+      expect(outputs[1]).toEqual(outputs[0]);
+    })
 );

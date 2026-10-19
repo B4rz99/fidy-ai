@@ -11,6 +11,11 @@ const Premise = Schema.fromJsonString(
     pairingCode: Schema.String,
     backupRecoveryCode: Schema.String,
     assertion: Schema.String,
+    endpoint: Schema.Literals([
+      "https://127.0.0.1:4174/internal/support-recovery",
+      "https://127.0.0.1:4184/internal/support-recovery",
+      "https://127.0.0.1:4194/internal/support-recovery",
+    ]),
   })
 );
 await Effect.runPromise(
@@ -26,7 +31,7 @@ await Effect.runPromise(
         const headers = new Headers(init?.headers);
         headers.set("cf-access-jwt-assertion", headers.get("cf-access-token") ?? "");
         headers.delete("cf-access-token");
-        return original("https://127.0.0.1:4174/internal/support-recovery", {
+        return original(premise.endpoint, {
           ...init,
           headers,
           tls: { rejectUnauthorized: false },

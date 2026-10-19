@@ -1,14 +1,9 @@
+import { ReviewWorkspace } from "./workspace-components";
 import { useWorkspaceResume } from "./workspace-resume";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
 import { useSession } from "@/session/session-context";
-import { type JSX, Suspense, lazy, memo, useState } from "react";
-
-const ReviewWorkspace = lazy(() =>
-  import("@/features/needs-review/feature").then((module) => ({
-    default: memo(module.NeedsReviewFeature),
-  }))
-);
+import { type JSX, Suspense, useState } from "react";
 
 /** Keep the visited inbox in its authentication lifetime, including its evidence expiry timers. */
 export const RetainedReviewWorkspace = (): JSX.Element => {

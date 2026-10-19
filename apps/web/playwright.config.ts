@@ -5,6 +5,17 @@ const measuringBrowserCost = process.env.BROWSER_COST_MEASUREMENT === "1";
 const fixtureRuntime = measuringBrowserCost ? process.execPath : "bun";
 const measurementAssertionMilliseconds = 30_000;
 const normalAssertionMilliseconds = 5_000;
+const browserWorkers = 8;
+const performanceCases =
+  /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs/u;
+const performancePartitions: Readonly<Record<string, RegExp>> = {
+  "1/2":
+    /returns from .+ with its review form and original already available|returns to Transacciones from cached data while refreshing/u,
+  "2/2":
+    /returns to (Presupuestos|Recurrentes|Tablero) from cached data while refreshing|switches between visited review tabs/u,
+};
+const performanceSelection =
+  performancePartitions[process.env.BROWSER_TEST_SHARD ?? ""] ?? performanceCases;
 const normalStartupMilliseconds = 120_000;
 const measurementStartupMilliseconds = 600_000;
 const viteBuild = measuringBrowserCost
@@ -16,14 +27,39 @@ export default defineConfig({
   expect: {
     timeout: measuringBrowserCost ? measurementAssertionMilliseconds : normalAssertionMilliseconds,
   },
-  testIgnore: "cli-login.spec.ts",
+  projects: [
+    {
+      name: "admission",
+      testMatch: ["acceptance-clock.spec.ts", "session-binding.spec.ts"],
+      grep: /native admission|virtual waiting|rejects stale cross-tab drafts and logout/u,
+      workers: 1,
+    },
+    {
+      name: "performance",
+      testMatch: ["needs-review.spec.ts", "workspace-navigation.spec.ts"],
+      grep: performanceSelection,
+      dependencies: ["admission"],
+      workers: 1,
+    },
+    {
+      name: "browser",
+      testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
+      dependencies: ["performance"],
+      grepInvert:
+        /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs|rejects stale cross-tab drafts and logout/u,
+    },
+  ],
   fullyParallel: false,
   forbidOnly: isCI,
   retries: 0,
-  workers: measuringBrowserCost ? 1 : 2,
+  workers: measuringBrowserCost ? 1 : browserWorkers,
   reporter: isCI
-    ? [["line"], ["json", { outputFile: "test-results/browser-timings.json" }]]
-    : "line",
+    ? [
+        ["./scripts/browser-phase-reporter.ts"],
+        ["line"],
+        ["json", { outputFile: "test-results/browser-timings.json" }],
+      ]
+    : [["./scripts/browser-phase-reporter.ts"], ["line"]],
   use: {
     baseURL: "https://127.0.0.1:4173",
     ignoreHTTPSErrors: true,

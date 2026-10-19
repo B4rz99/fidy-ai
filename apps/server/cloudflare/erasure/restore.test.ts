@@ -143,6 +143,16 @@ const verifyControlReview = (
     });
   });
 
+const expireNativeHold = Effect.fn(function* (
+  advance: (milliseconds: number) => Promise<void>,
+  deadline: number
+) {
+  const liveNow = Date.now.bind(Date);
+  const remaining = Math.max(deadline - liveNow() + 20, 1);
+  yield* Effect.tryPromise(() => advance(remaining));
+  vi.spyOn(Date, "now").mockImplementation(() => liveNow() + remaining);
+});
+
 const verifyRestore = Effect.gen(function* () {
   const platform = yield* nativeErasurePlatform;
   let native = yield* Effect.tryPromise(() => platform.acquire());
@@ -455,8 +465,7 @@ const verifyRestore = Effect.gen(function* () {
     (yield* Effect.tryPromise(() => native.registry.list({ prefix: `held-records/${reference}/` })))
       .objects.length
   ).toBe(2);
-  const remaining = heldUntil - (yield* Clock.currentTimeMillis);
-  if (remaining > 0) yield* Effect.sleep(remaining + 20);
+  yield* expireNativeHold(platform.advanceClock, heldUntil);
   for (let count = 0; count < 5; count++) {
     expect((yield* send({ action: "Continue", userId, reference })).status).toBe(202);
   }

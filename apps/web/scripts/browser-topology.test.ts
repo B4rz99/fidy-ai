@@ -1,22 +1,35 @@
 import { expect, it } from "vitest";
 import { Predicate, Record } from "effect";
 
+const listed = new Map<string, string>();
 const listTests = (
   config: string,
   mode: "shared" | "cli",
   args: ReadonlyArray<string> = []
 ): string => {
+  const key = JSON.stringify([config, mode, args]);
+  const cached = listed.get(key);
+  if (cached !== undefined) return cached;
   const result = Bun.spawnSync(
     [process.execPath, "--bun", "playwright", "test", "--config", config, "--list", ...args],
     {
       env: Record.filter(
-        { PATH: Bun.env.PATH, HOME: Bun.env.HOME, CLI_ACCEPTANCE_MODE: mode },
+        {
+          PATH: Bun.env.PATH,
+          HOME: Bun.env.HOME,
+          CLI_ACCEPTANCE_MODE: mode,
+          BROWSER_TEST_SHARD: args
+            .find((argument) => argument.startsWith("--shard="))
+            ?.slice("--shard=".length),
+        },
         Predicate.isString
       ),
     }
   );
   expect(result.exitCode).toBe(0);
-  return new TextDecoder().decode(result.stdout);
+  const output = new TextDecoder().decode(result.stdout);
+  listed.set(key, output);
+  return output;
 };
 
 it("keeps the native CLI mutation journey out of the shared User's browser suite", () => {
@@ -33,8 +46,21 @@ it("partitions the complete browser suite across both runners without dropping o
     cases(listTests("playwright.config.ts", "shared", [`--shard=${shard}`]))
   );
   for (const shard of shards) expect(shard.length).toBeGreaterThan(0);
-  expect(shards.flat().sort()).toEqual([...complete].sort());
-  expect(new Set(shards.flat()).size).toBe(complete.length);
+  const browser = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    tests.filter((line) => line.includes("[browser]"));
+  const admission = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    tests.filter((line) => line.includes("[admission]"));
+  const performance = (tests: ReadonlyArray<string>): ReadonlyArray<string> =>
+    tests.filter((line) => line.includes("[performance]"));
+  expect(admission(complete)).toHaveLength(3);
+  for (const [index, shard] of shards.entries()) {
+    expect(admission(shard)).toEqual(admission(complete));
+    expect(performance(shard)).toHaveLength(index === 0 ? 3 : 4);
+  }
+  expect(performance(shards.flat()).toSorted()).toEqual([...performance(complete)].sort());
+  expect(new Set(performance(shards.flat())).size).toBe(7);
+  expect(browser(shards.flat()).toSorted()).toEqual([...browser(complete)].sort());
+  expect(new Set(browser(shards.flat())).size).toBe(browser(complete).length);
 });
 
 it("selects only the native CLI journey for its isolated public/Core and Audit fixture", () => {

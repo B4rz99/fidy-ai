@@ -1,9 +1,13 @@
-import { ResourceLimited } from "@fidy/server/client";
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
+import {
+  advanceRefusedRequest,
+  installAcceptanceClock,
+  installAcceptanceClockWithNativePerformance,
+} from "./acceptance-clock";
 
 const { expect } = playwright;
 
@@ -78,32 +82,54 @@ export const openUpgradeThroughCore = (page: Page): Promise<void> => {
     .then(() => consent)
     .then((response) => confirmConsentRead(page, response));
 };
-const signInWithIdentity = (
-  { page, request }: SignInFixture,
-  identity:
-    | "primary"
-    | "firstCard"
-    | "dashboard"
-    | "budget"
-    | "budgetEditing"
-    | "pagination"
-    | "access"
-    | "privacy"
-    | "privacyRenewal"
-    | "privacyErasure"
-    | "recurring"
-    | "recurringSummary"
-    | "recurringRecovery"
-    | "recurringEditing"
-    | "navigationTransactions"
-    | "navigationBudget"
-    | "navigationRecurring"
-    | "navigationClock"
-    | "navigationDashboard"
-): Promise<void> =>
-  page.clock
-    .install()
-    .then(() => openBrowserLogin(page))
+type RecurringIdentity =
+  | "recurring"
+  | "recurringSummary"
+  | "recurringRecoveryUnavailable"
+  | "recurringRecoveryMalformed"
+  | "recurringRecoveryLimited"
+  | "recurringRecoveryPressure"
+  | "recurringEditing"
+  | "recurringLifecycle"
+  | "recurringTracking"
+  | "recurringExceptions"
+  | "recurringChat"
+  | "recurringPagination";
+
+const signInWithIdentity = ({
+  page,
+  request,
+  identity,
+  clockMode,
+}: SignInFixture &
+  Readonly<{
+    clockMode: "controlled" | "native-performance";
+    identity:
+      | "primary"
+      | "firstCard"
+      | "dashboard"
+      | "budget"
+      | "budgetEditing"
+      | "pagination"
+      | "access"
+      | "privacy"
+      | "privacyRenewal"
+      | "privacyErasure"
+      | RecurringIdentity
+      | "navigationTransactions"
+      | "navigationBudget"
+      | "navigationRecurring"
+      | "navigationReviewBudget"
+      | "navigationReviewTransactions"
+      | "navigationClock"
+      | "navigationDashboard";
+  }>): Promise<void> =>
+  openBrowserLogin(page)
+    .then(() =>
+      clockMode === "controlled"
+        ? installAcceptanceClock(page)
+        : installAcceptanceClockWithNativePerformance(page)
+    )
     .then(() => page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click())
     .then(() => visiblePairingCode(page))
     .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&${identity}=true`))
@@ -134,6 +160,7 @@ export const signInWithVerifiedEmailThroughCore = ({
 }: SignInFixture & Readonly<{ email: string }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
       yield* Effect.tryPromise(() => openBrowserLogin(page));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
@@ -175,25 +202,25 @@ export const signInFirstDaviplataThroughCore = (input: SignInFixture): Promise<v
 
 /** Signs in the seeded User with an available PaymentSource through real Core redemption. */
 export const signInThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "primary");
+  signInWithIdentity({ ...input, identity: "primary", clockMode: "controlled" });
 
 /** Signs in a separate User whose first Subscription must tokenize a new card. */
 export const signInFirstCardThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "firstCard");
+  signInWithIdentity({ ...input, identity: "firstCard", clockMode: "controlled" });
 
 /** Dashboard mutations have their own User so concurrent enrollment cannot reset its document. */
 export const signInDashboardThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "dashboard");
+  signInWithIdentity({ ...input, identity: "dashboard", clockMode: "controlled" });
 /** Budget mutations have their own User so they cannot change another journey's Widget data. */
 export const signInBudgetThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "budget");
+  signInWithIdentity({ ...input, identity: "budget", clockMode: "controlled" });
 /** Independent retained history spanning more than one canonical page. */
 export const signInPaginationThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "pagination");
+  signInWithIdentity({ ...input, identity: "pagination", clockMode: "controlled" });
 
 /** Independent metadata-only MCP continuation User; no usable OAuth grant is seeded. */
 export const signInAccessThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "access");
+  signInWithIdentity({ ...input, identity: "access", clockMode: "controlled" });
 
 /** Direct acceptance probes latch the same public identity as a mounted browser client. */
 export const browserSessionHeaders = (
@@ -228,66 +255,61 @@ export const boundSessionRequests = (
 
 const canonicalRecoveryMilliseconds = 15_000;
 const resourceProbeRetries = 6;
-const maximumProbeDelaySeconds = 5;
-const RetrySeconds = Schema.NumberFromString.check(
-  Schema.isInt(),
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(maximumProbeDelaySeconds)
-);
-
-export const probeCanonicalRequest = (
-  send: () => Promise<APIResponse>
-): Effect.Effect<APIResponse, Cause.UnknownError | Cause.TimeoutError> =>
+export const probeCanonicalRequest = ({
+  request,
+  send,
+}: Readonly<{ request: APIRequestContext; send: () => Promise<APIResponse> }>): Effect.Effect<
+  APIResponse,
+  Cause.UnknownError | Cause.TimeoutError
+> =>
   Effect.gen(function* () {
-    const limited = 429;
-    const millisecondsPerSecond = 1_000;
     for (let retry = 0; retry < resourceProbeRetries; retry++) {
       const response = yield* Effect.tryPromise(() => send());
-      if (response.status() !== limited) return response;
-      const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers()["retry-after"]);
-      if (Option.isNone(seconds)) return response;
-      const body: unknown = yield* Effect.tryPromise(() => response.json());
-      if (Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))) {
+      if (!(yield* Effect.tryPromise(() => advanceRefusedRequest({ request, response })))) {
         return response;
       }
-      yield* Effect.sleep(seconds.value * millisecondsPerSecond);
     }
     return yield* Effect.tryPromise(() => send());
   }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
 
 /** Independent expired-trial User for irreversible processing-withdrawal acceptance. */
 export const signInPrivacyThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "privacy");
+  signInWithIdentity({ ...input, identity: "privacy", clockMode: "controlled" });
 
 /** Independent erasure identity keeps request pressure and terminal intent isolated from withdrawal journeys. */
 export const signInPrivacyErasureThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "privacyErasure");
+  signInWithIdentity({ ...input, identity: "privacyErasure", clockMode: "controlled" });
 
 /** Independent renewal identity keeps withdrawal isolated from parallel browser journeys. */
 export const signInPrivacyRenewalThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "privacyRenewal");
+  signInWithIdentity({ ...input, identity: "privacyRenewal", clockMode: "controlled" });
 
 /** Each recurring journey has independent planning data and canonical admission limits. */
 export const signInRecurringThroughCore = (
   input: SignInFixture &
     Readonly<{
-      identity: "recurring" | "recurringSummary" | "recurringRecovery" | "recurringEditing";
+      identity: RecurringIdentity;
     }>
-): Promise<void> => signInWithIdentity(input, input.identity);
+): Promise<void> => signInWithIdentity({ ...input, clockMode: "controlled" });
 
-/** Navigation benchmarks cannot share admission budgets or mutable data with other journeys. */
-export const signInNavigationThroughCore = (
-  input: SignInFixture &
-    Readonly<{
-      identity:
-        | "navigationTransactions"
-        | "navigationBudget"
-        | "navigationRecurring"
-        | "navigationClock"
-        | "navigationDashboard";
-    }>
-): Promise<void> => signInWithIdentity(input, input.identity);
+type NavigationFixture = SignInFixture &
+  Readonly<{
+    identity:
+      | "navigationTransactions"
+      | "navigationBudget"
+      | "navigationRecurring"
+      | "navigationReviewBudget"
+      | "navigationReviewTransactions"
+      | "navigationClock"
+      | "navigationDashboard";
+  }>;
+/** Navigation journeys own their User and retained data. */
+export const signInNavigationThroughCore = (input: NavigationFixture): Promise<void> =>
+  signInWithIdentity({ ...input, clockMode: "controlled" });
+/** Timing probes preserve native performance while virtualizing polling and cooldowns. */
+export const signInNavigationPerformanceThroughCore = (input: NavigationFixture): Promise<void> =>
+  signInWithIdentity({ ...input, clockMode: "native-performance" });
 
 /** Budget editor journeys cannot race the Budget Widget's cap mutations. */
 export const signInBudgetEditingThroughCore = (input: SignInFixture): Promise<void> =>
-  signInWithIdentity(input, "budgetEditing");
+  signInWithIdentity({ ...input, identity: "budgetEditing", clockMode: "controlled" });

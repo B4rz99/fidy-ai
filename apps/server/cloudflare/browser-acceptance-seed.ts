@@ -31,8 +31,20 @@ export const paginationUserId = "24000000-0000-4000-8000-000000000341";
 export const recurringUserId = "24000000-0000-4000-8000-000000000401";
 export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
 export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
-export const recurringRecoveryUserId = "24000000-0000-4000-8000-000000000421";
+export const recurringIsolatedIdentities = [
+  { key: "recurringRecoveryUnavailable", userId: "24000000-0000-4000-8000-000000000421" },
+  { key: "recurringRecoveryMalformed", userId: "24000000-0000-4000-8000-000000000611" },
+  { key: "recurringRecoveryLimited", userId: "24000000-0000-4000-8000-000000000621" },
+  { key: "recurringRecoveryPressure", userId: "24000000-0000-4000-8000-000000000631" },
+  { key: "recurringLifecycle", userId: "24000000-0000-4000-8000-000000000581" },
+  { key: "recurringTracking", userId: "24000000-0000-4000-8000-000000000561" },
+  { key: "recurringExceptions", userId: "24000000-0000-4000-8000-000000000571" },
+  { key: "recurringChat", userId: "24000000-0000-4000-8000-000000000541" },
+  { key: "recurringPagination", userId: "24000000-0000-4000-8000-000000000551" },
+] as const;
 export const navigationIdentities = [
+  { key: "navigationReviewBudget", userId: "24000000-0000-4000-8000-000000000591" },
+  { key: "navigationReviewTransactions", userId: "24000000-0000-4000-8000-000000000601" },
   { key: "navigationClock", userId: "24000000-0000-4000-8000-000000000511" },
   { key: "navigationTransactions", userId: "24000000-0000-4000-8000-000000000451" },
   { key: "navigationBudget", userId: "24000000-0000-4000-8000-000000000461" },
@@ -102,7 +114,7 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
 };
 await seedIdentity();
 await Promise.all(
-  navigationIdentities.map((identity) =>
+  [...navigationIdentities, ...recurringIsolatedIdentities].map((identity) =>
     seedIdentity({
       userId: identity.userId,
       bsuid: `CO.${identity.key}`,
@@ -128,12 +140,6 @@ await seedIdentity({
   bsuid: "CO.RecurringEditing",
   email: "edicion-recurrentes@example.com",
   consentId: "24000000-0000-4000-8000-000000000502",
-});
-await seedIdentity({
-  userId: recurringRecoveryUserId,
-  bsuid: "CO.RecurringRecovery",
-  email: "recuperacion-recurrentes@example.com",
-  consentId: "24000000-0000-4000-8000-000000000422",
 });
 await seedIdentity({
   userId: privacyUserId,

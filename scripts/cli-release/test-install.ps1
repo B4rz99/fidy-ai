@@ -30,7 +30,7 @@ function Write-HostileArchive {
       $Entry = $Zip.CreateEntry($Name)
       $Output = $Entry.Open()
       try {
-        $Bytes = [IO.File]::ReadAllBytes($Installed)
+        $Bytes = [Text.Encoding]::UTF8.GetBytes('Hostile entries must be refused before extraction.')
         $Output.Write($Bytes, 0, $Bytes.Length)
       } finally { $Output.Dispose() }
     }

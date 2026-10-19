@@ -1174,6 +1174,7 @@ it("bounds token delivery waiting to five seconds and cancels queued refresh wit
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
       );
+      yield* assertReleased(fixture.db);
       const gate = fixture.holdRefresh();
       const pending = refreshFixture({
         ...fixture,

@@ -1,10 +1,11 @@
-import { signInThroughCore } from "./real-core-fixture";
+import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
 import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
+test.describe.configure({ mode: "parallel" });
 const id = "24000000-0000-4000-8000-000000001350";
 const item = {
   id,
@@ -848,20 +849,27 @@ const recordSwitchDuration = (page: Page): Promise<void> =>
       });
     });
 
-for (const destination of ["Presupuestos", "Transacciones"]) {
-  test(`returns from ${destination} with its review form and original already available`, ({
-    page,
-    request,
-  }) =>
+for (const [destination, identity] of [
+  ["Presupuestos", "navigationReviewBudget"],
+  ["Transacciones", "navigationReviewTransactions"],
+] as const) {
+  const title = `returns from ${destination} with its review form and original already available`;
+  test(title, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
-        yield* Effect.tryPromise(() => page.clock.resume());
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({ page, request, identity })
+        );
         yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
         yield* Effect.tryPromise(() =>
           page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
         );
-        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() =>
+          page
+            .getByRole("navigation", { name: "Aplicación" })
+            .getByText("Por revisar", { exact: true })
+            .click()
+        );
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
         );
@@ -904,7 +912,8 @@ for (const destination of ["Presupuestos", "Transacciones"]) {
           expect(page.getByText("Compra en Café — $13.500", { exact: true })).toHaveCount(0)
         );
       })
-    ));
+    )
+  );
 }
 
 const verifyPrivacyDisposesReview = (page: Page): Promise<void> =>

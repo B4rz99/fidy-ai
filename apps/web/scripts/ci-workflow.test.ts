@@ -29,16 +29,18 @@ describe("pull-request checks workflow policy", () => {
 
     expect(browserJob).toContain("~/.cache/ms-playwright");
     const restore = browserJob.indexOf("actions/cache@");
-    const systemDependencies = browserJob.indexOf("playwright install-deps chromium");
+    const systemDependencies = browserJob.indexOf("Verify Chromium system dependencies");
     const binaries = browserJob.indexOf("playwright install --only-shell chromium");
     expect(restore).toBeGreaterThan(0);
-    expect(systemDependencies).toBeGreaterThan(restore);
-    expect(binaries).toBeGreaterThan(systemDependencies);
+    expect(binaries).toBeGreaterThan(restore);
+    expect(systemDependencies).toBeGreaterThan(binaries);
+    expect(browserJob).toContain("chromium.launch()");
+    expect(browserJob).toContain("playwright install-deps chromium");
     expect(browserJob).toContain(
       "${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell"
     );
     const installation = browserJob.slice(
-      browserJob.indexOf("- name: Install Chromium system dependencies"),
+      browserJob.indexOf("- name: Verify Chromium system dependencies"),
       browserJob.indexOf("- name: Static-shell browser validation")
     );
     expect(installation).not.toContain("if:");

@@ -1,7 +1,9 @@
+import { coordinatorTestDatabase } from "../d1-test-fixture";
 import { Effect, FileSystem, type Scope } from "effect";
 import { Miniflare } from "miniflare";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 
+const noContentStatus = 204;
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise(run).pipe(Effect.orDie);
 type NativeBindings = Readonly<{
@@ -63,8 +65,8 @@ const create = (
   });
 const bindings = (runtime: Miniflare): Promise<NativeBindings> =>
   Promise.all([
-    runtime.getD1Database("DB"),
-    runtime.getD1Database("SNAPSHOT_DB"),
+    coordinatorTestDatabase({ runtime, binding: "DB" }),
+    coordinatorTestDatabase({ runtime, binding: "SNAPSHOT_DB" }),
     runtime.getBindings<{ EMAIL_BUCKET: R2Bucket; ERASURE_BUCKET: R2Bucket }>(),
     runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR"),
   ]).then(([db, snapshot, buckets, namespace]) => ({
@@ -94,6 +96,7 @@ const bindings = (runtime: Miniflare): Promise<NativeBindings> =>
 export const nativeErasurePlatform: Effect.Effect<
   Readonly<{
     acquire: () => Promise<NativeBindings>;
+    advanceClock: (milliseconds: number) => Promise<void>;
     restart: () => Promise<NativeBindings>;
     restoreSnapshot: () => Promise<NativeBindings>;
     restoreLive: () => Promise<NativeBindings>;
@@ -121,6 +124,18 @@ export const nativeErasurePlatform: Effect.Effect<
     });
   return {
     acquire: () => bindings(runtime),
+    advanceClock: (milliseconds) =>
+      runtime
+        .dispatchFetch("http://fixture/__fixture/clock", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ milliseconds }),
+        })
+        .then((response) => {
+          if (response.status !== noContentStatus) {
+            throw new Error("Native fixture clock advance failed");
+          }
+        }),
     restoreSnapshot: () => replace(true),
     restoreLive: () => replace(false),
     restart: () => replace(restored),

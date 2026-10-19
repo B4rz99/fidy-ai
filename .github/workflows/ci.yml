@@ -30,12 +30,18 @@ jobs:
       security-sast: ${{ steps.plan.outputs.security-sast }}
       security-sca: ${{ steps.plan.outputs.security-sca }}
       required-script: ${{ steps.results-gate.outputs.script }}
+      source-partitions: ${{ steps.plan.outputs.source-partitions }}
+      source-sca-partition: ${{ steps.plan.outputs.source-sca-partition }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-runtime
       - name: Plan checks from the complete PR diff
         id: plan
@@ -51,6 +57,13 @@ jobs:
             cat scripts/check-ci-results.sh
             echo 'FIDY_REQUIRED_CHECK_SCRIPT'
           } >> "$GITHUB_OUTPUT"
+      - name: Scan source partition 1 on this existing runner
+        if: ${{ steps.plan.outputs.security-sast == 'true' }}
+        env:
+          SOURCE_PARTITION_COUNT: ${{ steps.plan.outputs.source-partitions }}
+        run: |
+          bun scripts/partition-source-scan.ts "1/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          docker run --rm --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
 
   static:
     name: Workspace Gate
@@ -61,14 +74,39 @@ jobs:
       statuses: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - name: Fetch base branch tip
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
+      - name: Restore every declared upstream reference
+        run: |
+          bun -e '
+            const sources = await Bun.file(".patterns/sources.json").json();
+            for (const source of Object.values(sources)) {
+              for (const path of [source.snapshot.manifest, ...source.sourcePaths]) {
+                if (path.startsWith(".repos/")) console.log("/" + path);
+              }
+            }
+          ' | git sparse-checkout add --stdin
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
+      - name: Restore compiler-managed project graph
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            .tsbuild
+            tsconfig.tsbuildinfo
+          key: ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-typegraph-v1-${{ hashFiles('bun.lock', 'tsconfig*.json', 'apps/*/tsconfig*.json', 'infra/*/tsconfig*.json', 'tools/astro/tsconfig.json', 'tools/astro/bun.lock') }}-
+            ${{ runner.os }}-typegraph-v1-
       - name: Static repository validation
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -78,7 +116,7 @@ jobs:
           VERIFY_TIMING_REPORT: test-results/verify-static.json
         run: |
           if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then unset PR_TITLE; fi
-          bun run verify -- --group static
+          /usr/bin/time -p bun run verify -- --group static
       - name: Preserve Workspace Gate phase timings
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -95,10 +133,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
+      - name: Select installed Playwright version
+        id: playwright-version
+        run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
+      - name: Restore Playwright browser cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
+      - name: Install Chromium headless shell
+        run: bunx --bun playwright install --only-shell chromium
       - name: Build validation
         env:
           RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SITE_BROWSER_PREBUILT: "true"
         run: bun run verify -- --group builds
 
   unit:
@@ -109,6 +163,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+        with:
+          scope: unit-tests
       - name: Unit and artifact validation
         run: bun run verify -- --group unit
       - name: Preserve core coverage evidence
@@ -131,15 +187,25 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
         with:
           save-cache: "false"
+          scope: server-tests
       - name: Cloudflare adapter validation
         env:
           CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
           CLOUDFLARE_TEST_REPORT: "true"
           VERIFY_TIMING_REPORT: apps/server/test-results/verify-adapters.json
-        run: bun run verify -- --group cloudflare-adapters
+        run: |
+          export TMPDIR="$(mktemp -d /dev/shm/fidy-adapters.XXXXXX)"
+          export NATIVE_TEST_IMAGE_CACHE="$TMPDIR/pristine-native-images"
+          trap 'rm -rf "$TMPDIR"' EXIT
+          bun run verify -- --group cloudflare-adapters
       - name: Summarize adapter file timings
         if: ${{ !cancelled() }}
         run: |
@@ -170,12 +236,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
       - name: Cloudflare infrastructure validation
         env:
           CLOUDFLARE_TEST_REPORT: "true"
           VERIFY_TIMINGS_PATH: infra/cloudflare/test-results/verify-infra.json
-        run: bun run verify -- --group cloudflare-infra
+        run: |
+          export TMPDIR="$(mktemp -d /dev/shm/fidy-infra.XXXXXX)"
+          export NATIVE_TEST_IMAGE_CACHE="$TMPDIR/pristine-native-images"
+          trap 'rm -rf "$TMPDIR"' EXIT
+          bun run verify -- --group cloudflare-infra
       - name: Upload infrastructure timings
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -198,9 +273,15 @@ jobs:
         shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
         with:
           save-cache: "false"
+          scope: unit-tests
       - name: Select installed Playwright version
         id: playwright-version
         working-directory: apps/web
@@ -211,25 +292,34 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
-      - name: Install Chromium system dependencies
-        run: time sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
       - name: Install Chromium headless shell
         env:
           BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
         run: |
           echo "Browser cache hit: $BROWSER_CACHE_HIT"
           time bunx --bun playwright install --only-shell chromium
+      - name: Verify Chromium system dependencies
+        run: |
+          node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();' ||
+            sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
       - name: Static-shell browser validation
         env:
           BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
-          sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
-          dbus-run-session -- bash -euc '
-            printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
-            if [[ "$BROWSER_TEST_SHARD" == 1/* ]]; then bun run --cwd apps/cli test:native; fi
-            bun run verify -- --group browser
-          '
+          export TMPDIR="$(mktemp -d /dev/shm/fidy-browser.XXXXXX)"
+          export NATIVE_TEST_IMAGE_CACHE="$TMPDIR/pristine-native-images"
+          trap 'rm -rf "$TMPDIR"' EXIT
+          if [[ "$BROWSER_TEST_SHARD" == 1/* ]]; then
+            sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
+            dbus-run-session -- bash -euc '
+              printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
+              bun run --cwd apps/cli test:native
+              /usr/bin/time -p bun run verify -- --group browser
+            '
+          else
+            /usr/bin/time -p bun run verify -- --group browser
+          fi
       - name: Preserve browser timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -243,6 +333,8 @@ jobs:
           retention-days: 7
 
   security-secrets:
+    needs: changes
+    if: ${{ !cancelled() }}
     name: Secrets
     runs-on: ubuntu-latest
     steps:
@@ -253,6 +345,23 @@ jobs:
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch origin "$BASE_BRANCH"
+      - uses: ./.github/actions/bun-runtime
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+      - name: Start source partition 2 on this existing runner
+        id: source-scan
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+        env:
+          SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
+        run: |
+          bun scripts/partition-source-scan.ts "2/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          docker pull ghcr.io/trufflesecurity/trufflehog:3.97.1@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08 > "$RUNNER_TEMP/trufflehog-image-pull.log" 2>&1 &
+          trufflehog_pull_pid=$!
+          docker pull docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9 > "$RUNNER_TEMP/secrets-image-pull.log" 2>&1 &
+          secrets_pull_pid=$!
+          docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
+          wait "$trufflehog_pull_pid"
+          wait "$secrets_pull_pid"
+          cat "$RUNNER_TEMP/trufflehog-image-pull.log" "$RUNNER_TEMP/secrets-image-pull.log"
       - name: Gitleaks — pattern-based secret scan
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
@@ -266,6 +375,13 @@ jobs:
         run: >-
           docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9
           ss scan --strict --config /src/.fluidattacks/secrets.yaml
+      - name: Require source partition 2 result
+        if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
+        run: |
+          result=$(docker wait fidy-source-scan)
+          docker logs fidy-source-scan
+          docker rm fidy-source-scan
+          [[ "$result" == 0 ]]
 
   security-sast:
     needs: changes
@@ -274,15 +390,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Semgrep SAST
-        uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1
         with:
-          config: >-
-            p/owasp-top-ten
-            p/typescript
-            p/secrets
-      - name: Fluid Attacks SAST
-        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /src/.fluidattacks/sast.yaml
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - name: Semgrep
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b \
+            semgrep scan --error --strict --metrics=off --baseline-commit "$BASE_SHA" \
+            --config p/owasp-top-ten --config p/typescript --config p/secrets --exclude .repos .
 
   security-sca:
     needs: changes
@@ -291,8 +412,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-runtime
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+      - name: Start remaining source partition on this existing runner
+        id: source-scan
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+        env:
+          SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
+          SOURCE_PARTITION_INDEX: ${{ needs.changes.outputs.source-sca-partition }}
+        run: |
+          bun scripts/partition-source-scan.ts "$SOURCE_PARTITION_INDEX/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          docker pull docker.io/fluidattacks/sca@sha256:b5c6d30c03cba30ffbb404c22be288857bf0a57bd30867514a8a29b7dcd9079f > "$RUNNER_TEMP/sca-image-pull.log" 2>&1 &
+          sca_pull_pid=$!
+          docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
+          wait "$sca_pull_pid"
+          cat "$RUNNER_TEMP/sca-image-pull.log"
       - name: Fluid Attacks SCA
         run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca@sha256:b5c6d30c03cba30ffbb404c22be288857bf0a57bd30867514a8a29b7dcd9079f sca --strict scan /src/.fluidattacks/sca.yaml
+      - name: Require remaining source partition result
+        if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
+        run: |
+          result=$(docker wait fidy-source-scan)
+          docker logs fidy-source-scan
+          docker rm fidy-source-scan
+          [[ "$result" == 0 ]]
 
   cli-native-package:
     needs: changes
@@ -302,6 +450,20 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/bun-runtime
+      - name: Start source partition 3 on this existing runner
+        id: source-scan
+        if: ${{ needs.changes.outputs.security-sast == 'true' }}
+        env:
+          SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
+        run: |
+          bun scripts/partition-source-scan.ts "3/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
       - uses: ./.github/actions/bun-install
       - name: Bundle the real credential adapter and native probe
         run: bun run --cwd apps/cli build:native
@@ -312,6 +474,13 @@ jobs:
           path: apps/cli/dist/native-store/
           if-no-files-found: error
           retention-days: 1
+      - name: Require source partition 3 result
+        if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
+        run: |
+          result=$(docker wait fidy-source-scan)
+          docker logs fidy-source-scan
+          docker rm fidy-source-scan
+          [[ "$result" == 0 ]]
 
   cli-native:
     needs: [changes, cli-native-package]
@@ -325,6 +494,11 @@ jobs:
         os: [macos-15-intel, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /.github/actions/bun-runtime/
+            /scripts/install-bun.sh
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-runtime
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

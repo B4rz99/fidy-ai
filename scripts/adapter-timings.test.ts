@@ -2,12 +2,12 @@ import { expect, it } from "vitest";
 import { medianAdapterTimings, timingRuns } from "./adapter-timings";
 import { Schema } from "effect";
 
-const run = (runId: string, seconds: number): (typeof timingRuns.Type)[number] => ({
+const run = (runId: string, seconds: number, shardCount = 4): (typeof timingRuns.Type)[number] => ({
   runId,
   revision: "same-revision",
   platform: "linux",
-  configuration: "four-serial-shards",
-  reports: [0, 1, 2, 3].map((index) => ({
+  configuration: `${shardCount}-serial-shards`,
+  reports: Array.from({ length: shardCount }, (_, index) => ({
     success: true,
     numFailedTests: 0,
     numPendingTests: 0,
@@ -59,7 +59,7 @@ it("refuses incomplete, duplicated, or non-equivalent evidence", () => {
   expect(() => medianAdapterTimings([run("1", 10), run("2", 11), run("3", 0)])).toThrow("Invalid");
   expect(() =>
     medianAdapterTimings([run("1", 10), run("2", 11), { ...run("3", 12), reports: [] }])
-  ).toThrow("four");
+  ).toThrow("shards");
   const missing = run("3", 12);
   expect(() =>
     medianAdapterTimings([
@@ -107,4 +107,10 @@ it("rejects failed, skipped, or non-Linux reports before aggregating", () => {
       decode([{ ...sample, reports: sample.reports.map((report) => ({ ...report, [field]: 1 })) }])
     ).toThrow();
   }
+});
+
+it("accepts complete timing evidence after increasing the shard count", () => {
+  const samples = medianAdapterTimings([run("1", 10, 24), run("2", 12, 24), run("3", 11, 24)]);
+  expect(samples).toHaveLength(24);
+  expect(samples.every((sample) => sample.seconds === 11)).toBe(true);
 });

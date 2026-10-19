@@ -4,6 +4,7 @@ import { apiOrigin, installCategories, installUser } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
+test.describe.configure({ mode: "parallel" });
 const category = { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" };
 const pageSize = 100;
 const unauthorized = 401;

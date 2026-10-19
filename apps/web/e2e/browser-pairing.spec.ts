@@ -1,7 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { playwright } from "./playwright-runtime";
+import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { installUser } from "./http-fixtures";
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import {
   boundSessionRequests,
   openBrowserLogin,
@@ -9,6 +11,8 @@ import {
   visiblePairingCode,
 } from "./real-core-fixture";
 
+const { expect, test } = playwright;
+const { api: apiOrigin, app: appOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const json = (value: object): string => JSON.stringify(value);
@@ -48,8 +52,14 @@ const installCanonicalProductRoutes = (page: Page): Promise<void> =>
         )
       );
       yield* wait(
-        page.route(/^https:\/\/127\.0\.0\.1:4174\/transactions(?:\?.*)?$/u, (route) =>
-          route.fulfill({ contentType: "application/json", status: successStatus, body: emptyList })
+        page.route(
+          (url) => url.origin === apiOrigin && url.pathname === "/transactions",
+          (route) =>
+            route.fulfill({
+              contentType: "application/json",
+              status: successStatus,
+              body: emptyList,
+            })
         )
       );
     })
@@ -144,7 +154,7 @@ const installPairingApiFixture = (page: Page): Promise<PairingApiFixture> =>
               fixture.activeRedeems -= 1;
               const pending = fixture.redeemCount === 1;
               const responseHeaders: Record<string, string> = {
-                "access-control-allow-origin": "https://127.0.0.1:4173",
+                "access-control-allow-origin": appOrigin,
                 "access-control-allow-credentials": "true",
               };
               if (!pending) {
@@ -455,9 +465,9 @@ const finishRealPairing = ({
       yield* wait(expect(page.getByRole("button", { name: "Continuar con Google" })).toBeVisible());
       yield* wait(expect.poll(() => hasSessionCookie(context)).toBe(false));
       const revoked = yield* wait(
-        request.get("https://127.0.0.1:4174/user", {
+        request.get(`${apiOrigin}/user`, {
           headers: {
-            origin: "https://127.0.0.1:4173",
+            origin: appOrigin,
             cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
           },
         })
@@ -474,13 +484,15 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* wait(installAcceptanceClock(page));
       yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       const code = yield* wait(visiblePairingCode(page));
       const approval = yield* wait(
-        request.post(`http://127.0.0.1:4175/approve?code=${code}&pairing=true`)
+        request.post(`${operatorOrigin}/approve?code=${code}&pairing=true`)
       );
       expect(approval.status()).toBe(noContentStatus);
+      yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       yield* wait(
         expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
@@ -492,8 +504,8 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       expect(Option.getOrUndefined(session)?.httpOnly).toBe(true);
       expect(Option.getOrUndefined(session)?.secure).toBe(true);
       const current = yield* wait(
-        boundSessionRequests(page.request).get("https://127.0.0.1:4174/user", {
-          headers: { origin: "https://127.0.0.1:4173" },
+        boundSessionRequests(page.request).get(`${apiOrigin}/user`, {
+          headers: { origin: appOrigin },
         })
       );
       expect(current.status()).toBe(successStatus);
@@ -502,10 +514,10 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       });
       const otherTransaction = yield* wait(
         boundSessionRequests(page.request).get(
-          "https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262",
+          `${apiOrigin}/transactions/24000000-0000-4000-8000-000000000262`,
           {
             headers: {
-              origin: "https://127.0.0.1:4173",
+              origin: appOrigin,
               cookie: `${Option.getOrUndefined(session)?.name}=${Option.getOrUndefined(session)?.value}`,
             },
           }
@@ -522,27 +534,28 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* wait(installAcceptanceClock(page));
       const pending = page.waitForResponse(
         (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
       );
       yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       const code = yield* wait(visiblePairingCode(page));
+      yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
       yield* wait(pending);
-      const signed = yield* wait(
-        (yield* wait(request.get("http://127.0.0.1:4175/assertion"))).text()
-      );
+      const signed = yield* wait((yield* wait(request.get(`${operatorOrigin}/assertion`))).text());
       const decision = (): ReturnType<typeof request.post> =>
-        request.post("https://127.0.0.1:4174/internal/support-recovery", {
+        request.post(`${apiOrigin}/internal/support-recovery`, {
           headers: { "cf-access-jwt-assertion": signed },
           data: { pairingCode: code, backupRecoveryCode: "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2" },
         });
       expect((yield* wait(decision())).status()).toBe(successStatus);
       expect((yield* wait(decision())).status()).toBe(invalidStatus);
+      yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       const recovered = yield* wait(
-        boundSessionRequests(page.request).get("https://127.0.0.1:4174/user", {
-          headers: { origin: "https://127.0.0.1:4173" },
+        boundSessionRequests(page.request).get(`${apiOrigin}/user`, {
+          headers: { origin: appOrigin },
         })
       );
       expect(yield* wait(recovered.json())).toMatchObject({
@@ -656,24 +669,22 @@ const installExpiringPairingRoutes = (
   page
     .route("**/web/pairings", (route: Route) => {
       counts.start += 1;
-      return runFixture(
-        DateTime.now.pipe(
-          Effect.map((now) => DateTime.add(now, { seconds: 6 })),
-          Effect.map(DateTime.formatIso)
-        )
-      ).then((shortExpiry) =>
-        route.fulfill({
-          contentType: "application/json",
-          status: successStatus,
-          body: json({
-            pairingId,
-            privateVerifier,
-            publicCode,
-            expiresAt: shortExpiry,
-            pollingIntervalSeconds: 5,
-          }),
-        })
-      );
+      return page
+        .evaluate(() => performance.timeOrigin + performance.now())
+        .then((now) => DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(now), { seconds: 6 })))
+        .then((shortExpiry) =>
+          route.fulfill({
+            contentType: "application/json",
+            status: successStatus,
+            body: json({
+              pairingId,
+              privateVerifier,
+              publicCode,
+              expiresAt: shortExpiry,
+              pollingIntervalSeconds: 5,
+            }),
+          })
+        );
     })
     .then(() =>
       page.route("**/web/pairings/redeem", () => {

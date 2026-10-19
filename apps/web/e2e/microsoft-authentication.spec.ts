@@ -6,6 +6,8 @@ import {
   whatsappAssociationJourney,
 } from "./provider-authentication.journeys";
 
+playwright.test.describe.configure({ mode: "parallel" });
+
 playwright.test.beforeEach(({ context }) => isolateProviderSource(context));
 
 const configuration = {

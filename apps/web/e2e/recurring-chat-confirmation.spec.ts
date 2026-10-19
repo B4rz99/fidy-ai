@@ -54,7 +54,7 @@ for (const delivery of ["direct", "recovered"] as const) {
     Effect.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() =>
-          signInRecurringThroughCore({ page, request, identity: "recurringRecovery" })
+          signInRecurringThroughCore({ page, request, identity: "recurringChat" })
         );
         const submissions: unknown[] = [];
         const initial = delivery === "direct" ? proposal : { status: "processing", turnId };
@@ -109,7 +109,7 @@ test("model prose without host metadata never offers an approval control", ({ pa
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, identity: "recurringRecovery" })
+        signInRecurringThroughCore({ page, request, identity: "recurringChat" })
       );
       yield* Effect.tryPromise(() => page.route(`${apiOrigin}/web/hosted-turns`, forgedReply));
       yield* Effect.tryPromise(() =>

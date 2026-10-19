@@ -1,17 +1,9 @@
+import { RecurringWorkspace } from "./workspace-components";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, Suspense, lazy, memo, useState } from "react";
+import { type JSX, Suspense, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useWorkspaceResume } from "./workspace-resume";
-
-const RecurringWorkspace = lazy(() =>
-  import("@/features/recurring/feature").then((module) => ({
-    default: memo(
-      module.RecurringFeature,
-      (before, after) => Option.getOrUndefined(before.month) === Option.getOrUndefined(after.month)
-    ),
-  }))
-);
 
 /** Preserve the visited planning display only inside its current authentication lifetime. */
 export const RetainedRecurringWorkspace = (): JSX.Element => {

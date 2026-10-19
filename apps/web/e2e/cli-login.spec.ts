@@ -21,7 +21,7 @@ if (Bun.env.CLI_ACCEPTANCE_MODE !== "cli") {
 class CliJourneyFailed extends Data.TaggedError("CliJourneyFailed") {}
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, CliJourneyFailed> =>
   Effect.tryPromise({ try: () => promise, catch: () => new CliJourneyFailed() });
-const entry = Bun.fileURLToPath(new URL("../../cli/test/journey-entry.ts", import.meta.url));
+const sourceEntry = Bun.fileURLToPath(new URL("../../cli/test/journey-entry.ts", import.meta.url));
 const outputCodec = Schema.fromJsonString(Schema.toCodecJson(PublicOutput));
 const maximumOutputBytes = 16_384;
 // Playwright does not cancel a timed-out callback. Interrupt the body while its Scope is
@@ -212,6 +212,18 @@ const auditJourney = Effect.fn(function* (request: APIRequestContext) {
   expect(new Set(evidence.entries.map(({ patId }) => patId)).size).toBe(1);
 });
 
+const bundleJourney = Effect.fn(function* (directory: string) {
+  const build = yield* wait(
+    Bun.build({ entrypoints: [sourceEntry], target: "bun", format: "esm" })
+  );
+  expect(build.success).toBe(true);
+  expect(build.outputs).toHaveLength(1);
+  const artifact = Option.getOrThrow(Option.fromUndefinedOr(build.outputs[0]));
+  const entry = `${directory}/journey.mjs`;
+  yield* wait(Bun.write(entry, artifact));
+  return entry;
+});
+
 const cliJourney = Effect.fn(function* ({
   page,
   request,
@@ -219,6 +231,7 @@ const cliJourney = Effect.fn(function* ({
   yield* wait(signInThroughCore({ page, request }));
   const filesystem = yield* FileSystem.FileSystem;
   const directory = yield* filesystem.makeTempDirectoryScoped();
+  const entry = yield* bundleJourney(directory);
   const service = `com.fidy.cli.journey.${process.pid}-${Bun.nanoseconds()}`;
   const env = journeyEnvironment(directory, service);
   const spawn = (args: ReadonlyArray<string>): ReturnType<typeof scopedProcess> =>

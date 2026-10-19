@@ -620,6 +620,20 @@ coordinators across cases; cached immutable setup data is not shared application
 and runtime-lifecycle evidence must exercise the actual boundaries rather than infer them from a
 faster ordinary fixture.
 
+The isolated native coordinator harness exposes a bounded fixture clock advance so restore tests
+can cross a retention deadline in both the operator process and real Durable Object without
+changing retained rows or production clocks. Its clock control exists only in the test entry point.
+
+The loopback browser harness controls its process clock for admission cooldowns. After a real,
+declared resource refusal, browser fixtures advance that clock and the browser's timer before the
+application retries. Native D1 grants, request limits and all production clocks remain unchanged.
+The clock operator is confined to the loopback fixture; browser evidence explicitly proves burst
+refusal before advancement and readmission afterward.
+
+Hosted Turn integration evidence is split into transport, statement, canonical-tool and continuity
+suites. Their private `agent/hosted-turn.test-fixture.ts` constructs the same native runtimes and
+registers cleanup separately in each test process; every case retains an isolated database.
+
 Verification combines dependency/publication checks, generated contracts, browser graph checks, and
 behavioral evidence. Passing a fake or portable test never establishes a production adapter's
 existence, durable guarantees, or launch readiness.
@@ -700,3 +714,20 @@ WebSession-only canonical policies, so originals cannot enter agent tools or imm
 They return bounded escaped text with no-store delivery; missing media bytes permit manual completion
 before expiry. Draft/suggestion retention ends at the original source deadline independently of
 hosted conversation routing. Retry never commits a Transaction or overwrites User-edited facts.
+
+The shared native D1 test fixture prepares SQL descriptors locally and sends ordinary reads,
+writes, and batches through its asynchronous Worker fetch boundary. The same Miniflare D1
+binding executes every statement and transaction; native metadata and errors return across
+that boundary. Sessions, raw results, unsupported bindings, and mixed session batches retain
+the original binding path. The fixture suite compares both transports, including BLOB values,
+transaction rollback, foreign keys, FTS, and isolation. No application database implementation
+or production query path uses this test transport.
+
+For a never-opened test binding, the shared fixture may clone an immutable native D1 baseline
+image captured immediately after schema installation. A separate warmup process discovers and
+closes the empty slots before use. SQLite serialization includes committed WAL pages; the
+standalone image uses SQLite's documented journal-header conversion. Any earlier query, native
+session, raw access, or caller-owned schema disables replacement. Snapshot bytes never include
+subsequent test mutations. All reads, writes, constraints, FTS, and transaction evidence still run
+inside workerd's real D1 binding; Bun only serializes and copies the pristine image. Pools own
+both Worker shutdown and removal of their temporary files.

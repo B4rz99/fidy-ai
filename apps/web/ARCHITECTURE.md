@@ -147,7 +147,8 @@ storage, or application-wide state.
 withdrawal through the server-declared browser client. It remains accessible without ordinary
 canonical work and exposes the public rights contact without login. Its route composes the shared
 ApplicationShell without the ordinary access-expiry guard or Hosted Agent, preserving the sidebar
-and compact navigation after withdrawal or session expiry. The sidebar does not mount the canonical
+and compact navigation after withdrawal or session expiry. The shell mounts only the navigation
+for its current `md` viewport, with a scoped media-query subscription for viewport changes. The sidebar does not mount the canonical
 pending-count query on Privacy, so a product refusal cannot retire a live privacy interaction.
 WorkspaceHeader and WorkspaceColumns align the controls and rights-contact panel with the settings layout.
 Transactions likewise evaluates its independent cookie-only Consent read before choosing read-only
@@ -254,10 +255,13 @@ Successful fixture tests do not prove merchant activation, provider destinations
 Production readiness; those remain separate operator-evidence gates. The server contract gate owns
 generated OpenAPI freshness, while browser checks prove that neither host publishes that artifact.
 
-Browser journey sign-in fixtures advance only the browser's initial polling timer after operator
-approval; real Core proof verification, rate limits, and session creation are unchanged. Dedicated
-pairing journeys retain real-time cadence and real approval/redemption evidence. The mocked expiry
-case advances the browser clock through a pending request and its deadline rather than sleeping.
+Browser journey sign-in fixtures advance the initial polling timer after operator approval;
+Core proof verification, rate limits, and session creation stay active. A loopback-only operator
+advances the fixture clock through observed short cooldowns. Clock-sensitive admission probes run
+before concurrent journeys, and recurring read, chat, and pagination journeys own separate seeded
+Users. Latency probes preserve native browser performance timing while virtualizing timers and run
+without competing browser cases. Mocked expiry derives its deadline from the same browser clock
+that the test advances. All production admission and timeout policies remain active.
 The browser verification group also runs the native CLI journey through
 `bun run test:browser:cli` in its dedicated `4183–4185` public/Core topology, with fresh D1 and
 isolated native credentials. The shared suite excludes that journey: other tests must not change
@@ -322,6 +326,8 @@ resource results do not authorize editing: freshness and refresh failures still 
 Dashboard initialization remains exclusive to a declared uninitialized response during an
 actual visit. Consent, session binding and security settings reads retain their fresh access
 checks. Router intent preloading loads destination code without executing workspace commands.
+Needs Review and Recurring route loaders preload the same presentation component used by their
+retained workspace, so resolving destination code does not introduce another lazy suspension.
 
 The root application frame owns one shared shell across authenticated and independently authorized
 application routes, including Transactions; each route retains its own access checks. It retains a

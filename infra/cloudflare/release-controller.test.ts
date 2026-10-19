@@ -1,4 +1,5 @@
-import { Cause, Deferred, Effect, Exit, Option } from "effect";
+import { TestClock } from "effect/testing";
+import { Cause, Deferred, Effect, Exit, Fiber, Option, type Scope } from "effect";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import {
@@ -9,6 +10,15 @@ import {
   releaseController,
 } from "./release-controller";
 import { releaseCleanup } from "./release-cleanup";
+
+const advanceReleaseClock = <A, E, R>(
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R | Scope.Scope> =>
+  Effect.gen(function* () {
+    const pending = yield* Effect.forkScoped(work);
+    yield* TestClock.adjust("30 seconds");
+    return yield* Fiber.join(pending);
+  });
 
 const publicName = "fidy-ingress";
 const coreName = "fidy-core";
@@ -222,8 +232,8 @@ const failure = (effect: Effect.Effect<unknown, Error>, message: string): Effect
   );
 
 describe("zero-traffic Worker release", () => {
-  it("captures both stable Workers with overlapping reads and no traffic writes", () =>
-    Effect.runPromise(
+  it.effect("captures both stable Workers with overlapping reads and no traffic writes", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const bothStarted = yield* Deferred.make<void>();
@@ -243,12 +253,13 @@ describe("zero-traffic Worker release", () => {
         expect(snapshot.core.stableVersionId).toBe(versions.coreStable);
         expect(fixture.changes).toEqual([]);
       })
-    ));
+    )
+  );
 
-  it.each([publicName, coreName])(
+  it.effect.each([publicName, coreName])(
     "refuses capture when the %s read fails without traffic writes",
     (name) =>
-      Effect.runPromise(
+      advanceReleaseClock(
         Effect.gen(function* () {
           const fixture = harness();
           const port: ReleasePort = {
@@ -263,8 +274,8 @@ describe("zero-traffic Worker release", () => {
         })
       )
   );
-  it("keeps stable versions at 100% while staging exact candidates", () =>
-    Effect.runPromise(
+  it.effect("keeps stable versions at 100% while staging exact candidates", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         yield* staged(fixture.port);
@@ -277,10 +288,11 @@ describe("zero-traffic Worker release", () => {
           { id: versions.coreCandidate, percentage: 0 },
         ]);
       })
-    ));
+    )
+  );
 
-  it("removes a failed smoke candidate without changing stable traffic", () =>
-    Effect.runPromise(
+  it.effect("removes a failed smoke candidate without changing stable traffic", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -292,74 +304,81 @@ describe("zero-traffic Worker release", () => {
           { id: versions.coreStable, percentage: 100 },
         ]);
       })
-    ));
+    )
+  );
 
-  it("confirms cleanup through a stale read without repeating a committed traffic write", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = harness();
-        const release = yield* staged(fixture.port);
-        const oldPublic = yield* fixture.port.current(publicName);
-        let stale = false;
-        const port: ReleasePort = {
-          ...fixture.port,
-          deploy: (name, entries) =>
-            Effect.gen(function* () {
-              const result = yield* fixture.port.deploy(name, entries);
-              stale = name === publicName;
-              return result;
-            }),
-          current: (name) => {
-            if (name === publicName && stale) {
-              stale = false;
-              return Effect.succeed(oldPublic);
-            }
-            return fixture.port.current(name);
-          },
-        };
-        yield* releaseCleanup.cleanRelease(port, release.snapshot, candidates);
-        expect(fixture.changes).toEqual([
-          `${publicName}:100/0`,
-          `${coreName}:100/0`,
-          `${publicName}:100`,
-          `${coreName}:100`,
-        ]);
-        expect((yield* fixture.port.current(coreName)).versions).toEqual([
-          { id: versions.coreStable, percentage: 100 },
-        ]);
-      })
-    ));
+  it.effect(
+    "confirms cleanup through a stale read without repeating a committed traffic write",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const release = yield* staged(fixture.port);
+          const oldPublic = yield* fixture.port.current(publicName);
+          let stale = false;
+          const port: ReleasePort = {
+            ...fixture.port,
+            deploy: (name, entries) =>
+              Effect.gen(function* () {
+                const result = yield* fixture.port.deploy(name, entries);
+                stale = name === publicName;
+                return result;
+              }),
+            current: (name) => {
+              if (name === publicName && stale) {
+                stale = false;
+                return Effect.succeed(oldPublic);
+              }
+              return fixture.port.current(name);
+            },
+          };
+          yield* releaseCleanup.cleanRelease(port, release.snapshot, candidates);
+          expect(fixture.changes).toEqual([
+            `${publicName}:100/0`,
+            `${coreName}:100/0`,
+            `${publicName}:100`,
+            `${coreName}:100`,
+          ]);
+          expect((yield* fixture.port.current(coreName)).versions).toEqual([
+            { id: versions.coreStable, percentage: 100 },
+          ]);
+        })
+      )
+  );
 
-  it("finishes both candidate cleanups when the first committed response is lost, without repeating a write", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = harness();
-        const release = yield* staged(fixture.port);
-        const ambiguous: ReleasePort = {
-          ...fixture.port,
-          deploy: (name, entries) =>
-            fixture.port.deploy(name, entries).pipe(
-              Effect.filterOrFail(
-                () => name !== publicName,
-                () => Error("response lost")
-              )
-            ),
-        };
-        yield* releaseCleanup.cleanRelease(ambiguous, release.snapshot, candidates);
-        expect(fixture.changes).toEqual([
-          `${publicName}:100/0`,
-          `${coreName}:100/0`,
-          `${publicName}:100`,
-          `${coreName}:100`,
-        ]);
-        expect((yield* fixture.port.current(coreName)).versions).toEqual([
-          { id: versions.coreStable, percentage: 100 },
-        ]);
-      })
-    ));
+  it.effect(
+    "finishes both candidate cleanups when the first committed response is lost, without repeating a write",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const release = yield* staged(fixture.port);
+          const ambiguous: ReleasePort = {
+            ...fixture.port,
+            deploy: (name, entries) =>
+              fixture.port.deploy(name, entries).pipe(
+                Effect.filterOrFail(
+                  () => name !== publicName,
+                  () => Error("response lost")
+                )
+              ),
+          };
+          yield* releaseCleanup.cleanRelease(ambiguous, release.snapshot, candidates);
+          expect(fixture.changes).toEqual([
+            `${publicName}:100/0`,
+            `${coreName}:100/0`,
+            `${publicName}:100`,
+            `${coreName}:100`,
+          ]);
+          expect((yield* fixture.port.current(coreName)).versions).toEqual([
+            { id: versions.coreStable, percentage: 100 },
+          ]);
+        })
+      )
+  );
 
-  it("cleans only its own partially staged candidate after a Core staging failure", () =>
-    Effect.runPromise(
+  it.effect("cleans only its own partially staged candidate after a Core staging failure", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const snapshot = yield* captured(fixture.port);
@@ -376,10 +395,11 @@ describe("zero-traffic Worker release", () => {
           { id: versions.coreStable, percentage: 100 },
         ]);
       })
-    ));
+    )
+  );
 
-  it("refuses to clean an unknown staged version", () =>
-    Effect.runPromise(
+  it.effect("refuses to clean an unknown staged version", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const snapshot = yield* captured(fixture.port);
@@ -393,10 +413,11 @@ describe("zero-traffic Worker release", () => {
         );
         expect(fixture.changes).toHaveLength(1);
       })
-    ));
+    )
+  );
 
-  it("refuses superseded work without changing traffic", () =>
-    Effect.runPromise(
+  it.effect("refuses superseded work without changing traffic", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const snapshot = yield* captured(fixture.port);
@@ -407,10 +428,11 @@ describe("zero-traffic Worker release", () => {
         );
         expect(fixture.changes).toEqual([]);
       })
-    ));
+    )
+  );
 
-  it("refuses to overwrite a changed deployment", () =>
-    Effect.runPromise(
+  it.effect("refuses to overwrite a changed deployment", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const snapshot = yield* captured(fixture.port);
@@ -421,10 +443,11 @@ describe("zero-traffic Worker release", () => {
         );
         expect(fixture.changes).toHaveLength(1);
       })
-    ));
+    )
+  );
 
-  it("promotes the tested pair in Core-first order", () =>
-    Effect.runPromise(
+  it.effect("promotes the tested pair in Core-first order", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -445,10 +468,11 @@ describe("zero-traffic Worker release", () => {
           { id: versions.coreCandidate, percentage: 100 },
         ]);
       })
-    ));
+    )
+  );
 
-  it("retries an eventually consistent deployment read without writing traffic twice", () =>
-    Effect.runPromise(
+  it.effect("retries an eventually consistent deployment read without writing traffic twice", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -485,90 +509,100 @@ describe("zero-traffic Worker release", () => {
           `${publicName}:100`,
         ]);
       })
-    ));
+    )
+  );
 
-  it("confirms a committed Core promotion without repeating the write when its response was lost", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = harness();
-        const release = yield* staged(fixture.port);
-        const ambiguous: ReleasePort = {
-          ...fixture.port,
-          deploy: (name, entries) =>
-            fixture.port.deploy(name, entries).pipe(
-              Effect.filterOrFail(
-                () =>
-                  name !== coreName ||
-                  entries[0]?.id !== versions.coreCandidate ||
-                  entries.length !== 1,
-                () => Error("response lost after Core commit")
-              )
-            ),
-        };
-        yield* releaseController.promoteRelease(ambiguous, release, {
-          exactPairPassed: true,
-          middlePairPassed: true,
-        });
-        expect((yield* fixture.port.current(coreName)).versions).toEqual([
-          { id: versions.coreCandidate, percentage: 100 },
-        ]);
-        expect((yield* fixture.port.current(publicName)).versions).toEqual([
-          { id: versions.publicCandidate, percentage: 100 },
-        ]);
-        expect(fixture.changes).toEqual([
-          `${publicName}:100/0`,
-          `${coreName}:100/0`,
-          `${coreName}:100`,
-          `${publicName}:100`,
-        ]);
-      })
-    ));
-
-  it("refuses an unknown deployment after an ambiguous write and never repeats that write", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = harness();
-        const unknown: ReleasePort = {
-          ...fixture.port,
-          deploy: (name) =>
-            fixture.port
-              .deploy(name, [{ id: versions.coreCandidate, percentage: 100 }])
-              .pipe(Effect.andThen(Effect.fail(Error("response lost")))),
-        };
-        yield* failure(
-          releaseController.deployExact(unknown, publicName, [
+  it.effect(
+    "confirms a committed Core promotion without repeating the write when its response was lost",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const release = yield* staged(fixture.port);
+          const ambiguous: ReleasePort = {
+            ...fixture.port,
+            deploy: (name, entries) =>
+              fixture.port.deploy(name, entries).pipe(
+                Effect.filterOrFail(
+                  () =>
+                    name !== coreName ||
+                    entries[0]?.id !== versions.coreCandidate ||
+                    entries.length !== 1,
+                  () => Error("response lost after Core commit")
+                )
+              ),
+          };
+          yield* releaseController.promoteRelease(ambiguous, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          });
+          expect((yield* fixture.port.current(coreName)).versions).toEqual([
+            { id: versions.coreCandidate, percentage: 100 },
+          ]);
+          expect((yield* fixture.port.current(publicName)).versions).toEqual([
             { id: versions.publicCandidate, percentage: 100 },
-          ]),
-          "write not confirmed"
-        );
-        expect(fixture.changes).toEqual([`${publicName}:100`]);
-      })
-    ));
+          ]);
+          expect(fixture.changes).toEqual([
+            `${publicName}:100/0`,
+            `${coreName}:100/0`,
+            `${coreName}:100`,
+            `${publicName}:100`,
+          ]);
+        })
+      )
+  );
 
-  it("confirms a committed staging write when the adapter returns the preceding deployment", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = harness();
-        const previous = yield* fixture.port.current(publicName);
-        const stale: ReleasePort = {
-          ...fixture.port,
-          deploy: (name, entries) => fixture.port.deploy(name, entries).pipe(Effect.as(previous)),
-        };
-        const result = yield* releaseController.deployExact(stale, publicName, [
-          { id: versions.publicStable, percentage: 100 },
-          { id: versions.publicCandidate, percentage: 0 },
-        ]);
-        expect(result.id).not.toBe(previous.id);
-        expect(result.versions).toEqual([
-          { id: versions.publicStable, percentage: 100 },
-          { id: versions.publicCandidate, percentage: 0 },
-        ]);
-        expect(fixture.changes).toEqual([`${publicName}:100/0`]);
-      })
-    ));
+  it.effect(
+    "refuses an unknown deployment after an ambiguous write and never repeats that write",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const unknown: ReleasePort = {
+            ...fixture.port,
+            deploy: (name) =>
+              fixture.port
+                .deploy(name, [{ id: versions.coreCandidate, percentage: 100 }])
+                .pipe(Effect.andThen(Effect.fail(Error("response lost")))),
+          };
+          yield* failure(
+            releaseController.deployExact(unknown, publicName, [
+              { id: versions.publicCandidate, percentage: 100 },
+            ]),
+            "write not confirmed"
+          );
+          expect(fixture.changes).toEqual([`${publicName}:100`]);
+        })
+      )
+  );
 
-  it("does not promote if either pairing fails smoke", () =>
-    Effect.runPromise(
+  it.effect(
+    "confirms a committed staging write when the adapter returns the preceding deployment",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const previous = yield* fixture.port.current(publicName);
+          const stale: ReleasePort = {
+            ...fixture.port,
+            deploy: (name, entries) => fixture.port.deploy(name, entries).pipe(Effect.as(previous)),
+          };
+          const result = yield* releaseController.deployExact(stale, publicName, [
+            { id: versions.publicStable, percentage: 100 },
+            { id: versions.publicCandidate, percentage: 0 },
+          ]);
+          expect(result.id).not.toBe(previous.id);
+          expect(result.versions).toEqual([
+            { id: versions.publicStable, percentage: 100 },
+            { id: versions.publicCandidate, percentage: 0 },
+          ]);
+          expect(fixture.changes).toEqual([`${publicName}:100/0`]);
+        })
+      )
+  );
+
+  it.effect("does not promote if either pairing fails smoke", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -581,10 +615,11 @@ describe("zero-traffic Worker release", () => {
         );
         expect(fixture.changes).toHaveLength(2);
       })
-    ));
+    )
+  );
 
-  it("leaves stable traffic untouched if trunk moves while smoke runs", () =>
-    Effect.runPromise(
+  it.effect("leaves stable traffic untouched if trunk moves while smoke runs", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -598,10 +633,11 @@ describe("zero-traffic Worker release", () => {
         );
         expect(fixture.changes).toHaveLength(2);
       })
-    ));
+    )
+  );
 
-  it("refuses promotion if a staged deployment changed after smoke", () =>
-    Effect.runPromise(
+  it.effect("refuses promotion if a staged deployment changed after smoke", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -618,45 +654,49 @@ describe("zero-traffic Worker release", () => {
           percentage: 100,
         });
       })
-    ));
+    )
+  );
 
-  it("confirms a committed public promotion without retry or Core rollback when its response was lost", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = harness();
-        const release = yield* staged(fixture.port);
-        const original = fixture.port;
-        const ambiguous: ReleasePort = {
-          ...original,
-          deploy: (name, entries) =>
-            original.deploy(name, entries).pipe(
-              Effect.filterOrFail(
-                () => name !== publicName || entries.length !== 1,
-                () => Error("response lost after commit")
-              )
-            ),
-        };
-        yield* releaseController.promoteRelease(ambiguous, release, {
-          exactPairPassed: true,
-          middlePairPassed: true,
-        });
-        expect((yield* original.current(publicName)).versions).toEqual([
-          { id: versions.publicCandidate, percentage: 100 },
-        ]);
-        expect(fixture.changes).toEqual([
-          `${publicName}:100/0`,
-          `${coreName}:100/0`,
-          `${coreName}:100`,
-          `${publicName}:100`,
-        ]);
-        expect((yield* original.current(coreName)).versions).toEqual([
-          { id: versions.coreCandidate, percentage: 100 },
-        ]);
-      })
-    ));
+  it.effect(
+    "confirms a committed public promotion without retry or Core rollback when its response was lost",
+    () =>
+      advanceReleaseClock(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const release = yield* staged(fixture.port);
+          const original = fixture.port;
+          const ambiguous: ReleasePort = {
+            ...original,
+            deploy: (name, entries) =>
+              original.deploy(name, entries).pipe(
+                Effect.filterOrFail(
+                  () => name !== publicName || entries.length !== 1,
+                  () => Error("response lost after commit")
+                )
+              ),
+          };
+          yield* releaseController.promoteRelease(ambiguous, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          });
+          expect((yield* original.current(publicName)).versions).toEqual([
+            { id: versions.publicCandidate, percentage: 100 },
+          ]);
+          expect(fixture.changes).toEqual([
+            `${publicName}:100/0`,
+            `${coreName}:100/0`,
+            `${coreName}:100`,
+            `${publicName}:100`,
+          ]);
+          expect((yield* original.current(coreName)).versions).toEqual([
+            { id: versions.coreCandidate, percentage: 100 },
+          ]);
+        })
+      )
+  );
 
-  it("checks traffic and restores Core after an unexpected public adapter defect", () =>
-    Effect.runPromise(
+  it.effect("checks traffic and restores Core after an unexpected public adapter defect", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -678,10 +718,11 @@ describe("zero-traffic Worker release", () => {
           { id: versions.coreStable, percentage: 100 },
         ]);
       })
-    ));
+    )
+  );
 
-  it("does not swallow interruption to attempt another traffic write", () =>
-    Effect.runPromise(
+  it.effect("does not swallow interruption to attempt another traffic write", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -705,10 +746,11 @@ describe("zero-traffic Worker release", () => {
           `${coreName}:100`,
         ]);
       })
-    ));
+    )
+  );
 
-  it("restores stable Core when public promotion fails without committing", () =>
-    Effect.runPromise(
+  it.effect("restores stable Core when public promotion fails without committing", () =>
+    advanceReleaseClock(
       Effect.gen(function* () {
         const fixture = harness();
         const release = yield* staged(fixture.port);
@@ -728,5 +770,6 @@ describe("zero-traffic Worker release", () => {
           percentage: 100,
         });
       })
-    ));
+    )
+  );
 });

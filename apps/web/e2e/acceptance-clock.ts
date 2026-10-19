@@ -63,13 +63,11 @@ const advanceBrowserRetry = (response: Response, page: Page, scope: ClockScope):
     if (Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))) {
       return;
     }
-    return response
-      .finished()
-      .then(() =>
-        scope.active
-          ? advanceNativeRetry({ request: page.request, seconds: seconds.value })
-          : undefined
-      )
+    return (
+      scope.active
+        ? advanceNativeRetry({ request: page.request, seconds: seconds.value })
+        : Promise.resolve()
+    )
       .then(() => (scope.active ? page.evaluate(() => Promise.resolve()) : undefined))
       .then(() =>
         scope.active ? page.clock.fastForward(seconds.value * millisecondsPerSecond) : undefined

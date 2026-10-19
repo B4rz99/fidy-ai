@@ -53,8 +53,12 @@ export default defineConfig({
   retries: 0,
   workers: measuringBrowserCost ? 1 : browserWorkers,
   reporter: isCI
-    ? [["line"], ["json", { outputFile: "test-results/browser-timings.json" }]]
-    : "line",
+    ? [
+        ["./scripts/browser-phase-reporter.ts"],
+        ["line"],
+        ["json", { outputFile: "test-results/browser-timings.json" }],
+      ]
+    : [["./scripts/browser-phase-reporter.ts"], ["line"]],
   use: {
     baseURL: "https://127.0.0.1:4173",
     ignoreHTTPSErrors: true,

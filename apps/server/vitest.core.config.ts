@@ -13,6 +13,8 @@ export default defineConfig({
     clearMocks: true,
     environment: "node",
     pool: "forks",
+    // Core tests have no platform state or module mocks; reuse imports within each worker.
+    isolate: false,
     coverage: {
       provider: "istanbul",
       enabled: true,

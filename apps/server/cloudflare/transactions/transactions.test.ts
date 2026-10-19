@@ -3,6 +3,7 @@ import { Miniflare } from "miniflare";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   canonicalAdmissionMigrationNames,
+  coordinatorTestDatabase,
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
@@ -164,7 +165,7 @@ const platformDatabase = (): Promise<D1Database> =>
       });
       instances.push(mf);
       yield* fromTestPromise(() => mf.ready);
-      return yield* fromTestPromise(() => mf.getD1Database("DB"));
+      return yield* fromTestPromise(() => coordinatorTestDatabase({ runtime: mf, binding: "DB" }));
     })
   );
 afterAll(() => databases.dispose());

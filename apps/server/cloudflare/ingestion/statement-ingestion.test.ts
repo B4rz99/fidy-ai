@@ -21,6 +21,7 @@ import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
   canonicalAdmissionMigrationNames,
+  coordinatorTestDatabase,
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestStorage,
@@ -353,7 +354,10 @@ const boundStorage = (coordination: "bound" | "without-r2"): Promise<Runtime> =>
         miniflare.getBindings<{ DB: D1Database; BUCKET: R2Bucket }>(name)
       );
       const coordinator = Option.some(yield* fromTestPromise(() => platformCoordinator(miniflare)));
-      return { db: bindings.DB, bucket: bindings.BUCKET, coordinator };
+      const db = yield* fromTestPromise(() =>
+        coordinatorTestDatabase({ runtime: miniflare, binding: "DB" })
+      );
+      return { db, bucket: bindings.BUCKET, coordinator };
     })
   );
 

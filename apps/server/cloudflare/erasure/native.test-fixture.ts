@@ -1,3 +1,4 @@
+import { coordinatorTestDatabase } from "../d1-test-fixture";
 import { Effect, FileSystem, type Scope } from "effect";
 import { Miniflare } from "miniflare";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
@@ -64,8 +65,8 @@ const create = (
   });
 const bindings = (runtime: Miniflare): Promise<NativeBindings> =>
   Promise.all([
-    runtime.getD1Database("DB"),
-    runtime.getD1Database("SNAPSHOT_DB"),
+    coordinatorTestDatabase({ runtime, binding: "DB" }),
+    coordinatorTestDatabase({ runtime, binding: "SNAPSHOT_DB" }),
     runtime.getBindings<{ EMAIL_BUCKET: R2Bucket; ERASURE_BUCKET: R2Bucket }>(),
     runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR"),
   ]).then(([db, snapshot, buckets, namespace]) => ({

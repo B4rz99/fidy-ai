@@ -188,6 +188,11 @@
       "files": ["apps/web/src/features/transactions/ledger.tsx"],
       "rules": { "react/incompatible-library": "off" }
     },
+    // Playwright loads custom reporter modules through their default export.
+    {
+      "files": ["apps/web/scripts/browser-phase-reporter.ts"],
+      "rules": { "import/no-default-export": "off" }
+    },
     {
       "files": ["apps/cli/vitest.config.ts"],
       "rules": { "import/no-default-export": "off" }

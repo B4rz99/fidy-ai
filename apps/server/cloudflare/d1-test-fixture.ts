@@ -633,3 +633,17 @@ export const observeRetentionCost = (
     plans: () => explainRetentionPlans(db, queries),
   };
 };
+
+/** Uses the coordinator harness's query endpoint without replacing its database or Durable Objects. */
+export const coordinatorTestDatabase = ({
+  runtime,
+  binding,
+}: Readonly<{ runtime: Miniflare; binding: "DB" | "SNAPSHOT_DB" }>): Promise<D1Database> =>
+  runtime.getD1Database(binding).then((native) =>
+    asynchronousNativeDatabase({
+      native,
+      nativeAccess: () => undefined,
+      dispatch: (body) =>
+        runtime.dispatchFetch(`http://fixture/${binding}/query`, { method: "POST", body }),
+    })
+  );

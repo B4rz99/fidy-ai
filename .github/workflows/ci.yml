@@ -75,6 +75,8 @@ jobs:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
+        with:
+          workspace-cache: write
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
@@ -120,6 +122,8 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
+        with:
+          workspace-cache: read
       - name: Select installed Playwright version
         id: playwright-version
         run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
@@ -409,7 +413,11 @@ jobs:
           SOURCE_PARTITION_INDEX: ${{ needs.changes.outputs.source-sca-partition }}
         run: |
           bun scripts/partition-source-scan.ts "$SOURCE_PARTITION_INDEX/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          docker pull docker.io/fluidattacks/sca@sha256:b5c6d30c03cba30ffbb404c22be288857bf0a57bd30867514a8a29b7dcd9079f > "$RUNNER_TEMP/sca-image-pull.log" 2>&1 &
+          sca_pull_pid=$!
           docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
+          wait "$sca_pull_pid"
+          cat "$RUNNER_TEMP/sca-image-pull.log"
       - name: Fluid Attacks SCA
         run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca@sha256:b5c6d30c03cba30ffbb404c22be288857bf0a57bd30867514a8a29b7dcd9079f sca --strict scan /src/.fluidattacks/sca.yaml
       - name: Require remaining source partition result
@@ -438,6 +446,8 @@ jobs:
           bun scripts/partition-source-scan.ts "4/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
           docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
       - uses: ./.github/actions/bun-install
+        with:
+          workspace-cache: read
       - name: Bundle the real credential adapter and native probe
         run: bun run --cwd apps/cli build:native
       - name: Publish same-run native conformance artifact

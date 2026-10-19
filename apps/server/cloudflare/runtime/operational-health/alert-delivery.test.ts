@@ -1,8 +1,7 @@
-import { Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, describe, expect, vi } from "vitest";
-import { isolatedTestStorage } from "../../d1-test-fixture";
+import { isolatedTestDatabases, isolatedTestStorage } from "../../d1-test-fixture";
 import { runOperationalAlerts as deliverAlerts } from "./operations";
 import type { OperationalAlert } from "./contract";
 
@@ -11,35 +10,12 @@ const runOperationalAlerts = (
 ): Promise<void> =>
   deliverAlerts({ ...input, outage: Option.none(), signal: new AbortController().signal });
 
-const instances: Miniflare[] = [];
+const databases = isolatedTestDatabases();
+afterAll(() => databases.dispose());
+afterEach(() => vi.restoreAllMocks());
 const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const instance = new Miniflare({
-      workers: [
-        {
-          config: {
-            name: "operational-alerts",
-            type: "worker",
-            compatibilityDate: "2026-09-08",
-            env: {
-              DB: { id: "operational-alerts", type: "d1" },
-            },
-            manifest: {
-              mainModule: "index.mjs",
-              modules: {
-                "index.mjs": {
-                  contents: "export default {fetch() {return new Response('ok')}}",
-                  type: "esm",
-                },
-              },
-            },
-          },
-        },
-      ],
-    });
-    yield* Effect.tryPromise(() => instance.ready);
-    instances.push(instance);
-    const db = yield* Effect.tryPromise(() => instance.getD1Database("DB"));
+    const db = yield* Effect.tryPromise(() => databases.acquire());
     yield* Effect.tryPromise(() =>
       db
         .prepare(`CREATE TABLE operational_alerts (
@@ -53,13 +29,6 @@ const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     );
     return db;
   });
-afterEach(() =>
-  Effect.runPromise(
-    Effect.forEach(instances.splice(0), (instance) => Effect.tryPromise(() => instance.dispose()), {
-      discard: true,
-    })
-  )
-);
 
 const deadLetter: OperationalAlert = {
   kind: "dead_letters",

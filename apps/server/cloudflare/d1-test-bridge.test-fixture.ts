@@ -172,3 +172,42 @@ export const asynchronousNativeDatabase = ({
     },
   });
 };
+
+const QueryRequest = Schema.Struct({
+  operation: Schema.Literals(["all", "run", "batch", "first", "firstColumn"]),
+  statements: Schema.Array(Preparation),
+  column: Schema.optionalKey(Schema.String),
+});
+
+/** Private native harness endpoint; every statement executes on the supplied workerd binding. */
+export const nativeD1Response = ({
+  database,
+  request,
+}: Readonly<{ database: D1Database; request: Request }>): Promise<Response> =>
+  request
+    .json()
+    .then(Schema.decodeUnknownSync(QueryRequest))
+    .then((input): Promise<unknown> => {
+      const prepared = input.statements.map(({ sql, params }) =>
+        database.prepare(sql).bind(...params)
+      );
+      if (input.operation === "batch") return database.batch(prepared);
+      const first = prepared[0];
+      if (first === undefined) throw new Error("Native fixture statement missing");
+      if (input.operation === "first" || input.operation === "firstColumn") {
+        return input.column === undefined ? first.first() : first.first(input.column);
+      }
+      return first[input.operation]();
+    })
+    .then((value) => Response.json({ success: true, value }))
+    .catch((cause: unknown) =>
+      Response.json({
+        success: false,
+        error: {
+          message: cause instanceof Error ? cause.message : String(cause),
+          ...(cause instanceof Error && cause.cause instanceof Error
+            ? { cause: cause.cause.message }
+            : {}),
+        },
+      })
+    );

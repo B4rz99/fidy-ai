@@ -24,6 +24,10 @@ set -eu
 journey_mode="\${CLI_ACCEPTANCE_MODE:-shared}"
 if [[ "$*" == *"apps/site"* ]]; then journey_mode="site"; fi
 printf "CHECK mode=%s args=%s \\n" "$journey_mode" "$*"
+if [[ "$journey_mode" == shared ]]; then
+  [[ ! -e "\${JOURNEY_RENDEZVOUS}/cli" ]] || exit 3
+  printf 'FIDY_BROWSER_LATENCY_VERIFIED\\n'
+fi
 touch "\${JOURNEY_RENDEZVOUS}/$journey_mode"
 if [[ "$journey_mode" == "site" ]]; then
   [[ "\${FAIL_JOURNEY:-}" != "site" ]] || exit 1
@@ -112,6 +116,7 @@ it.effect(
             `${directory}/bun`,
             `#!/usr/bin/env bash
 printf 'CHECK %s\\n' "$*"
+if [[ "\${CHECK_NO_BROWSER_PHASE:-}" != 1 && "$*" == *test:browser* && "$*" != *test:browser:cli* ]]; then printf 'FIDY_BROWSER_LATENCY_VERIFIED\\n'; fi
 if [[ -n "\${CHECK_FAIL_MATCH:-}" && "$*" == *"$CHECK_FAIL_MATCH"* ]]; then exit 1; fi
 exit "\${CHECK_EXIT_CODE:-0}"
 `
@@ -159,6 +164,30 @@ exit "\${CHECK_EXIT_CODE:-0}"
       );
       expect(failedSite.exitCode).toBe(1);
       expect(new TextDecoder().decode(failedSite.stderr)).toContain("Public site browser checks");
+      const missingPhase = Bun.spawnSync(
+        [
+          process.execPath,
+          Bun.fileURLToPath(new URL("./verify.ts", import.meta.url)),
+          "--group",
+          "browser",
+        ],
+        {
+          env: {
+            ...Bun.env,
+            CLI_ACCEPTANCE_MODE: undefined,
+            BROWSER_TEST_SHARD: "1/2",
+            CHECK_NO_BROWSER_PHASE: "1",
+            PATH: `${directory}:${Bun.env.PATH}`,
+          },
+        }
+      );
+      expect(missingPhase.exitCode).toBe(1);
+      expect(new TextDecoder().decode(missingPhase.stdout)).not.toContain(
+        "CHECK run --cwd apps/web test:browser:cli"
+      );
+      expect(new TextDecoder().decode(missingPhase.stderr)).toContain(
+        "Isolated native CLI browser journey"
+      );
       for (const shard of ["1/2", "2/2"]) {
         for (const exitCode of [0, 1]) {
           const result = Bun.spawnSync(

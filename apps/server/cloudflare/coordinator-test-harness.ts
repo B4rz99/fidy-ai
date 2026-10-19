@@ -1,3 +1,4 @@
+import { nativeD1Response } from "./d1-test-bridge.test-fixture";
 import { Schema } from "effect";
 
 export { UserTransactionCoordinator } from "./transactions/runtime";
@@ -13,7 +14,19 @@ const nativeNow = Date.now.bind(Date);
 let elapsedMilliseconds = 0;
 
 export default {
-  fetch: (request: Request): Promise<Response> => {
+  fetch: (
+    request: Request,
+    environment: Readonly<Record<string, D1Database>>
+  ): Promise<Response> => {
+    const path = new URL(request.url).pathname;
+    if (request.method === "POST") {
+      if (path === "/DB/query" && environment.DB !== undefined) {
+        return nativeD1Response({ database: environment.DB, request });
+      }
+      if (path === "/SNAPSHOT_DB/query" && environment.SNAPSHOT_DB !== undefined) {
+        return nativeD1Response({ database: environment.SNAPSHOT_DB, request });
+      }
+    }
     if (new URL(request.url).pathname !== "/__fixture/clock" || request.method !== "POST") {
       return Promise.resolve(new Response("not_found", { status: 404 }));
     }

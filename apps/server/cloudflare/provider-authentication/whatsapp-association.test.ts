@@ -9,6 +9,9 @@ import { disposeJourneys, setup, setupHostedWhatsApp, setupWhatsApp } from "./jo
 afterAll(disposeJourneys);
 afterEach(() => vi.restoreAllMocks());
 
+const providerSecondMilliseconds = 1_100;
+const consentCooldownMilliseconds = 3_100;
+
 const seedAcceptedChat = (
   db: D1Database
 ): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
@@ -339,7 +342,7 @@ it("requires exact originating caller and reply confirmation, then atomically cr
       expect(
         (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
       ).toEqual([]);
-      yield* Effect.sleep("1100 millis");
+      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
       expect(
         (yield* whatsappMessages.sendChat(journey, command, { reply: "wamid.association-review" }))
           .status
@@ -428,7 +431,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
         )).status
       ).toBe(200);
       expect((yield* whatsappMessages.sendChat(journey, "Acepto")).status).toBe(409);
-      yield* Effect.sleep("3100 millis");
+      yield* whatsappMessages.advanceClock(consentCooldownMilliseconds);
       const acceptedAt = yield* Clock.currentTimeMillis;
       expect(
         (yield* whatsappMessages.sendChat(journey, "Acepto", {
@@ -443,7 +446,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
       const reference = /handoff=([0-9a-f-]{36})/u.exec(handoffText.text.body)?.[1] ?? "";
       yield* authenticateChatProvider(journey, reference);
       const code = yield* requestReview(journey);
-      yield* Effect.sleep("1100 millis");
+      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
       expect(
         (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
           reply: "wamid.association-review",
@@ -481,7 +484,7 @@ it.each(["denied", "expired", "uncertain_send"] as const)(
           expect(fetch).toHaveBeenCalledTimes(1);
         } else {
           const code = yield* requestReview(journey);
-          yield* Effect.sleep("1100 millis");
+          yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
           if (scenario === "expired") {
             yield* Effect.tryPromise(() =>
               journey.db
@@ -519,7 +522,7 @@ it("rolls back a failed association commit and permits exactly one concurrent su
       const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
       const code = yield* requestReview(journey);
-      yield* Effect.sleep("1100 millis");
+      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
       const confirmations = yield* Effect.all(
         [
           whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
@@ -608,7 +611,7 @@ it.each([false, true])(
         const chatJourney = { ...journey, pairing };
         yield* authenticateChatProvider(chatJourney, yield* seedAcceptedChat(journey.db));
         const code = yield* requestReview(chatJourney);
-        yield* Effect.sleep("1100 millis");
+        yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
         expect(
           (yield* whatsappMessages.sendChat(chatJourney, `Confirmo asociación ${code}`, {
             reply: "wamid.association-review",
@@ -738,9 +741,7 @@ it.each(["source", "spend", "storage"] as const)(
           ],
           { concurrency: "unbounded" }
         );
-        expect(refused.every((result) => result.status === 503 || result.status === 409)).toBe(
-          true
-        );
+        for (const result of refused) expect([503, 409]).toContain(result.status);
         expect(fetch).not.toHaveBeenCalled();
         expect(
           yield* Effect.tryPromise(() =>
@@ -761,7 +762,7 @@ it("sweeps expired handoff correlation while preserving committed User and legal
       const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
       const code = yield* requestReview(journey);
-      yield* Effect.sleep("1100 millis");
+      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
       expect(
         (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
           reply: "wamid.association-review",

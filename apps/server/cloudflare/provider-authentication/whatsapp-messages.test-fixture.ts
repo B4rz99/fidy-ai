@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../secret-material/operations";
 import type { setup } from "./journey.test-fixture";
@@ -68,4 +69,10 @@ const sendChat = (
     });
   });
 
-export const whatsappMessages = { sendPacket, sendChat };
+const advanceClock = (milliseconds: number): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    vi.spyOn(Date, "now").mockReturnValue(now + milliseconds);
+  });
+
+export const whatsappMessages = { sendPacket, sendChat, advanceClock };

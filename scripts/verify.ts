@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Data, Effect, Option } from "effect";
+import { Data, Deferred, Effect, Option, Stream } from "effect";
 
 const workspaceRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 
@@ -272,7 +272,29 @@ const failed: Array<string> = [];
 class VerificationProcessFailure extends Data.TaggedError("VerificationProcessFailure")<{
   readonly label: string;
 }> {}
-const runCheck = (check: Check): Effect.Effect<void> =>
+const browserPhaseMarker = "FIDY_BROWSER_LATENCY_VERIFIED";
+const forwardBrowserOutput = (
+  stream: ReadableStream<Uint8Array>,
+  ready: () => void
+): Promise<void> => {
+  const decoder = new TextDecoder();
+  let pending = "";
+  return Stream.fromReadableStream({
+    evaluate: () => stream,
+    onError: () => new VerificationProcessFailure({ label: "Browser output" }),
+  }).pipe(
+    Stream.runForEach((chunk) =>
+      Effect.sync(() => {
+        process.stdout.write(chunk);
+        pending += decoder.decode(chunk, { stream: true });
+        if (pending.includes(browserPhaseMarker)) ready();
+        pending = pending.slice(-browserPhaseMarker.length);
+      })
+    ),
+    Effect.runPromise
+  );
+};
+const runCheck = (check: Check, browserReady?: () => void): Effect.Effect<void> =>
   Effect.gen(function* () {
     process.stdout.write(`\n=== ${check.label} ===\n`);
     const started = performance.now();
@@ -280,11 +302,17 @@ const runCheck = (check: Check): Effect.Effect<void> =>
       cwd: check.cwd,
       env: check.env,
       stdin: "inherit",
-      stdout: "inherit",
+      stdout: browserReady === undefined ? "inherit" : "pipe",
       stderr: "inherit",
     });
     const exitCode = yield* Effect.tryPromise({
-      try: () => child.exited,
+      try: () =>
+        Promise.all([
+          child.exited,
+          child.stdout !== undefined && browserReady !== undefined
+            ? forwardBrowserOutput(child.stdout, browserReady)
+            : Promise.resolve(),
+        ]).then(([exit]) => exit),
       catch: () => new VerificationProcessFailure({ label: check.label }),
     }).pipe(Effect.orElseSucceed(() => 1));
     const elapsedMilliseconds = Math.round(performance.now() - started);
@@ -292,9 +320,35 @@ const runCheck = (check: Check): Effect.Effect<void> =>
     process.stdout.write(`Timing: ${check.label}: ${elapsedMilliseconds}ms\n`);
     if (exitCode !== 0) failed.push(check.label);
   });
+const runAfterBrowserReady = (
+  ready: Deferred.Deferred<boolean>,
+  check: Check
+): Effect.Effect<void> =>
+  Effect.flatMap(Deferred.await(ready), (verified) => {
+    if (verified) return runCheck(check);
+    failed.push(check.label);
+    return Effect.void;
+  });
+const runBrowserChecks = (checks: ReadonlyArray<Check>): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const ready = yield* Deferred.make<boolean>();
+    yield* Effect.forEach(
+      checks,
+      (check) => {
+        if (check.env.CLI_ACCEPTANCE_MODE === "cli") {
+          return runAfterBrowserReady(ready, check);
+        }
+        return runCheck(check, () => {
+          Deferred.doneUnsafe(ready, Effect.succeed(true));
+        }).pipe(Effect.ensuring(Deferred.succeed(ready, false)));
+      },
+      { concurrency: 2, discard: true }
+    );
+  });
 await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
+    if (group === "browser") return runBrowserChecks(groupChecks);
     if (group === "static") {
       const bootstrap = groupChecks.filter(
         (check) =>
@@ -304,12 +358,15 @@ await Effect.runPromise(
       );
       const validation = groupChecks.filter((check) => !bootstrap.includes(check));
       return Effect.gen(function* () {
-        yield* Effect.forEach(bootstrap, runCheck, { discard: true });
-        yield* Effect.forEach(validation, runCheck, { concurrency: 2, discard: true });
+        yield* Effect.forEach(bootstrap, (check) => runCheck(check), { discard: true });
+        yield* Effect.forEach(validation, (check) => runCheck(check), {
+          concurrency: 2,
+          discard: true,
+        });
       });
     }
-    return Effect.forEach(groupChecks, runCheck, {
-      concurrency: group === "browser" || group === "unit" ? 2 : 1,
+    return Effect.forEach(groupChecks, (check) => runCheck(check), {
+      concurrency: group === "unit" ? 2 : 1,
       discard: true,
     });
   })

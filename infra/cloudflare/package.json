@@ -21,6 +21,7 @@
     "@effect/platform-bun": "4.0.3",
     "@effect/vitest": "4.0.3",
     "alchemy": "2.0.0-beta.80",
+    "miniflare": "5.20260911.1-alpha",
     "typescript": "7.0.2",
     "vitest": "5.0.4",
     "wrangler": "4.149.0"

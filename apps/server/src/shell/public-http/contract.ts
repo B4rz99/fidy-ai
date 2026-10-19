@@ -257,7 +257,7 @@ export class Unauthenticated extends Schema.Error<Unauthenticated>(unauthenticat
 
 /**
  * The bearer is valid but does not grant the scope declared by the attempted operation. PAT
- * changes happen at `/settings/pats`, outside this canonical API, so the failure carries no
+ * changes happen at `/settings/access`, outside this canonical API, so the failure carries no
  * suggested operation.
  */
 export class ScopeMissing extends Schema.Error<ScopeMissing>(scopeMissingTag)(

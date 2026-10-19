@@ -243,7 +243,7 @@ const startHandoff = (input: Input): Effect.Effect<Option.Option<Response>, void
     yield* authorizeSend(input);
     yield* input.send({
       event: input.inbound.event,
-      text: `Consentimiento registrado. Abre ${input.browserOrigin}/auth/google?handoff=${id} para autenticarte con Google o Microsoft. Después vuelve a este chat y escribe “Estado” para revisar y confirmar la asociación. El enlace por sí solo no autoriza acceso. No envíes códigos de recuperación ni credenciales por WhatsApp. Si el intento vence, escribe “Reiniciar” para obtener un enlace nuevo.`,
+      text: `Consentimiento registrado. Abre ${input.browserOrigin}/login?handoff=${id} para autenticarte con Google o Microsoft. Después vuelve a este chat y escribe “Estado” para revisar y confirmar la asociación. El enlace por sí solo no autoriza acceso. No envíes códigos de recuperación ni credenciales por WhatsApp. Si el intento vence, escribe “Reiniciar” para obtener un enlace nuevo.`,
     });
     return Option.some(response(HTTP_OK));
   }).pipe(Effect.mapError(() => undefined));

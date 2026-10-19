@@ -24,7 +24,7 @@ export const AccessRefused = (): JSX.Element => (
         <Link to="/settings/privacy" className="underline">
           Revisar privacidad
         </Link>
-        <Link to="/auth/pair" className="underline">
+        <Link to="/login" className="underline">
           Iniciar sesión
         </Link>
       </AlertDescription>
@@ -57,7 +57,7 @@ export const ApplicationShell = ({
     if (status.waiting) return;
     completeLogoutNavigation({
       completeLogout,
-      navigate: () => router.navigate({ to: "/auth/pair" }),
+      navigate: () => router.navigate({ to: "/login" }),
       runLogout,
     });
   };

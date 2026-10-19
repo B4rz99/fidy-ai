@@ -14,7 +14,7 @@ import type {
 import type { BillingCollectionEnvironment } from "./subscription/contract";
 import type { SmokeEnvironment } from "./runtime/release-smoke/contract";
 import type { TelemetryService } from "../src/shell/observability/contract";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
 
@@ -250,7 +250,24 @@ class CoreMaintenanceCoordinator {
     }
 
     const work = Option.getOrElse(this.active, () => {
-      const started = runCoreMaintenance(maintenanceInput(this.environment))
+      const scheduledAt = Option.flatMap(
+        Option.fromNullishOr(request.headers.get("x-maintenance-scheduled-at")),
+        Schema.decodeUnknownOption(
+          Schema.NumberFromString.check(
+            Schema.isFinite(),
+            Schema.isInt(),
+            Schema.isGreaterThanOrEqualTo(0)
+          )
+        )
+      );
+      const started = runCoreMaintenance(
+        Option.isSome(scheduledAt)
+          ? {
+              environment: maintenanceInput(this.environment),
+              scheduledAtEpochMs: scheduledAt.value,
+            }
+          : maintenanceInput(this.environment)
+      )
         .pipe(
           Effect.ensuring(this.resumeErasureWork()),
           observeWorkerExecution({
@@ -307,14 +324,18 @@ export class UserTransactionCoordinator {
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
   fetch: makeCoreHttp(telemetry),
   queue: (batch, environment) => makeCoreQueue(telemetry)(batch, withErasureRecovery(environment)),
-  scheduled: (_controller, environment) =>
+  scheduled: (controller, environment) =>
     Effect.gen(function* () {
       const executor = environment.USER_TRANSACTION_COORDINATOR;
       const response = yield* Effect.tryPromise({
         try: (signal) =>
-          executor
-            .getByName("core-maintenance-v1")
-            .fetch(new Request("https://maintenance.invalid/tick", { method: "POST", signal })),
+          executor.getByName("core-maintenance-v1").fetch(
+            new Request("https://maintenance.invalid/tick", {
+              method: "POST",
+              headers: { "x-maintenance-scheduled-at": String(controller.scheduledTime) },
+              signal,
+            })
+          ),
         catch: () => new ScheduledWorkFailed(),
       });
       const succeededStatus = 204;

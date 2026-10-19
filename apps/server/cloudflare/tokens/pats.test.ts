@@ -377,7 +377,7 @@ const setup = (
         coreWorker.scheduled(
           {
             cron: "* * * * *",
-            scheduledTime: clock(),
+            scheduledTime: Math.floor(clock() / 3_600_000) * 3_600_000,
             noRetry: () => {},
           },
           coreEnvironment

@@ -168,12 +168,12 @@ it.effect(
         {
           purpose: "credential-replacement",
           subject: "Verifica tu nuevo correo en Fidy",
-          path: "/settings/email",
+          path: "/settings/account",
         },
         {
           purpose: "browser-pairing-approval",
           subject: "Tu código para iniciar sesión en Fidy",
-          path: "/auth/pair",
+          path: "/login",
         },
       ] as const;
       for (const expected of purposes) {
@@ -194,7 +194,7 @@ it.effect(
                 expect(email.subject).toBe(expected.subject);
                 for (const body of [email.text, email.html]) {
                   expect(body).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
-                  expect(body).toContain(`https://fidyapp.com${expected.path}`);
+                  expect(body).toContain(`https://app.fidyapp.com${expected.path}`);
                   expect(body).toContain(
                     "Fidy nunca te pedirá este código por WhatsApp ni por soporte."
                   );

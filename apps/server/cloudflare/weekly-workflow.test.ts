@@ -678,6 +678,9 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
       expect((yield* Effect.exit(harness.sweep()))._tag).toBe("Failure");
       expect(work).toHaveLength(0);
       clock.mockReturnValue(DateTime.add(at, { minutes: 1 }).epochMilliseconds);
+      expect((yield* Effect.exit(harness.sweep()))._tag).toBe("Success");
+      expect(work).toHaveLength(0);
+      clock.mockReturnValue(DateTime.add(at, { minutes: 5 }).epochMilliseconds);
       expect((yield* Effect.exit(harness.sweep()))._tag).toBe("Failure");
       expect(work.some((item) => item.userId === healthy && item.kind === "weekly-summary")).toBe(
         true

@@ -6,7 +6,11 @@ import {
   installAcceptanceClockWithNativePerformance,
 } from "./acceptance-clock";
 import { apiOrigin } from "./http-fixtures";
-import { browserSessionHeaders, signInBudgetEditingThroughCore } from "./real-core-fixture";
+import {
+  browserSessionHeaders,
+  openBrowserLogin,
+  signInBudgetEditingThroughCore,
+} from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -20,7 +24,7 @@ test("native admission still refuses the burst and recovers only after the fixtu
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => signInBudgetEditingThroughCore({ page, request }));
-      yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+      yield* Effect.tryPromise(() => openBrowserLogin(page));
       const headers = yield* Effect.tryPromise(() => browserSessionHeaders(page.request));
       let refusal = Option.none<APIResponse>();
       for (let attempt = 0; attempt < admissionProbeRequests; attempt++) {
@@ -62,7 +66,7 @@ const browserPerformance = (): number => performance.now();
 test("virtual waiting preserves native high-resolution browser performance timing", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+      yield* Effect.tryPromise(() => openBrowserLogin(page));
       yield* Effect.tryPromise(() => installAcceptanceClockWithNativePerformance(page));
       const before = yield* Effect.tryPromise(() => page.evaluate(browserPerformance));
       yield* Effect.tryPromise(() => page.clock.fastForward(virtualWaitMilliseconds));

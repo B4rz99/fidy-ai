@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { type Cause, Config, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInThroughCore, visiblePairingCode } from "./real-core-fixture";
+import { openBrowserLogin, signInThroughCore, visiblePairingCode } from "./real-core-fixture";
 
 const { test, expect } = playwright;
 test.skip(
@@ -31,7 +31,7 @@ const snapshot = (
   );
 
 type RequestObserver = Readonly<{
-  count: () => number;
+  count: (path?: string) => number;
   report: (scenario: string, before: typeof Cost.Type, after: typeof Cost.Type) => void;
 }>;
 const observeRequests = (page: Page): RequestObserver => {
@@ -53,7 +53,11 @@ const observeRequests = (page: Page): RequestObserver => {
     counts.set(key, (counts.get(key) ?? 0) + 1);
   });
   return {
-    count: (): number => Array.from(attempts.values()).reduce((sum, count) => sum + count, 0),
+    count: (path): number =>
+      Array.from(attempts.entries()).reduce(
+        (sum, [key, count]) => sum + (path === undefined || key.includes(path) ? count : 0),
+        0
+      ),
     report: (scenario, before, after): void => {
       process.stdout.write(
         `BROWSER_COST ${JSON.stringify({
@@ -98,7 +102,7 @@ test("measures pending provider status, hidden continuation and cancellation", (
           request.get(`${operator}/browser-cost`, { headers: { origin: api } })
         )).status()
       ).toBe(forbiddenStatus);
-      yield* wait(page.goto("/auth/google"));
+      yield* wait(page.goto("/login"));
       yield* wait(page.getByLabel("Acepto el tratamiento de datos descrito").check());
       const observed = observeRequests(page);
       const before = yield* snapshot(request);
@@ -126,7 +130,7 @@ test("measures pending provider status, hidden continuation and cancellation", (
 test("measures advertised pairing cadence and route unmount", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(page.goto("/auth/pair"));
+      yield* wait(openBrowserLogin(page));
       const observed = observeRequests(page);
       const before = yield* snapshot(request);
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
@@ -136,11 +140,24 @@ test("measures advertised pairing cadence and route unmount", ({ page, request }
         expect(reply.status()).toBe(pendingStatus);
       }
       observed.report("ordinary-start-and-two-pending-polls", before, yield* snapshot(request));
+      yield* wait(page.getByRole("button", { name: "Google o Microsoft" }).click());
+      const switchedBefore = yield* snapshot(request);
+      yield* wait(page.clock.install());
+      yield* wait(page.clock.runFor(cancelledWindowMilliseconds));
+      expect(observed.count("/web/pairings")).toBe(0);
+      observed.report("ordinary-after-method-switch", switchedBefore, yield* snapshot(request));
+      yield* wait(page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
+      yield* wait(
+        expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
+      );
+      yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(visiblePairingCode(page));
+      observed.report("ordinary-restarted", switchedBefore, yield* snapshot(request));
       yield* wait(page.goto("/"));
       const unmountedBefore = yield* snapshot(request);
       yield* wait(page.clock.install());
       yield* wait(page.clock.runFor(cancelledWindowMilliseconds));
-      expect(observed.count()).toBe(0);
+      expect(observed.count("/web/pairings")).toBe(0);
       observed.report("ordinary-after-route-unmount", unmountedBefore, yield* snapshot(request));
     })
   ));
@@ -169,8 +186,8 @@ const measureNavigation = Effect.fn(function* (
   const routeBefore = yield* snapshot(request);
   yield* wait(page.getByText("Ajustes", { exact: true }).first().click());
   for (let index = 0; index < 3; index += 1) {
-    yield* wait(page.getByRole("link", { name: "Correo", exact: true }).first().click());
-    yield* wait(expect(page).toHaveURL(/\/settings\/email$/u));
+    yield* wait(page.getByRole("link", { name: "Cuenta", exact: true }).first().click());
+    yield* wait(expect(page).toHaveURL(/\/settings\/account$/u));
     yield* wait(page.getByRole("link", { name: "Transacciones", exact: true }).first().click());
     yield* wait(
       expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()

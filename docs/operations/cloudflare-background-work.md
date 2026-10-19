@@ -3,12 +3,49 @@
 D1 owns accepted intent and outcomes. Queues redeliver bounded identities; a Workflow owns execution.
 A successful HTTP response means the mutation and its outbox committed, not that email or billing
 completed. After commit, Core tries an identity-targeted offer within its execution-context lifetime.
-The offer has a two-second budget. Failure leaves the accepted response intact, and the next minute's
-cron can retry after the shared publication cooldown.
+The offer has a two-second budget. Failure leaves the accepted response intact, and the next
+five-minute recovery sweep can retry after the shared publication cooldown.
+
+## Maintenance cadence
+
+Core's minute trigger remains the scheduling entrypoint. Maintenance selects due activities before
+executing them, using the trigger's scheduled timestamp so delayed delivery does not select a
+different window. Owner expiry, authorization and retention decisions still use the current clock.
+Intervals align to UTC clock minutes; hourly work runs at minute zero, and daily work at 00:00 UTC
+(19:00 the preceding day in Bogota). A missed or failed window is retried at the next scheduled
+window; queues, workflows and per-User recovery alarms retain their independent retry behavior.
+
+| Work                                                                             | Interval                |
+| -------------------------------------------------------------------------------- | ----------------------- |
+| Operational health and reminder discovery/publication                            | One minute              |
+| Subscription renewals, cancellations and price-notice recovery                   | 15 minutes              |
+| Dashboard projection repair                                                      | 15 minutes              |
+| Billing collection, payment-status reconciliation, refunds and void verification | Five minutes            |
+| Email, WhatsApp, disclosure and statement-extraction recovery                    | Five minutes            |
+| Weekly summaries and recurring-charge digest generation                          | Five minutes            |
+| Authentication, pairing, admission, quota and consent-offer cleanup              | One hour                |
+| Statement, media and review-evidence cleanup                                     | One hour                |
+| Operational event retention and smoke-probe expiry                               | One hour                |
+| Audit and terminal recovery-evidence retention                                   | One day                 |
+| Forwarded-email delivery recovery / private-byte cleanup                         | Five minutes / one hour |
+
+Recurring-charge detection retains its existing owner and scheduler behavior. This cadence change
+does not configure it. WhatsApp window expiry and the combined
+hosted-Turn recovery/retention sweep retain minute checks because they also settle expired delivery
+state and abandoned work. Proactivity evidence retention runs hourly, independently of reminders;
+delivery expiry and publication remain prompt.
+
+Slower cleanup does not extend credential validity, processing authority or access to expired
+evidence. Physical cleanup can follow expiry by up to its interval when the bounded page can drain
+the backlog. Forwarded-email cleanup already selects material within a 12-hour lookahead. All cleanup
+retains its existing bounded page sizes and erasure/hold guards. Verify that those bounds can drain
+the deployed workload: for example, an hourly 128-grant admission cleanup can process at most 3,072
+grants per day, and a daily Audit sweep selects at most eight subjects with 64 rows per projection.
+The idle budget below is not evidence of production backlog capacity.
 
 ## Idle D1 budget
 
-Core still scans accepted work every minute. Unchanged operational health snapshots refresh every
+Core inspects operational health every minute. Unchanged health snapshots refresh every
 five minutes; state changes persist immediately, and older observations cannot replace newer ones.
 The Queue→Workflow canary publishes in the first minute of each five-minute period, with the existing
 ten-minute stale threshold. A missed publication window is detected by that threshold rather than
@@ -16,8 +53,9 @@ replayed on every subsequent minute. Repeated empty/final-page control-object sw
 a cursor; multi-page cursors still advance durably and lawful-hold checks remain unchanged.
 
 `maintenance/idle-budget.test.ts` installs every migration in native D1, applies the production
-recovery wrapper, and runs Core, Email and all control-bucket sweeps over a complete five-minute
-steady-state cycle. It budgets downstream canary writes and asserts fewer than 10,000 projected daily
+recovery wrapper, and runs Core, Email and all control-bucket sweeps over a complete hourly
+cycle, adding the midnight tick's cost to the daily projection. It budgets downstream canary writes
+and asserts fewer than 10,000 projected daily
 idle writes (10% of the Free allowance) and 750,000 reads. This protects idle overhead, not total
 account usage: real work, incidents and other databases still consume the account-wide allowance.
 The opt-in performance benchmark also includes the recovery guard.
@@ -38,7 +76,7 @@ callback counters are no longer aggregated into D1 or delivered as operational e
 native Worker metrics and Workers Logs manually for those conditions. The `workflow_failure` D1
 counter remains independent: each application Workflow records rejected executions at its entrypoint,
 and the scheduled Core health sweep continues to alert on them. Core sweeps event buckets after 24
-hours with a bounded per-minute deletion, including historical Tail-only counters. The private
+hours with a bounded hourly deletion, including historical Tail-only counters. The private
 Queue→Workflow canary distinguishes real consumer execution from a successful Queue send or
 Workflow instance creation. A delayed/missing canary completion is critical; an unavailable inspection
 is a warning, never proof of execution. These probes do not change any application Work outcome.

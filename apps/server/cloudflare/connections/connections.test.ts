@@ -1290,7 +1290,8 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
           .scheduled(
             {
               cron: "* * * * *",
-              scheduledTime: DateTime.nowUnsafe().epochMilliseconds,
+              scheduledTime:
+                Math.floor(DateTime.nowUnsafe().epochMilliseconds / 3_600_000) * 3_600_000,
               noRetry: () => undefined,
             },
             {

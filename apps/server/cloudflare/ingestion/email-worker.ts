@@ -12,7 +12,10 @@ import {
 
 type EmailWorker = Readonly<{
   email: (message: ForwardedEmailMessage, environment: ForwardedEmailEnvironment) => Promise<void>;
-  scheduled: (controller: unknown, environment: ForwardedEmailEnvironment) => Promise<void>;
+  scheduled: (
+    controller: Pick<ScheduledController, "scheduledTime">,
+    environment: ForwardedEmailEnvironment
+  ) => Promise<void>;
 }>;
 
 /** Compose the native Email entrypoints with narrow Ingestion and Maintenance authorities. */
@@ -26,8 +29,11 @@ export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
       }),
       Effect.runPromise
     ),
-  scheduled: (_controller, environment) =>
-    runEmailMaintenance(withErasureRecovery(environment)).pipe(
+  scheduled: (controller, environment) =>
+    runEmailMaintenance({
+      environment: withErasureRecovery(environment),
+      scheduledAtEpochMs: controller.scheduledTime,
+    }).pipe(
       observeWorkerExecution({
         telemetry,
         environment: workerRelease(environment),

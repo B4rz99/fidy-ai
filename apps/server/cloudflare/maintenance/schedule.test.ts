@@ -4,8 +4,40 @@ import { Cause, Deferred, Effect, Exit, Fiber, Logger, Schema } from "effect";
 import { expect } from "vitest";
 import { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { ScheduledWorkFailed } from "./contract";
-import { executeSchedule } from "./operations";
+import { executeDueSchedule, executeSchedule } from "./operations";
 import { makeWorkerTelemetry, observeWorkerExecution } from "../runtime/telemetry/operations";
+
+it.effect("keeps fast checks running while dispatch and cleanup wait for their due windows", () =>
+  Effect.gen(function* () {
+    const completed: Array<string> = [];
+    const activities = [
+      { operation: "async.health", work: Effect.sync(() => completed.push("health")) },
+      {
+        operation: "browserPairing.email.dispatch",
+        work: Effect.sync(() => completed.push("email")),
+      },
+      { operation: "billing.renewal.dispatch", work: Effect.sync(() => completed.push("renewal")) },
+      {
+        operation: "dashboard.projectionRepair",
+        work: Effect.sync(() => completed.push("dashboard")),
+      },
+      { operation: "ingestion.mediaRetention", work: Effect.sync(() => completed.push("media")) },
+      { operation: "audit.retention", work: Effect.sync(() => completed.push("audit")) },
+    ] as const;
+    for (const [minute, expected] of [
+      [1, ["health"]],
+      [5, ["health", "email"]],
+      [15, ["health", "email", "renewal", "dashboard"]],
+      [60, ["health", "email", "renewal", "dashboard", "media"]],
+      [1_439, ["health"]],
+      [1_440, ["health", "email", "renewal", "dashboard", "media", "audit"]],
+    ] as const) {
+      completed.length = 0;
+      yield* executeDueSchedule({ activities, nowEpochMs: minute * 60_000 + 5_000 });
+      expect(completed).toEqual(expected);
+    }
+  })
+);
 
 it.effect("attempts independent retention after a failed activity before reporting failure", () =>
   Effect.gen(function* () {

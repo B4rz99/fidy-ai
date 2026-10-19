@@ -50,7 +50,7 @@ test("exposes answers, product signup, feature links and a real 404 without Java
   ).toHaveCount(faqCount);
   await expect(page.getByRole("link", { name: "Crear mi cuenta" }).first()).toHaveAttribute(
     "href",
-    "https://app.fidyapp.com/auth/google"
+    "https://app.fidyapp.com/login"
   );
   await expect(page.getByRole("link", { name: "Conecta tu agente", exact: true })).toHaveAttribute(
     "href",

@@ -103,7 +103,7 @@ test("reviews, issues, discloses once, and revokes a manually created PAT", ({ p
           body: response({ shortId: "default1" }),
         });
       });
-      yield* Effect.tryPromise(() => page.goto("/settings/pats"));
+      yield* Effect.tryPromise(() => page.goto("/settings/access"));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Nombre", { exact: true }).fill("Agente de casa")
       );

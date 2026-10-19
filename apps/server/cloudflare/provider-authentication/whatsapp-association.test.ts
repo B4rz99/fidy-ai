@@ -441,7 +441,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
       const handoffText = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ text: Schema.Struct({ body: Schema.String }) })
       )(yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(outbound[1] ?? ""));
-      expect(handoffText.text.body).toContain("/auth/google?handoff=");
+      expect(handoffText.text.body).toContain("/login?handoff=");
       expect(handoffText.text.body).toContain("Google o Microsoft");
       const reference = /handoff=([0-9a-f-]{36})/u.exec(handoffText.text.body)?.[1] ?? "";
       yield* authenticateChatProvider(journey, reference);

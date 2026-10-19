@@ -2,7 +2,7 @@ import { IssuedPAT } from "@fidy/server/client";
 import { Data, type Effect, type Option, type Redacted, Schema } from "effect";
 
 export const apiOrigin = "https://api.fidyapp.com";
-export const managementUrl = "https://app.fidyapp.com/settings/pats";
+export const managementUrl = "https://app.fidyapp.com/settings/access";
 
 /** Local grant facts, never a claim of current server authorization. */
 export const SavedGrant = Schema.Struct({

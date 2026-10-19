@@ -29,6 +29,11 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
       return code;
     });
 
+export const openBrowserLogin = (page: Page): Promise<void> =>
+  page
+    .goto("/login")
+    .then(() => page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
+
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 type ConsentRead = Readonly<{ status: number }>;
 const observeConsentRead = (page: Page): Promise<ConsentRead> =>
@@ -108,8 +113,7 @@ const signInWithIdentity = ({
       | "navigationClock"
       | "navigationDashboard";
   }>): Promise<void> =>
-  page
-    .goto("/auth/pair")
+  openBrowserLogin(page)
     .then(() =>
       clockMode === "controlled"
         ? installAcceptanceClock(page)
@@ -146,7 +150,7 @@ export const signInWithVerifiedEmailThroughCore = ({
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => installAcceptanceClock(page));
-      yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+      yield* Effect.tryPromise(() => openBrowserLogin(page));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
       );

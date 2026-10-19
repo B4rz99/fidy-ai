@@ -1088,7 +1088,7 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
       const schedule = yield* activateTestReminder(db);
-      const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
+      const now = DateTime.makeUnsafe("2026-10-06T23:01:00Z");
       vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
       const others = Array.from({ length: 16 }, () => UserId.make(newId()));
       yield* Effect.tryPromise(() =>

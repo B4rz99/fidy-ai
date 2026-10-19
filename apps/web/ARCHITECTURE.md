@@ -112,12 +112,12 @@ See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-que
 
 ## 3. Browser authentication
 
-Provider web signup/login begins at `/auth/google` or `/auth/microsoft`, discoverable from the public site.
+Provider web signup/login begins at `/login`, discoverable from the public site.
 The mounted Provider Authentication feature owns its private pairing proof, one-time recovery view,
 and provider popup. It uses the generated authentication client: accept the exact disclosure revision,
 initiate the selected provider, poll proof-bearing status, submit completion once, save recovery, then redeem through
 Browser Login. No provider token or protocol code reaches the feature. `/auth/google-return` or `/auth/microsoft-return` closes
-the popup at a parameter-free URL. Only the two provider entry documents use
+the popup at a parameter-free URL. Only the login document uses
 `same-origin-allow-popups` so the parent can observe a manually closed cross-origin popup.
 The blank popup's opener is cleared before provider navigation. Pending verification with a
 closed popup shows cancellation; verified status and native association confirmation take precedence.
@@ -127,7 +127,9 @@ and uncertain completion discard private proof and explain fresh sign-in; no mut
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work
 remains gated. Personal and work/school Microsoft accounts are accepted; initial WhatsApp linking is installed under #1091.
 
-The optional channel/mailbox Browser Login begins at `/auth/pair`. The browser retains the private verifier while WhatsApp
+The single `/login` route composes provider and channel/mailbox Browser Login as mutually exclusive mounted steps. Both Google and Microsoft are visible choices. Switching methods disposes private attempt state without changing the validated public continuation. Every successful method loads a new destination document to restore strict opener isolation. One shared allowlisted destination decoder preserves CLI, OAuth review, institution continuation, PAT review and Account settings; no caller-supplied redirect is accepted.
+
+The optional channel/mailbox Browser Login begins at `/login`. The browser retains the private verifier while WhatsApp
 approval, independently established mailbox authentication, or support recovery receives only its
 intended public proof. Provider contact email cannot use this mailbox path. The superseded
 `/auth/verify-email` signup page is removed. Public
@@ -137,7 +139,7 @@ state, or static artifacts.
 The web uses the server's canonical authentication paths and session authority. It does not implement
 identity resolution, proof verification, PAT issuance, Consent decisions, or recovery authority.
 Security-sensitive browser actions use the server-established fresh-session requirement.
-`/settings/email` keeps candidate mailbox and proof only in mounted form state. Both initiation and
+`/settings/account` keeps candidate mailbox and proof only in mounted form state. Both initiation and
 completion use the canonical typed client with no-store requests. Neither value enters a URL, browser
 storage, or application-wide state.
 
@@ -196,7 +198,7 @@ state; it immediately navigates to the server-owned registered callback. Fidy ne
 access/refresh credentials. An ambiguous approval failure disables repeat approval and asks the User
 to restart from the agent.
 
-`/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. The previous settings URLs resolve to this combined route. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. The mounted manual PAT issuance module encloses review, request identity, command outcomes and same-User draft continuation. Presentation receives display state and User actions. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime; late command completion cannot restore it.
+`/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. Obsolete PAT and agent settings aliases are removed. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. The mounted manual PAT issuance module encloses review, request identity, command outcomes and same-User draft continuation. Presentation receives display state and User actions. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime; late command completion cannot restore it.
 
 Sensitive-operation confirmation under #988 uses a server-owned native MCP form in **Claude Code and
 Codex only**, not a web feature or browser handoff. The server owns the exact effect disclosure,
@@ -224,7 +226,7 @@ provider query URLs are excluded from application telemetry. Configuration canno
 arbitrary provider hosts or paths; Production-mode DaviPlata activation and protocol evidence remain
 separate gates.
 Cloudflare applies
-the security headers to every SPA fallback, with the two provider-entry opener-policy exceptions
+the security headers to every SPA fallback, with the login opener-policy exception
 described above, keeps shells and release metadata revalidating with
 `no-cache`, and removes that inherited value before assigning one-year immutable caching to
 content-hashed assets.
@@ -274,7 +276,7 @@ exact Money/Currency formatting and captured date/zone context. Canonical loadin
 failure states use the existing session registry and query presentation; the URL carries only the
 opaque report identity and supplies no authorization.
 
-The public `handoff` search value on `/auth/google` and `/auth/microsoft` identifies one WhatsApp-led
+The public `handoff` search value on `/login` identifies one WhatsApp-led
 attempt and survives provider selection. It contains no browser proof. The feature uses accepted chat
 Consent, authenticates the selected provider, then polls with its private pairing verifier. Awaiting
 confirmation shows a public association identifier and directs the caller to compare the native chat
@@ -336,3 +338,5 @@ invalidates review reads while retaining visible content and disabling decisions
 A newer saved canonical draft replaces a clean local draft; outstanding local edits remain visible
 and require recovery if superseded. A completed autosave releases its draft barrier so subsequent
 bulk decisions use the fresh workspace revision.
+
+`/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Each feature retains its own proof and disclosure lifetime. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.

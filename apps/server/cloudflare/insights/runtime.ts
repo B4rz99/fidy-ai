@@ -1,4 +1,5 @@
 import { withErasureRecovery } from "../erasure/runtime";
+import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -220,7 +221,7 @@ const generateDueWeeklyWork = (
   input: Readonly<{ environment: ProactivityBackgroundEnvironment; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
-    if (input.environment.WEEKLY_SUMMARY_ENABLED !== "enabled") return;
+    if (input.environment.WEEKLY_SUMMARY_ENABLED !== "enabled" || !summariesDue(input.now)) return;
     const schedules = yield* discoverDueWeeklySchedules({
       db: input.environment.DB,
       now: input.now,
@@ -297,8 +298,12 @@ export const advanceProactivityWork = (
   Effect.gen(function* () {
     const now = yield* DateTime.now;
     yield* attemptIndependent([
-      sweepInsightChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
-      sweepProactivityChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
+      ...(evidenceRetentionDue(now)
+        ? [
+            sweepInsightChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
+            sweepProactivityChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
+          ]
+        : []),
       expireWeeklyQuestions({ db: environment.DB, now: now.epochMilliseconds }),
       expireDeliveryWork({ db: environment.DB, now: now.epochMilliseconds }),
       generateDueWeeklyWork({ environment, now }),

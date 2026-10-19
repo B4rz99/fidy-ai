@@ -5,6 +5,7 @@ import { Array, type Cause, Clock, DateTime, Effect, Option } from "effect";
 import { installUser } from "./http-fixtures";
 import {
   boundSessionRequests,
+  openBrowserLogin,
   openUpgradeThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
@@ -200,7 +201,7 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
     Effect.gen(function* () {
       yield* wait(page.clock.install());
       const api = yield* wait(installPairingApiFixture(page));
-      yield* wait(page.goto("/auth/pair"));
+      yield* wait(openBrowserLogin(page));
       yield* wait(
         expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
       );
@@ -243,9 +244,7 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
         expect.arrayContaining([expect.objectContaining({ name: "__Host-fidy_session" })])
       );
       yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());
-      yield* wait(
-        expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
-      );
+      yield* wait(expect(page.getByRole("button", { name: "Continuar con Google" })).toBeVisible());
       expect(api.logoutCount).toBe(1);
       expect(
         (yield* wait(context.cookies())).some(({ name }) => name === "__Host-fidy_session")
@@ -353,7 +352,7 @@ test("approves email login with the private browser verifier without exposing ma
     Effect.gen(function* () {
       yield* wait(page.clock.install());
       const attempts = yield* wait(installEmailLoginRoutes(page));
-      yield* wait(page.goto("/auth/pair"));
+      yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
       yield* wait(page.getByLabel("O accede con tu correo verificado").fill(emailLoginAddress));
@@ -455,9 +454,7 @@ const finishRealPairing = ({
       yield* wait(expect(page.getByRole("button", { name: "Elegir mensual" })).toBeVisible());
       yield* wait(page.goto("/app/transactions"));
       yield* wait(page.getByRole("button", { name: "Cerrar sesión" }).click());
-      yield* wait(
-        expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible()
-      );
+      yield* wait(expect(page.getByRole("button", { name: "Continuar con Google" })).toBeVisible());
       yield* wait(expect.poll(() => hasSessionCookie(context)).toBe(false));
       const revoked = yield* wait(
         request.get("https://127.0.0.1:4174/user", {
@@ -480,7 +477,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
   Effect.runPromise(
     Effect.gen(function* () {
       yield* wait(installAcceptanceClock(page));
-      yield* wait(page.goto("/auth/pair"));
+      yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       const code = yield* wait(visiblePairingCode(page));
       const approval = yield* wait(
@@ -533,7 +530,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       const pending = page.waitForResponse(
         (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
       );
-      yield* wait(page.goto("/auth/pair"));
+      yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       const code = yield* wait(visiblePairingCode(page));
       yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
@@ -611,7 +608,7 @@ test("honors server slowdown before showing the generic terminal refusal", ({ pa
     Effect.gen(function* () {
       yield* wait(page.clock.install());
       const { events, pendingRoutes } = yield* wait(installSlowdownRoutes(page));
-      yield* wait(page.goto("/auth/pair"));
+      yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
       yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
@@ -697,7 +694,7 @@ test("stops at pairing expiry after a timed-out poll without creating a replacem
       yield* wait(page.clock.install());
       yield* wait(page.clock.pauseAt(yield* Clock.currentTimeMillis));
       yield* wait(installExpiringPairingRoutes(page, counts));
-      yield* wait(page.goto("/auth/pair"));
+      yield* wait(openBrowserLogin(page));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
       yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));

@@ -17,6 +17,8 @@ import type { Workspace } from "./model";
 
 import { type Filter, ReviewNavigation } from "./view-navigation";
 
+const { Toaster } = await import("sonner");
+
 const makeReviewQuery = (
   client: FidyClient,
   filter: Filter,
@@ -32,7 +34,12 @@ export const NeedsReviewRoute = (): JSX.Element => {
   const search = useSearch({ from: "/authenticated/app/needs-review" });
   const filter = search.status ?? "pending";
   const page = search.offset ?? 0;
-  return <ReviewPageRepair key={`${filter}:${page}`} filter={filter} page={page} />;
+  return (
+    <>
+      <Toaster position="bottom-right" richColors />
+      <ReviewPageRepair key={`${filter}:${page}`} filter={filter} page={page} />
+    </>
+  );
 };
 
 /** Pagination repair belongs to the active route, outside the retained presentation owner. */
@@ -294,4 +301,3 @@ const filterReviewPage = ({
 });
 
 export { ReviewPendingCount } from "./navigation";
-export { CreatedReviewTransaction } from "./created-transaction";

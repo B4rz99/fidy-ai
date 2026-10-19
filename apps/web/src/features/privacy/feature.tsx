@@ -244,7 +244,7 @@ export const PrivacyFeature = (): JSX.Element => {
       ) : null}
       {status._tag === "Failure" ? (
         <div>
-          <Button variant="outline" render={<Link to="/auth/pair" />}>
+          <Button variant="outline" render={<Link to="/login" />}>
             Iniciar sesión
           </Button>
         </div>

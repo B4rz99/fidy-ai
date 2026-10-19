@@ -354,7 +354,7 @@ it("cannot open A's Consent decision with B's delivered provider correlation", (
         })).status
       ).toBe(200);
       expect(outbound).toHaveLength(3);
-      expect(outbound[2]).toContain("/auth/google?handoff=");
+      expect(outbound[2]).toContain("/login?handoff=");
       expect(outbound[2]).toContain('"to":"573009876543"');
     })
   ));
@@ -451,7 +451,7 @@ it.each(["callback", "missing_callback"])(
             phone: "573001234567",
           })).status
         ).toBe(200);
-        expect(outbound[1]).toContain("/auth/google?handoff=");
+        expect(outbound[1]).toContain("/login?handoff=");
       })
     )
 );

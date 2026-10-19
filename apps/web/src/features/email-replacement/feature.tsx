@@ -107,7 +107,7 @@ const ReplacementUnavailable = (): JSX.Element => (
     <AlertDescription>
       El cambio podría haberse completado. Comprueba tu correo al iniciar sesión antes de solicitar
       otro cambio.{" "}
-      <Link className="underline" to="/login" search={{ resume: "account" }}>
+      <Link className="underline" to="/login" reloadDocument search={{ resume: "account" }}>
         Ir a vinculación
       </Link>
       .
@@ -146,7 +146,7 @@ const replacementContent = ({
         <AlertTitle>Vincula el navegador de nuevo</AlertTitle>
         <AlertDescription>
           Por seguridad, necesitas una sesión recién vinculada para cambiar tu correo.{" "}
-          <Link className="underline" to="/login" search={{ resume: "account" }}>
+          <Link className="underline" to="/login" reloadDocument search={{ resume: "account" }}>
             Ir a vinculación
           </Link>
           .

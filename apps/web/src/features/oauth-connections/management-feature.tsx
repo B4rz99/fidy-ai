@@ -45,7 +45,7 @@ const ManagementContent = ({
           No pudimos consultar los agentes. Puede que necesites iniciar sesión de nuevo; no
           mostramos una lista vacía ni confirmamos revocaciones.
         </p>
-        <Button variant="outline" render={<Link to="/login" />}>
+        <Button variant="outline" render={<Link to="/login" reloadDocument />}>
           Iniciar sesión de nuevo
         </Button>
       </section>

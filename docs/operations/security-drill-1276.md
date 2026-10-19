@@ -1,7 +1,13 @@
 # Bounded security drill — #1276 / #1262
 
-Observed 2026-10-18. **Live drill incomplete; do not mark native detection, containment or recovery
-verified.** The owner authorized the drill in chat. Restricted receipt `2b5542c7-4028-4a72-a32e-89d4de25a944`
+Latest result: **2026-10-19 bounded scheduled-alert delivery/resolution and synthetic PAT
+containment/cleanup passed. Raw HTTP burst detection remains unverified live.** See the dated
+resumption below; the earlier attempt is preserved as history.
+
+## Earlier attempt — 2026-10-18
+
+Observed 2026-10-18. **That attempt was incomplete; it did not verify native detection, containment
+or recovery.** The owner authorized the drill in chat. Restricted receipt `2b5542c7-4028-4a72-a32e-89d4de25a944`
 records exact deployment IDs, times, bounded outcomes and immutable source identities. No secrets,
 User identifiers or response payloads are published.
 
@@ -59,3 +65,58 @@ After quota recovery, first verify fresh monitoring and D1-dependent operation, 
 bounded security signal and an explicitly isolated grant containment/recovery path. Preserve rate
 limits and existing real-User state. Link that actual result to the [privacy procedure](privacy-decisions-1276.md);
 this partial receipt cannot close #1262 or #1276's technical handoff requirement.
+
+## Resumption — 2026-10-19
+
+The owner authorized resuming after the quota reset. Fresh health observations and a malformed-bearer
+401 established recovered operation at preflight. Account analytics initially reported 4,249 writes
+for the current UTC date. The served release was
+`99fc5047bd422f9f66db20fb447b04a08a15d3f7`. Restricted version 2 receipt
+`f4ab786e-5529-4d2b-8a9e-c7ca13d6bda9` retains exact deployment identities, source receipts,
+ordinary API outcomes, cleanup observations and mailbox evidence. This was an exercise, not a release.
+
+### Scheduled warning and resolution
+
+One explicitly synthetic presence marker was inserted through the restricted operational signal
+seam. The existing scheduler classified `core_rejection_burst / coreRejectionBursts`, sent its warning,
+and automatically resolved it after the signal aged out. The authorized company mailbox independently
+displayed the warning at 06:48 Colombia and the resolution at 06:52 Colombia. Native state confirmed
+`resolved` with delivery confirmed and fresh healthy monitoring. The exact owned marker was then
+removed with a resolved-state guard; a subsequent query returned zero owned markers. The resolved
+alert record was retained.
+
+This proves scheduled classification, runtime notification delivery and automatic resolution from
+that signal seam. It does **not** prove the raw HTTP refusal threshold: no rate protection was
+bypassed and no second public burst was attempted. Runtime D1-outage fallback was not exercised.
+The agent read both messages. A conditional acknowledgement attempted after automatic resolution
+made no acknowledgement change; no successful native acknowledgement or human response is claimed.
+
+### Scoped credential containment
+
+The existing reserved synthetic identity was checked before use. Its 20 preexisting Transactions
+and zero Budgets were preserved. Two temporary read-only PATs each returned 200 for the same bounded
+Category query. Revoking one through the ordinary API returned 200; its stale bearer then returned
+401, while the control PAT still returned 200. Cleanup through the ordinary APIs returned 200 for
+both PAT revocations and 204 for logout. Final native inspection confirmed zero active PATs and
+zero active WebSessions for that synthetic identity, with its Transaction and Budget counts unchanged.
+No real User credential or financial record was used.
+
+An earlier harness attempt omitted the current session-binding header. The server refused its PAT
+request; no PAT was created in that attempt. Its exact synthetic session was administratively
+revoked before correcting the harness and completing the ordinary API exercise above. That cleanup
+is retained as a separate attempt, not presented as evidence of ordinary API containment. Bearers
+and session credentials were held only in process memory and excluded from receipts.
+
+### Handoff and remaining scope
+
+The sole operator remains the technical responder under [security response](security-response.md).
+The [privacy procedure](privacy-decisions-1276.md) consumes this bounded technical result separately
+from its synthetic reporting tabletop. No personal-data exposure was established in this exercise;
+no live incident report or third-party drill contact was submitted. Actual prior outage impact and
+any reporting decision remain separate assessments.
+
+This result supplies actual deployed alert receipt, scoped containment and recovery/cleanup evidence
+at the stated seams. It does not close all of [#1262](https://github.com/B4rz99/fidy-ai/issues/1262):
+raw public detection, other required monitoring coverage and unexercised fallback remain separate.
+It also does not supply qualified RNBD approval or unresolved provider-contract/contact evidence
+for [#1276](https://github.com/B4rz99/fidy-ai/issues/1276).

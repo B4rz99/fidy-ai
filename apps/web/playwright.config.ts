@@ -5,7 +5,7 @@ const measuringBrowserCost = process.env.BROWSER_COST_MEASUREMENT === "1";
 const fixtureRuntime = measuringBrowserCost ? process.execPath : "bun";
 const measurementAssertionMilliseconds = 30_000;
 const normalAssertionMilliseconds = 5_000;
-const browserWorkers = 8;
+const browserWorkers = 12;
 const performanceCases =
   /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs/u;
 const performancePartitions: Readonly<Record<string, RegExp>> = {

@@ -242,6 +242,8 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-install
+        with:
+          scope: infra-tests
       - name: Cloudflare infrastructure validation
         env:
           CLOUDFLARE_TEST_REPORT: "true"
@@ -354,7 +356,14 @@ jobs:
           SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
         run: |
           bun scripts/partition-source-scan.ts "2/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          docker pull ghcr.io/trufflesecurity/trufflehog:3.97.1@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08 > "$RUNNER_TEMP/trufflehog-image-pull.log" 2>&1 &
+          trufflehog_pull_pid=$!
+          docker pull docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9 > "$RUNNER_TEMP/secrets-image-pull.log" 2>&1 &
+          secrets_pull_pid=$!
           docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
+          wait "$trufflehog_pull_pid"
+          wait "$secrets_pull_pid"
+          cat "$RUNNER_TEMP/trufflehog-image-pull.log" "$RUNNER_TEMP/secrets-image-pull.log"
       - name: Gitleaks — pattern-based secret scan
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
@@ -405,6 +414,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-runtime
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
       - name: Start remaining source partition on this existing runner

@@ -63,10 +63,6 @@ export const advanceRefusedRequest = ({
     );
 };
 
-/** Join cooldown callbacks after the observed browser response has finished downloading. */
-export const settleAcceptanceClock = (page: Page): Promise<void> =>
-  Promise.all(installed.get(page)?.tasks ?? []).then(() => undefined);
-
 /** Advance an explicitly observed polling delay in the native fixture and the browser. */
 export const advanceAcceptancePoll = ({
   page,

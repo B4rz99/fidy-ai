@@ -1,4 +1,4 @@
-import type { APIRequestContext, APIResponse, Page, Response } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
@@ -7,7 +7,6 @@ import {
   advanceRefusedRequest,
   installAcceptanceClock,
   installAcceptanceClockWithNativePerformance,
-  settleAcceptanceClock,
 } from "./acceptance-clock";
 
 const { expect } = playwright;
@@ -36,7 +35,7 @@ export const openBrowserLogin = (page: Page): Promise<void> =>
     .then(() => page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
 
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
-type ConsentRead = Response;
+type ConsentRead = Readonly<{ status: number }>;
 const observeConsentRead = (page: Page): Promise<ConsentRead> =>
   page
     .waitForRequest(
@@ -45,7 +44,7 @@ const observeConsentRead = (page: Page): Promise<ConsentRead> =>
     .then((request) => request.response())
     .then((response) => {
       if (response === null) throw new Error("Expected the new consent read response");
-      return response;
+      return { status: response.status() };
     });
 const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
   Effect.runPromise(
@@ -54,18 +53,17 @@ const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
       const maximumRetries = 6;
       for (
         let retry = 0;
-        response.status() === resourceLimitedStatus && retry < maximumRetries;
+        response.status === resourceLimitedStatus && retry < maximumRetries;
         retry++
       ) {
-        yield* Effect.tryPromise(() => response.finished());
-        yield* Effect.tryPromise(() => settleAcceptanceClock(page));
+        yield* Effect.sleep("1 second");
         const refreshed = observeConsentRead(page);
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Reintentar", exact: true }).click()
         );
         response = yield* Effect.tryPromise(() => refreshed);
       }
-      expect(response.status()).toBe(successStatus);
+      expect(response.status).toBe(successStatus);
     }).pipe(Effect.timeout("15 seconds"))
   );
 export const reloadTransactionsThroughCore = (page: Page): Promise<void> => {

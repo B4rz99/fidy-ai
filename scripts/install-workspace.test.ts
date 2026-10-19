@@ -98,6 +98,7 @@ it.effect(
     Effect.gen(function* () {
       for (const [scope, filters] of [
         ["--server-tests", ["@fidy/server"]],
+        ["--infra-tests", ["@fidy/cloudflare-infra"]],
         ["--unit-tests", ["@fidy/server", "@fidy/cli", "@fidy/web"]],
       ] as const) {
         const result = yield* runInstaller(authorizedLock, "2026-10-10", [scope]);

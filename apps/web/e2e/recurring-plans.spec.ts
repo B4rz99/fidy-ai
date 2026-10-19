@@ -354,10 +354,7 @@ const chooseDate = (page: Page, label: string, date: string): Promise<void> =>
     })
   );
 
-test("manual tracking can be reversed and skipped, while pause, resume and stop survive reload", ({
-  page,
-  request,
-}) =>
+test("manual tracking can be reversed and skipped", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
@@ -394,6 +391,23 @@ test("manual tracking can be reversed and skipped, while pause, resume and stop 
       yield* Effect.tryPromise(() =>
         expect(recurringItem(page, /Ciclo de seguimiento.*Omitido/u)).toHaveCount(0)
       );
+    })
+  ));
+
+test("pause, resume and stop survive reload", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({ page, request, identity: "recurringSummary" })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Ciclo de seguimiento",
+        kind: "expense",
+        currency: "COP",
+        amount: "100",
+      });
       yield* changeOccurrence(page, "Pausar");
       yield* Effect.tryPromise(() =>
         expect(recurringItem(page, /Ciclo de seguimiento/u)).toHaveCount(0)

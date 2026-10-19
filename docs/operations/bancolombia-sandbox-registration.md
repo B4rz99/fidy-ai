@@ -1,6 +1,8 @@
 # Bancolombia sandbox registration
 
-This is the registration prerequisite for #305, not an executable bank authorization flow.
+This publishes registration metadata for the bank-flow continuation of closed #305, not an executable
+bank authorization flow. [#1266 profile/provisioning evidence](bancolombia-profile-1266.md) owns the
+current accepted-contract check; #1267–#1270 own subsequent bank authorization and sandbox proof.
 Sandbox access and production eligibility remain separate; the Bancolombia institution gate stays
 disabled.
 
@@ -31,7 +33,8 @@ matching key through a redacted secret binding; this registration does not insta
 Do not regenerate the key during builds or releases. Changing the published key requires a
 coordinated bank registration change and preservation of the corresponding private key.
 
-The callback is deliberately unavailable until #305 installs the verified institution protocol.
+The callback is deliberately unavailable until the verified institution protocol is installed under
+#1267–#1268.
 GET requests containing query parameters receive a no-store/no-referrer 303 to the same fixed
 callback path without parameters. The clean callback returns HTTP 503 and a static explanation.
 It neither exchanges codes nor forwards to Core, records User data, creates Accounts or activates
@@ -46,6 +49,15 @@ query strings before real bank authorization use.
 
 Once access is provisioned, verify the sandbox issuer/discovery, exact redirect registration,
 client authentication, mTLS certificate requirements, PAR, S256 PKCE, consent and Account
-Information responses before implementing the remaining #305 behavior. A JWKS key does not replace
+Information responses before implementing the remaining #1267–#1270 behavior. A JWKS key does not replace
 an mTLS certificate. Keep the production eligibility gate disabled until its independent evidence
 is complete.
+
+## Read-only recheck — 2026-10-19
+
+The [profile worksheet](bancolombia-profile-1266.md#fidy-registration-evidence) records deployed JWKS
+200 with the matching public key, clean callback 503, synthetic-query stripping and the disabled
+production institution gate. The documented local private-key file was absent in the checked
+worktree. Protected GitHub secret metadata was present; no value was accessed. This does not prove
+matching possession or key loss and does not authorize regenerating/replacing the registered key.
+Accepted bank registration, client/issuer, transport policy and actual bank scenarios remain unverified.

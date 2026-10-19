@@ -239,23 +239,12 @@ test("skips and restores in bulk, advances, and preserves edits after a failed r
     })
   ));
 
-test("creates individually and advances to the next pending item", ({ page }) =>
+test("confirms creation with a toast and continues reviewing without leaving the workspace", ({
+  page,
+}) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const draft = {
-        amount: "13500",
-        currency: "COP",
-        direction: "outflow",
-        counterparty: "Café",
-        occurredAt: "2026-01-01T12:00:00Z",
-        userProvidedFields: [],
-      };
-      const entries: Fixture[] = [id, secondId].map((value) => ({
-        id: value,
-        revision: 0,
-        status: "pending",
-        draft,
-      }));
+      const entries = pagedReviewFixtures().slice(0, 2);
       yield* Effect.tryPromise(() => installUser(page));
       yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
       yield* Effect.tryPromise(() =>
@@ -266,6 +255,12 @@ test("creates individually and advances to the next pending item", ({ page }) =>
         page.getByRole("button", { name: "Crear transacción", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveText(
+          "Transacción creada"
+        )
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/needs-review$/u));
+      yield* Effect.tryPromise(() =>
         expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
@@ -273,9 +268,61 @@ test("creates individually and advances to the next pending item", ({ page }) =>
           page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` })
         ).toBeVisible()
       );
-      expect(entries.filter((entry) => entry.status === "created")).toHaveLength(1);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Transacción creada", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("link", { name: "Ver transacción" })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/needs-review\?/u));
+      expect(entries.filter((entry) => entry.status === "created")).toHaveLength(2);
     })
   ));
+
+test("does not show creation success when the server cannot confirm the transaction", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = pagedReviewFixtures().slice(0, 1);
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, unavailableCreationRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear transacción", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos confirmar el guardado. Actualiza antes de continuar.")
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-sonner-toast][data-type="success"]')).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/needs-review$/u));
+    })
+  ));
+
+const unavailableCreationRoute =
+  (entries: Fixture[]) =>
+  (route: Route): Promise<void> =>
+    new URL(route.request().url()).pathname.endsWith("/edits")
+      ? route.fulfill({
+          status: 503,
+          body: '{"error":{"code":"unavailable","message":"Try later"}}',
+        })
+      : lifecycleRoute(entries)(route);
 
 test("rereads the saved draft after a lost acknowledgement on mobile", ({ page }) =>
   Effect.runPromise(
@@ -724,7 +771,7 @@ test("removes retained review fields and original material at the evidence deadl
           .click()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Correo", exact: true }).click()
+        page.getByRole("link", { name: "Cuenta", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(
@@ -954,7 +1001,7 @@ const openReviewSibling = (page: Page): Promise<void> =>
     .getByRole("navigation", { name: "Aplicación" })
     .getByText("Ajustes", { exact: true })
     .click()
-    .then(() => page.getByRole("link", { name: "Correo", exact: true }).click())
+    .then(() => page.getByRole("link", { name: "Cuenta", exact: true }).click())
     .then(() =>
       expect(
         page.getByRole("heading", { name: "Cambiar correo verificado", exact: true })

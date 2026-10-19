@@ -107,7 +107,7 @@ const ReplacementUnavailable = (): JSX.Element => (
     <AlertDescription>
       El cambio podría haberse completado. Comprueba tu correo al iniciar sesión antes de solicitar
       otro cambio.{" "}
-      <Link className="underline" to="/auth/pair">
+      <Link className="underline" to="/login" reloadDocument search={{ resume: "account" }}>
         Ir a vinculación
       </Link>
       .
@@ -146,7 +146,7 @@ const replacementContent = ({
         <AlertTitle>Vincula el navegador de nuevo</AlertTitle>
         <AlertDescription>
           Por seguridad, necesitas una sesión recién vinculada para cambiar tu correo.{" "}
-          <Link className="underline" to="/auth/pair">
+          <Link className="underline" to="/login" reloadDocument search={{ resume: "account" }}>
             Ir a vinculación
           </Link>
           .
@@ -168,12 +168,12 @@ const replacementContent = ({
 
 /** Mailbox proofs stay in transient form state and request bodies. */
 export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Element => (
-  <main className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
+  <section aria-label="Correo de acceso">
     <Card>
       <CardHeader>
         <HugeiconsIcon aria-hidden="true" icon={MailCheckIcon} strokeWidth={2} />
         <CardTitle>
-          <h1>Cambiar correo verificado</h1>
+          <h2>Cambiar correo verificado</h2>
         </CardTitle>
         <CardDescription>
           Esta opción requiere un correo verificado establecido por separado. Iniciar sesión con
@@ -183,7 +183,7 @@ export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Elem
       </CardHeader>
       <CardContent>{replacementContent(props)}</CardContent>
     </Card>
-  </main>
+  </section>
 );
 
 export const EmailReplacementFeature = (): JSX.Element => (

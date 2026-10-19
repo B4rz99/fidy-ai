@@ -40,16 +40,10 @@ const ExpiredReviewItem = ({ item }: Readonly<{ item: Item }>): JSX.Element => (
       {item.status === "created" ? "Transacción creada" : "Este elemento venció"}
     </h2>
     <p className="mt-3 text-sm text-muted-foreground">
-      El original venció. Envía el material de nuevo para revisarlo.
+      {item.status === "created"
+        ? "La transacción sigue guardada. El material original venció."
+        : "El original venció. Envía el material de nuevo para revisarlo."}
     </p>
-    {item.status === "created" ? (
-      <a
-        className="mt-4 inline-block underline"
-        href={`/app/needs-review/transactions/${item.transactionId}`}
-      >
-        Ver transacción
-      </a>
-    ) : null}
   </div>
 );
 const ReviewItemEditor = ({ item, finished, barrier, disabled }: Props): JSX.Element => {
@@ -202,14 +196,6 @@ const HistoryDetail = ({ detail }: Readonly<{ detail: Detail }>): JSX.Element =>
     <div className="rounded-2xl border p-6">
       <h2 className="text-xl font-medium">{historyTitles[detail.item.status]}</h2>
       <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
-      {detail.item.status === "created" ? (
-        <a
-          className="mt-4 inline-block underline"
-          href={`/app/needs-review/transactions/${detail.item.transactionId}`}
-        >
-          Ver transacción
-        </a>
-      ) : null}
     </div>
   </div>
 );
@@ -253,7 +239,7 @@ const EditorFeedback = ({
 const historyDescription = (item: Item): string => {
   if (item.status === "expired") return "Envía el material de nuevo para revisarlo.";
   if (item.status === "created") {
-    return "La transacción ya está guardada. Puedes abrirla para consultar sus datos.";
+    return "La transacción ya está guardada.";
   }
   return "Selecciona este elemento y pulsa Restaurar para volver a editarlo. Su vencimiento original se conserva.";
 };

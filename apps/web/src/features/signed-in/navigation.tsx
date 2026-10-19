@@ -75,7 +75,7 @@ export const SignedInNavigation = ({
         <Button
           className="justify-start md:mt-auto"
           variant="ghost"
-          render={<Link to="/auth/pair" />}
+          render={<Link to="/login" reloadDocument />}
         >
           Iniciar sesión
         </Button>

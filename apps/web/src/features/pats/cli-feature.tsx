@@ -88,7 +88,7 @@ const PreselectedApproval = ({
           La solicitud venció, no está disponible o necesitas iniciar sesión. Inicia sesión de nuevo
           o ejecuta fidy login para comenzar otra conexión.
         </p>
-        <Button render={<Link to="/auth/pair" search={{ cliCode: code }} />}>
+        <Button render={<Link to="/login" reloadDocument search={{ cliCode: code }} />}>
           Iniciar sesión de nuevo
         </Button>
       </div>

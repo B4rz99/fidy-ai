@@ -1,6 +1,6 @@
 # Google web authentication (#1089)
 
-Implemented: discoverable `/auth/google`, explicit current web Consent for signup, Google OIDC,
+Implemented: discoverable `/login`, explicit current web Consent for signup, Google OIDC,
 atomic User/ProviderCredential/Consent/168-hour TrialPeriod/digest-only recovery creation, and
 Browser Login private-verifier redemption. Returning Google authentication preserves stable User
 ownership even without an email claim. It never silently merges another issuer/subject, renews a

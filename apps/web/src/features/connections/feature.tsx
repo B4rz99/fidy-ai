@@ -24,7 +24,7 @@ const Unavailable = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <Button render={<Link to="/auth/pair" search={{ connectionAttempt: attempt }} />}>
+      <Button render={<Link to="/login" reloadDocument search={{ connectionAttempt: attempt }} />}>
         Iniciar sesión
       </Button>
     </CardContent>

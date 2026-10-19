@@ -25,6 +25,11 @@ export const visiblePairingCode = (page: Page): Promise<string> =>
       return code;
     });
 
+export const openBrowserLogin = (page: Page): Promise<void> =>
+  page
+    .goto("/login")
+    .then(() => page.getByRole("button", { name: "WhatsApp o correo verificado" }).click());
+
 type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 type ConsentRead = Readonly<{ status: number }>;
 const observeConsentRead = (page: Page): Promise<ConsentRead> =>
@@ -98,7 +103,7 @@ const signInWithIdentity = (
 ): Promise<void> =>
   page.clock
     .install()
-    .then(() => page.goto("/auth/pair"))
+    .then(() => openBrowserLogin(page))
     .then(() => page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click())
     .then(() => visiblePairingCode(page))
     .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&${identity}=true`))
@@ -129,7 +134,7 @@ export const signInWithVerifiedEmailThroughCore = ({
 }: SignInFixture & Readonly<{ email: string }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+      yield* Effect.tryPromise(() => openBrowserLogin(page));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
       );

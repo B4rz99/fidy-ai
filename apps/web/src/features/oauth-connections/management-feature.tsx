@@ -45,7 +45,7 @@ const ManagementContent = ({
           No pudimos consultar los agentes. Puede que necesites iniciar sesión de nuevo; no
           mostramos una lista vacía ni confirmamos revocaciones.
         </p>
-        <Button variant="outline" render={<Link to="/auth/pair" />}>
+        <Button variant="outline" render={<Link to="/login" reloadDocument />}>
           Iniciar sesión de nuevo
         </Button>
       </section>
@@ -108,7 +108,13 @@ export const ManagementPage = ({
   };
   const next = (id: OAuthConnectionId): void => {
     router
-      .navigate({ to: "/settings/access", search: (previous) => ({ ...previous, after: id }) })
+      .navigate({
+        to: "/settings/access",
+        search: (previous) => ({
+          resume: previous.resume === "pat" ? "pat" : undefined,
+          after: id,
+        }),
+      })
       .catch(() => undefined);
   };
   return (
@@ -139,7 +145,10 @@ const FirstConnectionsPage = (): JSX.Element => (
   <Button
     variant="outline"
     render={
-      <Link to="/settings/access" search={(previous) => ({ ...previous, after: undefined })} />
+      <Link
+        to="/settings/access"
+        search={(previous) => ({ resume: previous.resume === "pat" ? "pat" : undefined })}
+      />
     }
   >
     Primera página

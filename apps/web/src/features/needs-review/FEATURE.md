@@ -20,7 +20,8 @@ and requires an explicit canonical reread. Neither originals nor drafts use brow
 `ingestion.applyReviewEdit` atomically saves, skips, restores or creates under live authority and
 Processing Consent. Bulk decisions are all-or-none; creation stays individual. Skip keeps the draft
 and original deadline, and its receipt supplies immediate Undo. Created, skipped and expired items
-remain discoverable in history; created items link to the exact canonical Transaction.
+remain discoverable in history. Confirmed creation shows a “Transacción creada” success toast
+and advances to the next pending item without leaving Needs Review.
 
 Statement evidence lasts 24 hours from submission, raw forwarded email 90 days, and media
 locator/caption 30 days. Drafts and suggestions share the immutable evidence deadline; scheduled

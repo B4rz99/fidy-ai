@@ -248,7 +248,7 @@ const creationActions = (
       const previous = current.value;
       if (previous._tag !== "IdentityConfirmation") return;
       if (preservePATDraft({ userId: previous.userId, draft: previous.draft })) {
-        window.location.assign("/auth/google?resume=pat");
+        window.location.assign("/login?resume=pat");
       } else change({ ...previous, preservationFailed: true });
     },
     reset: clear,

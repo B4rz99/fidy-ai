@@ -9,11 +9,7 @@
   X-Frame-Options: DENY
   Cache-Control: no-cache
 
-/auth/google
-  ! Cross-Origin-Opener-Policy
-  Cross-Origin-Opener-Policy: same-origin-allow-popups
-
-/auth/microsoft
+/login
   ! Cross-Origin-Opener-Policy
   Cross-Origin-Opener-Policy: same-origin-allow-popups
 

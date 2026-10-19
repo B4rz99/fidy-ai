@@ -99,7 +99,7 @@ const RenewalChoice = ({
           <AlertTitle>No pudimos confirmar la renovación</AlertTitle>
           <AlertDescription>
             Verifica el estado antes de reintentar. Necesitas un inicio de sesión reciente.
-            <Link to="/auth/pair" className="underline">
+            <Link to="/login" reloadDocument className="underline">
               Iniciar sesión
             </Link>
           </AlertDescription>

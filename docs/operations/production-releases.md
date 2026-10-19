@@ -344,11 +344,10 @@ ingress-to-Core service binding. This is the representative local runtime; start
 alone is useful UI work but does not prove the Cloudflare topology. The local-emulation acceptance
 starts this same CLI stack and probes both browser wiring and bound health.
 
-After deployment, verify the redirect, static host, metadata, and bounded health response:
+After deployment, verify the static host, metadata, and bounded health response:
 
 ```sh
-curl --fail --silent --dump-header - https://fidyapp.com/auth/pair --output /dev/null
-curl --fail --silent --dump-header - https://app.fidyapp.com/auth/pair --output /dev/null
+curl --fail --silent --dump-header - https://app.fidyapp.com/login --output /dev/null
 curl --fail --silent https://app.fidyapp.com/deployment-metadata.json | jq
 curl --fail --silent https://api.fidyapp.com/health | jq
 ```

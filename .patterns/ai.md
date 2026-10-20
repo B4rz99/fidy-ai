@@ -1,6 +1,6 @@
 # Effect v4 AI boundaries and Workers AI
 
-Use this reference for `effect/ai`, backed by Effect 4.0.3's
+Use this reference for `effect/ai`, backed by Effect 4.0.4's
 `node_modules/effect/src/ai/{LanguageModel,Prompt,Tool,Toolkit}.ts`. Fidy's provider-neutral hosted
 inference contract lives in `apps/server/src/shell/hosted-inference/operations.ts`; its implemented
 Workers AI adapter lives under `apps/server/cloudflare/ai/`. Effect's `LanguageModel` is a library

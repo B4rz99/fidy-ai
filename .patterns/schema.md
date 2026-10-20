@@ -42,7 +42,7 @@ explicit `identifier` annotations for reusable definitions. Brands do not supply
 custom checks can be absent from generated JSON Schema; actual decoding remains authoritative.
 Compare generated contracts against decoding when changing checks or optionality.
 
-`Schema.Int` / `Schema.isInt()` project safe-integer bounds in 4.0.3. Narrower numeric checks
+`Schema.Int` / `Schema.isInt()` project safe-integer bounds in 4.0.4. Narrower numeric checks
 can appear under `allOf`; consumers deriving help must retain those conjunctive constraints.
 
 ## Checks, transformations, and brands

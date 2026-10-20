@@ -173,7 +173,7 @@ export class PaymentEnrollmentUnavailableApi extends Schema.Error<PaymentEnrollm
   { httpApiStatus: 503 }
 ) {}
 
-/** Replacement is limited to a definitively declined first card payment; it cannot change a paid Subscription. */
+/** Explicit replacement of a cleared failed card by an enabled method; paid Subscriptions and unresolved charges remain blocked. */
 export const PreparePaymentEnrollmentPayload = Schema.Struct({
   priceId: PriceId,
   method: EnrollmentMethod,

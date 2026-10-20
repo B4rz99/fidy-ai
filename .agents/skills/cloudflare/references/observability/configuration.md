@@ -47,9 +47,7 @@ console.log("user_id: 123 logged in successfully in 45ms");
 
 ```toml
 # wrangler.toml
-analytics_engine_datasets = [
-  { binding = "ANALYTICS", dataset = "api_metrics" }
-]
+analytics_engine_datasets = [{ binding = "ANALYTICS", dataset = "api_metrics" }]
 ```
 
 **Write Data Points**:

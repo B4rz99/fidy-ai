@@ -11,6 +11,11 @@ declined weekly first payment. Each approved case verified the reusable NEQUI so
 settlement. The declined case reached the bounded failure decision without granting paid access.
 The other 67 cases in that test file were excluded by the workflow's test-name filter.
 
+The [2026-10-18 rerun](https://github.com/B4rz99/fidy-ai/actions/runs/39155516916) passed the same
+four scenarios at `1195aeb38737c77e9ed6e360d98f140b1bb8b2f9` with Effect 4.0.3; the other 76 cases
+were excluded. This remains real Sandbox provider plus local D1/activity evidence, not deployed
+wallet, callback or Queue/Workflow verification.
+
 The implementation also has synthetic adapter, browser-lifetime and native D1 tests. This result
 does not establish Production merchant eligibility, deployed callback delivery, automatic renewal
 or native Queue/Workflow recovery. Remaining native-platform launch proofs belong to #920.

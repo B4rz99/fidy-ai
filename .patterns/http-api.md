@@ -1,6 +1,6 @@
 # Effect v4 HttpApi and Cloudflare adapter boundaries
 
-Import HttpApi modules from `effect/http-api`. Selected Effect 4.0.3 source:
+Import HttpApi modules from `effect/http-api`. Selected Effect 4.0.4 source:
 `node_modules/effect/src/http-api/{HttpApi,HttpApiBuilder,HttpApiClient,HttpApiMiddleware,HttpApiSchema,OpenApi}.ts`.
 
 Use HttpApi as the define-once public contract. The canonical operation declaration derives typed
@@ -56,7 +56,7 @@ checks validate the browser graph and static artifact separately from API contra
 
 For decoded endpoint result types, use `HttpApiClient.SuccessType` with the declaration's
 `HttpApiEndpoint.Success`, as in `WebAuthSuccess` in the
-[browser client](../apps/web/src/transport/client.ts). In 4.0.3, `ReturnType` on a generic client
+[browser client](../apps/web/src/transport/client.ts). In 4.0.4, `ReturnType` on a generic client
 method includes decoded-only, response-only and decoded-and-response modes; it does not select
 the default decoded-only mode used by an ordinary call.
 Upstream [#8767](https://github.com/Effect-TS/effect/pull/8767) and the refreshed

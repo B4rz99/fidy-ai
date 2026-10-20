@@ -33,6 +33,7 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "0060_subscription_cancellation.sql",
         "0106_declined_card_retry.sql",
         "0107_failed_card_replacement.sql",
+        "0112_failed_card_wallet_replacement.sql",
       ].map((file) => new URL(`../migrations/${file}`, import.meta.url)),
     })
   );

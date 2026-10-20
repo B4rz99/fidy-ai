@@ -134,6 +134,12 @@ it("migrates retained card authority without changing BillingAttempt, outbox or 
           source: new URL("../migrations/0107_failed_card_replacement.sql", import.meta.url),
         })
       );
+      yield* Effect.tryPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0112_failed_card_wallet_replacement.sql", import.meta.url),
+        })
+      );
       for (const [index, table] of [
         "billing_attempts",
         "billing_collection_outbox",

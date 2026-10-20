@@ -422,8 +422,14 @@ const prepare = ({
   Effect.gen(function* () {
     const body = yield* readBody(request, PreparePaymentEnrollmentPayload);
     if (Option.isNone(body)) return invalid();
-    const replacing = body.value.replaceFailedSource === true;
-    if (replacing && body.value.method !== "card") return invalid();
+    const currentSource = yield* waitFor(() =>
+      environment.DB.prepare(
+        "SELECT id FROM card_payment_sources WHERE user_id=? AND retired_at_ms IS NULL"
+      )
+        .bind(session.user_id)
+        .first()
+    );
+    const replacing = body.value.replaceFailedSource === true && currentSource !== null;
     if (body.value.method === "daviplata" && Option.isNone(daviplataPolicy(environment))) {
       return unavailable();
     }
@@ -431,7 +437,7 @@ const prepare = ({
     if (Option.isNone(selected)) return invalid();
     const incompatibleSource = yield* waitFor(() =>
       environment.DB.prepare(
-        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM subscription_cancellations c WHERE c.payment_source_id=s.id) OR s.method <> ?
+        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM subscription_cancellations c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
             OR NOT EXISTS (SELECT 1 FROM card_enrollments AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
                 (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
@@ -440,6 +446,7 @@ const prepare = ({
         .bind(
           session.user_id,
           body.value.method,
+          replacing ? 1 : 0,
           environment.WOMPI_ENVIRONMENT,
           environment.WOMPI_ENVIRONMENT,
           environment.WOMPI_ENVIRONMENT

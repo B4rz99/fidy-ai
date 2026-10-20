@@ -73,7 +73,10 @@ and shares Price, Consent and payment status views. A separate server-declared a
 owned by the session's Effect Atom registry, advertises DaviPlata only when operator activation and
 reviewed exact OTP destinations allow it. Availability is not a canonical operation, a browser
 activation switch, or a chatbot activation path; preparation still enforces the server's one-source
-restriction. Missing or failing availability does not advertise DaviPlata.
+restriction. Explicit method selection can replace a cleared failed card with a wallet; it never
+submits another payment automatically. Pending/verifying and successful payments keep selection
+locked, while final failure permits another method with fresh terms and authorization.
+Missing or failing availability does not advertise DaviPlata.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,

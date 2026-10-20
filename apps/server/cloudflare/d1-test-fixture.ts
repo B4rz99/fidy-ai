@@ -339,6 +339,7 @@ export const canonicalAdmissionMigrationNames = (
       "0060_subscription_cancellation",
       "0106_declined_card_retry",
       "0107_failed_card_replacement",
+      "0112_failed_card_wallet_replacement",
       "0016_hosted_turn",
       "0062_pat_activity",
       "0063_connections",

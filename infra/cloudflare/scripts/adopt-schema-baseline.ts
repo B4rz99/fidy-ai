@@ -27,7 +27,7 @@ const ForeignKeyReply = Schema.Tuple([
   }),
 ]);
 const managedObjects =
-  "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT GLOB 'sqlite_*' AND name NOT GLOB '_cf_*' AND name NOT IN('__alchemy_migrations','d1_migrations') ORDER BY type,name";
+  "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT GLOB 'sqlite_*' AND name NOT GLOB '_cf_*' AND name<>'d1_migrations' ORDER BY type,name";
 type SchemaObject = typeof SchemaObject.Type;
 type Query = (sql: string) => string;
 const schemaObjects = (source: string): ReadonlyArray<SchemaObject> => {
@@ -40,16 +40,29 @@ const schemaObjects = (source: string): ReadonlyArray<SchemaObject> => {
     if (!expected.some((row) => row.type === "table" && row.name === "users")) {
       throw new BaselineVerificationError("Baseline schema is incomplete");
     }
-    return expected;
+    return expected.filter((row) => row.name !== "__alchemy_migrations");
   } finally {
     database.close();
   }
 };
 const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`;
 const verifySchema = (query: Query, expected: ReadonlyArray<SchemaObject>): void => {
+  process.stdout.write("Baseline verification: read schema metadata.\n");
   const [reply] = Schema.decodeUnknownSync(SchemaReply)(JSON.parse(query(managedObjects)));
+  const actualObjects = reply.results.filter((row) => row.name !== "__alchemy_migrations");
+  const diagnosticsFile = process.env.SCHEMA_METADATA_FILE;
+  if (diagnosticsFile !== undefined) {
+    writeFileSync(
+      diagnosticsFile,
+      JSON.stringify({
+        expected,
+        actual: actualObjects,
+        ledgerSchema: reply.results.filter((row) => row.name === "__alchemy_migrations"),
+      })
+    );
+  }
   const differences = expected.filter((wanted, index) => {
-    const actual = reply.results.at(index);
+    const actual = actualObjects.at(index);
     return (
       actual === undefined ||
       actual.type !== wanted.type ||
@@ -58,18 +71,15 @@ const verifySchema = (query: Query, expected: ReadonlyArray<SchemaObject>): void
       JSON.stringify(schemaSqlTokens(actual.sql)) !== JSON.stringify(schemaSqlTokens(wanted.sql))
     );
   });
-  if (reply.results.length !== expected.length || differences.length > 0) {
-    const diagnosticsFile = process.env.SCHEMA_METADATA_FILE;
-    if (diagnosticsFile !== undefined) {
-      writeFileSync(diagnosticsFile, JSON.stringify({ expected, actual: reply.results }));
-    }
+  if (actualObjects.length !== expected.length || differences.length > 0) {
     throw new BaselineVerificationError(
-      `Production schema differs from baseline (expected ${expected.length} objects, received ${reply.results.length}; differing objects: ${differences
+      `Production schema differs from baseline (expected ${expected.length} objects, received ${actualObjects.length}; differing objects: ${differences
         .slice(0, maximumDiagnosticObjects)
         .map((row) => row.name)
         .join(", ")})`
     );
   }
+  process.stdout.write("Baseline verification: check foreign keys.\n");
   const [foreignKeys] = Schema.decodeUnknownSync(ForeignKeyReply)(
     JSON.parse(query("PRAGMA foreign_key_check"))
   );
@@ -130,14 +140,17 @@ export const adoptSchemaBaseline = ({
   validateHistory(applied, target);
   const expected = schemaObjects(source.source);
   verifySchema(query, expected);
+  process.stdout.write("Baseline verification: install replacement ledger row.\n");
   query(
     `INSERT INTO __alchemy_migrations(hash,created_at,name,applied_at) SELECT ${sqlLiteral(target.hash)},NULL,${sqlLiteral(baselineName)},datetime('now') WHERE NOT EXISTS(SELECT 1 FROM __alchemy_migrations WHERE name=${sqlLiteral(baselineName)})`
   );
+  process.stdout.write("Baseline verification: verify replacement ledger row.\n");
   requireBaseline(
     ledger().filter((row) => row.name === baselineName),
     target
   );
   verifySchema(query, expected);
+  process.stdout.write("Baseline verification: retire historical ledger rows.\n");
   query(`DELETE FROM __alchemy_migrations WHERE name<>${sqlLiteral(baselineName)}`);
   const adopted = ledger();
   requireBaseline(adopted, target);

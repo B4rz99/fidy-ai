@@ -36,8 +36,10 @@ const statementOwner = (sql: string): string =>
   /^CREATE (?:UNIQUE )?INDEX "?\w+"?\s+ON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   /^CREATE TRIGGER "?\w+"?[\s\S]*?\bON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   "";
-const tableName = (sql: string): string =>
-  statementOwner(sql) || /^INSERT INTO "?(\w+)"?/u.exec(sql.trim())?.[1] || "";
+const tableName = (sql: string): string => {
+  const owner = statementOwner(sql);
+  return owner.length > 0 ? owner : (/^INSERT INTO "?(\w+)"?/u.exec(sql.trim())?.[1] ?? "");
+};
 /** Focused owner fixtures stub caller-owned authentication; owner constraints come from the production baseline. */
 export const installCurrentTestObjects = ({
   db,

@@ -259,7 +259,7 @@ CREATE TABLE "card_enrollments" (
   method TEXT NOT NULL DEFAULT 'card' CHECK (method IN ('card', 'nequi', 'daviplata')),
   wompi_environment TEXT CHECK (wompi_environment IN ('sandbox', 'production')),
   authorization_digest TEXT CHECK (authorization_digest IS NULL OR length(authorization_digest) = 64),
-source_row_ref TEXT UNIQUE,
+source_row_ref TEXT,
  payment_source_id TEXT UNIQUE CHECK(payment_source_id IS NULL OR length(payment_source_id)=36),
  source_wompi_id INTEGER UNIQUE CHECK(source_wompi_id IS NULL OR source_wompi_id>0),
  source_billing_email TEXT,source_created_at_ms INTEGER,source_retired_at_ms INTEGER CHECK(source_retired_at_ms IS NULL OR source_retired_at_ms>0),
@@ -306,7 +306,7 @@ CREATE TABLE transactions (
   notes TEXT,
   occurred_at TEXT NOT NULL,
   created_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0), user_decisions TEXT NOT NULL DEFAULT '{}', deleted_at_ms INTEGER,
-reconciliation_row_ref TEXT UNIQUE,reconciliation_first_id TEXT,reconciliation_second_id TEXT,
+reconciliation_row_ref TEXT,reconciliation_first_id TEXT,reconciliation_second_id TEXT,
  FOREIGN KEY(user_id,reconciliation_first_id,reconciliation_second_id) REFERENCES transaction_reconciliation_decisions(user_id,first_transaction_id,second_transaction_id),
  CHECK((reconciliation_first_id IS NULL AND reconciliation_second_id IS NULL AND reconciliation_row_ref IS NULL) OR (reconciliation_first_id IS NOT NULL AND reconciliation_second_id IS NOT NULL AND id IN(reconciliation_first_id,reconciliation_second_id))),
  CHECK(reconciliation_first_id IS NULL OR deleted_at_ms IS NULL),
@@ -336,7 +336,7 @@ CREATE TABLE billing_provider_transactions (
  status TEXT CHECK(status IN ('PENDING','APPROVED','DECLINED','VOIDED','ERROR')),
  first_observed_at_ms INTEGER,negative_observed_at_ms INTEGER,finalized_at_ms INTEGER,
  evidence_transaction_id TEXT GENERATED ALWAYS AS(CASE WHEN status IS NOT NULL THEN transaction_id END) VIRTUAL UNIQUE,
-event_row_ref TEXT UNIQUE,event_received_at_ms INTEGER,event_signed_at INTEGER,event_signed_status TEXT,
+event_row_ref TEXT,event_received_at_ms INTEGER,event_signed_at INTEGER,event_signed_status TEXT,
  event_lookup_attempts INTEGER CHECK(event_lookup_attempts>=0),event_last_checked_at_ms INTEGER,event_resolved_at_ms INTEGER,
  CHECK(attempt_id IS NOT NULL OR event_received_at_ms IS NOT NULL),
  CHECK(attempt_id IS NOT NULL OR (status IS NULL AND first_observed_at_ms IS NULL AND negative_observed_at_ms IS NULL AND finalized_at_ms IS NULL)),
@@ -993,6 +993,15 @@ END;
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX payment_source_active_user ON card_enrollments(user_id) WHERE payment_source_id IS NOT NULL AND source_retired_at_ms IS NULL;
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX payment_source_record_reference ON card_enrollments(source_row_ref) WHERE source_row_ref IS NOT NULL;
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX reconciliation_record_reference ON transactions(reconciliation_row_ref) WHERE reconciliation_row_ref IS NOT NULL;
+--> statement-breakpoint
+
+CREATE UNIQUE INDEX billing_callback_record_reference ON billing_provider_transactions(event_row_ref) WHERE event_row_ref IS NOT NULL;
 --> statement-breakpoint
 
 CREATE INDEX payment_sources_by_owner ON card_enrollments(user_id) WHERE payment_source_id IS NOT NULL;

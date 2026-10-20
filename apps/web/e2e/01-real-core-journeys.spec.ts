@@ -362,6 +362,39 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
       );
     })
   ));
+test("renders stored hostile Transaction text literally after a real Core write and reload", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInThroughCore({ page, request }));
+      const hostile = '<img src=x onerror="window.__fidyStoredInjection=true">';
+      const occurredAt = DateTime.formatIso(yield* DateTime.now);
+      const captured = yield* probeCanonicalRequest({
+        request: page.request,
+        send: () =>
+          boundSessionRequests(page.request).post(`${api}/transactions`, {
+            headers: { origin: appOrigin },
+            data: {
+              money: { amount: "12500", currency: "COP" },
+              counterparty: hostile,
+              direction: "outflow",
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              occurredAt,
+            },
+          }),
+      });
+      expect(captured.status()).toBe(created);
+      yield* fromPlaywright(reloadTransactionsThroughCore(page));
+      yield* fromPlaywright(expect(page.getByText(hostile, { exact: true }).first()).toBeVisible());
+      yield* fromPlaywright(expect(page.locator('img[src="x"]')).toHaveCount(0));
+      expect(
+        yield* fromPlaywright(page.evaluate(() => Object.hasOwn(window, "__fidyStoredInjection")))
+      ).toBe(false);
+    })
+  ));
+
 test("a browser cannot render or fetch another User's private Transaction through public routes", ({
   page,
   request,

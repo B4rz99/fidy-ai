@@ -974,8 +974,6 @@ CREATE TABLE oauth_operation_intents (
   reference TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   connection_id TEXT NOT NULL REFERENCES oauth_connections(id) ON DELETE CASCADE,
-  browser_approved_at_ms INTEGER,
-  browser_session_id TEXT REFERENCES web_sessions(id),
   operation TEXT NOT NULL,
   input_json TEXT NOT NULL CHECK(length(CAST(input_json AS BLOB)) <= 16384),
   input_digest BLOB NOT NULL CHECK(length(input_digest) = 32),
@@ -983,7 +981,7 @@ CREATE TABLE oauth_operation_intents (
   disclosure_revision TEXT NOT NULL,
   created_at_ms INTEGER NOT NULL,
   expires_at_ms INTEGER NOT NULL CHECK(expires_at_ms > created_at_ms AND expires_at_ms <= created_at_ms + 300000)
-);
+, browser_approved_at_ms INTEGER, browser_session_id TEXT REFERENCES web_sessions(id));
 --> statement-breakpoint
 
 CREATE TABLE oauth_public_clients (

@@ -508,3 +508,25 @@ to bypass a failed candidate proof.
 OAuth bootstrap charges D1 resource admission before returning public discovery metadata or rejecting several malformed machine requests. After authenticated smoke proves a closed D1 daily-quota refusal for the exact Worker pair, release verification may defer those OAuth availability proofs when they return 503. It still probes every route and requires no-store, CSP, HSTS, framing, MIME, referrer, CORS and exact candidate-version checks. Cross-origin MCP and first-party-origin refusals, provider rejection, categories authentication and hosted-turn rejection remain mandatory. Any other status or independent-route failure blocks promotion. This does not change application admission, grant authority or financial access.
 
 The release attestation records `oauthAvailability` alongside `synthetic`; both explicitly report `deferred-d1-quota` during this outage. Promoted normal traffic and the final edge step obtain a fresh authenticated quota proof rather than trusting a flag or stale attestation. A full successful synthetic result restores all expected OAuth statuses automatically.
+
+### Verify the live database after a quota reset
+
+Run `gh workflow run production-inspect.yml --ref trunk -f verify_database=true` to repeat the signed
+proof on the serving release without uploading candidates or changing traffic. The default inspection
+remains read-only. The optional proof writes bounded synthetic D1/R2 records and exercises the existing
+Queue, Workflow and coordinator path; it has no User-data, provider or model authority.
+
+Protected inspection serializes with deployments, requires no topology drift, captures the exact live
+Worker pair and exports its validated revision, contract digest and version identities. It then runs
+normal-traffic smoke without a version override. Only `Production smoke passed.` completes this audit;
+a quota deferral remains incomplete and fails the inspection. A newly merged but not yet deployed
+trunk revision is not substituted for the captured live revision. Signing material stays in the
+protected Production environment.
+
+On October 20, post-reset metrics showed approximately 16,000 total rows written over 24 hours. The
+optimized paths accounted for about 5,680 health-snapshot writes and 590 canary writes; 47,576 recovery
+guard checks wrote no rows, and cleanup-cursor activity contained only 4,409 reads. This mixed window
+also contained authenticated application activity and operational alerts, including an active
+`dead_letters` alert first observed October 10. It is evidence of reduced background overhead, not a
+controlled measurement of the healthy-idle budget. Headline and chart totals differ slightly, so
+retain rounded totals rather than subtracting their independently aggregated values.

@@ -107,16 +107,16 @@ it(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
         const projections = [
-          { table: "statement_submission_audit", operation: "ingestion.submitForExtraction" },
-          { table: "statement_review_audit", operation: "ingestion.listNeedsReviewItems" },
-          { table: "statement_clarification_audit", operation: "ingestion.skipNeedsReviewItem" },
+          { operation: "ingestion.submitForExtraction" },
+          { operation: "ingestion.listNeedsReviewItems" },
+          { operation: "ingestion.skipNeedsReviewItem" },
         ];
         for (const userId of [userA, userB]) {
           for (const [index, projection] of projections.entries()) {
             yield* fromTestPromise(() =>
               runtime.db
                 .prepare(
-                  `INSERT INTO ${projection.table} (id,user_id,operation,outcome,occurred_at_ms) VALUES (?,?,?,'success',?)`
+                  `INSERT INTO audit_entries (record_type,id,user_id,operation,outcome,occurred_at_ms) VALUES ('publication',?,?,?,'success',?)`
                 )
                 .bind(newId(), userId, projection.operation, index + 1)
                 .run()
@@ -512,7 +512,7 @@ it("inherits the statement read owner's Clock for credential expiry and Audit", 
         (yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              "SELECT occurred_at_ms FROM statement_submission_audit WHERE operation = 'ingestion.getStatementSubmission'"
+              "SELECT occurred_at_ms FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit WHERE operation = 'ingestion.getStatementSubmission'"
             )
             .all()
         )).results
@@ -530,9 +530,8 @@ it(
           yield* fromTestPromise(() =>
             runtime.db
               .prepare(
-                `INSERT INTO onboarding_consent_records
-           (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-            decision_received_at_ms, accepted_at_ms) VALUES (?, ?, '{}', 'fixture', 'fixture', 1, 1)`
+                `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+            decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'fixture', 'fixture', 1, 1)`
               )
               .bind(`30000000-0000-4000-8000-00000000010${index}`, userId)
               .run()
@@ -581,18 +580,15 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         yield* fromTestPromise(() =>
           runtime.db
-            .prepare(`INSERT INTO onboarding_consent_records
-          (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-           decision_received_at_ms, accepted_at_ms)
-          VALUES ('30000000-0000-4000-8000-000000000111', ?, '{}', 'fixture', 'fixture', 1, 1)`)
+            .prepare(`INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+           decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant','30000000-0000-4000-8000-000000000111', ?, '{}', 'fixture', 'fixture', 1, 1)`)
             .bind(userA)
             .run()
         );
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(`CREATE TRIGGER skip_forwarding_audit
-        BEFORE INSERT ON statement_submission_audit
-        WHEN NEW.operation = 'ingestion.enableEmailForwarding' AND NEW.outcome = 'success'
+        BEFORE INSERT ON audit_entries WHEN NEW.record_type='publication' AND NEW.operation = 'ingestion.enableEmailForwarding' AND NEW.outcome = 'success'
         BEGIN SELECT RAISE(IGNORE); END`)
             .run()
         );
@@ -611,7 +607,9 @@ it(
         );
         const audits = yield* fromTestPromise(() =>
           runtime.db
-            .prepare("SELECT operation,outcome FROM statement_submission_audit WHERE user_id = ?")
+            .prepare(
+              "SELECT operation,outcome FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit WHERE user_id = ?"
+            )
             .bind(userA)
             .all<{ operation: string; outcome: string }>()
         );
@@ -620,7 +618,9 @@ it(
         ]);
         const addresses = yield* fromTestPromise(() =>
           runtime.db
-            .prepare("SELECT count(*) AS total FROM email_forwarding_addresses WHERE user_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT rowid,id AS user_id,forwarding_address_id AS id,forwarding_local_part AS local_part,forwarding_issued_at_ms AS created_at_ms FROM users WHERE forwarding_address_id IS NOT NULL) AS email_forwarding_addresses WHERE user_id = ?"
+            )
             .bind(userA)
             .first<{ total: number }>()
         );
@@ -939,10 +939,10 @@ const stagedWithBody = (body: string): StagedBody => ({
 
 const canonicalStateTables = [
   "transactions",
-  "transaction_audit",
+  "session_call",
   "statement_submissions",
   "statement_ingestion_outbox",
-  "statement_submission_audit",
+  "publication",
   "statement_backfill_entitlements",
 ] as const;
 
@@ -959,10 +959,23 @@ const expectCanonicalState = (
     }
   });
 
+const relationSql = (relation: string): string => {
+  if (relation === "statement_ingestion_outbox") {
+    return "(SELECT * FROM statement_submissions WHERE work_revision IS NOT NULL)";
+  }
+  if (relation === "publication" || relation === "session_call") {
+    return `(SELECT * FROM audit_entries WHERE record_type='${relation}')`;
+  }
+  if (relation === "statement_backfill_entitlements") {
+    return "(SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL)";
+  }
+  return relation;
+};
+
 /** Row count over one relation: a table, or a table with a WHERE fragment, in the caller's schema. */
 const count = (db: D1Database, relation: string): Promise<number> =>
   db
-    .prepare(`SELECT count(*) AS total FROM ${relation}`)
+    .prepare(`SELECT count(*) AS total FROM ${relationSql(relation)}`)
     .first<{ total: number }>()
     .then((row) => row?.total ?? -1);
 
@@ -1175,7 +1188,7 @@ it(
         const audits = yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              `SELECT operation, outcome, count(*) AS total FROM statement_submission_audit
+              `SELECT operation, outcome, count(*) AS total FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit
                GROUP BY operation, outcome ORDER BY operation, outcome`
             )
             .all<{ operation: string; outcome: string; total: number }>()
@@ -1231,9 +1244,9 @@ it(
         yield* expectCanonicalState(runtime.db, {
           statement_submissions: 0,
           statement_ingestion_outbox: 0,
-          statement_submission_audit: 0,
+          publication: 0,
           transactions: 0,
-          transaction_audit: 0,
+          session_call: 0,
         });
         expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(1);
         expect(
@@ -1276,8 +1289,9 @@ it("offers eligible statement identities in publication order even after an earl
         });
         yield* fromTestPromise(() =>
           runtime.db
-            .prepare(`UPDATE statement_ingestion_outbox
-        SET published_at_ms = ?, last_attempt_at_ms = ? WHERE submission_id = ?`)
+            .prepare(
+              `UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms = ?, work_last_attempt_at_ms = ? WHERE work_revision IS NOT NULL AND id = ?`
+            )
             .bind(1000 + index, index === 0 ? 1 : null, submission.id)
             .run()
         );
@@ -1303,7 +1317,7 @@ it("finishes a durably queued statement after withdrawal without reopening ordin
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,'{}','fixture','fixture',1,1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','fixture','fixture',1,1)"
           )
           .bind(userA, userA)
           .run()
@@ -1328,7 +1342,7 @@ it("finishes a durably queued statement after withdrawal without reopening ordin
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)"
+            "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)"
           )
           .bind(newId(), userA, userA, sessionA, withdrawnAt)
           .run()
@@ -1556,7 +1570,7 @@ it(
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              "UPDATE statement_ingestion_outbox SET last_attempt_at_ms = 0 WHERE submission_id = ?"
+              "UPDATE statement_submissions AS statement_ingestion_outbox SET work_last_attempt_at_ms = 0 WHERE work_revision IS NOT NULL AND id = ?"
             )
             .bind(submission.id)
             .run()
@@ -1688,9 +1702,9 @@ const clarifyStatement = (
           : { userId: userB, grantId: "30000000-0000-4000-8000-000000000199" };
       yield* fromTestPromise(() =>
         runtime.db
-          .prepare(`INSERT INTO onboarding_consent_records
-    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
-    VALUES (?, ?, '{}', 'fixture', 'fixture', 1, 1)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'fixture', 'fixture', 1, 1)`
+          )
           .bind(owner.grantId, owner.userId)
           .run()
       );
@@ -1772,7 +1786,7 @@ const oauthClarificationSubject = (db: D1Database, current: number): Effect.Effe
           ),
         db
           .prepare(
-            `INSERT INTO oauth_grant_consents (id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES (?,?,?,?,'fixture','fixture',?)`
+            `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES ('oauth_grant',?,?,?,?,'fixture','fixture',?)`
           )
           .bind(
             "80000000-0000-4000-8000-000000000105",
@@ -1783,7 +1797,7 @@ const oauthClarificationSubject = (db: D1Database, current: number): Effect.Effe
           ),
         db
           .prepare(
-            `INSERT INTO oauth_access_credentials (id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES (?,?,?,?,?,?,'["write"]')`
+            `INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access',?,?,?,?,?,?,'["write"]')`
           )
           .bind(
             credentialId,
@@ -1850,17 +1864,25 @@ const commitFreshClarification = (
     ).toHaveLength(operation === "resolve" ? 1 : 0);
     expect(
       (yield* fromTestPromise(() =>
-        work.db.prepare("SELECT review_id FROM statement_review_decisions").all()
+        work.db.prepare("SELECT review_id FROM ingestion_statement_review_decisions").all()
       )).results
     ).toHaveLength(2);
     expect(
       yield* fromTestPromise(() =>
-        work.db.prepare("SELECT state FROM statement_clarifications").first()
+        work.db
+          .prepare(
+            "SELECT clarification_state AS state FROM statement_submissions WHERE clarification_state IS NOT NULL"
+          )
+          .first()
       )
     ).toEqual({ state: operation === "abandon" ? "abandoned" : "completed" });
     expect(
       (yield* fromTestPromise(() =>
-        work.db.prepare("SELECT outcome FROM pat_audit WHERE oauth_connection_id IS NOT NULL").all()
+        work.db
+          .prepare(
+            "SELECT outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id IS NOT NULL"
+          )
+          .all()
       )).results
     ).toEqual([{ outcome: "accepted" }]);
   });
@@ -1934,7 +1956,7 @@ it.each(["resolve", "skip", "abandon"] as const)(
         expect(commit._tag).toBe("Failure");
         expect(
           (yield* fromTestPromise(() =>
-            runtime.db.prepare("SELECT review_id FROM statement_review_decisions").all()
+            runtime.db.prepare("SELECT review_id FROM ingestion_statement_review_decisions").all()
           )).results
         ).toEqual([{ review_id: sibling }]);
         expect(
@@ -1944,7 +1966,9 @@ it.each(["resolve", "skip", "abandon"] as const)(
         expect(
           (yield* fromTestPromise(() =>
             runtime.db
-              .prepare("SELECT id FROM pat_audit WHERE oauth_connection_id=?")
+              .prepare(
+                "SELECT id FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id=?"
+              )
               .bind(subject.oauthConnectionId)
               .all()
           )).results
@@ -1971,7 +1995,7 @@ it.each(["resolve", "skip", "abandon"] as const)(
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              `INSERT INTO statement_hosted_origins (submission_id,user_id,session_id,turn_id,expires_at_ms) VALUES (?,?,?,?,?)`
+              `UPDATE statement_submissions SET hosted_session_id=?3,hosted_turn_id=?4,hosted_expires_at_ms=?5 WHERE id=?1 AND user_id=?2`
             )
             .bind(
               statement.submissionId,
@@ -2005,7 +2029,7 @@ it.each(["resolve", "skip", "abandon"] as const)(
         expect(prepared._tag).toBe("Refused");
         expect(
           (yield* fromTestPromise(() =>
-            runtime.db.prepare("SELECT review_id FROM statement_review_decisions").all()
+            runtime.db.prepare("SELECT review_id FROM ingestion_statement_review_decisions").all()
           )).results
         ).toHaveLength(0);
         expect(
@@ -2014,7 +2038,11 @@ it.each(["resolve", "skip", "abandon"] as const)(
         ).toHaveLength(0);
         expect(
           yield* fromTestPromise(() =>
-            runtime.db.prepare("SELECT state FROM statement_clarifications").first()
+            runtime.db
+              .prepare(
+                "SELECT clarification_state AS state FROM statement_submissions WHERE clarification_state IS NOT NULL"
+              )
+              .first()
           )
         ).toEqual({ state: "awaiting" });
       })
@@ -2064,12 +2092,12 @@ it("publishes a staged statement under held WhatsApp authority and atomically bi
         runtime.db.batch([
           runtime.db
             .prepare(
-              "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('30000000-0000-4000-8000-000000000199',?,'{}','fixture','fixture',1,1)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','30000000-0000-4000-8000-000000000199',?,'{}','fixture','fixture',1,1)"
             )
             .bind(userA),
           runtime.db
             .prepare(
-              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
             )
             .bind(userA, subject.portfolioId, subject.bsuid, current),
           runtime.db
@@ -2084,7 +2112,7 @@ it("publishes a staged statement under held WhatsApp authority and atomically bi
             .bind(turnId, userA, sessionId, current),
           runtime.db
             .prepare(
-              "INSERT INTO hosted_whatsapp_inbound (turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+              "WITH incoming(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) AS (VALUES (?,?,?,?,?,?,?,?)) UPDATE hosted_turns SET inbound_portfolio_id=incoming.portfolio_id,inbound_bsuid=incoming.bsuid,inbound_message_id=incoming.message_id,inbound_business_phone_number_id=incoming.business_phone_number_id,inbound_occurred_at_ms=incoming.occurred_at_ms,inbound_received_at_ms=incoming.received_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
             )
             .bind(
               turnId,
@@ -2137,7 +2165,7 @@ it("publishes a staged statement under held WhatsApp authority and atomically bi
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO statement_whatsapp_documents (turn_id,user_id,media_id,staging_id,reference_json,created_at_ms) VALUES (?,?,?,?,?,?)"
+            "WITH incoming(turn_id,user_id,media_id,staging_id,reference_json,created_at_ms) AS (VALUES (?,?,?,?,?,?)) UPDATE hosted_turns SET document_media_id=incoming.media_id,document_staging_id=incoming.staging_id,document_reference_json=incoming.reference_json,document_created_at_ms=incoming.created_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
           )
           .bind(turnId, userA, "direct-document", staged.stagingId, JSON.stringify(staged), current)
           .run()
@@ -2161,7 +2189,7 @@ it("publishes a staged statement under held WhatsApp authority and atomically bi
         yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              "SELECT session_id,turn_id FROM statement_hosted_origins WHERE submission_id=? AND user_id=?"
+              "SELECT hosted_session_id AS session_id,hosted_turn_id AS turn_id FROM statement_submissions WHERE id=? AND user_id=? AND hosted_session_id IS NOT NULL"
             )
             .bind(submission.data.id, userA)
             .first()
@@ -2209,7 +2237,7 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
         runtime.db.batch([
           runtime.db
             .prepare(
-              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
             )
             .bind(userA, subject.portfolioId, subject.bsuid, current),
           runtime.db
@@ -2229,7 +2257,7 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
             .bind("40000000-0000-4000-8000-000000000985", userA, sessionId, priorId, current),
           runtime.db
             .prepare(
-              "INSERT INTO hosted_whatsapp_inbound (turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+              "WITH incoming(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) AS (VALUES (?,?,?,?,?,?,?,?)) UPDATE hosted_turns SET inbound_portfolio_id=incoming.portfolio_id,inbound_bsuid=incoming.bsuid,inbound_message_id=incoming.message_id,inbound_business_phone_number_id=incoming.business_phone_number_id,inbound_occurred_at_ms=incoming.occurred_at_ms,inbound_received_at_ms=incoming.received_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
             )
             .bind(
               priorId,
@@ -2243,7 +2271,7 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
             ),
           runtime.db
             .prepare(
-              "INSERT INTO hosted_whatsapp_delivery (turn_id,user_id,text,correlation_token,business_phone_number_id,proposed_at_ms,state,provider_message_id,delivered_at_ms) VALUES (?,?,'Responde exactamente: CONFIRMAR fixture','statement-challenge','123456789',?,'delivered','wamid.challenge-delivered',?)"
+              "INSERT INTO whatsapp_deliveries AS hosted_whatsapp_delivery(kind,turn_id,user_id,text,correlation_token,business_phone_number_id,proposed_at_ms,state,provider_message_id,delivered_at_ms) VALUES ('hosted',?,?,'Responde exactamente: CONFIRMAR fixture','statement-challenge','123456789',?,'delivered','wamid.challenge-delivered',?)"
             )
             .bind(priorId, userA, current, current),
           runtime.db
@@ -2256,7 +2284,7 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
             .bind(turnId, userA, sessionId, current),
           runtime.db
             .prepare(
-              "INSERT INTO hosted_whatsapp_inbound (turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+              "WITH incoming(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) AS (VALUES (?,?,?,?,?,?,?,?)) UPDATE hosted_turns SET inbound_portfolio_id=incoming.portfolio_id,inbound_bsuid=incoming.bsuid,inbound_message_id=incoming.message_id,inbound_business_phone_number_id=incoming.business_phone_number_id,inbound_occurred_at_ms=incoming.occurred_at_ms,inbound_received_at_ms=incoming.received_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
             )
             .bind(
               turnId,
@@ -2270,7 +2298,7 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
             ),
           runtime.db
             .prepare(
-              "INSERT INTO statement_hosted_origins (submission_id,user_id,session_id,turn_id,expires_at_ms) VALUES (?,?,?,?,?)"
+              "UPDATE statement_submissions SET hosted_session_id=?3,hosted_turn_id=?4,hosted_expires_at_ms=?5 WHERE id=?1 AND user_id=?2"
             )
             .bind(statement.submissionId, userA, sessionId, priorId, current + idleMs),
           runtime.db
@@ -2362,7 +2390,7 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
       expect(
         (yield* fromTestPromise(() =>
           runtime.db
-            .prepare("SELECT review_id FROM statement_review_decisions WHERE review_id=?")
+            .prepare("SELECT review_id FROM ingestion_statement_review_decisions WHERE review_id=?")
             .bind(id)
             .all()
         )).results
@@ -2527,7 +2555,7 @@ it("all-skipped clarification completes without consuming the Free grant", () =>
       const grantBefore = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT submission_id, consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first()
@@ -2543,7 +2571,7 @@ it("all-skipped clarification completes without consuming the Free grant", () =>
       const grantAfter = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
+            "SELECT submission_id, consumed_at_ms FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements WHERE user_id = ?"
           )
           .bind(userA)
           .first()
@@ -2740,7 +2768,7 @@ it("shows committed review rows only to their User through the canonical read", 
           token,
         })
       );
-      const auditBefore = yield* fromTestPromise(() => count(runtime.db, "statement_review_audit"));
+      const auditBefore = yield* fromTestPromise(() => count(runtime.db, "publication"));
       const underScoped = yield* fromTestPromise(() =>
         send(
           runtime,
@@ -2752,9 +2780,7 @@ it("shows committed review rows only to their User through the canonical read", 
       );
       expect(underScoped.status).toBe(403);
       expect(yield* fromTestPromise(() => underScoped.text())).not.toContain("-45000");
-      expect(yield* fromTestPromise(() => count(runtime.db, "statement_review_audit"))).toBe(
-        auditBefore
-      );
+      expect(yield* fromTestPromise(() => count(runtime.db, "publication"))).toBe(auditBefore);
     })
   ));
 
@@ -2923,8 +2949,9 @@ it("settles an errored Workflow when its final failure-report activity also exha
       const now = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
         runtime.db
-          .prepare(`UPDATE statement_ingestion_outbox
-        SET published_at_ms = ? WHERE submission_id = ?`)
+          .prepare(
+            `UPDATE statement_submissions AS statement_ingestion_outbox SET work_published_at_ms = ? WHERE work_revision IS NOT NULL AND id = ?`
+          )
           .bind(now, submission.id)
           .run()
       );
@@ -3107,9 +3134,14 @@ it(
             [
               "statement_staging_objects",
               "statement_submissions",
-              "statement_submission_audit",
+              "publication",
               "statement_ingestion_outbox",
-            ].map((table) => runtime.db.prepare(`SELECT * FROM ${table}`).all().then(rowsJson))
+            ].map((table) =>
+              runtime.db
+                .prepare(`SELECT * FROM ${relationSql(table)}`)
+                .all()
+                .then(rowsJson)
+            )
           )
         );
         for (const row of rows) {
@@ -3156,7 +3188,7 @@ it(
         const refusals = yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              `SELECT user_id, operation, outcome FROM statement_submission_audit
+              `SELECT user_id, operation, outcome FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit
                ORDER BY user_id`
             )
             .all<{ user_id: string; operation: string; outcome: string }>()
@@ -3224,7 +3256,7 @@ it(
         yield* expectCanonicalState(runtime.db, {
           statement_submissions: 0,
           statement_ingestion_outbox: 0,
-          statement_submission_audit: 2,
+          publication: 2,
         });
       })
     ),
@@ -3406,7 +3438,7 @@ it(
           firstRow(
             runtime.db,
             entitlementRow,
-            "SELECT consumed_at_ms, submission_id FROM statement_backfill_entitlements"
+            "SELECT consumed_at_ms, submission_id FROM (SELECT id AS user_id,backfill_submission_id AS submission_id,backfill_consumed_at_ms AS consumed_at_ms FROM users WHERE backfill_present IS NOT NULL) AS statement_backfill_entitlements"
           )
         );
         expect(Option.isNone(entitlement.consumed_at_ms)).toBe(true);
@@ -3517,9 +3549,7 @@ it(
 
         yield* fromTestPromise(() =>
           runtime.db
-            .prepare(
-              "INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?, ?, ?)"
-            )
+            .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
             .bind(userB, current - dayMilliseconds, current - dayMilliseconds + 604_800_000)
             .run()
         );
@@ -3580,10 +3610,10 @@ it(
         yield* expectCanonicalState(runtime.db, {
           statement_submissions: 0,
           statement_ingestion_outbox: 0,
-          statement_submission_audit: 0,
+          publication: 0,
           statement_backfill_entitlements: 0,
           transactions: 0,
-          transaction_audit: 0,
+          session_call: 0,
         });
         expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(2);
       })
@@ -3603,7 +3633,7 @@ it(
         const audit = yield* fromTestPromise(() =>
           runtime.db
             .prepare(
-              `SELECT operation, outcome, count(*) AS total FROM statement_submission_audit
+              `SELECT operation, outcome, count(*) AS total FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit
                GROUP BY operation, outcome`
             )
             .all<{ operation: string; outcome: string; total: number }>()
@@ -3612,7 +3642,12 @@ it(
           { operation: "ingestion.getStatementSubmission", outcome: "not_found", total: 1 },
         ]);
         const rows = yield* fromTestPromise(() =>
-          runtime.db.prepare("SELECT * FROM statement_submission_audit").all().then(rowsJson)
+          runtime.db
+            .prepare(
+              "SELECT id,user_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit"
+            )
+            .all()
+            .then(rowsJson)
         );
         expect(rows).not.toContain("not-a-uuid");
       })
@@ -3633,52 +3668,7 @@ it(
           getSubmission(runtime, 0, "50000000-0000-4000-8000-000000000999")
         );
         expect(refused.status).toBe(401);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          0
-        );
-      })
-    ),
-  30_000
-);
-
-it(
-  "bounds canonical statement work with the shared daily budget and leaves staging open",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const current = yield* Clock.currentTimeMillis;
-        yield* fromTestPromise(() =>
-          runtime.db
-            .prepare(
-              `WITH RECURSIVE budget(value) AS (
-                 SELECT 1 UNION ALL SELECT value + 1 FROM budget WHERE value < 256
-               )
-               INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-               SELECT '90000000-0000-4000-8000-' || substr('000000000000' || value, -12),
-                      ?, 'ingestion.getStatementSubmission', 'success', ?
-               FROM budget`
-            )
-            .bind(userA, current)
-            .run()
-        );
-
-        const refused = yield* fromTestPromise(() =>
-          getSubmission(runtime, 0, "50000000-0000-4000-8000-000000000999")
-        );
-        expect(refused.status).toBe(429);
-        expect(yield* fromTestPromise(() => failureCode(refused))).toBe("rate_limited");
-
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const submitted = yield* fromTestPromise(() =>
-          publishFixture(runtime, {
-            idempotencyKey: "20000000-0000-4000-8000-000000000913",
-            index: 0,
-            reference: staged,
-          })
-        );
-        expect(submitted.status).toBe(429);
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.db, "publication"))).toBe(0);
       })
     ),
   30_000
@@ -3717,7 +3707,7 @@ it(
           yield* fromTestPromise(() =>
             scalar<{ total: number }>(
               runtime.db,
-              `SELECT count(*) AS total FROM statement_submission_audit
+              `SELECT count(*) AS total FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit
                WHERE user_id = ? AND outcome = 'validation_failed'`,
               userA
             )
@@ -3784,11 +3774,15 @@ it(
         yield* Effect.tryPromise(() => expect(batchRejectionOf(refused)).rejects.toThrow());
         yield* expectCanonicalState(runtime.db, {
           transactions: 0,
-          transaction_audit: 1,
-          statement_submission_audit: 0,
+          session_call: 1,
+          publication: 0,
         });
         const audit = yield* fromTestPromise(() =>
-          runtime.db.prepare("SELECT operation, outcome FROM transaction_audit").all()
+          runtime.db
+            .prepare(
+              "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+            )
+            .all()
         );
         expect(audit.results).toEqual([
           { operation: "operations.executeAtomicBatch", outcome: "validation_failed" },
@@ -3824,7 +3818,7 @@ it(
         yield* expectCanonicalState(runtime.db, {
           statement_submissions: 0,
           statement_ingestion_outbox: 0,
-          statement_submission_audit: 0,
+          publication: 0,
         });
         expect(
           yield* fromTestPromise(() =>
@@ -3861,8 +3855,8 @@ it(
         });
         yield* expectCanonicalState(runtime.db, {
           transactions: 0,
-          transaction_audit: 0,
-          statement_submission_audit: 0,
+          session_call: 0,
+          publication: 0,
         });
       })
     ),
@@ -3898,7 +3892,7 @@ it("reclaims expired statement material even when an unrelated email dispatcher 
       });
       const failedEmailDatabase: D1Database = {
         prepare: (query) => {
-          if (query.includes("browser_pairing_email_outbox")) {
+          if (query.includes("browser_pairing_email_proofs")) {
             throw new Error("private database failure detail");
           }
           return runtime.db.prepare(query);
@@ -3953,7 +3947,9 @@ it("reclaims expired statement material even when an unrelated email dispatcher 
       expect(
         (yield* fromTestPromise(() =>
           runtime.db
-            .prepare("SELECT user_id FROM statement_submission_audit WHERE outcome = 'success'")
+            .prepare(
+              "SELECT user_id FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit WHERE outcome = 'success'"
+            )
             .all()
         )).results
       ).toEqual([{ user_id: userB }]);
@@ -4050,7 +4046,7 @@ it("Core scheduling expires only old terminal Agent content and preserves curren
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) SELECT id, id, '{}', 'fixture', 'fixture', 1, 1 FROM users WHERE id IN (?, ?)"
+            "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) SELECT 'processing_grant',id, id, '{}', 'fixture', 'fixture', 1, 1 FROM users WHERE id IN (?, ?)"
           )
           .bind(userA, userB)
           .run()
@@ -4360,7 +4356,7 @@ it("delivers retained original material only to its browser owner", () =>
       const audit = yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "SELECT outcome FROM pat_audit WHERE user_id=? AND operation IN ('ingestion.getReviewMaterial','ingestion.getReviewSuggestions')"
+            "SELECT outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id=? AND operation IN ('ingestion.getReviewMaterial','ingestion.getReviewSuggestions')"
           )
           .bind(userB)
           .all()
@@ -4485,7 +4481,7 @@ const admitReviewImage = (runtime: Runtime): Effect.Effect<void> =>
     yield* fromTestPromise(() =>
       runtime.db
         .prepare(
-          "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,'review-portfolio','CO.reviewfixture',?)"
+          "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,'review-portfolio','CO.reviewfixture',?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
         )
         .bind(userA, current)
         .run()
@@ -4672,7 +4668,7 @@ it("denies agent originals and refuses review reads and writes after Consent rev
       yield* fromTestPromise(() =>
         runtime.db
           .prepare(
-            "INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms) SELECT ?,user_id,id,?,? FROM onboarding_consent_records WHERE user_id=?"
+            "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) SELECT 'processing_withdrawal', ?,user_id,id,?,? FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id=?"
           )
           .bind(newId(), sessionA, current, userA)
           .run()
@@ -4890,3 +4886,62 @@ const reviewRetentionRows = (db: D1Database): Effect.Effect<ReadonlyArray<unknow
       )
       .all()
   ).pipe(Effect.map((result) => result.results));
+
+it("shares review revisions across workspace and statement decisions without capturing either row twice", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const source = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,descripcion\n2026-08-01,?,Cafe\n2026-08-02,?,Tienda\n"
+        )
+      );
+      const first = source.reviewIds[0] ?? "";
+      const second = source.reviewIds[1] ?? "";
+      const create = (id: string, revision: number): unknown => ({
+        _tag: "Create",
+        id,
+        revision,
+        extraction: {
+          money: { amount: "15000", currency: "COP" },
+          direction: "outflow",
+          occurredAt: "2026-08-01T15:00:00.000Z",
+        },
+      });
+      expect((yield* fromTestPromise(() => editReview(runtime, create(first, 0)))).status).toBe(
+        200
+      );
+      expect(
+        (yield* fromTestPromise(() => reviewDecision(runtime, { id: first, action: "resolve" })))
+          .status
+      ).toBe(404);
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "SaveDraft",
+            id: second,
+            revision: 0,
+            draft: {
+              amount: "13500",
+              counterparty: "",
+              occurredAt: "",
+              userProvidedFields: ["money"],
+            },
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() => reviewDecision(runtime, { id: second, action: "resolve" })))
+          .status
+      ).toBe(200);
+      const detail = yield* fromTestPromise(() => reviewDetail(runtime, second));
+      expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
+        data: { revision: 2, item: { status: "created" } },
+      });
+      expect((yield* fromTestPromise(() => editReview(runtime, create(second, 2)))).status).toBe(
+        400
+      );
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
+    })
+  ));

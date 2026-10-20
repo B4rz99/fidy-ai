@@ -18,7 +18,7 @@ export const currentUserQuery = (userId: UserId): OwnedStatement =>
   protectConsentStatement({
     statement: {
       sql: `SELECT u.id, u.service_market, u.locale, u.time_zone, u.created_at_ms,
-              t.started_at_ms, t.ends_at_ms FROM users AS u JOIN trial_periods AS t ON t.user_id = u.id
+              u.trial_started_at_ms AS started_at_ms, u.trial_ends_at_ms AS ends_at_ms FROM users AS u
               WHERE u.id = ?`,
       params: [userId],
     },

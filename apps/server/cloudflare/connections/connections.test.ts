@@ -406,7 +406,11 @@ it.each(["expired", "stale-session", "revoked-session", "disabled-institution"] 
         ).toMatchObject({ results: [{ status: "pending" }] });
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+            db
+              .prepare(
+                "SELECT id AS attempt_id FROM connection_attempts WHERE prepared_session_id IS NOT NULL"
+              )
+              .all()
           )
         ).toMatchObject({ results: [] });
       })
@@ -564,7 +568,7 @@ it("rolls back browser preparation when Audit fails and allows a safe retry", ()
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER refuse_browser_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'connections.beginContinuation' BEGIN SELECT RAISE(ABORT, 'fixture_evidence_unavailable'); END"
+            "CREATE TRIGGER refuse_browser_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'connections.beginContinuation' BEGIN SELECT RAISE(ABORT, 'fixture_evidence_unavailable'); END"
           )
           .run()
       );
@@ -574,7 +578,11 @@ it("rolls back browser preparation when Audit fails and allows a safe retry", ()
       expect(refused.status).toBe(503);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+          db
+            .prepare(
+              "SELECT id AS attempt_id FROM connection_attempts WHERE prepared_session_id IS NOT NULL"
+            )
+            .all()
         )
       ).toMatchObject({ results: [] });
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_browser_audit").run());
@@ -596,7 +604,7 @@ it.each(["session-revocation", "consent-withdrawal"] as const)(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO onboarding_consent_records VALUES ('browser-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','browser-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
             )
             .bind(users[0])
             .run()
@@ -615,7 +623,7 @@ it.each(["session-revocation", "consent-withdrawal"] as const)(
                   .run()
               : database
                   .prepare(
-                    "INSERT INTO consent_user_revocations VALUES ('browser-withdrawn', ?, 'browser-grant', ?, ?)"
+                    "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal','browser-withdrawn', ?, 'browser-grant', ?, ?)"
                   )
                   .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
                   .run()
@@ -627,44 +635,16 @@ it.each(["session-revocation", "consent-withdrawal"] as const)(
         ).toMatchObject({ results: [{ status: "pending" }] });
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+            db
+              .prepare(
+                "SELECT id AS attempt_id FROM connection_attempts WHERE prepared_session_id IS NOT NULL"
+              )
+              .all()
           )
         ).toMatchObject({ results: [] });
       })
     )
 );
-it("rolls back preparation at the shared User Audit budget", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
-      const started = yield* Effect.tryPromise(() => start(db));
-      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
-      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
-    SELECT 'browser-budget-' || n, ?, ?, 'connections.listConnections', 'accepted', ? FROM seq`)
-          .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
-          .run()
-      );
-      const refused = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
-      );
-      expect(refused.status).toBe(429);
-      expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT status FROM connection_attempts").all())
-      ).toMatchObject({ results: [{ status: "pending" }] });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
-        )
-      ).toMatchObject({ results: [] });
-    })
-  ));
 it("shares canonical User request pressure before browser work is queued", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -745,7 +725,7 @@ it("isolates ready and prepared browser review from a different User holding the
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT id FROM pat_audit WHERE user_id = ? AND operation = 'connections.reviewContinuation' AND outcome = 'accepted'"
+              "SELECT id FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ? AND operation = 'connections.reviewContinuation' AND outcome = 'accepted'"
             )
             .bind(users[1])
             .all()
@@ -1021,7 +1001,7 @@ it("rolls back Connection, attempt and success Audit when the final evidence wri
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER refuse_connection_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'connections.connectInstitution' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'fixture_evidence_unavailable'); END"
+            "CREATE TRIGGER refuse_connection_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'connections.connectInstitution' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'fixture_evidence_unavailable'); END"
           )
           .run()
       );
@@ -1040,7 +1020,7 @@ it("rolls back Connection, attempt and success Audit when the final evidence wri
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT id FROM pat_audit WHERE operation = 'connections.connectInstitution' AND outcome = 'accepted'"
+              "SELECT id FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'connections.connectInstitution' AND outcome = 'accepted'"
             )
             .all()
         )
@@ -1197,37 +1177,6 @@ it("refuses malformed and cross-origin starts before any lifecycle effect", () =
       expect(yield* Effect.tryPromise(() => list.json())).toEqual({ data: [], next: [] });
     })
   ));
-it("counts browser inspection and initiation against the same shared Audit budget", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
-    SELECT 'connection-audit-' || n, ?, ?, 'connections.listConnections', 'accepted', ? FROM seq`)
-          .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
-          .run()
-      );
-      const inspection = yield* Effect.tryPromise(() => send(db, request(0, "/institutions")));
-      expect(inspection.status).toBe(200);
-      const denied = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
-      );
-      expect(denied.status).toBe(429);
-      expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connections").all())
-      ).toMatchObject({ results: [] });
-      expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_attempts").all())
-      ).toMatchObject({
-        results: [],
-      });
-    })
-  ));
 it("removes expired attempts after their bounded retention while retaining the stable Connection", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1264,7 +1213,7 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO onboarding_consent_records VALUES ('retention-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','retention-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
           )
           .bind(users[0])
           .run()
@@ -1280,7 +1229,7 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO consent_user_revocations VALUES ('retention-withdrawn', ?, 'retention-grant', ?, ?)"
+            "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal','retention-withdrawn', ?, 'retention-grant', ?, ?)"
           )
           .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
           .run()
@@ -1321,7 +1270,11 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
       yield* Effect.tryPromise(tick);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+          db
+            .prepare(
+              "SELECT id AS attempt_id FROM connection_attempts WHERE prepared_session_id IS NOT NULL"
+            )
+            .all()
         )).results
       ).toHaveLength(1);
       vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds + 86400000);
@@ -1331,7 +1284,11 @@ it("scheduled retention erases abandoned preparation after Consent withdrawal wi
       ).toMatchObject({ results: [] });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+          db
+            .prepare(
+              "SELECT id AS attempt_id FROM connection_attempts WHERE prepared_session_id IS NOT NULL"
+            )
+            .all()
         )
       ).toMatchObject({ results: [] });
       expect(

@@ -76,9 +76,9 @@ const rotateFreshSessionProof = (
       db.batch([
         db
           .prepare(
-            `UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?,
-        consumed_at_ms = NULL, revision = revision + 1
-        WHERE user_id = ? AND ${freshSessionExists}`
+            `UPDATE users SET recovery_code_digest = ?, recovery_created_at_ms = ?,
+        recovery_consumed_at_ms = NULL, recovery_revision = recovery_revision + 1
+        WHERE id = ? AND ${freshSessionExists}`
           )
           .bind(
             codeDigest,
@@ -88,8 +88,7 @@ const rotateFreshSessionProof = (
           ),
         db
           .prepare(
-            `INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
-        SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`
+            `INSERT INTO audit_entries(record_type,id, user_id, session_id, operation, occurred_at_ms) SELECT 'security_mutation',?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`
           )
           .bind(newId(), session.user_id, session.id, usedAt),
       ])

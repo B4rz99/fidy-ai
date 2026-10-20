@@ -8,7 +8,6 @@ import {
 import { it as effectIt } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
 import {
-  Data,
   DateTime,
   Effect,
   Exit,
@@ -35,12 +34,8 @@ import {
   StatementStagingUnavailable,
 } from "./internal/statement-staging";
 
-class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
-  Effect.tryPromise({
-    try: () => Promise.resolve(promise()),
-    catch: () => new TestPromiseFailure(),
-  }).pipe(Effect.orDie);
+  Effect.tryPromise(() => Promise.resolve(promise())).pipe(Effect.orDie);
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const userB = "10000000-0000-4000-8000-000000000102";
@@ -78,7 +73,9 @@ const migrationNames = [
   "0017_forwarded_email",
   "0017_statement_dispatch",
   "0032_statement_capture_entitlement",
+  "0033_oauth_authority",
   "0033_statement_clarification",
+  "0034_statement_clarification_audit",
   "0035_statement_hosted_origin",
   "0018_batch_envelope_audit",
   "0019_canonical_child_guards",
@@ -237,10 +234,12 @@ type StagingRowRecord = Readonly<{
 
 const count = (
   database: D1Database,
-  table: "statement_staging_objects" | "statement_submissions" | "statement_submission_audit"
+  table: "statement_staging_objects" | "statement_submissions" | "publication"
 ): Promise<number> =>
   database
-    .prepare(`SELECT count(*) AS total FROM ${table}`)
+    .prepare(
+      `SELECT count(*) AS total FROM ${table === "publication" ? "(SELECT * FROM audit_entries WHERE record_type='publication')" : table}`
+    )
     .first<{ readonly total: number }>()
     .then((row) => row?.total ?? 0);
 
@@ -468,9 +467,7 @@ const verifyDelayedUpload = (
       expect(yield* fromTestPromise(() => count(restarted.database, "statement_submissions"))).toBe(
         0
       );
-      expect(
-        yield* fromTestPromise(() => count(restarted.database, "statement_submission_audit"))
-      ).toBe(0);
+      expect(yield* fromTestPromise(() => count(restarted.database, "publication"))).toBe(0);
       expect(requireValue(yield* fromTestPromise(() => sweep(restarted)))).toEqual({
         objectsDeleted: 0,
         rowsDeleted: 0,
@@ -579,9 +576,7 @@ describe("Cloudflare statement byte staging", () => {
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.database, "publication"))).toBe(0);
         expect((yield* fromTestPromise(() => runtime.bucket.list())).objects).toHaveLength(1);
       })
     ));
@@ -603,20 +598,9 @@ describe("Cloudflare statement byte staging", () => {
             yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
           );
           const submissionId = yield* completedSubmission(runtime, staged.stagingId);
-          if (column === "completed_at_ms") {
-            yield* fromTestPromise(() =>
-              runtime.database
-                .prepare("UPDATE statement_submissions SET completed_at_ms = ? WHERE id = ?")
-                .bind(value, submissionId)
-                .run()
-            );
-          }
-          const database =
-            column === "completed_at_ms"
-              ? runtime.database
-              : corruptFirst(runtime.database, "SELECT s.id, s.source_format", (row) =>
-                  Predicate.isObject(row) ? { ...row, [column]: value } : row
-                );
+          const database = corruptFirst(runtime.database, "SELECT s.id, s.source_format", (row) =>
+            Predicate.isObject(row) ? { ...row, [column]: value } : row
+          );
           const staging = StatementStaging.make({
             database,
             bucket: runtime.bucket,
@@ -671,14 +655,6 @@ describe("Cloudflare statement byte staging", () => {
               scope: Option.none(),
             })).status
           ).toBe(404);
-          if (column === "completed_at_ms") {
-            yield* fromTestPromise(() =>
-              runtime.database
-                .prepare("UPDATE statement_submissions SET completed_at_ms = ? WHERE id = ?")
-                .bind(startedAtEpochMs, submissionId)
-                .run()
-            );
-          }
           const valid = yield* readCanonicalSubmission({
             config: { database: runtime.database },
             userId: userA,
@@ -699,9 +675,7 @@ describe("Cloudflare statement byte staging", () => {
             },
             next: [],
           });
-          expect(
-            yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-          ).toBe(0);
+          expect(yield* fromTestPromise(() => count(runtime.database, "publication"))).toBe(0);
           expect((yield* fromTestPromise(() => runtime.bucket.list())).objects).toHaveLength(1);
         })
       )
@@ -730,9 +704,7 @@ describe("Cloudflare statement byte staging", () => {
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           1
         );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.database, "publication"))).toBe(0);
         expect((yield* fromTestPromise(() => runtime.bucket.list())).objects).toHaveLength(1);
       })
     ));
@@ -769,7 +741,7 @@ describe("Cloudflare statement byte staging", () => {
               ),
             runtime.database
               .prepare(
-                `INSERT INTO statement_clarifications (submission_id,user_id,state,expires_at_ms) VALUES (?, ?, 'awaiting', ?)`
+                `UPDATE statement_submissions SET clarification_state='awaiting',clarification_expires_at_ms=?3 WHERE id=?1 AND user_id=?2`
               )
               .bind(submissionId, userA, startedAtEpochMs + 600000),
             runtime.database
@@ -819,14 +791,16 @@ describe("Cloudflare statement byte staging", () => {
         expect(
           yield* fromTestPromise(() =>
             runtime.database
-              .prepare("SELECT count(*) AS total FROM statement_review_decisions")
+              .prepare("SELECT count(*) AS total FROM ingestion_statement_review_decisions")
               .first("total")
           )
         ).toBe(0);
         expect(
           yield* fromTestPromise(() =>
             runtime.database
-              .prepare("SELECT count(*) AS total FROM statement_clarification_audit")
+              .prepare(
+                "SELECT count(*) AS total FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit"
+              )
               .first("total")
           )
         ).toBe(0);
@@ -858,9 +832,7 @@ describe("Cloudflare statement byte staging", () => {
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.database, "publication"))).toBe(0);
         const row = required(
           yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId))
         );
@@ -1004,9 +976,7 @@ describe("Cloudflare statement byte staging", () => {
         expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
           0
         );
-        expect(
-          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
-        ).toBe(0);
+        expect(yield* fromTestPromise(() => count(runtime.database, "publication"))).toBe(0);
         expect(
           required(yield* fromTestPromise(() => stagingRow(runtime.database, staged.stagingId)))
             .status

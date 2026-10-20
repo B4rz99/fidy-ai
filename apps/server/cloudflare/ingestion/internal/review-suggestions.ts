@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { ReviewUnavailable } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { encodeMoneyAmount } from "../../../src/core/_shared/money";
@@ -13,7 +14,7 @@ import {
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { categorizeCaptures } from "../../categories/operations";
-import { readReviewDetail, reviewCompletion } from "./review-store";
+import { readReviewDetail } from "./review-store";
 import { commitReviewRead, reviewAudit } from "./review-audit";
 
 const maximumEmailBytes = 1_048_576;
@@ -70,7 +71,7 @@ const emailSuggestion = ({
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          `SELECT r.receipt_id,s.object_key,r.created_at_ms,s.time_zone FROM forwarded_email_needs_review r JOIN forwarded_email_receipts s ON s.id=r.receipt_id AND s.user_id=r.user_id WHERE r.id=? AND r.user_id=?`
+          `SELECT s.id AS receipt_id,s.object_key,s.review_created_at_ms AS created_at_ms,s.time_zone FROM forwarded_email_receipts s WHERE s.review_id=? AND s.user_id=?`
         )
         .bind(id, userId)
         .first()
@@ -145,7 +146,7 @@ export const browseReviewSuggestions = ({
           operation: "ingestion.getReviewSuggestions",
           accepted: Option.isSome(suggestion),
         }),
-        db.prepare(reviewCompletion),
+        prepareChangedRowAssertion({ db, scope: "ingestion_review" }),
       ])
     );
     if (

@@ -59,16 +59,12 @@ import {
 } from "./internal/statement-processing";
 import { processForwardedEmail as processEmail } from "./internal/forwarded-email-processing";
 import {
-  statementDailyBudgetRefusal as budgetRefusal,
   prepareHeldStatementSubmission as heldSubmission,
   statementMutationAdapter,
 } from "./internal/statement-mutation";
-import {
-  forwardingAddressMutationAdapter,
-  forwardingAuditLimitRefusal as forwardingAuditRefusal,
-} from "./internal/forwarding-address-mutation";
+import { forwardingAddressMutationAdapter } from "./internal/forwarding-address-mutation";
 
-/** Atomically accept an authenticated image with its media unit, attribution, visible review and durable outbox. Exact delivery replay is free; no provider retrieval occurs here. */
+/** Atomically accept an authenticated image with its media unit, attribution, visible review and capacity reservation. Exact delivery replay is free; no provider retrieval occurs here. */
 export const acceptWhatsAppMedia = (input: MediaAdmissionInput): Effect.Effect<Response> =>
   admitMedia(input);
 
@@ -187,11 +183,7 @@ export const presentStatementSubmission: typeof statementMutationAdapter.present
 /** Attribute invalid submission input with the owner's metadata-only refusal contract. */
 export const invalidStatementSubmission: typeof statementMutationAdapter.invalidRefusal = (work) =>
   statementMutationAdapter.invalidRefusal(work);
-/** Classify only the shared budget refusal; no storage evidence leaves the owner. */
-export const statementDailyBudgetRefusal: typeof budgetRefusal = (phase) => budgetRefusal(phase);
-/** Decide the forwarding response when its commit is refused by the shared Audit budget. */
-export const forwardingAuditLimitRefusal: typeof forwardingAuditRefusal = () =>
-  forwardingAuditRefusal();
+
 /** Prepare idempotent forwarding-address access and its Audit for the caller's D1 unit. */
 export const prepareForwardingAddress: typeof forwardingAddressMutationAdapter.prepare = (work) =>
   forwardingAddressMutationAdapter.prepare(work);

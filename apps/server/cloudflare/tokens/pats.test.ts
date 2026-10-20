@@ -174,7 +174,9 @@ it("refuses corrupt retained pairing expiry before approving a grant or recordin
       expect(
         yield* awaitPromise(
           db
-            .prepare("SELECT count(*) AS total FROM pat_grant_consents WHERE pairing_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents WHERE pairing_id = ?"
+            )
             .bind(started.pairingId)
             .first()
         )
@@ -488,7 +490,9 @@ const seedExpiredAdmission = ({
       .prepare("INSERT INTO commercial_allowance_consumptions VALUES (?,'canonical_call',?,?,?,0)")
       .bind(userId, `live-${userId}`, current, current),
     db
-      .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
+      .prepare(
+        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+      )
       .bind(
         `expired-${userId}`,
         userId,
@@ -497,7 +501,9 @@ const seedExpiredAdmission = ({
         current - 94 * 86400000
       ),
     db
-      .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
+      .prepare(
+        "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+      )
       .bind(`live-${userId}`, userId, patId, "categories.listCategories", current),
   ]);
 
@@ -541,7 +547,11 @@ it("Core maintenance removes expired replay bodies and admission state for inact
       ).toEqual([{ identity: `live-${userA}` }, { identity: `live-${userB}` }]);
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT id FROM canonical_request_acceptances ORDER BY user_id").all()
+          db
+            .prepare(
+              "SELECT id FROM (SELECT id,user_id,pat_id,operation,accepted_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances ORDER BY user_id"
+            )
+            .all()
         )).results
       ).toEqual([{ id: `live-${userA}` }, { id: `live-${userB}` }]);
     })
@@ -692,7 +702,11 @@ it.each(["fresh", "live"] as const)(
         ).toBe("pending_approval");
         expect(
           (yield* awaitPromise(
-            db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first()
+            db
+              .prepare(
+                "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents"
+              )
+              .first()
           ))?.total
         ).toBe(0);
         vi.useFakeTimers({
@@ -802,14 +816,18 @@ it.each(["revoked", "idle-expired"] as const)(
         ).toBe("pending_approval");
         expect(
           (yield* awaitPromise(
-            db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first()
+            db
+              .prepare(
+                "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents"
+              )
+              .first()
           ))?.total
         ).toBe(0);
         expect(
           (yield* awaitPromise(
             db
               .prepare(
-                "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.approvePATPairing'"
+                "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.approvePATPairing'"
               )
               .first()
           ))?.total
@@ -916,8 +934,8 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
       vi.setSystemTime(clock() + 600_001);
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER refuse_pairing_expiry_evidence BEFORE INSERT ON pat_revocation_consents
-          WHEN NEW.pairing_id IS NOT NULL
+          .prepare(`CREATE TRIGGER refuse_pairing_expiry_evidence BEFORE INSERT ON consent_history
+          WHEN NEW.record_type='pat_revocation' AND NEW.pairing_id IS NOT NULL
           BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
           .run()
       );
@@ -930,7 +948,9 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
       expect(
         (yield* awaitPromise(
           db
-            .prepare("SELECT count(*) AS total FROM pat_revocation_consents WHERE pairing_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
+            )
             .bind(approved.pairingId)
             .first()
         ))?.total
@@ -952,7 +972,9 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
       expect(
         (yield* awaitPromise(
           db
-            .prepare("SELECT count(*) AS total FROM pat_revocation_consents WHERE pairing_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
+            )
             .bind(approved.pairingId)
             .first()
         ))?.total
@@ -972,7 +994,9 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
       expect(
         yield* awaitPromise(
           db
-            .prepare("SELECT 1 FROM pat_grant_consents WHERE pairing_id = ?")
+            .prepare(
+              "SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents WHERE pairing_id = ?"
+            )
             .bind(approved.pairingId)
             .first()
         )
@@ -986,7 +1010,7 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT policy_reason,session_id FROM pat_revocation_consents WHERE pairing_id = ?"
+              "SELECT policy_reason,session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
             )
             .bind(approved.pairingId)
             .first()
@@ -999,7 +1023,9 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
       expect(
         (yield* awaitPromise(
           db
-            .prepare("SELECT count(*) AS total FROM pat_revocation_consents WHERE pairing_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
+            )
             .bind(approved.pairingId)
             .first()
         ))?.total
@@ -1066,7 +1092,7 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
       ).toBe("approved_awaiting_claim");
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER test_revoke_all_failure BEFORE INSERT ON pat_revocation_consents
+          .prepare(`CREATE TRIGGER test_revoke_all_failure BEFORE INSERT ON consent_history WHEN NEW.record_type='pat_revocation'
     BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
           .run()
       );
@@ -1107,7 +1133,7 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT session_id,policy_reason FROM pat_revocation_consents WHERE pairing_id = ?"
+              "SELECT session_id,policy_reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pairing_id = ?"
             )
             .bind(started.pairingId)
             .first()
@@ -1118,7 +1144,11 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
       });
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents"
+            )
+            .first()
         ))?.total
       ).toBe(1);
       expect(
@@ -1208,19 +1238,27 @@ it("bounds per-User issuance even when every PAT is revoked immediately", () =>
       ).toBe(20);
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first()
-        ))?.total
-      ).toBe(20);
-      expect(
-        (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents"
+            )
+            .first()
         ))?.total
       ).toBe(20);
       expect(
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.createManualPAT'"
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents"
+            )
+            .first()
+        ))?.total
+      ).toBe(20);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.createManualPAT'"
             )
             .first()
         ))?.total
@@ -1310,7 +1348,7 @@ it("rolls back revoke-one and retries exactly one append-only Consent revocation
       });
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER test_revoke_failure BEFORE INSERT ON pat_revocation_consents
+          .prepare(`CREATE TRIGGER test_revoke_failure BEFORE INSERT ON consent_history WHEN NEW.record_type='pat_revocation'
     BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
           .run()
       );
@@ -1362,7 +1400,11 @@ it("rolls back revoke-one and retries exactly one append-only Consent revocation
       ).toBe(200);
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents"
+            )
+            .first()
         ))?.total
       ).toBe(1);
       expect(
@@ -1418,7 +1460,7 @@ it("atomically expires a fixed-lifetime PAT with policy-origin Consent evidence"
       ).toBe(401);
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER test_expiry_failure BEFORE INSERT ON pat_revocation_consents
+          .prepare(`CREATE TRIGGER test_expiry_failure BEFORE INSERT ON consent_history WHEN NEW.record_type='pat_revocation'
     BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
           .run()
       );
@@ -1441,9 +1483,13 @@ it("atomically expires a fixed-lifetime PAT with policy-origin Consent evidence"
       yield* awaitPromise(expect(scheduled()).rejects.toThrow());
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first<{
-            total: number;
-          }>()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents"
+            )
+            .first<{
+              total: number;
+            }>()
         ))?.total
       ).toBe(0);
       yield* awaitPromise(db.prepare("DROP TRIGGER ignore_expiry_transition").run());
@@ -1452,7 +1498,7 @@ it("atomically expires a fixed-lifetime PAT with policy-origin Consent evidence"
       expect(
         yield* awaitPromise(
           db
-            .prepare(`SELECT r.policy_reason,r.session_id FROM pat_revocation_consents r
+            .prepare(`SELECT r.policy_reason,r.session_id FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
     JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
             .bind(issued.pat.shortId)
             .first()
@@ -1463,7 +1509,11 @@ it("atomically expires a fixed-lifetime PAT with policy-origin Consent evidence"
       });
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents"
+            )
+            .first()
         ))?.total
       ).toBe(1);
     })
@@ -1544,7 +1594,9 @@ it("serializes concurrent private-code claims so only one bearer is ever issued"
       expect(
         (yield* awaitPromise(
           db
-            .prepare("SELECT count(*) AS total FROM pat_grant_consents WHERE pairing_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents WHERE pairing_id = ?"
+            )
             .bind(started.pairingId)
             .first()
         ))?.total
@@ -1680,7 +1732,7 @@ it("isolates management by User and immediately refuses revoked and under-scoped
       expect(
         yield* awaitPromise(
           db
-            .prepare(`SELECT r.session_id,r.policy_reason FROM pat_revocation_consents r
+            .prepare(`SELECT r.session_id,r.policy_reason FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') r
     JOIN pats p ON p.id = r.pat_id WHERE p.short_id = ?`)
             .bind(issued.pat.shortId)
             .first()
@@ -1702,7 +1754,7 @@ it("isolates management by User and immediately refuses revoked and under-scoped
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT count(*) AS total FROM pat_revocation_consents WHERE pat_id IS NOT NULL"
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents WHERE pat_id IS NOT NULL"
             )
             .first()
         ))?.total
@@ -1744,7 +1796,11 @@ it("isolates management by User and immediately refuses revoked and under-scoped
         next: [],
       });
       const auditBeforeSearch = yield* awaitPromise(
-        db.prepare("SELECT count(*) AS total FROM transaction_audit").first<{ total: number }>()
+        db
+          .prepare(
+            "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
+          .first<{ total: number }>()
       );
       const deniedSearch = yield* awaitPromise(
         send({ path: "/transactions/search?q=private", method: "GET", bearer: writerBearer })
@@ -1756,7 +1812,11 @@ it("isolates management by User and immediately refuses revoked and under-scoped
       });
       expect(
         yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM transaction_audit").first<{ total: number }>()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+            )
+            .first<{ total: number }>()
         )
       ).toEqual(auditBeforeSearch);
       yield* awaitPromise(
@@ -1859,9 +1919,13 @@ it("does not leave revoke-all Consent evidence when the PAT transition is refuse
       expect(revoked.status).not.toBe(200);
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first<{
-            total: number;
-          }>()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents"
+            )
+            .first<{
+              total: number;
+            }>()
         ))?.total
       ).toBe(0);
       expect(
@@ -1901,9 +1965,13 @@ it("does not append revocation Consent when the PAT transition silently fails", 
       expect(revoked.status).not.toBe(200);
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_revocation_consents").first<{
-            total: number;
-          }>()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_revocation') AS pat_revocation_consents"
+            )
+            .first<{
+              total: number;
+            }>()
         ))?.total
       ).toBe(0);
       expect(
@@ -1962,8 +2030,9 @@ it("retries a claim without losing its approval when the claim AuditLogEntry is 
       ).toBe(200);
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER refuse_claim_audit BEFORE INSERT ON pat_audit
-    WHEN NEW.operation = 'pats.claim' BEGIN SELECT RAISE(IGNORE); END`)
+          .prepare(
+            `CREATE TRIGGER refuse_claim_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'pats.claim' BEGIN SELECT RAISE(IGNORE); END`
+          )
           .run()
       );
       const proof = {
@@ -2038,7 +2107,7 @@ it("keeps a PATPairing pending when its approval ConsentRecord is silently refus
       ).toBe(200);
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER refuse_pairing_grant BEFORE INSERT ON pat_grant_consents
+          .prepare(`CREATE TRIGGER refuse_pairing_grant BEFORE INSERT ON consent_history WHEN NEW.record_type='pat_grant'
     BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
@@ -2062,9 +2131,13 @@ it("keeps a PATPairing pending when its approval ConsentRecord is silently refus
       ).toBe("pending_approval");
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first<{
-            total: number;
-          }>()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents"
+            )
+            .first<{
+              total: number;
+            }>()
         ))?.total
       ).toBe(0);
     })
@@ -2075,7 +2148,7 @@ it("does not commit a PAT when its ConsentRecord is silently refused", () =>
       const { db, send, sessions } = yield* awaitPromise(setup());
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER refuse_pat_grant BEFORE INSERT ON pat_grant_consents
+          .prepare(`CREATE TRIGGER refuse_pat_grant BEFORE INSERT ON consent_history WHEN NEW.record_type='pat_grant'
     BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
@@ -2110,9 +2183,13 @@ it("does not commit a PAT when its ConsentRecord is silently refused", () =>
       ).toBe(0);
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT count(*) AS total FROM pat_grant_consents").first<{
-            total: number;
-          }>()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents"
+            )
+            .first<{
+              total: number;
+            }>()
         ))?.total
       ).toBe(0);
     })
@@ -2163,7 +2240,11 @@ it("inherits the canonical PAT metadata owner's Clock for authority expiry and A
       expect(expired.status).toBe(401);
       expect(
         (yield* awaitPromise(
-          db.prepare("SELECT occurred_at_ms FROM pat_audit WHERE operation = 'pats.listPATs'").all()
+          db
+            .prepare(
+              "SELECT occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.listPATs'"
+            )
+            .all()
         )).results
       ).toEqual([{ occurred_at_ms: acceptedAt }]);
     })
@@ -2213,7 +2294,7 @@ it("shares subject-owned PAT metadata and Audit between HTTP and headerless host
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT user_id, session_id, outcome FROM pat_audit WHERE operation = 'pats.listPATs' ORDER BY rowid"
+              "SELECT user_id, session_id, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.listPATs' ORDER BY occurred_at_ms,id"
             )
             .all()
         )).results
@@ -2252,12 +2333,12 @@ for (const refusal of ["revoked", "withdrawn", "suppressed-audit"] as const) {
             db.batch([
               db
                 .prepare(
-                  "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,'{}','disclosure','decision',?,?)"
+                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)"
                 )
                 .bind(grantId, userA, current, current),
               db
                 .prepare(
-                  "INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)"
+                  "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)"
                 )
                 .bind("e0000000-0000-4000-8000-000000000042", userA, grantId, subject.id, current),
             ])
@@ -2267,7 +2348,7 @@ for (const refusal of ["revoked", "withdrawn", "suppressed-audit"] as const) {
           yield* awaitPromise(
             db
               .prepare(
-                "CREATE TRIGGER refuse_list_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'pats.listPATs' BEGIN SELECT RAISE(IGNORE); END"
+                "CREATE TRIGGER refuse_list_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'pats.listPATs' BEGIN SELECT RAISE(IGNORE); END"
               )
               .run()
           );
@@ -2296,7 +2377,9 @@ for (const refusal of ["revoked", "withdrawn", "suppressed-audit"] as const) {
         expect(
           yield* awaitPromise(
             db
-              .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'pats.listPATs'")
+              .prepare(
+                "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.listPATs'"
+              )
               .first()
           )
         ).toEqual({ count: 0 });
@@ -2342,7 +2425,9 @@ it("refuses PAT metadata for substituted User, digest and PAT caller proofs with
       expect(
         yield* awaitPromise(
           db
-            .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'pats.listPATs'")
+            .prepare(
+              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.listPATs'"
+            )
             .first()
         )
       ).toEqual({ count: 0 });
@@ -2364,8 +2449,9 @@ it("denies PAT metadata reads after explicit Consent withdrawal at protected wor
       ).toBe(200);
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER refuse_list_audit BEFORE INSERT ON pat_audit
-    WHEN NEW.operation = 'pats.listPATs' BEGIN SELECT RAISE(IGNORE); END`)
+          .prepare(
+            `CREATE TRIGGER refuse_list_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'pats.listPATs' BEGIN SELECT RAISE(IGNORE); END`
+          )
           .run()
       );
       expect(
@@ -2381,16 +2467,17 @@ it("denies PAT metadata reads after explicit Consent withdrawal at protected wor
       const grantId = "e0000000-0000-4000-8000-000000000031";
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          )
           .bind(grantId, userA, clock(), clock())
           .run()
       );
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO consent_user_revocations
-    (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`)
+          .prepare(
+            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+          )
           .bind(
             "e0000000-0000-4000-8000-000000000032",
             userA,
@@ -2412,7 +2499,9 @@ it("denies PAT metadata reads after explicit Consent withdrawal at protected wor
       expect(
         (yield* awaitPromise(
           db
-            .prepare("SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.listPATs'")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.listPATs'"
+            )
             .first()
         ))?.total
       ).toBe(1);
@@ -2427,175 +2516,7 @@ it("denies PAT metadata reads after explicit Consent withdrawal at protected wor
       ).toBe(200);
     })
   ));
-it("includes PAT metadata listing in the shared User/day canonical work budget", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      yield* awaitPromise(
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
-    INSERT INTO transaction_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    SELECT lower(hex(randomblob(16))), ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
-          .bind(userA, "40000000-0000-4000-8000-000000000001", clock())
-          .run()
-      );
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/pats",
-            method: "GET",
-            session: sessions[0],
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/pats",
-            method: "GET",
-            session: sessions[0],
-          })
-        )).status
-      ).toBe(429);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/pats",
-            method: "GET",
-            session: sessions[1],
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/categories",
-            method: "GET",
-            session: sessions[0],
-          })
-        )).status
-      ).toBe(429);
-    })
-  ));
-it("bounds canonical work across a stable User and multiple PATs", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const issue = (requestId: string): Promise<typeof Issued.Type> =>
-        runTest(
-          Effect.gen(function* () {
-            const result = yield* awaitPromise(
-              send({
-                path: "/pats",
-                method: "POST",
-                session: sessions[0],
-                payload: {
-                  requestId,
-                  grant: {
-                    recipientLabel: "Budgeted agent",
-                    scopes: ["read"],
-                    lifetimeDays: 7,
-                    reviewExpiresAt: DateTime.formatIso(
-                      DateTime.makeUnsafe(clock() + 7 * 86_400_000)
-                    ),
-                  },
-                },
-              })
-            );
-            expect(result.status).toBe(200);
-            return (yield* Schema.decodeUnknownEffect(
-              Schema.Struct({
-                data: Issued,
-              })
-            )(yield* awaitPromise(result.json()))).data;
-          })
-        );
-      const first = yield* awaitPromise(issue("70000000-0000-4000-8000-000000000031"));
-      const second = yield* awaitPromise(issue("70000000-0000-4000-8000-000000000032"));
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "GET",
-            bearer: first.bearer,
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "GET",
-            bearer: second.bearer,
-          })
-        )).status
-      ).toBe(200);
-      const pat = yield* awaitPromise(
-        db.prepare("SELECT id FROM pats WHERE short_id = ?").bind(second.pat.shortId).first<{
-          id: string;
-        }>()
-      );
-      expect(pat).not.toBeNull();
-      yield* awaitPromise(
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 254)
-    INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-    SELECT lower(hex(randomblob(16))), ?, ?, 'transactions.listTransactions', 'accepted', ? FROM seq`)
-          .bind(userA, pat?.id, clock())
-          .run()
-      );
-      const count = (yield* awaitPromise(
-        db
-          .prepare(
-            "SELECT count(*) AS total FROM pat_audit WHERE user_id = ? AND operation = 'transactions.listTransactions'"
-          )
-          .bind(userA)
-          .first<{
-            total: number;
-          }>()
-      ))?.total;
-      expect(count).toBe(256);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "GET",
-            bearer: first.bearer,
-          })
-        )).status
-      ).toBe(429);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "GET",
-            bearer: second.bearer,
-          })
-        )).status
-      ).toBe(429);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "GET",
-            session: sessions[0],
-          })
-        )).status
-      ).toBe(429);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE user_id = ? AND operation = 'transactions.listTransactions'"
-            )
-            .bind(userA)
-            .first<{
-              total: number;
-            }>()
-        ))?.total
-      ).toBe(count);
-    })
-  ));
+
 it("returns user_action_required when Consent is withdrawn between PAT admission and protected Transaction work", () =>
   runTest(
     Effect.gen(function* () {
@@ -2605,8 +2526,9 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
       let revocationSequence = 0;
       const revoke = (db: D1Database): Promise<D1Result> =>
         db
-          .prepare(`INSERT INTO consent_user_revocations
-      (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`)
+          .prepare(
+            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+          )
           .bind(
             `e0000000-0000-4000-8000-${String(++revocationSequence).padStart(12, "0")}`,
             userB,
@@ -2665,17 +2587,17 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
       );
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          )
           .bind(grantId, userA, clock(), clock())
           .run()
       );
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          )
           .bind(writerGrantId, userB, clock(), clock())
           .run()
       );
@@ -2683,8 +2605,8 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
         db
           .prepare(`CREATE TRIGGER withdraw_during_pat_read BEFORE UPDATE OF last_used_at_ms ON pats
     WHEN OLD.short_id = '${reader.pat.shortId}' BEGIN
-    INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
-    VALUES ('e0000000-0000-4000-8000-000000000042','${userA}','${grantId}',
+    INSERT INTO consent_history (record_type,id,user_id,grant_record_id,session_id,occurred_at_ms)
+    VALUES ('processing_withdrawal','e0000000-0000-4000-8000-000000000042','${userA}','${grantId}',
       '40000000-0000-4000-8000-000000000001',${clock()}); END`)
           .run()
       );
@@ -2828,8 +2750,7 @@ it("rolls back PAT Transaction capture and activity when its audit is silently r
       };
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER refuse_pat_capture_audit BEFORE INSERT ON pat_audit
-    WHEN NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'accepted'
+          .prepare(`CREATE TRIGGER refuse_pat_capture_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'accepted'
     BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
@@ -2917,7 +2838,7 @@ it("rechecks PAT scope after admission at the protected D1 read and audit", () =
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'categories.listCategories'"
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'categories.listCategories'"
             )
             .first()
         ))?.total
@@ -2941,7 +2862,7 @@ it("rechecks PAT scope after admission at the protected D1 read and audit", () =
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'transactions.listTransactions'"
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'transactions.listTransactions'"
             )
             .first()
         ))?.total
@@ -3028,7 +2949,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'transactions.createTransaction' AND outcome = 'accepted'"
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'transactions.createTransaction' AND outcome = 'accepted'"
             )
             .first()
         ))?.total
@@ -3073,7 +2994,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'transactions.updateTransaction' AND outcome = 'accepted'"
+              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'transactions.updateTransaction' AND outcome = 'accepted'"
             )
             .first<{ count: number }>()
         ))?.count
@@ -3274,7 +3195,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'budgets.listBudgets'"
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'budgets.listBudgets'"
             )
             .first()
         ))?.total
@@ -3283,17 +3204,18 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       const grantId = "e0000000-0000-4000-8000-000000000001";
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-    (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-    VALUES (?,?,'{}','disclosure','decision',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          )
           .bind(grantId, userA, clock(), clock())
           .run()
       );
-      const [withdrawal, concurrentUse] = yield* awaitPromise(
+      const [, concurrentUse] = yield* awaitPromise(
         Promise.all([
           db
-            .prepare(`INSERT INTO consent_user_revocations
-    (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`)
+            .prepare(
+              `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+            )
             .bind(
               "e0000000-0000-4000-8000-000000000002",
               userA,
@@ -3309,7 +3231,6 @@ it("gates every declared canonical path by live PAT and exact operation scope be
           }),
         ])
       );
-      expect(withdrawal.meta.changes).toBe(1);
       expect([200, 403]).toContain(concurrentUse.status);
       const withdrawn = yield* awaitPromise(
         send({
@@ -3388,7 +3309,9 @@ it("gates every declared canonical path by live PAT and exact operation scope be
       expect(
         (yield* awaitPromise(
           db
-            .prepare("SELECT count(*) AS total FROM pat_grant_consents WHERE pairing_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT * FROM consent_history WHERE record_type='pat_grant') AS pat_grant_consents WHERE pairing_id = ?"
+            )
             .bind(pending.pairingId)
             .first()
         ))?.total
@@ -3577,8 +3500,9 @@ it("does not commit PAT activity or disclose Category rows when its audit is sil
       });
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER ignore_category_audit BEFORE INSERT ON pat_audit
-    WHEN NEW.operation = 'categories.listCategories' BEGIN SELECT RAISE(IGNORE); END`)
+          .prepare(
+            `CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'categories.listCategories' BEGIN SELECT RAISE(IGNORE); END`
+          )
           .run()
       );
       expect(
@@ -3611,7 +3535,7 @@ it("does not commit PAT activity or disclose Category rows when its audit is sil
       expect(
         (yield* awaitPromise(
           db
-            .prepare(`SELECT count(*) AS total FROM pat_audit WHERE operation = 'categories.listCategories'
+            .prepare(`SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'categories.listCategories'
     AND pat_id = (SELECT id FROM pats WHERE short_id = ?)`)
             .bind(issued.pat.shortId)
             .first()
@@ -3619,65 +3543,7 @@ it("does not commit PAT activity or disclose Category rows when its audit is sil
       ).toBe(1);
     })
   ));
-it("shares the Category work budget between WebSessions, PATs and Transaction work", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const issued = yield* issueManualPAT({
-        send,
-        session: sessions[0],
-        requestId: "f0000000-0000-4000-8000-000000000001",
-        grant: manualGrant({ recipientLabel: "Category reader" }),
-      });
-      yield* awaitPromise(
-        db.batch(
-          Array.from(
-            {
-              length: 255,
-            },
-            (_, index) =>
-              db
-                .prepare(`INSERT INTO transaction_audit
-    (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    VALUES (?, ?, ?, 'transactions.listTransactions', 'success', ?)`)
-                .bind(
-                  `e0000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
-                  userA,
-                  "40000000-0000-4000-8000-000000000001",
-                  clock()
-                )
-          )
-        )
-      );
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/categories",
-            method: "GET",
-            session: sessions[0],
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/categories",
-            method: "GET",
-            bearer: issued.bearer,
-          })
-        )).status
-      ).toBe(429);
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/categories",
-            method: "GET",
-            session: sessions[0],
-          })
-        )).status
-      ).toBe(429);
-    })
-  ));
+
 it("rechecks revoke/use races at protected canonical work, not only bearer admission", () =>
   runTest(
     Effect.gen(function* () {
@@ -3722,7 +3588,7 @@ it("rechecks revoke/use races at protected canonical work, not only bearer admis
       expect(revocation.status).toBe(200);
       const before = yield* awaitPromise(
         db
-          .prepare(`SELECT count(*) AS total FROM pat_audit
+          .prepare(`SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit
     WHERE pat_id = (SELECT id FROM pats WHERE short_id = ?) AND operation = 'transactions.listTransactions'`)
           .bind(issued.pat.shortId)
           .first()
@@ -3738,7 +3604,7 @@ it("rechecks revoke/use races at protected canonical work, not only bearer admis
       expect(
         (yield* awaitPromise(
           db
-            .prepare(`SELECT count(*) AS total FROM pat_audit
+            .prepare(`SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit
     WHERE pat_id = (SELECT id FROM pats WHERE short_id = ?) AND operation = 'transactions.listTransactions'`)
             .bind(issued.pat.shortId)
             .first()
@@ -3840,8 +3706,9 @@ it("returns only the latest 50 retained PAT calls, breaking timestamp ties deter
       const current = clock();
       const call = (index: number, time: number): D1PreparedStatement =>
         db
-          .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,id,'categories.listCategories',?,? FROM pats WHERE user_id = ? AND short_id = ?`)
+          .prepare(
+            `INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,id,'categories.listCategories',?,? FROM pats WHERE user_id = ? AND short_id = ?`
+          )
           .bind(
             `e0000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
             userA,
@@ -3909,8 +3776,9 @@ it("represents unused, expired and retention-truncated PAT histories without cla
       const current = clock();
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT 'e0000000-0000-4000-8000-000000000253',?,id,'categories.listCategories','accepted',? FROM pats WHERE short_id = ?`)
+          .prepare(
+            `INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call','e0000000-0000-4000-8000-000000000253',?,id,'categories.listCategories','accepted',? FROM pats WHERE short_id = ?`
+          )
           .bind(userA, current - 366 * 86400000, issued.pat.shortId)
           .run()
       );
@@ -4000,7 +3868,7 @@ it("refuses PAT self-access, cross-User activity and substituted hosted identity
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT user_id,outcome FROM pat_audit WHERE operation = 'pats.getPATActivity' ORDER BY rowid"
+              "SELECT user_id,outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.getPATActivity' ORDER BY occurred_at_ms,id"
             )
             .all()
         )).results
@@ -4039,15 +3907,17 @@ for (const refusal of [
         } else if (refusal === "withdrawn-consent") {
           yield* awaitPromise(
             db
-              .prepare(`INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-        VALUES ('e0000000-0000-4000-8000-000000000001',?,'{}','disclosure','decision',?,?)`)
+              .prepare(
+                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000001',?,'{}','disclosure','decision',?,?)`
+              )
               .bind(userA, current, current)
               .run()
           );
           yield* awaitPromise(
             db
-              .prepare(`INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
-        VALUES ('e0000000-0000-4000-8000-000000000002',?,'e0000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',?)`)
+              .prepare(
+                `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal','e0000000-0000-4000-8000-000000000002',?,'e0000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',?)`
+              )
               .bind(userA, current)
               .run()
           );
@@ -4055,15 +3925,16 @@ for (const refusal of [
           yield* awaitPromise(
             db
               .prepare(
-                "CREATE TRIGGER refuse_activity_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'pats.getPATActivity' BEGIN SELECT RAISE(IGNORE); END"
+                "CREATE TRIGGER refuse_activity_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'pats.getPATActivity' BEGIN SELECT RAISE(IGNORE); END"
               )
               .run()
           );
         } else {
           yield* awaitPromise(
             db
-              .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-        SELECT 'e0000000-0000-4000-8000-000000000255',?,id,'unsafe error prose','accepted',? FROM pats WHERE short_id = ?`)
+              .prepare(
+                `INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call','e0000000-0000-4000-8000-000000000255',?,id,'unsafe error prose','accepted',? FROM pats WHERE short_id = ?`
+              )
               .bind(userA, current, issued.pat.shortId)
               .run()
           );
@@ -4117,7 +3988,7 @@ for (const refusal of [
             yield* awaitPromise(
               db
                 .prepare(
-                  "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.getPATActivity'"
+                  "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.getPATActivity'"
                 )
                 .first()
             )
@@ -4126,49 +3997,6 @@ for (const refusal of [
       })
     ));
 }
-
-it("bounds PAT activity answers with the shared User canonical Audit budget", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const issued = yield* issueManualPAT({
-        send,
-        session: sessions[0],
-        requestId: "70000000-0000-4000-8000-000000000256",
-        grant: manualGrant(),
-      });
-      const current = clock();
-      yield* awaitPromise(
-        db.batch(
-          Array.from({ length: 255 }, (_, index) =>
-            db
-              .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    VALUES (?,?,'40000000-0000-4000-8000-000000000001','pats.getPATActivity','accepted',?)`)
-              .bind(`e0000000-0000-4000-8000-${String(index).padStart(12, "0")}`, userA, current)
-          )
-        )
-      );
-      const path = `/pats/${issued.pat.shortId}/activity`;
-      expect(
-        (yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))).status
-      ).toBe(200);
-      expect(
-        (yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))).status
-      ).toBe(429);
-      expect(
-        (yield* awaitPromise(send({ path: "/pats", method: "GET", session: sessions[0] }))).status
-      ).toBe(429);
-      expect(
-        yield* awaitPromise(
-          db
-            .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.getPATActivity'"
-            )
-            .first()
-        )
-      ).toEqual({ total: 256 });
-    })
-  ));
 
 it("offers PAT activity to admitted hosted Turns and refuses substituted Users or inactive authority", () =>
   runTest(
@@ -4185,8 +4013,9 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
       const turnId = "60000000-0000-4000-8000-000000000251";
       yield* awaitPromise(
         db
-          .prepare(`INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-    VALUES ('e0000000-0000-4000-8000-000000000257',?,'{}','disclosure','decision',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','e0000000-0000-4000-8000-000000000257',?,'{}','disclosure','decision',?,?)`
+          )
           .bind(userA, current, current)
           .run()
       );
@@ -4237,7 +4066,7 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT user_id,session_id,hosted_turn_id,outcome FROM pat_audit WHERE operation = 'pats.getPATActivity'"
+              "SELECT user_id,session_id,hosted_turn_id,outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.getPATActivity'"
             )
             .first()
         )
@@ -4266,7 +4095,7 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
       yield* awaitPromise(
         db
           .prepare(
-            "CREATE TRIGGER refuse_hosted_activity_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'pats.getPATActivity' BEGIN SELECT RAISE(IGNORE); END"
+            "CREATE TRIGGER refuse_hosted_activity_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'pats.getPATActivity' BEGIN SELECT RAISE(IGNORE); END"
           )
           .run()
       );
@@ -4288,7 +4117,7 @@ it("offers PAT activity to admitted hosted Turns and refuses substituted Users o
         yield* awaitPromise(
           db
             .prepare(
-              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.getPATActivity'"
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'pats.getPATActivity'"
             )
             .first()
         )

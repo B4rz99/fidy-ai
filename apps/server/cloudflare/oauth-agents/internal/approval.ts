@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, type PlatformError, Redacted, Schema } from "effect";
 import { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
 import {
@@ -81,7 +82,7 @@ const commitApproval = (
 
       input.db
         .prepare(
-          `INSERT INTO oauth_codes (digest,connection_id,challenge,expires_at_ms) SELECT ?,?,?,? WHERE changes() = 1`
+          `UPDATE oauth_connections SET code_digest=incoming.digest,code_challenge=incoming.challenge,code_expires_at_ms=incoming.expires_at_ms FROM (SELECT ? AS digest,? AS connection_id,? AS challenge,? AS expires_at_ms WHERE changes() = 1) AS incoming WHERE oauth_connections.id=incoming.connection_id AND oauth_connections.code_digest IS NULL`
         )
         .bind(
           material.digest,
@@ -92,9 +93,7 @@ const commitApproval = (
       input.db
         .prepare("DELETE FROM oauth_review_requests WHERE id = ? AND user_id = ? AND changes() = 1")
         .bind(input.choice.requestId, input.session.user_id),
-      input.db.prepare(
-        "INSERT INTO oauth_atomic_assertion VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
-      ),
+      prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
     ]);
   });
 /** Publishes the exact reviewed grant, Consent and callback code as one indivisible unit. */

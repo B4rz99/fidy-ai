@@ -67,7 +67,11 @@ it.effect.each([
       ).toEqual({ idle_expires_at_ms: idle, hard_expires_at_ms: hard, revoked_at_ms: revoked });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,occurred_at_ms FROM audit_entries WHERE record_type='identity_read') AS canonical_user_reads"
+            )
+            .first()
         )
       ).toEqual({ count: 0 });
     }).pipe(
@@ -150,7 +154,11 @@ it.effect.each([
       });
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT user_id, session_id, occurred_at_ms FROM canonical_user_reads").all()
+          db
+            .prepare(
+              "SELECT user_id, session_id, occurred_at_ms FROM (SELECT id,user_id,session_id,occurred_at_ms FROM audit_entries WHERE record_type='identity_read') AS canonical_user_reads"
+            )
+            .all()
         )).results
       ).toEqual([{ user_id: sessionUser, session_id: sessionId, occurred_at_ms: current }]);
     }).pipe(

@@ -6,14 +6,22 @@ import { UserId } from "../../src/core/identity/contract";
 import { Money } from "../../src/core/_shared/money";
 import { RecurringSeriesPage } from "../../src/core/recurring/contract";
 import { Transaction } from "../../src/core/transactions/contract";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
+  applyTestMigration,
+  installTestSchema,
+  isolatedTestDatabases,
+  observeRetentionCost,
+} from "../d1-test-fixture";
+import {
+  discoverRecurringWork,
   evaluateRecurringSeries,
   listRecurringSeries,
   prepareRecurringDigestSourceGuard,
   readRecurringConfirmations,
   readRecurringDigestSource,
 } from "./operations";
+import { projections } from "./internal/erasure";
+import { advanceRecurringWork } from "./runtime";
 import { makeCoordinators, sendBackground } from "./recurring.test-fixture";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
@@ -82,7 +90,7 @@ const setup = (): Effect.Effect<D1Database> =>
             .bind(subject),
           db
             .prepare(
-              "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, '{}', 'disclosure', 'decision', 0, 0)"
+              "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 0, 0)"
             )
             .bind(subject, subject),
         ])
@@ -475,7 +483,7 @@ it.effect(
       const audits = yield* fromPromise(() =>
         db
           .prepare(
-            "SELECT count(*) AS count FROM pat_audit WHERE operation = 'recurring.listRecurringSeries'"
+            "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'recurring.listRecurringSeries'"
           )
           .first()
       );
@@ -483,7 +491,7 @@ it.effect(
       yield* fromPromise(() =>
         db
           .prepare(
-            "INSERT INTO consent_user_revocations (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO consent_history(record_type,id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES ('processing_withdrawal',?, ?, ?, ?, ?)"
           )
           .bind(
             "90000000-0000-4000-8000-000000000001",
@@ -504,7 +512,7 @@ it.effect(
       const unchanged = yield* fromPromise(() =>
         db
           .prepare(
-            "SELECT count(*) AS count FROM pat_audit WHERE operation = 'recurring.listRecurringSeries'"
+            "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'recurring.listRecurringSeries'"
           )
           .first()
       );
@@ -596,7 +604,7 @@ it.effect(
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM pat_audit WHERE operation = 'recurring.listRecurringSeries'"
+              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'recurring.listRecurringSeries'"
             )
             .first()
         ))?.count
@@ -631,7 +639,12 @@ it.effect("requires current read scope at the native query's atomic authority ch
     ).toBeNull();
     expect(
       (yield* fromPromise(() =>
-        db.prepare("SELECT count(*) AS count FROM pat_audit WHERE pat_id = ?").bind(patId).first()
+        db
+          .prepare(
+            "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE pat_id = ?"
+          )
+          .bind(patId)
+          .first()
       ))?.count
     ).toBe(0);
     yield* fromPromise(() =>
@@ -785,199 +798,6 @@ it.effect(
     })
 );
 
-it.effect(
-  "shares the User budget across browser recurring, other owners and multiple PATs, including the final concurrent slot",
-  () =>
-    Effect.gen(function* () {
-      const db = yield* setup();
-      for (const month of [1, 2, 3]) yield* capture(db, month);
-      yield* evaluate(db);
-      const financialBefore = yield* confirmations(db);
-      const current = DateTime.nowUnsafe().epochMilliseconds;
-      const browserBearer = "3".repeat(43);
-      const browserDigest = new Uint8Array(
-        yield* fromPromise(() =>
-          crypto.subtle.digest("SHA-256", new TextEncoder().encode(browserBearer))
-        )
-      );
-      yield* fromPromise(() =>
-        db
-          .prepare("UPDATE web_sessions SET token_digest = ? WHERE id = ?")
-          .bind(browserDigest, sessionId)
-          .run()
-      );
-      const patIds = [
-        "81000000-0000-4000-8000-000000000001",
-        "81000000-0000-4000-8000-000000000002",
-      ];
-      const tokens = ["fin_abcdefgh_" + "4".repeat(43), "fin_ijklmnop_" + "5".repeat(43)];
-      const shortIds = ["abcdefgh", "ijklmnop"];
-      const lifetime = 604_800_000;
-      for (const [index, patId] of patIds.entries()) {
-        const token = Option.getOrThrow(Option.fromUndefinedOr(tokens[index]));
-        const patDigest = new Uint8Array(
-          yield* fromPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)))
-        );
-        yield* fromPromise(() =>
-          db
-            .prepare(
-              `INSERT INTO pats (id, user_id, short_id, bearer_digest, recipient_label, scopes_json, lifetime_days, created_at_ms, issued_at_ms, expires_at_ms, request_id) VALUES (?, ?, ?, ?, 'Budget test', '["read"]', 7, ?, ?, ?, ?)`
-            )
-            .bind(
-              patId,
-              userId,
-              shortIds[index],
-              patDigest,
-              current,
-              current,
-              current + lifetime,
-              patId
-            )
-            .run()
-        );
-      }
-      const browser = (path: string): Promise<Response> =>
-        sendPublic({
-          db,
-          request: new Request(`https://api.fidyapp.com${path}`, {
-            headers: {
-              origin: "https://app.fidyapp.com",
-              "Fidy-Session-Binding": sessionId,
-              cookie: `__Host-fidy_session=${browserBearer}`,
-            },
-          }),
-        });
-      const pat = (token: string, path: string): Promise<Response> =>
-        sendPublic({
-          db,
-          request: new Request(`https://api.fidyapp.com${path}`, {
-            headers: { authorization: `Bearer ${token}`, "cf-connecting-ip": "192.0.2.35" },
-          }),
-        });
-      expect(
-        (yield* fromPromise(() =>
-          pat(Option.getOrThrow(Option.fromUndefinedOr(tokens[0])), "/recurring-series")
-        )).status
-      ).toBe(200);
-      const seededCalls = 252;
-      yield* fromPromise(() =>
-        db.batch(
-          Array.from({ length: seededCalls }, (_, index) =>
-            db
-              .prepare(
-                "INSERT INTO category_audit (id, user_id, session_id, operation, occurred_at_ms) VALUES (?, ?, ?, 'categories.listCategories', ?)"
-              )
-              .bind(
-                `82000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
-                userId,
-                sessionId,
-                current
-              )
-          )
-        )
-      );
-      expect((yield* fromPromise(() => browser("/recurring-series"))).status).toBe(200);
-      expect((yield* fromPromise(() => browser("/categories"))).status).toBe(200);
-      const contenders = yield* fromPromise(() =>
-        Promise.all([browser("/recurring-series"), browser("/recurring-series")])
-      );
-      expect(contenders.filter((response) => response.status === 200)).toHaveLength(1);
-      expect(contenders.filter((response) => response.status >= 400)).toHaveLength(1);
-      const auditBefore = yield* fromPromise(() =>
-        db
-          .prepare("SELECT count(*) AS count FROM canonical_audit_usage WHERE user_id = ?")
-          .bind(userId)
-          .first()
-      );
-      expect(auditBefore?.count).toBe(256);
-      const useBefore = yield* fromPromise(() =>
-        db
-          .prepare("SELECT id, last_used_at_ms FROM pats WHERE user_id = ? ORDER BY id")
-          .bind(userId)
-          .all()
-      );
-      for (const path of ["/recurring-series", "/categories", "/transactions"]) {
-        const denied = [
-          yield* fromPromise(() => browser(path)),
-          ...(yield* fromPromise(() => Promise.all(tokens.map((token) => pat(token, path))))),
-        ];
-        for (const response of denied) {
-          expect(response.status).toBeGreaterThanOrEqual(400);
-          const body: unknown = yield* fromPromise(() => response.json());
-          expect(body).not.toHaveProperty("data");
-        }
-      }
-      expect(
-        yield* fromPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM canonical_audit_usage WHERE user_id = ?")
-            .bind(userId)
-            .first()
-        )
-      ).toEqual(auditBefore);
-      const useAfter = yield* fromPromise(() =>
-        db
-          .prepare("SELECT id, last_used_at_ms FROM pats WHERE user_id = ? ORDER BY id")
-          .bind(userId)
-          .all()
-      );
-      expect(useAfter.results).toEqual(useBefore.results);
-      expect(yield* confirmations(db)).toEqual(financialBefore);
-      const otherSession = "10000000-0000-4000-8000-000000000062";
-      const otherBearer = "6".repeat(43);
-      const otherDigest = new Uint8Array(
-        yield* fromPromise(() =>
-          crypto.subtle.digest("SHA-256", new TextEncoder().encode(otherBearer))
-        )
-      );
-      const freshFor = 600_000;
-      const idleFor = 3_600_000;
-      const hardFor = 7_776_000_000;
-      yield* fromPromise(() =>
-        db.batch([
-          db
-            .prepare(
-              "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, 'EFGH-5678', ?, ?, 'consumed', ?, ?)"
-            )
-            .bind(otherSession, otherDigest, otherUserId, current, current + freshFor),
-          db
-            .prepare(
-              "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(
-              otherSession,
-              otherSession,
-              otherUserId,
-              otherDigest,
-              current,
-              current + freshFor,
-              current + idleFor,
-              current + hardFor
-            ),
-        ])
-      );
-      const independent = yield* fromPromise(() =>
-        sendPublic({
-          db,
-          request: new Request("https://api.fidyapp.com/recurring-series", {
-            headers: {
-              origin: "https://app.fidyapp.com",
-              "Fidy-Session-Binding": otherSession,
-              cookie: `__Host-fidy_session=${otherBearer}`,
-            },
-          }),
-        })
-      );
-      expect(independent.status).toBe(200);
-      const independentBody: unknown = yield* fromPromise(() => independent.json());
-      expect(
-        (yield* Schema.decodeUnknownEffect(
-          Schema.toCodecJson(Schema.Struct({ data: RecurringSeriesPage }))
-        )(independentBody)).data.series
-      ).toEqual([]);
-    })
-);
-
 const coordinatedEvaluation = ({
   db,
   userId: subject,
@@ -1036,7 +856,9 @@ it.effect(
       const before = yield* query(db);
       const confirmationBefore = yield* fromPromise(() =>
         db
-          .prepare("SELECT confirmation_json FROM recurring_confirmations WHERE user_id = ?")
+          .prepare(
+            "SELECT confirmation_json FROM recurring_series WHERE user_id = ? AND confirmation_id IS NOT NULL"
+          )
           .bind(userId)
           .first()
       );
@@ -1060,7 +882,9 @@ it.effect(
       expect(
         yield* fromPromise(() =>
           db
-            .prepare("SELECT confirmation_json FROM recurring_confirmations WHERE user_id = ?")
+            .prepare(
+              "SELECT confirmation_json FROM recurring_series WHERE user_id = ? AND confirmation_id IS NOT NULL"
+            )
             .bind(userId)
             .first()
         )
@@ -1081,7 +905,7 @@ it.effect("rejects 129 proposed series before publishing any current result", ()
     expect(
       (yield* fromPromise(() =>
         db
-          .prepare("SELECT count(*) AS count FROM recurring_confirmations WHERE user_id = ?")
+          .prepare("SELECT count(confirmation_id) AS count FROM recurring_series WHERE user_id = ?")
           .bind(userId)
           .first()
       ))?.count
@@ -1110,12 +934,12 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
       db.batch([
         db
           .prepare(`UPDATE recurring_series SET evidence_json = json_set(evidence_json,
-        '$.evaluatedFactRevision', (SELECT revision FROM transaction_fact_state WHERE user_id = ?))
+        '$.evaluatedFactRevision', (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?))
         WHERE user_id = ?`)
           .bind(userId, userId),
         db
           .prepare(`WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM copies WHERE n < ?)
-        INSERT INTO recurring_series
+        INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence)
         SELECT user_id, printf('51000000-0000-4000-8000-%012d',n), currency,
           printf('limit merchant %03d',n),
           json_set(series_json, '$.id', printf('51000000-0000-4000-8000-%012d',n),
@@ -1125,21 +949,16 @@ const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
             printf('%08d-0000-4000-8000-000000000002',50000000+n),
             printf('%08d-0000-4000-8000-000000000003',50000000+n)),
             '$.latestTransactionId', printf('%08d-0000-4000-8000-000000000003',50000000+n)),
-          reference_json, valid FROM recurring_series CROSS JOIN copies WHERE user_id = ? AND id = ?`)
-          .bind(count - 1, userId, original),
-        db
-          .prepare(`WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM copies WHERE n < ?)
-        INSERT INTO recurring_confirmations
-        SELECT user_id, printf('52000000-0000-4000-8000-%012d',n),
-          printf('51000000-0000-4000-8000-%012d',n), confirmed_at, context_json,
+          reference_json, valid, printf('52000000-0000-4000-8000-%012d',n), confirmed_at, confirmation_context_json,
           json_set(confirmation_json, '$.id', printf('52000000-0000-4000-8000-%012d',n),
-            '$.seriesId', printf('51000000-0000-4000-8000-%012d',n))
-        FROM recurring_confirmations CROSS JOIN copies WHERE user_id = ? AND series_id = ?`)
+            '$.seriesId', printf('51000000-0000-4000-8000-%012d',n)),digest_excluded,
+          (SELECT max(confirmation_sequence) FROM recurring_series)+n
+        FROM recurring_series CROSS JOIN copies WHERE user_id = ? AND id = ?`)
           .bind(count - 1, userId, original),
         db
           .prepare(`UPDATE recurring_progress SET revision =
-        (SELECT revision FROM transaction_fact_state WHERE user_id = ?), evaluated_revision =
-        (SELECT revision FROM transaction_fact_state WHERE user_id = ?) WHERE user_id = ?`)
+        (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?), evaluated_revision =
+        (SELECT fact_revision FROM dashboard_projection_state WHERE user_id = ?) WHERE user_id = ?`)
           .bind(userId, userId, userId),
       ])
     );
@@ -1163,7 +982,7 @@ it.effect("publishes exactly 128 proposed series at the coordinator identity lim
     expect(
       yield* fromPromise(() =>
         db
-          .prepare("SELECT count(*) AS count FROM recurring_confirmations WHERE user_id = ?")
+          .prepare("SELECT count(confirmation_id) AS count FROM recurring_series WHERE user_id = ?")
           .bind(userId)
           .first<number>("count")
       )
@@ -1211,7 +1030,9 @@ it.effect(
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT count(*) AS count FROM recurring_confirmations WHERE user_id = ?")
+            .prepare(
+              "SELECT count(confirmation_id) AS count FROM recurring_series WHERE user_id = ?"
+            )
             .bind(userId)
             .first()
         ))?.count
@@ -1256,5 +1077,248 @@ it.effect(
         cursor: Option.none(),
       }).pipe(Effect.orDie);
       expect(refreshed.checkpoint).not.toBe(page.checkpoint);
+    })
+);
+
+it.effect("restores fair discovery after erasure removes the dispatch cursor", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    const pending = Array.from({ length: 6 }, (_, index) =>
+      UserId.make(`90000000-0000-4000-8000-${String(index).padStart(12, "0")}`)
+    );
+    yield* fromPromise(() =>
+      db.batch(
+        pending.flatMap((id) => [
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)"
+            )
+            .bind(id),
+          db
+            .prepare(
+              "UPDATE dashboard_projection_state SET fact_revision=1,first_captured_at='2026-01-01T00:00:00Z',time_zone='America/Bogota' WHERE user_id=?"
+            )
+            .bind(id),
+        ])
+      )
+    );
+    yield* fromPromise(() =>
+      db.batch([
+        db.prepare("UPDATE recurring_dispatch SET last_user=? WHERE id=1").bind(userId),
+        db
+          .prepare(
+            "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES ('cursor-erasure',?,0,'Erasing')"
+          )
+          .bind(userId),
+        db
+          .prepare("INSERT INTO erasure_permits VALUES ('cursor-erasure',?,'recurring_dispatch')")
+          .bind(userId),
+        db.prepare("INSERT INTO erasure_chunk VALUES ('cursor-erasure','1')"),
+      ])
+    );
+    const cursor = projections.find((projection) => projection.id === "recurring_dispatch");
+    expect(cursor).toBeDefined();
+    if (cursor === undefined) return;
+    yield* fromPromise(() =>
+      db.batch(
+        cursor
+          .remove({ userId, reference: "cursor-erasure" })
+          .map(({ sql, params }) => db.prepare(sql).bind(...params))
+      )
+    );
+    expect(
+      yield* fromPromise(() => db.prepare("SELECT last_user FROM recurring_dispatch").first())
+    ).toBeNull();
+    // Pending Users stay pending: rotation must work even if their execution is unavailable.
+    expect(yield* discoverRecurringWork(db)).toEqual(pending.slice(0, 4));
+    expect(yield* discoverRecurringWork(db)).toEqual([...pending.slice(4), ...pending.slice(0, 2)]);
+    expect(
+      yield* fromPromise(() =>
+        db.prepare("SELECT last_user FROM recurring_dispatch WHERE id=1").first("last_user")
+      )
+    ).toBe(pending[1]);
+  })
+);
+
+it.effect(
+  "waits seven days after a completed evaluation despite changed Transactions and skips unchanged weeks",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const completed = DateTime.makeUnsafe("2026-07-01T12:00:00Z").epochMilliseconds;
+      yield* TestClock.setTime(completed);
+      for (const month of [1, 2, 3]) yield* capture(db, month);
+      yield* evaluate(db);
+      expect(yield* discoverRecurringWork(db)).toEqual([]);
+      yield* TestClock.setTime(completed + 86400000);
+      yield* capture(db, 4);
+      expect(yield* discoverRecurringWork(db)).toEqual([]);
+      yield* TestClock.setTime(completed + 604800000 - 1);
+      expect(yield* discoverRecurringWork(db)).toEqual([]);
+      // The hourly discovery may add at most an hour of scheduling delay to the weekly boundary.
+      yield* TestClock.setTime(completed + 604800000 + 3600000 - 1);
+      expect(yield* discoverRecurringWork(db)).toEqual([userId]);
+      yield* evaluate(db);
+      const nextCompleted = completed + 604800000 + 3600000 - 1;
+      yield* TestClock.setTime(nextCompleted + 604800000);
+      expect(yield* discoverRecurringWork(db)).toEqual([]);
+      yield* capture(db, 5);
+      yield* TestClock.setTime(nextCompleted + 604800000 + 3600000);
+      expect(yield* discoverRecurringWork(db)).toEqual([userId]);
+    })
+);
+
+it.effect("discovers new Users hourly while resuming interrupted evaluation on the next tick", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    const start = DateTime.makeUnsafe("2026-07-01T12:00:00Z").epochMilliseconds;
+    yield* TestClock.setTime(start);
+    expect(yield* discoverRecurringWork(db)).toEqual([]);
+    yield* capture(db, 1);
+    yield* TestClock.setTime(start + 60000);
+    const observed = observeRetentionCost(db);
+    expect(yield* discoverRecurringWork(observed.database)).toEqual([]);
+    expect(observed.cost().rowsRead).toBeLessThanOrEqual(3);
+    const plans = yield* fromPromise(() => observed.plans());
+    expect(plans.some((plan) => plan.includes("recurring_unfinished_users"))).toBe(true);
+    expect(plans.some((plan) => plan.includes("dashboard_projection_state"))).toBe(false);
+    yield* TestClock.setTime(start + 3600000);
+    expect(yield* discoverRecurringWork(db)).toEqual([userId]);
+    yield* evaluateRecurringSeries({ db, userId });
+    yield* TestClock.setTime(start + 3660000);
+    yield* advanceRecurringWork({ DB: db, USER_TRANSACTION_COORDINATOR: makeCoordinators(db) });
+    expect(
+      yield* fromPromise(() =>
+        db
+          .prepare("SELECT phase FROM recurring_progress WHERE user_id=?")
+          .bind(userId)
+          .first("phase")
+      )
+    ).toBe("detect");
+  })
+);
+
+it.live(
+  "preserves the exact historical digest exclusions and confirmation immutability through migration",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => databases.acquire());
+      const directory = new URL("../migrations/", import.meta.url);
+      const names = [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
+        .filter((name) => name < "0129_")
+        .sort();
+      for (const name of names) {
+        yield* fromPromise(() => applyTestMigration({ db, source: new URL(name, directory) }));
+      }
+      yield* fromPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','UTC',0)"
+          )
+          .bind(userId)
+          .run()
+      );
+      for (const [index, snapshot] of [
+        [1, "{}"],
+        [2, "{}"],
+        [3, '{"counterparty":"Netflix"}'],
+      ] as const) {
+        yield* fromPromise(() =>
+          db.batch([
+            db
+              .prepare("INSERT INTO recurring_series VALUES(?,?,'COP','merchant','{}','{}','{}',1)")
+              .bind(userId, `series-${index}`),
+            db
+              .prepare(
+                "INSERT INTO recurring_confirmations(rowid,user_id,id,series_id,confirmed_at,context_json,confirmation_json) VALUES(?,?,?,?,'2026-10-01T00:00:00Z','{}',?)"
+              )
+              .bind(
+                [7, 3, 11][index - 1],
+                userId,
+                `confirmation-${index}`,
+                `series-${index}`,
+                snapshot
+              ),
+          ])
+        );
+      }
+      // Only the original marker is authoritative; another malformed snapshot is not silently excused.
+      yield* fromPromise(() =>
+        db
+          .prepare("INSERT INTO recurring_legacy_confirmations VALUES(?,?)")
+          .bind(userId, "confirmation-1")
+          .run()
+      );
+      const before = yield* fromPromise(() =>
+        db.prepare("SELECT * FROM recurring_confirmations ORDER BY id").all()
+      );
+      yield* fromPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("0129_recurring_digest_exclusions.sql", directory),
+        })
+      );
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT user_id,id,series_id,confirmed_at,context_json,confirmation_json FROM recurring_confirmations ORDER BY id"
+            )
+            .all()
+        )).results
+      ).toEqual(before.results);
+      expect(
+        (yield* fromPromise(() =>
+          db.prepare("SELECT id,digest_excluded FROM recurring_confirmations ORDER BY id").all()
+        )).results
+      ).toEqual([
+        { id: "confirmation-1", digest_excluded: 1 },
+        { id: "confirmation-2", digest_excluded: 0 },
+        { id: "confirmation-3", digest_excluded: 0 },
+      ]);
+      yield* fromPromise(() =>
+        expect(
+          db
+            .prepare(
+              "UPDATE recurring_confirmations SET digest_excluded=0 WHERE id='confirmation-1'"
+            )
+            .run()
+        ).rejects.toThrow("recurring_confirmation_immutable")
+      );
+      for (const name of [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
+        .filter((name) => name > "0129_recurring_digest_exclusions.sql")
+        .sort()) {
+        yield* fromPromise(() => applyTestMigration({ db, source: new URL(name, directory) }));
+      }
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT user_id,confirmation_id AS id,id AS series_id,confirmed_at,confirmation_context_json AS context_json,confirmation_json FROM recurring_series ORDER BY confirmation_id"
+            )
+            .all()
+        )).results
+      ).toEqual(before.results);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT confirmation_id AS id,digest_excluded,confirmation_sequence FROM recurring_series ORDER BY confirmation_sequence"
+            )
+            .all()
+        )).results
+      ).toEqual([
+        { id: "confirmation-2", digest_excluded: 0, confirmation_sequence: 3 },
+        { id: "confirmation-1", digest_excluded: 1, confirmation_sequence: 7 },
+        { id: "confirmation-3", digest_excluded: 0, confirmation_sequence: 11 },
+      ]);
+      yield* fromPromise(() =>
+        db.prepare("UPDATE recurring_series SET valid=0 WHERE id='series-1'").run()
+      );
+      yield* fromPromise(() =>
+        expect(
+          db.prepare("UPDATE recurring_series SET digest_excluded=0 WHERE id='series-1'").run()
+        ).rejects.toThrow("recurring_confirmation_immutable")
+      );
     })
 );

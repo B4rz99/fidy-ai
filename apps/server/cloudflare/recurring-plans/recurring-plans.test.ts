@@ -9,12 +9,7 @@ import { UserId } from "../../src/core/identity/contract";
 import { RecurringSeriesPage } from "../../src/core/recurring/contract";
 import { evaluateRecurringSeries } from "../recurring/operations";
 import { afterAll, expect, it } from "vitest";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
-import {
-  dailyAuditBudget,
-  dailyAuditCount,
-  utcDayMilliseconds,
-} from "../../src/shell/audit/operations";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
@@ -257,7 +252,7 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, '{}', 'disclosure', 'decision', 0, 0)"
+              "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 0, 0)"
             )
             .bind(owner.userId, owner.userId)
             .run()
@@ -546,7 +541,7 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TRIGGER recurring_test_audit_failure BEFORE INSERT ON pat_audit WHEN NEW.operation = 'recurringPlans.applyRecurringEdit' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test unavailable'); END"
+              "CREATE TRIGGER recurring_test_audit_failure BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'recurringPlans.applyRecurringEdit' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test unavailable'); END"
             )
             .run()
         );
@@ -899,14 +894,7 @@ it(
   30000
 );
 
-const seedReadBudget = (db: D1Database, current: number): Promise<D1Result> =>
-  db
-    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
-    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-    SELECT 'read-budget-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
-    .bind(dailyAuditBudget - 1, users[0], sessions[0], current)
-    .run();
-const readBudgetQuery = (
+const readQuery = (
   db: D1Database,
   index: number,
   operation: "categories.listCategories" | "recurringPlans.getRecurringWorkspace"
@@ -936,55 +924,24 @@ const recoveryDatabase = (db: D1Database): Effect.Effect<D1Database, Cause.Unkno
       ERASURE_BUCKET: bucket,
     }).DB;
   });
-const budgetReadOperations = [
+const readOperations = [
   "categories.listCategories",
   "recurringPlans.getRecurringWorkspace",
 ] as const;
-for (const previousDay of [false, true]) {
-  it(
-    `classifies exhausted read budgets without leaking storage errors (previous day: ${previousDay})`,
-    () =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const db = yield* setup();
-          const guarded = yield* recoveryDatabase(db);
-          const current = yield* Clock.currentTimeMillis;
-          yield* Effect.tryPromise(() =>
-            seedReadBudget(db, current - (previousDay ? utcDayMilliseconds : 0))
-          );
-          for (const operation of budgetReadOperations) {
-            const response = yield* readBudgetQuery(guarded, 0, operation);
-            expect(response.status).toBe(previousDay ? 200 : 429);
-            if (!previousDay) {
-              const body = yield* Effect.tryPromise(() => response.text());
-              expect(body).toContain('"code":"rate_limited"');
-              expect(body).not.toContain("transaction_audit_limit");
-              expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
-              expect(response.headers.get("cache-control")).toBe("no-store");
-            }
-            expect((yield* readBudgetQuery(guarded, 1, operation)).status).toBe(200);
-          }
-          expect(
-            yield* Effect.tryPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
-          ).toBe(previousDay ? budgetReadOperations.length : dailyAuditBudget);
-        })
-      ),
-    30000
-  );
-}
 it(
   "keeps unrelated read storage failures unavailable",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* Effect.tryPromise(() => db.prepare("DROP TABLE category_audit").run());
+        yield* Effect.tryPromise(() => db.prepare("DROP TABLE audit_entries").run());
         const guarded = yield* recoveryDatabase(db);
-        for (const operation of budgetReadOperations) {
-          const response = yield* readBudgetQuery(guarded, 0, operation);
+        for (const operation of readOperations) {
+          const response = yield* readQuery(guarded, 0, operation);
           expect(response.status).toBe(503);
           const body = yield* Effect.tryPromise(() => response.text());
-          expect(body).not.toContain("category_audit");
+          expect(body).not.toContain("audit_entries");
+          expect(body).not.toContain("audit_entries");
           expect(body).not.toContain("D1_ERROR");
         }
       })

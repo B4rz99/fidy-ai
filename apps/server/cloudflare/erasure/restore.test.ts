@@ -163,7 +163,9 @@ const verifyRestore = Effect.gen(function* () {
       db.batch([
         ...[userId, foreignUser].map((id) =>
           db
-            .prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',?)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+            )
             .bind(id, current)
         ),
         db
@@ -193,7 +195,9 @@ const verifyRestore = Effect.gen(function* () {
   yield* Effect.tryPromise(() =>
     native.snapshot.batch([
       native.snapshot
-        .prepare("INSERT INTO hosted_agent_sessions VALUES(?,?,'{}',?,?,'active')")
+        .prepare(
+          "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status) VALUES(?,?,'{}',?,?,'active')"
+        )
         .bind("12740000-0000-4000-8000-000000000050", userId, current, current),
       native.snapshot
         .prepare(

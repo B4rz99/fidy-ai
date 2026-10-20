@@ -295,7 +295,7 @@ const preparedCorrection = ({
       oauthReview,
       requiredScope: callerScope(subject),
       guardRefusal: transactionGuardRefusal(outcome),
-      auditBudget: "shared",
+
       commitGuards: Option.none(),
       outcome,
       statements: [

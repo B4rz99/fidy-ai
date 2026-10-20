@@ -1,3 +1,4 @@
+import { findUserDocument, prepareUserDocumentWrite } from "../../user-documents/operations";
 import { type DashboardMutationOperation, type DashboardOperation } from "../contract";
 import { listCategories } from "../../categories/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
@@ -28,20 +29,11 @@ import {
 } from "../../canonical-operations/contract";
 
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));
-const StoredDocument = Schema.Struct({
-  document_json: Schema.String,
-  revision: Schema.Int,
-});
 type MutationContext = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
 }>;
-
-/** A skipped guarded edit or audit invalidates the entire shared unit. */
-export const dashboardCompletion = `INSERT INTO dashboard_assertion (id, accepted)
-  VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-  ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
 
 export const audit = ({
   work,
@@ -103,27 +95,17 @@ export const findDashboardDocument = ({
   Option.Option<StoredDashboard>,
   InvalidStoredDashboard
 > =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare("SELECT document_json, revision FROM dashboard_documents WHERE user_id = ?")
-        .bind(userId)
-        .first(),
-    catch: () => new InvalidStoredDashboard(),
-  }).pipe(
-    Effect.flatMap((raw): Effect.Effect<Option.Option<StoredDashboard>, InvalidStoredDashboard> => {
-      if (raw === null) return Effect.succeedNone;
-      const decoded = Option.flatMap(Schema.decodeUnknownOption(StoredDocument)(raw), (row) =>
-        Option.map(Schema.decodeOption(DocumentJson)(row.document_json), (document) => ({
-          document,
-          revision: row.revision,
-          encoded: row.document_json,
-        }))
+  findUserDocument({ db, userId, kind: "dashboard" }).pipe(
+    Effect.flatMap((found) => {
+      if (Option.isNone(found)) return Effect.succeedNone;
+      const row = found.value;
+      return Schema.decodeEffect(DocumentJson)(row.encoded).pipe(
+        Effect.map((document) =>
+          Option.some({ document, revision: row.revision, encoded: row.encoded })
+        )
       );
-      return Option.isSome(decoded)
-        ? Effect.succeed(decoded)
-        : Effect.fail(new InvalidStoredDashboard());
-    })
+    }),
+    Effect.mapError(() => new InvalidStoredDashboard())
   );
 
 export const defaultDocument = (): DashboardDocument =>
@@ -145,16 +127,9 @@ export const firstUse = ({
   Schema.SchemaError
 > =>
   Schema.encodeEffect(DocumentJson)(document).pipe(
-    Effect.map((encoded) => {
-      const authority = callerAuthority(work);
-      return work.db
-        .prepare(
-          `INSERT INTO dashboard_documents (user_id, document_json, revision)
-        SELECT user_id, ?, 1 FROM ${authority.table} WHERE ${authority.predicate}
-        ON CONFLICT(user_id) DO NOTHING`
-        )
-        .bind(encoded, ...authority.bindings);
-    })
+    Effect.map((encoded) =>
+      prepareUserDocumentWrite({ work, kind: "dashboard", encoded, revision: 1 })
+    )
   );
 
 const HTTP_NOT_FOUND = 404;
@@ -197,15 +172,14 @@ export const editWrite = ({
   revision: number;
 }>): Effect.Effect<ReadonlyArray<D1PreparedStatement>, Schema.SchemaError> => {
   if (operation !== "dashboard.applyDashboardEdit") return Effect.succeed([]);
-  const authority = callerAuthority(work);
   return Schema.encodeEffect(DocumentJson)(document).pipe(
     Effect.map((encoded) => [
-      work.db
-        .prepare(
-          `UPDATE dashboard_documents SET document_json = ?, revision = revision + 1
-      WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
-        )
-        .bind(encoded, work.subject.userId, revision, ...authority.bindings),
+      prepareUserDocumentWrite({
+        work,
+        kind: "dashboard",
+        encoded,
+        revision: revision + 1,
+      }),
     ])
   );
 };
@@ -216,22 +190,6 @@ export const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOu
   collisionKey: Option.some("dashboard-document"),
   guardFacts: Option.none(),
   read: (db, userId) => findDashboardValue({ db, userId, operation }),
-  triggerRefusal: (_work, kind) =>
-    kind === "audit"
-      ? Option.some({
-          code: "rate_limited",
-          message: "Daily audit budget exhausted.",
-          record: () => Effect.succeed("rate_limited" as const),
-          respond: () =>
-            Effect.succeed(
-              transactionFailure({
-                code: "rate_limited",
-                status: 429,
-                message: "Daily audit budget exhausted.",
-              })
-            ),
-        })
-      : Option.none(),
 });
 
 /** Read the committed document or ephemeral view from the same User after the unit commits. */

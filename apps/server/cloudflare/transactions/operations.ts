@@ -20,7 +20,6 @@ import type {
   RecurringFactsUnavailable,
   TransactionAggregatesUnavailable,
 } from "./contract";
-import { readBudgetContributions as ownerReadBudgetContributions } from "./internal/budget-query";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import {
   findDashboardAggregate as ownerFindDashboardAggregate,
@@ -55,16 +54,12 @@ import {
 import { repairDashboardProjection as ownerRepairDashboardProjection } from "./internal/dashboard-repair";
 import {
   findTransactionValue as ownerFindTransactionValue,
-  transactionBudgetRefusal as ownerTransactionBudgetRefusal,
-  transactionMovementRefusal as ownerTransactionMovementRefusal,
   transactionRefusal as ownerTransactionRefusal,
-  transactionTriggerRefusal as ownerTransactionTriggerRefusal,
 } from "./internal/transaction-outcome";
 import {
   prepareNotificationEmailCapture as ownerPrepareNotificationEmailCapture,
   prepareReviewedCapture as ownerPrepareReviewedCapture,
   prepareStatementCapture as ownerPrepareStatementCapture,
-  statementCaptureCapacityExceeded as ownerStatementCaptureCapacityExceeded,
 } from "./internal/ingestion-capture";
 
 export * from "./contract";
@@ -170,21 +165,7 @@ export const prepareUnlink: typeof ownerPrepareUnlink = (...args) => ownerPrepar
 export const findTransactionValue: typeof ownerFindTransactionValue = (...args) =>
   ownerFindTransactionValue(...args);
 
-/**
- * The refusal a Transaction child reports when the shared daily audit budget, not the child,
- * refused its unit. The canonical limited result is rendered without a refusal AuditLogEntry: the
- * budget that refused the work is the same one the record would consume.
- */
-export const transactionBudgetRefusal: typeof ownerTransactionBudgetRefusal = (...args) =>
-  ownerTransactionBudgetRefusal(...args);
-
 /** Decide a proved Transaction trigger refusal under the prepared child's exact caller authority. */
-export const transactionTriggerRefusal: typeof ownerTransactionTriggerRefusal = (input) =>
-  ownerTransactionTriggerRefusal(input);
-
-/** The refusal a capture child reports when the daily manual-movement budget aborts its unit. */
-export const transactionMovementRefusal: typeof ownerTransactionMovementRefusal = (...args) =>
-  ownerTransactionMovementRefusal(...args);
 
 /**
  * Prepare one statement Transaction and historical SourceAttestation for the caller's existing
@@ -207,10 +188,6 @@ export const prepareNotificationEmailCapture: typeof ownerPrepareNotificationEma
   input
 ) => ownerPrepareNotificationEmailCapture(input);
 
-/** Read a bounded ascending page of effective outflows for one User, Category, Currency and interval. */
-export const readBudgetContributions: typeof ownerReadBudgetContributions = (input) =>
-  ownerReadBudgetContributions(input);
-
 /** Read ready, decoded effective Transaction lists atomically with a caller-owned context snapshot. */
 export const readDashboardTransactions: typeof ownerReadDashboardTransactions = (input) =>
   ownerReadDashboardTransactions(input);
@@ -221,11 +198,6 @@ export const findDashboardAggregate: typeof ownerFindDashboardAggregate = (input
 
 /** Prepare irreversible history removal under live authority and the observed revision. */
 export const prepareDeletion: typeof ownerPrepareDeletion = (input) => ownerPrepareDeletion(input);
-
-/** Recognize a permanent Transaction admission refusal during statement capture. */
-export const statementCaptureCapacityExceeded: typeof ownerStatementCaptureCapacityExceeded = (
-  cause
-) => ownerStatementCaptureCapacityExceeded(cause);
 
 const PlanningMonthRow = Schema.Struct({
   month: Schema.String.check(Schema.isPattern(/^20[0-9]{2}-(?:0[1-9]|1[0-2])$/u)),

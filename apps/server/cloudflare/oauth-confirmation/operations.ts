@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { Array as Arr, type Cause, Clock, Effect, Option, Predicate, Schema } from "effect";
 import { digestBytes, newId } from "../secret-material/operations";
 import { liveOAuthCommitAuthority } from "../../src/shell/oauth-agents/operations";
@@ -25,9 +26,8 @@ export const oauthMutationReview = (
   revision: input.revision,
   guards: [
     input.db
-      .prepare(`INSERT INTO oauth_confirmation_guard(singleton, accepted)
-    SELECT 1, CASE WHEN EXISTS (${input.guard.sql}) THEN 1 ELSE 0 END
-    ON CONFLICT(singleton) DO UPDATE SET accepted = excluded.accepted`)
+      .prepare(`INSERT INTO sql_assertions (scope, accepted) SELECT 'oauth_confirmation', CASE WHEN EXISTS (${input.guard.sql}) THEN 1 ELSE 0 END
+    ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`)
       .bind(...input.guard.params),
   ],
 });
@@ -124,11 +124,7 @@ const consumeIntent = (
     );
   return Effect.succeed({
     _tag: "Prepared",
-    statements: [
-      consumed,
-      db.prepare(`INSERT INTO oauth_confirmation_guard(singleton, accepted) VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-          ON CONFLICT(singleton) DO UPDATE SET accepted = excluded.accepted`),
-    ],
+    statements: [consumed, prepareChangedRowAssertion({ db, scope: "oauth_confirmation" })],
   });
 };
 

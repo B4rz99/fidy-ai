@@ -55,7 +55,12 @@ export const requestOffer = (
       statements.push(
         input.db
           .prepare(
-            "INSERT INTO recurring_digest_opportunities(user_id,request_id) SELECT user_id,id FROM proactivity_offer_requests WHERE user_id=? AND kind='new-recurring-series' AND request_message_id=? ON CONFLICT(user_id) DO UPDATE SET request_id=excluded.request_id"
+            "UPDATE proactivity_offer_requests SET current_recurring_opportunity=NULL WHERE user_id=? AND current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM proactivity_offer_requests q WHERE q.user_id=? AND q.kind='new-recurring-series' AND q.request_message_id=?)"
+          )
+          .bind(input.userId, input.userId, input.messageId),
+        input.db
+          .prepare(
+            "UPDATE proactivity_offer_requests SET current_recurring_opportunity=1 WHERE user_id=? AND kind='new-recurring-series' AND request_message_id=?"
           )
           .bind(input.userId, input.messageId)
       );
@@ -78,7 +83,7 @@ export const offerWindowOpen = (now: DateTime.Utc): boolean =>
 export const recoverableOfferRequests = (now: DateTime.Utc): OwnedStatement => {
   const started = proactivityStartedDeliveryQuery();
   return {
-    sql: `SELECT q.id,q.user_id,q.kind,q.created_at_ms,q.last_evaluated_at_ms FROM proactivity_offer_requests AS q WHERE (q.materialized_at_ms IS NULL OR (q.kind<>'new-recurring-series' AND EXISTS (SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=q.user_id AND r.delivery_id=q.delivery_id AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id))))`,
+    sql: `SELECT q.id,q.user_id,q.kind,q.created_at_ms,q.last_evaluated_at_ms FROM proactivity_offer_requests AS q WHERE (q.materialized_at_ms IS NULL OR (q.kind<>'new-recurring-series' AND EXISTS (SELECT 1 FROM insight_reports AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=q.user_id AND r.delivery_id=q.delivery_id AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id))))`,
     params: [now.epochMilliseconds],
   };
 };
@@ -152,7 +157,7 @@ const materializeOffer = (
           subject: { _tag: "User", userId: input.userId },
           requirement: "active",
           statement: {
-            sql: "INSERT OR IGNORE INTO proactivity_reports(delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM proactivity_offer_requests WHERE user_id=? AND id=? AND materialized_at_ms IS NULL)",
+            sql: "INSERT OR IGNORE INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) SELECT 'proactivity-delivery',?,?,?,?,?,?,?,?,? ,'ready',?9,0,0 WHERE EXISTS (SELECT 1 FROM proactivity_offer_requests WHERE user_id=? AND id=? AND materialized_at_ms IS NULL)",
             params: [
               value.id,
               input.userId,
@@ -168,14 +173,10 @@ const materializeOffer = (
             ],
           },
         }),
+
         input.db
           .prepare(
-            "INSERT OR IGNORE INTO proactivity_outbox(user_id,delivery_id,created_at_ms) SELECT user_id,delivery_id,created_at_ms FROM proactivity_reports WHERE user_id=? AND delivery_id=?"
-          )
-          .bind(input.userId, value.id),
-        input.db
-          .prepare(
-            "UPDATE proactivity_offer_requests SET materialized_at_ms=?,delivery_id=? WHERE user_id=? AND id=? AND EXISTS (SELECT 1 FROM proactivity_reports WHERE user_id=? AND delivery_id=?)"
+            "UPDATE proactivity_offer_requests SET materialized_at_ms=?,delivery_id=? WHERE user_id=? AND id=? AND EXISTS (SELECT 1 FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND delivery_id=?)"
           )
           .bind(
             input.now.epochMilliseconds,

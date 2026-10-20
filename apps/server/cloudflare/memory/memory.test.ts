@@ -332,7 +332,7 @@ const auditRows = (db: D1Database, user: string): Promise<ReadonlyArray<AuditRow
   fromTestPromise(() =>
     db
       .prepare(
-        "SELECT operation, outcome, session_id, occurred_at_ms FROM memory_audit WHERE user_id = ? ORDER BY occurred_at_ms"
+        "SELECT operation, outcome, session_id, occurred_at_ms FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY occurred_at_ms"
       )
       .bind(user)
       .all<AuditRow>()
@@ -700,7 +700,7 @@ it("requires the declared PAT scope, lifetime, revocation standing, and Consent 
       const patAudit = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT operation, outcome FROM pat_audit WHERE user_id = ? AND operation LIKE 'memory.%' AND outcome = 'accepted'"
+            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ? AND operation LIKE 'memory.%' AND outcome = 'accepted'"
           )
           .bind(users[0])
           .all<{ operation: string; outcome: string }>()
@@ -746,9 +746,7 @@ it("requires the declared PAT scope, lifetime, revocation standing, and Consent 
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO onboarding_consent_records
-              (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-              VALUES (?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, users[0], clock(), clock())
           .run()
@@ -756,8 +754,7 @@ it("requires the declared PAT scope, lifetime, revocation standing, and Consent 
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
-              VALUES (?,?,?,?,?)`
+            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
           )
           .bind("e0000000-0000-4000-8000-000000000062", users[0], grantId, sessions[0], clock())
           .run()
@@ -812,9 +809,7 @@ it("stops a revoked WebSession and a withdrawn Consent from reading or writing M
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO onboarding_consent_records
-              (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-              VALUES (?,?,'{}','disclosure','decision',?,?)`
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
           )
           .bind(grantId, users[1], clock(), clock())
           .run()
@@ -822,8 +817,7 @@ it("stops a revoked WebSession and a withdrawn Consent from reading or writing M
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
-              VALUES (?,?,?,?,?)`
+            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
           )
           .bind("e0000000-0000-4000-8000-000000000064", users[1], grantId, sessions[1], clock())
           .run()
@@ -832,38 +826,6 @@ it("stops a revoked WebSession and a withdrawn Consent from reading or writing M
       expect(yield* fromTestPromise(() => memoryTextRows(db, users[1]))).toEqual([
         { text: "memoria dos" },
       ]);
-    })
-  ));
-
-it("shares the stable-User canonical work budget including Memory audit rows", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const current = clock();
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            `WITH RECURSIVE sequence(value) AS (
-              SELECT 0 UNION ALL SELECT value + 1 FROM sequence WHERE value < 255
-            )
-            INSERT INTO memory_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-            SELECT printf('20000000-0000-4000-8000-%012d', value), ?, ?, 'memory.recall', 'success', ?
-            FROM sequence`
-          )
-          .bind(users[0], sessions[0], current)
-          .run()
-      );
-      const limited = yield* fromTestPromise(() => recalled(db, cookie(0)));
-      expect(limited.status).toBe(429);
-      expect(serialized(yield* decode(Failure, limited))).not.toContain("memoria");
-      expect(
-        (yield* fromTestPromise(() => remembered(db, "sin presupuesto", cookie(0)))).status
-      ).toBe(429);
-      expect(
-        (yield* fromTestPromise(() =>
-          send(db, { path: "/memories", method: "GET", session: cookie(1) })
-        )).status
-      ).toBe(200);
     })
   ));
 

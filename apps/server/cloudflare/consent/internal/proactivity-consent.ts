@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { protectQueuedStatement } from "./queued-work";
 import type { QueuedConsentAction } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -37,9 +38,9 @@ export const sweepOffers = (
     try: () =>
       input.db
         .prepare(
-          `DELETE FROM proactivity_consent_offers WHERE id IN (
- SELECT o.id FROM proactivity_consent_offers AS o WHERE o.decision IS NULL AND o.expires_at_ms<=?
- AND NOT EXISTS (SELECT 1 FROM proactivity_consent_records AS r WHERE r.offer_id=o.id)
+          `DELETE FROM consent_offers WHERE kind<>'weekly-summary' AND id IN (
+ SELECT o.id FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE o.decision IS NULL AND o.expires_at_ms<=?
+ AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS r WHERE r.offer_id=o.id)
  ORDER BY o.expires_at_ms,o.id LIMIT ?)`
         )
         .bind(input.nowEpochMs - elapsedDayMs, maximumExpiredOffers)
@@ -70,7 +71,7 @@ export const hasChoiceReceipt = (
       channelAction(
         input,
         {
-          sql: `SELECT 1 FROM proactivity_consent_offers AS o WHERE o.user_id=? AND o.kind=? AND o.id=? AND o.disclosure_message_id IS NOT NULL AND ((o.decision_message_id=? AND o.decision=?) OR (?='revoke' AND EXISTS (SELECT 1 FROM proactivity_consent_records AS r WHERE r.user_id=o.user_id AND r.kind=o.kind AND r.offer_id=o.id AND r.decision_message_id=? AND r.grant_id IS NOT NULL)))`,
+          sql: `SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE o.user_id=? AND o.kind=? AND o.id=? AND o.disclosure_message_id IS NOT NULL AND ((o.decision_message_id=? AND o.decision=?) OR (?='revoke' AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS r WHERE r.user_id=o.user_id AND r.kind=o.kind AND r.offer_id=o.id AND r.decision_message_id=? AND r.grant_id IS NOT NULL)))`,
           params: [
             input.userId,
             input.kind,
@@ -94,8 +95,8 @@ const OfferRow = Schema.Struct({
   decision_message_id: Schema.NullOr(WhatsAppProviderMessageId),
   expires_at_ms: Schema.Int,
 });
-const liveGrant = `SELECT g.id FROM proactivity_consent_records AS g WHERE g.user_id=? AND g.kind=? AND g.grant_id IS NULL
- AND NOT EXISTS (SELECT 1 FROM proactivity_consent_records AS r WHERE r.user_id=g.user_id AND r.kind=g.kind AND r.grant_id=g.id)`;
+const liveGrant = `SELECT g.id FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS g WHERE g.user_id=? AND g.kind=? AND g.grant_id IS NULL
+ AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS r WHERE r.user_id=g.user_id AND r.kind=g.kind AND r.grant_id=g.id)`;
 
 /** Atomic historical eligibility capture; the caller receives only the current grant identity. */
 export const currentGrantQuery = (
@@ -153,10 +154,6 @@ const channelAction = (
       });
   return input.db.prepare(guarded.sql).bind(...guarded.params);
 };
-const assertion = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    "INSERT INTO proactivity_consent_assertion(id,accepted) VALUES (1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
-  );
 
 const replacementProof = (
   input: ProactivityConsentContext,
@@ -169,7 +166,7 @@ const replacementProof = (
   const replacementGuard = Option.match(replacement, {
     onNone: () => ({ sql: "1=1", params: [] }),
     onSome: (value) => ({
-      sql: `EXISTS (SELECT 1 FROM proactivity_consent_offers AS old WHERE old.user_id=? AND old.kind=? AND old.id=? AND old.disclosure_message_id IS NULL AND old.decision IS NULL AND EXISTS (SELECT 1 FROM (${value.proof.sql}) AS rejected WHERE rejected.user_id=old.user_id AND rejected.delivery_id=old.id))`,
+      sql: `EXISTS (SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS old WHERE old.user_id=? AND old.kind=? AND old.id=? AND old.disclosure_message_id IS NULL AND old.decision IS NULL AND EXISTS (SELECT 1 FROM (${value.proof.sql}) AS rejected WHERE rejected.user_id=old.user_id AND rejected.delivery_id=old.id))`,
       params: [input.userId, input.kind, value.offerId, ...value.proof.params],
     }),
   });
@@ -193,9 +190,9 @@ export const createOffer = (
       channelAction(
         input,
         {
-          sql: `INSERT INTO proactivity_consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,replaces_offer_id)
- SELECT ?,?,?,?,?,?,?,?,nullif(?,'') WHERE (SELECT count(*) FROM proactivity_consent_offers WHERE user_id=? AND created_at_ms>?) < ?
- AND NOT EXISTS (SELECT 1 FROM proactivity_consent_offers AS o WHERE user_id=? AND kind=? AND decision IS NULL AND expires_at_ms>? AND ( ?='' OR id<>?) AND NOT EXISTS(SELECT 1 FROM proactivity_consent_offers AS n WHERE n.replaces_offer_id=o.id)) AND ${replacementGuard.sql}`,
+          sql: `INSERT INTO consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,replaces_offer_id)
+ SELECT ?,?,?,?,?,?,?,?,nullif(?,'') WHERE (SELECT count(*) FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE user_id=? AND created_at_ms>?) < ?
+ AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE user_id=? AND kind=? AND decision IS NULL AND expires_at_ms>? AND ( ?='' OR id<>?) AND NOT EXISTS(SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS n WHERE n.replaces_offer_id=o.id)) AND ${replacementGuard.sql}`,
           params: [
             id,
             input.userId,
@@ -241,7 +238,7 @@ export const findCurrentOffer = (
       channelAction(
         input,
         {
-          sql: "SELECT id,disclosure_json,expires_at_ms FROM proactivity_consent_offers AS o WHERE user_id=? AND kind=? AND portfolio_id=? AND bsuid=? AND decision IS NULL AND expires_at_ms>? AND NOT EXISTS(SELECT 1 FROM proactivity_consent_offers AS n WHERE n.replaces_offer_id=o.id)",
+          sql: "SELECT id,disclosure_json,expires_at_ms FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS o WHERE user_id=? AND kind=? AND portfolio_id=? AND bsuid=? AND decision IS NULL AND expires_at_ms>? AND NOT EXISTS(SELECT 1 FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS n WHERE n.replaces_offer_id=o.id)",
           params: [
             input.userId,
             input.kind,
@@ -277,7 +274,7 @@ export const prepareVerifiedDisclosure = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_consent_offers SET disclosure_message_id=(SELECT v.provider_message_id FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?) WHERE user_id=? AND id=? AND disclosure_message_id IS NULL AND decision IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND ((kind='budget-threshold' AND v.role='budget-offer') OR (kind='manual-entry-reminder' AND v.role='reminder-offer') OR (kind='new-recurring-series' AND v.role='recurring-offer')))`
+      `UPDATE consent_offers SET disclosure_message_id=(SELECT v.provider_message_id FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?) WHERE kind<>'weekly-summary' AND user_id=? AND id=? AND disclosure_message_id IS NULL AND decision IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND ((kind='budget-threshold' AND v.role='budget-offer') OR (kind='manual-entry-reminder' AND v.role='reminder-offer') OR (kind='new-recurring-series' AND v.role='recurring-offer')))`
     )
     .bind(
       ...input.proof.params,
@@ -302,7 +299,7 @@ export const discloseOffer = (
       channelAction(
         input,
         {
-          sql: "UPDATE proactivity_consent_offers SET disclosure_message_id=? WHERE user_id=? AND kind=? AND id=? AND portfolio_id=? AND bsuid=? AND disclosure_message_id IS NULL AND decision IS NULL",
+          sql: "UPDATE consent_offers SET disclosure_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND portfolio_id=? AND bsuid=? AND disclosure_message_id IS NULL AND decision IS NULL",
           params: [
             message,
             input.userId,
@@ -325,7 +322,7 @@ export const findGrant = (
     const rows = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `SELECT id,record_json FROM proactivity_consent_records WHERE id IN (${liveGrant}) LIMIT 2`
+          `SELECT id,record_json FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE id IN (${liveGrant}) LIMIT 2`
         )
         .bind(input.userId, input.kind)
         .all()
@@ -380,7 +377,7 @@ const readChoice = (
       channelAction(
         input,
         {
-          sql: "SELECT id,disclosure_json,disclosure_message_id,decision_message_id,expires_at_ms FROM proactivity_consent_offers WHERE user_id=? AND kind=? AND id=?",
+          sql: "SELECT id,disclosure_json,disclosure_message_id,decision_message_id,expires_at_ms FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE user_id=? AND kind=? AND id=?",
           params: [input.userId, input.kind, choice.value[2]],
         },
         true
@@ -408,7 +405,7 @@ const acceptChoiceAction = (
   return channelAction(
     input,
     {
-      sql: `UPDATE proactivity_consent_offers SET decision='accept',decision_message_id=? WHERE user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND portfolio_id=? AND bsuid=? AND expires_at_ms>? AND ${grantGuard.sql}`,
+      sql: `UPDATE consent_offers SET decision='accept',decision_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND portfolio_id=? AND bsuid=? AND expires_at_ms>? AND ${grantGuard.sql}`,
       params: [
         evidence.message,
         input.userId,
@@ -435,8 +432,8 @@ const authorizeChoice = (input: DecisionInput, evidence: PreparedChoice): D1Prep
     return channelAction(
       input,
       {
-        sql: `UPDATE proactivity_consent_offers SET decision=decision WHERE user_id=? AND kind=? AND id=? AND disclosure_message_id IS NOT NULL
- AND EXISTS (${liveGrant} AND g.id=?) AND NOT EXISTS (SELECT 1 FROM proactivity_consent_records WHERE decision_message_id=?)`,
+        sql: `UPDATE consent_offers SET decision=decision WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND disclosure_message_id IS NOT NULL
+ AND EXISTS (${liveGrant} AND g.id=?) AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE decision_message_id=?)`,
         params: [
           input.userId,
           input.kind,
@@ -453,7 +450,7 @@ const authorizeChoice = (input: DecisionInput, evidence: PreparedChoice): D1Prep
   return channelAction(
     input,
     {
-      sql: "UPDATE proactivity_consent_offers SET decision=?,decision_message_id=? WHERE user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND (?<>'accept' OR (portfolio_id=? AND bsuid=? AND expires_at_ms>?))",
+      sql: "UPDATE consent_offers SET decision=?,decision_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND (?<>'accept' OR (portfolio_id=? AND bsuid=? AND expires_at_ms>?))",
       params: [
         decision,
         evidence.message,
@@ -508,7 +505,7 @@ const prepareRecord = (
     )(record);
     const statement = input.db
       .prepare(
-        "INSERT INTO proactivity_consent_records(id,user_id,kind,grant_id,offer_id,decision_message_id,record_json,occurred_at_ms) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1"
+        "INSERT INTO consent_history (record_type,id,user_id,kind,grant_id,offer_id,decision_message_id,record_json,occurred_at_ms) SELECT 'proactivity_grant',?,?,?,?,?,?,?,? WHERE changes()=1"
       )
       .bind(
         id,
@@ -527,6 +524,7 @@ export const prepareDecision = (
   input: DecisionInput
 ): Effect.Effect<Option.Option<PreparedProactivityConsentDecision>, ConsentUnavailable> =>
   Effect.gen(function* () {
+    const completion = prepareChangedRowAssertion({ db: input.db, scope: "proactivity_consent" });
     const evidence = yield* readChoice(input);
     if (Option.isNone(evidence)) return Option.none();
     const { choice, grant } = evidence.value;
@@ -537,7 +535,7 @@ export const prepareDecision = (
           ...common,
           decision: "continue",
           grantId: grant.value.id,
-          statements: [...common.statements, assertion(input.db)],
+          statements: [...common.statements, completion],
         });
       }
       const record = yield* prepareRecord(input, evidence.value, {
@@ -548,14 +546,14 @@ export const prepareDecision = (
         ...common,
         decision: "accept",
         grantId: record.id,
-        statements: [...common.statements, record.statement, assertion(input.db)],
+        statements: [...common.statements, record.statement, completion],
       });
     }
     if (Option.isNone(grant)) {
       return Option.some<PreparedProactivityConsentDecision>({
         ...common,
         decision: "decline",
-        statements: [...common.statements, assertion(input.db)],
+        statements: [...common.statements, completion],
       });
     }
     const record = yield* prepareRecord(input, evidence.value, {
@@ -566,6 +564,6 @@ export const prepareDecision = (
       ...common,
       decision: "revoke",
       grantId: grant.value.id,
-      statements: [...common.statements, record.statement, assertion(input.db)],
+      statements: [...common.statements, record.statement, completion],
     });
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));

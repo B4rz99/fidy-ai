@@ -30,9 +30,9 @@ const TranscriptEvidenceSchema = Schema.Struct({
 type TranscriptEvidence = typeof TranscriptEvidenceSchema.Type;
 
 type Snapshot = {
+  readonly unusedAssertionTables: ReadonlyArray<string>;
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
-  readonly hostedWhatsAppInboundExists: boolean;
   readonly hostedVoiceRefusalsExists: boolean;
   readonly hostedWhatsAppWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
@@ -49,9 +49,9 @@ type ConstraintChecks = {
 };
 
 type MigrationState = {
+  readonly unusedAssertionTables: ReadonlyArray<string>;
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
-  readonly hostedWhatsAppInboundExists: boolean;
   readonly hostedVoiceRefusalsExists: boolean;
   readonly hostedWhatsAppWindowsExists: boolean;
   readonly foreignKeyViolationCount: number;
@@ -85,10 +85,8 @@ const seedExistingTranscript = Effect.fn(function* (db: D1Database) {
         .bind(legacyUser, timestamp),
       db
         .prepare(
-          `INSERT INTO onboarding_consent_records
-           (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-            decision_received_at_ms, accepted_at_ms)
-           VALUES (?, ?, '{}', 'disclosed', 'accepted', ?, ?)`
+          `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+            decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosed', 'accepted', ?, ?)`
         )
         .bind("10000000-0000-4000-8000-000000000734", legacyUser, timestamp, timestamp),
       db
@@ -164,8 +162,17 @@ const readSnapshot = Effect.fn(function* (db: D1Database) {
 
   return {
     appliedMigrationNames: migrations.map((migration) => migration.name),
+    unusedAssertionTables: tables
+      .map((table) => table.name)
+      .filter((name) =>
+        [
+          "memory_atomic_assertion",
+          "transaction_capture_assertion",
+          "erasure_runtime_assertion",
+        ].includes(name)
+      )
+      .sort(),
     transcriptHasIteration: columns.some((column) => column.name === "iteration"),
-    hostedWhatsAppInboundExists: tables.some((table) => table.name === "hosted_whatsapp_inbound"),
     hostedVoiceRefusalsExists: tables.some((table) => table.name === "hosted_voice_refusals"),
     hostedWhatsAppWindowsExists: tables.some((table) => table.name === "hosted_whatsapp_windows"),
     foreignKeyViolationCount: foreignKeys.length,
@@ -305,8 +312,8 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
 
   return {
     appliedMigrationNames: snapshot.appliedMigrationNames,
+    unusedAssertionTables: snapshot.unusedAssertionTables,
     transcriptHasIteration: snapshot.transcriptHasIteration,
-    hostedWhatsAppInboundExists: snapshot.hostedWhatsAppInboundExists,
     hostedVoiceRefusalsExists: snapshot.hostedVoiceRefusalsExists,
     hostedWhatsAppWindowsExists: snapshot.hostedWhatsAppWindowsExists,
     foreignKeyViolationCount: snapshot.foreignKeyViolationCount,

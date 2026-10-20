@@ -7,23 +7,20 @@ import { settleDeliveryWork } from "./proactivity-delivery-work";
 type Delivery = Readonly<{ userId: UserId; work: ProactivityDeliveryWork; now: number }>;
 /** Metadata is bounded to one native identity, never provider or transport claims. */
 const deliveryMetadataQuery = (input: Delivery): OwnedStatement => {
-  switch (input.work.kind) {
-    case "proactivity-delivery":
-      return {
-        sql: "SELECT o.user_id,o.state,r.expires_at_ms,(r.text IS NOT NULL) AS content_available FROM proactivity_outbox AS o JOIN proactivity_reports AS r ON r.user_id=o.user_id AND r.delivery_id=o.delivery_id WHERE o.user_id=? AND o.delivery_id=?",
-        params: [input.userId, input.work.id],
-      };
-    case "weekly-summary":
-      return {
-        sql: "SELECT o.user_id,o.state,r.expires_at_ms,1 AS content_available FROM weekly_summary_outbox AS o JOIN weekly_summary_reports AS r ON r.user_id=o.user_id AND r.insight_event_id=o.insight_event_id WHERE o.user_id=? AND o.insight_event_id=?",
-        params: [input.userId, input.work.insightEventId],
-      };
-    case "weekly-question":
-      return {
-        sql: "SELECT user_id,state,created_at_ms+86400000 AS expires_at_ms,1 AS content_available FROM weekly_question_intents WHERE user_id=? AND id=?",
-        params: [input.userId, input.work.id],
-      };
+  if (input.work.kind === "weekly-question") {
+    return {
+      sql: "SELECT user_id,state,created_at_ms+86400000 AS expires_at_ms,1 AS content_available FROM weekly_question_intents WHERE user_id=? AND id=?",
+      params: [input.userId, input.work.id],
+    };
   }
+  return {
+    sql: "SELECT user_id,state,expires_at_ms,content_available FROM proactivity_delivery_metadata WHERE user_id=? AND kind=? AND delivery_id=?",
+    params: [
+      input.userId,
+      input.work.kind,
+      input.work.kind === "weekly-summary" ? input.work.insightEventId : input.work.id,
+    ],
+  };
 };
 
 /** Exact unfinished, unexpired admission; never a recurring schedule or Workflow payload. */

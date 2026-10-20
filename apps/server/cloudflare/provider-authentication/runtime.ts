@@ -38,11 +38,6 @@ export const sweepProviderAuthentication = ({
         .bind(current - admissionWindowMs),
       db
         .prepare(
-          "DELETE FROM completed_provider_authentications WHERE attempt_id IN (SELECT id FROM provider_authentication_attempts WHERE expires_at_ms<? ORDER BY expires_at_ms,id LIMIT ?)"
-        )
-        .bind(current - retainedAttemptMilliseconds, maximumSweepRows),
-      db
-        .prepare(
           "DELETE FROM provider_authentication_attempts WHERE id IN (SELECT id FROM provider_authentication_attempts WHERE expires_at_ms<? ORDER BY expires_at_ms,id LIMIT ?)"
         )
         .bind(current - retainedAttemptMilliseconds, maximumSweepRows),

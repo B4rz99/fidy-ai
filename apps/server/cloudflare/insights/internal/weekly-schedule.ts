@@ -1,5 +1,6 @@
 import { DateTime, Effect, Option, Schema } from "effect";
-import { IanaTimeZone } from "../../../src/core/_shared/context";
+import * as ScheduleStore from "./schedule-store";
+import { UtcTimestamp } from "../../../src/core/_shared/time";
 import { type ConsentRecordId } from "../../../src/core/consent/contract";
 import { type UserId } from "../../../src/core/identity/contract";
 import {
@@ -25,29 +26,23 @@ const ScheduleRow = Schema.Struct({
   user_id: WeeklyScheduleSnapshot.fields.userId,
   version: WeeklyScheduleSnapshot.fields.version,
   enabled: Schema.Literals([0, 1]),
-  weekday: Schema.Int,
-  hour: Schema.Int,
-  minute: Schema.Int,
-  time_zone: IanaTimeZone,
-  service_market: WeeklyScheduleSnapshot.fields.serviceMarket,
-  locale: WeeklyScheduleSnapshot.fields.locale,
-  next_scheduled_at: Schema.String,
+  snapshot_json: Schema.fromJsonString(Schema.toCodecJson(WeeklyScheduleSnapshot)),
+  next_scheduled_at: UtcTimestamp,
   consent_grant_id: WeeklyScheduleSnapshot.fields.consentGrantId,
 });
-const scheduleColumns =
-  "id,user_id,version,enabled,weekday,hour,minute,time_zone,service_market,locale,next_scheduled_at,consent_grant_id";
 const decodeSchedule = (raw: unknown): Effect.Effect<WeeklyScheduleSnapshot, InsightUnavailable> =>
   Effect.gen(function* () {
     const row = yield* Schema.decodeUnknownEffect(ScheduleRow)(raw);
-    return yield* Schema.decodeEffect(Schema.toCodecJson(WeeklyScheduleSnapshot))({
-      id: row.id,
-      userId: row.user_id,
-      version: row.version,
+    if (
+      row.id !== row.snapshot_json.id ||
+      row.user_id !== row.snapshot_json.userId ||
+      row.version !== row.snapshot_json.version
+    ) {
+      return yield* new InsightUnavailable();
+    }
+    return WeeklyScheduleSnapshot.make({
+      ...row.snapshot_json,
       enabled: row.enabled === 1,
-      timing: { weekday: row.weekday, hour: row.hour, minute: row.minute },
-      timeZone: row.time_zone,
-      serviceMarket: row.service_market,
-      locale: row.locale,
       nextScheduledAt: row.next_scheduled_at,
       consentGrantId: row.consent_grant_id,
     });
@@ -63,7 +58,7 @@ export const findSchedule = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: `SELECT ${scheduleColumns} FROM weekly_schedules WHERE user_id = ?`,
+          sql: "SELECT id,user_id,version,enabled,snapshot_json,next_scheduled_at,consent_grant_id FROM schedules WHERE kind='weekly' AND user_id=?",
           params: [input.userId],
         },
       }).first()
@@ -78,7 +73,7 @@ export const discoverSchedules = (
     const rows = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT user_id AS userId,id FROM weekly_schedules WHERE enabled = 1 AND next_scheduled_at <= ? ORDER BY last_evaluated_at_ms,next_scheduled_at,id LIMIT 64"
+          "SELECT user_id AS userId,id FROM schedules WHERE kind='weekly' AND enabled = 1 AND next_scheduled_at <= ? ORDER BY last_evaluated_at_ms,next_scheduled_at,id LIMIT 64"
         )
         .bind(DateTime.formatIso(input.now))
         .all()
@@ -94,7 +89,7 @@ export const noteScheduleEvaluation = (
   Effect.tryPromise(() =>
     input.db
       .prepare(
-        "UPDATE weekly_schedules SET last_evaluated_at_ms = ? WHERE user_id = ? AND id = ? AND enabled = 1"
+        "UPDATE schedules SET last_evaluated_at_ms = ? WHERE kind='weekly' AND user_id = ? AND id = ? AND enabled = 1"
       )
       .bind(input.now.epochMilliseconds, input.userId, input.id)
       .run()
@@ -110,7 +105,7 @@ export const occurrenceGuard = (input: WeeklyOccurrenceGuard): D1PreparedStateme
     userId: snapshot.userId,
     grantId: snapshot.consentGrantId,
     statement: {
-      sql: `${input.statement.sql} AND EXISTS (SELECT 1 FROM weekly_schedules WHERE user_id = ? AND id = ? AND version = ? AND enabled = 1 AND next_scheduled_at = ? AND next_scheduled_at <= ? AND consent_grant_id = ?)`,
+      sql: `${input.statement.sql} AND EXISTS (SELECT 1 FROM schedules WHERE kind='weekly' AND user_id = ? AND id = ? AND version = ? AND enabled = 1 AND next_scheduled_at = ? AND next_scheduled_at <= ? AND consent_grant_id = ?)`,
       params: [
         ...input.statement.params,
         snapshot.userId,
@@ -123,10 +118,6 @@ export const occurrenceGuard = (input: WeeklyOccurrenceGuard): D1PreparedStateme
     },
   });
 };
-const scheduleAssertion = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    "INSERT INTO weekly_schedule_assertion (id,accepted) VALUES (1,CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
-  );
 
 export const scheduleAdvance = (
   input: WeeklyScheduleAdvance
@@ -143,27 +134,15 @@ export const scheduleAdvance = (
     timing: snapshot.timing,
     timeZone: snapshot.timeZone,
   });
-  const marker = occurrenceGuard({
-    ...input,
-    statement: {
-      sql: "INSERT INTO weekly_schedule_executions (user_id,schedule_id,schedule_version,scheduled_at,outcome) SELECT ?,?,?,?,? WHERE 1 = 1",
-      params: [
-        snapshot.userId,
-        snapshot.id,
-        snapshot.version,
-        DateTime.formatIso(materializedScheduledAt),
-        input.outcome,
-      ],
-    },
+  return ScheduleStore.prepareAdvance({
+    db,
+    kind: "weekly",
+    snapshot,
+    scheduledAt: materializedScheduledAt,
+    next,
+    outcome: input.outcome,
+    guard: (statement) => occurrenceGuard({ ...input, statement }),
   });
-  const advance = occurrenceGuard({
-    ...input,
-    statement: {
-      sql: "UPDATE weekly_schedules SET next_scheduled_at = ? WHERE user_id = ? AND id = ?",
-      params: [DateTime.formatIso(next), snapshot.userId, snapshot.id],
-    },
-  });
-  return [marker, scheduleAssertion(db), advance, scheduleAssertion(db)];
 };
 
 export const prepareScheduleEnable = (
@@ -199,34 +178,14 @@ export const prepareScheduleEnable = (
     const json = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(WeeklyScheduleSnapshot))
     )(schedule).pipe(Effect.mapError(() => new InsightUnavailable()));
-    const params = [
-      id,
-      input.userId,
-      version,
-      1,
-      timing.weekday,
-      timing.hour,
-      timing.minute,
-      timeZone,
-      "CO",
-      "es-CO",
-      DateTime.formatIso(next),
-      input.grantId,
-    ];
-    const write = input.db
-      .prepare(
-        `INSERT INTO weekly_schedules (${scheduleColumns}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET version=excluded.version,enabled=1,next_scheduled_at=excluded.next_scheduled_at,consent_grant_id=excluded.consent_grant_id`
-      )
-      .bind(...params);
-    const revision = input.db
-      .prepare(
-        "INSERT INTO weekly_schedule_revisions (user_id,schedule_id,version,snapshot_json) VALUES (?,?,?,?)"
-      )
-      .bind(input.userId, id, version, json);
-    return [write, scheduleAssertion(input.db), revision];
+    return ScheduleStore.prepareActivation({
+      ...input,
+      kind: "weekly",
+      snapshot: schedule,
+      json,
+    });
   });
 
 export const prepareScheduleDisable = (
   input: Readonly<{ db: D1Database; userId: UserId }>
-): D1PreparedStatement =>
-  input.db.prepare("UPDATE weekly_schedules SET enabled = 0 WHERE user_id = ?").bind(input.userId);
+): D1PreparedStatement => ScheduleStore.prepareDisable({ ...input, kind: "weekly" });

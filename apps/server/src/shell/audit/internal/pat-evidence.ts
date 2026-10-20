@@ -14,7 +14,7 @@ export const recordedPATCallProof = ({
   auditId,
   operation,
 }: Readonly<{ auditId: string; operation: AuditedPATOperation }>): OwnedStatement => ({
-  sql: "SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
+  sql: "SELECT 1 FROM audit_entries WHERE record_type='credential_call' AND id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
   params: [auditId, operation],
 });
 
@@ -23,7 +23,7 @@ export const recordedPATReplayCallProof = ({
   auditId,
   operation,
 }: Readonly<{ auditId: string; operation: CanonicalOperationId }>): OwnedStatement => ({
-  sql: "SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
+  sql: "SELECT 1 FROM audit_entries WHERE record_type='credential_call' AND id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
   params: [auditId, operation],
 });
 
@@ -39,13 +39,11 @@ export const recordSessionPATTransition = ({
 }: Readonly<{ session: FreshSessionSubject; input: TransitionInput }>): OwnedStatement =>
   Option.isNone(input.patId)
     ? {
-        sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-        SELECT ?,?,?,?,'accepted',? WHERE changes() = 1`,
+        sql: `INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,?,'accepted',? WHERE changes() = 1`,
         params: [input.id, session.user_id, session.id, input.operation, input.current],
       }
     : {
-        sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
-        SELECT ?,?,?,?,?,'accepted',? WHERE changes() = 1`,
+        sql: `INSERT INTO audit_entries(record_type,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,?,?,'accepted',? WHERE changes() = 1`,
         params: [
           input.id,
           session.user_id,
@@ -60,8 +58,7 @@ export const recordSessionPATTransition = ({
 export const recordClaimedPAT = (
   input: AuditTime & Readonly<{ userId: string; patId: string }>
 ): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-    SELECT ?,?,?,'pats.claim','accepted',? WHERE changes() = 1`,
+  sql: `INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,'pats.claim','accepted',? WHERE changes() = 1`,
   params: [input.id, input.userId, input.patId, input.current],
 });
 
@@ -75,8 +72,7 @@ export const recordPATList = ({
   authority: WebSessionAuthority;
   input: AuditTime;
 }>): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    SELECT ?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+  sql: `INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
   params: [input.id, session.user_id, session.id, input.current, ...authority.bindings],
 });
 
@@ -88,8 +84,7 @@ export const recordOnePATRevocation = ({
 }: Readonly<{ session: FreshSessionSubject; input: RevokeAuditInput }>): OwnedStatement => {
   const selected = patIdentityQuery({ userId: session.user_id, shortId: input.shortId });
   return {
-    sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
-      SELECT ?,?,?,id,'pats.revokePAT','accepted',? FROM (${selected.sql}) WHERE changes() = 1`,
+    sql: `INSERT INTO audit_entries(record_type,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,id,'pats.revokePAT','accepted',? FROM (${selected.sql}) WHERE changes() = 1`,
     params: [input.id, session.user_id, session.id, input.current, ...selected.params],
   };
 };
@@ -99,8 +94,7 @@ export const recordAllPATRevocations = ({
   session,
   input,
 }: Readonly<{ session: FreshSessionSubject; input: AuditTime }>): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    SELECT ?,?,?,'pats.revokeAllPATs','accepted',? WHERE ${freshSessionExists}`,
+  sql: `INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,'pats.revokeAllPATs','accepted',? WHERE ${freshSessionExists}`,
   params: [
     input.id,
     session.user_id,

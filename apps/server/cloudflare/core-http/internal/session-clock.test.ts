@@ -71,7 +71,7 @@ for (const path of [
               .bind(userId, created),
             db
               .prepare(
-                "INSERT INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', ?, ?)"
+                "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', ?, ?)"
               )
               .bind("clock-consent", userId, created, created),
             db
@@ -167,7 +167,11 @@ for (const path of [
         ).toBe(0);
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first<number>("count")
+            db
+              .prepare(
+                "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,occurred_at_ms FROM audit_entries WHERE record_type='identity_read') AS canonical_user_reads"
+              )
+              .first<number>("count")
           )
         ).toBe(0);
         expect(response.headers.get("cache-control")).toBe("no-store");

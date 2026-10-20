@@ -29,14 +29,20 @@ const setup = (upgrade = false): Effect.Effect<D1Database> =>
     const names = Array.from(
       new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
     ).sort();
-    yield* fromTestPromise(() =>
-      installTestSchema({
-        db,
-        sources: names
-          .filter((name) => !upgrade || name !== "0075_transaction_query_costs.sql")
-          .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-      })
-    );
+    if (upgrade) {
+      for (const name of names.filter((name) => name < "0075_transaction_query_costs.sql")) {
+        yield* fromTestPromise(() =>
+          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
+        );
+      }
+    } else {
+      yield* fromTestPromise(() =>
+        installTestSchema({
+          db,
+          sources: names.map((name) => new URL(`../migrations/${name}`, import.meta.url)),
+        })
+      );
+    }
     yield* fromTestPromise(() =>
       db.batch(
         [userId, otherUserId].map((subject) =>

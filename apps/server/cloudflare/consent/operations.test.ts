@@ -45,14 +45,18 @@ it("reads one User's exact Consent basis without borrowing another User's grant"
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users VALUES (?,'CO','es-CO','America/Bogota',?)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+            )
             .bind(userA, now),
           db
-            .prepare("INSERT INTO users VALUES (?,'CO','es-CO','America/Bogota',?)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+            )
             .bind(userB, now),
           db
             .prepare(
-              `INSERT INTO onboarding_consent_records VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+              `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
             )
             .bind(grantA, userA, disclosureJson, now, now),
         ])
@@ -91,10 +95,14 @@ const seedSubject = ({
   const pairingId = `50000000-0000-4000-8000-00000000000${index}`;
   return db
     .batch([
-      db.prepare("INSERT INTO users VALUES (?,'CO','es-CO','America/Bogota',?)").bind(userId, now),
       db
         .prepare(
-          `INSERT INTO onboarding_consent_records VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+        )
+        .bind(userId, now),
+      db
+        .prepare(
+          `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
         )
         .bind(
           index === 1 ? grantA : "30000000-0000-4000-8000-000000000002",
@@ -195,7 +203,9 @@ it("reads the exact provider-signup grant whose identifier is an opaque authenti
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users VALUES (?,'CO','es-CO','America/Bogota',?)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+            )
             .bind(userA, now),
           recordWebOnboardingConsent({
             db,

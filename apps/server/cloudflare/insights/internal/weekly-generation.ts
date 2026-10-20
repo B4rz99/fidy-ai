@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { MoneyGroups, type ReadonlyMoney, groupMoney } from "../../../src/core/_shared/money";
 import { type UserId } from "../../../src/core/identity/contract";
@@ -129,12 +130,10 @@ const reportStatements = (
       ],
     },
   });
-  const assertion = db.prepare(
-    "INSERT INTO weekly_schedule_assertion (id,accepted) VALUES (1,CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
-  );
+  const assertion = prepareChangedRowAssertion({ db, scope: "weekly_schedule" });
   const report = db
     .prepare(
-      `INSERT INTO weekly_summary_reports (user_id,insight_event_id,consent_grant_id,payload_json,presentation_json,scheduled_at_ms,expires_at_ms) VALUES (?,?,?,?,?,?,?)`
+      `INSERT INTO insight_reports (kind,user_id,delivery_id,consent_grant_id,payload_json,presentation_json,scheduled_at_ms,expires_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('weekly-summary',?,?,?,?,?,?,? ,'ready',?,0,0)`
     )
     .bind(
       snapshot.userId,
@@ -143,14 +142,11 @@ const reportStatements = (
       candidate.payloadJson,
       candidate.presentationJson,
       scheduledAt.epochMilliseconds,
-      expiresAt.epochMilliseconds
+      expiresAt.epochMilliseconds,
+      now.epochMilliseconds
     );
-  const outbox = db
-    .prepare(
-      "INSERT INTO weekly_summary_outbox (user_id,insight_event_id,created_at_ms) VALUES (?,?,?)"
-    )
-    .bind(snapshot.userId, candidate.id, now.epochMilliseconds);
-  return [event, assertion, report, outbox];
+
+  return [event, assertion, report];
 };
 const commit = (
   db: D1Database,
@@ -232,7 +228,7 @@ export const materialize = (
 export const weeklyReportDeliveryQuery = (
   input: Readonly<{ userId: UserId; insightEventId: InsightEventId }>
 ): OwnedStatement => ({
-  sql: `SELECT 1 FROM weekly_summary_reports AS r JOIN insight_events AS e ON e.id=r.insight_event_id AND e.user_id=r.user_id JOIN weekly_schedules AS s ON s.id=e.schedule_id AND s.user_id=e.user_id WHERE r.user_id=? AND r.insight_event_id=? AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND NOT EXISTS (SELECT 1 FROM weekly_governors AS g WHERE g.user_id=s.user_id AND (g.paused_at_ms IS NOT NULL OR (g.question_needed=1 AND g.question_delivered=0)))`,
+  sql: `SELECT 1 FROM insight_reports AS r JOIN insight_events AS e ON e.id=r.delivery_id AND e.user_id=r.user_id JOIN schedules AS s ON s.kind='weekly' AND s.id=e.schedule_id AND s.user_id=e.user_id WHERE r.kind='weekly-summary' AND r.user_id=? AND r.delivery_id=? AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') AS g WHERE g.user_id=s.user_id AND (g.paused_at_ms IS NOT NULL OR (g.question_needed=1 AND g.question_delivered=0)))`,
   params: [input.userId, input.insightEventId],
 });
 
@@ -253,7 +249,7 @@ const readReport = (
 ): Effect.Effect<Option.Option<WeeklySummaryReport>, InsightUnavailable> =>
   Effect.gen(function* () {
     const statement: OwnedStatement = {
-      sql: "SELECT insight_event_id,consent_grant_id,payload_json,presentation_json,expires_at_ms FROM weekly_summary_reports WHERE user_id = ? AND insight_event_id = ?",
+      sql: "SELECT delivery_id AS insight_event_id,consent_grant_id,payload_json,presentation_json,expires_at_ms FROM insight_reports WHERE kind='weekly-summary' AND user_id=? AND delivery_id=?",
       params: [input.userId, input.id],
     };
     const raw = yield* Effect.tryPromise(() =>

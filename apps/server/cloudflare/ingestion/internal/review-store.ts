@@ -10,9 +10,6 @@ import {
 import { categorizeCaptures } from "../../categories/operations";
 import { TransactionId } from "../../../src/core/transactions/contract";
 
-export const reviewCompletion = `INSERT INTO ingestion_review_assertion (id, accepted)
-  VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-  ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
 export const ReviewRow = Schema.Struct({
   ...ReviewMetadata.fields,
   status: ReviewStatus,

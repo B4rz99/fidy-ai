@@ -32,7 +32,9 @@ it.live("rejects corrupt retained pause dates before materializing any report", 
     const schedule = yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
     yield* Effect.tryPromise(() =>
       db
-        .prepare("INSERT INTO weekly_governors(user_id,paused_at_ms) VALUES(?,?)")
+        .prepare(
+          "INSERT INTO proactivity_governors AS weekly_governors(kind,user_id,paused_at_ms) VALUES ('weekly',?,?)"
+        )
         .bind(userId, 8_640_000_000_000_001)
         .run()
     );
@@ -54,7 +56,9 @@ it.live("rejects corrupt retained pause dates before materializing any report", 
     expect(
       (yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT insight_event_id FROM weekly_summary_outbox WHERE user_id=?")
+          .prepare(
+            "SELECT delivery_id AS insight_event_id FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='weekly-summary' AND user_id=?"
+          )
           .bind(userId)
           .all()
       )).results
@@ -115,7 +119,12 @@ it.live("rejects a corrupt retained question origin without staging or sending w
     ).toEqual({ state: "ready" });
     expect(
       (yield* Effect.tryPromise(() =>
-        db.prepare("SELECT id FROM weekly_governor_questions WHERE user_id=?").bind(userId).all()
+        db
+          .prepare(
+            "SELECT id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=?"
+          )
+          .bind(userId)
+          .all()
       )).results
     ).toEqual([]);
   })
@@ -130,7 +139,7 @@ it.live(
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO weekly_consent_rejections(id,user_id,offer_id,decision_message_id,decision) SELECT 'no-history',user_id,id,'no-history-message','decline' FROM weekly_consent_offers WHERE user_id=? AND decision='accept'"
+            "INSERT INTO consent_history (record_type,id,user_id,offer_id,decision_message_id,decision) SELECT 'weekly_rejection','no-history',user_id,id,'no-history-message','decline' FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE user_id=? AND decision='accept'"
           )
           .bind(userId)
           .run()

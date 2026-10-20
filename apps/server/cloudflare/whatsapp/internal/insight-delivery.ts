@@ -82,11 +82,9 @@ export const prepareInsightRecipient = (
 ): D1PreparedStatement => {
   const association = whatsAppIdentityQuery({ ...input.recipient, userId: input.userId });
   return input.db
-    .prepare(`INSERT INTO insight_whatsapp_routes(user_id,portfolio_id,bsuid,business_phone_number_id,verified_at_ms)
- SELECT ?,?,?,?,? WHERE EXISTS (${association.sql})
- ON CONFLICT(user_id) DO UPDATE SET portfolio_id=excluded.portfolio_id,bsuid=excluded.bsuid,
- business_phone_number_id=excluded.business_phone_number_id,verified_at_ms=excluded.verified_at_ms
- WHERE excluded.verified_at_ms >= insight_whatsapp_routes.verified_at_ms`)
+    .prepare(`UPDATE users SET route_portfolio_id=?2,route_bsuid=?3,route_phone_number_id=?4,route_verified_at_ms=?5
+ WHERE id=?1 AND (route_verified_at_ms IS NULL OR ?5>=route_verified_at_ms)
+ AND EXISTS (${association.sql})`)
     .bind(
       input.userId,
       input.recipient.portfolioId,
@@ -105,7 +103,7 @@ const readRecipient = (
 ): Effect.Effect<Option.Option<InsightRecipient>, InsightDeliveryFailure> =>
   Effect.gen(function* () {
     const statement = {
-      sql: "SELECT portfolio_id AS portfolioId,bsuid,business_phone_number_id AS businessPhoneNumberId FROM insight_whatsapp_routes WHERE user_id = ?",
+      sql: "SELECT portfolio_id AS portfolioId,bsuid,business_phone_number_id AS businessPhoneNumberId FROM (SELECT rowid,id AS user_id,route_portfolio_id AS portfolio_id,route_bsuid AS bsuid,route_phone_number_id AS business_phone_number_id,route_verified_at_ms AS verified_at_ms FROM users WHERE route_portfolio_id IS NOT NULL) WHERE user_id = ?",
       params: [input.userId],
     };
     const prepared = Option.match(input.queuedAdmission, {
@@ -143,7 +141,9 @@ export const stageInsightDelivery = (
     );
     const existing = yield* Effect.tryPromise(() =>
       input.db
-        .prepare("SELECT 1 FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=?")
+        .prepare(
+          "SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=?"
+        )
         .bind(input.userId, input.insightEventId)
         .first()
     );
@@ -153,8 +153,7 @@ export const stageInsightDelivery = (
     const association = whatsAppIdentityQuery({ ...input.recipient, userId: input.userId });
     const result = yield* Effect.tryPromise(() =>
       deliveryAction(input, {
-        sql: `INSERT INTO insight_whatsapp_claims(user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state)
- SELECT ?,?,?,?,?,?,?,?,?,?,?,'staged' WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
+        sql: `INSERT INTO whatsapp_deliveries AS insight_whatsapp_claims(kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state) SELECT 'insight', ?,?,?,?,?,?,?,?,?,?,?,'staged' WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
         params: [
           input.userId,
           input.insightEventId,
@@ -185,7 +184,7 @@ const claimSend = (
   });
   return Effect.tryPromise(() =>
     deliveryAction(input, {
-      sql: `UPDATE insight_whatsapp_claims SET state='sending',send_started_at_ms=? WHERE user_id=? AND insight_event_id=? AND state='staged' AND correlation_token=? AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
+      sql: `UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET state='sending',send_started_at_ms=? WHERE kind='insight' AND user_id=? AND insight_event_id=? AND state='staged' AND correlation_token=? AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
       params: [
         DateTime.toEpochMillis(input.now),
         input.userId,
@@ -205,7 +204,7 @@ export const startInsightSend = (
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
       deliveryAction(input, {
-        sql: `SELECT * FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='staged' AND EXISTS (${input.guard.sql})`,
+        sql: `SELECT * FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='staged' AND EXISTS (${input.guard.sql})`,
         params: [input.userId, input.insightEventId, ...input.guard.params],
       }).first()
     );
@@ -223,7 +222,7 @@ export const startInsightSend = (
       yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "UPDATE insight_whatsapp_claims SET state='expired',text=NULL,summary_json=NULL WHERE user_id=? AND insight_event_id=? AND state='staged'"
+            "UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET state='expired',text=NULL,summary_json=NULL WHERE kind='insight' AND user_id=? AND insight_event_id=? AND state='staged'"
           )
           .bind(input.userId, input.insightEventId)
           .run()
@@ -258,7 +257,7 @@ export const recordInsightSend = (
     yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `UPDATE insight_whatsapp_claims SET state=?,provider_message_id=coalesce(provider_message_id,?) WHERE user_id=? AND insight_event_id=? AND correlation_token=? AND state='sending' AND (provider_message_id IS NULL OR provider_message_id IS ?)`
+          `UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET state=?,provider_message_id=coalesce(provider_message_id,?) WHERE kind='insight' AND user_id=? AND insight_event_id=? AND correlation_token=? AND state='sending' AND (provider_message_id IS NULL OR provider_message_id IS ?)`
         )
         .bind(
           input.outcome.kind,
@@ -279,10 +278,10 @@ export const reconcileInsightStatus = (
     const status = input.admission;
     const result = yield* Effect.tryPromise(() =>
       input.db
-        .prepare(`UPDATE insight_whatsapp_claims SET
+        .prepare(`UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET
  state=CASE WHEN ?='delivered' THEN 'delivered' WHEN state IN ('delivered','rejected') THEN state WHEN ?='failed' THEN 'rejected' ELSE 'accepted' END,
  provider_message_id=coalesce(provider_message_id,?),delivered_at_ms=CASE WHEN ?='delivered' THEN coalesce(delivered_at_ms,?) ELSE delivered_at_ms END,last_received_at_ms=max(coalesce(last_received_at_ms,?),?)
- WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL
+ WHERE kind='insight' AND user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL
  AND (provider_message_id IS NULL OR provider_message_id=?) AND ? + ? >= send_started_at_ms AND ? <= ?
  AND state NOT IN ('staged','expired') RETURNING insight_event_id,state`)
         .bind(
@@ -326,7 +325,7 @@ export const findInsightDeliveryUser = (
     const row = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT user_id FROM insight_whatsapp_claims WHERE correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL"
+          "SELECT user_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL"
         )
         .bind(input.correlationToken, input.businessPhoneNumberId)
         .first()
@@ -345,7 +344,7 @@ export const readInsightDeliveryEvidence = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT insight_event_id,provider_message_id,send_started_at_ms,delivered_at_ms FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered'"
+          "SELECT insight_event_id,provider_message_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered'"
         )
         .bind(input.userId, input.insightEventId)
         .first()
@@ -367,7 +366,7 @@ export const readInsightDeliveryEvidence = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT text FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered' AND send_started_at_ms + ? > ?",
+          sql: "SELECT text FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered' AND send_started_at_ms + ? > ?",
           params: [input.userId, input.insightEventId, hostedTranscriptRetentionMs, input.now],
         },
       }).first()
@@ -395,24 +394,24 @@ const expireInsightClaims = (
     input.db.batch([
       input.db
         .prepare(
-          `UPDATE insight_whatsapp_claims SET text=NULL,summary_json=NULL
-           WHERE ${scope}rowid IN (
-             SELECT rowid FROM insight_whatsapp_claims
+          `UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET text=NULL,summary_json=NULL
+           WHERE kind='insight' AND rowid IN (
+             SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims
              WHERE ${scope}(text IS NOT NULL OR summary_json IS NOT NULL) AND send_started_at_ms <= ?
              ORDER BY send_started_at_ms LIMIT 64
            ) AND (text IS NOT NULL OR summary_json IS NOT NULL)`
         )
-        .bind(...user, ...user, input.now - hostedTranscriptRetentionMs),
+        .bind(...user, input.now - hostedTranscriptRetentionMs),
       input.db
         .prepare(
-          `UPDATE insight_whatsapp_claims SET text=NULL,summary_json=NULL
-           WHERE ${scope}rowid IN (
-             SELECT rowid FROM insight_whatsapp_claims
+          `UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET text=NULL,summary_json=NULL
+           WHERE kind='insight' AND rowid IN (
+             SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims
              WHERE ${scope}(text IS NOT NULL OR summary_json IS NOT NULL) AND state='staged' AND expires_at_ms <= ?
              ORDER BY expires_at_ms LIMIT 64
            ) AND (text IS NOT NULL OR summary_json IS NOT NULL)`
         )
-        .bind(...user, ...user, input.now),
+        .bind(...user, input.now),
     ])
   ).pipe(Effect.asVoid);
 };
@@ -441,7 +440,7 @@ export const weeklySummaryReplyQuery = (proof: WhatsAppTurnAdmission): OwnedStat
     bsuid: proof.bsuid,
   });
   const statement: OwnedStatement = {
-    sql: `SELECT d.user_id,d.insight_event_id,NULL AS question_id,? AS occurred_at_ms,d.delivered_at_ms FROM insight_whatsapp_claims AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered' UNION ALL SELECT d.user_id,NULL,d.id,?,d.delivered_at_ms FROM weekly_governor_questions AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered'`,
+    sql: `SELECT d.user_id,d.insight_event_id,NULL AS question_id,? AS occurred_at_ms,d.delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered' UNION ALL SELECT d.user_id,NULL,d.id,?,d.delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered'`,
     params: [
       proof.occurredAtMs,
       proof.userId,
@@ -472,7 +471,7 @@ export const contextualInsightQuery = (
       subject: { _tag: "User", userId: input.userId },
       requirement: "active",
       statement: {
-        sql: `SELECT user_id,insight_event_id,delivery_id FROM (SELECT user_id,insight_event_id,insight_event_id AS delivery_id FROM insight_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' UNION ALL SELECT user_id,delivery_id AS insight_event_id,delivery_id FROM proactivity_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered') WHERE EXISTS (${association.sql})`,
+        sql: `SELECT user_id,insight_event_id,delivery_id FROM (SELECT user_id,insight_event_id,insight_event_id AS delivery_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' UNION ALL SELECT user_id,delivery_id AS insight_event_id,delivery_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered') WHERE EXISTS (${association.sql})`,
         params: [
           input.userId,
           input.portfolioId,
@@ -497,7 +496,7 @@ export const insightVerifiedTranscriptQuery = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: "SELECT user_id,insight_event_id,delivered_at_ms,text FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered' AND text IS NOT NULL AND send_started_at_ms + ? > ?",
+      sql: "SELECT user_id,insight_event_id,delivered_at_ms,text FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered' AND text IS NOT NULL AND send_started_at_ms + ? > ?",
       params: [input.userId, input.insightEventId, hostedTranscriptRetentionMs, input.now],
     },
   });
@@ -506,6 +505,6 @@ export const insightVerifiedTranscriptQuery = (
 export const insightVerifiedDeliveryQuery = (
   input: Readonly<{ userId: UserId; insightEventId: InsightEventId }>
 ): OwnedStatement => ({
-  sql: "SELECT user_id,insight_event_id,provider_message_id,send_started_at_ms,delivered_at_ms FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL",
+  sql: "SELECT user_id,insight_event_id,provider_message_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=? AND state='delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL",
   params: [input.userId, input.insightEventId],
 });

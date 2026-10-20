@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { ReviewUnavailable } from "../contract";
 import { Effect, Option, Schema } from "effect";
 import PostalMime from "postal-mime";
@@ -11,7 +12,7 @@ import {
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { commitReviewRead, reviewAudit } from "./review-audit";
-import { readReviewDetail, reviewCompletion } from "./review-store";
+import { readReviewDetail } from "./review-store";
 
 const materialIdPosition = -2;
 const maximumMaterialCharacters = 100_000;
@@ -32,8 +33,8 @@ const findMaterial = ({
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT original_evidence AS text,NULL AS object_key FROM statement_needs_review WHERE user_id=? AND id=?
-    UNION ALL SELECT NULL,s.object_key FROM forwarded_email_needs_review r JOIN forwarded_email_receipts s ON s.id=r.receipt_id AND s.user_id=r.user_id WHERE r.user_id=? AND r.id=?
-    UNION ALL SELECT s.caption,NULL FROM media_needs_review r JOIN media_submissions s ON s.id=r.id AND s.user_id=r.user_id WHERE r.user_id=? AND r.id=?`)
+    UNION ALL SELECT NULL,s.object_key FROM forwarded_email_receipts s WHERE s.user_id=? AND s.review_id=?
+    UNION ALL SELECT s.caption,NULL FROM media_submissions s WHERE s.review_reason IS NOT NULL AND s.user_id=? AND s.id=?`)
       .bind(userId, id, userId, id, userId, id)
       .first()
   ).pipe(
@@ -121,7 +122,7 @@ export const browseReviewMaterial = ({
           operation: "ingestion.getReviewMaterial",
           accepted: true,
         }),
-        db.prepare(reviewCompletion),
+        prepareChangedRowAssertion({ db, scope: "ingestion_review" }),
       ])
     );
     const data =

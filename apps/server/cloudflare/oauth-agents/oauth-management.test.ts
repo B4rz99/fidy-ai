@@ -194,7 +194,9 @@ it("revokes one agent atomically across restart without revoking another connect
       ).toBe(200);
       const evidence = yield* wait(
         fixture.db
-          .prepare("SELECT connection_id,reason,session_id FROM oauth_user_revocation_consents")
+          .prepare(
+            "SELECT connection_id,reason,session_id FROM (SELECT * FROM consent_history WHERE record_type='oauth_user_revocation') AS oauth_user_revocation_consents"
+          )
           .all()
       );
       expect(evidence.results).toEqual([
@@ -209,7 +211,9 @@ it("revokes one agent atomically across restart without revoking another connect
           yield* Effect.option(
             wait(
               fixture.db
-                .prepare("UPDATE oauth_user_revocation_consents SET reason = 'user_all'")
+                .prepare(
+                  "UPDATE consent_history SET reason = 'user_all' WHERE record_type='oauth_user_revocation'"
+                )
                 .run()
             )
           )
@@ -218,7 +222,11 @@ it("revokes one agent atomically across restart without revoking another connect
       expect(
         Option.isNone(
           yield* Effect.option(
-            wait(fixture.db.prepare("DELETE FROM oauth_user_revocation_consents").run())
+            wait(
+              fixture.db
+                .prepare("DELETE FROM consent_history WHERE record_type='oauth_user_revocation'")
+                .run()
+            )
           )
         )
       ).toBe(true);
@@ -290,7 +298,9 @@ it.each(["wrong-user", "forged-session", "stale-session", "csrf", "oauth-bearer"
         expect(
           yield* wait(
             fixture.db
-              .prepare("SELECT count(*) FROM oauth_user_revocation_consents")
+              .prepare(
+                "SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_user_revocation') AS oauth_user_revocation_consents"
+              )
               .first<number>("count(*)")
           )
         ).toBe(0);
@@ -307,7 +317,7 @@ it("revokes all owned agents while a refresh is queued, leaving another User and
       yield* wait(
         fixture.db
           .prepare(
-            "INSERT INTO onboarding_consent_records VALUES ('other-grant-test', ?, '{}', 'disclosure', 'decision', 1, 1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','other-grant-test', ?, '{}', 'disclosure', 'decision', 1, 1)"
           )
           .bind("20000000-0000-4000-8000-000000000001")
           .run()
@@ -405,7 +415,9 @@ it("revokes all owned agents while a refresh is queued, leaving another User and
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_user_revocation_consents")
+            .prepare(
+              "SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_user_revocation') AS oauth_user_revocation_consents"
+            )
             .first<number>("count(*)")
         )
       ).toBe(2);
@@ -423,7 +435,7 @@ it("does not revoke any agent when append-only revocation evidence is unavailabl
       yield* wait(
         fixture.db
           .prepare(
-            `CREATE TRIGGER reject_oauth_evidence BEFORE INSERT ON oauth_user_revocation_consents WHEN NEW.connection_id = '${second.connectionId}' BEGIN SELECT RAISE(ABORT,'unavailable'); END`
+            `CREATE TRIGGER reject_oauth_evidence BEFORE INSERT ON consent_history WHEN NEW.record_type='oauth_user_revocation' AND NEW.connection_id = '${second.connectionId}' BEGIN SELECT RAISE(ABORT,'unavailable'); END`
           )
           .run()
       );
@@ -446,7 +458,9 @@ it("does not revoke any agent when append-only revocation evidence is unavailabl
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_user_revocation_consents")
+            .prepare(
+              "SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_user_revocation') AS oauth_user_revocation_consents"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
@@ -554,7 +568,9 @@ it("reports malformed connection metadata and unavailable canonical activity rat
       yield* wait(
         fixture.db.prepare("UPDATE oauth_connections SET scopes_json = '[\"read\"]'").run()
       );
-      yield* wait(fixture.db.prepare("ALTER TABLE pat_audit RENAME TO unavailable_audit").run());
+      yield* wait(
+        fixture.db.prepare("ALTER TABLE audit_entries RENAME TO unavailable_audit").run()
+      );
       expect(
         (yield* wait(fixture.send("/web/oauth/connections", { headers: fixture.headers }))).status
       ).toBe(503);
@@ -697,7 +713,9 @@ it("rechecks queued browser revocation subject, freshness and deadline before re
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_user_revocation_consents")
+            .prepare(
+              "SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_user_revocation') AS oauth_user_revocation_consents"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
@@ -716,8 +734,9 @@ it("pages retained connections and refuses oversized revoke-all atomically rathe
       SELECT '30000000-0000-4000-8000-' || printf('%012d',n),'copy-' || n,g.user_id,g.client_id,g.claimed_client_name,g.redirect_uri,g.resource,g.scopes_json,g.approved_at_ms,g.expires_at_ms,g.refresh_allowed FROM copies,oauth_connections g WHERE g.id = ?`)
             .bind(fixture.connectionId),
           fixture.db
-            .prepare(`INSERT INTO oauth_grant_consents(id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms)
-      SELECT 'copy-' || g.id,g.id,g.user_id,c.session_id,c.disclosure_revision,c.disclosure_text,c.accepted_at_ms FROM oauth_connections g,oauth_grant_consents c WHERE c.connection_id = ? AND g.id != ?`)
+            .prepare(
+              `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) SELECT 'oauth_grant','copy-' || g.id,g.id,g.user_id,c.session_id,c.disclosure_revision,c.disclosure_text,c.accepted_at_ms FROM oauth_connections g,consent_history c WHERE c.record_type='oauth_grant' AND c.connection_id = ? AND g.id != ?`
+            )
             .bind(fixture.connectionId, fixture.connectionId),
         ])
       );
@@ -764,7 +783,9 @@ it("pages retained connections and refuses oversized revoke-all atomically rathe
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_user_revocation_consents")
+            .prepare(
+              "SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_user_revocation') AS oauth_user_revocation_consents"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);

@@ -55,7 +55,7 @@ export const reconcileSandboxDelivery = Effect.fn(
     WHERE e.portfolio_id=? AND e.bsuid=? AND e.phone_number_id=?
       AND e.state='outbound_started' AND e.disclosure_message_id IS NOT NULL
       AND COALESCE(e.rejected_at_ms,e.expires_at_ms)>?
-      AND NOT EXISTS(SELECT 1 FROM pending_consent_delivery d WHERE d.correlation_token=e.correlation_token)
+      AND NOT EXISTS(SELECT 1 FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) d WHERE d.correlation_token=e.correlation_token)
     ORDER BY e.created_at_ms DESC LIMIT 1`)
         .bind(
           event.caller.businessPortfolioId,

@@ -59,7 +59,7 @@ it.live(
                 .run()
             );
             yield* Effect.tryPromise(() =>
-              db.prepare("CREATE TABLE forwarded_email_outcomes (receipt_id TEXT)").run()
+              db.prepare("ALTER TABLE forwarded_email_receipts ADD COLUMN outcome TEXT").run()
             );
             yield* Effect.tryPromise(() =>
               db
@@ -93,7 +93,9 @@ it.live(
             );
             yield* Effect.tryPromise(() =>
               db
-                .prepare("INSERT INTO forwarded_email_receipts VALUES (?, ?, ?, 'queued')")
+                .prepare(
+                  "INSERT INTO forwarded_email_receipts(id,received_at_ms,expires_at_ms,state) VALUES (?, ?, ?, 'queued')"
+                )
                 .bind("00000000-0000-4000-8000-000000000000", now - 600_000, now - 86_400_000)
                 .run()
             );

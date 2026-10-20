@@ -42,7 +42,7 @@ export const publicationOutage = ({
         return (query: string): D1PreparedStatement => {
           if (checkpointReached({ checkpoint, staged, entries })) offline = true;
           if (offline) throw new Error("Simulated publication interruption");
-          if (query.includes("UPDATE statement_whatsapp_documents SET staging_id")) staged = true;
+          if (query.includes("UPDATE hosted_turns SET document_staging_id")) staged = true;
           if (query.includes("INSERT INTO statement_submissions")) publication = true;
           if (query.includes("INSERT INTO transcript_entries") && staged) entries += 1;
           return target.prepare(query);

@@ -24,23 +24,24 @@ export const prepareProactivityWorkObservation = (
   input: Readonly<{ db: D1Database; weeklyEnabled: boolean; proactivityEnabled: boolean }>
 ): D1PreparedStatement => {
   const sources: string[] = [];
+  const kinds = [
+    ...(input.weeklyEnabled ? ["weekly-summary"] : []),
+    ...(input.proactivityEnabled ? ["proactivity-delivery"] : []),
+  ];
+  for (const kind of kinds) {
+    sources.push(`SELECT * FROM (SELECT user_id AS userId,kind,
+      CASE WHEN kind='weekly-summary' THEN delivery_id END AS insightEventId,
+      CASE WHEN kind='proactivity-delivery' THEN delivery_id END AS id,
+      dispatch_created_at_ms AS created,expires_at_ms AS deadline
+      FROM insight_reports INDEXED BY report_dispatch_health
+      WHERE kind='${kind}' AND dispatch_state IN ('ready','started')
+      ORDER BY dispatch_created_at_ms,user_id,delivery_id LIMIT ${proactivityObservationLimit})`);
+  }
   if (input.weeklyEnabled) {
-    sources.push(`SELECT o.user_id AS userId, 'weekly-summary' AS kind, o.insight_event_id AS insightEventId, NULL AS id,
-      o.created_at_ms AS created, r.expires_at_ms AS deadline
-      FROM (SELECT user_id, insight_event_id, created_at_ms FROM weekly_summary_outbox
-        WHERE state IN ('ready', 'started') ORDER BY created_at_ms, user_id, insight_event_id LIMIT ${proactivityObservationLimit}) o
-      JOIN weekly_summary_reports r ON r.user_id=o.user_id AND r.insight_event_id=o.insight_event_id`);
     sources.push(`SELECT user_id AS userId, 'weekly-question' AS kind, NULL AS insightEventId, id,
       created_at_ms AS created, created_at_ms+86400000 AS deadline
       FROM (SELECT user_id, id, created_at_ms FROM weekly_question_intents
         WHERE state='ready' ORDER BY created_at_ms, user_id, id LIMIT ${proactivityObservationLimit})`);
-  }
-  if (input.proactivityEnabled) {
-    sources.push(`SELECT o.user_id AS userId, 'proactivity-delivery' AS kind, NULL AS insightEventId, o.delivery_id AS id,
-      o.created_at_ms AS created, r.expires_at_ms AS deadline
-      FROM (SELECT user_id, delivery_id, created_at_ms FROM proactivity_outbox
-        WHERE state IN ('ready', 'started') ORDER BY created_at_ms, user_id, delivery_id LIMIT ${proactivityObservationLimit}) o
-      JOIN proactivity_reports r ON r.user_id=o.user_id AND r.delivery_id=o.delivery_id`);
   }
   return input.db.prepare(
     sources.length === 0

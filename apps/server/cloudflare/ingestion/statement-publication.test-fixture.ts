@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import type { TransactionAuthority } from "../canonical-work/contract";
 import { Effect, Option, Schema } from "effect";
 import { StatementSubmission, SubmitForExtractionInput } from "../../src/shell/ingestion/contract";
@@ -11,16 +12,13 @@ import {
   recordStatementRefusal,
   statementAbortRefusal,
   statementRefusal,
-  statementSubmissionCompletion,
   submissionProjection,
 } from "./internal/statement-staging";
 import {
-  statementDailyBudgetResponse,
   statementRefusalResponse,
   unavailableStatement,
   uploadStagedStatement,
 } from "./internal/statement-ingestion";
-import { dailyAuditExhausted, refusedByAuditBudget } from "../../src/shell/audit/operations";
 
 type Storage = Readonly<{ db: D1Database; bucket: R2Bucket }>;
 type PublicationInput = Readonly<{
@@ -90,7 +88,6 @@ const publicationAbort = ({
   publication,
   authority,
   current,
-  cause,
 }: Readonly<{
   storage: Storage;
   index: number;
@@ -100,7 +97,6 @@ const publicationAbort = ({
   cause: unknown;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if (refusedByAuditBudget(cause)) return statementDailyBudgetResponse();
     if (
       Option.isNone(
         yield* Effect.tryPromise(() =>
@@ -139,7 +135,7 @@ const commitPublication = (
       Effect.tryPromise(() =>
         work.storage.db.batch([
           ...work.publication.statements,
-          work.storage.db.prepare(statementSubmissionCompletion),
+          prepareChangedRowAssertion({ db: work.storage.db, scope: "statement_submission" }),
         ])
       )
     );
@@ -176,13 +172,6 @@ export const publishOwnedStatement = ({
         bucket: storage.bucket,
         nowEpochMs: (): number => current,
       };
-      if (
-        yield* Effect.tryPromise(() =>
-          dailyAuditExhausted({ db: storage.db, userId: subject.value.userId, current })
-        )
-      ) {
-        return statementDailyBudgetResponse();
-      }
       const parsed = yield* Schema.decodeEffect(SubmitForExtractionInput)(input);
       const authority = callerAuthority({ subject: subject.value, current });
       const prepared = yield* prepareStagedStatementPublication(config, {

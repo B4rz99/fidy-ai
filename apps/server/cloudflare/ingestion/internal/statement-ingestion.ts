@@ -8,10 +8,8 @@ import {
   SubmitForExtractionInput,
 } from "../../../src/shell/ingestion/contract";
 import {
-  dailyAuditExhausted,
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import type { OAuthCaller } from "../../../src/shell/oauth-agents/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
@@ -49,17 +47,6 @@ import {
 class IngestionAuditFailed extends Data.TaggedError("IngestionAuditFailed")<{
   readonly cause: unknown;
 }> {}
-
-/** True while the caller's shared stable-User canonical work budget is already spent. */
-const budgetSpent = (
-  database: D1Database,
-  userId: string,
-  current: number
-): Effect.Effect<boolean, IngestionAuditFailed> =>
-  Effect.tryPromise({
-    try: () => dailyAuditExhausted({ db: database, userId, current }),
-    catch: (cause) => new IngestionAuditFailed({ cause }),
-  });
 
 export type StatementIngestionEnvironment = Readonly<{ readonly DB: D1Database }> &
   Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket }>>;
@@ -116,14 +103,6 @@ const rateLimited = (): Response =>
       },
       next: [],
     },
-    HTTP_TOO_MANY_REQUESTS
-  );
-
-export const statementDailyBudgetMessage =
-  "Too many statement calls today; retry after the daily budget resets.";
-export const statementDailyBudgetResponse = (): Response =>
-  json(
-    { error: { code: "rate_limited", message: statementDailyBudgetMessage }, next: [] },
     HTTP_TOO_MANY_REQUESTS
   );
 
@@ -309,7 +288,7 @@ export const submitForExtractionInput = (
 /**
  * One canonical read's attribution: a session caller commits one metadata-only read audit row, and
  * a PAT caller advances its activity and commits one accepted `pat_audit` row (never both, so a
- * read counts once toward the shared daily budget). A malformed id binds no value, so it is still
+ * read appends one required AuditLogEntry). A malformed id binds no value, so it is still
  * audited as absent.
  */
 const oauthReadAudit = (
@@ -420,11 +399,7 @@ export const commitReadAudit: {
         })
       );
       if (Result.isFailure(outcome)) {
-        return Option.some(
-          refusedByAuditBudget(outcome.failure.cause)
-            ? statementDailyBudgetResponse()
-            : unavailable()
-        );
+        return Option.some(unavailable());
       }
       const results = outcome.success;
       const committed =
@@ -479,10 +454,6 @@ export const readStatementSubmission = ({
   subject: QueryCaller;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    if (yield* budgetSpent(environment.DB, subject.userId, current)) {
-      return statementDailyBudgetResponse();
-    }
     const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
     const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);
     const refused = yield* commitReadAudit(environment, subject, {

@@ -1,3 +1,4 @@
+import { preparePredicateAssertion } from "../../../src/shell/sql-assertions/operations";
 import { verifiedEmailQuery } from "../../email-authentication/operations";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
@@ -171,7 +172,6 @@ const firstGroupEnd = 8;
 const secondGroupEnd = 12;
 const thirdGroupEnd = 16;
 const fourthGroupEnd = 20;
-const billingInsertResultFromEnd = -2;
 const forbiddenStatus = 403;
 const unauthorizedStatus = 401;
 const jsonPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -528,8 +528,11 @@ const prepare = ({
     const guard = enrollmentAuthority(session, now);
     yield* waitFor(() =>
       environment.DB.batch([
-        environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
-        VALUES (?, (SELECT 1 FROM (${guard.sql}) LIMIT 1))`).bind(enrollmentId, ...guard.params),
+        preparePredicateAssertion({
+          db: environment.DB,
+          scope: "payment_authority",
+          predicate: guard,
+        }),
         ...Option.match(activeId, {
           onNone: () => [],
           onSome: (active) => [
@@ -542,13 +545,14 @@ const prepare = ({
           ? [
               environment.DB.prepare(`UPDATE card_payment_sources SET retired_at_ms=?
           WHERE user_id=? AND method='card' AND retired_at_ms IS NULL`).bind(now, session.user_id),
-              environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
-          VALUES (?, (SELECT 1 WHERE EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND method='card' AND retired_at_ms IS NOT NULL)
-            AND NOT EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND retired_at_ms IS NULL)))`).bind(
-                enrollmentId + "-replacement",
-                session.user_id,
-                session.user_id
-              ),
+              preparePredicateAssertion({
+                db: environment.DB,
+                scope: "payment_replacement",
+                predicate: {
+                  sql: "SELECT 1 WHERE EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND method='card' AND retired_at_ms IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND retired_at_ms IS NULL)",
+                  params: [session.user_id, session.user_id],
+                },
+              }),
             ]
           : []),
         environment.DB.prepare(`INSERT OR IGNORE INTO card_enrollments
@@ -563,15 +567,14 @@ const prepare = ({
           now,
           now + enrollmentLifetimeMs
         ),
-        environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id,allowed)
-        VALUES (?,(SELECT 1 FROM card_enrollments WHERE id=? AND user_id=? AND status='preparing'))`).bind(
-          enrollmentId + "-reserved",
-          enrollmentId,
-          session.user_id
-        ),
-        environment.DB.prepare(
-          "DELETE FROM payment_commit_guards WHERE enrollment_id IN (?,?,?)"
-        ).bind(enrollmentId, enrollmentId + "-replacement", enrollmentId + "-reserved"),
+        preparePredicateAssertion({
+          db: environment.DB,
+          scope: "payment_reservation",
+          predicate: {
+            sql: "SELECT 1 FROM card_enrollments WHERE id=? AND user_id=? AND status='preparing'",
+            params: [enrollmentId, session.user_id],
+          },
+        }),
       ])
     );
     const wompi = yield* makeWompi(environment);
@@ -640,8 +643,7 @@ const attemptFor = (
   attemptId: string
 ): Promise<Option.Option<BillingAttempt>> =>
   db
-    .prepare(`SELECT a.*, p.ends_at_ms, p.renewal_anchor_ms FROM billing_attempts AS a
-      LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
+    .prepare(`SELECT a.*, a.paid_ends_at_ms AS ends_at_ms, a.paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts AS a
       WHERE a.id = ? AND a.user_id = ?`)
     .bind(attemptId, userId)
     .first()
@@ -719,8 +721,11 @@ const finish = ({
     const current = yield* Clock.currentTimeMillis;
     const guard = enrollmentAuthority(session, current);
     const statements = [
-      environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
-          VALUES (?, (SELECT 1 FROM (${guard.sql}) LIMIT 1))`).bind(row.id, ...guard.params),
+      preparePredicateAssertion({
+        db: environment.DB,
+        scope: "payment_authority",
+        predicate: guard,
+      }),
       ...(Option.isNone(wompiSourceId)
         ? []
         : [
@@ -760,15 +765,8 @@ const finish = ({
       ),
     ];
     const accepted = yield* Effect.gen(function* () {
-      const committed = yield* waitFor(() =>
-        environment.DB.batch([
-          ...statements,
-          environment.DB.prepare("DELETE FROM payment_commit_guards WHERE enrollment_id = ?").bind(
-            row.id
-          ),
-        ])
-      );
-      if ((committed.at(billingInsertResultFromEnd)?.meta.changes ?? 0) === 0) return false;
+      const committed = yield* waitFor(() => environment.DB.batch(statements));
+      if ((committed.at(-1)?.meta.changes ?? 0) === 0) return false;
       environment.onAccepted(attemptId);
       return true;
     }).pipe(Effect.uninterruptible);
@@ -980,7 +978,7 @@ const submit = ({
     const blocked = yield* waitFor(() =>
       environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
       WHERE a.user_id = ? AND a.status <> 'succeeded'
-        AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations AS c
+        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,no_charge_reference AS wompi_reference,no_charge_environment AS wompi_environment,no_charge_case_id AS provider_case_id,no_charge_operator_id AS operator_id,no_charge_confirmed_at_ms AS confirmed_at_ms FROM billing_attempts WHERE no_charge_confirmed_at_ms IS NOT NULL) AS c
           WHERE c.attempt_id = a.id)
         AND NOT EXISTS (SELECT 1 FROM billing_retry_clearances c WHERE c.attempt_id=a.id) LIMIT 1`)
         .bind(session.user_id)

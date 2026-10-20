@@ -237,11 +237,11 @@ const deliverReplacementProof = (): Promise<Response> =>
 const deliverEmailLoginProof = (code: string): Promise<Response> =>
   deliverProof((digest, expiry) =>
     db
-      .prepare(`UPDATE browser_pairing_email_proofs SET state = 'awaiting_proof',
-    public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
-    WHERE pairing_id = (SELECT id FROM browser_login_pairings WHERE public_code = ?)
-      AND state = 'awaiting_delivery'`)
-      .bind(replacementCode.slice(0, publicCodeLength), digest, expiry, code)
+      .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_state = 'awaiting_proof',
+    email_public_code = ?, email_proof_digest = ?, email_proof_expires_at_ms = ?
+    WHERE email_work_id IS NOT NULL AND id = (SELECT id FROM browser_login_pairings WHERE public_code = ?)
+      AND email_state = 'awaiting_delivery'`)
+      .bind(code, digest, expiry, code)
       .run()
   );
 
@@ -290,7 +290,7 @@ const approveWhatsAppPairing = (code: string, userId: string): Promise<Response>
         ? new Response(null, { status: 404 })
         : db
             .prepare(
-              "INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id) VALUES (?,?,?,?)"
+              "UPDATE browser_login_pairings SET approval_portfolio_id=incoming.portfolio_id,approval_message_id=incoming.message_id,approval_user_id=incoming.user_id FROM (SELECT ? AS portfolio_id,? AS message_id,? AS pairing_id,? AS user_id) AS incoming WHERE browser_login_pairings.id=incoming.pairing_id AND browser_login_pairings.approval_message_id IS NULL"
             )
             .bind("acceptance-portfolio", newId(), pairing.id, userId)
             .run()
@@ -314,7 +314,7 @@ const CliEvidence = Schema.Struct({
 const cliEvidence = (): Promise<Response> =>
   db
     .prepare(
-      "SELECT operation, outcome, pat_id AS patId FROM pat_audit WHERE user_id = ? AND pat_id IS NOT NULL ORDER BY rowid DESC LIMIT 32"
+      "SELECT operation, outcome, pat_id AS patId FROM (SELECT sequence AS rowid,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ? AND pat_id IS NOT NULL ORDER BY rowid DESC LIMIT 32"
     )
     .bind(fixtureUserId)
     .all()
@@ -352,7 +352,7 @@ const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
   if (operatorRoute(request, "/dashboard/reset", "POST")) {
     return Option.some(
       db
-        .prepare("DELETE FROM dashboard_documents WHERE user_id = ?")
+        .prepare("DELETE FROM user_documents WHERE kind='dashboard' AND user_id = ?")
         .bind(
           new URL(request.url).searchParams.get("dashboard") === "true"
             ? dashboardUserId
@@ -410,8 +410,9 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
         )
         .bind(subject.value)
     : db
-        .prepare(`INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms)
-        SELECT ?,c.user_id,g.id,w.id,? FROM provider_credentials c JOIN onboarding_consent_records g ON g.user_id=c.user_id JOIN web_sessions w ON w.user_id=c.user_id AND w.revoked_at_ms IS NULL WHERE c.subject=? ORDER BY w.created_at_ms DESC LIMIT 1`)
+        .prepare(
+          `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) SELECT 'processing_withdrawal', ?,c.user_id,g.id,w.id,? FROM provider_credentials c JOIN (SELECT * FROM consent_history WHERE record_type='processing_grant') g ON g.user_id=c.user_id JOIN web_sessions w ON w.user_id=c.user_id AND w.revoked_at_ms IS NULL WHERE c.subject=? ORDER BY w.created_at_ms DESC LIMIT 1`
+        )
         .bind(newId(), Effect.runSync(Clock.currentTimeMillis), subject.value);
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };

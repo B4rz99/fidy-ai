@@ -91,7 +91,7 @@ const preparedDeletion = ({
     mutation: {
       outcome,
       requiredScope: callerScope(subject),
-      auditBudget: "shared" as const,
+
       commitGuards: Option.none(),
       guardRefusal: transactionGuardRefusal(outcome),
       oauthReview: Option.isSome(observed)

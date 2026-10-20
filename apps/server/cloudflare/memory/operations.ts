@@ -23,7 +23,6 @@ import {
   replaceMemory,
 } from "./internal/storage";
 import {
-  dailyAuditExhausted,
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   recordOAuthCall,
@@ -57,10 +56,8 @@ import {
 } from "../canonical-operations/contract";
 import {
   type MemoryOutcome,
-  memoryBudgetRefusal,
   memoryGuardRefusal,
   memoryOutcome,
-  memoryRateLimited,
   memoryRefusal,
   memoryUnavailable,
 } from "./internal/outcome";
@@ -116,16 +113,6 @@ const readMemories = ({
     );
     return memoriesFromRows(rows.results);
   });
-
-/** True while the caller's shared stable-User canonical work budget is already spent. */
-const budgetExhausted = ({
-  db,
-  subject,
-  current,
-}: Readonly<{ db: D1Database; subject: QueryCaller; current: number }>): Effect.Effect<
-  boolean,
-  TransactionBoundaryFailure
-> => waitFor(() => dailyAuditExhausted({ db, userId: subject.userId, current }));
 
 const admit = <A, Requirements>(
   decision: Effect.Effect<A, MemoryCapacityExceeded, Requirements>
@@ -211,8 +198,8 @@ const acceptedStatements = ({
 };
 
 /**
- * Decide one canonical `memory.remember` against live caller authority, the shared work budget, and
- * the complete aggregate capacity. The returned statements are guard-chained writes; the caller's
+ * Decide one canonical `memory.remember` against live caller authority and the complete aggregate
+ * capacity. The returned statements are guard-chained writes; the caller's
  * D1 unit commits them or none of them.
  */
 export const prepareRemember = ({
@@ -227,9 +214,6 @@ export const prepareRemember = ({
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation, never, HostedInference> =>
   Effect.gen(function* () {
-    if (yield* budgetExhausted({ db, subject, current })) {
-      return refusedPreparation(memoryBudgetRefusal());
-    }
     const candidate = Memory.make({
       id: MemoryId.make(memoryId()),
       text: payload.text,
@@ -259,7 +243,7 @@ export const prepareRemember = ({
       mutation: {
         requiredScope: callerScope(subject),
         guardRefusal: memoryGuardRefusal(outcome),
-        auditBudget: "shared",
+
         oauthReview: Option.none(),
         commitGuards: Option.some(memoryCapacityGuards(candidate)),
         outcome: memoryOutcome(outcome),
@@ -303,7 +287,7 @@ const reviseMutation = ({
     }),
     requiredScope: callerScope(subject),
     guardRefusal: memoryGuardRefusal(outcome),
-    auditBudget: "shared",
+
     commitGuards: Option.some(memoryCapacityGuards(candidate)),
     outcome: memoryOutcome(outcome),
     statements: acceptedStatements({
@@ -334,9 +318,6 @@ export const prepareRevise = ({
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation, never, HostedInference> =>
   Effect.gen(function* () {
-    if (yield* budgetExhausted({ db, subject, current })) {
-      return refusedPreparation(memoryBudgetRefusal());
-    }
     const stored = yield* readMemories({ db, subject, current });
     if (Option.isNone(stored)) return unavailablePreparation();
     const previous = Option.fromUndefinedOr(stored.value.find((memory) => memory.id === id));
@@ -397,9 +378,6 @@ export const prepareForget = ({
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
-    if (yield* budgetExhausted({ db, subject, current })) {
-      return refusedPreparation(memoryBudgetRefusal());
-    }
     let oauthReview = Option.none<OAuthMutationReview>();
     if (isOAuthCaller(subject)) {
       const stored = yield* readMemories({ db, subject, current });
@@ -429,7 +407,7 @@ export const prepareForget = ({
       mutation: {
         requiredScope: callerScope(subject),
         guardRefusal: memoryGuardRefusal(outcome),
-        auditBudget: "shared",
+
         oauthReview,
         commitGuards: Option.none(),
         outcome: memoryOutcome(outcome),
@@ -568,7 +546,6 @@ export const recallMemories = ({
 }: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    if (yield* budgetExhausted({ db, subject, current })) return memoryRateLimited();
     const query = memoryRowsQuery({
       userId: subject.userId,
       authority: memoryAuthorityQuery({ subject, current }),

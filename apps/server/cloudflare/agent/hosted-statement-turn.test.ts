@@ -165,7 +165,7 @@ it.each([
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
             )
             .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
             .run()
@@ -313,7 +313,7 @@ it.each([
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
             )
             .bind(users[1], "portfolio-1", "CO.13491208655302741919", now())
             .run()
@@ -458,7 +458,9 @@ it.each([
         expect(
           (yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT review_id FROM statement_review_decisions WHERE review_id=?")
+              .prepare(
+                "SELECT review_id FROM ingestion_statement_review_decisions WHERE review_id=?"
+              )
               .bind(review.id)
               .all()
           )).results
@@ -580,7 +582,9 @@ it.each([
           expect(
             yield* Effect.tryPromise(() =>
               db
-                .prepare("SELECT state FROM statement_clarifications WHERE user_id=?")
+                .prepare(
+                  "SELECT clarification_state AS state FROM statement_submissions WHERE clarification_state IS NOT NULL AND user_id=?"
+                )
                 .bind(users[0])
                 .first()
             )

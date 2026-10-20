@@ -22,8 +22,8 @@ export const loadStatus = ({
   Effect.tryPromise({
     try: () =>
       db
-        .prepare(`SELECT EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = ?) AS granted,
-      EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?) AS revoked`)
+        .prepare(`SELECT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = ?) AS granted,
+      EXISTS (SELECT 1 FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations WHERE user_id = ?) AS revoked`)
         .bind(userId, userId)
         .first(),
     catch: () => new ConsentUnavailable(),
@@ -48,8 +48,8 @@ export const loadStanding = ({
       try: () =>
         db
           .prepare(`SELECT id, disclosure_json,
-        EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = c.user_id) AS revoked
-        FROM onboarding_consent_records c WHERE user_id = ?`)
+        EXISTS (SELECT 1 FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations WHERE user_id = c.user_id) AS revoked
+        FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') c WHERE user_id = ?`)
           .bind(userId)
           .first(),
       catch: () => new ConsentUnavailable(),

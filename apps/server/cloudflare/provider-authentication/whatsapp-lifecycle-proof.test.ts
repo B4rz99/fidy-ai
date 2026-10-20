@@ -83,7 +83,9 @@ it.each([
       expect(
         (yield* Effect.tryPromise(() =>
           journey.db
-            .prepare("SELECT count(*) AS total FROM pending_consent_delivery")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery"
+            )
             .first<{ total: number }>()
         ))?.total
       ).toBe(0);

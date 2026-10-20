@@ -104,7 +104,7 @@ const cancellationStatements = (
     .prepare(`INSERT INTO subscription_cancellations
     (user_id,paid_attempt_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation)
     SELECT s.user_id,s.attempt_id,a.payment_source_id,?,?,CASE WHEN source.method='daviplata' THEN 'void-pending' ELSE 'detached' END
-    FROM subscriptions s JOIN billing_attempts a ON a.id=s.attempt_id AND a.user_id=s.user_id
+    FROM subscriptions s JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
     JOIN card_payment_sources source ON source.id=a.payment_source_id AND source.user_id=s.user_id
     WHERE s.user_id=? AND s.attempt_id=? AND a.payment_source_id=?
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
@@ -146,9 +146,9 @@ export const prepareCancellation = (
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT s.attempt_id,a.payment_source_id,
-    MIN(p.ends_at_ms, COALESCE((SELECT MIN(ends_at_ms) FROM billing_access_adjustments WHERE attempt_id=p.attempt_id),p.ends_at_ms)) AS paid_through_ms
-    FROM subscriptions s JOIN billing_attempts a ON a.id=s.attempt_id AND a.user_id=s.user_id
-    JOIN billing_paid_periods p ON p.attempt_id=a.id WHERE s.user_id=?
+    MIN(a.paid_ends_at_ms, COALESCE((SELECT MIN(ends_at_ms) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments WHERE attempt_id=a.id),a.paid_ends_at_ms)) AS paid_through_ms
+    FROM subscriptions s JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
+     WHERE s.user_id=?
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(subject.userId, ...authority.bindings)
         .first()
@@ -160,7 +160,7 @@ export const prepareCancellation = (
       _tag: "Prepared",
       mutation: {
         requiredScope: callerScope(subject),
-        auditBudget: "shared",
+
         commitGuards: Option.none(),
         oauthReview: isOAuthCaller(subject)
           ? Option.some(
@@ -182,7 +182,6 @@ export const prepareCancellation = (
           collisionKey: Option.some(`subscription-cancellation:${subject.userId}`),
           guardFacts: Option.none(),
           read: readCancellation,
-          triggerRefusal: () => Option.some(cancellationRefusal(work)),
         },
         statements: cancellationStatements(work, snapshot),
       },

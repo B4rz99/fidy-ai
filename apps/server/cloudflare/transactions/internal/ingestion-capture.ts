@@ -10,10 +10,6 @@ import type {
   StatementCaptureInput,
 } from "../contract";
 
-/** Decode the installed Transaction admission trigger from a native D1 batch failure. */
-export const statementCaptureCapacityExceeded = (cause: unknown): boolean =>
-  String(cause).includes("transaction_resource_limit");
-
 const sourceAuthority = ({
   userId,
   sourceGuard,

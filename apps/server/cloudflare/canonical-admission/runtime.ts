@@ -26,7 +26,7 @@ export const sweepCanonicalAdmission = ({
           .bind(current),
         db
           .prepare(
-            `DELETE FROM canonical_request_acceptances WHERE id IN (SELECT id FROM canonical_request_acceptances WHERE accepted_at_ms <= ? ORDER BY accepted_at_ms LIMIT ${retentionBatchSize})`
+            `DELETE FROM audit_entries WHERE record_type='request_admission' AND id IN (SELECT id FROM audit_entries WHERE record_type='request_admission' AND accepted_at_ms <= ? ORDER BY accepted_at_ms LIMIT ${retentionBatchSize})`
           )
           .bind(current - acceptanceLifetimeMs),
         db

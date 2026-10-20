@@ -15,7 +15,7 @@ export const whatsAppAssociationQuery = ({
   userId,
   caller,
 }: Readonly<{ userId: UserId; caller: WhatsAppCallerReference }>): OwnedStatement => ({
-  sql: "SELECT user_id AS userId FROM whatsapp_identities WHERE user_id = ? AND portfolio_id = ? AND bsuid = ?",
+  sql: "SELECT user_id AS userId FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) WHERE user_id = ? AND portfolio_id = ? AND bsuid = ?",
   params: [userId, caller.businessPortfolioId, caller.businessScopedUserId],
 });
 
@@ -80,8 +80,8 @@ export const liveWebSessionAuthority = (
  * absent state produces no row. The caller retains responsibility for its access authority.
  */
 export const userTrialPeriodQuery = (userId: UserId): OwnedStatement => ({
-  sql: `SELECT started_at_ms AS startedAtMs, ends_at_ms AS endsAtMs
-    FROM trial_periods WHERE user_id = ? LIMIT 1`,
+  sql: `SELECT trial_started_at_ms AS startedAtMs, trial_ends_at_ms AS endsAtMs
+    FROM users WHERE id = ? AND trial_started_at_ms IS NOT NULL LIMIT 1`,
   params: [userId],
 });
 

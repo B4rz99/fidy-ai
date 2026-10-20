@@ -258,22 +258,8 @@ const captureMutation = ({
     requiredScope: callerScope(subject),
     guardRefusal: transactionGuardRefusal(outcome),
     outcome,
-    auditBudget: "shared",
-    commitGuards: Option.some(
-      ({ db, userId, current, index, operation }): ReadonlyArray<D1PreparedStatement> => {
-        const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
-        return [
-          db
-            .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,movement_ok)
-        SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM transactions
-          WHERE user_id = ? AND created_at >= substr(?, 1, 10) || 'T00:00:00.000Z'
-          AND created_at < date(?, '+1 day') || 'T00:00:00.000Z') < 100 THEN 1 ELSE 0 END
-        ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-          accepted = excluded.accepted, movement_ok = excluded.movement_ok`)
-            .bind(index, operation, userId, createdAt, createdAt),
-        ];
-      }
-    ),
+
+    commitGuards: Option.none(),
     statements: captureStatements(db, {
       input,
       subject,

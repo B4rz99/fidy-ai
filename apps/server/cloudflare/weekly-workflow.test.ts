@@ -69,7 +69,7 @@ const seedOtherSchedule = (db: D1Database): Effect.Effect<WeeklyScheduleSnapshot
     yield* promise(() =>
       db
         .prepare(
-          "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+          "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
         )
         .bind(
           weeklySummaryOtherUser,
@@ -95,13 +95,12 @@ const workflowBinding: Workflow<ProactivityDeliveryWork> = {
 const snapshot = (db: D1Database): Effect.Effect<ReadonlyArray<ReadonlyArray<unknown>>> =>
   Effect.forEach(
     [
-      "weekly_summary_outbox",
+      "(SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL)",
       "weekly_question_intents",
-      "weekly_governor_questions",
-      "insight_whatsapp_claims",
-      "weekly_consent_offers",
-      "weekly_consent_revocation_records",
-      "weekly_governors",
+      "whatsapp_deliveries",
+      "consent_offers",
+      "consent_history",
+      "proactivity_governors",
       "proactive_transcript_entries",
       "insight_events",
     ],
@@ -125,7 +124,7 @@ const seedQuestion = (
     yield* promise(() =>
       input.db
         .prepare(
-          "INSERT INTO weekly_governor_questions(id,user_id,offer_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,time_zone) SELECT ?,user_id,id,?,?,'question-correlation','portfolio','CO.abcdef','phone','retained question disclosure','America/Bogota' FROM weekly_consent_offers WHERE user_id=? LIMIT 1"
+          "INSERT INTO whatsapp_deliveries AS weekly_governor_questions(kind,id,user_id,offer_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,time_zone) SELECT 'weekly-question', ?,user_id,id,?,?,'question-correlation','portfolio','CO.abcdef','phone','retained question disclosure','America/Bogota' FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE user_id=? LIMIT 1"
         )
         .bind(questionId, input.created, input.expires, userId)
         .run()
@@ -360,7 +359,7 @@ it.each(["retention", "generation"])(
         yield* promise(() =>
           db
             .prepare(
-              "UPDATE weekly_schedules SET next_scheduled_at=?,last_evaluated_at_ms=0 WHERE user_id=?"
+              "UPDATE schedules SET next_scheduled_at=?,last_evaluated_at_ms=0 WHERE kind='weekly' AND user_id=?"
             )
             .bind(DateTime.formatIso(schedule.nextScheduledAt), weeklySummaryOtherUser)
             .run()
@@ -371,7 +370,13 @@ it.each(["retention", "generation"])(
           expires: DateTime.subtract(schedule.nextScheduledAt, { days: 1 }).epochMilliseconds,
         });
         if (failure === "retention") {
-          yield* promise(() => db.prepare("DROP TABLE insight_whatsapp_claims").run());
+          yield* promise(() =>
+            db
+              .prepare(
+                "ALTER TABLE whatsapp_deliveries RENAME COLUMN summary_json TO unavailable_summary_json"
+              )
+              .run()
+          );
         }
         const work: Array<ProactivityDeliveryWork> = [];
         const send = (message: ProactivityDeliveryWork): Promise<QueueSendResponse> => {
@@ -397,7 +402,9 @@ it.each(["retention", "generation"])(
         expect(
           yield* promise(() =>
             db
-              .prepare("SELECT text FROM weekly_governor_questions WHERE id=?")
+              .prepare(
+                "SELECT text FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE id=?"
+              )
               .bind(questionId)
               .first("text")
           )
@@ -575,7 +582,9 @@ it("withdrawn expired question purposes terminate without content reads or furth
       expect(
         yield* promise(() =>
           db
-            .prepare("SELECT text FROM weekly_governor_questions WHERE id=?")
+            .prepare(
+              "SELECT text FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE id=?"
+            )
             .bind(questionId)
             .first("text")
         )
@@ -605,7 +614,7 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
                 .bind(id, userId),
               db
                 .prepare(
-                  "INSERT INTO onboarding_consent_records(id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) SELECT ?,?,disclosure_json,?, ?,0,0 FROM onboarding_consent_records WHERE user_id=? LIMIT 1"
+                  "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) SELECT 'processing_grant',?,?,disclosure_json,?, ?,0,0 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id=? LIMIT 1"
                 )
                 .bind(id, id, `disclosed-${id}`, `accepted-${id}`, userId),
             ])
@@ -622,7 +631,7 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
           yield* promise(() =>
             db
               .prepare(
-                "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+                "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
               )
               .bind(
                 id,
@@ -642,7 +651,9 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
         at = schedule.nextScheduledAt;
         yield* promise(() =>
           db
-            .prepare("UPDATE weekly_schedules SET last_evaluated_at_ms=? WHERE user_id=?")
+            .prepare(
+              "UPDATE schedules SET last_evaluated_at_ms=? WHERE kind='weekly' AND user_id=?"
+            )
             .bind(index, id)
             .run()
         );

@@ -38,7 +38,6 @@ import publicWorker from "../public-worker";
 import { browseTransactions, transactionInput, transactionSession } from "./operations";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { dailyAuditCount } from "../../src/shell/audit/operations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -422,7 +421,7 @@ const auditedOperations = (
 ): Promise<ReadonlyArray<{ operation: string; outcome: string }>> =>
   db
     .prepare(
-      "SELECT operation, outcome FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
+      "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY occurred_at_ms"
     )
     .bind(userId)
     .all<{ operation: string; outcome: string }>()
@@ -434,19 +433,13 @@ const auditedPATOperations = (
   userId: string
 ): Promise<ReadonlyArray<{ operation: string; outcome: string }>> =>
   db
-    .prepare("SELECT operation, outcome FROM pat_audit WHERE user_id = ?")
+    .prepare(
+      "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ?"
+    )
     .bind(userId)
     .all<{ operation: string; outcome: string }>()
     .then((rows) => rows.results);
-const seedDailyTransactions = (db: D1Database, count: number): Promise<unknown> => {
-  const today = DateTime.formatIso(DateTime.nowUnsafe());
-  return db
-    .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
-    INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
-    SELECT 'seed-' || n, ?, '1', 'COP', 'outflow', ?, ?, ? FROM seq`)
-    .bind(count, users[0], category, today, today)
-    .run();
-};
+
 const seedTransaction = ({
   db,
   userId,
@@ -832,9 +825,9 @@ effectIt.effect(
       )(currentDisclosureFor());
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-      (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
-      VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+          )
           .bind("10000000-0000-4000-8000-000000000091", users[0], disclosure, now, now)
           .run()
       );
@@ -961,9 +954,9 @@ const grantHostedConsent = ({
     Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
   )(currentDisclosureFor());
   return db
-    .prepare(`INSERT INTO onboarding_consent_records
-    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
-    VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)`)
+    .prepare(
+      `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)`
+    )
     .bind(grant, user, disclosure, time, time)
     .run();
 };
@@ -1039,7 +1032,11 @@ effectIt.effect(
       ).toEqual([{ kind: "user" }, { kind: "failed" }]);
       expect(
         (yield* fromTestPromise(() =>
-          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+          db
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
     })
@@ -1095,7 +1092,11 @@ effectIt.effect(
       ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
       expect(
         (yield* fromTestPromise(() =>
-          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+          db
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
     })
@@ -1139,7 +1140,11 @@ effectIt.effect(
       ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
       expect(
         (yield* fromTestPromise(() =>
-          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+          db
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
     })
@@ -1237,7 +1242,11 @@ effectIt.effect(
       ).toEqual([{ kind: "user" }]);
       expect(
         (yield* fromTestPromise(() =>
-          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+          db
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+            )
+            .all()
         )).results
       ).toHaveLength(1);
     })
@@ -1271,21 +1280,25 @@ effectIt.effect(
       )(yield* fromTestPromise(() => reply.json()));
       const stored = yield* fromTestPromise(() =>
         db
-          .prepare("SELECT receipt_digest FROM hosted_delivery_proposals WHERE turn_id = ?")
+          .prepare(
+            "SELECT receipt_digest FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+          )
           .bind(proposal.turnId)
           .first<{ receipt_digest: ArrayBuffer }>()
       );
       if (stored === null) throw Error("missing proposal");
       yield* fromTestPromise(() =>
         db
-          .prepare("DELETE FROM hosted_delivery_proposals WHERE turn_id = ?")
+          .prepare(
+            "UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_user_id=NULL,proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ?"
+          )
           .bind(proposal.turnId)
           .run()
       );
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO hosted_delivery_proposals (turn_id, user_id, receipt_digest, proposed_at_ms, text) VALUES (?, ?, ?, ?, ?)"
+            "UPDATE hosted_turns SET proposal_user_id=incoming.user_id,proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.proposed_at_ms IS NULL"
           )
           .bind(
             proposal.turnId,
@@ -1317,7 +1330,11 @@ effectIt.effect(
       ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
       expect(
         (yield* fromTestPromise(() =>
-          db.prepare("SELECT turn_id FROM hosted_delivery_proposals").all()
+          db
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
     })
@@ -1492,8 +1509,9 @@ effectIt.effect(
       expect(crossUser.status).toBe(503);
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO consent_user_revocations
-      (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+          .prepare(
+            `INSERT INTO consent_history(record_type,id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES ('processing_withdrawal',?, ?, ?, ?, ?)`
+          )
           .bind("10000000-0000-4000-8000-000000000093", users[0], grant, sessions[0], now)
           .run()
       );
@@ -1658,19 +1676,22 @@ it("links one exact pair into one effective Transaction while retaining both ori
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: visible,
-            id: "30000000-0000-4000-8000-000000000201",
-          }),
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: suppressed,
-            id: "30000000-0000-4000-8000-000000000202",
-          }),
-        ])
+        ]).then(() =>
+          Promise.all([
+            seedManualAttestation({
+              db,
+              userId: owner,
+              transactionId: visible,
+              id: "30000000-0000-4000-8000-000000000201",
+            }),
+            seedManualAttestation({
+              db,
+              userId: owner,
+              transactionId: suppressed,
+              id: "30000000-0000-4000-8000-000000000202",
+            }),
+          ])
+        )
       );
       const send = (path: string, body?: object): Promise<Response> =>
         sendPublicRequest(
@@ -1834,7 +1855,7 @@ it("refuses ineligible pairs without writing any relation", () =>
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.linkTransactions' AND outcome = 'validation_failed'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation = 'transactions.linkTransactions' AND outcome = 'validation_failed'",
             owner
           )
         )
@@ -1860,13 +1881,14 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
+        ]).then(() =>
           seedManualAttestation({
             db,
             userId: owner,
             transactionId: suppressed,
             id: "30000000-0000-4000-8000-000000000402",
-          }),
-        ])
+          })
+        )
       );
       const send = (path: string, body: object): Promise<Response> =>
         sendPublicRequest(
@@ -1956,7 +1978,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation IN ('transactions.linkTransactions', 'transactions.unlinkTransactions') AND outcome = 'success'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation IN ('transactions.linkTransactions', 'transactions.unlinkTransactions') AND outcome = 'success'",
             owner
           )
         )
@@ -2161,13 +2183,14 @@ it("keeps the effective Transaction consistent after corrections to either membe
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
+        ]).then(() =>
           seedManualAttestation({
             db,
             userId: owner,
             transactionId: visible,
             id: "30000000-0000-4000-8000-000000000801",
-          }),
-        ])
+          })
+        )
       );
       const send = (path: string, method: string, body: object): Promise<Response> =>
         sendPublicRequest(
@@ -2484,7 +2507,7 @@ it("links and unlinks under the caller's live credential scope and records only 
       const audits = yield* fromTestPromise(() =>
         db
           .prepare(
-            `SELECT operation, outcome FROM pat_audit WHERE user_id = ?
+            `SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ?
               AND operation IN ('transactions.linkTransactions', 'transactions.unlinkTransactions')
               ORDER BY operation`
           )
@@ -2527,16 +2550,17 @@ it("links and unlinks under the caller's live credential scope and records only 
       yield* seedPAT({ db, userId: owner, token: consentToken, scopes: ["write"], current });
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-            (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-            VALUES (?,?,'{}','disclosure','decision',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          )
           .bind(withdrawnGrant, owner, current, current)
           .run()
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
-            VALUES (?,?,?,?,?)`)
+          .prepare(
+            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+          )
           .bind("50000000-0000-4000-8000-000000000012", owner, withdrawnGrant, sessions[0], current)
           .run()
       );
@@ -2583,7 +2607,7 @@ it("links and unlinks under the caller's live credential scope and records only 
         yield* fromTestPromise(() =>
           countRows(
             db,
-            `SELECT COUNT(*) AS count FROM pat_audit WHERE user_id = ?
+            `SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ?
               AND operation IN ('transactions.linkTransactions', 'transactions.unlinkTransactions')
               AND outcome = 'accepted'`,
             owner
@@ -2668,7 +2692,7 @@ it("corrects selected facts once, retains decisions and evidence, and rejects st
         (yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.updateTransaction' AND outcome = 'not_found'"
+              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation = 'transactions.updateTransaction' AND outcome = 'not_found'"
             )
             .bind(users[0] ?? "")
             .first<{ count: number }>()
@@ -2792,8 +2816,9 @@ it("serializes competing corrections and rolls back evidence when the correction
       const first = { expectedRevision: 0, changes: { notes: "first" } };
       yield* fromTestPromise(() =>
         db
-          .prepare(`CREATE TRIGGER refuse_correction_audit BEFORE INSERT ON transaction_audit
-      WHEN NEW.operation = 'transactions.updateTransaction' BEGIN SELECT RAISE(IGNORE); END`)
+          .prepare(
+            `CREATE TRIGGER refuse_correction_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.updateTransaction' BEGIN SELECT RAISE(IGNORE); END`
+          )
           .run()
       );
       expect((yield* fromTestPromise(() => send(path, "PUT", first))).status).not.toBe(200);
@@ -2852,8 +2877,9 @@ it("rolls back public Transaction capture when its audit silently refuses a writ
       yield* Effect.tryPromise({
         try: () =>
           db
-            .prepare(`CREATE TRIGGER refuse_capture_audit BEFORE INSERT ON transaction_audit
-    WHEN NEW.operation = 'transactions.createTransaction' BEGIN SELECT RAISE(IGNORE); END`)
+            .prepare(
+              `CREATE TRIGGER refuse_capture_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.createTransaction' BEGIN SELECT RAISE(IGNORE); END`
+            )
             .run(),
         catch: () => undefined,
       });
@@ -2996,110 +3022,6 @@ it("coordinates concurrent public mutations through a real per-User Durable Obje
     })
   ));
 
-it("enforces the stable-User daily write budget atomically and preserves append-only evidence", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      yield* fromTestPromise(() => seedDailyTransactions(db, 100));
-      expect(
-        (yield* fromTestPromise(() => sendPublicRequest(db, postTransaction(0, input())))).status
-      ).toBe(429);
-      const rows = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?")
-          .bind(users[0])
-          .first<{ count: number }>()
-      );
-      expect(rows?.count).toBe(100);
-      expect(
-        (yield* fromTestPromise(() => sendPublicRequest(db, postTransaction(1, input())))).status
-      ).toBe(201);
-      const evidence = yield* fromTestPromise(() =>
-        db.prepare("SELECT id FROM transaction_audit").first<{ id: string }>()
-      );
-      if (evidence === null) throw new Error("Missing audit");
-      yield* fromTestPromise(() =>
-        expect(
-          db.prepare("DELETE FROM transaction_audit WHERE id = ?").bind(evidence.id).run()
-        ).rejects.toThrow()
-      );
-      yield* fromTestPromise(() =>
-        expect(db.prepare("DELETE FROM source_attestations").run()).rejects.toThrow()
-      );
-    })
-  ));
-
-it("bounds authenticated audit growth atomically per stable User at the public boundary", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const current = yield* Clock.currentTimeMillis;
-      yield* fromTestPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 256)
-    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-    SELECT 'budget-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
-          .bind(users[0], sessions[0], current)
-          .run()
-      );
-      const call = (index: number, path = "/transactions", body?: object): Promise<Response> =>
-        sendPublicRequest(
-          db,
-          new Request(`https://api.fidyapp.com${path}`, {
-            method: body === undefined ? "GET" : "POST",
-            headers: {
-              origin: "https://app.fidyapp.com",
-              "Fidy-Session-Binding": sessions[index] ?? "invalid",
-              cookie: `__Host-fidy_session=${bearer(index)}`,
-              ...(body === undefined ? {} : { "content-type": "application/json" }),
-            },
-            body: body === undefined ? undefined : JSON.stringify(body),
-          })
-        );
-      expect((yield* fromTestPromise(() => call(0))).status).toBe(429);
-      const cheapDb: D1Database = {
-        prepare: (sql) => {
-          if (/FROM\s+transactions\b/iu.test(sql)) throw new Error("History query must not run");
-          return db.prepare(sql);
-        },
-        batch: (statements) => db.batch(statements),
-        exec: (sql) => db.exec(sql),
-        withSession: (constraint) => db.withSession(constraint),
-        dump: () => db.dump(),
-      };
-      const cheapRefusal = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          cheapDb,
-          new Request("https://api.fidyapp.com/transactions", {
-            headers: {
-              origin: "https://app.fidyapp.com",
-              "Fidy-Session-Binding": sessions[0] ?? "invalid",
-              cookie: `__Host-fidy_session=${bearer(0)}`,
-            },
-          })
-        )
-      );
-      expect(cheapRefusal.status).toBe(429);
-      expect((yield* fromTestPromise(() => call(0, "/transactions?unknown=1"))).status).toBe(429);
-      expect((yield* fromTestPromise(() => call(0, "/transactions", input()))).status).toBe(429);
-      expect((yield* fromTestPromise(() => call(1))).status).toBe(200);
-      const audit = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ?")
-          .bind(users[0])
-          .first<{ count: number }>()
-      );
-      const transactions = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?")
-          .bind(users[0])
-          .first<{ count: number }>()
-      );
-      expect(audit?.count).toBe(256);
-      expect(transactions?.count).toBe(0);
-    })
-  ));
-
 it("rejects forged browser origins and malformed Money before any public mutation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -3130,7 +3052,11 @@ it("rejects forged browser origins and malformed Money before any public mutatio
       ).toBe(400);
       const counts = yield* fromTestPromise(() =>
         Promise.all(
-          ["transactions", "source_attestations", "transaction_audit"].map((table) =>
+          [
+            "transactions",
+            "source_attestations",
+            "(SELECT * FROM audit_entries WHERE record_type='session_call')",
+          ].map((table) =>
             db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>()
           )
         )
@@ -3207,7 +3133,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
       const outcomes = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT outcome FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.getTransaction'"
+            "SELECT outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation = 'transactions.getTransaction'"
           )
           .bind(users[1])
           .all<{ outcome: string }>()
@@ -3221,7 +3147,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
       const invalidAudit = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT outcome FROM transaction_audit WHERE user_id = ? AND outcome = 'validation_failed'"
+            "SELECT outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND outcome = 'validation_failed'"
           )
           .bind(users[0])
           .first<{ outcome: string }>()
@@ -3267,7 +3193,9 @@ it("retains the Transaction owner's not-found refusal and Audit for malformed ca
       expect(
         (yield* fromTestPromise(() =>
           db
-            .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
+            .prepare(
+              "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
+            )
             .bind(users[0])
             .all()
         )).results
@@ -3331,7 +3259,12 @@ for (const scenario of [
     status: 503,
     page: false,
     accounted: false,
-    arrange: (db) => db.prepare("DROP TABLE transaction_audit").run(),
+    arrange: (db) =>
+      db
+        .prepare(
+          "CREATE TRIGGER refuse_history_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' BEGIN SELECT RAISE(ABORT,'audit_unavailable'); END"
+        )
+        .run(),
   }),
   historyQueryCase("revoked", {
     status: 401,
@@ -3407,7 +3340,9 @@ for (const scenario of [
         }
         const audited = yield* fromTestPromise(() =>
           db
-            .prepare("SELECT operation, outcome FROM pat_audit WHERE pat_id = ? ORDER BY rowid")
+            .prepare(
+              "SELECT operation, outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE pat_id = ? ORDER BY rowid"
+            )
             .bind(patId)
             .all()
         );
@@ -3635,7 +3570,7 @@ it("commits exact manual Money, immutable capture context, and audit before cano
       const audit = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT operation FROM transaction_audit WHERE user_id = ? ORDER BY occurred_at_ms"
+            "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY occurred_at_ms"
           )
           .bind(users[0])
           .all()
@@ -3932,7 +3867,12 @@ it("leaves an unindexed atomic resource abort unattributed", () =>
       );
       expect(response.status).toBe(503);
       const audit = yield* fromTestPromise(() =>
-        db.prepare("SELECT outcome FROM transaction_audit WHERE user_id = ?").bind(users[0]).all()
+        db
+          .prepare(
+            "SELECT outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
+          )
+          .bind(users[0])
+          .all()
       );
       expect(audit.results).toEqual([]);
       const transactions = yield* fromTestPromise(() =>
@@ -3965,7 +3905,11 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
       ).not.toBe(201);
       const counts = yield* fromTestPromise(() =>
         Promise.all(
-          ["transactions", "source_attestations", "transaction_audit"].map((table) =>
+          [
+            "transactions",
+            "source_attestations",
+            "(SELECT * FROM audit_entries WHERE record_type='session_call')",
+          ].map((table) =>
             db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>()
           )
         )
@@ -4041,7 +3985,7 @@ it("commits an ordered two-child batch in one D1 unit and agrees with immediate 
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND outcome = 'success' AND operation = 'transactions.createTransaction'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND outcome = 'success' AND operation = 'transactions.createTransaction'",
             users[0] ?? ""
           )
         )
@@ -4172,8 +4116,7 @@ it("attributes a silently skipped child Audit without exposing D1 details", () =
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(`CREATE TRIGGER refuse_batch_correction_audit BEFORE INSERT ON transaction_audit
-            WHEN NEW.operation = 'transactions.updateTransaction' AND NEW.outcome = 'success'
+          .prepare(`CREATE TRIGGER refuse_batch_correction_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.updateTransaction' AND NEW.outcome = 'success'
             BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
@@ -4222,14 +4165,13 @@ it("attributes a silently skipped child Audit without exposing D1 details", () =
     })
   ));
 
-it("names the capture child when its success Audit is skipped and preserves the daily budget", () =>
+it("names the capture child when its success Audit is skipped and rolls back the unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       yield* fromTestPromise(() =>
         db
-          .prepare(`CREATE TRIGGER skip_capture_audit BEFORE INSERT ON transaction_audit
-          WHEN NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'success'
+          .prepare(`CREATE TRIGGER skip_capture_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'success'
           BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
@@ -4257,8 +4199,7 @@ it("records a skipped keyword-rule guard as that child's refusal without committ
       const db = yield* fromTestPromise(() => setup());
       yield* fromTestPromise(() =>
         db
-          .prepare(`CREATE TRIGGER skip_rule_audit BEFORE INSERT ON category_audit
-          WHEN NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
+          .prepare(`CREATE TRIGGER skip_rule_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
           BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
@@ -4282,7 +4223,9 @@ it("records a skipped keyword-rule guard as that child's refusal without committ
       ).toBe(0);
       const audits = yield* fromTestPromise(() =>
         db
-          .prepare("SELECT operation,outcome FROM category_audit")
+          .prepare(
+            "SELECT operation,outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*'"
+          )
           .all<{ operation: string; outcome: string }>()
       );
       expect(audits.results).toEqual([
@@ -4345,7 +4288,10 @@ it("does not assign a child to a forged guard marker from an unrelated write", (
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
     })
@@ -4380,7 +4326,10 @@ it("rolls back a batch containing deletion of an absent Transaction", () =>
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(1);
     })
@@ -4404,13 +4353,14 @@ it("links and unlinks pair children inside one atomic batch", () =>
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
+        ]).then(() =>
           seedManualAttestation({
             db,
             userId: owner,
             transactionId: suppressed,
             id: "30000000-0000-4000-8000-000000000903",
-          }),
-        ])
+          })
+        )
       );
       const linked = yield* fromTestPromise(() =>
         sendPublicRequest(
@@ -4631,8 +4581,7 @@ it("aborts a batch unlink when a competing unlink commits before the unit", () =
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-          seedLinkedPair({ db, userId: owner, first, second, visible: first }),
-        ])
+        ]).then(() => seedLinkedPair({ db, userId: owner, first, second, visible: first }))
       );
       const response = yield* fromTestPromise(() =>
         sendPublicRequest(
@@ -4731,14 +4680,6 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
       const current = yield* Clock.currentTimeMillis;
       const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
       yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
-      yield* fromTestPromise(() =>
-        installTestSchema({
-          db,
-          sources: ["0030_dashboard_initialization"].map(
-            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
-          ),
-        })
-      );
       const children = [
         { operation: "categories.listCategories", input: {} },
         {
@@ -4768,12 +4709,18 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
         ).toBe(0);
         expect(
           yield* fromTestPromise(() =>
-            countRows(db, "SELECT COUNT(*) AS count FROM dashboard_documents")
+            countRows(
+              db,
+              "SELECT COUNT(*) AS count FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+            )
           )
         ).toBe(0);
         expect(
           yield* fromTestPromise(() =>
-            countRows(db, "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+            countRows(
+              db,
+              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+            )
           )
         ).toBe(0);
         expect(
@@ -4809,7 +4756,10 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+          )
         )
       ).toBe(0);
 
@@ -4830,7 +4780,7 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
       const audits = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT operation, outcome FROM pat_audit WHERE operation LIKE 'transactions.%' ORDER BY operation"
+            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation LIKE 'transactions.%' ORDER BY operation"
           )
           .all<{ operation: string; outcome: string }>()
       );
@@ -4907,7 +4857,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
             users[0] ?? ""
           )
         )
@@ -4916,7 +4866,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM memory_audit WHERE user_id = ? AND operation = 'memory.remember' AND outcome = 'success'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? AND operation = 'memory.remember' AND outcome = 'success'",
             users[0] ?? ""
           )
         )
@@ -4925,7 +4875,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM category_audit WHERE user_id = ? AND operation = 'categories.createKeywordRule'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? AND operation = 'categories.createKeywordRule'",
             users[0] ?? ""
           )
         )
@@ -4977,7 +4927,9 @@ it("attributes a duplicate keyword in one batch with the owner's declared confli
       expect(
         (yield* fromTestPromise(() =>
           db
-            .prepare("SELECT operation,outcome FROM category_audit WHERE user_id = ?")
+            .prepare(
+              "SELECT operation,outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
+            )
             .bind(users[0] ?? "")
             .all()
         )).results
@@ -5041,14 +4993,27 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       ).toBe(99);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM memory_audit"))
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*'"
+          )
+        )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM category_audit"))
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*'"
+          )
+        )
       ).toBe(1);
     })
   ));
@@ -5101,13 +5066,16 @@ it("attributes a cross-owner Memory conflict at commit time and keeps no earlier
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       const audits = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT operation, outcome FROM memory_audit WHERE user_id = ? ORDER BY operation"
+            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation"
           )
           .bind(users[0] ?? "")
           .all<{ operation: string; outcome: string }>()
@@ -5161,7 +5129,10 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+          )
         )
       ).toBe(0);
 
@@ -5187,7 +5158,7 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
       const audits = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT operation, outcome FROM pat_audit WHERE outcome = 'accepted' ORDER BY operation"
+            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' ORDER BY operation"
           )
           .all<{ operation: string; outcome: string }>()
       );
@@ -5241,7 +5212,10 @@ it("rejects a duplicate call identity named across owners before any child commi
       expect(rejection.error.operation).toBe("memory.remember");
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       expect(
@@ -5324,10 +5298,20 @@ it("refuses two children addressing one retained rule or Memory before any child
       );
       expect(memory).toEqual({ text: "Repetida" });
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM category_audit"))
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*'"
+          )
+        )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM memory_audit"))
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*'"
+          )
+        )
       ).toBe(0);
     })
   ));
@@ -5410,7 +5394,9 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
       ).toBe(1);
       const categoryAudits = yield* fromTestPromise(() =>
         db
-          .prepare("SELECT operation FROM category_audit WHERE user_id = ? ORDER BY operation")
+          .prepare(
+            "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? ORDER BY operation"
+          )
           .bind(users[0] ?? "")
           .all<{ operation: string }>()
       );
@@ -5421,7 +5407,7 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
       const memoryAudits = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT operation, outcome FROM memory_audit WHERE user_id = ? ORDER BY operation"
+            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation"
           )
           .bind(users[0] ?? "")
           .all<{ operation: string; outcome: string }>()
@@ -5431,7 +5417,7 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
             users[0] ?? ""
           )
         )
@@ -5469,7 +5455,10 @@ it("fails closed on a cross-owner dependency defect without partial state", () =
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(keywordDb, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            keywordDb,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       expect(
@@ -5509,7 +5498,10 @@ it("fails closed on a cross-owner dependency defect without partial state", () =
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(memoryDb, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            memoryDb,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       expect(
@@ -5665,84 +5657,11 @@ it("attributes keyword capacity after a deletion and earlier creates without rec
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM category_audit WHERE user_id = ? AND outcome = 'validation_failed'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? AND outcome = 'validation_failed'",
             users[0] ?? ""
           )
         )
       ).toBe(1);
-    })
-  ));
-
-it("attributes movement and shared Audit budgets to the exact child without consuming the aborted unit", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const movementDb = yield* fromTestPromise(() => setup());
-      yield* fromTestPromise(() => seedDailyTransactions(movementDb, 99));
-      const limited = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          movementDb,
-          batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
-        )
-      );
-      expect(limited.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => limited.json())
-      ).pipe(Effect.orDie);
-      expect(rejection.error.code).toBe("rate_limited");
-      expect(rejection.error.failedCallIndex).toBe(1);
-      expect(rejection.error.operation).toBe("transactions.createTransaction");
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            movementDb,
-            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(99);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            movementDb,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ? AND outcome = 'resource_limit'",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(1);
-
-      const auditDb = yield* fromTestPromise(() => setup());
-      const current = yield* Clock.currentTimeMillis;
-      yield* fromTestPromise(() =>
-        auditDb
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 254)
-    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-    SELECT 'budget-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
-          .bind(users[0], sessions[0], current)
-          .run()
-      );
-      const exhausted = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          auditDb,
-          batchRequest(0, [transactionCall(1, input()), transactionCall(2, input())])
-        )
-      );
-      expect(exhausted.status).toBe(400);
-      const auditRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => exhausted.json())
-      ).pipe(Effect.orDie);
-      expect(auditRejection.error.code).toBe("rate_limited");
-      expect(auditRejection.error.failedCallIndex).toBe(1);
-      expect(auditRejection.error.operation).toBe("transactions.createTransaction");
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(auditDb, "SELECT COUNT(*) AS count FROM transactions")
-        )
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(auditDb, "SELECT COUNT(*) AS count FROM transaction_audit")
-        )
-      ).toBe(255);
     })
   ));
 
@@ -5818,7 +5737,7 @@ it("a PAT cannot read or correct another User's Transaction individually or afte
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted' AND operation != 'transactions.getTransaction'"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' AND operation != 'transactions.getTransaction'"
           )
         )
       ).toBe(0);
@@ -5920,13 +5839,16 @@ it("maps a batch dependency defect to the closed unavailable failure without par
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
     })
   ));
 
-it("records a PAT refusal Audit for a refused batch child and attributes a PAT budget abort", () =>
+it("records a PAT refusal Audit for a refused batch child without partial writes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -5966,45 +5888,6 @@ it("records a PAT refusal Audit for a refused batch child and attributes a PAT b
           )
         )
       ).toBe(1);
-
-      const budgetDb = yield* fromTestPromise(() => setup());
-      yield* fromTestPromise(() => seedDailyTransactions(budgetDb, 99));
-      const budgetToken = `fin_${"u".repeat(8)}_${"d".repeat(43)}`;
-      yield* seedPAT({
-        db: budgetDb,
-        userId: users[0] ?? "",
-        token: budgetToken,
-        scopes: ["write"],
-        current,
-      });
-      const limited = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          budgetDb,
-          bearerRequest(0, budgetToken, [transactionCall(1, input()), transactionCall(2, input())])
-        )
-      );
-      expect(limited.status).toBe(400);
-      const limitedRejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => limited.json())
-      ).pipe(Effect.orDie);
-      expect(limitedRejection.error.code).toBe("rate_limited");
-      expect(limitedRejection.error.failedCallIndex).toBe(1);
-      expect(limitedRejection.error.operation).toBe("transactions.createTransaction");
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            budgetDb,
-            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
-            users[0] ?? ""
-          )
-        )
-      ).toBe(99);
-      const budgetRefusals = yield* fromTestPromise(() =>
-        auditedPATOperations(budgetDb, users[0] ?? "")
-      );
-      expect(budgetRefusals).toEqual([
-        { operation: "transactions.createTransaction", outcome: "rejected" },
-      ]);
     })
   ));
 
@@ -6047,16 +5930,17 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
       const grantId = "50000000-0000-4000-8000-000000000001";
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-            (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-            VALUES (?,?,'{}','disclosure','decision',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          )
           .bind(grantId, users[1], current, current)
           .run()
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(`INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
-            VALUES (?,?,?,?,?)`)
+          .prepare(
+            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+          )
           .bind("50000000-0000-4000-8000-000000000002", users[1], grantId, sessions[1], current)
           .run()
       );
@@ -6078,7 +5962,10 @@ it("refuses a batch under a revoked session, revoked PAT, or withdrawn Consent w
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
     })
@@ -6134,7 +6021,10 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
       expect(unshapedFailure.error.code).toBe("validation_failed");
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(2);
       expect(yield* fromTestPromise(() => auditedOperations(db, users[0] ?? ""))).toEqual([
@@ -6144,11 +6034,11 @@ it("attributes a malformed child to its index and Audit while an unshaped body s
     })
   ));
 
-it("records exactly one metadata-only batch refusal for each unadmitted envelope without spending child budget", () =>
+it("records one metadata-only refusal for each malformed batch envelope", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const current = yield* Clock.currentTimeMillis;
+
       const rawBatch = (body: object): Request =>
         new Request("https://api.fidyapp.com/operations/atomic-batch", {
           method: "POST",
@@ -6185,7 +6075,7 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
       const audits = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT user_id, session_id, operation, outcome FROM transaction_audit WHERE user_id = ?"
+            "SELECT user_id, session_id, operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
           )
           .bind(users[0])
           .all()
@@ -6207,76 +6097,16 @@ it("records exactly one metadata-only batch refusal for each unadmitted envelope
         }))
       );
       expect(
-        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'transactions.*'"
+          )
+        )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
       ).toBe(0);
-      for (let chunk = 0; chunk < 4; chunk++) {
-        yield* fromTestPromise(() =>
-          db
-            .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 63)
-            INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-            SELECT 'envelope-seed-' || ? || '-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
-            .bind(chunk, users[0], sessions[0], current)
-            .run()
-        );
-      }
-      const atLimit = yield* fromTestPromise(() => sendPublicRequest(db, rawBatch({ calls: [] })));
-      expect(atLimit.status).toBe(400);
-      expect(
-        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
-      ).toBe(256);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'operations.executeAtomicBatch'"
-          )
-        )
-      ).toBe(5);
-      for (let chunk = 0; chunk < 5; chunk++) {
-        yield* fromTestPromise(() =>
-          db
-            .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 49)
-            INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-            SELECT 'envelope-cap-' || ? || '-' || n, ?, ?, 'operations.executeAtomicBatch', 'validation_failed', ? FROM seq`)
-            .bind(chunk, users[0], sessions[0], current)
-            .run()
-        );
-      }
-      yield* fromTestPromise(() =>
-        db
-          .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-          VALUES ('envelope-cap-last', ?, ?, 'operations.executeAtomicBatch', 'validation_failed', ?)`)
-          .bind(users[0], sessions[0], current)
-          .run()
-      );
-      const capped = yield* fromTestPromise(() => sendPublicRequest(db, rawBatch({ calls: [] })));
-      expect(capped.status).toBe(429);
-      expect(
-        (yield* Schema.decodeUnknownEffect(CallerFailure)(
-          yield* fromTestPromise(() => capped.json())
-        ).pipe(Effect.orDie)).error.code
-      ).toBe("rate_limited");
-      expect(
-        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
-      ).toBe(256);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(
-            db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'operations.executeAtomicBatch'"
-          )
-        )
-      ).toBe(256);
-      const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
-      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["read"], current });
-      const cappedPAT = yield* fromTestPromise(() =>
-        sendPublicRequest(db, bearerRequest(0, token, []))
-      );
-      expect(cappedPAT.status).toBe(429);
-      expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toEqual([]);
     })
   ));
 
@@ -6344,7 +6174,10 @@ it("does not misattribute a repeated callId with a malformed later operation to 
       expect(unsupportedFirst.status).toBe(400);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       expect(
@@ -6402,7 +6235,12 @@ it("records a batch envelope for a PAT without the child's scope, but never for 
         { operation: "operations.executeAtomicBatch", outcome: "rejected" },
       ]);
       expect(
-        yield* fromTestPromise(() => dailyAuditCount({ db, userId: users[0] ?? "", current }))
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'transactions.*'"
+          )
+        )
       ).toBe(0);
       const child = yield* fromTestPromise(() =>
         sendPublicRequest(db, bearerRequest(0, token, [transactionCall(1, input())]))
@@ -6437,7 +6275,10 @@ it("records a batch envelope for a PAT without the child's scope, but never for 
       );
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       expect(
@@ -6653,11 +6494,19 @@ it("refuses a cookie-admitted batch without the browser origin and writes nothin
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+          )
         )
       ).toBe(0);
       expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM pat_audit"))
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+          )
+        )
       ).toBe(0);
     })
   ));
@@ -6724,7 +6573,7 @@ it("permanently deletes visible history with provenance retained and rejects ano
         yield* fromTestPromise(() =>
           countRows(
             db,
-            "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'transactions.deleteTransaction' AND outcome = 'success'"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND operation = 'transactions.deleteTransaction' AND outcome = 'success'"
           )
         )
       ).toBe(1);
@@ -6762,7 +6611,7 @@ it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
           yield* fromTestPromise(() =>
             db
               .prepare(
-                "CREATE TRIGGER refuse_delete_audit BEFORE INSERT ON transaction_audit WHEN NEW.operation = 'transactions.deleteTransaction' BEGIN SELECT RAISE(ABORT, 'audit_unavailable'); END"
+                "CREATE TRIGGER refuse_delete_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'transactions.deleteTransaction' BEGIN SELECT RAISE(ABORT, 'audit_unavailable'); END"
               )
               .run()
           );
@@ -6804,7 +6653,7 @@ it.each(["linked", "audit-outage", "read-only", "revoked"] as const)(
           yield* fromTestPromise(() =>
             countRows(
               db,
-              "SELECT COUNT(*) AS count FROM transaction_audit WHERE operation = 'transactions.deleteTransaction' AND outcome = 'success'"
+              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND operation = 'transactions.deleteTransaction' AND outcome = 'success'"
             )
           )
         ).toBe(0);

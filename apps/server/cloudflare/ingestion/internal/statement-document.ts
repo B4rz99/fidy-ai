@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { readWhatsAppStatementMedia } from "../../../src/shell/ingestion/operations";
 import { Clock, Crypto, Effect, Option, PlatformError, Schema } from "effect";
 import { WhatsAppMediaId } from "../../../src/shell/channels/whatsapp/contract";
@@ -8,11 +9,7 @@ import {
   StatementStagingId,
   StatementSubmissionId,
 } from "../../../src/shell/ingestion/contract";
-import {
-  StatementStaging,
-  StatementStagingUnavailable,
-  statementSubmissionCompletion,
-} from "./statement-staging";
+import { StatementStaging, StatementStagingUnavailable } from "./statement-staging";
 import {
   admitStatementUpload,
   statementUploadAuthority,
@@ -39,8 +36,9 @@ export const prepareStatementDocumentAdmission = ({
   current: number;
 }>): ReadonlyArray<D1PreparedStatement> => [
   db
-    .prepare(`INSERT INTO statement_whatsapp_documents (turn_id,user_id,media_id,created_at_ms)
-    SELECT turn_id,user_id,?,? FROM (${source.sql})`)
+    .prepare(`UPDATE hosted_turns SET document_media_id=?,document_created_at_ms=?
+    WHERE document_media_id IS NULL AND EXISTS(SELECT 1 FROM (${source.sql}) source
+    WHERE source.turn_id=hosted_turns.id AND source.user_id=hosted_turns.user_id)`)
     .bind(mediaId, current, ...source.params),
 ];
 const Document = Schema.Struct({
@@ -63,7 +61,7 @@ const findDocument = ({
     try: () =>
       db
         .prepare(
-          `SELECT media_id,staging_id,reference_json,upload_grant_id,upload_expires_at_ms FROM statement_whatsapp_documents WHERE turn_id=? AND user_id=? AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
+          `SELECT media_id,staging_id,reference_json,upload_grant_id,upload_expires_at_ms FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) WHERE turn_id=? AND user_id=? AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
         )
         .bind(caller.turnId, caller.userId, ...caller.authority.bindings)
         .first(),
@@ -102,7 +100,7 @@ const retireDocumentUpload = ({
     try: () =>
       db
         .prepare(
-          "UPDATE statement_whatsapp_documents SET upload_grant_id=NULL,upload_expires_at_ms=NULL WHERE turn_id=? AND user_id=? AND upload_grant_id=?"
+          "UPDATE hosted_turns SET document_upload_grant_id=NULL,document_upload_expires_at_ms=NULL WHERE id=? AND user_id=? AND document_upload_grant_id=?"
         )
         .bind(caller.turnId, caller.userId, grantId),
     catch: () => new ResourceAdmissionUnavailable({ reason: "authority_unavailable" }),
@@ -145,7 +143,7 @@ export const readHeldStatementDocumentSubmission = ({
     try: () =>
       db
         .prepare(
-          `SELECT s.id FROM statement_submissions s JOIN statement_hosted_origins o ON o.submission_id=s.id WHERE s.user_id=? AND o.turn_id=? AND o.session_id=? AND o.abandoned_at_ms IS NULL AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
+          `SELECT s.id FROM statement_submissions s WHERE s.user_id=? AND s.hosted_turn_id=? AND s.hosted_session_id=? AND s.hosted_abandoned_at_ms IS NULL AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
         )
         .bind(caller.userId, caller.turnId, caller.sessionId, ...caller.authority.bindings)
         .first(),
@@ -178,7 +176,7 @@ export const withHeldStatementDocumentUpload = <A, E, R>({
       statements: (grantId) => [
         db
           .prepare(
-            `UPDATE statement_whatsapp_documents SET upload_grant_id=?,upload_expires_at_ms=? WHERE turn_id=? AND user_id=? AND staging_id IS NULL AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
+            `UPDATE hosted_turns SET document_upload_grant_id=?,document_upload_expires_at_ms=? WHERE id=? AND user_id=? AND document_staging_id IS NULL AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
           )
           .bind(
             grantId,
@@ -187,7 +185,7 @@ export const withHeldStatementDocumentUpload = <A, E, R>({
             caller.userId,
             ...caller.authority.bindings
           ),
-        db.prepare(statementSubmissionCompletion),
+        prepareChangedRowAssertion({ db, scope: "statement_submission" }),
       ],
     }),
     work,
@@ -247,7 +245,7 @@ export const stageHeldStatementDocument = ({
       try: () =>
         db
           .prepare(
-            `UPDATE statement_whatsapp_documents SET staging_id=?,reference_json=? WHERE turn_id=? AND user_id=? AND staging_id IS NULL AND upload_grant_id=? AND upload_expires_at_ms>? AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
+            `UPDATE hosted_turns SET document_staging_id=?,document_reference_json=? WHERE id=? AND user_id=? AND document_staging_id IS NULL AND document_upload_grant_id=? AND document_upload_expires_at_ms>? AND EXISTS (SELECT 1 FROM ${caller.authority.table} WHERE ${caller.authority.predicate})`
           )
           .bind(
             reference.stagingId,

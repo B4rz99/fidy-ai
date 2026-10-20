@@ -279,9 +279,18 @@ it("preserves stable Google ownership across changed/missing emails and never me
         })).status
       ).toBe(200);
       expect(yield* countRows(journey.db, "users")).toBe(2);
-      expect(yield* countRows(journey.db, "trial_periods")).toBe(2);
-      expect(yield* countRows(journey.db, "whatsapp_identities")).toBe(0);
-      expect(yield* countRows(journey.db, "verified_email_credentials")).toBe(0);
+      expect(
+        yield* countRows(
+          journey.db,
+          "(SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)"
+        )
+      ).toBe(0);
+      expect(
+        yield* countRows(
+          journey.db,
+          "(SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+        )
+      ).toBe(0);
       expect(
         yield* Effect.tryPromise(() =>
           journey.db
@@ -323,7 +332,7 @@ it("rolls back every new owner record when the origin guard fails, and concurren
       yield* Effect.tryPromise(() =>
         journey.db
           .prepare(
-            "CREATE TRIGGER refuse_provider BEFORE INSERT ON completed_provider_authentications BEGIN SELECT RAISE(ABORT,'fixture_rollback'); END"
+            "CREATE TRIGGER refuse_provider BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_rollback'); END"
           )
           .run()
       );
@@ -331,9 +340,8 @@ it("rolls back every new owner record when the origin guard fails, and concurren
       for (const table of [
         "users",
         "provider_credentials",
-        "trial_periods",
-        "backup_recovery_credentials",
-        "onboarding_consent_records",
+        "(SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)",
+        "consent_history",
       ]) {
         expect(yield* countRows(journey.db, table)).toBe(0);
       }
@@ -502,7 +510,7 @@ it("an expired abandoned or completed Google attempt never blocks unrelated Brow
       );
       expect((yield* Effect.tryPromise(() => journey.send("/web/pairings", {}))).status).toBe(200);
       expect(yield* countRows(journey.db, "provider_credentials")).toBe(1);
-      expect(yield* countRows(journey.db, "onboarding_consent_records")).toBe(1);
+      expect(yield* countRows(journey.db, "consent_history")).toBe(1);
     })
   ));
 

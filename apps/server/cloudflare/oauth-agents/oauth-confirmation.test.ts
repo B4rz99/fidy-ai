@@ -116,7 +116,7 @@ it("reviews an exact Budget deletion natively and consumes client acceptance wit
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
             )
             .first<number>("count(*)")
         )
@@ -166,7 +166,7 @@ it.each(refusingNativeResponses)(
             yield* wait(
               fixture.db
                 .prepare(
-                  "SELECT count(*) FROM pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
+                  "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
                 )
                 .first<number>("count(*)")
             )
@@ -266,7 +266,7 @@ it("rolls back native intent consumption with failed Audit and allows only one c
       yield* wait(
         fixture.db
           .prepare(
-            "CREATE TRIGGER fail_native_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'budgets.deleteBudget' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_native_audit_failure'); END"
+            "CREATE TRIGGER fail_native_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'budgets.deleteBudget' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_native_audit_failure'); END"
           )
           .run()
       );
@@ -301,7 +301,7 @@ it("rolls back native intent consumption with failed Audit and allows only one c
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
             )
             .first<number>("count(*)")
         )
@@ -645,7 +645,9 @@ it.each(["single", "batch"] as const)(
           if (changed === "scope") {
             yield* wait(
               fixture.db
-                .prepare("UPDATE oauth_access_credentials SET scopes_json = '[\"read\"]'")
+                .prepare(
+                  "UPDATE oauth_credentials AS oauth_credentials SET scopes_json = '[\"read\"]' WHERE kind='access'"
+                )
                 .run()
             );
           }
@@ -672,7 +674,7 @@ it.each(["single", "batch"] as const)(
             yield* wait(
               fixture.db
                 .prepare(
-                  "SELECT count(*) FROM pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
+                  "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
                 )
                 .first<number>("count(*)")
             )

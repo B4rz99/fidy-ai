@@ -71,7 +71,9 @@ it("refuses deliberately missing canonical query adapters without inventing a bi
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) AS total FROM pat_audit WHERE oauth_connection_id = ?")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+            )
             .bind(fixture.connectionId)
             .first<number>("total")
         )
@@ -266,10 +268,14 @@ it.each(queryGroups)(
         yield* wait(
           fixture.db.batch([
             fixture.db
-              .prepare("INSERT INTO trial_periods VALUES (?,0,604800000)")
+              .prepare(
+                "UPDATE users SET trial_started_at_ms=0,trial_ends_at_ms=604800000 WHERE id=?1"
+              )
               .bind("10000000-0000-4000-8000-000000000001"),
             fixture.db
-              .prepare("INSERT INTO trial_periods VALUES (?,0,604800000)")
+              .prepare(
+                "UPDATE users SET trial_started_at_ms=0,trial_ends_at_ms=604800000 WHERE id=?1"
+              )
               .bind("20000000-0000-4000-8000-000000000001"),
             fixture.db
               .prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)")
@@ -409,7 +415,7 @@ it.each(queryGroups)(
             const audit = yield* wait(
               fixture.db
                 .prepare(
-                  "SELECT oauth_connection_id,oauth_credential_id,pat_id,operation,outcome FROM pat_audit WHERE operation = ? AND oauth_connection_id = ?"
+                  "SELECT oauth_connection_id,oauth_credential_id,pat_id,operation,outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = ? AND oauth_connection_id = ?"
                 )
                 .bind(operation.id, current.connectionId)
                 .all()
@@ -425,7 +431,9 @@ it.each(queryGroups)(
         expect(
           yield* wait(
             fixture.db
-              .prepare("SELECT count(*) AS total FROM dashboard_documents")
+              .prepare(
+                "SELECT count(*) AS total FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+              )
               .first<number>("total")
           )
         ).toBe(1);
@@ -484,7 +492,7 @@ it.each(queryGroups)(
           const audit = yield* wait(
             fixture.db
               .prepare(
-                "SELECT outcome FROM pat_audit WHERE operation = ? AND oauth_connection_id = ?"
+                "SELECT outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = ? AND oauth_connection_id = ?"
               )
               .bind(operation.id, fixture.connectionId)
               .all()
@@ -664,7 +672,9 @@ it.each([
         expect(
           yield* wait(
             fixture.db
-              .prepare("SELECT count(*) AS total FROM pat_audit WHERE oauth_connection_id = ?")
+              .prepare(
+                "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+              )
               .bind(fixture.connectionId)
               .first<number>("total")
           )
@@ -741,7 +751,11 @@ it("returns the canonical uninitialized Dashboard outcome without creating domai
       });
       expect(
         yield* wait(
-          fixture.db.prepare("SELECT count(*) FROM dashboard_documents").first<number>("count(*)")
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+            )
+            .first<number>("count(*)")
         )
       ).toBe(0);
     })
@@ -790,7 +804,9 @@ it("keeps read and account-security tools uncallable by a write-only connection"
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ?")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+            )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
         )
@@ -839,7 +855,9 @@ it("blocks wrong-purpose credentials and live explicit Consent revocation after 
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ?")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+            )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
         )
@@ -870,7 +888,9 @@ it("rejects cross-User and client coordinator substitutions and returns validate
       )(
         yield* wait(
           fixture.db
-            .prepare("SELECT id,user_id FROM oauth_access_credentials WHERE connection_id = ?")
+            .prepare(
+              "SELECT id,user_id FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials WHERE connection_id = ?"
+            )
             .bind(fixture.connectionId)
             .first()
         )
@@ -908,7 +928,9 @@ it("rejects cross-User and client coordinator substitutions and returns validate
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ?")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+            )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
         )
@@ -935,7 +957,7 @@ it("rejects cross-User and client coordinator substitutions and returns validate
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'rejected'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ? AND outcome = 'rejected'"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")

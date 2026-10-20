@@ -152,7 +152,7 @@ const status = (state: BridgeState): Effect.Effect<Response, HostFixtureFailure>
     const accepted = yield* wait(() =>
       state.fixture.db
         .prepare(
-          "SELECT count(*) FROM pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
+          "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
         )
         .first<number>("count(*)")
     );

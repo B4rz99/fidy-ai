@@ -20,7 +20,6 @@ import {
   type OwnerAuditCall,
   type PATActivityAuthority,
   auditRetentionDays,
-  dailyAuditBudget,
   utcDayMilliseconds,
 } from "./contract";
 import { emailReplacementEvidence } from "~/shell/audit/internal/email-evidence";
@@ -31,16 +30,10 @@ import {
   queryCallStatement,
   replayAccessStatement,
 } from "~/shell/audit/internal/recording";
-import {
-  auditDayBindings,
-  auditDayCountExpression,
-  browserBudgetGuard,
-  dailyAuditCount as countDailyCalls,
-} from "~/shell/audit/internal/daily-budget";
 
 import * as patEvidence from "~/shell/audit/internal/pat-evidence";
 
-export { dailyAuditBudget, utcDayMilliseconds } from "./contract";
+export { utcDayMilliseconds } from "./contract";
 
 /** Reads at most three attributable canonical outcomes under the caller's same-User live browser guard. Unreadable or malformed evidence is unavailable, not empty activity. */
 export const readOAuthActivity = (
@@ -52,7 +45,7 @@ export const readOAuthActivity = (
         input.db.prepare(`SELECT 1 AS live WHERE ${input.guard.sql}`).bind(...input.guard.params),
         input.db
           .prepare(
-            `SELECT id,operation,outcome,occurred_at_ms FROM pat_audit WHERE user_id = ? AND oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND ${input.guard.sql} ORDER BY occurred_at_ms DESC,id DESC LIMIT 3`
+            `SELECT id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call' AND user_id = ? AND oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND ${input.guard.sql} ORDER BY occurred_at_ms DESC,id DESC LIMIT 3`
           )
           .bind(input.userId, input.connectionId, ...input.guard.params),
       ])
@@ -87,8 +80,7 @@ export const recordOAuthCall = (
     outcome: "accepted" | "rejected";
   }>
 ): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms)
-    SELECT ?,?,?,?,?,?,? FROM ${input.authority.table} WHERE ${input.authority.predicate}`,
+  sql: `INSERT INTO audit_entries(record_type,id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms) SELECT 'credential_call',?,?,?,?,?,?,? FROM ${input.authority.table} WHERE ${input.authority.predicate}`,
   params: [
     input.id,
     input.authority.attribution.userId,
@@ -105,7 +97,7 @@ export const recordOAuthCall = (
  * Commit the returned statement in the canonical unit, after the owner write when
  * `afterOwnerWrite` is true. A skipped guard changes no row and must refuse the unit;
  * never report success without checking the owning unit's completion assertion.
- * Audit chooses the storage projection and enforces its append-only and budget triggers.
+ * Audit chooses the storage projection and enforces its append-only policy.
  */
 export const recordAuthorizedCall = (input: AuthorizedAuditCall): OwnedStatement =>
   authorizedCallStatement(input);
@@ -199,60 +191,6 @@ export const recordCanonicalPATWork: typeof patEvidence.recordCanonicalPATWork =
 export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (input) =>
   patEvidence.recordRejectedPATWork(input);
 
-/** Classify commit-time Audit budget refusal without returning a raw D1 error or its contents. */
-export const refusedByAuditBudget = (cause: unknown): boolean =>
-  String(cause).includes("transaction_audit_limit") ||
-  String(cause).includes("statement_audit_limit") ||
-  String(cause).includes("batch_envelope_limit");
-
-/** Count one explicit User's canonical work without exposing Audit's storage projections or failures. */
-export const dailyAuditCount = (
-  input: Readonly<{ db: D1Database; userId: string; current: number }>
-): Promise<number> =>
-  countDailyCalls(input).catch(() => {
-    throw new AuditUnavailable();
-  });
-/** True when a User cannot admit another call under the shared daily budget. */
-export const dailyAuditExhausted = (
-  input: Readonly<{ db: D1Database; userId: string; current: number }>
-): Promise<boolean> => dailyAuditCount(input).then((count) => count >= dailyAuditBudget);
-/** Recheck the shared Audit budget inside the indexed canonical child commit, so exhaustion rolls it back. */
-export const prepareCanonicalAuditBudgetGuard = ({
-  db,
-  userId,
-  current,
-  index,
-  operation,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  current: number;
-  index: number;
-  operation: string;
-}>): D1PreparedStatement =>
-  db
-    .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,budget_ok)
-    SELECT ?,?,1,CASE WHEN (${auditDayCountExpression}) < ? THEN 1 ELSE 0 END
-    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-      accepted = excluded.accepted, budget_ok = excluded.budget_ok`)
-    .bind(index, operation, ...auditDayBindings({ userId, current }), dailyAuditBudget);
-
-/** Recheck a Budget/Insight browser-call budget in the exact indexed canonical child commit. */
-export const prepareBrowserAuditBudgetGuard = ({
-  db,
-  ...input
-}: Readonly<{
-  db: D1Database;
-  owner: "budgets" | "insights";
-  userId: string;
-  current: number;
-  index: number;
-  operation: string;
-}>): D1PreparedStatement => {
-  const statement = browserBudgetGuard(input);
-  return db.prepare(statement.sql).bind(...statement.params);
-};
-
 /** Bind fixed metadata and a subject-scoped owner proof to the same atomic D1 unit. */
 export const prepareOwnerAuditCall = ({
   db,
@@ -283,8 +221,7 @@ export const preparePATActivity = (
   const cutoff = input.current - auditRetentionDays * utcDayMilliseconds;
   return {
     statement: {
-      sql: `SELECT operation,outcome,occurred_at_ms AS occurredAt FROM pat_audit
-        WHERE user_id = ? AND pat_id = (${input.grant.sql})
+      sql: `SELECT operation,outcome,occurred_at_ms AS occurredAt FROM audit_entries WHERE record_type='credential_call' AND user_id = ? AND pat_id = (${input.grant.sql})
         AND session_id IS NULL AND operation NOT LIKE 'pats.%' AND occurred_at_ms >= ?
         AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})
         ORDER BY occurred_at_ms DESC, id DESC LIMIT ${maximumPATActivityEntries + 1}`,
@@ -317,8 +254,7 @@ export const recordPATActivityQuery = (
     authority: PATActivityAuthority;
   }>
 ): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,${input.authority.table === "hosted_turns" ? "hosted_turn_id" : "session_id"},operation,outcome,occurred_at_ms)
-    SELECT ?,user_id,id,'pats.getPATActivity',CASE WHEN EXISTS (${input.grant.sql}) THEN 'accepted' ELSE 'rejected' END,?
+  sql: `INSERT INTO audit_entries(record_type,id,user_id,${input.authority.table === "hosted_turns" ? "hosted_turn_id" : "session_id"},operation,outcome,occurred_at_ms) SELECT 'credential_call',?,user_id,id,'pats.getPATActivity',CASE WHEN EXISTS (${input.grant.sql}) THEN 'accepted' ELSE 'rejected' END,?
     FROM ${input.authority.table} WHERE ${input.authority.predicate}`,
   params: [input.id, ...input.grant.params, input.current, ...input.authority.bindings],
 });

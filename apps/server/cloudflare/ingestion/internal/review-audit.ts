@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { ReviewUnavailable } from "../contract";
 import { Effect } from "effect";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
@@ -11,7 +12,6 @@ import {
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import type { CanonicalMutationRefusal } from "../../canonical-operations/contract";
-import { reviewCompletion } from "./review-store";
 
 type Work = Readonly<{ db: D1Database; subject: QueryCaller; current: number }>;
 type Operation =
@@ -54,7 +54,7 @@ export const reviewRefusal = (work: Work): CanonicalMutationRefusal => ({
     Effect.tryPromise(() =>
       work.db.batch([
         ...reviewAudit({ work, operation: "ingestion.applyReviewEdit", accepted: false }),
-        work.db.prepare(reviewCompletion),
+        prepareChangedRowAssertion({ db: work.db, scope: "ingestion_review" }),
       ])
     ).pipe(
       Effect.as("recorded" as const),
@@ -76,7 +76,10 @@ export const commitReviewRead = (
   input: Readonly<{ work: Work; operation: Operation; accepted: boolean }>
 ): Effect.Effect<void, ReviewUnavailable> =>
   Effect.tryPromise(() =>
-    input.work.db.batch([...reviewAudit(input), input.work.db.prepare(reviewCompletion)])
+    input.work.db.batch([
+      ...reviewAudit(input),
+      prepareChangedRowAssertion({ db: input.work.db, scope: "ingestion_review" }),
+    ])
   ).pipe(
     Effect.asVoid,
     Effect.mapError(() => new ReviewUnavailable())

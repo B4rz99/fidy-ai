@@ -131,9 +131,9 @@ test(
 
       const state = yield* readState(yield* workerUrl(Option.fromUndefinedOr(deployed.worker.url)));
       expect(state).toMatchObject({
+        unusedAssertionTables: [],
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
-        hostedWhatsAppInboundExists: true,
         hostedVoiceRefusalsExists: true,
         hostedWhatsAppWindowsExists: true,
         foreignKeyViolationCount: 0,
@@ -165,6 +165,13 @@ test(
 
       const beforeUrl = yield* workerUrl(Option.fromUndefinedOr(before.worker.url));
       expect(yield* readState(beforeUrl)).toMatchObject({
+        unusedAssertionTables: predecessorNames.includes("0112_retire_unused_assertions.sql")
+          ? []
+          : [
+              "erasure_runtime_assertion",
+              "memory_atomic_assertion",
+              "transaction_capture_assertion",
+            ],
         appliedMigrationNames: [...predecessorNames].sort(),
         hostedVoiceRefusalsExists: true,
         hostedWhatsAppWindowsExists: true,
@@ -181,9 +188,9 @@ test(
 
       const state = yield* readState(yield* workerUrl(Option.fromUndefinedOr(after.worker.url)));
       expect(state).toMatchObject({
+        unusedAssertionTables: [],
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
-        hostedWhatsAppInboundExists: true,
         hostedVoiceRefusalsExists: true,
         hostedWhatsAppWindowsExists: true,
         foreignKeyViolationCount: 0,

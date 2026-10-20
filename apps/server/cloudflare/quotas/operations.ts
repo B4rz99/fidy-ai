@@ -1,18 +1,10 @@
-import {
-  prepareAuthorizedAuditCall,
-  recordedPATCallProof,
-  refusedByAuditBudget,
-} from "../../src/shell/audit/operations";
+import { preparePredicateAssertion } from "../../src/shell/sql-assertions/operations";
+import { prepareAuthorizedAuditCall, recordedPATCallProof } from "../../src/shell/audit/operations";
 import {
   livePATAuthority,
   recordAuditedPATUseFromAuthority,
 } from "../../src/shell/tokens/operations";
-import {
-  type QueryCaller,
-  callerAuthority,
-  isPATCaller,
-  rateLimitedTransactionResponse,
-} from "../canonical-work/operations";
+import { type QueryCaller, callerAuthority, isPATCaller } from "../canonical-work/operations";
 import { newId } from "../secret-material/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { allowanceMeter, allowancePeriod } from "../../src/core/quotas/operations";
@@ -41,7 +33,6 @@ const consumptionStatements = (
 ): ReadonlyArray<D1PreparedStatement> => {
   const period = allowancePeriod(DateTime.makeUnsafe(input.current));
   const pro = activeProUserCondition({ userId: input.userId, nowEpochMs: input.current });
-  const assertionId = `${input.allowance}:${input.identity}`;
   const availability =
     mode === "required"
       ? { sql: "1", params: [] }
@@ -56,10 +47,14 @@ const consumptionStatements = (
           ],
         };
   return [
-    input.db
-      .prepare(`INSERT INTO commercial_allowance_assertions(id,valid)
-      VALUES (?, EXISTS (SELECT 1 FROM (${input.authority.sql}) WHERE userId = ?))`)
-      .bind(assertionId, ...input.authority.params, input.userId),
+    preparePredicateAssertion({
+      db: input.db,
+      scope: "commercial_allowance",
+      predicate: {
+        sql: `SELECT 1 FROM (${input.authority.sql}) WHERE userId = ?`,
+        params: [...input.authority.params, input.userId],
+      },
+    }),
     input.db
       .prepare(`INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units)
       SELECT ?,?,?,?,?,CASE WHEN ${pro.sql} THEN 0 ELSE 1 END WHERE ${availability.sql}
@@ -73,7 +68,6 @@ const consumptionStatements = (
         ...pro.params,
         ...availability.params
       ),
-    input.db.prepare("DELETE FROM commercial_allowance_assertions WHERE id = ?").bind(assertionId),
   ];
 };
 
@@ -161,21 +155,18 @@ export const prepareAuthorizedQuotaRead = ({
   db: D1Database;
   userId: string;
   current: number;
-  authority: Readonly<{ sql: string; params: ReadonlyArray<string | number | Uint8Array> }>;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const id = newId();
-  return [
-    db
-      .prepare(
-        "INSERT INTO commercial_allowance_assertions VALUES (?,CASE WHEN EXISTS (SELECT 1 FROM (" +
-          authority.sql +
-          ") WHERE userId = ?) THEN 1 ELSE 0 END)"
-      )
-      .bind(id, ...authority.params, userId),
-    quotaStatusStatement({ db, userId, current }),
-    db.prepare("DELETE FROM commercial_allowance_assertions WHERE id = ?").bind(id),
-  ];
-};
+  authority: OwnedStatement;
+}>): ReadonlyArray<D1PreparedStatement> => [
+  preparePredicateAssertion({
+    db,
+    scope: "commercial_allowance",
+    predicate: {
+      sql: `SELECT 1 FROM (${authority.sql}) WHERE userId = ?`,
+      params: [...authority.params, userId],
+    },
+  }),
+  quotaStatusStatement({ db, userId, current }),
+];
 
 /** Decodes the owner projection; a malformed meter is unavailable, never zero consumption. */
 export const decodeQuotaStatus = (
@@ -258,11 +249,7 @@ export const executeProtectedQuotaQuery = ({
       ])
     );
     const status = decodeQuotaStatus({ row: rows[1]?.results[0], current });
-    if (Option.isNone(status) || rows[3]?.meta.changes !== 1) return unavailable();
+    if (Option.isNone(status) || rows[2]?.meta.changes !== 1) return unavailable();
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(QuotaStatus))(status.value);
     return Response.json({ data, next: [] }, { headers: { "cache-control": "no-store" } });
-  }).pipe(
-    Effect.catchCause((cause) =>
-      Effect.succeed(refusedByAuditBudget(cause) ? rateLimitedTransactionResponse() : unavailable())
-    )
-  );
+  }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));

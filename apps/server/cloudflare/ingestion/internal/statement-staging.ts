@@ -38,7 +38,6 @@ import {
   prepareAuthorizedAuditCall,
   prepareOwnerAuditCall,
   recordRejectedPATWork,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import {
   Context,
@@ -74,12 +73,7 @@ export type StatementPublicationRefusal = Readonly<{
   readonly message: string;
 }>;
 
-type RefusalRecord = "recorded" | "credential_refused" | "rate_limited" | "unavailable";
-
-/** The one-row assertion that rolls back a publication unit when a guarded step changed no row. */
-export const statementSubmissionCompletion = `INSERT INTO statement_submission_assertion (id, accepted)
-VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
+type RefusalRecord = "recorded" | "credential_refused" | "unavailable";
 
 /**
  * Worker-backed entropy and digest for staging identities, object locators, and content digests.
@@ -684,8 +678,8 @@ const readAdmissionState = (
              WHERE s.user_id = ? AND s.status IN ('queued', 'processing')) AS outstanding,
            (SELECT count(*) FROM statement_submissions AS s
              WHERE s.user_id = ? AND s.submitted_at_ms > ?) AS recent,
-           EXISTS (SELECT 1 FROM statement_backfill_entitlements AS e
-             WHERE e.user_id = ? AND (e.consumed_at_ms IS NOT NULL OR e.submission_id IS NOT NULL))
+           EXISTS (SELECT 1 FROM users AS e
+             WHERE e.id = ? AND (e.backfill_consumed_at_ms IS NOT NULL OR e.backfill_submission_id IS NOT NULL))
              AS backfill_reserved,
            ${pro.sql} AS pro`
       )
@@ -764,10 +758,10 @@ const submissionInsertStatement = (
                WHERE hourly.user_id = staging.user_id AND hourly.submitted_at_ms > ?)
              < ?
          AND (${pro.sql} OR NOT EXISTS (
-               SELECT 1 FROM statement_backfill_entitlements AS entitlement
-               WHERE entitlement.user_id = staging.user_id
-                 AND (entitlement.consumed_at_ms IS NOT NULL
-                   OR entitlement.submission_id IS NOT NULL)))
+               SELECT 1 FROM users AS entitlement
+               WHERE entitlement.id = staging.user_id
+                 AND (entitlement.backfill_consumed_at_ms IS NOT NULL
+                   OR entitlement.backfill_submission_id IS NOT NULL)))
          AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
       params: [
         submissionId,
@@ -832,7 +826,7 @@ const statementSubmissionRefusalAudit = ({
   id,
   outcome,
 }: Readonly<{
-  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_access_credentials" }>;
+  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_credentials" }>;
   current: number;
   database: D1Database;
   id: string;
@@ -857,7 +851,7 @@ const statementSubmissionReplayAudit = ({
   database,
   id,
 }: Readonly<{
-  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_access_credentials" }>;
+  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_credentials" }>;
   current: number;
   database: D1Database;
   id: string;
@@ -891,13 +885,11 @@ const publicationAccountabilityStatements = (
       .bind(submissionId, stagingId, userId, nowEpochMs),
     database
       .prepare(
-        `INSERT INTO statement_backfill_entitlements (user_id, submission_id)
-         SELECT ?, CASE WHEN ${pro.sql} THEN NULL ELSE ? END WHERE changes() = 1
-         ON CONFLICT(user_id) DO UPDATE SET submission_id =
-           CASE WHEN ${pro.sql} THEN statement_backfill_entitlements.submission_id
-                ELSE excluded.submission_id END`
+        `UPDATE users SET backfill_present=1,backfill_submission_id=
+           CASE WHEN ${pro.sql} THEN backfill_submission_id ELSE ? END
+         WHERE id=? AND changes()=1`
       )
-      .bind(userId, ...pro.params, submissionId, ...pro.params),
+      .bind(...pro.params, submissionId, userId),
     prepareOwnerAuditCall({
       db: database,
       id: auditId,
@@ -914,9 +906,8 @@ const publicationAccountabilityStatements = (
     }),
     database
       .prepare(
-        `INSERT INTO statement_ingestion_outbox (submission_id, user_id, revision, published_at_ms)
-         SELECT id, user_id, 1, ? FROM statement_submissions
-         WHERE user_id = ? AND id = ? AND changes() = 1`
+        `UPDATE statement_submissions SET work_user_id=user_id,work_revision=1,work_published_at_ms=?
+         WHERE user_id=? AND id=? AND changes()=1 AND work_revision IS NULL`
       )
       .bind(nowEpochMs, userId, submissionId),
   ];
@@ -1142,7 +1133,7 @@ const statementPublicationAccountability = ({
   current: number;
   database: D1Database;
 }>): ReadonlyArray<D1PreparedStatement> => {
-  if (authority.table === "oauth_access_credentials") {
+  if (authority.table === "oauth_credentials") {
     return [
       prepareAuthorizedAuditCall({
         db: database,
@@ -1181,7 +1172,7 @@ const statementReplayAccountability = ({
   current: number;
   database: D1Database;
 }>): ReadonlyArray<D1PreparedStatement> => {
-  if (authority.table === "oauth_access_credentials") {
+  if (authority.table === "oauth_credentials") {
     return [
       prepareAuthorizedAuditCall({
         db: database,
@@ -1407,8 +1398,8 @@ export const prepareStagedStatementPublication: {
 /**
  * Records one refused canonical statement call's metadata-only AuditLogEntry under the exact
  * authority the caller presented: a PAT's rejected `pat_audit` row, or a session caller's bounded
- * `statement_submission_audit` refusal. A refusal whose audit cannot commit for a dead credential, a
- * spent shared daily budget, or an unavailable authority is classified instead of answered.
+ * `ingestion_publication_audit` refusal. A refusal whose audit cannot commit for a dead credential or
+ * an unavailable authority is classified instead of answered.
  */
 const statementRefusalEvidence = (
   input: Readonly<{
@@ -1418,7 +1409,7 @@ const statementRefusalEvidence = (
     refusal: StatementPublicationRefusal;
   }>
 ): D1PreparedStatement => {
-  if (input.authority.table === "oauth_access_credentials") {
+  if (input.authority.table === "oauth_credentials") {
     return prepareAuthorizedAuditCall({
       db: input.database,
       authority: input.authority,
@@ -1457,9 +1448,7 @@ export const recordStatementRefusal = (
     .then((results): RefusalRecord =>
       results[0]?.meta.changes === 1 ? "recorded" : "credential_refused"
     )
-    .catch((cause: unknown) =>
-      refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
-    );
+    .catch(() => "unavailable" as const);
 
 type LostPublication =
   | Readonly<{ _tag: "Replay"; submissionId: string }>
@@ -1551,14 +1540,14 @@ export const readOwnedStatementSubmission: {
         .prepare(
           `SELECT s.id, s.source_format, s.parser_revision,
            CASE WHEN s.status = 'failed' THEN s.status ELSE
-             CASE WHEN c.state='awaiting' AND s.needs_review_rows=(SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id=s.id) THEN 'completed' ELSE CASE c.state WHEN 'awaiting' THEN 'awaiting-clarification' WHEN 'abandoned' THEN 'abandoned' ELSE s.status END END END AS status,
-           s.submitted_at_ms, s.started_at_ms, coalesce(c.ended_at_ms, s.completed_at_ms) AS completed_at_ms,
+             CASE WHEN s.clarification_state='awaiting' AND s.needs_review_rows=(SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id=s.id) THEN 'completed' ELSE CASE s.clarification_state WHEN 'awaiting' THEN 'awaiting-clarification' WHEN 'abandoned' THEN 'abandoned' ELSE s.status END END END AS status,
+           s.submitted_at_ms, s.started_at_ms, coalesce(s.clarification_ended_at_ms, s.completed_at_ms) AS completed_at_ms,
            s.failure_reason, s.input_rows,
            s.accepted_rows + (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'resolved') AS accepted_rows,
            s.needs_review_rows - (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id) AS needs_review_rows,
            (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'skipped') AS skipped_rows,
            (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
-         FROM statement_submissions s LEFT JOIN statement_clarifications c ON c.submission_id = s.id AND c.user_id = s.user_id
+         FROM statement_submissions s
          WHERE s.id = ? AND s.user_id = ?`
         )
         .bind(input.submissionId, input.userId)
@@ -1631,12 +1620,6 @@ const expireStatementSubmissions = (
            WHERE id IN (SELECT value FROM json_each(?)) AND status IN ('queued', 'processing') RETURNING id`
         )
         .bind(nowEpochMs, nowEpochMs, ids),
-      config.database
-        .prepare(
-          `UPDATE statement_backfill_entitlements SET submission_id = NULL
-           WHERE consumed_at_ms IS NULL AND submission_id IN (SELECT value FROM json_each(?))`
-        )
-        .bind(ids),
       config.database
         .prepare(
           `UPDATE statement_staging_objects

@@ -256,46 +256,10 @@ const makeSeries = ({ proposal, progress, current, retained }: SeriesInput): Rec
       onSome: (old) => old.series.announcement,
     }),
   });
-const confirmationStatement = (
+const seriesStatement = (
   work: Work,
-  input: Readonly<{ series: RecurringSeries; context: UserContext }>
+  input: SeriesInput & Readonly<{ context: UserContext }>
 ): Effect.Effect<D1PreparedStatement, RecurringUnavailable> =>
-  Effect.gen(function* () {
-    const { series, context } = input;
-    const eventId = RecurringConfirmationId.make(transactionId());
-    const event = yield* Schema.encodeEffect(jsonCodec(RecurringSeriesConfirmed))({
-      id: eventId,
-      seriesId: series.id,
-      confirmedAt: series.confirmedAt,
-      money: series.money,
-      counterparty: series.counterparty,
-      cadence: series.cadence,
-      announcement: series.announcement,
-    });
-    const contextJson = yield* Schema.encodeEffect(jsonCodec(UserContext))(context);
-    return work.db
-      .prepare(
-        "INSERT INTO recurring_confirmations (user_id, id, series_id, confirmed_at, context_json, confirmation_json) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, series_id) DO NOTHING"
-      )
-      .bind(
-        work.userId,
-        eventId,
-        series.id,
-        DateTime.formatIso(series.confirmedAt),
-        contextJson,
-        event
-      );
-  }).pipe(Effect.mapError(() => new RecurringUnavailable()));
-const seriesStatements = (
-  work: Work,
-  input: Readonly<{
-    proposal: RecurringProposal;
-    progress: Progress;
-    current: DateTime.Utc;
-    retained: Option.Option<Retained>;
-    context: UserContext;
-  }>
-): Effect.Effect<ReadonlyArray<D1PreparedStatement>, RecurringUnavailable> =>
   Effect.gen(function* () {
     const { proposal, progress, retained, context } = input;
     const series = makeSeries(input);
@@ -307,25 +271,44 @@ const seriesStatements = (
       evaluatedFactRevision: progress.revision,
     });
     const reference = yield* Schema.encodeEffect(jsonCodec(Money))(proposal.referenceMoney);
-    const statements = [
-      work.db
-        .prepare(
-          `INSERT INTO recurring_series (user_id, id, currency, counterparty_key, series_json, evidence_json, reference_json, valid) VALUES (?, ?, ?, ?, ?, ?, ?, 1) ON CONFLICT(user_id, id) DO UPDATE SET series_json = excluded.series_json, evidence_json = excluded.evidence_json, reference_json = excluded.reference_json, valid = 1`
-        )
-        .bind(
-          work.userId,
-          series.id,
-          series.money.currency,
-          normalizeCounterparty(series.counterparty),
-          encoded,
-          evidence,
-          reference
-        ),
-    ];
-    if (Option.isNone(retained)) {
-      statements.push(yield* confirmationStatement(work, { series, context }));
-    }
-    return statements;
+    const eventId = Option.isNone(retained) ? RecurringConfirmationId.make(transactionId()) : null;
+    const confirmation =
+      eventId === null
+        ? null
+        : yield* Schema.encodeEffect(jsonCodec(RecurringSeriesConfirmed))({
+            id: eventId,
+            seriesId: series.id,
+            confirmedAt: series.confirmedAt,
+            money: series.money,
+            counterparty: series.counterparty,
+            cadence: series.cadence,
+            announcement: series.announcement,
+          });
+    const contextJson =
+      eventId === null ? null : yield* Schema.encodeEffect(jsonCodec(UserContext))(context);
+    return work.db
+      .prepare(`INSERT INTO recurring_series (
+      user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,
+      confirmation_id,confirmed_at,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence
+    ) VALUES (?,?,?,?,?,?,?,1,?,?,?,?,?,
+      CASE WHEN ? IS NOT NULL THEN (SELECT coalesce(max(confirmation_sequence),0)+1 FROM recurring_series WHERE confirmation_sequence IS NOT NULL) END)
+    ON CONFLICT(user_id,id) DO UPDATE SET series_json=excluded.series_json,
+      evidence_json=excluded.evidence_json,reference_json=excluded.reference_json,valid=1`)
+      .bind(
+        work.userId,
+        series.id,
+        series.money.currency,
+        normalizeCounterparty(series.counterparty),
+        encoded,
+        evidence,
+        reference,
+        eventId,
+        eventId === null ? null : DateTime.formatIso(series.confirmedAt),
+        contextJson,
+        confirmation,
+        eventId === null ? null : 0,
+        eventId
+      );
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
 
 const retainedAssignments = ({
@@ -392,7 +375,7 @@ export const cutover = ({
     ];
     for (const { proposal, retained: old } of assignments) {
       statements.push(
-        ...(yield* seriesStatements(work, { proposal, progress, current, retained: old, context }))
+        yield* seriesStatement(work, { proposal, progress, current, retained: old, context })
       );
     }
     statements.push(

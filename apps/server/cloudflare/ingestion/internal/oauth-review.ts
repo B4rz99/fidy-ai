@@ -67,10 +67,10 @@ const StoredSnapshot = Schema.Struct({ snapshot: Schema.String });
 const snapshotSql = `SELECT json_object(
   'submission', json_object('id',s.id,'staging_id',s.staging_id,'source_format',s.source_format,
     'parser_revision',s.parser_revision,'status',s.status,'accepted_rows',s.accepted_rows,'needs_review_rows',s.needs_review_rows),
-  'clarification', json_object('state',c.state,'expires_at_ms',c.expires_at_ms,'ended_at_ms',c.ended_at_ms),
+  'clarification', json_object('state',s.clarification_state,'expires_at_ms',s.clarification_expires_at_ms,'ended_at_ms',s.clarification_ended_at_ms),
   'content', json_object('sha256',o.sha256,'status',o.status),
-  'entitlement', (SELECT json_object('submission_id',e.submission_id,'consumed_at_ms',e.consumed_at_ms)
-    FROM statement_backfill_entitlements e WHERE e.user_id=s.user_id),
+  'entitlement', (SELECT json_object('submission_id',e.backfill_submission_id,'consumed_at_ms',e.backfill_consumed_at_ms)
+    FROM users e WHERE e.backfill_present IS NOT NULL AND e.id=s.user_id),
   'reviews', (SELECT json_group_array(json_object('id',id,'record_number',record_number,'reason',reason,
     'original_evidence',original_evidence,'known_money',known_money,'issues',issues,'status',status,
     'evidence_expires_at_ms',evidence_expires_at_ms,'created_at_ms',created_at_ms,'service_market',service_market,
@@ -78,10 +78,10 @@ const snapshotSql = `SELECT json_object(
     'extractor_revision',extractor_revision)) FROM (SELECT * FROM statement_needs_review
       WHERE submission_id=s.id AND user_id=s.user_id ORDER BY id LIMIT 5001)),
   'decisions', (SELECT json_group_array(json_object('review_id',review_id,'decision',decision,
-    'transaction_id',transaction_id,'decided_at_ms',decided_at_ms)) FROM (SELECT * FROM statement_review_decisions
+    'transaction_id',transaction_id,'decided_at_ms',decided_at_ms)) FROM (SELECT * FROM ingestion_statement_review_decisions
       WHERE submission_id=s.id AND user_id=s.user_id ORDER BY review_id LIMIT 5001))
   ) AS snapshot FROM statement_submissions s
-  JOIN statement_clarifications c ON c.submission_id=s.id AND c.user_id=s.user_id
+
   JOIN statement_staging_objects o ON o.id=s.staging_id AND o.user_id=s.user_id
   WHERE s.id=? AND s.user_id=?`;
 

@@ -29,57 +29,13 @@ const Row = Schema.Struct({
   occurredAt: Schema.Int,
 });
 
-const projection = (
-  table: string,
-  caller: "session" | "pat" | "insight",
-  outcome: string
-): string =>
-  `SELECT id, user_id AS subjectUserId, session_id AS sessionId, ${caller === "pat" ? "pat_id" : "NULL"} AS patId,
-    ${caller === "insight" || caller === "pat" ? "hosted_turn_id" : "NULL"} AS hostedTurnId,
-    ${caller === "pat" ? "oauth_connection_id AS oauthConnectionId, oauth_credential_id AS oauthCredentialId," : ""}
-    operation, ${outcome} AS outcome, occurred_at_ms AS occurredAt FROM ${table} WHERE user_id = ?
-    ORDER BY occurred_at_ms, id LIMIT ?`;
-const evidenceQueries = [
-  projection(
-    "transaction_audit",
-    "session",
-    "CASE WHEN outcome = 'success' THEN 'succeeded' ELSE 'rejected' END"
-  ),
-  projection(
-    "pat_audit",
-    "pat",
-    "CASE WHEN outcome = 'accepted' THEN 'succeeded' ELSE 'rejected' END"
-  ),
-  projection(
-    "category_audit",
-    "session",
-    "CASE WHEN outcome = 'success' THEN 'succeeded' ELSE 'rejected' END"
-  ),
-  projection(
-    "memory_audit",
-    "session",
-    "CASE WHEN outcome = 'success' THEN 'succeeded' ELSE 'rejected' END"
-  ),
-  projection(
-    "budget_audit",
-    "session",
-    "CASE WHEN outcome = 'accepted' THEN 'succeeded' ELSE 'rejected' END"
-  ),
-  projection(
-    "dashboard_audit",
-    "session",
-    "CASE WHEN outcome = 'accepted' THEN 'succeeded' ELSE 'rejected' END"
-  ),
-  projection(
-    "insight_audit",
-    "insight",
-    "CASE WHEN outcome = 'accepted' THEN 'succeeded' ELSE 'rejected' END"
-  ),
-  `SELECT id, user_id AS subjectUserId, session_id AS sessionId, NULL AS patId, NULL AS hostedTurnId,
-    'emailAuthentication.' || operation AS operation,
-    CASE WHEN outcome IN ('accepted', 'replaced') THEN 'succeeded' ELSE 'rejected' END AS outcome,
-    occurred_at_ms AS occurredAt FROM email_replacement_audit WHERE user_id = ? ORDER BY occurred_at_ms, id LIMIT ?`,
-];
+const evidenceQuery = `SELECT id,user_id AS subjectUserId,session_id AS sessionId,
+  pat_id AS patId,hosted_turn_id AS hostedTurnId,oauth_connection_id AS oauthConnectionId,
+  oauth_credential_id AS oauthCredentialId,operation,
+  CASE WHEN outcome IN ('success','accepted','replaced') THEN 'succeeded' ELSE 'rejected' END AS outcome,
+  occurred_at_ms AS occurredAt FROM audit_entries
+  WHERE user_id=? AND record_type IN ('session_call','credential_call','insight_call')
+  ORDER BY occurred_at_ms,id LIMIT ?`;
 
 const callerOf = (row: typeof Row.Type): AuditCaller => {
   if (Option.isSome(row.sessionId)) {
@@ -115,32 +71,22 @@ export const queryEvidence = ({
   Effect.gen(function* () {
     const request = yield* Schema.decodeEffect(Query)(input);
     const result = yield* Effect.tryPromise({
-      try: () =>
-        database.batch(
-          evidenceQueries.map((sql) => database.prepare(sql).bind(request.userId, request.limit))
-        ),
+      try: () => database.prepare(evidenceQuery).bind(request.userId, request.limit).all(),
       catch: () => new AuditUnavailable(),
     });
-    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Row))(
-      result.flatMap((batch) => batch.results)
-    );
+    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Row))(result.results);
     return yield* Effect.try({
       try: () =>
-        rows
-          .toSorted(
-            (left, right) => left.occurredAt - right.occurredAt || left.id.localeCompare(right.id)
-          )
-          .slice(0, request.limit)
-          .map((row) =>
-            AuditLogEntry.make({
-              id: row.id,
-              subjectUserId: row.subjectUserId,
-              caller: callerOf(row),
-              operation: row.operation,
-              outcome: row.outcome,
-              occurredAt: DateTime.makeUnsafe(row.occurredAt),
-            })
-          ),
+        rows.map((row) =>
+          AuditLogEntry.make({
+            id: row.id,
+            subjectUserId: row.subjectUserId,
+            caller: callerOf(row),
+            operation: row.operation,
+            outcome: row.outcome,
+            occurredAt: DateTime.makeUnsafe(row.occurredAt),
+          })
+        ),
       catch: () => new AuditUnavailable(),
     });
   }).pipe(Effect.mapError(() => new AuditUnavailable()));
@@ -159,16 +105,16 @@ export const queryPublications = ({
 > =>
   Effect.gen(function* () {
     const request = yield* Schema.decodeEffect(Query)(input);
-    const projection = (table: string): string => `SELECT id, user_id AS subjectUserId, operation,
-      CASE WHEN outcome = 'success' THEN 'succeeded' ELSE 'rejected' END AS outcome, occurred_at_ms AS occurredAt
-      FROM ${table} WHERE user_id = ?`;
     const result = yield* Effect.tryPromise({
       try: () =>
         database
           .prepare(
-            `SELECT * FROM (${projection("statement_submission_audit")} UNION ALL ${projection("statement_review_audit")} UNION ALL ${projection("statement_clarification_audit")}) ORDER BY occurredAt, id LIMIT ?`
+            `SELECT id,user_id AS subjectUserId,operation,
+            CASE WHEN outcome='success' THEN 'succeeded' ELSE 'rejected' END AS outcome,
+            occurred_at_ms AS occurredAt FROM audit_entries WHERE record_type='publication' AND user_id=?
+            ORDER BY occurred_at_ms,id LIMIT ?`
           )
-          .bind(request.userId, request.userId, request.userId, request.limit)
+          .bind(request.userId, request.limit)
           .all<unknown>(),
       catch: () => new AuditUnavailable(),
     });

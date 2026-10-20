@@ -340,7 +340,7 @@ export const prepareLink = (work: PairWork): Effect.Effect<CanonicalMutationPrep
       mutation: {
         requiredScope: callerScope(work.subject),
         guardRefusal: transactionGuardRefusal(outcome),
-        auditBudget: "shared",
+
         commitGuards: Option.none(),
         outcome,
         oauthReview: Option.none(),
@@ -444,7 +444,7 @@ export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPr
       mutation: {
         requiredScope: callerScope(work.subject),
         guardRefusal: transactionGuardRefusal(outcome),
-        auditBudget: "shared",
+
         commitGuards: Option.none(),
         outcome,
         oauthReview,

@@ -39,7 +39,6 @@ import {
 } from "../../src/shell/channels/whatsapp/contract";
 import { makeCloudflareHostedInference } from "../ai/runtime";
 import {
-  applyTestMigration,
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
@@ -183,11 +182,6 @@ export const promiseGate = (): {
   return { promise, release: (): void => release() };
 };
 
-const applyMigration = (db: D1Database, name: string): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
-  );
-
 const migrationNames = [
   "0001_categories",
   "0002_resource_admission",
@@ -233,86 +227,18 @@ const migrationNames = [
   ...statementAuditTestMigrations,
 ] as const;
 
-export const legacyTurn = "10000000-0000-4000-8000-000000000731";
-
-export const legacyUser = "10000000-0000-4000-8000-000000000732";
-
-export const legacySession = "10000000-0000-4000-8000-000000000733";
-
-const seedTurnBeforeWhatsAppMigration = (db: D1Database): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const timestamp = now();
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare(`INSERT INTO users
-        (id, service_market, locale, time_zone, created_at_ms)
-        VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)`)
-            .bind(legacyUser, timestamp),
-          db
-            .prepare(`INSERT INTO onboarding_consent_records
-        (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-          decision_received_at_ms, accepted_at_ms)
-        VALUES (?, ?, '{}', 'disclosed', 'accepted', ?, ?)`)
-            .bind(newId(), legacyUser, timestamp, timestamp),
-          db
-            .prepare(`INSERT INTO hosted_agent_sessions
-        (id, user_id, consent_basis_json, started_at_ms, status)
-        VALUES (?, ?, '{}', ?, 'active')`)
-            .bind(legacySession, legacyUser, timestamp),
-          db
-            .prepare(`INSERT INTO hosted_turns
-        (id, user_id, hosted_session_id, started_at_ms, status)
-        VALUES (?, ?, ?, ?, 'pending')`)
-            .bind(legacyTurn, legacyUser, legacySession, timestamp),
-          db
-            .prepare(`INSERT INTO transcript_entries
-        (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
-        VALUES (?, ?, ?, ?, 'user', ?, 'Antes')`)
-            .bind(newId(), legacyUser, legacySession, legacyTurn, timestamp),
-          db
-            .prepare(`INSERT INTO hosted_mutation_commits
-        (turn_id, tool_call_id, user_id, committed_at_ms, valid) VALUES (?, ?, ?, ?, 1)`)
-            .bind(legacyTurn, "legacy-call", legacyUser, timestamp),
-        ])
-      );
-    })
-  );
-
-const applySeededMigration = ({
-  db,
-  migration,
-  seedLegacyTurn,
-}: Readonly<{ db: D1Database; migration: string; seedLegacyTurn: boolean }>): Effect.Effect<
-  void,
-  Cause.UnknownError
-> =>
-  Effect.gen(function* () {
-    if (seedLegacyTurn && migration === "0024_hosted_whatsapp") {
-      yield* Effect.tryPromise(() => seedTurnBeforeWhatsAppMigration(db));
-    }
-    yield* applyMigration(db, migration);
-  });
-
-export const setup = (seedLegacyTurn = false): Promise<D1Database> =>
+export const setup = (firstGrant: string = grants[0]): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      if (seedLegacyTurn) {
-        for (const migration of canonicalAdmissionMigrationNames(migrationNames)) {
-          yield* applySeededMigration({ db, migration, seedLegacyTurn });
-        }
-      } else {
-        yield* Effect.tryPromise(() =>
-          installTestSchema({
-            db,
-            sources: canonicalAdmissionMigrationNames(migrationNames).map(
-              (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
-            ),
-          })
-        );
-      }
+      yield* Effect.tryPromise(() =>
+        installTestSchema({
+          db,
+          sources: canonicalAdmissionMigrationNames(migrationNames).map(
+            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+          ),
+        })
+      );
       const snapshot = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
       )(currentDisclosureFor());
@@ -322,7 +248,7 @@ export const setup = (seedLegacyTurn = false): Promise<D1Database> =>
         const user = users[index];
         const pairing = pairings[index];
         const session = sessions[index];
-        const grant = grants[index];
+        const grant = index === 0 ? firstGrant : grants[index];
         if (
           user === undefined ||
           pairing === undefined ||
@@ -341,7 +267,7 @@ export const setup = (seedLegacyTurn = false): Promise<D1Database> =>
         statements.push(
           db
             .prepare(
-              "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+              "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
             )
             .bind(grant, user, snapshot, timestamp, timestamp)
         );
@@ -514,8 +440,9 @@ export const queuedWhatsAppTurn = ({
       const bsuid = WhatsAppBusinessScopedUserId.make(`CO.1349120865530274191${index}`);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO whatsapp_identities
-          (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)`)
+          .prepare(
+            `WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms`
+          )
           .bind(userId, "portfolio-1", bsuid, now())
           .run()
       );
@@ -557,8 +484,12 @@ export const retainedChannelState = (db: D1Database): Promise<ReadonlyArray<unkn
     .batch([
       db.prepare("SELECT * FROM hosted_turns ORDER BY id"),
       db.prepare("SELECT * FROM transcript_entries ORDER BY user_id, sequence"),
-      db.prepare("SELECT * FROM hosted_whatsapp_outbox ORDER BY turn_id"),
-      db.prepare("SELECT * FROM hosted_whatsapp_delivery ORDER BY turn_id"),
+      db.prepare(
+        "SELECT * FROM (SELECT turn_id,dispatch_user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS hosted_whatsapp_outbox ORDER BY turn_id"
+      ),
+      db.prepare(
+        "SELECT * FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery ORDER BY turn_id"
+      ),
     ])
     .then((batches) => batches.map(({ results }) => results));
 
@@ -570,7 +501,7 @@ export const finishLatestWhatsAppFixture = ({
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT correlation_token,provider_message_id,proposed_at_ms FROM hosted_whatsapp_delivery WHERE user_id=? ORDER BY proposed_at_ms DESC,rowid DESC LIMIT 1"
+          "SELECT correlation_token,provider_message_id,proposed_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id=? ORDER BY proposed_at_ms DESC,rowid DESC LIMIT 1"
         )
         .bind(subject.userId)
         .first()
@@ -771,7 +702,9 @@ export const assertQueuedStatement = ({
     expect(
       (yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT turn_id FROM hosted_whatsapp_delivery WHERE user_id=?")
+          .prepare(
+            "SELECT turn_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id=?"
+          )
           .bind(users[0])
           .all()
       )).results
@@ -807,7 +740,9 @@ export const assertSettledStatement = ({
     expect(
       yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT state FROM statement_clarifications WHERE user_id=?")
+          .prepare(
+            "SELECT clarification_state AS state FROM statement_submissions WHERE clarification_state IS NOT NULL AND user_id=?"
+          )
           .bind(users[0])
           .first()
       )
@@ -815,7 +750,9 @@ export const assertSettledStatement = ({
     expect(
       (yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT turn_id FROM statement_whatsapp_documents WHERE user_id=?")
+          .prepare(
+            "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) WHERE user_id=?"
+          )
           .bind(users[0])
           .all()
       )).results
@@ -857,7 +794,9 @@ const assertExtractedStatement = ({
     expect(
       yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT state FROM statement_clarifications WHERE user_id=?")
+          .prepare(
+            "SELECT clarification_state AS state FROM statement_submissions WHERE clarification_state IS NOT NULL AND user_id=?"
+          )
           .bind(users[0])
           .first()
       )
@@ -872,7 +811,9 @@ export const assertStatementQuestion = (
     expect((yield* resumeInterruptedStatement(work)).status).toBe(202);
     const row = yield* Effect.tryPromise(() =>
       work.db
-        .prepare("SELECT text AS proposed_text FROM hosted_whatsapp_delivery WHERE user_id=?")
+        .prepare(
+          "SELECT text AS proposed_text FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id=?"
+        )
         .bind(users[0])
         .first()
     );
@@ -968,7 +909,9 @@ export const publishStatementWithRecovery = ({
     expect(
       (yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT submission_id FROM statement_ingestion_outbox WHERE user_id=?")
+          .prepare(
+            "SELECT submission_id FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE user_id=?"
+          )
           .bind(users[0])
           .all()
       )).results
@@ -1206,7 +1149,6 @@ export const seedRecurringReview = ({
   Cause.UnknownError | Schema.SchemaError | InvalidRecurringEdit
 > =>
   Effect.gen(function* () {
-    yield* applyMigration(db, "0093_recurring_plans");
     const plan = yield* Schema.decodeEffect(RecurringPlanInput)({
       name: "Plan de prueba",
       kind: "expense",
@@ -1229,7 +1171,7 @@ export const seedRecurringReview = ({
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "INSERT INTO recurring_plan_documents (user_id, document_json, revision) VALUES (?, ?, 1)"
+          "INSERT INTO user_documents (kind,user_id, document_json, revision) VALUES ('recurring-plan',?, ?, 1)"
         )
         .bind(users[0], encoded)
         .run()

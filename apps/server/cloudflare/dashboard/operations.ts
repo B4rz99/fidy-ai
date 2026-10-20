@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 
 import { boundedJsonBody } from "../http/operations";
@@ -26,7 +27,6 @@ import {
 import {
   audit,
   credentialUse,
-  dashboardCompletion,
   dashboardOutcome,
   defaultDocument,
   editWrite,
@@ -70,7 +70,7 @@ export const dashboardRefusal = ({
       work.db.batch([
         ...credentialUse(work),
         audit({ work, operation, outcome: "rejected" }),
-        work.db.prepare(dashboardCompletion),
+        prepareChangedRowAssertion({ db: work.db, scope: "dashboard" }),
       ])
     ).pipe(
       Effect.map(() => "recorded" as const),
@@ -129,7 +129,7 @@ const preparedDashboard = ({
   mutation: {
     oauthReview,
     requiredScope: callerScope(work.subject),
-    auditBudget: "shared",
+
     commitGuards: Option.none(),
     guardRefusal: ({ db, subject, current }) =>
       Effect.succeed(
@@ -143,10 +143,12 @@ const preparedDashboard = ({
       ...credentialUse(work),
       ...(Option.isSome(initial) ? [initial.value] : []),
       ...(operation === "dashboard.applyDashboardEdit" && Option.isSome(initial)
-        ? [work.db.prepare(dashboardCompletion)]
+        ? [prepareChangedRowAssertion({ db: work.db, scope: "dashboard" })]
         : []),
       ...write,
-      ...(write.length > 0 ? [work.db.prepare(dashboardCompletion)] : []),
+      ...(write.length > 0
+        ? [prepareChangedRowAssertion({ db: work.db, scope: "dashboard" })]
+        : []),
       audit({ work, operation, outcome: "accepted" }),
     ],
     outcome: dashboardOutcome(operation),

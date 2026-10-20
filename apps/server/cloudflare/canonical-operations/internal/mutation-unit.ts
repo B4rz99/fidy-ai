@@ -6,23 +6,14 @@ import { maximumAtomicBatchCalls } from "../../../src/shell/operations/contract"
 import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import type { HostedCommitFence } from "../../agent/contract";
 import { prepareHostedMutationCommit } from "../../agent/operations";
-import {
-  prepareCanonicalAuditBudgetGuard,
-  refusedByAuditBudget,
-} from "../../../src/shell/audit/operations";
 import { StatementSubmission } from "../../../src/shell/ingestion/contract";
 import { EmailForwardingAddress } from "../../../src/core/ingestion/contract";
-import {
-  forwardingAuditLimitRefusal,
-  readForwardingAddress,
-  statementDailyBudgetRefusal,
-} from "../../ingestion/operations";
+import { readForwardingAddress } from "../../ingestion/operations";
 import {
   RestoredTransactionPair,
   Transaction,
   TransactionPresentation,
 } from "../../../src/core/transactions/contract";
-import { canonicalTriggerOf } from "./triggers";
 import { liveOAuthCommitAuthority } from "../../../src/shell/oauth-agents/operations";
 
 import {
@@ -36,7 +27,7 @@ import {
   transactionNoStore,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import { findTransactionValue, transactionTriggerRefusal } from "../../transactions/operations";
+import { findTransactionValue } from "../../transactions/operations";
 import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
@@ -66,8 +57,6 @@ export type CanonicalMutationUnitExecution =
   | Readonly<{ _tag: "Aborted" }>
   | Readonly<{ _tag: "ConfirmationReview"; review: OAuthNativeReview }>;
 
-type TriggerKind = "movement" | "audit";
-
 /** A child's canonical identity is fixed by its owner's prepared outcome, never by D1's error. */
 const mutationOperation = (mutation: PreparedCanonicalMutation): string =>
   mutation.outcome.operation;
@@ -87,48 +76,24 @@ const childCompletion = (db: D1Database, index: number, operation: string): D1Pr
       accepted = excluded.accepted`)
     .bind(index, operation);
 
-const childBudget = ({
-  db,
-  userId,
-  current,
-  index,
-  operation,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  current: number;
-  index: number;
-  operation: string;
-}>): D1PreparedStatement =>
-  prepareCanonicalAuditBudgetGuard({ db, userId, current, index, operation });
-
 /** Decode only a known CHECK failure; a trigger with similar prose is not proof of a child. */
 const childGuardMarker = (
   cause: unknown
-): Option.Option<
-  Readonly<{ index: number; kind: "completion" | "budget" | "movement" | "capacity" }>
-> => {
+): Option.Option<Readonly<{ index: number; kind: "completion" | "capacity" }>> => {
   const detail = String(cause);
   // SQLite appends the actual extended code after trigger-supplied prose. A forged CHECK phrase
   // inside a RAISE(ABORT) message still ends with SQLITE_CONSTRAINT_TRIGGER and is not trusted.
   if (detail.includes("extended: SQLITE_CONSTRAINT_TRIGGER")) return Option.none();
   const match =
-    /D1_ERROR: CHECK constraint failed: canonical_child_(guard|budget|movement|capacity)_(0|[1-9]|10|11): SQLITE_CONSTRAINT \(extended: SQLITE_CONSTRAINT_CHECK\)/u.exec(
+    /D1_ERROR: CHECK constraint failed: canonical_child_(guard|capacity)_(0|[1-9]|10|11): SQLITE_CONSTRAINT \(extended: SQLITE_CONSTRAINT_CHECK\)/u.exec(
       detail
     );
   if (match === null) return Option.none();
   const index = Number(match[2]);
   if (index >= maximumAtomicBatchCalls) return Option.none();
-  if (match[1] === "budget") return Option.some({ index, kind: "budget" as const });
-  if (match[1] === "movement") return Option.some({ index, kind: "movement" as const });
   if (match[1] === "capacity") return Option.some({ index, kind: "capacity" as const });
   return Option.some({ index, kind: "completion" as const });
 };
-
-/** A shared Audit trigger without a child marker is provable only in a single-child unit. */
-const auditBudgetIndex = (
-  mutations: ReadonlyArray<PreparedCanonicalMutation>
-): Option.Option<number> => (mutations.length === 1 ? Option.some(0) : Option.none());
 
 /** Record the already-decided child refusal and return the disposition its caller must report. */
 const rejectRecorded = ({
@@ -145,90 +110,6 @@ const rejectRecorded = ({
       return { _tag: "Rejected", callIndex, refusal, disposition };
     })
   );
-
-/**
- * The refusal one prepared child explains for a commit-time trigger, or None when the trigger
- * class does not belong to that child's owner. The refusal records its own evidence under the exact
- * child scope, so a rejection the unit attributes is audited like the individual refusal it is.
- */
-const triggerRefusal = ({
-  db,
-  subject,
-  current,
-  mutation,
-  kind,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  mutation: PreparedCanonicalMutation;
-  kind: TriggerKind;
-}>): Option.Option<CanonicalMutationRefusal> => {
-  const scoped = childCaller({ subject, requiredScope: mutation.requiredScope });
-  const auditOnly = (refusal: CanonicalMutationRefusal): Option.Option<CanonicalMutationRefusal> =>
-    kind === "audit" ? Option.some(refusal) : Option.none();
-  switch (mutation.outcome._tag) {
-    case "Owner":
-      return mutation.outcome.triggerRefusal({ db, subject: scoped, current }, kind);
-    case "Transaction":
-      return transactionTriggerRefusal({
-        db,
-        subject: scoped,
-        current,
-        outcome: mutation.outcome,
-        kind,
-      });
-    case "ForwardingAddress":
-      return auditOnly(forwardingAuditLimitRefusal());
-    case "StatementSubmission":
-      return auditOnly(statementDailyBudgetRefusal("trigger"));
-  }
-};
-
-/**
- * The child index and trigger class one aborted unit's D1 constraint names, or None when the
- * message is not a known commit-time trigger or no child in the unit can be named as its cause.
- * The value attributes an abort; the triggers themselves remain the atomic authority that admitted
- * or refused the work.
- */
-const triggerAttribution = ({
-  mutations,
-  detail,
-}: Readonly<{
-  mutations: ReadonlyArray<PreparedCanonicalMutation>;
-  detail: string;
-}>): Option.Option<Readonly<{ index: number; kind: TriggerKind }>> => {
-  if (Option.isSome(canonicalTriggerOf(detail)) || !refusedByAuditBudget(detail)) {
-    return Option.none();
-  }
-  return Option.map(auditBudgetIndex(mutations), (index) => ({ index, kind: "audit" as const }));
-};
-
-/** Record one attributed trigger's child refusal, or answer Unavailable when it names no owner. */
-const refuseAttributed = ({
-  db,
-  subject,
-  current,
-  mutations,
-  index,
-  kind,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  mutations: ReadonlyArray<PreparedCanonicalMutation>;
-  index: number;
-  kind: TriggerKind;
-}>): Effect.Effect<CanonicalMutationUnitExecution> => {
-  const mutation = mutations[index];
-  const refusal =
-    mutation === undefined
-      ? Option.none<CanonicalMutationRefusal>()
-      : triggerRefusal({ db, subject, current, mutation, kind });
-  return Option.isNone(refusal)
-    ? Effect.succeed({ _tag: "Unavailable" } as const)
-    : rejectRecorded({ callIndex: index, refusal: refusal.value });
-};
 
 /** Attribute an owner's indexed completion or capacity assertion only to the child it names. */
 const refuseChildGuard = ({
@@ -266,10 +147,6 @@ const refuseChildGuard = ({
     return yield* rejectRecorded({ callIndex: index, refusal });
   });
 
-const isOwnerGuard = (
-  kind: "completion" | "capacity" | "movement" | "budget"
-): kind is "completion" | "capacity" => kind === "completion" || kind === "capacity";
-
 /** Classify a child-specific CHECK, refusing unknown lookalikes without guessing a child. */
 const markedAbort = ({
   db,
@@ -287,36 +164,24 @@ const markedAbort = ({
   const marker = childGuardMarker(cause);
   if (Option.isSome(marker)) {
     return Option.some(
-      isOwnerGuard(marker.value.kind)
-        ? refuseChildGuard({
-            db,
-            subject,
-            current,
-            mutations,
-            index: marker.value.index,
-            kind: marker.value.kind,
-          })
-        : refuseAttributed({
-            db,
-            subject,
-            current,
-            mutations,
-            index: marker.value.index,
-            kind: marker.value.kind === "budget" ? "audit" : marker.value.kind,
-          })
+      refuseChildGuard({
+        db,
+        subject,
+        current,
+        mutations,
+        index: marker.value.index,
+        kind: marker.value.kind,
+      })
     );
   }
   const detail = String(cause);
-  return detail.includes("canonical_child_guard_") ||
-    detail.includes("canonical_child_budget_") ||
-    detail.includes("canonical_child_movement_") ||
-    detail.includes("canonical_child_capacity_")
+  return detail.includes("canonical_child_guard_") || detail.includes("canonical_child_capacity_")
     ? Option.some(Effect.succeed({ _tag: "Unavailable" } as const))
     : Option.none();
 };
 
 /**
- * Attribute an aborted unit only when its indexed CHECK or a known trigger proves the child, then
+ * Attribute an aborted unit only when its indexed CHECK proves the child, then
  * record that child's refusal after rollback. A forged marker or unowned trigger is Unavailable;
  * an unmarked abort stays Aborted so a same-material statement can retry without a false Audit.
  */
@@ -340,20 +205,6 @@ const classifyAbortedUnit = ({
     if (!live) return { _tag: "CredentialRefused" } as const;
     const marked = markedAbort({ db, subject, current, mutations, cause });
     if (Option.isSome(marked)) return yield* marked.value;
-    const attributed = triggerAttribution({
-      mutations,
-      detail: String(cause),
-    });
-    if (Option.isSome(attributed)) {
-      return yield* refuseAttributed({
-        db,
-        subject,
-        current,
-        mutations,
-        index: attributed.value.index,
-        kind: attributed.value.kind,
-      });
-    }
     return { _tag: "Aborted" } as const;
   });
 
@@ -441,9 +292,6 @@ const childStatements = ({
   const operation = mutationOperation(mutation);
   return [
     ...oauthChildStatements({ db, subject, current, mutation, index }),
-    ...(mutation.auditBudget === "shared"
-      ? [childBudget({ db, userId, current, index, operation })]
-      : []),
     ...Option.match(mutation.commitGuards, {
       onNone: (): ReadonlyArray<D1PreparedStatement> => [],
       onSome: (guards) => guards({ db, userId, current, index, operation }),

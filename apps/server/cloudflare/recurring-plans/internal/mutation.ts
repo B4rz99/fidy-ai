@@ -16,7 +16,6 @@ import {
 import { ownsRecurringSeries } from "../../recurring/operations";
 import { listCategories } from "../../categories/operations";
 import { readPlanningTransactions } from "../../transactions/operations";
-import { recurringLimitRefusal } from "./audit";
 import { readDocument } from "./store";
 
 import { planningFact } from "./facts";
@@ -143,6 +142,4 @@ export const outcome = (): OwnerOutcome => ({
       ),
       Effect.orElseSucceed(() => Option.none())
     ),
-  triggerRefusal: (_work, kind) =>
-    kind === "audit" ? Option.some(recurringLimitRefusal()) : Option.none(),
 });

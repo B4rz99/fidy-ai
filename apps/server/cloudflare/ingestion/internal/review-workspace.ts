@@ -1,16 +1,13 @@
+import { reviewAudit } from "./review-audit";
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Data, Effect, Option, Schema } from "effect";
 import {
   ReviewWorkspace,
   ReviewWorkspaceQuery,
   reviewPageSize,
 } from "../../../src/core/ingestion/contract";
-import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
-import { recordLivePATUse } from "../../../src/shell/tokens/operations";
 import {
   type QueryCaller,
-  callerAuthority,
-  isPATCaller,
-  transactionId,
   transactionNoStore,
   transactionNow,
   transactionUnavailable,
@@ -21,39 +18,8 @@ import { validationFailed } from "./statement-ingestion";
 const Counts = Schema.Struct({ pendingCount: Schema.Int, total: Schema.Int });
 const relation = `SELECT *, CASE WHEN status != 'created' AND expires_at_ms <= ?
   THEN 'expired' ELSE status END AS visible_status FROM ingestion_review_sources WHERE user_id = ?`;
-const completion = `INSERT INTO ingestion_review_assertion (id, accepted)
-  VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-  ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
 
 class ReviewWorkspaceUnavailable extends Data.TaggedError("ReviewWorkspaceUnavailable") {}
-
-const readAccountability = ({
-  db,
-  subject,
-  current,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  current: number;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const use = isPATCaller(subject)
-    ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
-        db.prepare(sql).bind(...params)
-      )
-    : [];
-  return [
-    ...use,
-    prepareAuthorizedAuditCall({
-      db,
-      authority: callerAuthority({ subject, current }),
-      id: transactionId(),
-      current,
-      operation: "ingestion.getReviewWorkspace",
-      outcome: "accepted",
-      afterOwnerWrite: false,
-    }),
-  ];
-};
 
 const readWorkspace = ({
   db,
@@ -93,8 +59,12 @@ const readWorkspace = ({
             reviewPageSize,
             Option.getOrElse(query.value.offset, () => 0)
           ),
-        ...readAccountability({ db, subject, current }),
-        db.prepare(completion),
+        ...reviewAudit({
+          work: { db, subject, current },
+          operation: "ingestion.getReviewWorkspace",
+          accepted: true,
+        }),
+        prepareChangedRowAssertion({ db, scope: "ingestion_review" }),
       ])
     );
     const counts = yield* Schema.decodeUnknownEffect(Counts)(results[0]?.results[0]);

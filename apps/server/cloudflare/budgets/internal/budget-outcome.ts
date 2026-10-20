@@ -1,7 +1,7 @@
 import { type BudgetOutcome } from "../contract";
 import { Budget, BudgetId } from "../../../src/core/budgets/contract";
 import { type Cause, Effect, Option, Schema } from "effect";
-import { auditLimitRefusal } from "../../canonical-work/operations";
+
 import { budgetFromRow } from "./budget-row";
 import {
   type CommittedMutationValue,
@@ -63,13 +63,11 @@ export const findBudgetValue = ({
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
 
-/** Commit-time Budget decisions stay with the owner; only a proved audit trigger is attributed. */
+/** The Budget owner retains its identity and committed readback. */
 export const budgetOutcome = (outcome: BudgetOutcome): OwnerOutcome => ({
   _tag: "Owner",
   operation: outcome.operation,
   guardFacts: Option.some(outcome),
   collisionKey: Option.none(),
   read: (db, userId) => findBudgetValue({ db, userId, outcome }),
-  triggerRefusal: (_work, kind) =>
-    kind === "audit" ? Option.some(auditLimitRefusal()) : Option.none(),
 });

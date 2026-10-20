@@ -75,8 +75,6 @@ export type AuditCredentialOperation =
 export type AuditPublicationOperation =
   | "ingestion.submitForExtraction"
   | "ingestion.listNeedsReviewItems";
-/** The shared stable-User daily canonical-call budget enforced at commit time. */
-export const dailyAuditBudget = 256;
 /** UTC-day width used by canonical admission, in milliseconds. */
 export const utcDayMilliseconds = 86400000;
 /** Maximum retention of canonical activity evidence, in UTC days. */
@@ -129,7 +127,7 @@ export type AuthorizedAuditCall = Readonly<{
         outcome: AcceptedOutcome;
       }>
     | Readonly<{
-        authority: AuditAuthority & { table: "pats" | "oauth_access_credentials" };
+        authority: AuditAuthority & { table: "pats" | "oauth_credentials" };
         operation: AuditCredentialOperation;
         outcome: AcceptedOutcome;
       }>
@@ -148,7 +146,7 @@ export type CanonicalAdmissionRefusal = Readonly<{
 /** Record a completed retained-response disclosure only with the original snapshot's exact live proof. It grants no permission beyond the coordinator's current authority. */
 export type CanonicalReplayAccess = CanonicalAdmissionRefusal &
   Readonly<{
-    authority: AuditAuthority & Readonly<{ table: "pats" | "oauth_access_credentials" }>;
+    authority: AuditAuthority & Readonly<{ table: "pats" | "oauth_credentials" }>;
     retainedResponseProof: OwnedStatement;
     outcome: "accepted" | "rejected";
   }>;

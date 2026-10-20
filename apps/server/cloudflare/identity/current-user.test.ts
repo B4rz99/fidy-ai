@@ -4,7 +4,11 @@ import { User, UserId } from "../../src/core/identity/contract";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import assert from "node:assert/strict";
 import { afterAll, expect, it } from "vitest";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  consentHistoryTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { IdentityUnavailable } from "./contract";
 import { readCurrentUser } from "./operations";
 
@@ -25,21 +29,34 @@ const setup = (): Effect.Effect<D1Database, never> =>
     yield* Effect.tryPromise(() =>
       db.batch([
         db.prepare(
-          "CREATE TABLE users (id TEXT PRIMARY KEY, service_market TEXT, locale TEXT, time_zone TEXT, created_at_ms INTEGER)"
+          "CREATE TABLE users (id TEXT PRIMARY KEY, service_market TEXT, locale TEXT, time_zone TEXT, created_at_ms INTEGER, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
         ),
-        db.prepare(
-          "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER, ends_at_ms INTEGER)"
-        ),
-        db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY)"),
+        db.prepare(consentHistoryTestSchema),
         db
-          .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1000)")
+          .prepare(
+            "INSERT INTO users (id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1000)"
+          )
           .bind(userA),
         db
-          .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/New_York', 2000)")
+          .prepare(
+            "INSERT INTO users (id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/New_York', 2000)"
+          )
           .bind(userB),
-        db.prepare("INSERT INTO trial_periods VALUES (?, 1000, 604801000)").bind(userA),
-        db.prepare("INSERT INTO trial_periods VALUES (?, 2000, 604802000)").bind(userB),
-        db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(userA),
+        db
+          .prepare(
+            "UPDATE users SET trial_started_at_ms=1000,trial_ends_at_ms=604801000 WHERE id=?1"
+          )
+          .bind(userA),
+        db
+          .prepare(
+            "UPDATE users SET trial_started_at_ms=2000,trial_ends_at_ms=604802000 WHERE id=?1"
+          )
+          .bind(userB),
+        db
+          .prepare(
+            "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+          )
+          .bind(userA),
       ])
     );
     return db;
@@ -72,17 +89,31 @@ it("refuses a User without their own current Consent grant without borrowing ano
       const currentB = readCurrentUser({ db, userId: userB });
       assert.deepStrictEqual(yield* Effect.exit(currentB), Exit.fail(new IdentityUnavailable()));
       yield* Effect.tryPromise(() =>
-        db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(userB).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+          )
+          .bind(userB)
+          .run()
       );
       expect((yield* currentB).data.id).toBe(userB);
       yield* Effect.tryPromise(() =>
-        db.prepare("DELETE FROM onboarding_consent_records WHERE user_id = ?").bind(userB).run()
+        db
+          .prepare(
+            "DELETE FROM consent_history AS onboarding_consent_records WHERE onboarding_consent_records.record_type='processing_grant' AND user_id = ?"
+          )
+          .bind(userB)
+          .run()
       );
       assert.deepStrictEqual(yield* Effect.exit(currentB), Exit.fail(new IdentityUnavailable()));
       expect((yield* readCurrentUser({ db, userId: userA })).data.id).toBe(userA);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM trial_periods ORDER BY user_id").all()
+          db
+            .prepare(
+              "SELECT id AS user_id,trial_started_at_ms AS started_at_ms,trial_ends_at_ms AS ends_at_ms FROM users ORDER BY id"
+            )
+            .all()
         )).results
       ).toEqual([
         { user_id: userA, started_at_ms: 1000, ends_at_ms: 604801000 },
@@ -98,9 +129,12 @@ it.each([
   },
   {
     invalid: "original TrialPeriod",
-    sql: "UPDATE trial_periods SET ends_at_ms = 2000 WHERE user_id = ?",
+    sql: "UPDATE users SET trial_ends_at_ms = 2000 WHERE id = ?",
   },
-  { invalid: "missing TrialPeriod", sql: "DELETE FROM trial_periods WHERE user_id = ?" },
+  {
+    invalid: "missing TrialPeriod",
+    sql: "UPDATE users SET trial_started_at_ms = NULL,trial_ends_at_ms = NULL WHERE id = ?",
+  },
 ])("fails closed for $invalid without substituting another User's valid state", ({ sql }) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -108,7 +142,11 @@ it.each([
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(sql).bind(userA),
-          db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(userB),
+          db
+            .prepare(
+              "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+            )
+            .bind(userB),
         ])
       );
       assert.deepStrictEqual(

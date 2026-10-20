@@ -91,7 +91,7 @@ export const stage = (input: ProactivityChannelStage): Effect.Effect<void, Whats
     )(template);
     const association = whatsAppIdentityQuery({ userId: input.userId, ...input.recipient });
     const prior = yield* protectedAction(input, {
-      sql: "SELECT template_json FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='staged'",
+      sql: "SELECT template_json FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='staged'",
       params: [input.userId, input.id],
     });
     const raw = yield* attempt(() => prior.first());
@@ -102,7 +102,7 @@ export const stage = (input: ProactivityChannelStage): Effect.Effect<void, Whats
       if (stored.template_json !== serialized) return yield* new WhatsAppUnavailable();
     }
     const statement = yield* protectedAction(input, {
-      sql: `INSERT OR IGNORE INTO proactivity_whatsapp_claims(user_id,delivery_id,role,consent_grant_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,template_json,text,scheduled_at_ms,expires_at_ms,time_zone,state) SELECT ?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,?, 'staged' WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
+      sql: `INSERT OR IGNORE INTO whatsapp_deliveries AS proactivity_whatsapp_claims(kind,user_id,delivery_id,role,consent_grant_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,template_json,text,scheduled_at_ms,expires_at_ms,time_zone,state) SELECT 'proactivity', ?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,?, 'staged' WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
       params: [
         input.userId,
         input.id,
@@ -128,7 +128,7 @@ const expireStaged = (input: ProactivityChannelScope): Effect.Effect<void, Whats
   attempt(() =>
     input.db
       .prepare(
-        "UPDATE proactivity_whatsapp_claims SET state='expired',text=NULL,template_json=NULL WHERE user_id=? AND delivery_id=? AND state='staged'"
+        "UPDATE whatsapp_deliveries AS proactivity_whatsapp_claims SET state='expired',text=NULL,template_json=NULL WHERE kind='proactivity' AND user_id=? AND delivery_id=? AND state='staged'"
       )
       .bind(input.userId, input.id)
       .run()
@@ -139,7 +139,7 @@ export const start = (
 ): Effect.Effect<ProactivityChannelClaim, WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const select = yield* protectedAction(input, {
-      sql: `SELECT correlation_token,portfolio_id,bsuid,business_phone_number_id,template_json,scheduled_at_ms,expires_at_ms,time_zone FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND role=? AND consent_grant_id IS NULLIF(?,'') AND state='staged' AND EXISTS (${input.guard.sql})`,
+      sql: `SELECT correlation_token,portfolio_id,bsuid,business_phone_number_id,template_json,scheduled_at_ms,expires_at_ms,time_zone FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND role=? AND consent_grant_id IS NULLIF(?,'') AND state='staged' AND EXISTS (${input.guard.sql})`,
       params: [input.userId, input.id, input.role, grantParameter(input), ...input.guard.params],
     });
     const raw = yield* attempt(() => select.first());
@@ -162,7 +162,7 @@ export const start = (
       bsuid: row.bsuid,
     });
     const update = yield* protectedAction(input, {
-      sql: `UPDATE proactivity_whatsapp_claims SET state='sending',send_started_at_ms=? WHERE user_id=? AND delivery_id=? AND state='staged' AND correlation_token=? AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND (SELECT count(*) FROM proactivity_whatsapp_claims WHERE user_id=? AND send_started_at_ms>?)<?`,
+      sql: `UPDATE whatsapp_deliveries AS proactivity_whatsapp_claims SET state='sending',send_started_at_ms=? WHERE kind='proactivity' AND user_id=? AND delivery_id=? AND state='staged' AND correlation_token=? AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND (SELECT count(*) FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND send_started_at_ms>?)<?`,
       params: [
         input.now.epochMilliseconds,
         input.userId,
@@ -202,7 +202,7 @@ export const recordSend = (
   attempt(() =>
     input.db
       .prepare(
-        "UPDATE proactivity_whatsapp_claims SET state=?,provider_message_id=coalesce(provider_message_id,?) WHERE user_id=? AND delivery_id=? AND correlation_token=? AND state='sending'"
+        "UPDATE whatsapp_deliveries AS proactivity_whatsapp_claims SET state=?,provider_message_id=coalesce(provider_message_id,?) WHERE kind='proactivity' AND user_id=? AND delivery_id=? AND correlation_token=? AND state='sending'"
       )
       .bind(
         input.outcome,
@@ -220,7 +220,7 @@ export const prepareReconciliation = (
   const status = input.admission;
   return input.db
     .prepare(
-      "UPDATE proactivity_whatsapp_claims SET state=CASE WHEN ?='delivered' THEN 'delivered' WHEN state IN ('delivered','rejected') THEN state WHEN ?='failed' THEN 'rejected' ELSE 'accepted' END,provider_message_id=coalesce(provider_message_id,?),delivered_at_ms=CASE WHEN ?='delivered' THEN coalesce(delivered_at_ms,?) ELSE delivered_at_ms END WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+?>=send_started_at_ms AND ?<=? AND state NOT IN ('staged','expired')"
+      "UPDATE whatsapp_deliveries AS proactivity_whatsapp_claims SET state=CASE WHEN ?='delivered' THEN 'delivered' WHEN state IN ('delivered','rejected') THEN state WHEN ?='failed' THEN 'rejected' ELSE 'accepted' END,provider_message_id=coalesce(provider_message_id,?),delivered_at_ms=CASE WHEN ?='delivered' THEN coalesce(delivered_at_ms,?) ELSE delivered_at_ms END WHERE kind='proactivity' AND user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+?>=send_started_at_ms AND ?<=? AND state NOT IN ('staged','expired')"
     )
     .bind(
       status.outcome,
@@ -247,7 +247,7 @@ export const reconcile = (
     const raw = yield* attempt(() =>
       input.db
         .prepare(
-          `SELECT delivery_id,CASE WHEN ?='delivered' THEN 'delivered' ELSE state END AS state FROM proactivity_whatsapp_claims WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+?>=send_started_at_ms AND ?<=? AND state NOT IN ('staged','expired')`
+          `SELECT delivery_id,CASE WHEN ?='delivered' THEN 'delivered' ELSE state END AS state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+?>=send_started_at_ms AND ?<=? AND state NOT IN ('staged','expired')`
         )
         .bind(
           status.outcome,
@@ -287,7 +287,7 @@ export const findDeliveryUser = (
     const raw = yield* attempt(() =>
       input.db
         .prepare(
-          "SELECT user_id FROM proactivity_whatsapp_claims WHERE correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL"
+          "SELECT user_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL"
         )
         .bind(input.correlationToken, input.businessPhoneNumberId)
         .first()
@@ -301,7 +301,7 @@ export const findDeliveryUser = (
 
 /** Metadata-only no-resend identities for bounded expiry/recovery; a begun send remains begun regardless of provider outcome. */
 export const startedDeliveryQuery = (): OwnedStatement => ({
-  sql: "SELECT user_id,delivery_id FROM proactivity_whatsapp_claims WHERE send_started_at_ms IS NOT NULL",
+  sql: "SELECT user_id,delivery_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE send_started_at_ms IS NOT NULL",
   params: [],
 });
 
@@ -309,12 +309,12 @@ export const startedDeliveryQuery = (): OwnedStatement => ({
 export const rejectedDeliveryQuery = (
   input: Readonly<{ userId: UserId; id: string }>
 ): OwnedStatement => ({
-  sql: "SELECT user_id,delivery_id FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='rejected'",
+  sql: "SELECT user_id,delivery_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='rejected'",
   params: [input.userId, input.id],
 });
 
 export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): OwnedStatement => ({
-  sql: "SELECT user_id,delivery_id,role,provider_message_id,send_started_at_ms,delivered_at_ms FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL",
+  sql: "SELECT user_id,delivery_id,role,provider_message_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL",
   params: [input.userId, input.id],
 });
 export const transcriptQuery = (
@@ -322,7 +322,7 @@ export const transcriptQuery = (
 ): OwnedStatement => {
   const base = deliveryQuery(input);
   return {
-    sql: `SELECT v.*,c.text FROM (${base.sql}) AS v JOIN proactivity_whatsapp_claims AS c ON c.user_id=v.user_id AND c.delivery_id=v.delivery_id WHERE c.text IS NOT NULL AND c.send_started_at_ms+?>?`,
+    sql: `SELECT v.*,c.text FROM (${base.sql}) AS v JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS c ON c.user_id=v.user_id AND c.delivery_id=v.delivery_id WHERE c.text IS NOT NULL AND c.send_started_at_ms+?>?`,
     params: [...base.params, retentionMs, input.now],
   };
 };
@@ -336,7 +336,7 @@ export const controlQuery = (
     bsuid: input.proof.bsuid,
   });
   return {
-    sql: `SELECT c.user_id,c.delivery_id,c.consent_grant_id FROM proactivity_whatsapp_claims AS c WHERE c.user_id=? AND c.delivery_id=? AND c.role='reminder-question' AND c.state='delivered' AND c.text IS NOT NULL AND c.send_started_at_ms+?>? AND c.delivered_at_ms<=?+? AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
+    sql: `SELECT c.user_id,c.delivery_id,c.consent_grant_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS c WHERE c.user_id=? AND c.delivery_id=? AND c.role='reminder-question' AND c.state='delivered' AND c.text IS NOT NULL AND c.send_started_at_ms+?>? AND c.delivered_at_ms<=?+? AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
     params: [
       input.proof.userId,
       input.id,
@@ -358,7 +358,7 @@ export const replyQuery = (input: WhatsAppTurnAdmission): OwnedStatement => {
     bsuid: input.bsuid,
   });
   return {
-    sql: `SELECT c.user_id,c.delivery_id,c.role,c.delivered_at_ms,? AS occurred_at_ms FROM proactivity_whatsapp_claims AS c WHERE c.user_id=? AND c.provider_message_id=? AND c.state='delivered' AND c.role IN ('manual-entry-reminder','reminder-question') AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
+    sql: `SELECT c.user_id,c.delivery_id,c.role,c.delivered_at_ms,? AS occurred_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS c WHERE c.user_id=? AND c.provider_message_id=? AND c.state='delivered' AND c.role IN ('manual-entry-reminder','reminder-question') AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
     params: [
       input.occurredAtMs,
       input.userId,
@@ -377,8 +377,8 @@ export const sweepEvidence = (
     input.db.batch([
       input.db
         .prepare(
-          `UPDATE proactivity_whatsapp_claims SET text=NULL,template_json=NULL WHERE rowid IN (
-             SELECT rowid FROM proactivity_whatsapp_claims
+          `UPDATE whatsapp_deliveries AS proactivity_whatsapp_claims SET text=NULL,template_json=NULL WHERE kind='proactivity' AND rowid IN (
+             SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims
              WHERE (text IS NOT NULL OR template_json IS NOT NULL) AND send_started_at_ms <= ?
              ORDER BY send_started_at_ms LIMIT 64
            ) AND (text IS NOT NULL OR template_json IS NOT NULL)`
@@ -386,8 +386,8 @@ export const sweepEvidence = (
         .bind(input.now - retentionMs),
       input.db
         .prepare(
-          `UPDATE proactivity_whatsapp_claims SET text=NULL,template_json=NULL WHERE rowid IN (
-             SELECT rowid FROM proactivity_whatsapp_claims
+          `UPDATE whatsapp_deliveries AS proactivity_whatsapp_claims SET text=NULL,template_json=NULL WHERE kind='proactivity' AND rowid IN (
+             SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims
              WHERE (text IS NOT NULL OR template_json IS NOT NULL) AND state='staged' AND expires_at_ms <= ?
              ORDER BY expires_at_ms LIMIT 64
            ) AND (text IS NOT NULL OR template_json IS NOT NULL)`

@@ -15,15 +15,14 @@ const database = Effect.gen(function* () {
   const db = yield* io(() => pool.acquire());
   yield* io(() =>
     db.batch([
-      db.prepare("CREATE TABLE users (id TEXT PRIMARY KEY)"),
       db.prepare(
-        "CREATE TABLE trial_periods (user_id TEXT, started_at_ms INTEGER, ends_at_ms INTEGER)"
+        "CREATE TABLE users (id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
       ),
       db.prepare(
         "CREATE TABLE subscriptions (user_id TEXT, paid_period_ends_at_ms INTEGER, attempt_id TEXT)"
       ),
       db.prepare(
-        "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT)"
+        "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER)"
       ),
       db.prepare("CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
       db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
@@ -31,12 +30,11 @@ const database = Effect.gen(function* () {
         "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
       ),
       db.prepare(
-        "CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER, ends_at_ms INTEGER)"
+        "CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT)"
       ),
-      db.prepare("CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER)"),
       db.prepare("CREATE TABLE authority (userId TEXT PRIMARY KEY, live INTEGER)"),
       db.prepare("CREATE TABLE publication (id TEXT PRIMARY KEY)"),
-      db.prepare("INSERT INTO users VALUES (?),(?)").bind(userId, otherUser),
+      db.prepare("INSERT INTO users (id) VALUES (?),(?)").bind(userId, otherUser),
       db.prepare("INSERT INTO authority VALUES (?,1),(?,1)").bind(userId, otherUser),
     ])
   );
@@ -151,11 +149,15 @@ it("uses corrected paid standing at publication without retroactively charging P
             .prepare("INSERT INTO subscriptions VALUES (?,?,?)")
             .bind(userId, current + 1, "paid-attempt"),
           db
-            .prepare("INSERT INTO billing_paid_periods VALUES (?,?,?)")
-            .bind("paid-attempt", current - 1, current + 1),
-          db
-            .prepare("INSERT INTO billing_attempts VALUES ('paid-attempt', ?, 'source', 'weekly')")
+            .prepare(
+              "INSERT INTO billing_attempts(id,user_id,payment_source_id,billing_period) VALUES ('paid-attempt', ?, 'source', 'weekly')"
+            )
             .bind(userId),
+          db
+            .prepare(
+              "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms FROM (SELECT ? AS attempt_id,? AS starts_at_ms,? AS ends_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
+            )
+            .bind("paid-attempt", current - 1, current + 1),
           db.prepare("INSERT INTO card_payment_sources VALUES ('source', ?, 'nequi')").bind(userId),
         ])
       );
@@ -165,7 +167,9 @@ it("uses corrected paid standing at publication without retroactively charging P
       ).toEqual({ _tag: "Uncapped" });
       yield* io(() =>
         db
-          .prepare("INSERT INTO billing_access_adjustments VALUES (?,?)")
+          .prepare(
+            "INSERT INTO refund_attempts(adjusted_attempt_id,access_ends_at_ms) VALUES (?,?)"
+          )
           .bind("paid-attempt", current)
           .run()
       );
@@ -185,7 +189,7 @@ it("leaves Trial use unmetered and begins a fresh Free meter at exclusive expiry
       const db = yield* database;
       yield* io(() =>
         db
-          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
           .bind(userId, current - 1, current + 1)
           .run()
       );

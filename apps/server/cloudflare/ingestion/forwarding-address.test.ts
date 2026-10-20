@@ -1,6 +1,10 @@
 import { Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { applyTestMigration } from "../d1-test-fixture";
+import {
+  applyForwardingFixtureMigration,
+  consentHistoryTestSchema,
+  installAuditTestSchema,
+} from "../d1-test-fixture";
 import { afterEach, expect, it } from "vitest";
 import { forwardingAddressResponse } from "./operations";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
@@ -41,34 +45,26 @@ const setup = Effect.fn(function* () {
   yield* wait(() => miniflare.ready);
   const db = yield* wait(() => miniflare.getD1Database("DB"));
   yield* wait(() =>
-    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY);
-    CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY, accepted_at_ms INTEGER NOT NULL);
-    CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY);
+    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
+    ${consentHistoryTestSchema};
+
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
     CREATE TABLE statement_submission_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE statement_submission_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER CHECK (accepted = 1));
+    CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT DEFAULT 'success', occurred_at_ms INTEGER);
     CREATE TABLE transaction_audit (user_id TEXT, operation TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE statement_clarification_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER, ends_at_ms INTEGER);
     CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY, attempt_id TEXT, paid_period_ends_at_ms INTEGER);
-    CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT);
+    CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
  CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
- CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY, starts_at_ms INTEGER, ends_at_ms INTEGER);
-    CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER);`)
+
+    CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);`)
   );
   for (const [name, event, table] of [
     ["statement_submission_audit_no_update", "UPDATE", "statement_submission_audit"],
     ["statement_submission_audit_no_delete", "DELETE", "statement_submission_audit"],
-    ["statement_audit_daily_budget", "INSERT", "statement_submission_audit"],
-    ["transaction_audit_daily_budget", "INSERT", "transaction_audit"],
-    ["pat_canonical_daily_budget", "INSERT", "pat_audit"],
-    ["category_canonical_daily_budget", "INSERT", "category_audit"],
-    ["memory_canonical_daily_budget", "INSERT", "memory_audit"],
   ]) {
     yield* wait(() =>
       db.prepare(`CREATE TRIGGER ${name} BEFORE ${event} ON ${table} BEGIN SELECT 1; END`).run()
@@ -79,15 +75,26 @@ const setup = Effect.fn(function* () {
     "0019_canonical_child_guards",
     "0032_commercial_allowances",
     "0034_forwarded_email_deferral",
+    "0115_ingestion_audit",
+    "0120_email_deferral",
   ]) {
     yield* wait(() =>
-      applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+      applyForwardingFixtureMigration({
+        db,
+        source: new URL(`../migrations/${name}.sql`, import.meta.url),
+      })
     );
   }
+  yield* wait(() => installAuditTestSchema(db));
   for (const user of [userA, userB]) {
-    yield* wait(() => db.prepare("INSERT INTO users VALUES (?)").bind(user).run());
+    yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(user).run());
     yield* wait(() =>
-      db.prepare("INSERT INTO onboarding_consent_records VALUES (?, 1)").bind(user).run()
+      db
+        .prepare(
+          "INSERT INTO consent_history (record_type,user_id,accepted_at_ms) VALUES ('processing_grant',?, 1)"
+        )
+        .bind(user)
+        .run()
     );
   }
   yield* wait(() =>
@@ -150,7 +157,9 @@ it("issues unpredictable User-specific addresses at verified Consent and returns
       expect(
         (yield* wait(() =>
           db
-            .prepare("SELECT operation FROM statement_submission_audit WHERE user_id = ?")
+            .prepare(
+              "SELECT operation FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit WHERE user_id = ? ORDER BY occurred_at_ms,operation"
+            )
             .bind(userA)
             .all()
         )).results
@@ -167,7 +176,9 @@ it("returns unavailable without a defect when a retained forwarding creation dat
       const db = yield* setup();
       yield* wait(() =>
         db
-          .prepare("UPDATE email_forwarding_addresses SET created_at_ms = ? WHERE user_id = ?")
+          .prepare(
+            "UPDATE users AS email_forwarding_addresses SET forwarding_issued_at_ms = ? WHERE forwarding_address_id IS NOT NULL AND id = ?"
+          )
           .bind(8_640_000_000_000_001, userA)
           .run()
       );
@@ -212,7 +223,12 @@ it("refuses a cross-User session subject and revoked Consent without disclosing 
       });
       expect(wrongMutation.status).not.toBe(200);
       yield* wait(() =>
-        db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userA).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userA)
+          .run()
       );
       const revoked = yield* forwardingAddressResponse({
         db,
@@ -236,7 +252,13 @@ it("refuses a cross-User session subject and revoked Consent without disclosing 
       });
       expect(revokedMutation.status).not.toBe(200);
       expect(
-        (yield* wait(() => db.prepare("SELECT id FROM statement_submission_audit").all())).results
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT id FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(0);
     })
   ));
@@ -257,7 +279,13 @@ it("canonical query dispatch refuses a mutation identity and an unavailable oper
         expect(Option.isNone(response)).toBe(true);
       }
       expect(
-        (yield* wait(() => db.prepare("SELECT id FROM statement_submission_audit").all())).results
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT id FROM (SELECT id,user_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='publication') AS ingestion_publication_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(0);
     })
   ));

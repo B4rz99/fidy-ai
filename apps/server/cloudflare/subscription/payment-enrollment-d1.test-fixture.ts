@@ -1,10 +1,15 @@
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
 import { afterAll } from "vitest";
-import { installTestSchemaWithPrefix, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  auditEntriesTestSchema,
+  consentHistoryTestSchema,
+  installTestSchemaWithPrefix,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 
-class FixtureFailure extends Data.TaggedError("FixtureFailure") {}
 const fromPromise = <A>(tryPromise: () => Promise<A>): Effect.Effect<A> =>
-  Effect.tryPromise({ try: tryPromise, catch: () => new FixtureFailure() }).pipe(Effect.orDie);
+  Effect.tryPromise(tryPromise).pipe(Effect.orDie);
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 
@@ -18,7 +23,7 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
   yield* fromPromise(() =>
     installTestSchemaWithPrefix({
       db,
-      prefixStatements: authSchema,
+      prefixStatements: [...authSchema, auditEntriesTestSchema, consentHistoryTestSchema],
       sources: [
         "0002_resource_admission.sql",
         "0009_card_enrollment.sql",
@@ -35,6 +40,21 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "0107_failed_card_replacement.sql",
         "0112_failed_card_wallet_replacement.sql",
       ].map((file) => new URL(`../migrations/${file}`, import.meta.url)),
+    })
+  );
+  yield* fromPromise(() =>
+    applyTestMigration({
+      db,
+      source: new URL("../migrations/0153_user_companions.sql", import.meta.url),
+      includeStatement: (sql) =>
+        sql.startsWith("PRAGMA ") ||
+        sql.startsWith("ALTER TABLE users ADD COLUMN subscription_id ") ||
+        sql.startsWith("UPDATE users SET subscription_id=") ||
+        sql.startsWith("CREATE UNIQUE INDEX users_subscription_id ") ||
+        sql.includes("refund_attempts") ||
+        sql.includes("subscription_renewal_fences") ||
+        sql.startsWith("DROP TABLE subscription_identities") ||
+        sql.startsWith("CREATE TRIGGER subscription_identities_field_"),
     })
   );
   return { db };

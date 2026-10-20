@@ -247,7 +247,7 @@ it("accounts OAuth mutation attempts and atomic batches once and replays across 
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_credential_id IS NOT NULL AND operation = 'budgets.createBudget'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_credential_id IS NOT NULL AND operation = 'budgets.createBudget'"
             )
             .first<number>("count(*)")
         )
@@ -523,7 +523,7 @@ it("keeps Trial OAuth calls commercially uncapped while reporting independent se
       const current = yield* Clock.currentTimeMillis;
       yield* wait(
         fixture.db
-          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
           .bind("10000000-0000-4000-8000-000000000001", current - 1, current - 1 + 604800000)
           .run()
       );

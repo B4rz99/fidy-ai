@@ -16,14 +16,14 @@ export const prepareStatementSessionActivity = ({
   source: OwnedStatement;
 }>): ReadonlyArray<D1PreparedStatement> => [
   db
-    .prepare(`WITH activity AS (${source.sql}) UPDATE statement_hosted_origins
-    SET abandoned_at_ms = CASE WHEN expires_at_ms <= ? OR session_id !=
+    .prepare(`WITH activity AS (${source.sql}) UPDATE statement_submissions
+    SET hosted_abandoned_at_ms = CASE WHEN hosted_expires_at_ms <= ? OR hosted_session_id !=
       (SELECT session_id FROM activity WHERE user_id = ?) OR
       (SELECT expires_at_ms FROM activity WHERE user_id = ?) <= ? THEN ? ELSE NULL END,
-      expires_at_ms = CASE WHEN expires_at_ms > ? AND session_id =
+      hosted_expires_at_ms = CASE WHEN hosted_expires_at_ms > ? AND hosted_session_id =
         (SELECT session_id FROM activity WHERE user_id = ?) THEN
-        (SELECT expires_at_ms FROM activity WHERE user_id = ?) ELSE expires_at_ms END
-    WHERE user_id = ? AND abandoned_at_ms IS NULL AND EXISTS
+        (SELECT expires_at_ms FROM activity WHERE user_id = ?) ELSE hosted_expires_at_ms END
+    WHERE user_id = ? AND hosted_session_id IS NOT NULL AND hosted_abandoned_at_ms IS NULL AND EXISTS
       (SELECT 1 FROM activity WHERE user_id = ?)`)
     .bind(
       ...source.params,

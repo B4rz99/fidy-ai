@@ -281,12 +281,12 @@ it.each([
             .bind(userId, now),
           db
             .prepare(
-              "INSERT INTO proactivity_reports(delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES (?,?,'budget-offer',?,'private-report',?,?,'UTC',?)"
+              "INSERT INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES ('proactivity-delivery',?,?,'budget-offer',?,'private-report',?,?,'UTC',?)"
             )
             .bind(deliveryId, userId, deliveryId, now - 600_000, now + 3_600_000, now - 600_000),
           db
             .prepare(
-              "INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms,state) VALUES (?,?,?,'started')"
+              "UPDATE insight_reports SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms,'started' AS state) AS source) AS source) AS incoming WHERE insight_reports.user_id=incoming.user_id AND insight_reports.kind=incoming.kind AND insight_reports.delivery_id=incoming.delivery_id AND insight_reports.dispatch_state IS NULL"
             )
             .bind(userId, deliveryId, now - 600_000),
           db

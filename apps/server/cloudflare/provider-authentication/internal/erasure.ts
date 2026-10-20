@@ -2,33 +2,9 @@ import type { ErasureProjection } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
-    id: "completed_provider_authentications",
-    dataClass: "credentials",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM completed_provider_authentications r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM completed_provider_authentications r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM completed_provider_authentications r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM completed_provider_authentications AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "provider_authentication_attempts",
     dataClass: "credentials",
-    dependencies: ["completed_provider_authentications"],
+    dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM provider_authentication_attempts r WHERE r.user_id=?",

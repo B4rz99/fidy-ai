@@ -153,7 +153,7 @@ const snapshot = (
 const publishBillingEntry = (
   input: Readonly<{
     environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_QUEUE: CollectionQueue }>;
-    entry: { readonly attempt_id: BillingAttemptId; readonly version: 1 };
+    entry: { readonly attempt_id: BillingAttemptId };
     now: number;
   }>
 ): Effect.Effect<boolean> =>
@@ -162,9 +162,8 @@ const publishBillingEntry = (
     const { environment, entry, now } = input;
     const claimed = yield* Effect.exit(
       attempt(() =>
-        environment.DB.prepare(`UPDATE billing_collection_outbox
-      SET last_attempt_at_ms = ? WHERE attempt_id = ?
-      AND (last_attempt_at_ms IS NULL OR last_attempt_at_ms < ?)`)
+        environment.DB.prepare(`UPDATE billing_attempts AS billing_collection_work SET collection_last_attempt_at_ms = ? WHERE collection_state IS NOT NULL AND id = ?
+      AND (collection_last_attempt_at_ms IS NULL OR collection_last_attempt_at_ms < ?)`)
           .bind(now, entry.attempt_id, now - dispatchCooldownMs)
           .run()
       )
@@ -175,22 +174,13 @@ const publishBillingEntry = (
       attempt(() =>
         environment.BILLING_COLLECTION_QUEUE.send({
           ...trace,
-          version: entry.version,
+          version: 1,
           attemptId: entry.attempt_id,
         })
       )
     );
     if (Exit.isFailure(offered)) return false;
-    const published = yield* Effect.exit(
-      attempt(() =>
-        environment.DB.prepare(
-          "UPDATE billing_collection_outbox SET published_at_ms = ? WHERE attempt_id = ?"
-        )
-          .bind(now, entry.attempt_id)
-          .run()
-      )
-    );
-    return Exit.isSuccess(published);
+    return true;
   });
 
 /** Offer bounded, secret-free work identities. D1 intent remains authoritative on Queue failure. */
@@ -203,9 +193,9 @@ export const dispatchBillingCollection = (
     const identity = environment.identity;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT o.attempt_id, o.version
-      FROM billing_collection_outbox AS o JOIN billing_collection_arms AS arm ON arm.attempt_id = o.attempt_id
-      WHERE arm.state = 'armed' AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
+      environment.DB.prepare(`SELECT o.attempt_id
+      FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS o
+      WHERE o.state = 'armed' AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
         AND (? IS NULL OR o.attempt_id = ?)
       ORDER BY o.last_attempt_at_ms, o.attempt_id LIMIT ?`)
         .bind(
@@ -217,7 +207,7 @@ export const dispatchBillingCollection = (
         .all()
     );
     const entries = yield* decode(
-      Schema.Array(Schema.Struct({ attempt_id: BillingAttemptId, version: Schema.Literal(1) })),
+      Schema.Array(Schema.Struct({ attempt_id: BillingAttemptId })),
       rows.results
     );
     let failed = false;
@@ -264,7 +254,7 @@ export const receiveBillingCollection = (
       const collection = work.value;
       const row = yield* attempt(() =>
         input.environment.DB.prepare(
-          "SELECT state FROM billing_collection_arms WHERE attempt_id = ?"
+          "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
         )
           .bind(collection.attemptId)
           .first()
@@ -421,7 +411,7 @@ const reconcileEventCandidate = (
     yield* attempt(() =>
       environment.DB.prepare(`UPDATE billing_event_candidates
       SET resolved_at_ms = ? WHERE transaction_id = ? AND resolved_at_ms IS NULL
-      AND EXISTS (SELECT 1 FROM billing_transaction_evidence AS e
+      AND EXISTS (SELECT 1 FROM billing_provider_transactions AS e
         JOIN billing_attempts AS a ON a.id = e.attempt_id
         WHERE e.transaction_id = ? AND a.status IN ('succeeded', 'failed'))`)
         .bind(now, transactionId, transactionId)
@@ -468,7 +458,7 @@ export const receiveWompiBillingEvent = (
         (excluded.signed_at = billing_event_candidates.signed_at
           AND excluded.signed_status = 'APPROVED'
           AND billing_event_candidates.signed_status <> 'APPROVED'))
-        AND NOT EXISTS (SELECT 1 FROM billing_transaction_evidence AS e
+        AND NOT EXISTS (SELECT 1 FROM billing_provider_transactions AS e
           JOIN billing_attempts AS a ON a.id = e.attempt_id
           WHERE e.transaction_id = excluded.transaction_id AND a.status = 'succeeded')`)
           .bind(transactionId, now, signedAt, signedStatus)
@@ -489,8 +479,7 @@ const claimCollection = (
 ): Effect.Effect<boolean, BillingCollectionFailure> => {
   const { environment, captured, attemptId, now } = input;
   const collectionClaim = {
-    sql: `UPDATE billing_collection_arms
-      SET state = 'sent', sent_at_ms = ? WHERE attempt_id = ? AND state = 'armed'`,
+    sql: `UPDATE billing_attempts AS billing_collection_work SET collection_state = 'sent', collection_sent_at_ms = ? WHERE collection_state IS NOT NULL AND id = ? AND collection_state = 'armed'`,
     params: [now, attemptId],
   };
   const protectedClaim = Option.isSome(captured.previous_paid_attempt_id)
@@ -563,12 +552,13 @@ const collect = (
     const candidate = created.value.transactionId;
     yield* attempt(() =>
       environment.DB.batch([
-        environment.DB.prepare(`INSERT OR IGNORE INTO billing_transaction_candidates
+        environment.DB.prepare(`INSERT OR IGNORE INTO billing_provider_transactions
       (transaction_id, attempt_id) VALUES (?, ?)`).bind(candidate, attemptId),
         ...(captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)
           ? [
-              environment.DB.prepare(`INSERT INTO billing_checkout_responses (attempt_id, transaction_id)
-              VALUES (?, ?)`).bind(attemptId, candidate),
+              environment.DB.prepare(
+                `UPDATE billing_attempts SET checkout_transaction_id=incoming.transaction_id FROM (SELECT ? AS attempt_id,? AS transaction_id) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.checkout_transaction_id IS NULL`
+              ).bind(attemptId, candidate),
             ]
           : []),
       ])
@@ -665,7 +655,7 @@ const offerBillingLookup = (
       db.batch([
         db
           .prepare(
-            "UPDATE billing_transaction_candidates SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ? AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
+            "UPDATE billing_provider_transactions SET last_checked_at_ms = ?, lookup_attempts = lookup_attempts + 1 WHERE transaction_id = ? AND lookup_attempts < ? AND (last_checked_at_ms IS NULL OR last_checked_at_ms < ?)"
           )
           .bind(now, transactionId, maximumCandidateLookupAttempts, now - candidateCooldownMs),
         db
@@ -703,14 +693,14 @@ export const reconcileBillingCandidates = (
       MAX(signed_status) AS signed_status FROM (
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, a.created_at_ms) AS priority,
         NULL AS signed_at, NULL AS signed_status
-        FROM billing_transaction_candidates AS c
+        FROM billing_provider_transactions AS c
         JOIN billing_attempts AS a ON a.id = c.attempt_id WHERE a.status = 'pending'
           AND c.lookup_attempts < ?
           AND (c.last_checked_at_ms IS NULL OR c.last_checked_at_ms < ?)
       UNION
       SELECT c.transaction_id, COALESCE(c.last_checked_at_ms, c.received_at_ms) AS priority,
         c.signed_at, c.signed_status FROM billing_event_candidates AS c
-        LEFT JOIN billing_transaction_evidence AS e ON e.transaction_id = c.transaction_id
+        LEFT JOIN billing_provider_transactions AS e ON e.transaction_id = c.transaction_id
         LEFT JOIN billing_attempts AS a ON a.id = e.attempt_id
         WHERE c.resolved_at_ms IS NULL AND c.lookup_attempts < ?
         AND c.received_at_ms >= ?

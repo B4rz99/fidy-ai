@@ -10,12 +10,12 @@ export const makeCoordinators = (
 ): Readonly<{
   getByName: (
     name: string
-  ) => Readonly<{ fetch: (request: RequestInfo | URL) => Promise<Response> }>;
+  ) => Readonly<{ fetch: (request: RequestInfo | URL, init?: RequestInit) => Promise<Response> }>;
 }> => {
   const retained = new Map<string, UserTransactionCoordinator>();
   return {
     getByName: (name) => ({
-      fetch: (request): Promise<Response> => {
+      fetch: (request, init): Promise<Response> => {
         const found = Option.fromUndefinedOr(retained.get(name));
         const coordinator = Option.getOrElse(found, () => {
           const created = new UserTransactionCoordinator(
@@ -32,7 +32,7 @@ export const makeCoordinators = (
           retained.set(name, created);
           return created;
         });
-        return coordinator.fetch(new Request(request));
+        return coordinator.fetch(new Request(request, init));
       },
     }),
   };

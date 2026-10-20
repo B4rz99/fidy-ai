@@ -79,7 +79,9 @@ const setup = (current: number): Effect.Effect<Fixture, TestFailure, Scope.Scope
     );
     yield* wait(() =>
       db
-        .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
+        .prepare(
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+        )
         .bind(userId, current)
         .run()
     );
@@ -292,7 +294,9 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
       expect(
         yield* wait(() =>
           fixture.db
-            .prepare("SELECT consumed_at_ms FROM backup_recovery_credentials WHERE user_id=?")
+            .prepare(
+              "SELECT consumed_at_ms FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) WHERE user_id=?"
+            )
             .bind(userId)
             .first()
         )
@@ -301,7 +305,7 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
         (yield* wait(() =>
           fixture.db
             .prepare(
-              "SELECT action,at_ms,user_id,operator_subject FROM support_recovery_events ORDER BY action"
+              "SELECT action,at_ms,user_id,operator_subject FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery') ORDER BY action"
             )
             .all()
         )).results
@@ -404,7 +408,11 @@ it.each(["owning Effect", "native Request"])(
               .first()
           )
         ).toEqual({ attempts: 1 });
-        for (const table of ["support_recovery_cases", "support_recovery_events", "web_sessions"]) {
+        for (const table of [
+          "support_recovery_cases",
+          "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
+          "web_sessions",
+        ]) {
           expect(
             yield* wait(() => fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
           ).toEqual({ count: 0 });
@@ -427,7 +435,7 @@ const credentialSnapshot = (fixture: Fixture): Effect.Effect<unknown, TestFailur
   wait(() =>
     fixture.db
       .prepare(
-        "SELECT code_digest,consumed_at_ms,revision FROM backup_recovery_credentials WHERE user_id=?"
+        "SELECT code_digest,consumed_at_ms,revision FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL) WHERE user_id=?"
       )
       .bind(userId)
       .first()
@@ -528,7 +536,11 @@ it("starts a new browser pairing after an approved recovery expires without brow
       ).toEqual({ count: 1 });
       expect(
         yield* wait(() =>
-          fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_events").first()
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
+            )
+            .first()
         )
       ).toEqual({ count: 2 });
     }).pipe(Effect.scoped)
@@ -564,7 +576,7 @@ it("retains recovery evidence until its calendar deadline then removes it withou
       yield* sweepRecoveryEvidence({ db: fixture.db, nowEpochMs: Date.UTC(2026, 1, 28, 12) });
       for (const table of [
         "support_recovery_cases",
-        "support_recovery_events",
+        "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
         "support_recovery_operator_limits",
       ]) {
         expect(
@@ -611,7 +623,11 @@ it("rolls back recovery event deletion when its terminal case cannot be removed"
       deepStrictEqual(exit, Exit.fail(new RecoveryRetentionUnavailable()));
       expect(
         yield* wait(() =>
-          fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_events").first()
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')"
+            )
+            .first()
         )
       ).toEqual({ count: 2 });
       expect(
@@ -639,7 +655,7 @@ const expectUnchanged = ({
     ).toEqual({ state: "pending_approval", user_id: null });
     for (const table of [
       "support_recovery_cases",
-      "support_recovery_events",
+      "(SELECT sequence AS rowid,id,recovery_case_id AS case_id,user_id,operator_issuer,operator_subject,recovery_action AS action,occurred_at_ms AS at_ms FROM audit_entries WHERE record_type='support_recovery')",
       "support_recovery_operator_limits",
       "support_recovery_admissions",
       "web_sessions",

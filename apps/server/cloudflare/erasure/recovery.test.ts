@@ -46,11 +46,6 @@ it("checks the recovery generation without spending writes on guarded reads", ()
             .first("generation")
         )
       ).toBe("initial");
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM erasure_runtime_assertion").first("count")
-        )
-      ).toBe(0);
     })
   ));
 
@@ -64,7 +59,9 @@ it("rolls back an earlier write when a later recovery assertion fails", () =>
           Effect.tryPromise(() =>
             db.batch([
               db
-                .prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)")
+                .prepare(
+                  "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+                )
                 .bind(userId),
               db.prepare("UPDATE erasure_generation SET generation=? WHERE id=1").bind(generation),
               generationAssertion({ db, generation: "initial" }),
@@ -89,7 +86,9 @@ it("rolls back an earlier write when a later recovery assertion fails", () =>
             db.batch([
               generationAssertion({ db, generation: "initial" }),
               db
-                .prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)")
+                .prepare(
+                  "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+                )
                 .bind(userId),
             ])
           )
@@ -109,7 +108,12 @@ it("fences reads, writes and native Sessions after an interrupted checkpoint or 
       const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
       yield* Effect.tryPromise(() => installRetentionTestSchema(db));
       yield* Effect.tryPromise(() =>
-        db.prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)").bind(userId).run()
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+          )
+          .bind(userId)
+          .run()
       );
       yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
       const guarded = withErasureRecovery({

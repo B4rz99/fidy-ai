@@ -12,7 +12,6 @@ import { memoriesFromRows, memoryRowQuery } from "./storage";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import type {
   CanonicalMutationRefusal,
@@ -34,13 +33,12 @@ import {
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_CONFLICT = 409;
-const HTTP_RATE_LIMITED = 429;
+
 const HTTP_UNAVAILABLE = 503;
 
 const memoryUnavailableMessage = "Memory is temporarily unavailable. Retry later.";
 const memoryInvalidMessage = "Invalid Memory input.";
 const memoryNotFoundMessage = "No current Memory with that identifier belongs to you.";
-const memoryBudgetMessage = "Memory work budget exhausted. Retry after the current UTC day.";
 
 const jsonResponse = (body: unknown, status: number): Response =>
   Response.json(body, { status, headers: transactionNoStore });
@@ -76,13 +74,6 @@ const memoryNotFound = (): Response =>
     code: "not_found",
     status: HTTP_NOT_FOUND,
     message: memoryNotFoundMessage,
-  });
-/** The declared budget failure for one Memory call the shared work budget refused. */
-export const memoryRateLimited = (): Response =>
-  transactionFailure({
-    code: "rate_limited",
-    status: HTTP_RATE_LIMITED,
-    message: memoryBudgetMessage,
   });
 
 const memoryRejectionResponse = (outcome: MemoryRefusalOutcome): Response => {
@@ -213,11 +204,7 @@ export const memoryRefusal = ({
       Effect.map((audited) =>
         audited.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
       ),
-      Effect.catch((cause) =>
-        Effect.succeed(
-          refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
-        )
-      )
+      Effect.orElseSucceed(() => "unavailable" as const)
     ),
   respond: (disposition) => {
     switch (disposition) {
@@ -225,24 +212,11 @@ export const memoryRefusal = ({
         return Effect.succeed(memoryRejectionResponse(outcome));
       case "credential_refused":
         return refusedCredentialResponse({ db, subject });
-      case "rate_limited":
-        return Effect.succeed(memoryRateLimited());
+
       case "unavailable":
         return Effect.succeed(memoryUnavailable());
     }
   },
-});
-
-/**
- * The refusal a Memory child reports when the shared daily audit budget, not the child, refused its
- * unit. The batch answers `rate_limited` without a row and the individual entry point answers its
- * own Memory budget failure, exactly as its pre-check does.
- */
-export const memoryBudgetRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: memoryBudgetMessage,
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(memoryRateLimited()),
 });
 
 /**
@@ -313,6 +287,4 @@ export const memoryOutcome = (outcome: MemoryOutcome): OwnerOutcome => ({
   collisionKey: Option.some(`memory:${outcome.memoryId}`),
   guardFacts: Option.none(),
   read: (db, userId) => findMemoryValue({ db, userId, outcome }),
-  triggerRefusal: (_work, kind) =>
-    kind === "audit" ? Option.some(memoryBudgetRefusal()) : Option.none(),
 });

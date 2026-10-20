@@ -31,9 +31,15 @@ it("reads only the explicit User's independent context, without identity storage
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)"
+            )
             .bind(userA),
-          db.prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'Asia/Tokyo', 2)").bind(userB),
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'Asia/Tokyo', 2)"
+            )
+            .bind(userB),
         ])
       );
       expect(yield* readUserContext({ db, userId: userA, authority: Option.none() })).toEqual(
@@ -55,9 +61,15 @@ it("snapshots current context inside the owner's atomic unit and rolls it back w
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)"
+            )
             .bind(userA),
-          db.prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'Asia/Tokyo', 2)").bind(userB),
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'Asia/Tokyo', 2)"
+            )
+            .bind(userB),
           db.prepare(
             "CREATE TABLE snapshots (user_id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT"
           ),
@@ -113,9 +125,15 @@ it("rechecks credential authority and refuses a different User's subject before 
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)"
+            )
             .bind(userA),
-          db.prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'Asia/Tokyo', 2)").bind(userB),
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'Asia/Tokyo', 2)"
+            )
+            .bind(userB),
           db.prepare(
             "CREATE TABLE read_permits (credential TEXT PRIMARY KEY, subject TEXT, live INTEGER) STRICT"
           ),
@@ -141,7 +159,9 @@ it("fails closed on invalid stored context or unreadable storage without leaking
       const db = yield* Effect.tryPromise(setup);
       yield* Effect.tryPromise(() =>
         db
-          .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'invalid-zone', 1)")
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'invalid-zone', 1)"
+          )
           .bind(userA)
           .run()
       );

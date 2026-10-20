@@ -1,6 +1,6 @@
 import { Config, Data, Effect, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { dashboardTransactionQueries } from "./internal/dashboard-query";
 
 class ProjectionCostFailure extends Data.TaggedError("ProjectionCostFailure")<{ cause: unknown }> {}
@@ -19,17 +19,12 @@ const migration = new URL(`../migrations/${migrationName}`, import.meta.url);
 const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const db = yield* wait(() => databases.acquire());
-    yield* wait(() =>
-      installTestSchema({
-        db,
-        sources: Array.from(
-          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-        )
-          .sort()
-          .filter((name) => name !== migrationName)
-          .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-      })
-    );
+    const directory = new URL("../migrations/", import.meta.url);
+    for (const name of [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
+      .filter((name) => name < migrationName)
+      .sort()) {
+      yield* wait(() => applyTestMigration({ db, source: new URL(name, directory) }));
+    }
     yield* wait(() =>
       db.batch(
         [userId, otherUserId].flatMap((subject) => [

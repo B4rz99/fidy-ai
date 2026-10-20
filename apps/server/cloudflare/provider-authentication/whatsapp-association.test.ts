@@ -39,7 +39,7 @@ const seedAcceptedChat = (
           ),
         db
           .prepare(
-            `INSERT INTO pending_consent_decisions(exchange_id,portfolio_id,bsuid,phone_number_id,decision,disclosure_json,disclosure_message_id,decision_message_id,delivery_key,body_sha256,occurred_at_ms,received_at_ms) VALUES(?,'portfolio','CO.Person1','123456789012345','accepted',?,'disclosure','accept','accept',?,?,?)`
+            `UPDATE pending_consent_exchanges SET decision_portfolio_id=incoming.portfolio_id,decision_bsuid=incoming.bsuid,decision_phone_number_id=incoming.phone_number_id,decision_value=incoming.decision,decision_disclosure_json=incoming.disclosure_json,decision_disclosure_message_id=incoming.disclosure_message_id,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,'portfolio' AS portfolio_id,'CO.Person1' AS bsuid,'123456789012345' AS phone_number_id,'accepted' AS decision,? AS disclosure_json,'disclosure' AS disclosure_message_id,'accept' AS decision_message_id,'accept' AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL`
           )
           .bind(id, disclosure, "a".repeat(64), now - 7000, now - 7000),
         db
@@ -361,7 +361,11 @@ it("requires exact originating caller and reply confirmation, then atomically cr
       )(yield* Effect.tryPromise(() => completed.json()));
       expect(created.backupRecoveryCode.length).toBeGreaterThan(20);
       const association = yield* Effect.tryPromise(() =>
-        journey.db.prepare("SELECT portfolio_id,bsuid FROM whatsapp_identities").all()
+        journey.db
+          .prepare(
+            "SELECT portfolio_id,bsuid FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)"
+          )
+          .all()
       );
       expect(association.results).toEqual([{ portfolio_id: "portfolio", bsuid: "CO.Person1" }]);
       expect(
@@ -460,7 +464,11 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
 
       expect(
         (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT user_id FROM verified_email_credentials").all()
+          journey.db
+            .prepare(
+              "SELECT user_id FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL)"
+            )
+            .all()
         )).results
       ).toEqual([]);
     })
@@ -540,7 +548,7 @@ it("rolls back a failed association commit and permits exactly one concurrent su
       yield* Effect.tryPromise(() =>
         journey.db
           .prepare(
-            "CREATE TRIGGER fixture_refuse BEFORE INSERT ON completed_provider_authentications BEGIN SELECT RAISE(ABORT,'fixture_failure'); END"
+            "CREATE TRIGGER fixture_refuse BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_failure'); END"
           )
           .run()
       );
@@ -554,7 +562,11 @@ it("rolls back a failed association commit and permits exactly one concurrent su
       ).toEqual([]);
       expect(
         (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT user_id FROM whatsapp_identities").all()
+          journey.db
+            .prepare(
+              "SELECT user_id FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)"
+            )
+            .all()
         )).results
       ).toEqual([]);
       yield* Effect.tryPromise(() => journey.db.prepare("DROP TRIGGER fixture_refuse").run());
@@ -591,7 +603,7 @@ it.each([false, true])(
         const records = yield* Effect.tryPromise(() =>
           journey.db
             .prepare(
-              "SELECT (SELECT COUNT(*) FROM trial_periods) trial,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM onboarding_consent_records) consent"
+              "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
             )
             .first()
         );
@@ -599,7 +611,7 @@ it.each([false, true])(
           yield* Effect.tryPromise(() =>
             journey.db
               .prepare(
-                "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) SELECT id,'portfolio','CO.Existing',created_at_ms FROM users"
+                "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (SELECT id,'portfolio','CO.Existing',created_at_ms FROM users) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
               )
               .run()
           );
@@ -633,7 +645,7 @@ it.each([false, true])(
           yield* Effect.tryPromise(() =>
             journey.db
               .prepare(
-                "SELECT (SELECT COUNT(*) FROM trial_periods) trial,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM onboarding_consent_records) consent"
+                "SELECT (SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trial,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent"
               )
               .first()
           )
@@ -747,7 +759,7 @@ it.each(["source", "spend", "storage"] as const)(
           yield* Effect.tryPromise(() =>
             journey.db
               .prepare(
-                "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM whatsapp_identities) associations,(SELECT COUNT(*) FROM web_sessions) sessions"
+                "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)) associations,(SELECT COUNT(*) FROM web_sessions) sessions"
               )
               .first()
           )
@@ -774,7 +786,7 @@ it("sweeps expired handoff correlation while preserving committed User and legal
         )).status
       ).toBe(200);
       const durable =
-        "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM provider_credentials) credentials,(SELECT COUNT(*) FROM onboarding_consent_records) consent,(SELECT COUNT(*) FROM trial_periods) trials,(SELECT COUNT(*) FROM backup_recovery_credentials) recovery,(SELECT COUNT(*) FROM whatsapp_identities) associations";
+        "SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM provider_credentials) credentials,(SELECT COUNT(*) FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records) consent,(SELECT COUNT(*) FROM users WHERE trial_started_at_ms IS NOT NULL) trials,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,recovery_code_digest AS code_digest,recovery_created_at_ms AS created_at_ms,recovery_consumed_at_ms AS consumed_at_ms,recovery_revision AS revision FROM users WHERE recovery_code_digest IS NOT NULL)) recovery,(SELECT COUNT(*) FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)) associations";
       const before = yield* Effect.tryPromise(() => journey.db.prepare(durable).first());
       expect(before).toEqual({
         users: 1,
@@ -796,7 +808,7 @@ it("sweeps expired handoff correlation while preserving committed User and legal
         yield* Effect.tryPromise(() =>
           journey.db
             .prepare(
-              "SELECT (SELECT COUNT(*) FROM whatsapp_provider_handoffs) handoffs,(SELECT COUNT(*) FROM provider_authentication_attempts) attempts,(SELECT COUNT(*) FROM completed_provider_authentications) receipts"
+              "SELECT (SELECT COUNT(*) FROM whatsapp_provider_handoffs) handoffs,(SELECT COUNT(*) FROM provider_authentication_attempts) attempts,(SELECT COUNT(*) FROM provider_authentication_attempts WHERE completed_at_ms IS NOT NULL) receipts"
             )
             .first()
         )
@@ -842,7 +854,7 @@ it.each(["123456789012345", "987654321098765"])(
               .bind(userId, now),
             journey.db
               .prepare(
-                "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,'portfolio','CO.Person1',?)"
+                "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES(?,'portfolio','CO.Person1',?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
               )
               .bind(userId, now),
           ])

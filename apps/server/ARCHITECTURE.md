@@ -362,6 +362,13 @@ recheck authority, revision, and eligibility at commit. A pending-Turn mutation 
 foreign, terminal, or already-consumed hosted call from committing. No process lock or post-commit
 repair substitutes for these guards.
 
+`sql_assertions` shares fixed, metadata-only guard slots across owners. Each scope preserves the
+old singleton's row presence and update behavior; no User or request identifier becomes a scope.
+The shared `prepareChangedRowAssertion` binds the scope and aborts the enclosing D1 batch unless
+the preceding statement changed exactly one row. Its successful write also changes one row,
+preserving downstream `changes()` chains. Predicate checks remain owner-local. Named refusals,
+per-child attribution, request-keyed controls and cursor guards retain their specialized storage.
+
 R2 bytes and D1 state cannot commit together. Statement staging is authenticated, bounded, opaque,
 and non-authoritative. Canonical publication verifies ownership, size, and digest and commits the
 submission, accounting, staging promotion, and extraction intent together. Unpublished material
@@ -391,7 +398,7 @@ reconciliation policy; timeout or lost acknowledgment is not proof of rejection.
 | Tokens                           | PAT/PATPairing scope, proof, issuance, activity, revocation, and expiry                                  |
 | Transactions / SourceAttestation | Effective financial facts and corrections / immutable captured-source declarations                       |
 | Categories                       | Stable taxonomy and User keyword rules; rule changes affect future capture, not retained history         |
-| Budgets                          | Exact spending and threshold decisions over Transactions' published effective contributions              |
+| Budgets                          | Exact spending and threshold decisions over Transactions' published exact aggregates                     |
 | Dashboard                        | Validated documents and views composed from published Category, Budget, and Transaction facts            |
 | Ingestion                        | Bounded material admission, interpretation, Transaction-or-review finalization, and retention            |
 | Subscription                     | Prices, PaymentEnrollment, BillingAttempts, and settled paid periods                                     |
@@ -402,7 +409,7 @@ reconciliation policy; timeout or lost acknowledgment is not proof of rejection.
 | Memory                           | Current User-owned prose and aggregate capacity, without a revision history or embedding authority       |
 | Agent                            | Hosted Session/Turn lifecycle, context, confirmation, inference orchestration, and Transcript settlement |
 | WhatsApp                         | Authenticated channel evidence, send claims, delivery certainty, and channel recovery                    |
-| Audit                            | Accountability evidence, recording budgets, and bounded retention                                        |
+| Audit                            | Accountability evidence, append-only recording, and bounded retention                                    |
 
 Peers receive decoded projections or deliberate commit-composition operations, never another owner's
 rows, effective SQL relation, provider representation, or reusable credential authority.
@@ -597,9 +604,10 @@ or production enablement.
 Installed code does not by itself enable a channel or provider. In particular, forwarded-email
 routing remains disabled until institution Connection admission and authenticated institutional
 sender proof exist. Receipt/image acceptance atomically publishes commercial consumption,
-accountability, visible review, and an identity-only outbox; provider retrieval/extraction is not
-installed. Accepted images therefore remain visibly extraction-unavailable, with bounded
-locator/caption retention. Rejected images retain no deferred bytes and admit no hosted Turn.
+accountability and visible review; provider retrieval/extraction is not installed.
+Media submissions hold indexed admission-capacity slots until bounded expiry cleanup releases them;
+there is no media processing outbox or unfinished-work claim. Accepted images therefore remain
+visibly extraction-unavailable, with bounded locator/caption retention. Rejected images retain no deferred bytes and admit no hosted Turn.
 [Commercial allowances](../../docs/operations/commercial-allowances.md) document the separate
 accounting boundaries. Deployment configuration and owner contracts remain the evidence for
 executable capabilities, not this document's directory inventory.
@@ -639,6 +647,21 @@ registers cleanup separately in each test process; every case retains an isolate
 Verification combines dependency/publication checks, generated contracts, browser graph checks, and
 behavioral evidence. Passing a fake or portable test never establishes a production adapter's
 existence, durable guarantees, or launch readiness.
+
+Transactions retain Dashboard projection control and the optional fact-revision group in one
+`dashboard_projection_state` row per User. New Users have an empty ready projection and no fact
+revision. The first capture installs the revision, first capture time and captured time zone;
+subsequent effective-fact changes advance only that revision. Projection repair changes readiness,
+version and cursor without rewriting fact metadata. A fact revision never proves readiness.
+Aggregate reads and publication guards inspect both groups in one row, and recurring consumers
+continue to use the published revision projection. One projections-class erasure disposition
+archives and removes the combined state after its existing Transaction and projection dependencies.
+
+Recurring stores each immutable first-confirmation snapshot and its original ID on its owning
+series, independently of the mutable detected pattern. An explicit confirmation sequence preserves
+digest ordering and checkpoints, including when a series predates its confirmation. New patterns
+and snapshots publish in one insert. Confirmation erasure clears only the snapshot fields before
+the separate series disposition removes the parent.
 
 Recurring publishes a complete, bounded confirmation source for the recurring-charge digest.
 Its same-User checkpoint guards the effective Transaction revision, completed detector evaluation,
@@ -684,7 +707,7 @@ Budget queries remain observational. An explicit month on a canonical Budget wri
 
 Group labels organize categories across months. A group rename explicitly selects Category identities, updates only the caller's Budgets, and captures the selected collection's revision for OAuth review. Each named group owns one Currency in `budget_group_currencies`, versioned from a selected month in the same canonical D1 unit as its caps and Audit. Category caps project that inherited Currency. Changes retain nominal amounts, preserve earlier month Currency, and reject incompatible precision in affected retained caps. Currency revisions invalidate Budget projections and group confirmation evidence. The browser never combines currencies or converts Money to floating-point values for totals.
 
-Budget status reports include observed monthly income and expenses from Transactions’ published exact aggregate projection. The same requested half-open period, caller ownership, and optional category/currency filters apply to that cash flow, including when no caps match.
+Budget status reports include observed monthly income and expenses from Transactions’ published exact aggregate projection. The same requested half-open period, caller ownership, and optional category/currency filters apply to that cash flow, including when no caps match. Category spending uses those same complete aggregates. There is no separate paginated Budget contribution reader or report checkpoint. Consent and projection readiness are checked in the same native D1 batch as the totals; unavailable projections refuse the report rather than return partial spending.
 
 ### Recurring planning
 
@@ -708,9 +731,10 @@ confirmation guards remain at canonical execution. Historical RecurringSeries an
 [ADR 0036](../../docs/adr/0036-recurring-planning.md).
 
 The ingestion review workspace projects statement rows, forwarded email and media into an
-expiry-ordered, metadata-only inbox and retained history. Revision-bound drafts and reversible
-skip/restore decisions live with Ingestion; individual reviewed capture composes Transaction and
-manual SourceAttestation writes in the canonical D1 unit. The source context and original expiry
+expiry-ordered, metadata-only inbox and retained history. Revision-bound drafts, reversible
+skip/restore decisions and permanent statement abandonment share one Ingestion-owned decision store
+and transition preparation; individual reviewed capture composes Transaction and manual
+SourceAttestation writes in the canonical D1 unit. The source context and original expiry
 never come from the browser. Original material and deterministic suggestion reads use explicit
 WebSession-only canonical policies, so originals cannot enter agent tools or immutable transcripts.
 They return bounded escaped text with no-store delivery; missing media bytes permit manual completion
@@ -733,3 +757,165 @@ session, raw access, or caller-owned schema disables replacement. Snapshot bytes
 subsequent test mutations. All reads, writes, constraints, FTS, and transaction evidence still run
 inside workerd's real D1 binding; Bun only serializes and copies the pristine image. Pools own
 both Worker shutdown and removal of their temporary files.
+Accountability records share one append-only `audit_entries` store, qualified by record type.
+It retains browser/PAT/OAuth/hosted attribution, detailed call outcomes, ingestion publications,
+media admission, billing transitions, admitted requests, identity reads and security mutations.
+The public Audit history uses one indexed ordered query. Ordinary call/publication retention uses
+one bounded deletion path; media follows its submission, billing follows its attempt, and request
+admission metadata expires independently. These lifetimes remain explicit.
+
+One erasure implementation selects each record type under its original logical purpose,
+data class, archive shape and exact User-specific permit. The logical purpose IDs are permission
+identifiers, not additional tables. Generated references preserve the existing Dashboard session
+exception and media cascade. Billing retains its indirect User ownership through BillingAttempt.
+
+Audit records accountability; it does not meter product usage. Canonical admission owns one shared
+short-term User request policy, Quotas owns monthly Free allowances, and provider owners bound
+expensive work. There is no extra daily canonical-call, batch-envelope, per-feature Audit, or
+Transaction creation allowance. Child completion and owner capacity assertions remain in the
+atomic canonical unit; they do not count Audit history.
+
+Statement clarification and the review workspace write `ingestion_review_state`; statement-specific
+projections translate its status without storing a second decision. Conversation resolution clears
+original row evidence and settles its clarification, while workspace skips remain reversible until
+the original evidence deadline. Source context and capture idempotency remain Transaction-owned.
+
+Media submissions retain their nullable review reason and review creation time directly; a missing
+legacy review marker stays absent. Forwarded email receipts retain a nullable last deferral check,
+which drives the bounded fair sweep and clears on admission or expiry. These fields share their
+parent's erasure and retention lifecycle; provider outboxes and immutable processing outcomes keep
+their separate delivery and accountability meaning.
+
+Recurring-charge detection evaluates changed facts no more often than seven days after that User's
+last completed evaluation. New Users enter at the next hourly discovery. Completion times spread
+work across Users; bounded full batches continue draining the backlog. The existing dispatch cursor
+retains the hourly discovery wakeup, while indexed unfinished evaluations resume on minute
+maintenance ticks. Transaction mutations invalidate the revision but do not dispatch detection.
+
+Weekly summaries and category messages retain their optional dispatch state directly on
+`insight_reports`, keyed by User, delivery kind and identity. Dispatch presence, retry counts,
+creation time and last attempt remain independent of report content and WhatsApp provider state.
+Publication writes the report and initial work in one insert. Indexed metadata discovery derives
+expiry and content availability directly from that row; text expiry preserves dispatch progress.
+Category sends retain channel-started proof across expiry and ambiguous delivery. Weekly question
+intents retain their distinct request and governor evidence.
+
+A recurring-discovery offer request carries an explicit current-opportunity marker, unique per User.
+Foreground request admission moves that marker atomically to the exact request, including a replay
+of an older request. Request timestamps do not determine the current opportunity.
+
+Users retain the optional stable Subscription identity and issued email-forwarding address directly.
+The subscription UUID survives changes to paid standing and remains the foreign-key identity for
+Refund attempts. A processing grant installs the opaque forwarding address and original issue time;
+merely creating a User does not issue an address. Billing identity and forwarding address retain
+separate purpose-specific archive and field-clear permissions before User deletion.
+
+Billing attempts retain their collection dispatch cooldown and send claim directly. Email proof and replacement rows own their current work identity and
+queue dispatch cooldown; a new proof generation resets that cooldown. Dispatch does not keep
+separate outbox rows or unused publication timestamps. Payment authorization/reservation and
+statement publication use the shared `sql_assertions` control inside their existing atomic
+batches. Recurring confirmations carry their immutable `digest_excluded` marker; migrating
+that marker preserves the exact set of previously excluded confirmations.
+
+The shared `sql_assertions` store also enforces named failures for canonical request protection,
+commercial authority, browser continuation commits, media capacity/publication and recurring cursor
+revision checks. Insert and update guards preserve the closed signals consumed by each owner's
+failure classifier. Each predicate stays inside its original D1 batch; fixed slots replace
+request-keyed scratch records and their cleanup statements. Commercial consumption and its
+capacity enforcement remain owned by Quotas.
+
+Proactive insights and standalone prompts share `proactive_transcript_entries`, discriminated by
+kind. InsightEvent and delivery identities remain separate; entry IDs are unique within their kind.
+The original insight sequence, grouped event links and per-message expiry survive consolidation.
+Grouped links reference only same-User insight entries. Authenticated reply context uses one
+protected lookup; retention and erasure share one message store without creating hosted Turns.
+
+## Consolidated identity and consent storage
+
+The original TrialPeriod is retained as `users.trial_started_at_ms` and
+`users.trial_ends_at_ms`. Onboarding creates the User and trial in one insert. Existing dates are
+copied exactly; a missing original trial stays missing. A started trial cannot be restarted or
+edited, and deleting its User requires the User-specific erasure permit.
+
+Consent owns one typed append-only `consent_history` for processing grants, withdrawals and
+renewals, weekly grants, rejected decisions and revocations, contextual proactivity decisions,
+PAT consent, and OAuth consent. Current standing, offers, and execution state remain separate.
+The record type qualifies identities and uniqueness; typed, same-User foreign keys preserve
+relationships between grants, revocations and retained reports. Permission checks still select
+the appropriate purpose. A shared erasure implementation retains each purpose's dependency
+order, archive fields, and exact logical permit, while all history records use one physical table.
+
+Weekly summaries and manual-entry reminders share `schedules`, `schedule_revisions`, and
+`schedule_executions`. Kind-qualified identities allow one schedule per User per kind and keep
+revision and occurrence foreign keys within that User and kind. Current schedules retain indexed
+execution fields and a typed instruction snapshot; immutable revision snapshots remain unchanged
+when a schedule advances or disables. Activation, advancement, and erasure use shared persistence.
+Consent eligibility, recurrence calculations, governor decisions, and allowed occurrence outcomes
+remain owned by their respective feature policies.
+
+Weekly summaries, proactive messages, reminder occurrence evidence and full recurring digest reports
+share `insight_reports`. Weekly and proactive delivery identities remain kind-qualified, with
+same-User foreign keys from dispatch work and grouped event links. Reminder evidence and recurring
+payloads live on the matching report row; their original fields remain independently retained,
+including any historical detail with no delivery header. New reminder and recurring publications
+write one report row in the original atomic unit. Recurring reads use the frozen payload directly,
+and text expiry only clears delivery text. It cannot rewrite retained financial content, instruction
+bindings, evidence deadlines or report identity. One erasure projection covers the combined store.
+
+Authentication attempts own connection preparation and provider completion metadata, including
+proof-consumption results. Completion still commits with its required evidence and caller actions
+in the original atomic batch. Statement submissions own their manifest, hosted-origin binding and
+clarification state; bounded derived parts remain separate. Forwarded email receipts own immutable
+review metadata and their completion outcome. Parent erasure projections include the consolidated
+fields and follow the resulting foreign-key dependencies.
+
+Weekly and contextual offers share `consent_offers`; typed references preserve their separate
+consent meanings. Weekly and reminder state share `proactivity_governors`, with once-only delivery
+observations in `governor_delivery_receipts`. Every identity and mutation qualifies its purpose.
+The policies for unanswered messages, questions and pausing remain feature-owned.
+
+Hosted replies, weekly summaries, contextual sends and weekly questions share
+`whatsapp_deliveries`. Each kind retains its original state constraints, immutable send evidence,
+identity indexes and content deadlines. Hosted callback events reference only hosted correlation
+tokens. Retention reads use partial deadline indexes and bounded row batches. Logical erasure
+purposes retain their exact permits and archive fields through shared delivery persistence.
+
+## Shared document and companion storage
+
+Dashboard layouts and Recurring Planning documents share `user_documents`, keyed by User and
+kind. The shared persistence operation owns encoded document reads and optimistic revision writes;
+each feature retains its own codec, absent-document behavior, authorization, and mutation outcome.
+Their original `projections` and `schedules` erasure purposes select only the corresponding kind.
+
+An InsightEvent holds its optional immutable delivery receipt. Verified settlement installs receipt
+identity, provider evidence, and the pending-to-delivered transition in one guarded write. Later
+read/dismissed transitions preserve that evidence; delayed settlement never regresses attention.
+OAuth review observes event and receipt together and guards both field groups at commit. The original
+receipt erasure purpose clears only its fields before the event's independent deletion.
+
+A User holds an optional statement-backfill entitlement group. An explicit presence marker preserves
+absent, available, reserved, and consumed states. Publication reserves only for a Free User; successful
+capture or review consumes the reservation. Failure releases an unconsumed reservation through the
+submission transition trigger; completion and clarification retain their existing release rules.
+The original ingestion erasure purpose archives and clears the group before its referenced submission
+or User is deleted, preserving the separate subscription and forwarding fields.
+
+Users retain verified email, backup recovery credentials, WhatsApp association and the verified
+insight destination as independent optional field groups. Email uniqueness remains case-insensitive;
+recovery lookup uses an indexed digest, and rotation/consumption keep their revision and single-use
+rules. Each group retains its original credential or conversation erasure purpose.
+
+Hosted Turns retain their verified WhatsApp inbound and optional statement attachment directly.
+Delivery foreign keys require the inbound-qualified Turn identity. Inbound evidence is immutable;
+its dispatch intent remains independently mutable. Staging deletion and publication clear attachment
+fields without deleting a Turn. Attachment and conversation erasure remain separate.
+
+OAuth refresh and support recovery evidence use `audit_entries`, with typed foreign keys and unique
+consumed/issued refresh identities. Refresh history cannot expire through ordinary Audit retention;
+support evidence follows its case's 24-calendar-month retention. The shared erasure fence maps each
+record kind to its original logical permission.
+
+Budget threshold InsightEvents retain the immutable crossing snapshot and unique delivery-group /
+threshold identity. Publication creates the event and snapshot in one write. The global pending
+statement-review counter stays materialized: deriving it at its 5,000-item bound examines 5,000 rows
+per check instead of one, with no measured local latency benefit.

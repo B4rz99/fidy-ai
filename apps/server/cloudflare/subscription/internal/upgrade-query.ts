@@ -2,17 +2,12 @@ import { Clock, Effect, Option } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordedPATCallProof,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import {
   livePATAuthority,
   recordAuditedPATUseFromAuthority,
 } from "../../../src/shell/tokens/operations";
-import {
-  callerAuthority,
-  isPATCaller,
-  rateLimitedTransactionResponse,
-} from "../../canonical-work/operations";
+import { callerAuthority, isPATCaller } from "../../canonical-work/operations";
 import { newId } from "../../secret-material/operations";
 import type { SubscriptionQueryInput } from "../contract";
 
@@ -77,8 +72,4 @@ export const queryUpgrade = (
       },
       { headers: { "cache-control": "no-store" } }
     );
-  }).pipe(
-    Effect.catchCause((cause) =>
-      Effect.succeed(refusedByAuditBudget(cause) ? rateLimitedTransactionResponse() : unavailable())
-    )
-  );
+  }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));

@@ -3,7 +3,11 @@ import { Data, DateTime, Effect } from "effect";
 import { recordAuthorizedCall, recordOwnerCall } from "../../../src/shell/audit/operations";
 import { makeAudit, makeAuditRetention } from "../../../src/shell/audit/runtime";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
-import { installTestSchema, isolatedTestDatabases } from "../../d1-test-fixture";
+import {
+  applyTestMigration,
+  installTestSchema,
+  isolatedTestDatabases,
+} from "../../d1-test-fixture";
 import { fixtureWorker as coreWorker } from "../../core-worker.test-fixture";
 import { approvedWorkersAiModel } from "../../../src/shell/hosted-inference/contract";
 
@@ -19,18 +23,26 @@ class FixtureFailure extends Data.TaggedError("FixtureFailure")<{ readonly cause
 const attempt = <A>(work: () => Promise<A>): Effect.Effect<A, FixtureFailure> =>
   Effect.tryPromise({ try: work, catch: (cause) => new FixtureFailure({ cause }) });
 
-const setup = (): Effect.Effect<D1Database, FixtureFailure> =>
+const setup = (beforeConsolidation = false): Effect.Effect<D1Database, FixtureFailure> =>
   Effect.gen(function* () {
     const db = yield* attempt(() => databases.acquire());
     const names = Array.from(
       new Bun.Glob("*.sql").scanSync(new URL("../../migrations/", import.meta.url).pathname)
     ).sort();
-    yield* attempt(() =>
-      installTestSchema({
-        db,
-        sources: names.map((name) => new URL(`../../migrations/${name}`, import.meta.url)),
-      })
-    );
+    if (beforeConsolidation) {
+      for (const name of names.filter((name) => name < "0135_accountability.sql")) {
+        yield* attempt(() =>
+          applyTestMigration({ db, source: new URL(`../../migrations/${name}`, import.meta.url) })
+        );
+      }
+    } else {
+      yield* attempt(() =>
+        installTestSchema({
+          db,
+          sources: names.map((name) => new URL(`../../migrations/${name}`, import.meta.url)),
+        })
+      );
+    }
     yield* attempt(() =>
       db.batch([
         ...[userId, otherUserId].map((id) =>
@@ -211,14 +223,21 @@ it("retains evidence for 365 days, removes only the selected User's older eviden
       );
       const deletion = yield* Effect.result(
         attempt(() =>
-          db.prepare("DELETE FROM transaction_audit WHERE user_id = ?").bind(userId).run()
+          db
+            .prepare(
+              "DELETE FROM audit_entries WHERE record_type='session_call' AND (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
+            )
+            .bind(userId)
+            .run()
         )
       );
       expect(deletion._tag).toBe("Failure");
       const rewrite = yield* Effect.result(
         attempt(() =>
           db
-            .prepare("UPDATE transaction_audit SET outcome = 'not_found' WHERE user_id = ?")
+            .prepare(
+              "UPDATE audit_entries SET outcome = 'not_found' WHERE record_type='session_call' AND user_id = ?"
+            )
             .bind(userId)
             .run()
         )
@@ -236,7 +255,12 @@ it("retains evidence for 365 days, removes only the selected User's older eviden
       ).toEqual(["30000000-0000-4000-8000-000000000006"]);
       const afterRetention = yield* Effect.result(
         attempt(() =>
-          db.prepare("DELETE FROM transaction_audit WHERE user_id = ?").bind(userId).run()
+          db
+            .prepare(
+              "DELETE FROM audit_entries WHERE record_type='session_call' AND (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
+            )
+            .bind(userId)
+            .run()
         )
       );
       expect(afterRetention._tag).toBe("Failure");
@@ -280,7 +304,12 @@ it("rolls retention back and leaves ordinary deletion forbidden when a later pro
       expect(yield* makeAudit({ database: db }).query({ userId, limit: 10 })).toHaveLength(1);
       const deletion = yield* Effect.result(
         attempt(() =>
-          db.prepare("DELETE FROM transaction_audit WHERE user_id = ?").bind(userId).run()
+          db
+            .prepare(
+              "DELETE FROM audit_entries WHERE record_type='session_call' AND (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
+            )
+            .bind(userId)
+            .run()
         )
       );
       expect(deletion._tag).toBe("Failure");
@@ -294,7 +323,7 @@ it("returns a safe failure instead of exposing malformed stored evidence or data
       yield* attempt(() =>
         db
           .prepare(
-            "INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms) VALUES ('malformed-private-value', ?, ?, 'transactions.listTransactions', 'success', ?)"
+            "INSERT INTO audit_entries(record_type,id, user_id, session_id, operation, outcome, occurred_at_ms) VALUES ('session_call','malformed-private-value', ?, ?, 'transactions.listTransactions', 'success', ?)"
           )
           .bind(userId, sessionId, current)
           .run()
@@ -421,5 +450,153 @@ it("bounds retention work and resumes the remaining expired evidence on the next
       expect(yield* makeAudit({ database: db }).query({ userId, limit: 256 })).toHaveLength(1);
       expect(yield* retention.retain({ userId, now: current + 365 * 86400000 })).toBe(1);
       expect(yield* makeAudit({ database: db }).query({ userId, limit: 256 })).toEqual([]);
+    })
+  ));
+
+it("preserves populated accountability history, independent lifetimes and parent relationships through consolidation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup(true);
+      const id = "30000000-0000-4000-8000-000000000090";
+      const pat = "40000000-0000-4000-8000-000000000090";
+      const enrollment = "50000000-0000-4000-8000-000000000090";
+      const source = "60000000-0000-4000-8000-000000000090";
+      const request = "70000000-0000-4000-8000-000000000090";
+      const billing = "80000000-0000-4000-8000-000000000090";
+      yield* attempt(() =>
+        db.batch([
+          db
+            .prepare(`INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id)
+          VALUES (?,?,'12345678',?,'fixture','["read"]',7,0,0,604800000,?)`)
+            .bind(pat, userId, digest, request),
+          db
+            .prepare(`INSERT INTO card_enrollments(id,user_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,payment_request_id,wompi_candidate_source_id,method,wompi_environment)
+          VALUES (?,?,'22700000-0000-4000-8000-000000000001','payer@example.com','creating','create','{}','{}',0,900000,?,3891,'card','sandbox')`)
+            .bind(enrollment, userId, request),
+          db
+            .prepare(
+              `INSERT INTO card_payment_sources(id,user_id,enrollment_id,wompi_source_id,billing_email,created_at_ms) VALUES (?,?,?,3891,'payer@example.com',0)`
+            )
+            .bind(source, userId, enrollment),
+          db.prepare("UPDATE card_enrollments SET status='available' WHERE id=?").bind(enrollment),
+          db
+            .prepare(`INSERT INTO billing_attempts(id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)
+          VALUES (?,?,?,?,?,'22700000-0000-4000-8000-000000000001','9900','COP','weekly','CO','not-taxable','America/Bogota','sandbox','audit-migration',0)`)
+            .bind(billing, userId, enrollment, request, source),
+          db
+            .prepare(`INSERT INTO media_submissions(id,user_id,portfolio_id,bsuid,message_id,input_digest,accepted_at_ms,expires_at_ms,service_market,locale,time_zone)
+          VALUES (?,?,'portfolio','bsuid','message','digest',0,2592000000,'CO','es-CO','America/Bogota')`)
+            .bind(id, userId),
+          db
+            .prepare(
+              "INSERT INTO session_audit(id,user_id,session_id,operation,outcome,occurred_at_ms) VALUES (?,?,?,'transactions.getTransaction','not_found',1)"
+            )
+            .bind(id, userId, sessionId),
+          db
+            .prepare(
+              "INSERT INTO pat_audit(id,user_id,pat_id,operation,outcome,occurred_at_ms) VALUES (?,?,?,'memory.recall','accepted',2)"
+            )
+            .bind(id, userId, pat),
+          db
+            .prepare(
+              "INSERT INTO insight_audit(id,user_id,session_id,operation,outcome,occurred_at_ms) VALUES (?,?,?,'insights.listPendingInsights','rejected',3)"
+            )
+            .bind(id, userId, sessionId),
+          db
+            .prepare(
+              "INSERT INTO ingestion_publication_audit(id,user_id,operation,outcome,occurred_at_ms) VALUES (?,?,'ingestion.submitForExtraction','resource_limit',4)"
+            )
+            .bind(id, userId),
+          db
+            .prepare(
+              "INSERT INTO media_submission_audit(id,user_id,outcome,occurred_at_ms) VALUES (?,?,'accepted',5)"
+            )
+            .bind(id, userId),
+          db
+            .prepare(
+              "INSERT INTO billing_audit(attempt_id,transition,occurred_at_ms) VALUES (?,'failed',6)"
+            )
+            .bind(billing),
+          db
+            .prepare(
+              "INSERT INTO canonical_request_acceptances(id,user_id,pat_id,operation,accepted_at_ms) VALUES (?,?,?,'memory.recall',7)"
+            )
+            .bind(id, userId, pat),
+          db
+            .prepare(
+              "INSERT INTO canonical_user_reads(id,user_id,session_id,occurred_at_ms) VALUES (?,?,?,8)"
+            )
+            .bind(id, userId, sessionId),
+          db
+            .prepare(
+              "INSERT INTO canonical_security_mutations(id,user_id,session_id,operation,occurred_at_ms) VALUES (?,?,?,'recovery.rotateBackupRecoveryCode',9)"
+            )
+            .bind(id, userId, sessionId),
+        ])
+      );
+      const sources = [
+        ["session_audit", "session_call"],
+        ["pat_audit", "credential_call"],
+        ["insight_audit", "insight_call"],
+        ["ingestion_publication_audit", "publication"],
+        ["media_submission_audit", "media_admission"],
+        ["billing_audit", "billing_transition"],
+        ["canonical_request_acceptances", "request_admission"],
+        ["canonical_user_reads", "identity_read"],
+        ["canonical_security_mutations", "security_mutation"],
+      ] as const;
+      const before = yield* attempt(() =>
+        Promise.all(sources.map(([table]) => db.prepare(`SELECT * FROM ${table}`).all()))
+      );
+      yield* attempt(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../../migrations/0135_accountability.sql", import.meta.url),
+        })
+      );
+      for (const [index, [, kind]] of sources.entries()) {
+        const oldRows = before[index]?.results ?? [];
+        const columns = Object.keys(oldRows[0] ?? {});
+        const after = yield* attempt(() =>
+          db
+            .prepare(`SELECT ${columns.join(",")} FROM audit_entries WHERE record_type=?`)
+            .bind(kind)
+            .all()
+        );
+        expect(after.results, kind).toEqual(oldRows);
+      }
+      const audit = makeAudit({ database: db });
+      expect(
+        (yield* audit.query({ userId, limit: 20 })).map(({ operation, outcome }) => ({
+          operation,
+          outcome,
+        }))
+      ).toEqual([
+        { operation: "transactions.getTransaction", outcome: "rejected" },
+        { operation: "memory.recall", outcome: "succeeded" },
+        { operation: "insights.listPendingInsights", outcome: "rejected" },
+      ]);
+      expect(yield* makeAuditRetention({ database: db }).retain({ userId, now: current })).toBe(4);
+      const retained = yield* attempt(() =>
+        db.prepare("SELECT record_type FROM audit_entries ORDER BY record_type").all()
+      );
+      expect(retained.results.map(({ record_type }) => record_type)).toEqual([
+        "billing_transition",
+        "identity_read",
+        "media_admission",
+        "request_admission",
+        "security_mutation",
+      ]);
+      yield* attempt(() => db.prepare("DELETE FROM media_submissions WHERE id=?").bind(id).run());
+      expect(
+        yield* attempt(() =>
+          db
+            .prepare("SELECT count(*) FROM audit_entries WHERE record_type='media_admission'")
+            .first("count(*)")
+        )
+      ).toBe(0);
+      expect((yield* attempt(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual(
+        []
+      );
     })
   ));

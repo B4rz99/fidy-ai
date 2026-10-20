@@ -3,12 +3,7 @@ import { BigDecimal, DateTime, Effect, Equal, Result } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { type Budget, BudgetId } from "./contract";
-import {
-  advanceBudgetLatch,
-  calculateBudgetStatus,
-  deriveCurrentBudgetMonth,
-  sumBudgetContributions,
-} from "./operations";
+import { advanceBudgetLatch, calculateBudgetStatus, deriveCurrentBudgetMonth } from "./operations";
 import { CategoryId } from "~/core/categories/contract";
 
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>
@@ -59,31 +54,6 @@ it("returns exact under, reached, and over variants in the Budget Currency", () 
   expect(over.type === "over" && Equal.equals(over.overBy.amount, money("250.75").amount)).toBe(
     true
   );
-});
-
-it("sums only same-Category, same-Currency outflows inside the half-open zoned month", () => {
-  type Movement = Parameters<typeof sumBudgetContributions>[0]["movements"][number];
-  const makeMovement = (changes: Partial<Movement> = {}): Movement => ({
-    money: money("100"),
-    categoryId: budget.categoryId,
-    direction: "outflow",
-    occurredAt: DateTime.makeUnsafe("2026-07-15T12:00:00Z"),
-    ...changes,
-  });
-  const otherCategory = CategoryId.make("10000000-0000-4000-8000-000000000002");
-  const movements = [
-    makeMovement({ money: money("10.25"), occurredAt: period.from }),
-    makeMovement({ money: money("7.50"), occurredAt: DateTime.makeUnsafe("2026-08-01T04:59:59Z") }),
-    makeMovement({ money: money("100", Currency.make("USD")) }),
-    makeMovement({ categoryId: otherCategory }),
-    makeMovement({ direction: "inflow" }),
-    makeMovement({ occurredAt: DateTime.makeUnsafe("2026-07-01T04:59:59Z") }),
-    makeMovement({ occurredAt: period.to }),
-  ];
-
-  const total = sumBudgetContributions({ budget, period, movements });
-  expect(Equal.equals(total.amount, money("17.75").amount)).toBe(true);
-  expect(total.currency).toBe("COP");
 });
 
 it("latches each crossed threshold once, including a jump across both thresholds", () => {

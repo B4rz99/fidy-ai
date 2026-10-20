@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import type { NotificationEmailOutcome } from "../../../src/shell/ingestion/contract";
 import { prepareQueuedConsentAction } from "../../consent/operations";
 import { fallbackCaptureCategory } from "../../../src/core/categories/operations";
@@ -65,7 +66,7 @@ const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, EmailProcessingUnav
   Effect.tryPromise({ try: run, catch: (cause) => new EmailProcessingUnavailable({ cause }) });
 const activeSource = `SELECT r.user_id FROM forwarded_email_receipts r
   WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-  AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`;
+  AND r.outcome IS NULL`;
 const active = `EXISTS (${activeSource})`;
 
 // Only these fixed HTML tags may leave the personal-evidence boundary; never store tag names
@@ -103,7 +104,7 @@ const findOwnedReceipt = (
           sql: `SELECT r.id, r.object_key, r.delivery_digest, r.byte_length,
             r.received_at_ms, r.expires_at_ms, r.time_zone FROM forwarded_email_receipts r
             WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-              AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`,
+              AND r.outcome IS NULL`,
           params: [input.receiptId, input.userId, current],
         },
       }).first()
@@ -242,16 +243,15 @@ const reviewStatement = (settlement: Settlement): D1PreparedStatement => {
     userId: input.userId,
     queued: { sql: activeSource, params: guard },
     statement: {
-      sql: `INSERT INTO forwarded_email_needs_review
-    (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
-    SELECT ?, ?, ?, ?, ?, ? WHERE ${active}`,
+      sql: `UPDATE forwarded_email_receipts SET review_id=?,review_reason=?,review_created_at_ms=?,review_evidence_expires_at_ms=?
+    WHERE id=? AND user_id=? AND review_id IS NULL AND ${active}`,
       params: [
         id,
-        input.receiptId,
-        input.userId,
         material.interpretation.reason,
         now,
         receipt.expires_at_ms,
+        input.receiptId,
+        input.userId,
         ...guard,
       ],
     },
@@ -319,25 +319,19 @@ const settle = (
         userId: input.userId,
         queued: { sql: activeSource, params: settlement.guard },
         statement: {
-          sql: `INSERT INTO forwarded_email_outcomes
-    (receipt_id, user_id, outcome, transaction_id, review_id, completed_at_ms)
-    SELECT ?, ?, ?, ${material.interpretation._tag === "Interpreted" ? "?, NULL" : "NULL, ?"}, ? WHERE ${active}`,
+          sql: `UPDATE forwarded_email_receipts SET outcome=?,${material.interpretation._tag === "Interpreted" ? "outcome_transaction_id=?" : "outcome_review_id=?"},outcome_completed_at_ms=? WHERE id=? AND user_id=? AND outcome IS NULL AND ${active}`,
           params: [
-            input.receiptId,
-            input.userId,
             material.interpretation._tag === "Interpreted" ? "accepted" : "needs-review",
             id,
             now,
+            input.receiptId,
+            input.userId,
             ...settlement.guard,
           ],
         },
       })
     );
-    statements.push(
-      input.DB.prepare(`INSERT INTO forwarded_email_assertion (id, accepted)
-    VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-    ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`)
-    );
+    statements.push(prepareChangedRowAssertion({ db: input.DB, scope: "forwarded_email" }));
     yield* attempt(() => input.DB.batch(statements));
   });
 

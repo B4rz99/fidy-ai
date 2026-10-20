@@ -6,7 +6,13 @@ import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
-import { applyTestMigration, isolatedTestStorage } from "../d1-test-fixture";
+import {
+  applyForwardingFixtureMigration,
+  applyTestMigration,
+  consentHistoryTestSchema,
+  installAuditTestSchema,
+  isolatedTestStorage,
+} from "../d1-test-fixture";
 import { afterAll, afterEach, expect, vi } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
 import { runEmailMaintenance } from "../maintenance/runtime";
@@ -56,7 +62,13 @@ it.live("still offers another User's current email when expired-byte deletion fa
         .bind(userA)
         .run()
     );
-    yield* wait(() => db.prepare("UPDATE forwarded_email_outbox SET sent_at_ms = NULL").run());
+    yield* wait(() =>
+      db
+        .prepare(
+          "UPDATE forwarded_email_receipts AS forwarded_email_outbox SET dispatch_sent_at_ms = NULL WHERE dispatch_user_id IS NOT NULL "
+        )
+        .run()
+    );
     jobs.splice(0);
     const outcome = yield* runEmailMaintenance({
       scheduledAtEpochMs: 0,
@@ -162,30 +174,28 @@ const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
 const setup = Effect.fn(function* () {
   const { db, bucket } = yield* wait(() => storage.acquire());
   yield* wait(() =>
-    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota', service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO');
-    CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY, accepted_at_ms INTEGER NOT NULL);
-    CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY);
+    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota', service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
+    ${consentHistoryTestSchema};
+
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
     CREATE TABLE statement_submission_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE transaction_audit (user_id TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT, occurred_at_ms INTEGER);
+    CREATE TABLE transaction_audit (user_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE categories (id TEXT PRIMARY KEY);
     INSERT INTO categories (id) VALUES ('10000000-0000-4000-8000-000000000016');
     CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE(user_id, id));
     CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT);
-    CREATE TABLE statement_submissions (id TEXT PRIMARY KEY);
+    CREATE TABLE statement_submissions (id TEXT PRIMARY KEY,user_id TEXT,clarification_state TEXT,clarification_expires_at_ms INTEGER,clarification_ended_at_ms INTEGER);
     CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
-    CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER);
     CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
-    CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT);
+    CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
  CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
- CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY,starts_at_ms INTEGER, ends_at_ms INTEGER);
- CREATE TABLE billing_access_adjustments (attempt_id TEXT,ends_at_ms INTEGER);
+
+ CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);
     CREATE TABLE statement_clarification_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE statement_clarifications (submission_id TEXT PRIMARY KEY, user_id TEXT, state TEXT, expires_at_ms INTEGER);
+
     CREATE TABLE statement_review_decisions (review_id TEXT PRIMARY KEY, submission_id TEXT, user_id TEXT, decision TEXT, transaction_id TEXT, decided_at_ms INTEGER);
     ALTER TABLE transactions ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
     CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
@@ -202,11 +212,6 @@ const setup = Effect.fn(function* () {
   for (const [name, event, table] of [
     ["statement_submission_audit_no_update", "UPDATE", "statement_submission_audit"],
     ["statement_submission_audit_no_delete", "DELETE", "statement_submission_audit"],
-    ["statement_audit_daily_budget", "INSERT", "statement_submission_audit"],
-    ["transaction_audit_daily_budget", "INSERT", "transaction_audit"],
-    ["pat_canonical_daily_budget", "INSERT", "pat_audit"],
-    ["category_canonical_daily_budget", "INSERT", "category_audit"],
-    ["memory_canonical_daily_budget", "INSERT", "memory_audit"],
   ]) {
     yield* wait(() =>
       db.prepare(`CREATE TRIGGER ${name} BEFORE ${event} ON ${table} BEGIN SELECT 1; END`).run()
@@ -215,7 +220,9 @@ const setup = Effect.fn(function* () {
   yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(userA).run());
   yield* wait(() =>
     db
-      .prepare("INSERT INTO onboarding_consent_records (user_id, accepted_at_ms) VALUES (?, 1)")
+      .prepare(
+        "INSERT INTO consent_history (record_type,user_id, accepted_at_ms) VALUES ('processing_grant',?, 1)"
+      )
       .bind(userA)
       .run()
   );
@@ -230,15 +237,33 @@ const setup = Effect.fn(function* () {
     "0038_proactivity_consent",
     "0092_queued_processing_cutoff",
     "0095_titular_erasure",
+    "0115_ingestion_audit",
+    "0120_email_deferral",
+    "0117_media_capacity",
+    "0119_media_review",
+    "0140_email_companions",
   ]) {
     yield* wait(() =>
-      applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+      applyForwardingFixtureMigration({
+        db,
+        source: new URL(`../migrations/${name}.sql`, import.meta.url),
+      })
     );
   }
+  yield* wait(() =>
+    applyTestMigration({
+      db,
+      source: new URL("../migrations/0145_parent_work.sql", import.meta.url),
+      includeStatement: (sql) => sql.includes("forwarded_email"),
+    })
+  );
+  yield* wait(() => installAuditTestSchema(db));
   yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(userB).run());
   yield* wait(() =>
     db
-      .prepare("INSERT INTO onboarding_consent_records (user_id, accepted_at_ms) VALUES (?, 1)")
+      .prepare(
+        "INSERT INTO consent_history (record_type,user_id, accepted_at_ms) VALUES ('processing_grant',?, 1)"
+      )
       .bind(userB)
       .run()
   );
@@ -248,7 +273,9 @@ const setup = Effect.fn(function* () {
   ]) {
     yield* wait(() =>
       db
-        .prepare("UPDATE email_forwarding_addresses SET local_part = ? WHERE user_id = ?")
+        .prepare(
+          "UPDATE users AS email_forwarding_addresses SET forwarding_local_part = ? WHERE forwarding_address_id IS NOT NULL AND id = ?"
+        )
         .bind(local, userId)
         .run()
     );
@@ -301,11 +328,16 @@ it.effect("reevaluates upgrades fairly even when an older revoked User fills a s
       environment: env,
     });
     yield* wait(() =>
-      db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userA).run()
+      db
+        .prepare(
+          "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+        )
+        .bind(userA)
+        .run()
     );
     yield* wait(() =>
       db
-        .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+        .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
         .bind(userB, current, current + 604800000)
         .run()
     );
@@ -317,7 +349,9 @@ it.effect("reevaluates upgrades fairly even when an older revoked User fills a s
     expect(
       yield* wait(() =>
         db
-          .prepare("SELECT COUNT(*) AS total FROM forwarded_email_deferrals WHERE user_id = ?")
+          .prepare(
+            "SELECT COUNT(*) AS total FROM forwarded_email_receipts WHERE deferred_checked_at_ms IS NOT NULL AND user_id = ?"
+          )
           .bind(userA)
           .first()
       )
@@ -368,12 +402,20 @@ it.effect(
       });
       expect(
         yield* wait(() =>
-          db.prepare("SELECT count(*) AS total FROM forwarded_email_deferrals").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM forwarded_email_receipts WHERE deferred_checked_at_ms IS NOT NULL"
+            )
+            .first()
         )
       ).toEqual({ total: 1 });
       expect(
         yield* wait(() =>
-          db.prepare("SELECT count(*) AS total FROM forwarded_email_outbox").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT rowid,id AS receipt_id,dispatch_user_id AS user_id,dispatch_sent_at_ms AS sent_at_ms FROM forwarded_email_receipts WHERE dispatch_user_id IS NOT NULL) AS forwarded_email_outbox"
+            )
+            .first()
         )
       ).toEqual({ total: 1 });
       expect(
@@ -392,7 +434,11 @@ it.effect(
       yield* dispatchForwardedEmail(env);
       expect(
         yield* wait(() =>
-          db.prepare("SELECT count(*) AS total FROM forwarded_email_deferrals").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM forwarded_email_receipts WHERE deferred_checked_at_ms IS NOT NULL"
+            )
+            .first()
         )
       ).toEqual({ total: 0 });
       expect(
@@ -497,7 +543,12 @@ it("finishes a previously queued financial email after withdrawal with one Trans
       expect(receipt).not.toBeNull();
       if (receipt === null) return;
       yield* wait(() =>
-        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userA)
+          .run()
       );
       yield* wait(() => emailWorker.scheduled(scheduledController, env));
       const coordinator = coordinatorFor(db, bucket, userA);
@@ -649,7 +700,11 @@ it.each([
         yield* wait(() => processForwardedEmail(work));
         expect(
           (yield* wait(() =>
-            db.prepare("SELECT user_id,reason FROM forwarded_email_needs_review").all()
+            db
+              .prepare(
+                "SELECT user_id,review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL"
+              )
+              .all()
           )).results
         ).toEqual([{ user_id: userA, reason }]);
         expect(
@@ -684,7 +739,9 @@ it("keeps uncertain mail in visible review rather than creating a Transaction", 
       );
       const review = yield* wait(() =>
         db
-          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .prepare(
+            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+          )
           .bind(userA)
           .all()
       );
@@ -714,7 +771,7 @@ it.effect(
       yield* wait(() =>
         db
           .prepare(
-            "INSERT INTO statement_clarifications (submission_id,user_id,state,expires_at_ms) VALUES (?,?,'awaiting',?)"
+            "INSERT INTO statement_submissions(id,user_id,clarification_state,clarification_expires_at_ms) VALUES (?,?,'awaiting',?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,clarification_state=excluded.clarification_state,clarification_expires_at_ms=excluded.clarification_expires_at_ms"
           )
           .bind("10000000-0000-4000-8000-000000000602", userA, current + 60_000)
           .run()
@@ -790,7 +847,13 @@ it.effect(
         url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
       });
       expect(corrupt.status).toBe(200);
-      yield* wait(() => db.prepare("DELETE FROM statement_clarifications").run());
+      yield* wait(() =>
+        db
+          .prepare(
+            "UPDATE statement_submissions SET clarification_state=NULL,clarification_expires_at_ms=NULL"
+          )
+          .run()
+      );
       const metadata = yield* listNeedsReviewItems({
         database: db,
         environment: { DB: db },
@@ -873,7 +936,12 @@ it.each(["before-processing", "during-processing"] as const)(
         const job = jobs[0];
         if (job === undefined) return yield* Effect.die("Expected queued email");
         yield* wait(() =>
-          db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+          db
+            .prepare(
+              "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+            )
+            .bind(userA)
+            .run()
         );
         const receipt = yield* wait(() =>
           db
@@ -927,8 +995,8 @@ it.each(["before-processing", "during-processing"] as const)(
         (SELECT count(*) FROM transactions) AS transactions,
         (SELECT count(*) FROM source_attestations) AS attestations,
         (SELECT count(*) FROM anonymized_email_samples) AS samples,
-        (SELECT count(*) FROM forwarded_email_needs_review) AS reviews,
-        (SELECT count(*) FROM forwarded_email_outcomes) AS outcomes`)
+        (SELECT count(*) FROM forwarded_email_receipts WHERE review_id IS NOT NULL) AS reviews,
+        (SELECT count(*) FROM forwarded_email_receipts WHERE outcome IS NOT NULL) AS outcomes`)
               .first()
           )
         ).toEqual({ transactions: 0, attestations: 0, samples: 0, reviews: 0, outcomes: 0 });
@@ -949,7 +1017,12 @@ it("finishes previously queued email after withdrawal while ordinary access stay
       );
       if (receipt === null) throw new Error("Expected receipt");
       yield* wait(() =>
-        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userA)
+          .run()
       );
       yield* wait(() =>
         processForwardedEmail({
@@ -960,24 +1033,42 @@ it("finishes previously queued email after withdrawal while ordinary access stay
         })
       );
       expect(
-        (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
-          .results
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT id AS receipt_id FROM forwarded_email_receipts WHERE outcome IS NOT NULL"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
       expect(
-        (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_needs_review").all())).results
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT review_id AS id FROM forwarded_email_receipts WHERE review_id IS NOT NULL"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
       yield* wait(() => emailWorker.scheduled(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
       const review = yield* wait(() =>
         db
-          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .prepare(
+            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+          )
           .bind(userA)
           .first<{ reason: string }>()
       );
       expect(review?.reason).toBe("unsupported-content");
       expect(
-        (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
-          .results
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT id AS receipt_id FROM forwarded_email_receipts WHERE outcome IS NOT NULL"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
       const current = yield* Clock.currentTimeMillis;
       const session = "10000000-0000-4000-8000-000000000203";
@@ -1029,8 +1120,13 @@ it("does not let another User's receipt identity authorize reading or finalizing
       );
       expect(acked).toBe(true);
       expect(
-        (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outcomes").all()))
-          .results
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT id AS receipt_id FROM forwarded_email_receipts WHERE outcome IS NOT NULL"
+            )
+            .all()
+        )).results
       ).toHaveLength(0);
     })
   ));
@@ -1084,7 +1180,12 @@ it("rejects revoked Consent without reading or retaining a User's email", () =>
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
       yield* wait(() =>
-        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userA)
+          .run()
       );
       const input = delivery();
       yield* wait(() => emailWorker.email(input.message, env));
@@ -1103,7 +1204,12 @@ it("dispatches previously queued email after Consent withdrawal", () =>
       const { env, db, jobs } = yield* setup();
       yield* wait(() => emailWorker.email(delivery().message, env));
       yield* wait(() =>
-        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userA).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userA)
+          .run()
       );
       yield* wait(() => emailWorker.scheduled(scheduledController, env));
       expect(jobs).toHaveLength(1);
@@ -1126,7 +1232,9 @@ it("refuses publication when Consent is revoked after reservation and cleans pri
             bucket.put(key, bytes, options).then((stored) => {
               if (options.customMetadata?.purpose !== "forwarded-email") return stored;
               return db
-                .prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)")
+                .prepare(
+                  "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+                )
                 .bind(userA)
                 .run()
                 .then(() => stored);
@@ -1140,8 +1248,13 @@ it("refuses publication when Consent is revoked after reservation and cleans pri
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
       ).toHaveLength(0);
       expect(
-        (yield* wait(() => db.prepare("SELECT receipt_id FROM forwarded_email_outbox").all()))
-          .results
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT receipt_id FROM (SELECT rowid,id AS receipt_id,dispatch_user_id AS user_id,dispatch_sent_at_ms AS sent_at_ms FROM forwarded_email_receipts WHERE dispatch_user_id IS NOT NULL) AS forwarded_email_outbox"
+            )
+            .all()
+        )).results
       ).toHaveLength(0);
       expect(jobs).toHaveLength(0);
     })
@@ -1192,7 +1305,9 @@ it("enforces the global outstanding cap atomically across Users", () =>
         );
         yield* wait(() =>
           db
-            .prepare("INSERT INTO onboarding_consent_records VALUES (?, 1)")
+            .prepare(
+              "INSERT INTO consent_history (record_type,user_id,accepted_at_ms) VALUES ('processing_grant',?, 1)"
+            )
             .bind(`fidy-test-${index}`)
             .run()
         );
@@ -1344,7 +1459,9 @@ it("deletes expired private email while keeping a replay tombstone", () =>
       expect(jobs).toHaveLength(0);
       const review = yield* wait(() =>
         db
-          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .prepare(
+            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+          )
           .bind(userA)
           .first<{ reason: string }>()
       );
@@ -1371,7 +1488,7 @@ it("clears near-expiry email before the bounded sweep can exceed its retention d
       const review = yield* wait(() =>
         db
           .prepare(
-            "SELECT reason, evidence_expires_at_ms FROM forwarded_email_needs_review WHERE user_id = ?"
+            "SELECT review_reason AS reason,review_evidence_expires_at_ms AS evidence_expires_at_ms FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
           )
           .bind(userA)
           .first<{ reason: string; evidence_expires_at_ms: number }>()
@@ -1400,7 +1517,9 @@ it("records interrupted reservations visibly before expiring their private bytes
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const review = yield* wait(() =>
         db
-          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE receipt_id = ?")
+          .prepare(
+            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND id = ?"
+          )
           .bind(id)
           .first<{ reason: string }>()
       );
@@ -1435,7 +1554,9 @@ it("makes an interrupted reservation visible after its bounded write window", ()
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const review = yield* wait(() =>
         db
-          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE receipt_id = ?")
+          .prepare(
+            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND id = ?"
+          )
           .bind(id)
           .first<{ reason: string }>()
       );
@@ -1508,7 +1629,9 @@ it("keeps retention failure visible and retries private deletion without duplica
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
       const review = yield* wait(() =>
         db
-          .prepare("SELECT reason FROM forwarded_email_needs_review WHERE user_id = ?")
+          .prepare(
+            "SELECT review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+          )
           .bind(userA)
           .first<{ reason: string }>()
       );
@@ -1517,7 +1640,9 @@ it("keeps retention failure visible and retries private deletion without duplica
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const reviews = yield* wait(() =>
         db
-          .prepare("SELECT id FROM forwarded_email_needs_review WHERE user_id = ?")
+          .prepare(
+            "SELECT review_id AS id FROM forwarded_email_receipts WHERE review_id IS NOT NULL AND user_id = ?"
+          )
           .bind(userA)
           .all()
       );

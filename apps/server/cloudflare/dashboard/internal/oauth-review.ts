@@ -112,7 +112,7 @@ export const dashboardOAuthReview = (
     ];
     const guard = Option.isSome(input.existing)
       ? {
-          sql: "SELECT 1 FROM dashboard_documents WHERE user_id = ? AND revision = ? AND document_json = ?",
+          sql: "SELECT 1 FROM user_documents WHERE kind='dashboard' AND user_id = ? AND revision = ? AND document_json = ?",
           params: [
             input.subject.userId,
             input.existing.value.revision,
@@ -120,7 +120,7 @@ export const dashboardOAuthReview = (
           ],
         }
       : {
-          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM dashboard_documents WHERE user_id = ?)",
+          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM user_documents WHERE kind='dashboard' AND user_id = ?)",
           params: [input.subject.userId],
         };
     return Option.some(

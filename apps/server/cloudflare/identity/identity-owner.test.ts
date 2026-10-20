@@ -28,13 +28,18 @@ it("resolves only the established portfolio and BSUID pair without borrowing con
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare(`CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT,
-      verified_at_ms INTEGER)`),
+          db.prepare(
+            `CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)`
+          ),
           db
-            .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio-a', 'CO.caller', 1000)")
+            .prepare(
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, 'portfolio-a', 'CO.caller', 1000)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+            )
             .bind(userA),
           db
-            .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio-b', 'CO.caller', 1000)")
+            .prepare(
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, 'portfolio-b', 'CO.caller', 1000)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+            )
             .bind(userB),
         ])
       );
@@ -87,14 +92,18 @@ it("rechecks the exact User association at execution and refuses cross-User subs
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT, verified_at_ms INTEGER)"
+            "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare("CREATE TABLE protected_work (user_id TEXT)"),
           db
-            .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio-a', 'CO.caller', 1000)")
+            .prepare(
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, 'portfolio-a', 'CO.caller', 1000)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+            )
             .bind(userA),
           db
-            .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio-a', 'CO.other', 1000)")
+            .prepare(
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, 'portfolio-a', 'CO.other', 1000)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+            )
             .bind(userB),
         ])
       );
@@ -119,10 +128,7 @@ it("rechecks the exact User association at execution and refuses cross-User subs
         },
       });
       yield* Effect.tryPromise(() =>
-        db
-          .prepare("UPDATE whatsapp_identities SET bsuid = 'CO.changed' WHERE user_id = ?")
-          .bind(userA)
-          .run()
+        db.prepare("UPDATE users SET whatsapp_bsuid = 'CO.changed' WHERE id = ?").bind(userA).run()
       );
       yield* Effect.tryPromise(() => prepared.run());
       expect(
@@ -152,13 +158,10 @@ it("keeps User, WhatsApp association and original TrialPeriod inside the caller'
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "CREATE TABLE users (id TEXT PRIMARY KEY, service_market TEXT, locale TEXT, time_zone TEXT, created_at_ms INTEGER)"
+            "CREATE TABLE users (id TEXT PRIMARY KEY, service_market TEXT, locale TEXT, time_zone TEXT, created_at_ms INTEGER, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare(
-            "CREATE TABLE whatsapp_identities (user_id TEXT PRIMARY KEY REFERENCES users(id), portfolio_id TEXT, bsuid TEXT, verified_at_ms INTEGER, phone_number_id TEXT, UNIQUE(portfolio_id, bsuid))"
-          ),
-          db.prepare(
-            "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY REFERENCES users(id), started_at_ms INTEGER, ends_at_ms INTEGER)"
+            "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare(
             "CREATE TABLE pending_consent_exchanges (id TEXT PRIMARY KEY, portfolio_id TEXT, bsuid TEXT, phone_number_id TEXT, expires_at_ms INTEGER, state TEXT)"
@@ -185,7 +188,6 @@ it("keeps User, WhatsApp association and original TrialPeriod inside the caller'
           db.batch([
             identity.createUser,
             associateCaller,
-            identity.startTrial,
             db.prepare("INSERT INTO verification_completion VALUES (0)"),
           ])
         )
@@ -202,13 +204,18 @@ it("keeps User, WhatsApp association and original TrialPeriod inside the caller'
         { results: [] }
       );
       expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT * FROM trial_periods").all())
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id AS user_id,trial_started_at_ms AS started_at_ms,trial_ends_at_ms AS ends_at_ms FROM users"
+            )
+            .all()
+        )
       ).toMatchObject({ results: [] });
       yield* Effect.tryPromise(() =>
         db.batch([
           identity.createUser,
           associateCaller,
-          identity.startTrial,
           db.prepare("INSERT INTO verification_completion VALUES (1)"),
         ])
       );
@@ -220,7 +227,13 @@ it("keeps User, WhatsApp association and original TrialPeriod inside the caller'
         })
       ).toEqual(Option.some(userA));
       expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT * FROM trial_periods").all())
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id AS user_id,trial_started_at_ms AS started_at_ms,trial_ends_at_ms AS ends_at_ms FROM users"
+            )
+            .all()
+        )
       ).toMatchObject({
         results: [{ user_id: userA, started_at_ms: 1000, ends_at_ms: 604801000 }],
       });
@@ -234,13 +247,15 @@ it("does not release another User's Memory through a valid but borrowed associat
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)"
+            "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare(
             "CREATE TABLE memories (id TEXT, user_id TEXT, text TEXT, created_at TEXT, updated_at TEXT)"
           ),
           db
-            .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio-a', 'CO.caller')")
+            .prepare(
+              "WITH incoming(user_id,portfolio_id,bsuid) AS (VALUES (?, 'portfolio-a', 'CO.caller')) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+            )
             .bind(userA),
           db
             .prepare(

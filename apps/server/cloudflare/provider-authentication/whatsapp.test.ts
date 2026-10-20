@@ -45,7 +45,11 @@ it("acknowledges uncorrelated sent, delivered and failed receipts without delive
         ).toBe(200);
       }
       expect(reads).toBe(3);
-      for (const table of ["pending_consent_delivery", "whatsapp_provider_handoffs", "users"]) {
+      for (const table of [
+        "(SELECT id FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL)",
+        "whatsapp_provider_handoffs",
+        "users",
+      ]) {
         expect(
           (yield* Effect.tryPromise(() =>
             journey.db.prepare(`SELECT count(*) AS total FROM ${table}`).first<{ total: number }>()
@@ -128,7 +132,9 @@ it("bounds signed lifecycle replay, concurrent failures and the shared provider-
       expect(
         (yield* Effect.tryPromise(() =>
           journey.db
-            .prepare("SELECT count(*) AS total FROM pending_consent_delivery")
+            .prepare(
+              "SELECT count(*) AS total FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery"
+            )
             .first<{ total: number }>()
         ))?.total
       ).toBe(0);
@@ -435,7 +441,9 @@ it.each(["callback", "missing_callback"])(
           expect(replay.map((response) => response.status)).toEqual([503, 503, 503]);
           const receipts = yield* Effect.tryPromise(() =>
             journey.db
-              .prepare("SELECT count(*) AS total FROM pending_consent_delivery")
+              .prepare(
+                "SELECT count(*) AS total FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery"
+              )
               .first<{ total: number }>()
           );
           expect(receipts?.total).toBe(1);

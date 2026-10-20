@@ -63,8 +63,7 @@ const revocationDisclosure =
 
 /** Append the exact reviewed OAuth grant after its guarded connection insertion in the same unit. */
 export const grantOAuthConsent = (input: OAuthGrantConsentInput): OwnedStatement => ({
-  sql: `INSERT INTO oauth_grant_consents (id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms)
-    SELECT ?,?,?,?,?,?,? WHERE changes() = 1`,
+  sql: `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) SELECT 'oauth_grant',?,?,?,?,?,?,? WHERE changes() = 1`,
   params: [
     input.id,
     input.connectionId,
@@ -90,9 +89,8 @@ export const grantOAuthConsent = (input: OAuthGrantConsentInput): OwnedStatement
 });
 /** Appends the exact first-party decision for each owner-selected same-User grant, in its revocation unit. Already terminal grants gain no duplicate evidence. */
 export const revokeOAuthUserConsent = (input: OAuthUserRevocationInput): OwnedStatement => ({
-  sql: `INSERT INTO oauth_user_revocation_consents(connection_id,user_id,session_id,reason,disclosure_revision,disclosure_text,occurred_at_ms)
-    SELECT selected.connection_id,selected.user_id,?,?,?,?,? FROM (${input.selection.sql}) selected
-    WHERE selected.user_id = ? AND EXISTS (SELECT 1 FROM oauth_grant_consents c WHERE c.connection_id = selected.connection_id AND c.user_id = selected.user_id)`,
+  sql: `INSERT INTO consent_history (record_type,connection_id,user_id,session_id,reason,disclosure_revision,disclosure_text,occurred_at_ms) SELECT 'oauth_user_revocation',selected.connection_id,selected.user_id,?,?,?,?,? FROM (${input.selection.sql}) selected
+    WHERE selected.user_id = ? AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='oauth_grant') c WHERE c.connection_id = selected.connection_id AND c.user_id = selected.user_id)`,
   params: [
     input.session.id,
     input.reason,
@@ -107,14 +105,13 @@ export const revokeOAuthUserConsent = (input: OAuthUserRevocationInput): OwnedSt
 export const oauthUserRevocationProof = (
   input: Pick<OAuthUserRevocationInput, "session" | "current" | "reason">
 ): OwnedStatement => ({
-  sql: `SELECT connection_id FROM oauth_user_revocation_consents WHERE user_id = ? AND session_id = ? AND reason = ? AND occurred_at_ms = ?`,
+  sql: `SELECT connection_id FROM (SELECT * FROM consent_history WHERE record_type='oauth_user_revocation') AS oauth_user_revocation_consents WHERE user_id = ? AND session_id = ? AND reason = ? AND occurred_at_ms = ?`,
   params: [input.session.user_id, input.session.id, input.reason, input.current],
 });
 /** Automatic replay cleanup requires same-User grant evidence and atomic replay selection, not renewed Consent to issue credentials. */
 export const revokeOAuthReplayConsent = (input: OAuthReplayConsentInput): OwnedStatement => ({
-  sql: `INSERT INTO oauth_revocation_consents(id,user_id,connection_id,reason,occurred_at_ms)
-    SELECT ?,?,?,'refresh_replay',? WHERE EXISTS (${input.replay.sql})
-    AND EXISTS (SELECT 1 FROM oauth_grant_consents WHERE connection_id = ? AND user_id = ?)`,
+  sql: `INSERT INTO consent_history (record_type,id,user_id,connection_id,reason,occurred_at_ms) SELECT 'oauth_replay_revocation',?,?,?,'refresh_replay',? WHERE EXISTS (${input.replay.sql})
+    AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='oauth_grant') AS oauth_grant_consents WHERE connection_id = ? AND user_id = ?)`,
   params: [
     input.id,
     input.userId,
@@ -130,7 +127,7 @@ export const protectOAuthGrantConsentAuthority = <Authority extends ConsentAutho
   input: Readonly<{ authority: Authority; subject: OAuthGrantConsentSubject }>
 ): Authority => ({
   ...input.authority,
-  predicate: `${input.authority.predicate} AND EXISTS (SELECT 1 FROM oauth_grant_consents WHERE connection_id = ? AND user_id = ?)`,
+  predicate: `${input.authority.predicate} AND EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='oauth_grant') AS oauth_grant_consents WHERE connection_id = ? AND user_id = ?)`,
   bindings: [...input.authority.bindings, input.subject.connectionId, input.subject.userId],
 });
 /**

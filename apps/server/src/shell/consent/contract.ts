@@ -121,6 +121,7 @@ export type ConsentSubjectColumn =
   | "r.user_id"
   | "o.user_id"
   | "a.user_id"
+  | "a.id"
   | "w.user_id"
   | "s.user_id"
   | "transactions.user_id"
@@ -143,12 +144,7 @@ export type ConsentProtectedStatement = Readonly<{
 
 /** The closed credential owners that compose their live authority with Consent standing. */
 export type ConsentAuthority = Readonly<{
-  table:
-    | "pats"
-    | "pat_pairings"
-    | "web_sessions"
-    | "oauth_access_credentials"
-    | "oauth_refresh_credentials";
+  table: "pats" | "pat_pairings" | "web_sessions" | "oauth_credentials";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;

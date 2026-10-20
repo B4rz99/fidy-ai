@@ -1,6 +1,5 @@
 import { TransactionId } from "../../../src/core/transactions/contract";
 import type { TransactionOutcome } from "../contract";
-import { dailyAuditMessage } from "../../canonical-work/contract";
 import { Effect, Option, Schema } from "effect";
 import type {
   TransactionPair,
@@ -19,7 +18,6 @@ import {
   alreadyLinkedMessage,
   missingTransactionMessage,
   pairPolicyMessage,
-  rateLimitedTransactionResponse,
   recordTransactionRefusal,
   refusalFailureCode,
   refusedCredentialResponse,
@@ -116,8 +114,7 @@ export const transactionRefusal = ({
         return Effect.succeed(refusedTransactionResponse(refusal));
       case "credential_refused":
         return refusedCredentialResponse({ db, subject });
-      case "rate_limited":
-        return Effect.succeed(rateLimitedTransactionResponse());
+
       case "unavailable":
         return Effect.succeed(transactionUnavailable());
     }
@@ -143,45 +140,7 @@ export const refusedTransactionMutation = ({
 }>): CanonicalMutationPreparation =>
   refusedPreparation(transactionRefusal({ db, subject, operation, refusal, current }));
 
-/**
- * The refusal a Transaction child reports when the shared daily audit budget, not the child,
- * refused its unit. The canonical limited result is rendered without a refusal AuditLogEntry: the
- * budget that refused the work is the same one the record would consume.
- */
-export const transactionBudgetRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: dailyAuditMessage,
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(rateLimitedTransactionResponse()),
-});
-
 /** The refusal a Transaction child reports for a trigger that belongs to its own owner. */
-export const transactionTriggerRefusal = ({
-  db,
-  subject,
-  current,
-  outcome,
-  kind,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  outcome: TransactionOutcome;
-  kind: "movement" | "audit";
-}>): Option.Option<CanonicalMutationRefusal> => {
-  if (kind === "movement") {
-    return Option.some(
-      transactionRefusal({
-        db,
-        subject,
-        operation: outcome.operation,
-        refusal: transactionMovementRefusal(),
-        current,
-      })
-    );
-  }
-  return Option.some(transactionBudgetRefusal());
-};
 
 const findDeletedTransactionValue = ({
   db,
@@ -444,9 +403,3 @@ export const countRows = (statement: D1PreparedStatement): Promise<number> =>
       if (Option.isNone(row)) throw new Error("Invalid capacity count projection");
       return row.value.total;
     });
-
-/** The refusal a capture child reports when the daily manual-movement budget aborts its unit. */
-export const transactionMovementRefusal = (): TransactionRefusal => ({
-  outcome: "resource_limit",
-  message: "The caller's manual Transaction budget is exhausted for today.",
-});

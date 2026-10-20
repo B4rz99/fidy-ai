@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
-  applyTestMigration,
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
@@ -263,7 +262,7 @@ const consentSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
         users.map((userId, index) =>
           db
             .prepare(
-              "INSERT INTO onboarding_consent_records VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
             )
             .bind(
               `30000000-0000-4000-8000-00000000000${index}`,
@@ -295,12 +294,6 @@ it("renews the exact withdrawn authorization through the public browser boundary
         authorizationReference: "30000000-0000-4000-8000-000000000000",
         disclosureSha256: currentDisclosureFor().contentSha256,
       };
-      yield* Effect.tryPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0094_processing_consent_renewal.sql", import.meta.url),
-        })
-      );
       const renewed = yield* Effect.tryPromise(() =>
         send(db, request(0, "/web/consent/renew", "POST", payload))
       );
@@ -434,7 +427,9 @@ it("delivers actual same-User Transactions after withdrawal with scoped Audit an
       expect(page.next).toBeNull();
       const audit = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT user_id,operation,outcome FROM pat_audit WHERE id=?")
+          .prepare(
+            "SELECT user_id,operation,outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE id=?"
+          )
           .bind(page.reference)
           .first()
       );
@@ -491,7 +486,7 @@ it("refuses stale or raced privacy proof and rolls back failed accountability wi
       );
       yield* Effect.tryPromise(() =>
         db.exec(
-          "CREATE TRIGGER fail_privacy_audit BEFORE INSERT ON pat_audit WHEN NEW.operation='privacy.transactions' BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END;"
+          "CREATE TRIGGER fail_privacy_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='privacy.transactions' BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END;"
         )
       );
       const failed = yield* Effect.tryPromise(() =>
@@ -502,7 +497,9 @@ it("refuses stale or raced privacy proof and rolls back failed accountability wi
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS n FROM pat_audit WHERE operation='privacy.transactions'")
+            .prepare(
+              "SELECT COUNT(*) AS n FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation='privacy.transactions'"
+            )
             .first()
         ))?.n
       ).toBe(0);
@@ -550,13 +547,19 @@ it("withdraws only the authenticated User, keeps one stable receipt on concurren
       expect(yield* readConsentStatus({ db, userId: users[1] })).toBe("Granted");
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT COUNT(*) AS n FROM consent_user_revocations").first()
+          db
+            .prepare(
+              "SELECT COUNT(*) AS n FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations"
+            )
+            .first()
         ))?.n
       ).toBe(1);
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS n FROM pat_audit WHERE operation='consent.withdraw'")
+            .prepare(
+              "SELECT COUNT(*) AS n FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation='consent.withdraw'"
+            )
             .first()
         ))?.n
       ).toBe(1);
@@ -625,7 +628,7 @@ it("rechecks revoked proof at coordinated commit and rolls withdrawal back when 
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER test_withdraw_audit BEFORE INSERT ON pat_audit WHEN NEW.operation='consent.withdraw' BEGIN SELECT RAISE(ABORT,'synthetic_failure'); END;"
+            "CREATE TRIGGER test_withdraw_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='consent.withdraw' BEGIN SELECT RAISE(ABORT,'synthetic_failure'); END;"
           )
           .run()
       );
@@ -722,8 +725,12 @@ const expectNoWithdrawal = (
     expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
     const evidence = yield* Effect.tryPromise(() =>
       db.batch([
-        db.prepare("SELECT COUNT(*) AS n FROM consent_user_revocations"),
-        db.prepare("SELECT COUNT(*) AS n FROM pat_audit WHERE operation='consent.withdraw'"),
+        db.prepare(
+          "SELECT COUNT(*) AS n FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations"
+        ),
+        db.prepare(
+          "SELECT COUNT(*) AS n FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation='consent.withdraw'"
+        ),
       ])
     );
     expect(evidence.map((result) => result.results)).toEqual([[{ n: 0 }], [{ n: 0 }]]);
@@ -882,10 +889,14 @@ it("refuses authorization copies with lost proof, hostile origins or malformed a
         (yield* Effect.tryPromise(() => send(db, request(0, "/web/consent/authorization")))).status
       ).toBe(401);
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER revoke_copy_session").run());
+      // Simulate corrupt stored evidence to verify the public reader fails closed.
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER consent_history_no_update").run());
       for (const value of ["{}", '{"padding":"' + "x".repeat(32769) + '"}']) {
         yield* Effect.tryPromise(() =>
           db
-            .prepare("UPDATE onboarding_consent_records SET disclosure_json=? WHERE user_id=?")
+            .prepare(
+              "UPDATE consent_history SET disclosure_json=? WHERE record_type='processing_grant' AND user_id=?"
+            )
             .bind(value, users[1])
             .run()
         );
@@ -916,12 +927,6 @@ const withdrawnRenewal = (): Effect.Effect<
 > =>
   Effect.gen(function* () {
     const db = yield* consentSetup();
-    yield* Effect.tryPromise(() =>
-      applyTestMigration({
-        db,
-        source: new URL("../migrations/0094_processing_consent_renewal.sql", import.meta.url),
-      })
-    );
     const response = yield* Effect.tryPromise(() =>
       send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
     );
@@ -994,7 +999,7 @@ it("rolls back renewal when Audit silently refuses its acceptance", () =>
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER refuse_renewal_audit BEFORE INSERT ON pat_audit WHEN NEW.operation='consent.renew' BEGIN SELECT RAISE(IGNORE); END"
+            "CREATE TRIGGER refuse_renewal_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='consent.renew' BEGIN SELECT RAISE(IGNORE); END"
           )
           .run()
       );
@@ -1012,44 +1017,34 @@ it("rolls back renewal when Audit silently refuses its acceptance", () =>
     })
   ));
 
-it("keeps withdrawal and renewal evidence immutable and rolls back a refused cutoff removal", () =>
+it("keeps withdrawal and renewal evidence immutable", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, payload, status } = yield* withdrawnRenewal();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TRIGGER refuse_renewal_cutoff BEFORE DELETE ON consent_user_revocations BEGIN SELECT RAISE(IGNORE); END"
-          )
-          .run()
-      );
-      const refused = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/web/consent/renew", "POST", payload))
-      );
-      expect(refused.status).toBe(503);
-      const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
-      expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_renewal_cutoff").run());
+      const { db, payload } = yield* withdrawnRenewal();
       const accepted = yield* Effect.tryPromise(() =>
         send(db, request(0, "/web/consent/renew", "POST", payload))
       );
       expect(accepted.status).toBe(200);
-      for (const table of [
-        "processing_consent_withdrawal_records",
-        "processing_consent_renewals",
-      ]) {
+      for (const recordType of ["processing_withdrawal", "processing_renewal"]) {
         yield* Effect.tryPromise(() =>
           expect(
             db
-              .prepare(`UPDATE ${table} SET user_id=? WHERE user_id=?`)
+              .prepare(
+                `UPDATE consent_history SET user_id=? WHERE record_type='${recordType}' AND user_id=?`
+              )
               .bind(users[1], users[0])
               .run()
-          ).rejects.toThrow("consent_append_only")
+          ).rejects.toThrow("consent_history_immutable")
         );
         yield* Effect.tryPromise(() =>
           expect(
-            db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(users[0]).run()
-          ).rejects.toThrow("consent_append_only")
+            db
+              .prepare(
+                `DELETE FROM consent_history WHERE record_type='${recordType}' AND user_id=?`
+              )
+              .bind(users[0])
+              .run()
+          ).rejects.toThrow("consent_history_retention_required")
         );
       }
     })

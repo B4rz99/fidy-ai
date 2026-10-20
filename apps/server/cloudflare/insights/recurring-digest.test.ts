@@ -304,7 +304,11 @@ it("requires every source page, recovers after revision changes, and links the e
       expect((yield* advanceRecurringDigest({ ...context, now: closedNow }))._tag).toBe("Progress");
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM recurring_digest_reports").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
+            )
+            .first()
         )
       ).toEqual({ total: 0 });
       yield* Effect.tryPromise(() =>
@@ -326,7 +330,12 @@ it("requires every source page, recovers after revision changes, and links the e
       expect(report.payload.items).toHaveLength(32);
       expect(
         yield* Effect.tryPromise((): Promise<unknown> =>
-          db.prepare("SELECT text FROM proactivity_reports WHERE delivery_id=?").bind(id).first()
+          db
+            .prepare(
+              "SELECT text FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND delivery_id=?"
+            )
+            .bind(id)
+            .first()
         )
       ).toMatchObject({
         text: `Nuevos patrones históricos de cargos recurrentes del 2026-10-06. No indica que sigan activos.\n32 patrones. Informe completo: https://app.fidyapp.com/insights/recurring/${id}`,
@@ -371,7 +380,7 @@ it("retains frozen historical facts after invalidation and rejects foreign, unde
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT outcome FROM pat_audit WHERE operation='insights.getRecurringDigestReport' ORDER BY rowid DESC LIMIT 1"
+              "SELECT outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation='insights.getRecurringDigestReport' ORDER BY rowid DESC LIMIT 1"
             )
             .first()
         )
@@ -452,7 +461,11 @@ it("refuses a populated foreign report through an admitted hosted Turn without d
       expect(text).not.toContain("items");
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT user_id,hosted_turn_id,operation FROM insight_audit").all()
+          db
+            .prepare(
+              "SELECT user_id,hosted_turn_id,operation FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit"
+            )
+            .all()
         )
       ).toMatchObject({
         results: [
@@ -462,7 +475,9 @@ it("refuses a populated foreign report through an admitted hosted Turn without d
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS n FROM recurring_digest_reports WHERE user_id=?")
+            .prepare(
+              "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL AND user_id=?"
+            )
             .bind(caller.userId)
             .first()
         )
@@ -471,7 +486,11 @@ it("refuses a populated foreign report through an admitted hosted Turn without d
       expect((yield* executeHostedStatementQuery(work)).status).not.toBe(200);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS n FROM insight_audit").first()
+          db
+            .prepare(
+              "SELECT count(*) AS n FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit"
+            )
+            .first()
         )
       ).toEqual({ n: 1 });
     })
@@ -578,7 +597,7 @@ it("uses the installed coordinator for one-shot delivery and settles the exact t
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE delivery_id=?"
+              "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE delivery_id=?"
             )
             .bind(id)
             .first()
@@ -717,7 +736,7 @@ it("offers once on foreground discovery, replaces a definitively rejected disclo
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state,scheduled_at_ms,expires_at_ms FROM proactivity_whatsapp_claims WHERE delivery_id=?"
+              "SELECT state,scheduled_at_ms,expires_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE delivery_id=?"
             )
             .bind(first.id)
             .first()
@@ -820,7 +839,11 @@ it("preserves later same-date discoveries after backward travel in their distinc
       ).toEqual(before);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM recurring_digest_reports").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
+            )
+            .first()
         )
       ).toEqual({ total: 2 });
     })
@@ -895,7 +918,11 @@ it("excludes earlier-day backlog and permanently suppressed confirmations while 
       );
       expect(
         yield* Effect.tryPromise(() =>
-          suppressedDb.prepare("SELECT count(*) AS total FROM recurring_digest_reports").first()
+          suppressedDb
+            .prepare(
+              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
+            )
+            .first()
         )
       ).toEqual({ total: 0 });
       vi.spyOn(Date, "now").mockReturnValue(
@@ -909,7 +936,11 @@ it("excludes earlier-day backlog and permanently suppressed confirmations while 
       ).toBe("NoWork");
       expect(
         yield* Effect.tryPromise(() =>
-          suppressedDb.prepare("SELECT count(*) AS total FROM recurring_digest_reports").first()
+          suppressedDb
+            .prepare(
+              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
+            )
+            .first()
         )
       ).toEqual({ total: 0 });
     })
@@ -1001,7 +1032,11 @@ it("recovers recurring work independently through Maintenance, identity-only Que
       yield* harness.sweep();
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS total FROM recurring_digest_reports").first()
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL"
+            )
+            .first()
         )
       ).toEqual({ total: 1 });
     })

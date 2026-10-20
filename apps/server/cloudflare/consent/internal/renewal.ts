@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { type Cause, Clock, Effect, Schema } from "effect";
 import { ProcessingConsentRenewalReceipt } from "../../../src/shell/processing-consent/contract";
 import {
@@ -23,11 +24,7 @@ type RenewalReceipt = Readonly<{
   withdrawalReference: string;
   acceptedAtMs: number;
 }>;
-const assertChanged = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    `INSERT INTO processing_consent_renewal_assertion(id,accepted) VALUES(1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)
-   ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted`
-  );
+
 const renewalReceipt = (row: RenewalReceipt): Effect.Effect<Response> =>
   Schema.decodeEffect(ProcessingConsentRenewalReceipt)({ status: "Granted", renewal: row }).pipe(
     Effect.map((receipt) => Response.json(receipt, { headers: { "cache-control": "no-store" } })),
@@ -60,7 +57,7 @@ const renewalContext = (
   };
 };
 const eligibleWithdrawal = ({ admission, authority }: RenewalContext): OwnedStatement => ({
-  sql: `SELECT r.id FROM consent_user_revocations r JOIN onboarding_consent_records g ON g.id=r.grant_record_id
+  sql: `SELECT r.id FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) r JOIN (SELECT * FROM consent_history WHERE record_type='processing_grant') g ON g.id=r.grant_record_id
     WHERE r.id=? AND r.user_id=? AND g.user_id=? AND g.id=? AND json_extract(g.disclosure_json,'$.contentSha256')=?
     AND EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
   params: [
@@ -82,9 +79,9 @@ const retryReceipt = ({
     const previous = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT n.id AS reference,n.withdrawal_id AS withdrawalReference,n.accepted_at_ms AS acceptedAtMs
-    FROM processing_consent_renewals n WHERE n.withdrawal_id=? AND n.user_id=? AND n.grant_record_id=?
+    FROM (SELECT * FROM consent_history WHERE record_type='processing_renewal') n WHERE n.withdrawal_id=? AND n.user_id=? AND n.grant_record_id=?
     AND json_extract(n.disclosure_json,'$.contentSha256')=?
-    AND NOT EXISTS(SELECT 1 FROM consent_user_revocations WHERE user_id=n.user_id)
+    AND NOT EXISTS(SELECT 1 FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations WHERE user_id=n.user_id)
     AND EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(
           decision.withdrawalReference,
@@ -119,8 +116,7 @@ const commitRenewal = (
       Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare(`INSERT INTO processing_consent_renewals(id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms)
-      SELECT ?,g.user_id,?,g.id,?,g.disclosure_json,? FROM onboarding_consent_records g
+            .prepare(`INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms) SELECT 'processing_renewal',?,g.user_id,?,g.id,?,g.disclosure_json,? FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') g
       WHERE g.id=? AND g.user_id=? AND EXISTS(${eligible.sql})`)
             .bind(
               reference,
@@ -140,13 +136,7 @@ const commitRenewal = (
             outcome: "accepted",
             afterOwnerWrite: true,
           }),
-          assertChanged(db),
-          db
-            .prepare(`DELETE FROM consent_user_revocations WHERE id=? AND user_id=?
-      AND EXISTS(SELECT 1 FROM processing_consent_renewals WHERE id=? AND withdrawal_id=consent_user_revocations.id)
-      AND EXISTS(SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-            .bind(decision.withdrawalReference, admission.userId, reference, ...authority.bindings),
-          assertChanged(db),
+          prepareChangedRowAssertion({ db, scope: "processing_consent_renewal" }),
         ])
       )
     );
@@ -157,7 +147,7 @@ const commitRenewal = (
     });
   });
 
-/** Append reacceptance and remove only its exact current cutoff in one User-coordinated unit. */
+/** Append reacceptance that settles only its exact current cutoff in one User-coordinated unit. */
 export const renewProcessingConsent = (
   input: Readonly<{
     db: D1Database;

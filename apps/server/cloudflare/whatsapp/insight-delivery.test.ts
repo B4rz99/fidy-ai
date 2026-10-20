@@ -96,10 +96,8 @@ it.live(
       const input = yield* prepare(yield* weeklySummaryTestDatabase);
       yield* Effect.tryPromise(() =>
         input.db
-          .prepare(`INSERT INTO insight_whatsapp_claims
-      (user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,
-       summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms)
-      VALUES (?,?,?,?,?,?,NULL,NULL,?,?,?,'delivered',?,'wamid.corrupt',?)`)
+          .prepare(`INSERT INTO whatsapp_deliveries AS insight_whatsapp_claims(kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,
+       summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms) VALUES ('insight',?,?,?,?,?,?,NULL,NULL,?,?,?,'delivered',?,'wamid.corrupt',?)`)
           .bind(
             input.userId,
             input.insightEventId,
@@ -135,7 +133,7 @@ it.live("refuses corrupt staged claim dates without consuming send authority", (
       yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "UPDATE insight_whatsapp_claims SET scheduled_at_ms=?,expires_at_ms=? WHERE user_id=? AND insight_event_id=?"
+            "UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET scheduled_at_ms=?,expires_at_ms=? WHERE kind='insight' AND user_id=? AND insight_event_id=?"
           )
           .bind(scheduledAt, scheduledAt + 1, input.userId, input.insightEventId)
           .run()
@@ -148,7 +146,7 @@ it.live("refuses corrupt staged claim dates without consuming send authority", (
         yield* Effect.tryPromise(() =>
           input.db
             .prepare(
-              "SELECT state,send_started_at_ms FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=?"
+              "SELECT state,send_started_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=?"
             )
             .bind(input.userId, input.insightEventId)
             .first()
@@ -157,7 +155,7 @@ it.live("refuses corrupt staged claim dates without consuming send authority", (
       yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "UPDATE insight_whatsapp_claims SET scheduled_at_ms=?,expires_at_ms=? WHERE user_id=? AND insight_event_id=?"
+            "UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET scheduled_at_ms=?,expires_at_ms=? WHERE kind='insight' AND user_id=? AND insight_event_id=?"
           )
           .bind(
             DateTime.toEpochMillis(input.scheduledAt),
@@ -177,9 +175,9 @@ it.live("refuses corrupt weekly question dates before consuming send authority",
     const id = "11111111-1111-4111-8111-111111111112";
     yield* Effect.tryPromise(() =>
       input.db
-        .prepare(`INSERT INTO weekly_governor_questions
-        (id,user_id,offer_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,time_zone)
-        SELECT ?,user_id,id,?,?,?, ?,?,?,? FROM weekly_consent_offers WHERE user_id=? LIMIT 1`)
+        .prepare(
+          `INSERT INTO whatsapp_deliveries AS weekly_governor_questions(kind,id,user_id,offer_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,time_zone) SELECT 'weekly-question', ?,user_id,id,?,?,?, ?,?,?,? FROM (SELECT rowid,* FROM consent_offers WHERE kind='weekly-summary') AS weekly_consent_offers WHERE user_id=? LIMIT 1`
+        )
         .bind(
           id,
           8_640_000_000_000_000,
@@ -205,7 +203,7 @@ it.live("refuses corrupt weekly question dates before consuming send authority",
       yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "UPDATE weekly_governor_questions SET created_at_ms=?,expires_at_ms=? WHERE user_id=? AND id=?"
+            "UPDATE whatsapp_deliveries AS weekly_governor_questions SET created_at_ms=?,expires_at_ms=? WHERE kind='weekly-question' AND user_id=? AND id=?"
           )
           .bind(createdAt, createdAt + 1, input.userId, id)
           .run()
@@ -218,7 +216,7 @@ it.live("refuses corrupt weekly question dates before consuming send authority",
         yield* Effect.tryPromise(() =>
           input.db
             .prepare(
-              "SELECT state,send_started_at_ms FROM weekly_governor_questions WHERE user_id=? AND id=?"
+              "SELECT state,send_started_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=?"
             )
             .bind(input.userId, id)
             .first()

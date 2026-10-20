@@ -77,9 +77,7 @@ export const seedStatementUploadRefusal = ({
       if (kind === "paywall") {
         yield* Effect.tryPromise(() =>
           db
-            .prepare(
-              "INSERT INTO statement_backfill_entitlements (user_id,submission_id,consumed_at_ms) VALUES (?,NULL,?)"
-            )
+            .prepare("UPDATE users SET backfill_present=1,backfill_consumed_at_ms=?2 WHERE id=?1")
             .bind(userId, current)
             .run()
         );

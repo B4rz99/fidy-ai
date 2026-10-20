@@ -83,12 +83,12 @@ it("observes only enabled Proactivity work and its real Workflow identities with
             .bind(questionId, weeklySummaryOtherUser, now - 600_000),
           db
             .prepare(
-              "INSERT INTO proactivity_reports(delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES (?,?,'budget-offer',?,'private-financial-sentinel',?,?,'UTC',?)"
+              "INSERT INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES ('proactivity-delivery',?,?,'budget-offer',?,'private-financial-sentinel',?,?,'UTC',?)"
             )
             .bind(deliveryId, userId, deliveryId, now - 300_000, now - 1, now - 300_000),
           db
             .prepare(
-              "INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms,state) VALUES (?,?,?,'started')"
+              "UPDATE insight_reports SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms,'started' AS state) AS source) AS source) AS incoming WHERE insight_reports.user_id=incoming.user_id AND insight_reports.kind=incoming.kind AND insight_reports.delivery_id=incoming.delivery_id AND insight_reports.dispatch_state IS NULL"
             )
             .bind(userId, deliveryId, now - 300_000),
         ])
@@ -189,11 +189,9 @@ it("caps the oldest pending sample and indexed reads independently of terminal d
         db.batch([
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<2020)
-      INSERT INTO proactivity_reports(delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms)
-      SELECT printf('90000000-0000-4000-8000-%012d', i),?,'budget-offer','offer','private-report',0,?,'UTC',i FROM n`)
+      INSERT INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts)
+      SELECT 'proactivity-delivery',printf('90000000-0000-4000-8000-%012d', i),?,'budget-offer','offer','private-report',0,?,'UTC',i,CASE WHEN i<=2000 THEN 'settled' ELSE 'ready' END,i,0,0 FROM n`)
             .bind(userId, now + 600_000),
-          db.prepare(`INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms,state)
-      SELECT user_id,delivery_id,created_at_ms,CASE WHEN created_at_ms<=2000 THEN 'settled' ELSE 'ready' END FROM proactivity_reports`),
         ])
       );
       const result = yield* Effect.tryPromise(() =>

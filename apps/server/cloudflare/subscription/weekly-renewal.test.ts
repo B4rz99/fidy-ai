@@ -10,7 +10,7 @@ import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { applyTestMigration } from "../d1-test-fixture";
+import { applyTestMigration, consentHistoryTestSchema } from "../d1-test-fixture";
 import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
@@ -87,9 +87,9 @@ const fixture = (
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
-        "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
-        "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
+        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+        consentHistoryTestSchema,
+        "",
       ]);
 
       const db = created.db;
@@ -100,8 +100,12 @@ const fixture = (
       }[calendar.billingPeriod];
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userId),
-          db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(userId),
+          db.prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')").bind(userId),
+          db
+            .prepare(
+              "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+            )
+            .bind(userId),
 
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
@@ -142,7 +146,9 @@ const fixture = (
             )
             .bind(Date.parse(calendar.startsAt), attemptId),
           db
-            .prepare("INSERT INTO billing_paid_periods VALUES (?, ?, ?, ?)")
+            .prepare(
+              "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms,paid_renewal_anchor_ms=incoming.renewal_anchor_ms FROM (SELECT ? AS attempt_id,? AS starts_at_ms,? AS ends_at_ms,? AS renewal_anchor_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
+            )
             .bind(
               attemptId,
               Date.parse(calendar.startsAt),
@@ -159,7 +165,9 @@ const fixture = (
               Date.parse(calendar.endsAt)
             ),
           db
-            .prepare("INSERT INTO billing_followup_outbox VALUES (?, 'renewal_due', ?)")
+            .prepare(
+              "UPDATE billing_attempts SET followup_kind=incoming.kind,followup_due_at_ms=incoming.due_at_ms FROM (SELECT ? AS attempt_id,'renewal_due' AS kind,? AS due_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.followup_kind IS NULL"
+            )
             .bind(attemptId, Date.parse(calendar.endsAt)),
         ])
       );
@@ -224,13 +232,21 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
       expect(
         (yield* fromPromise(() =>
           db
-            .prepare("SELECT * FROM billing_collection_outbox WHERE attempt_id <> ?")
+            .prepare(
+              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id <> ?"
+            )
             .bind(attemptId)
             .all()
         )).results
       ).toHaveLength(1);
       expect(
-        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
     })
   ));
@@ -285,15 +301,20 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
         yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT starts_at_ms, ends_at_ms FROM billing_paid_periods WHERE attempt_id = ?"
+              "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
             )
             .bind(row.id)
             .first()
         )
       ).toEqual({ starts_at_ms: dueAt, ends_at_ms: Date.parse("2026-10-20T15:00:00Z") });
       expect(
-        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_followup_outbox").all()))
-          .results
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) AS billing_followup_outbox"
+            )
+            .all()
+        )).results
       ).toEqual([
         { attempt_id: row.id, kind: "renewal_due", due_at_ms: Date.parse("2026-10-20T15:00:00Z") },
       ]);
@@ -310,15 +331,22 @@ it.each(renewalCalendars)(
         const foreignUserId = "10000000-0000-4000-8000-000000000002";
         yield* fromPromise(() =>
           db.batch([
-            db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(foreignUserId),
-            db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(foreignUserId),
+            db
+              .prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')")
+              .bind(foreignUserId),
+            db
+              .prepare(
+                "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+              )
+              .bind(foreignUserId),
           ])
         );
         const billingState = (): Promise<D1Result[]> =>
           db.batch([
             db.prepare("SELECT * FROM billing_attempts ORDER BY id"),
-            db.prepare("SELECT * FROM billing_collection_arms ORDER BY attempt_id"),
-            db.prepare("SELECT * FROM billing_collection_outbox ORDER BY attempt_id"),
+            db.prepare(
+              "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work ORDER BY attempt_id"
+            ),
           ]);
         const before = (yield* fromPromise(billingState)).map((result) => result.results);
         yield* executeSubscriptionRenewalAdmission({
@@ -343,7 +371,12 @@ it.each(renewalCalendars)(
         expect(foreign.status).toBe(403);
         yield* admission(db, boundaryMs - 1);
         yield* fromPromise(() =>
-          db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
+          db
+            .prepare(
+              "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+            )
+            .bind(userId)
+            .run()
         );
         yield* admission(db, boundaryMs);
         expect(
@@ -354,8 +387,13 @@ it.each(renewalCalendars)(
           )).results
         ).toEqual([]);
         expect(
-          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_collection_outbox").all()))
-            .results
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT * FROM (SELECT id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work"
+              )
+              .all()
+          )).results
         ).toHaveLength(1);
       })
     )
@@ -389,7 +427,9 @@ it.each(renewalCalendars)(
         expect(
           yield* fromPromise(() =>
             db
-              .prepare("SELECT ends_at_ms FROM billing_paid_periods WHERE attempt_id = ?")
+              .prepare(
+                "SELECT ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
+              )
               .bind(attemptId)
               .first()
           )
@@ -521,7 +561,12 @@ it.each(renewalCalendars)(
         );
         if (row === null) throw new Error("Missing renewal fixture");
         yield* fromPromise(() =>
-          db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
+          db
+            .prepare(
+              "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+            )
+            .bind(userId)
+            .run()
         );
         const fetch = vi.fn(() =>
           Promise.reject(new Error("Revoked renewal must not reach Wompi"))
@@ -544,13 +589,21 @@ it.each(renewalCalendars)(
         expect(
           yield* fromPromise(() =>
             db
-              .prepare("SELECT state FROM billing_collection_arms WHERE attempt_id=?")
+              .prepare(
+                "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id=?"
+              )
               .bind(row.id)
               .first()
           )
         ).toEqual({ state: "armed" });
         expect(
-          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              )
+              .all()
+          )).results
         ).toHaveLength(1);
       })
     )
@@ -613,7 +666,13 @@ it("aborts an interrupted renewal coordinator dispatch", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromPromise(() => fixture());
-      yield* fromPromise(() => db.prepare("UPDATE billing_followup_outbox SET due_at_ms=0").run());
+      yield* fromPromise(() =>
+        db
+          .prepare(
+            "UPDATE billing_attempts AS billing_followup_outbox SET followup_due_at_ms=0 WHERE followup_kind IS NOT NULL "
+          )
+          .run()
+      );
       const started = Promise.withResolvers<Request>();
       const fiber = yield* dispatchSubscriptionRenewals({
         DB: db,
@@ -659,12 +718,12 @@ it("renews despite an older collection with confirmed no charge", () =>
             ),
           db
             .prepare(
-              "UPDATE billing_collection_arms SET state='sent', sent_at_ms=1 WHERE attempt_id=?"
+              "UPDATE billing_attempts AS billing_collection_work SET collection_state='sent', collection_sent_at_ms=1 WHERE collection_state IS NOT NULL AND id=?"
             )
             .bind(historicalId),
           db
             .prepare(
-              "INSERT INTO billing_no_charge_confirmations VALUES (?, ?, 'sandbox', 'case-9', 'operator-9', 1)"
+              "UPDATE billing_attempts SET no_charge_reference=incoming.wompi_reference,no_charge_environment=incoming.wompi_environment,no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-9' AS provider_case_id,'operator-9' AS operator_id,1 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL"
             )
             .bind(historicalId, `fidy-${historicalId}`),
         ])
@@ -745,8 +804,14 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       const foreignUserId = "10000000-0000-4000-8000-000000000009";
       yield* fromPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(foreignUserId),
-          db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(foreignUserId),
+          db
+            .prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')")
+            .bind(foreignUserId),
+          db
+            .prepare(
+              "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+            )
+            .bind(foreignUserId),
           db
             .prepare(
               "INSERT INTO billing_price_notices (user_id,price_id,created_at_ms) VALUES (?, ?, 1)"
@@ -768,7 +833,12 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       expect(create).not.toHaveBeenCalled();
       yield* fromPromise(() => runNotice(db, foreignWork));
       yield* fromPromise(() =>
-        db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userId)
+          .run()
       );
       yield* receiveBillingCollection({
         environment: {
@@ -816,7 +886,13 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
         },
       ]);
       expect(
-        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
       const immutable = yield* Effect.exit(
         fromPromise(() =>
@@ -960,16 +1036,26 @@ it.each(
             });
           yield* fromPromise(() => run());
           expect(
-            (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all()))
-              .results
+            (yield* fromPromise(() =>
+              db
+                .prepare(
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                )
+                .all()
+            )).results
           ).toHaveLength(paidPeriods);
           status = "APPROVED";
           providerSourceId = 3892;
           const rejected = yield* Effect.exit(fromPromise(() => run(true)));
           expect(rejected._tag).toBe("Failure");
           expect(
-            (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all()))
-              .results
+            (yield* fromPromise(() =>
+              db
+                .prepare(
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                )
+                .all()
+            )).results
           ).toHaveLength(paidPeriods);
           providerSourceId = 3891;
           yield* fromPromise(() => run(true));
@@ -984,7 +1070,7 @@ it.each(
             yield* fromPromise(() =>
               db
                 .prepare(
-                  "SELECT starts_at_ms, ends_at_ms FROM billing_paid_periods WHERE attempt_id = ?"
+                  "SELECT starts_at_ms, ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
                 )
                 .bind(row.id)
                 .first()
@@ -992,8 +1078,13 @@ it.each(
           ).toEqual({ starts_at_ms: previousEndsAt, ends_at_ms: Date.parse(boundary) });
           paidPeriods++;
           expect(
-            (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all()))
-              .results
+            (yield* fromPromise(() =>
+              db
+                .prepare(
+                  "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+                )
+                .all()
+            )).results
           ).toHaveLength(paidPeriods);
           previousPaidAttemptId = row.id;
           previousEndsAt = Date.parse(boundary);
@@ -1108,7 +1199,13 @@ it.each(["card", "nequi", "daviplata"] as const)(
         ).toEqual({ status: "failed" });
         yield* admission(db, boundary + 240000);
         expect(
-          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              )
+              .all()
+          )).results
         ).toHaveLength(1);
         expect(
           (yield* fromPromise(() =>
@@ -1165,13 +1262,11 @@ const cancellationFixture = (
     const db = yield* fromPromise(() => fixture(method));
     yield* fromPromise(() =>
       db.exec(`CREATE TABLE web_sessions (id TEXT PRIMARY KEY,user_id TEXT,token_digest BLOB,revoked_at_ms INTEGER,idle_expires_at_ms INTEGER,hard_expires_at_ms INTEGER);
-CREATE TABLE pat_audit (id TEXT PRIMARY KEY,user_id TEXT,session_id TEXT,pat_id TEXT,oauth_connection_id TEXT,oauth_credential_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
+
 CREATE TABLE transaction_audit (user_id TEXT,operation TEXT,occurred_at_ms INTEGER);
 CREATE TABLE category_audit (user_id TEXT,occurred_at_ms INTEGER);
 CREATE TABLE memory_audit (user_id TEXT,occurred_at_ms INTEGER);
-CREATE TABLE statement_submission_audit (user_id TEXT,occurred_at_ms INTEGER);
-CREATE TABLE statement_review_audit (user_id TEXT,occurred_at_ms INTEGER);
-CREATE TABLE statement_clarification_audit (user_id TEXT,occurred_at_ms INTEGER);`)
+`)
     );
     yield* fromPromise(() =>
       applyTestMigration({
@@ -1246,11 +1341,6 @@ it("routes HTTP cancellation through the User coordinator and preserves paid acc
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* cancellationFixture("card");
-      yield* fromPromise(() =>
-        db.exec(
-          "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER) STRICT;"
-        )
-      );
       for (const name of [
         "0032_commercial_allowances.sql",
         "0033_canonical_request_protection.sql",
@@ -1518,7 +1608,13 @@ it.each(["card", "nequi", "daviplata"] as const)(
           )
         ).toEqual({ active: 0 });
         expect(
-          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT * FROM (SELECT id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+              )
+              .all()
+          )).results
         ).toHaveLength(1);
       })
     )
@@ -1561,7 +1657,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
-                "SELECT starts_at_ms,ends_at_ms FROM billing_paid_periods ORDER BY starts_at_ms"
+                "SELECT starts_at_ms,ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods ORDER BY starts_at_ms"
               )
               .all()
           )).results
@@ -1647,7 +1743,7 @@ it("refuses a borrowed or revoked browser credential before cancellation and rol
       yield* fromPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER reject_cancellation_audit BEFORE INSERT ON pat_audit BEGIN SELECT RAISE(ABORT,'test_audit_failure'); END"
+            "CREATE TRIGGER reject_cancellation_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' BEGIN SELECT RAISE(ABORT,'test_audit_failure'); END"
           )
           .run()
       );
@@ -1784,13 +1880,8 @@ it("preserves an independent TrialPeriod after grace exhaustion and cancellation
     Effect.gen(function* () {
       const db = yield* cancellationFixture("card");
       yield* fromPromise(() =>
-        db.exec(
-          "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER) STRICT"
-        )
-      );
-      yield* fromPromise(() =>
         db
-          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
           .bind(userId, dueAt, dueAt + 604800000)
           .run()
       );
@@ -1907,10 +1998,10 @@ const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.Unkno
     db
       .prepare(`SELECT
   (SELECT COUNT(*) FROM subscription_cancellations) AS cancellations,
-  (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
-  (SELECT COUNT(*) FROM billing_collection_arms WHERE state='armed') AS armed,
-  (SELECT COUNT(*) FROM billing_collection_outbox) AS offers,
-  (SELECT COUNT(*) FROM pat_audit WHERE outcome='accepted') AS accepted`)
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state='armed') AS armed,
+  (SELECT COUNT(*) FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work) AS offers,
+  (SELECT COUNT(*) FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome='accepted') AS accepted`)
       .first()
   );
 
@@ -1923,8 +2014,8 @@ it.each(["missing", "declined", "expired", "borrowed", "replayed"] as const)(
         yield* admission(db, dueAt);
         yield* fromPromise(() =>
           db.exec(`CREATE TABLE oauth_connections(id TEXT PRIMARY KEY,user_id TEXT,client_id TEXT,resource TEXT,scopes_json TEXT,revoked_at_ms INTEGER,expires_at_ms INTEGER);
-CREATE TABLE oauth_access_credentials(id TEXT PRIMARY KEY,user_id TEXT,digest BLOB,connection_id TEXT,scopes_json TEXT,expires_at_ms INTEGER);
-CREATE TABLE oauth_grant_consents(connection_id TEXT,user_id TEXT);`)
+CREATE TABLE oauth_credentials(kind TEXT NOT NULL, id TEXT PRIMARY KEY,user_id TEXT,digest BLOB,connection_id TEXT,scopes_json TEXT,expires_at_ms INTEGER);
+${consentHistoryTestSchema};`)
         );
         yield* fromPromise(() =>
           applyTestMigration({
@@ -1950,10 +2041,14 @@ CREATE TABLE oauth_grant_consents(connection_id TEXT,user_id TEXT);`)
               .bind(enrollmentId, userId, subject.clientId, oauthResource),
             db
               .prepare(
-                "INSERT INTO oauth_access_credentials VALUES(?,?,?,?,'[\"write\"]',9000000000000)"
+                "INSERT INTO oauth_credentials VALUES('access',?,?,?,?,'[\"write\"]',9000000000000)"
               )
               .bind(sourceId, userId, subject.digest, enrollmentId),
-            db.prepare("INSERT INTO oauth_grant_consents VALUES(?,?)").bind(enrollmentId, userId),
+            db
+              .prepare(
+                "INSERT INTO consent_history (record_type,connection_id,user_id) VALUES ('oauth_grant',?,?)"
+              )
+              .bind(enrollmentId, userId),
           ])
         );
         const operation = CanonicalOperationId.make("subscription.cancelSubscription");

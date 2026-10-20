@@ -20,17 +20,15 @@ import {
   transactionNoStore,
 } from "./contract";
 import { readConsentStatus } from "../consent/operations";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   recordOAuthCall,
   recordedPATCallProof,
-  refusedByAuditBudget,
-  utcDayMilliseconds,
 } from "../../src/shell/audit/operations";
 import { type CanonicalCapability } from "../../src/core/canonical-operations/contract";
-import { type ErrorCode, ResourceLimited } from "../../src/shell/public-http/contract";
+import { type ErrorCode } from "../../src/shell/public-http/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
 import { type AuditedPATMutation, type PATAuthority } from "../../src/shell/tokens/contract";
@@ -198,7 +196,7 @@ const sessionRefusalStatement = ({
 
 /**
  * Record one refused Transaction mutation's metadata-only AuditLogEntry. A refusal whose audit
- * cannot commit for a dead credential, an exhausted shared daily budget, or a database defect is
+ * cannot commit for a dead credential or a database defect is
  * reported as that cause instead: the caller never reports a refusal the durable record denies.
  */
 export const recordTransactionRefusal = ({
@@ -217,28 +215,7 @@ export const recordTransactionRefusal = ({
   Promise.resolve()
     .then(() => refusalStatement({ db, subject, outcome, operation, current }).run())
     .then((audit) => (audit.meta.changes === 1 ? "recorded" : "credential_refused"))
-    .catch((error: unknown) => (refusedByAuditBudget(error) ? "rate_limited" : "unavailable"));
-
-export const canonicalAuditRateLimitedResponse = (current: number): Response => {
-  const millisecondsPerSecond = 1000;
-  const retryAfterSeconds = Math.ceil(
-    (utcDayMilliseconds - (current % utcDayMilliseconds)) / millisecondsPerSecond
-  );
-  return Response.json(
-    Schema.encodeSync(Schema.toCodecJson(ResourceLimited))(
-      ResourceLimited.make({
-        error: {
-          code: "rate_limited",
-          message:
-            "Alcanzaste el límite diario de solicitudes. Inténtalo después del reinicio diario.",
-          retryAfterSeconds,
-        },
-        next: [],
-      })
-    ),
-    { status: 429, headers: { ...transactionNoStore, "retry-after": String(retryAfterSeconds) } }
-  );
-};
+    .catch(() => "unavailable");
 
 export const transactionUnavailable = (): Response =>
   Response.json({ status: "unavailable" }, { status: 503, headers: transactionNoStore });
@@ -279,7 +256,7 @@ const limited = (): Response =>
   transactionFailure({
     code: "rate_limited",
     status: 429,
-    message: "Manual Transaction budget exhausted.",
+    message: "Too many requests. Retry later.",
   });
 
 const refusalOutcomes: Readonly<
@@ -292,12 +269,6 @@ const refusalOutcomes: Readonly<
 
 export const refusedTransactionResponse = (refusal: TransactionRefusal): Response =>
   refusalOutcomes[refusal.outcome].response();
-
-export const rateLimitedTransactionResponse = (): Response => {
-  const response = limited();
-  response.headers.set("retry-after", "1");
-  return response;
-};
 
 export const refusalFailureCode = (outcome: TransactionRefusal["outcome"]): ErrorCode =>
   refusalOutcomes[outcome].code;
@@ -326,8 +297,6 @@ export const rejectTransactionMutation = ({
     switch (record) {
       case "credential_refused":
         return refusedTransactionWork({ db, subject });
-      case "rate_limited":
-        return limited();
       case "unavailable":
         return transactionUnavailable();
       case "recorded":
@@ -368,7 +337,7 @@ export const rejectInvalidBatchInput = (): Response =>
 
 /**
  * Record one authenticated, pre-admission batch refusal without child attribution. This row is
- * metadata-only and excluded from the daily canonical-work budget by the D1 audit triggers.
+ * metadata-only; request admission already bounds the invocation.
  * A PAT needs a live credential and Consent, but no child scope: no child was admitted.
  */
 const batchEnvelopeStatement = ({
@@ -416,8 +385,8 @@ const batchEnvelopeStatement = ({
 
 /**
  * Record one metadata-only envelope refusal for a live credential. Return the declared validation
- * failure only after the row commits; otherwise answer credential refusal, the separate daily
- * envelope rate limit, or unavailable without claiming evidence was recorded.
+ * failure only after the row commits; otherwise answer credential refusal or unavailable
+ * without claiming evidence was recorded.
  */
 export const rejectBatchEnvelope = (
   input: Readonly<{
@@ -434,15 +403,7 @@ export const rejectBatchEnvelope = (
         ? rejectInvalidBatchInput()
         : refusedTransactionWork({ db, subject })
     )
-    .catch((cause: unknown) =>
-      String(cause).includes("batch_envelope_limit")
-        ? transactionFailure({
-            code: "rate_limited",
-            status: 429,
-            message: "Atomic batch refusal budget exhausted.",
-          })
-        : transactionUnavailable()
-    );
+    .catch(() => transactionUnavailable());
 };
 
 const refusedBearerWork = Effect.fn(function* ({
@@ -570,16 +531,6 @@ export {
   alreadyLinkedMessage,
   unlinkedPairMessage,
 } from "./contract";
-
-export { dailyAuditMessage } from "./contract";
-
-/** An exhausted shared audit budget cannot write another refusal AuditLogEntry. */
-export const auditLimitRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: "Daily audit budget exhausted.",
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(transactionUnavailable()),
-});
 
 export const refusedPreparation = (
   refusal: CanonicalMutationRefusal

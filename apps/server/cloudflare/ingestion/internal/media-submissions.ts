@@ -1,3 +1,4 @@
+import { preparePredicateAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -85,7 +86,7 @@ const snapshot = ({
     db,
     userId,
     statement: {
-      sql: `INSERT INTO media_submissions SELECT ?,userId,?,?,?,?,?,NULLIF(?,''),?,?,serviceMarket,locale,timeZone FROM identity_user_context WHERE userId = ? AND EXISTS (${authority.sql})`,
+      sql: `INSERT INTO media_submissions (id,user_id,portfolio_id,bsuid,message_id,input_digest,media_id,caption,accepted_at_ms,expires_at_ms,service_market,locale,time_zone,review_reason,review_created_at_ms) SELECT ?,userId,?,?,?,?,?,NULLIF(?,''),?,?,serviceMarket,locale,timeZone,'extraction-unavailable',? FROM identity_user_context WHERE userId = ? AND EXISTS (${authority.sql})`,
       params: [
         id,
         event.caller.businessPortfolioId,
@@ -96,6 +97,7 @@ const snapshot = ({
         caption,
         current,
         current + mediaEvidenceLifetimeMs,
+        current,
         userId,
         ...authority.params,
       ],
@@ -113,11 +115,14 @@ const publication = ({
   const { db, userId } = input;
   const authority = authorityFor(input);
   return [
-    db
-      .prepare(
-        "INSERT INTO media_publication_assertions VALUES (?,1,CASE WHEN (SELECT count(*) FROM media_submission_outbox WHERE user_id = ?) < 50 AND (SELECT count(*) FROM media_submission_outbox) < 2500 THEN 1 ELSE 0 END)"
-      )
-      .bind(id, userId),
+    preparePredicateAssertion({
+      db,
+      scope: "media_capacity",
+      predicate: {
+        sql: "SELECT 1 WHERE (SELECT count(*) FROM media_submissions WHERE capacity_held=1 AND user_id = ?) < 50 AND (SELECT count(*) FROM media_submissions WHERE capacity_held=1) < 2500",
+        params: [userId],
+      },
+    }),
     ...prepareConsumption({
       db,
       userId,
@@ -127,27 +132,19 @@ const publication = ({
       authority,
     }),
     snapshot({ input, id, current, mediaId, caption, inputDigest }),
+    preparePredicateAssertion({
+      db,
+      scope: "media_publication",
+      predicate: {
+        sql: "SELECT 1 FROM media_submissions WHERE id = ? AND user_id = ?",
+        params: [id, userId],
+      },
+    }),
     db
       .prepare(
-        "UPDATE media_publication_assertions SET published = CASE WHEN EXISTS (SELECT 1 FROM media_submissions WHERE id = ? AND user_id = ?) THEN 1 ELSE 0 END WHERE id = ?"
-      )
-      .bind(id, userId, id),
-    db
-      .prepare(
-        "INSERT INTO media_submission_audit SELECT id,user_id,'accepted',accepted_at_ms FROM media_submissions WHERE id = ?"
-      )
-      .bind(id),
-    db
-      .prepare(
-        "INSERT INTO media_submission_outbox SELECT id,user_id,accepted_at_ms FROM media_submissions WHERE id = ?"
+        "INSERT INTO audit_entries(record_type,id,user_id,outcome,occurred_at_ms) SELECT 'media_admission',id,user_id,'accepted',accepted_at_ms FROM media_submissions WHERE id = ?"
       )
       .bind(id),
-    db
-      .prepare(
-        "INSERT INTO media_needs_review SELECT id,user_id,'extraction-unavailable',accepted_at_ms FROM media_submissions WHERE id = ?"
-      )
-      .bind(id),
-    db.prepare("DELETE FROM media_publication_assertions WHERE id = ?").bind(id),
   ];
 };
 const accepted = ({
@@ -214,7 +211,7 @@ const refusal = (cause: unknown, current: number): Response => {
   }
   return failure("unavailable", HTTP_UNAVAILABLE);
 };
-/** Publication, independent consumption, accountability, visible review and outbox identity commit together. No bytes or provider work are accepted on refusal. */
+/** Publication, independent consumption, accountability, visible review and capacity reservation commit together. No bytes or provider work are accepted on refusal. */
 const replayMedia = ({
   input,
   id,
@@ -243,7 +240,7 @@ const mediaDigest = ({
       )
   );
 
-/** Publication, independent consumption, accountability, visible review and outbox identity commit together. No bytes or provider work are accepted on refusal. */
+/** Publication, independent consumption, accountability, visible review and capacity reservation commit together. No bytes or provider work are accepted on refusal. */
 export const admitMedia = (input: MediaAdmissionInput): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const { event } = input;

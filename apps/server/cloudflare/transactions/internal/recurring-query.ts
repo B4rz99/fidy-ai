@@ -39,7 +39,7 @@ const snapshotRead = ({
     subject: { _tag: "User", userId },
     requirement: "active",
     statement: {
-      sql: "SELECT revision, first_captured_at AS firstCapturedAt, time_zone AS timeZone FROM transaction_fact_state WHERE user_id = ?",
+      sql: "SELECT fact_revision AS revision, first_captured_at AS firstCapturedAt, time_zone AS timeZone FROM dashboard_projection_state WHERE user_id = ? AND fact_revision IS NOT NULL",
       params: [userId],
     },
   });
@@ -117,7 +117,7 @@ export const readFacts = ({
               subject: { _tag: "User", userId },
               requirement: "active",
               statement: {
-                sql: `WITH ${relation.sql} SELECT id, amount, currency, counterparty, occurred_at, created_at FROM effective_transaction WHERE user_id = ? AND direction = 'outflow' AND (occurred_at, id) > (?, ?) AND EXISTS (SELECT 1 FROM transaction_fact_state WHERE user_id = ? AND revision = ?)`,
+                sql: `WITH ${relation.sql} SELECT id, amount, currency, counterparty, occurred_at, created_at FROM effective_transaction WHERE user_id = ? AND direction = 'outflow' AND (occurred_at, id) > (?, ?) AND EXISTS (SELECT 1 FROM dashboard_projection_state WHERE user_id = ? AND fact_revision = ?)`,
                 params: [
                   ...relation.bindings,
                   userId,
@@ -151,13 +151,13 @@ export const revisionGuard = ({
     subject: { _tag: "User", userId },
     requirement: "active",
     statement: {
-      sql: "SELECT 1 FROM transaction_fact_state WHERE user_id = ? AND revision = ?",
+      sql: "SELECT 1 FROM dashboard_projection_state WHERE user_id = ? AND fact_revision = ?",
       params: [userId, revision],
     },
   });
   return db
     .prepare(
-      `INSERT INTO transaction_fact_assertion (id, accepted) VALUES (1, CASE WHEN EXISTS (${allowed.sql}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`
+      `INSERT INTO sql_assertions (scope, accepted) VALUES ('transaction_fact', CASE WHEN EXISTS (${allowed.sql}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
     )
     .bind(...allowed.params);
 };
@@ -170,6 +170,6 @@ export const revisionProjection = ({
 }>): D1PreparedStatement =>
   db
     .prepare(
-      `WITH transaction_fact_revisions AS (SELECT user_id AS userId, revision FROM transaction_fact_state) ${statement.sql}`
+      `WITH transaction_fact_revisions AS (SELECT user_id AS userId, fact_revision AS revision FROM dashboard_projection_state WHERE fact_revision IS NOT NULL) ${statement.sql}`
     )
     .bind(...statement.params);

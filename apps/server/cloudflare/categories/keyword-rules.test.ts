@@ -844,8 +844,7 @@ it("stores no rule when its guarded audit evidence cannot commit", () =>
       const { db, send, sessions } = yield* awaitPromise(setup());
       yield* awaitPromise(
         db
-          .prepare(`CREATE TRIGGER refuse_keyword_rule_audit BEFORE INSERT ON category_audit
-    WHEN NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
+          .prepare(`CREATE TRIGGER refuse_keyword_rule_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'categories.createKeywordRule' AND NEW.outcome = 'success'
     BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );
@@ -915,7 +914,9 @@ it("lets a write-scoped PAT manage rules while a read-scoped PAT cannot", () =>
 
       const audited = yield* awaitPromise(
         db
-          .prepare("SELECT operation FROM pat_audit WHERE operation = ?")
+          .prepare(
+            "SELECT operation FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = ?"
+          )
           .bind("categories.createKeywordRule")
           .first()
       );
@@ -983,7 +984,9 @@ it("refuses cookie-admitted keyword-rule work without the matching browser Origi
       expect(untouched).toEqual({ keyword: "Rappi", category_id: domicilios });
       const audits = yield* awaitPromise(
         db
-          .prepare("SELECT count(*) AS total FROM category_audit WHERE user_id = ?")
+          .prepare(
+            "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
+          )
           .bind(userA)
           .first<{ total: number }>()
       );

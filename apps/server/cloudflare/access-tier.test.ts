@@ -34,13 +34,13 @@ it("derives each decision from one User's original trial and current settled pai
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "CREATE TABLE trial_periods (user_id TEXT, started_at_ms INTEGER, ends_at_ms INTEGER)"
+            "CREATE TABLE users (id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
           ),
           db.prepare(
             "CREATE TABLE subscriptions (user_id TEXT, attempt_id TEXT, paid_period_ends_at_ms INTEGER)"
           ),
           db.prepare(
-            "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT)"
+            "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER)"
           ),
           db.prepare("CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
           db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
@@ -48,14 +48,17 @@ it("derives each decision from one User's original trial and current settled pai
             "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
           ),
           db.prepare(
-            "CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER, ends_at_ms INTEGER)"
+            "CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT)"
           ),
-          db.prepare(
-            "CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER)"
-          ),
-          db.prepare("INSERT INTO trial_periods VALUES (?, 200, 300)").bind(userId),
           db
-            .prepare("INSERT INTO trial_periods VALUES (?, 100, 350)")
+            .prepare(
+              "INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms) VALUES (?1,200,300)"
+            )
+            .bind(userId),
+          db
+            .prepare(
+              "INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms) VALUES (?1,100,350)"
+            )
             .bind("20000000-0000-4000-8000-000000000002"),
         ])
       );
@@ -83,10 +86,14 @@ it("derives each decision from one User's original trial and current settled pai
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare("INSERT INTO subscriptions VALUES (?, 'attempt', 500)").bind(userId),
-          db.prepare("INSERT INTO billing_paid_periods VALUES ('attempt', 400, 500)"),
           db
-            .prepare("INSERT INTO billing_attempts VALUES ('attempt', ?, 'source', 'weekly')")
+            .prepare(
+              "INSERT INTO billing_attempts(id,user_id,payment_source_id,billing_period) VALUES ('attempt', ?, 'source', 'weekly')"
+            )
             .bind(userId),
+          db.prepare(
+            "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms FROM (SELECT 'attempt' AS attempt_id,400 AS starts_at_ms,500 AS ends_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
+          ),
           db.prepare("INSERT INTO card_payment_sources VALUES ('source', ?, 'nequi')").bind(userId),
         ])
       );
@@ -108,16 +115,24 @@ it("derives each decision from one User's original trial and current settled pai
         yield* Effect.tryPromise(() => tier(450, "20000000-0000-4000-8000-000000000002"))
       ).toBe(0);
       yield* Effect.tryPromise(() =>
-        db.prepare("INSERT INTO billing_access_adjustments VALUES ('attempt',450)").run()
+        db
+          .prepare(
+            "INSERT INTO refund_attempts(adjusted_attempt_id,access_ends_at_ms) VALUES ('attempt',450)"
+          )
+          .run()
       );
       expect(yield* Effect.tryPromise(() => tier(449))).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(450))).toBe(0);
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO billing_paid_periods VALUES ('newer-attempt',425,550)"),
           db
-            .prepare("INSERT INTO billing_attempts VALUES ('newer-attempt', ?, 'source', 'weekly')")
+            .prepare(
+              "INSERT INTO billing_attempts(id,user_id,payment_source_id,billing_period) VALUES ('newer-attempt', ?, 'source', 'weekly')"
+            )
             .bind(userId),
+          db.prepare(
+            "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms FROM (SELECT 'newer-attempt' AS attempt_id,425 AS starts_at_ms,550 AS ends_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
+          ),
           db
             .prepare(
               "UPDATE subscriptions SET attempt_id='newer-attempt',paid_period_ends_at_ms=550 WHERE user_id=?"

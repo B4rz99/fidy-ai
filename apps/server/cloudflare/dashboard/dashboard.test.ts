@@ -1,10 +1,10 @@
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { ScopeMissing } from "../../src/shell/public-http/contract";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
-import { repairDashboardProjection } from "../transactions/operations";
+import { findRecurringSnapshot, repairDashboardProjection } from "../transactions/operations";
 import { DashboardDocument, DashboardEdit } from "../../src/core/dashboard/contract";
 import { prepareDashboard } from "./operations";
 import { UserId } from "../../src/core/identity/contract";
@@ -83,22 +83,17 @@ const seedUser = ({
     );
   });
 
-const setup = (initializeSchema = true): Effect.Effect<D1Database, Cause.UnknownError> =>
+const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
-    yield* Effect.tryPromise(() =>
-      installTestSchema({
-        db,
-        sources: [
-          ...new Bun.Glob("*.sql").scanSync({
-            cwd: new URL("../migrations/", import.meta.url).pathname,
-          }),
-        ]
-          .filter((name) => initializeSchema || name !== "0030_dashboard_initialization.sql")
-          .sort()
-          .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-      })
-    );
+    const sources = [
+      ...new Bun.Glob("*.sql").scanSync({
+        cwd: new URL("../migrations/", import.meta.url).pathname,
+      }),
+    ]
+      .sort()
+      .map((name) => new URL(`../migrations/${name}`, import.meta.url));
+    yield* Effect.tryPromise(() => installTestSchema({ db, sources }));
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (user, index) => seedUser({ db, user, index, current }), {
       discard: true,
@@ -275,9 +270,11 @@ const initializedSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     expect((yield* Effect.tryPromise(() => initialize(db))).status).toBe(200);
     return db;
   });
-const count = (db: D1Database, table: "dashboard_documents" | "dashboard_audit"): Promise<number> =>
+const count = (db: D1Database, table: "dashboard_documents" | "audit_entries"): Promise<number> =>
   db
-    .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE user_id = ?`)
+    .prepare(
+      `SELECT COUNT(*) AS count FROM ${table === "dashboard_documents" ? "(SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard')" : table} WHERE ${table === "audit_entries" ? "record_type = 'session_call' AND operation GLOB 'dashboard.*' AND " : ""}user_id = ?`
+    )
     .bind(users[0])
     .first<{ count: number }>()
     .then((row) => row?.count ?? -1);
@@ -360,10 +357,14 @@ it(
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT COUNT(*) AS count FROM dashboard_documents").first()
+            db
+              .prepare(
+                "SELECT COUNT(*) AS count FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+              )
+              .first()
           )
         ).toEqual({ count: 0 });
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(2);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(2);
       })
     ),
   30_000
@@ -375,13 +376,13 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        yield* Effect.tryPromise(() => db.prepare("DROP TABLE dashboard_documents").run());
+        yield* Effect.tryPromise(() => db.prepare("DROP TABLE user_documents").run());
         for (const path of ["/dashboard", "/dashboard/view"]) {
           const reply = yield* Effect.tryPromise(() => send(db, 0, path));
           expect(reply.status).toBe(503);
           expect(yield* Effect.tryPromise(() => reply.json())).toEqual({ status: "unavailable" });
         }
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
       })
     ),
   30_000
@@ -404,7 +405,9 @@ it(
         expect((yield* Effect.tryPromise(() => initialize(db))).status).toBe(200);
         const retained = (): Promise<unknown> =>
           db
-            .prepare("SELECT * FROM dashboard_documents ORDER BY user_id")
+            .prepare(
+              "SELECT * FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents ORDER BY user_id"
+            )
             .all()
             .then((rows) => rows.results);
         const before = yield* Effect.tryPromise(retained);
@@ -490,7 +493,9 @@ it(
         ).toEqual({ count: 0 });
         const evidence = yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT operation, outcome FROM pat_audit WHERE pat_id = ? ORDER BY rowid")
+            .prepare(
+              "SELECT operation, outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE pat_id = ? ORDER BY rowid"
+            )
             .bind(id)
             .all()
         );
@@ -509,7 +514,7 @@ it("preserves Dashboard input refusals through coordinated HTTP and hosted query
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* initializedSetup();
-      const beforeAudit = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+      const beforeAudit = yield* Effect.tryPromise(() => count(db, "audit_entries"));
       const credential = {
         id: sessions[0] ?? "",
         userId: users[0] ?? "",
@@ -537,10 +542,14 @@ it("preserves Dashboard input refusals through coordinated HTTP and hosted query
           );
         }
       }
-      expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(beforeAudit);
+      expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(beforeAudit);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT user_id, revision FROM dashboard_documents ORDER BY user_id").all()
+          db
+            .prepare(
+              "SELECT user_id, revision FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents ORDER BY user_id"
+            )
+            .all()
         )).results
       ).toEqual([{ user_id: users[0], revision: 1 }]);
     })
@@ -565,7 +574,7 @@ it("rejects a substituted query target, mutation id or foreign User admission be
           HOSTED_AI_MODEL: approvedWorkersAiModel,
         }
       );
-      const beforeAudit = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+      const beforeAudit = yield* Effect.tryPromise(() => count(db, "audit_entries"));
       for (const attack of [
         { index: 0, operation: "dashboard.getDashboard", target: "/transactions" },
         { index: 0, operation: "dashboard.getDashboard", target: "//attacker.test/dashboard" },
@@ -591,10 +600,14 @@ it("rejects a substituted query target, mutation id or foreign User admission be
         expect(response.status).toBe(503);
         expect(yield* Effect.tryPromise(() => response.json())).toEqual({ status: "unavailable" });
       }
-      expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(beforeAudit);
+      expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(beforeAudit);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT user_id, revision FROM dashboard_documents ORDER BY user_id").all()
+          db
+            .prepare(
+              "SELECT user_id, revision FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents ORDER BY user_id"
+            )
+            .all()
         )).results
       ).toEqual([{ user_id: users[0], revision: 1 }]);
     })
@@ -646,7 +659,7 @@ const queryFault = ({
   if (fault === "audit-failed") {
     return db
       .prepare(
-        `CREATE TRIGGER refuse_query_audit BEFORE INSERT ON ${pat ? "pat_audit" : "dashboard_audit"} BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`
+        `CREATE TRIGGER refuse_query_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type = '${pat ? "credential_call" : "session_call"}' BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`
       )
       .run();
   }
@@ -655,12 +668,12 @@ const queryFault = ({
   return db.batch([
     db
       .prepare(
-        `INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,'{}','disclosure','decision',?,?)`
+        `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
       )
       .bind(grant, users[0], current, current),
     db
       .prepare(
-        `INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`
+        `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
       )
       .bind("50000000-0000-4000-8000-000000000004", users[0], grant, sessions[0], current),
   ]);
@@ -683,14 +696,18 @@ const queryReleaseFailure = Effect.fnUntraced(function* ({
   const patId = "40000000-0000-4000-8000-000000000097";
   yield* seedPAT(db, { token, scope: "read", id: patId });
   const beforeDocuments = yield* Effect.tryPromise(() =>
-    db.prepare("SELECT * FROM dashboard_documents ORDER BY user_id").all()
+    db
+      .prepare(
+        "SELECT * FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents ORDER BY user_id"
+      )
+      .all()
   );
-  const beforeAudit = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+  const beforeAudit = yield* Effect.tryPromise(() => count(db, "audit_entries"));
   let accountingPrepared = false;
   let injected = false;
   const guarded: D1Database = {
     prepare: (sql) => {
-      if (sql.includes("INSERT INTO pat_audit") || sql.includes("INSERT INTO dashboard_audit")) {
+      if (sql.includes("INSERT INTO audit_entries") && sql.includes("outcome")) {
         accountingPrepared = true;
       }
       return db.prepare(sql);
@@ -739,13 +756,22 @@ const queryReleaseFailure = Effect.fnUntraced(function* ({
   yield* assertQueryRefusal({ reply, http, pat, fault });
   expect(
     (yield* Effect.tryPromise(() =>
-      db.prepare("SELECT * FROM dashboard_documents ORDER BY user_id").all()
+      db
+        .prepare(
+          "SELECT * FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents ORDER BY user_id"
+        )
+        .all()
     )).results
   ).toEqual(beforeDocuments.results);
-  expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(beforeAudit);
+  expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(beforeAudit);
   expect(
     yield* Effect.tryPromise(() =>
-      db.prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE pat_id = ?").bind(patId).first()
+      db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE pat_id = ?"
+        )
+        .bind(patId)
+        .first()
     )
   ).toEqual({ count: 0 });
   expect(
@@ -805,7 +831,9 @@ it(
         ).toBe(200);
         const stored = (): Promise<unknown> =>
           db
-            .prepare("SELECT document_json, revision FROM dashboard_documents WHERE user_id = ?")
+            .prepare(
+              "SELECT document_json, revision FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents WHERE user_id = ?"
+            )
             .bind(users[0])
             .first();
         const before = yield* Effect.tryPromise(stored);
@@ -873,7 +901,7 @@ it(
           )).error
         ).toMatchObject({ code: "scope_missing" });
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
         const accepted = yield* Effect.tryPromise(() =>
           send(db, dashboard, {
             path: "/dashboard/initialize",
@@ -904,7 +932,7 @@ it(
         const evidence = yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT user_id, pat_id, operation, outcome FROM pat_audit WHERE operation = 'dashboard.initializeDashboard' AND outcome = 'accepted' ORDER BY rowid"
+              "SELECT user_id, pat_id, operation, outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'dashboard.initializeDashboard' AND outcome = 'accepted' ORDER BY rowid"
             )
             .all()
         );
@@ -975,7 +1003,9 @@ it(
           expect(
             yield* Effect.tryPromise(() =>
               db
-                .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+                .prepare(
+                  "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+                )
                 .first()
             )
           ).toEqual({ count: 0 });
@@ -1002,7 +1032,9 @@ it(
         ).toBe(200);
         const snapshot = (): Promise<unknown> =>
           db
-            .prepare("SELECT * FROM dashboard_documents ORDER BY user_id")
+            .prepare(
+              "SELECT * FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents ORDER BY user_id"
+            )
             .all()
             .then((rows) => rows.results);
         const before = yield* Effect.tryPromise(snapshot);
@@ -1036,7 +1068,7 @@ it(
             expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
           }
         }
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(1);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(1);
         const other = yield* Effect.tryPromise(() =>
           send(db, 1, {
             path: "/operations/atomic-batch",
@@ -1054,7 +1086,9 @@ it(
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT revision FROM dashboard_documents WHERE user_id = ?")
+              .prepare(
+                "SELECT revision FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents WHERE user_id = ?"
+              )
               .bind(users[1])
               .first()
           )
@@ -1089,11 +1123,12 @@ it(
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`CREATE TRIGGER refuse_initialization_audit BEFORE INSERT ON dashboard_audit
-      WHEN NEW.operation = 'dashboard.initializeDashboard' BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`)
+            .prepare(
+              `CREATE TRIGGER refuse_initialization_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.operation = 'dashboard.initializeDashboard' BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`
+            )
             .run()
         );
-        const before = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+        const before = yield* Effect.tryPromise(() => count(db, "audit_entries"));
         const responses = [
           yield* Effect.tryPromise(() =>
             send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} })
@@ -1104,7 +1139,7 @@ it(
         ];
         expect(responses.map((response) => response.status)).toEqual([503, 503]);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(before);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(before);
       })
     ),
   30_000
@@ -1124,7 +1159,7 @@ it(
           let revoked = false;
           const guarded: D1Database = {
             prepare: (sql) => {
-              if (sql.includes("INSERT INTO dashboard_documents")) prepared = true;
+              if (sql.includes("INSERT INTO user_documents")) prepared = true;
               return db.prepare(sql);
             },
             batch: <Row = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
@@ -1162,7 +1197,11 @@ it(
           expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
           expect(
             yield* Effect.tryPromise(() =>
-              db.prepare("SELECT COUNT(*) AS count FROM pat_audit").first()
+              db
+                .prepare(
+                  "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+                )
+                .first()
             )
           ).toEqual({ count: 0 });
           expect(
@@ -1193,13 +1232,14 @@ it(
         yield* Effect.tryPromise(() =>
           db.batch([
             db
-              .prepare(`INSERT INTO onboarding_consent_records
-        (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-        VALUES (?,?,'{}','disclosure','decision',?,?)`)
+              .prepare(
+                `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+              )
               .bind(grant, users[0], current, current),
             db
-              .prepare(`INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
-        VALUES (?,?,?,?,?)`)
+              .prepare(
+                `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+              )
               .bind("50000000-0000-4000-8000-000000000002", users[0], grant, sessions[0], current),
           ])
         );
@@ -1227,111 +1267,16 @@ it(
           }
         }
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT COUNT(*) AS count FROM pat_audit").first()
+            db
+              .prepare(
+                "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+              )
+              .first()
           )
         ).toEqual({ count: 0 });
-      })
-    ),
-  30_000
-);
-
-it(
-  "extending initialization evidence preserves retained audits, append-only policy, retention and daily limits",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup(false);
-        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(404);
-        const evidence = (): Promise<unknown> =>
-          db
-            .prepare("SELECT * FROM dashboard_audit ORDER BY id")
-            .all()
-            .then((rows) => rows.results);
-        const before = yield* Effect.tryPromise(evidence);
-        yield* Effect.tryPromise(() =>
-          applyTestMigration({
-            db,
-            source: new URL("../migrations/0030_dashboard_initialization.sql", import.meta.url),
-          })
-        );
-        expect(yield* Effect.tryPromise(evidence)).toEqual(before);
-        for (const sql of [
-          "UPDATE dashboard_audit SET outcome = 'rejected'",
-          "DELETE FROM dashboard_audit",
-        ]) {
-          expect(
-            Option.isNone(yield* Effect.tryPromise(() => db.prepare(sql).run()).pipe(Effect.option))
-          ).toBe(true);
-          expect(yield* Effect.tryPromise(evidence)).toEqual(before);
-        }
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} })
-          )).status
-        ).toBe(200);
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(`INSERT INTO dashboard_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      WITH RECURSIVE sequence(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM sequence WHERE n < 254)
-      SELECT printf('audit-%d', n), ?, ?, 'dashboard.initializeDashboard', 'accepted', ? FROM sequence`)
-            .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
-            .run()
-        );
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} })
-          )).status
-        ).toBe(429);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(256);
-        for (const path of ["/dashboard", "/dashboard/view"]) {
-          expect((yield* Effect.tryPromise(() => send(db, 0, path))).status).toBe(429);
-        }
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(256);
-        const maximum = yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT MAX(occurred_at_ms) AS time FROM dashboard_audit")
-            .first<{ time: number }>()
-        );
-        const cutoff = maximum?.time ?? 0;
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("INSERT INTO audit_retention_permits VALUES (?, ?)")
-            .bind(users[1], cutoff + 1)
-            .run()
-        );
-        expect(
-          Option.isNone(
-            yield* Effect.tryPromise(() => db.prepare("DELETE FROM dashboard_audit").run()).pipe(
-              Effect.option
-            )
-          )
-        ).toBe(true);
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("INSERT INTO audit_retention_permits VALUES (?, ?)")
-            .bind(users[0], cutoff)
-            .run()
-        );
-        expect(
-          Option.isNone(
-            yield* Effect.tryPromise(() =>
-              db.prepare("DELETE FROM dashboard_audit WHERE occurred_at_ms = ?").bind(cutoff).run()
-            ).pipe(Effect.option)
-          )
-        ).toBe(true);
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("UPDATE audit_retention_permits SET cutoff_ms = ? WHERE user_id = ?")
-            .bind(cutoff + 1, users[0])
-            .run()
-        );
-        yield* Effect.tryPromise(() =>
-          db.prepare("DELETE FROM dashboard_audit WHERE user_id = ?").bind(users[0]).run()
-        );
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
       })
     ),
   30_000
@@ -1366,7 +1311,7 @@ it(
         const rows = yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT operation, outcome FROM dashboard_audit WHERE user_id = ? ORDER BY rowid"
+              "SELECT operation, outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'dashboard.*' AND user_id = ? ORDER BY rowid"
             )
             .bind(users[0])
             .all()
@@ -1412,7 +1357,7 @@ it(
           code: "not_found",
         });
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(1);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(1);
         const accepted = yield* Effect.tryPromise(() =>
           batch(db, [batchCall("dashboard.initializeDashboard", {}, 3)])
         );
@@ -1442,7 +1387,7 @@ it(
           failedCallIndex: 1,
           code: "validation_failed",
         });
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(2);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(2);
       })
     ),
   30_000
@@ -1478,7 +1423,7 @@ it(
           )).error.code
         ).toBe("scope_missing");
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
         const allowed = yield* Effect.tryPromise(() =>
           send(db, token, {
             path: "/operations/atomic-batch",
@@ -1505,7 +1450,7 @@ it(
         expect(created.status).toBe(200);
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`CREATE TRIGGER ignore_dashboard_update BEFORE UPDATE ON dashboard_documents
+            .prepare(`CREATE TRIGGER ignore_dashboard_update BEFORE UPDATE ON user_documents
     BEGIN SELECT RAISE(IGNORE); END`)
             .run()
         );
@@ -1526,7 +1471,7 @@ it(
             yield* Effect.tryPromise(() => documentResponse4.json())
           )).data.title
         ).toBe("Tablero");
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(2);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(2);
       })
     ),
   30_000
@@ -1540,8 +1485,9 @@ it(
         const db = yield* setup();
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`CREATE TRIGGER reject_budget_success BEFORE INSERT ON budget_audit
-    WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_budget_unavailable'); END`)
+            .prepare(
+              `CREATE TRIGGER reject_budget_success BEFORE INSERT ON audit_entries WHEN NEW.record_type='session_call' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'test_budget_unavailable'); END`
+            )
             .run()
         );
         const reply = yield* Effect.tryPromise(() =>
@@ -1561,7 +1507,7 @@ it(
         );
         expect(reply.status).toBe(503);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
         const budget = yield* Effect.tryPromise(() =>
           db
             .prepare("SELECT COUNT(*) AS count FROM budgets WHERE user_id = ?")
@@ -1711,10 +1657,12 @@ it(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(200);
-        const before = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+        const before = yield* Effect.tryPromise(() => count(db, "audit_entries"));
         yield* Effect.tryPromise(() =>
           db
-            .prepare("UPDATE dashboard_documents SET document_json = ? WHERE user_id = ?")
+            .prepare(
+              "UPDATE user_documents SET document_json = ? WHERE kind='dashboard' AND user_id = ?"
+            )
             .bind("{}", users[0])
             .run()
         );
@@ -1728,11 +1676,13 @@ it(
         expect(edit.status).toBe(503);
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(503);
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(503);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(before);
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(before);
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT document_json FROM dashboard_documents WHERE user_id = ?")
+              .prepare(
+                "SELECT document_json FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents WHERE user_id = ?"
+              )
               .bind(users[0])
               .first<{ document_json: string }>()
           )
@@ -1999,7 +1949,9 @@ it(
         ).toBe(403);
         const before = yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS count FROM dashboard_documents WHERE user_id = ?")
+            .prepare(
+              "SELECT COUNT(*) AS count FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents WHERE user_id = ?"
+            )
             .bind(users[0])
             .first<{ count: number }>()
         );
@@ -2291,9 +2243,6 @@ it(
         const db = yield* initializedSetup();
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(200);
         yield* Effect.tryPromise(() =>
-          db.prepare("DROP TRIGGER transaction_manual_daily_budget").run()
-        );
-        yield* Effect.tryPromise(() =>
           db
             .prepare(`INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at)
@@ -2366,6 +2315,20 @@ it(
             .bind(users[0])
             .run()
         );
+        const factQuery = { db, userId: UserId.make(users[0] ?? "") };
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`INSERT INTO consent_history
+          (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+          VALUES('processing_grant','repair-facts-grant',?,'{}','disclosure','decision',?,?)`)
+            .bind(
+              factQuery.userId,
+              DateTime.nowUnsafe().epochMilliseconds,
+              DateTime.nowUnsafe().epochMilliseconds
+            )
+            .run()
+        );
+        const beforeRepair = Option.getOrThrow(yield* findRecurringSnapshot(factQuery));
         yield* Effect.tryPromise(() =>
           db
             .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
@@ -2382,6 +2345,7 @@ it(
                 status === "ready" ? Effect.succeed(true) : repair(remaining - 1)
               );
         expect(yield* repair(35)).toBe(false);
+        expect(Option.getOrThrow(yield* findRecurringSnapshot(factQuery))).toEqual(beforeRepair);
         const time = DateTime.formatIso(DateTime.nowUnsafe());
         yield* Effect.tryPromise(() =>
           db
@@ -2392,7 +2356,10 @@ it(
             .run()
         );
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(503);
+        const duringRepair = Option.getOrThrow(yield* findRecurringSnapshot(factQuery));
+        expect(duringRepair).toEqual({ ...beforeRepair, revision: beforeRepair.revision + 1 });
         expect(yield* repair(80)).toBe(true);
+        expect(Option.getOrThrow(yield* findRecurringSnapshot(factQuery))).toEqual(duringRepair);
         const viewResponse23 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(yield* metricTotals(viewResponse23)).toEqual(["81.95"]);
       })
@@ -2487,7 +2454,7 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO dashboard_documents (user_id, document_json, revision) VALUES (?, ?, 1)"
+              "INSERT INTO user_documents (kind,user_id, document_json, revision) VALUES ('dashboard',?, ?, 1)"
             )
             .bind(users[0], encodedDocument)
             .run()
@@ -2619,9 +2586,9 @@ const dashboardOAuthSubject = (db: D1Database): Effect.Effect<OAuthCaller, Cause
     yield* Effect.tryPromise(() =>
       db.batch([
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-          (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
-          VALUES ('dashboard-onboarding', ?, '{}', 'fixture-disclosure', 'fixture-decision', ?, ?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant','dashboard-onboarding', ?, '{}', 'fixture-disclosure', 'fixture-decision', ?, ?)`
+          )
           .bind(subject.userId, current, current),
         db
           .prepare(`INSERT INTO oauth_connections
@@ -2637,14 +2604,14 @@ const dashboardOAuthSubject = (db: D1Database): Effect.Effect<OAuthCaller, Cause
             current + 600000
           ),
         db
-          .prepare(`INSERT INTO oauth_grant_consents
-        (id, connection_id, user_id, session_id, disclosure_revision, disclosure_text, accepted_at_ms)
-        VALUES ('dashboard-consent', ?, ?, ?, 'fixture', 'fixture', ?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id, connection_id, user_id, session_id, disclosure_revision, disclosure_text, accepted_at_ms) VALUES ('oauth_grant','dashboard-consent', ?, ?, ?, 'fixture', 'fixture', ?)`
+          )
           .bind(subject.oauthConnectionId, subject.userId, sessions[0], current),
         db
-          .prepare(`INSERT INTO oauth_access_credentials
-        (id, connection_id, user_id, digest, issued_at_ms, expires_at_ms, scopes_json)
-        VALUES (?, ?, ?, ?, ?, ?, '["dashboard"]')`)
+          .prepare(
+            `INSERT INTO oauth_credentials AS oauth_credentials(kind,id, connection_id, user_id, digest, issued_at_ms, expires_at_ms, scopes_json) VALUES ('access',?, ?, ?, ?, ?, ?, '["dashboard"]')`
+          )
           .bind(
             subject.credentialId,
             subject.oauthConnectionId,
@@ -2755,7 +2722,7 @@ it.each(disclosureEdits)(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO dashboard_documents (user_id, document_json, revision) VALUES (?, ?, 4)"
+              "INSERT INTO user_documents (kind,user_id, document_json, revision) VALUES ('dashboard',?, ?, 4)"
             )
             .bind(subject.userId, encoded)
             .run()
@@ -2775,7 +2742,9 @@ it.each(disclosureEdits)(
         yield* Effect.tryPromise(() => db.batch([...review.guards]));
         yield* Effect.tryPromise(() =>
           db
-            .prepare("UPDATE dashboard_documents SET document_json = ? WHERE user_id = ?")
+            .prepare(
+              "UPDATE user_documents SET document_json = ? WHERE kind='dashboard' AND user_id = ?"
+            )
             .bind(encoded.replace("Título privado", "Título cambiado"), subject.userId)
             .run()
         );
@@ -2789,7 +2758,9 @@ it.each(disclosureEdits)(
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT revision FROM dashboard_documents WHERE user_id = ?")
+              .prepare(
+                "SELECT revision FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents WHERE user_id = ?"
+              )
               .bind(subject.userId)
               .first()
           )
@@ -2797,7 +2768,9 @@ it.each(disclosureEdits)(
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE oauth_connection_id = ?")
+              .prepare(
+                "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+              )
               .bind(subject.oauthConnectionId)
               .first()
           )

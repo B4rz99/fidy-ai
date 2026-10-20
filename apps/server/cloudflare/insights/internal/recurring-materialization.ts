@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { MoneyGroups, encodeMoneyAmount } from "../../../src/core/_shared/money";
 import {
@@ -24,15 +25,36 @@ import {
 import type { RecurringUnavailable } from "../../recurring/contract";
 import { ReportJson, type Scope, type StageView } from "./recurring-models";
 
-const assertChanged = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    "INSERT INTO proactivity_message_assertion(id,accepted) VALUES(1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
-  );
 type Publication = Readonly<{
   input: Scope;
   instruction: typeof InstructionRow.Type;
   report: RecurringDigestReport;
 }>;
+const prepareEvent = ({
+  input,
+  instruction,
+  report,
+}: Publication): Effect.Effect<D1PreparedStatement, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const groups = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(MoneyGroups))
+    )([]);
+    return input.db
+      .prepare(
+        "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES(?,?,'new-recurring-series',?,?,?,?,?,?,?)"
+      )
+      .bind(
+        report.insightEventId,
+        input.userId,
+        instruction.id,
+        instruction.version,
+        report.serviceMarket,
+        report.locale,
+        report.payload.confirmationDay.timeZone,
+        DateTime.formatIso(report.scheduledAt),
+        groups
+      );
+  });
 const prepareReport = (
   publication: Publication
 ): Effect.Effect<ReadonlyArray<D1PreparedStatement>, Schema.SchemaError> =>
@@ -41,36 +63,22 @@ const prepareReport = (
     const id = report.insightEventId;
     const day = report.payload.confirmationDay;
     const timing = report;
-    const statements: D1PreparedStatement[] = [];
+    const statements: D1PreparedStatement[] = [yield* prepareEvent(publication)];
     const reportJson = yield* Schema.encodeEffect(ReportJson)(report);
-    const groups = yield* Schema.encodeEffect(
-      Schema.fromJsonString(Schema.toCodecJson(MoneyGroups))
-    )([]);
     statements.push(
       input.db
         .prepare(
-          "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES(?,?,'new-recurring-series',?,?,?,?,?,?,?)"
+          "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,instruction_id,instruction_version,grant_id,local_date,day_from_ms,day_to_ms,report_json,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES('proactivity-delivery',?,?,'new-recurring-series',?,?,?,?,?,?,?,?,?,?,?,?,? ,CASE WHEN ?6<=?8 THEN 'expired' ELSE 'ready' END,?8,0,0)"
         )
         .bind(
           id,
           input.userId,
-          instruction.id,
-          instruction.version,
-          report.serviceMarket,
-          report.locale,
+          instruction.grant_id,
+          presentation(report),
+          timing.scheduledAt.epochMilliseconds,
+          timing.expiresAt.epochMilliseconds,
           day.timeZone,
-          DateTime.formatIso(timing.scheduledAt),
-          groups
-        )
-    );
-    statements.push(
-      input.db
-        .prepare(
-          "INSERT INTO recurring_digest_reports(user_id,insight_event_id,instruction_id,instruction_version,grant_id,local_date,day_from_ms,day_to_ms,report_json) VALUES(?,?,?,?,?,?,?,?,?)"
-        )
-        .bind(
-          input.userId,
-          id,
+          input.now.epochMilliseconds,
           instruction.id,
           instruction.version,
           instruction.grant_id,
@@ -80,52 +88,16 @@ const prepareReport = (
           reportJson
         )
     );
+    statements.push(
+      input.db
+        .prepare(
+          "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) VALUES(?,?,?)"
+        )
+        .bind(input.userId, id, id)
+    );
 
     return statements;
   });
-const prepareDelivery = (publication: Publication): ReadonlyArray<D1PreparedStatement> => {
-  const { input, instruction, report } = publication;
-  const id = report.insightEventId;
-  const day = report.payload.confirmationDay;
-  const timing = report;
-  const statements: D1PreparedStatement[] = [];
-  statements.push(
-    input.db
-      .prepare(
-        "INSERT INTO proactivity_reports(delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES(?,?,'new-recurring-series',?,?,?,?,?,?)"
-      )
-      .bind(
-        id,
-        input.userId,
-        instruction.grant_id,
-        presentation(report),
-        timing.scheduledAt.epochMilliseconds,
-        timing.expiresAt.epochMilliseconds,
-        day.timeZone,
-        input.now.epochMilliseconds
-      )
-  );
-  statements.push(
-    input.db
-      .prepare(
-        "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) VALUES(?,?,?)"
-      )
-      .bind(input.userId, id, id)
-  );
-  statements.push(
-    input.db
-      .prepare(
-        "INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms,state) VALUES(?,?,?,?)"
-      )
-      .bind(
-        input.userId,
-        id,
-        input.now.epochMilliseconds,
-        input.now.epochMilliseconds >= timing.expiresAt.epochMilliseconds ? "expired" : "ready"
-      )
-  );
-  return statements;
-};
 const prepareDay = (
   work: Readonly<{
     input: Scope;
@@ -140,18 +112,18 @@ const prepareDay = (
     const statements = [...(yield* prepareRecurringDigestSourceGuard({ ...input, checkpoint }))];
     statements.push(
       input.db.prepare(
-        "INSERT OR IGNORE INTO proactivity_message_assertion(id,accepted) VALUES(1,1)"
+        "INSERT OR IGNORE INTO sql_assertions (scope, accepted) VALUES ('proactivity_message',1)"
       ),
       prepareProactivityConsentAction({
         ...input,
         kind: "new-recurring-series",
         grantId: instruction.grant_id,
         statement: {
-          sql: "UPDATE proactivity_message_assertion SET accepted=1 WHERE id=1 AND EXISTS(SELECT 1 FROM recurring_digest_instructions WHERE user_id=? AND id=? AND version=? AND grant_id=? AND enabled=1)",
+          sql: "UPDATE sql_assertions SET accepted=1 WHERE scope='proactivity_message' AND EXISTS(SELECT 1 FROM recurring_digest_instructions WHERE user_id=? AND id=? AND version=? AND grant_id=? AND enabled=1)",
           params: [input.userId, instruction.id, instruction.version, instruction.grant_id],
         },
       }),
-      assertChanged(input.db)
+      prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" })
     );
     statements.push(
       input.db
@@ -239,7 +211,7 @@ export const materializeDay = (
         payload,
       });
       const publication = { input, instruction, report };
-      statements.push(...(yield* prepareReport(publication)), ...prepareDelivery(publication));
+      statements.push(...(yield* prepareReport(publication)));
     }
     for (const row of rows) {
       statements.push(

@@ -2,30 +2,6 @@ import type { ErasureProjection } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
-    id: "canonical_request_acceptances",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'pat_id',r.\"pat_id\",'operation',r.\"operation\",'accepted_at_ms',r.\"accepted_at_ms\") AS body FROM canonical_request_acceptances r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM canonical_request_acceptances r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM canonical_request_acceptances r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM canonical_request_acceptances AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "canonical_request_buckets",
     dataClass: "schedules",
     dependencies: [],
@@ -99,54 +75,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     remove: (scope) => [
       {
         sql: "DELETE FROM canonical_request_replays AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "canonical_security_mutations",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'session_id',r.\"session_id\",'operation',r.\"operation\",'occurred_at_ms',r.\"occurred_at_ms\") AS body FROM canonical_security_mutations r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM canonical_security_mutations r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM canonical_security_mutations r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM canonical_security_mutations AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "canonical_user_reads",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'session_id',r.\"session_id\",'occurred_at_ms',r.\"occurred_at_ms\") AS body FROM canonical_user_reads r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM canonical_user_reads r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM canonical_user_reads r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM canonical_user_reads AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

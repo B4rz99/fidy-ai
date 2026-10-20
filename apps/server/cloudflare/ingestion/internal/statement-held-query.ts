@@ -1,16 +1,12 @@
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
-import {
-  prepareAuthorizedAuditCall,
-  refusedByAuditBudget,
-} from "../../../src/shell/audit/operations";
+import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
 import { newId } from "../../secret-material/operations";
 import type { StatementDecisionWork } from "../contract";
 import { statementOriginGuard } from "./statement-scope";
 import { ReviewPage, pageSize, readCanonicalReviewPage } from "./statement-review";
 import {
   readCanonicalSubmission,
-  statementDailyBudgetResponse,
   unavailableStatement,
   validationFailed,
 } from "./statement-ingestion";
@@ -46,11 +42,7 @@ const readAudit = (
       })
     );
     if (Result.isFailure(result)) {
-      return Option.some(
-        refusedByAuditBudget(result.failure.cause)
-          ? statementDailyBudgetResponse()
-          : unavailableStatement()
-      );
+      return Option.some(unavailableStatement());
     }
     return result.success[0]?.meta.changes === 1
       ? Option.none()

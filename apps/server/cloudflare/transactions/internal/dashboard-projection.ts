@@ -3,7 +3,7 @@ import type {
   EffectiveTransactionAggregate,
   TransactionPeriod,
 } from "../../../src/core/transactions/contract";
-import type { UserId } from "../../../src/core/identity/contract";
+import { UserId } from "../../../src/core/identity/contract";
 import { prepareConsentAction } from "../../consent/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { TransactionAggregatesUnavailable } from "../contract";
@@ -181,10 +181,20 @@ export const findDashboardAggregate = ({
   Effect.gen(function* () {
     const range = projectionRange(from, toExclusive);
     if (Option.isNone(range)) return Option.none();
-    const [groups, digits] = yield* Effect.tryPromise(() =>
-      db.batch(projectionQueries(db, userId, range.value))
+    const [state, groups, digits] = yield* Effect.tryPromise(() =>
+      db.batch([
+        prepareConsentAction({
+          db,
+          subject: { _tag: "User", userId: UserId.make(userId) },
+          requirement: "unrevoked",
+          statement: revisionSelection(UserId.make(userId)),
+        }),
+        ...projectionQueries(db, userId, range.value),
+      ])
     );
-    if (groups === undefined || digits === undefined) return Option.none();
+    if (state?.results.length !== 1 || groups === undefined || digits === undefined) {
+      return Option.none();
+    }
     const sums = decodeSums(digits.results);
     return Option.flatMap(sums, (decoded) => decodeGroups(groups.results, decoded));
   }).pipe(Effect.orElseSucceed(() => Option.none()));
@@ -195,8 +205,7 @@ const AggregateRevision = Schema.Struct({
 const revisionSelection = (
   userId: UserId
 ): Readonly<{ sql: string; params: readonly [UserId] }> => ({
-  sql: `SELECT COALESCE(f.revision, 0) AS revision FROM dashboard_projection_state p
-    LEFT JOIN transaction_fact_state f ON f.user_id = p.user_id
+  sql: `SELECT COALESCE(p.fact_revision, 0) AS revision FROM dashboard_projection_state p
     WHERE p.user_id = ? AND p.version = 1 AND p.readiness = 'ready'`,
   params: [userId],
 });
@@ -285,7 +294,7 @@ export const periodAggregateGuard = (
   });
   return input.db
     .prepare(
-      `INSERT INTO transaction_fact_assertion (id, accepted) VALUES (1, CASE WHEN EXISTS (${protectedSelection.sql}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`
+      `INSERT INTO sql_assertions (scope, accepted) VALUES ('transaction_fact', CASE WHEN EXISTS (${protectedSelection.sql}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
     )
     .bind(...protectedSelection.params);
 };

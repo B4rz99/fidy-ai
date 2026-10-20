@@ -2,7 +2,11 @@ import { emailPairingAllowsUser } from "../../src/shell/email-authentication/ope
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  consentHistoryTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { freshSessionQuery } from "../../src/shell/web-session/operations";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
 import {
@@ -30,17 +34,23 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
       );
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("CREATE TABLE verified_email_credentials (user_id TEXT, email_address TEXT)"),
+          db.prepare(
+            "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
+          ),
           db.prepare(
             "CREATE TABLE web_sessions (id TEXT, user_id TEXT, revoked_at_ms INTEGER, fresh_until_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER)"
           ),
-          db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT)"),
+          db.prepare(consentHistoryTestSchema),
           db
             .prepare(
-              "INSERT INTO verified_email_credentials VALUES (?, 'current@example.com'), (?, 'foreign@example.com')"
+              "WITH incoming(user_id,email_address) AS (VALUES (?, 'current@example.com'), (?, 'foreign@example.com')) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
             )
             .bind(userA, userB),
-          db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(userA),
+          db
+            .prepare(
+              "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+            )
+            .bind(userA),
         ])
       );
       const now = yield* Clock.currentTimeMillis;
@@ -70,7 +80,7 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "UPDATE verified_email_credentials SET email_address = 'replacement@example.com' WHERE user_id = ?"
+            "UPDATE users SET verified_email_address = 'replacement@example.com' WHERE id = ?"
           )
           .bind(userA)
           .run()
@@ -89,7 +99,12 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
           .run()
       );
       yield* Effect.tryPromise(() =>
-        db.prepare("DELETE FROM onboarding_consent_records WHERE user_id = ?").bind(userA).run()
+        db
+          .prepare(
+            "DELETE FROM consent_history AS onboarding_consent_records WHERE onboarding_consent_records.record_type='processing_grant' AND user_id = ?"
+          )
+          .bind(userA)
+          .run()
       );
       expect(yield* Effect.tryPromise(() => statement.first())).toBeNull();
     })
@@ -101,9 +116,10 @@ it("keeps an unclaimed or same-User pairing eligible while a foreign email proof
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("CREATE TABLE browser_pairing_email_proofs (pairing_id TEXT, user_id TEXT)"),
-          db.prepare("CREATE TABLE browser_login_pairings (id TEXT, user_id TEXT)"),
-          db.prepare("INSERT INTO browser_login_pairings VALUES (?, NULL)").bind(pairingId),
+          db.prepare(
+            "CREATE TABLE browser_login_pairings (email_work_id TEXT,email_user_id TEXT,id TEXT, user_id TEXT)"
+          ),
+          db.prepare("INSERT INTO browser_login_pairings(id) VALUES (?)").bind(pairingId),
         ])
       );
       const allowed = emailPairingAllowsUser({
@@ -120,13 +136,20 @@ it("keeps an unclaimed or same-User pairing eligible while a foreign email proof
       expect((yield* Effect.tryPromise(() => update.run())).meta.changes).toBe(1);
       yield* Effect.tryPromise(() =>
         db
-          .prepare("INSERT INTO browser_pairing_email_proofs VALUES (?, ?)")
+          .prepare(
+            "UPDATE browser_login_pairings SET email_work_id=id,email_user_id=?2 WHERE id=?1"
+          )
           .bind(pairingId, userA)
           .run()
       );
       expect((yield* Effect.tryPromise(() => update.run())).meta.changes).toBe(1);
       yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE browser_pairing_email_proofs SET user_id = ?").bind(userB).run()
+        db
+          .prepare(
+            "UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_user_id = ? WHERE email_work_id IS NOT NULL "
+          )
+          .bind(userB)
+          .run()
       );
       expect((yield* Effect.tryPromise(() => update.run())).meta.changes).toBe(0);
     })

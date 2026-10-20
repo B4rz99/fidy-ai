@@ -24,7 +24,7 @@ export type OAuthCaller = Readonly<{
 }>;
 /** User-owned OAuth authority lent to a protected owner statement, never browser authority. */
 export type OAuthAuthority = Readonly<{
-  table: "oauth_access_credentials";
+  table: "oauth_credentials";
   attribution: Readonly<{
     userId: UserId;
     connectionId: OAuthConnectionId;

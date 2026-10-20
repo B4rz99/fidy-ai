@@ -95,7 +95,7 @@ export const stageWeeklyQuestion = (
       questionAction(
         input,
         {
-          sql: `INSERT INTO weekly_governor_questions(id,user_id,offer_id,grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,offer_json,time_zone) SELECT ?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,? WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND NOT EXISTS (SELECT 1 FROM weekly_governor_questions WHERE user_id=? AND id=?)`,
+          sql: `INSERT INTO whatsapp_deliveries AS weekly_governor_questions(kind,id,user_id,offer_id,grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,offer_json,time_zone) SELECT 'weekly-question', ?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,? WHERE EXISTS (${input.guard.sql}) AND EXISTS (${association.sql}) AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=?)`,
           params: [
             input.id,
             input.userId,
@@ -124,7 +124,7 @@ export const stageWeeklyQuestion = (
 
 const readQuestionForClaim = (input: QuestionStart): Effect.Effect<unknown, WhatsAppUnavailable> =>
   Effect.gen(function* () {
-    const predicate = `FROM weekly_governor_questions AS q WHERE q.user_id=? AND q.id=? AND q.state='ready' AND EXISTS (${input.guard.sql}) AND EXISTS (SELECT 1 FROM whatsapp_identities AS i WHERE i.user_id=q.user_id AND i.portfolio_id=q.portfolio_id AND i.bsuid=q.bsuid)`;
+    const predicate = `FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS q WHERE q.user_id=? AND q.id=? AND q.state='ready' AND EXISTS (${input.guard.sql}) AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) AS i WHERE i.user_id=q.user_id AND i.portfolio_id=q.portfolio_id AND i.bsuid=q.bsuid)`;
     const params = [input.userId, input.id, ...input.guard.params];
     const raw = yield* Effect.tryPromise(() =>
       questionAction(
@@ -170,7 +170,7 @@ export const startWeeklyQuestion = (
       yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "UPDATE weekly_governor_questions SET state='expired',text=NULL,offer_json=NULL WHERE user_id=? AND id=? AND state='ready'"
+            "UPDATE whatsapp_deliveries AS weekly_governor_questions SET state='expired',text=NULL,offer_json=NULL WHERE kind='weekly-question' AND user_id=? AND id=? AND state='ready'"
           )
           .bind(input.userId, input.id)
           .run()
@@ -201,7 +201,7 @@ const prepareQuestionClaim = (
     bsuid: row.bsuid,
   });
   const statement = {
-    sql: `UPDATE weekly_governor_questions SET state='sending',send_started_at_ms=? WHERE user_id=? AND id=? AND state='ready' AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
+    sql: `UPDATE whatsapp_deliveries AS weekly_governor_questions SET state='sending',send_started_at_ms=? WHERE kind='weekly-question' AND user_id=? AND id=? AND state='ready' AND EXISTS (${input.guard.sql}) AND EXISTS (${association.sql})`,
     params: [
       input.now.epochMilliseconds,
       input.userId,
@@ -225,7 +225,7 @@ export const recordWeeklyQuestionSend = (
   Effect.tryPromise(() =>
     input.db
       .prepare(
-        "UPDATE weekly_governor_questions SET state=?,provider_message_id=coalesce(provider_message_id,?) WHERE user_id=? AND id=? AND state='sending'"
+        "UPDATE whatsapp_deliveries AS weekly_governor_questions SET state=?,provider_message_id=coalesce(provider_message_id,?) WHERE kind='weekly-question' AND user_id=? AND id=? AND state='sending'"
       )
       .bind(input.outcome, Option.getOrNull(input.providerMessageId), input.userId, input.id)
       .run()
@@ -245,7 +245,7 @@ export const findWeeklyQuestionUser = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT user_id FROM weekly_governor_questions WHERE correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL"
+          "SELECT user_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL"
         )
         .bind(input.correlationToken, input.businessPhoneNumberId)
         .first()
@@ -278,7 +278,7 @@ export const reconcileWeeklyQuestion = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `UPDATE weekly_governor_questions SET state=CASE WHEN ?='delivered' THEN 'delivered' WHEN state IN ('delivered','rejected') THEN state WHEN ?='failed' THEN 'rejected' ELSE 'accepted' END,provider_message_id=coalesce(provider_message_id,?),delivered_at_ms=CASE WHEN ?='delivered' THEN coalesce(delivered_at_ms,?) ELSE delivered_at_ms END WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+1000 >= send_started_at_ms AND ? <= ?+300000 RETURNING *`
+          `UPDATE whatsapp_deliveries AS weekly_governor_questions SET state=CASE WHEN ?='delivered' THEN 'delivered' WHEN state IN ('delivered','rejected') THEN state WHEN ?='failed' THEN 'rejected' ELSE 'accepted' END,provider_message_id=coalesce(provider_message_id,?),delivered_at_ms=CASE WHEN ?='delivered' THEN coalesce(delivered_at_ms,?) ELSE delivered_at_ms END WHERE kind='weekly-question' AND user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+1000 >= send_started_at_ms AND ? <= ?+300000 RETURNING *`
         )
         .bind(
           status.outcome,
@@ -324,7 +324,7 @@ export const readWeeklyReplyChoice = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT offer_id FROM weekly_governor_questions WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' AND (?='decline' OR expires_at_ms>?)"
+          "SELECT offer_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' AND (?='decline' OR expires_at_ms>?)"
         )
         .bind(
           input.proof.userId,
@@ -347,7 +347,7 @@ export const readWeeklyReplyChoice = (
 export const weeklyQuestionDeliveryQuery = (
   input: Readonly<{ userId: UserId; id: string }>
 ): OwnedStatement => ({
-  sql: "SELECT user_id,id AS question_id,send_started_at_ms,delivered_at_ms FROM weekly_governor_questions WHERE user_id=? AND id=? AND state='delivered'",
+  sql: "SELECT user_id,id AS question_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=? AND state='delivered'",
   params: [input.userId, input.id],
 });
 
@@ -360,8 +360,8 @@ export const expireWeeklyQuestions = (
     input.db.batch([
       input.db
         .prepare(
-          `UPDATE weekly_governor_questions SET text=NULL,offer_json=NULL WHERE rowid IN (
-             SELECT rowid FROM weekly_governor_questions
+          `UPDATE whatsapp_deliveries AS weekly_governor_questions SET text=NULL,offer_json=NULL WHERE kind='weekly-question' AND rowid IN (
+             SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions
              WHERE (text IS NOT NULL OR offer_json IS NOT NULL) AND created_at_ms <= ?
              ORDER BY created_at_ms,id LIMIT 64
            ) AND (text IS NOT NULL OR offer_json IS NOT NULL)`
@@ -369,8 +369,8 @@ export const expireWeeklyQuestions = (
         .bind(input.now - questionContentLifetimeMs),
       input.db
         .prepare(
-          `UPDATE weekly_governor_questions SET text=NULL,offer_json=NULL WHERE rowid IN (
-             SELECT rowid FROM weekly_governor_questions
+          `UPDATE whatsapp_deliveries AS weekly_governor_questions SET text=NULL,offer_json=NULL WHERE kind='weekly-question' AND rowid IN (
+             SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions
              WHERE (text IS NOT NULL OR offer_json IS NOT NULL) AND state='ready' AND expires_at_ms <= ?
              ORDER BY expires_at_ms,id LIMIT 64
            ) AND (text IS NOT NULL OR offer_json IS NOT NULL)`

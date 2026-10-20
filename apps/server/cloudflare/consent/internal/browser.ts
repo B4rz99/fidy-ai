@@ -35,10 +35,10 @@ const receiptQuery = (
   return db
     .prepare(`SELECT
     CASE WHEN r.id IS NOT NULL THEN 'Revoked'
-      WHEN EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = ?) THEN 'Granted'
+      WHEN EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = ?) THEN 'Granted'
       ELSE 'Missing' END AS status,
     r.id AS reference, r.occurred_at_ms AS occurredAtMs
-    FROM web_sessions w LEFT JOIN consent_user_revocations r ON r.user_id = w.user_id
+    FROM web_sessions w LEFT JOIN (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) r ON r.user_id = w.user_id
     WHERE w.id = ? AND w.user_id = ?
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
     .bind(subject.userId, subject.id, subject.userId, ...authority.bindings);
@@ -92,7 +92,7 @@ export const readProcessingAuthorization = (
       input.db
         .prepare(`SELECT g.id AS reference,
     g.accepted_at_ms AS acceptedAtMs,CASE WHEN length(g.disclosure_json)<=? THEN g.disclosure_json ELSE NULL END AS disclosure
-    FROM web_sessions w LEFT JOIN onboarding_consent_records g ON g.user_id=w.user_id
+    FROM web_sessions w LEFT JOIN (SELECT * FROM consent_history WHERE record_type='processing_grant') g ON g.user_id=w.user_id
     WHERE w.id=? AND w.user_id=? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(
           maximumAuthorizationTextLength,

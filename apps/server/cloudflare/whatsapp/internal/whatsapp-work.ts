@@ -32,7 +32,7 @@ export const dispatchWhatsAppWork = ({
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT o.user_id, o.turn_id
-      FROM hosted_whatsapp_outbox AS o JOIN (${hostedChannelTurnObservation()}) AS t ON t.id = o.turn_id
+      FROM (SELECT rowid,turn_id,dispatch_user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS o JOIN (${hostedChannelTurnObservation()}) AS t ON t.id = o.turn_id
       WHERE t.status = 'pending' AND (o.offered_at_ms IS NULL OR o.offered_at_ms < ?)
         AND (? IS NULL OR o.user_id = ?)
       ORDER BY o.created_at_ms LIMIT ?`)
@@ -45,9 +45,8 @@ export const dispatchWhatsAppWork = ({
       const claim = yield* Effect.exit(
         Effect.tryPromise(() =>
           db
-            .prepare(`UPDATE hosted_whatsapp_outbox
-        SET offered_at_ms = ? WHERE turn_id = ? AND user_id = ?
-          AND (offered_at_ms IS NULL OR offered_at_ms < ?)`)
+            .prepare(`UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_offered_at_ms = ? WHERE dispatch_created_at_ms IS NOT NULL AND id = ? AND dispatch_user_id = ?
+          AND (dispatch_offered_at_ms IS NULL OR dispatch_offered_at_ms < ?)`)
             .bind(now, entry.turn_id, entry.user_id, now - offerCooldownMs)
             .run()
         )

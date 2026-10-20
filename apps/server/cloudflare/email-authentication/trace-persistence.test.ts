@@ -42,7 +42,7 @@ it.live("sanitizes both email proof Workflow params before native persistence", 
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "CREATE TABLE browser_pairing_email_proofs (work_id TEXT, email_address TEXT, expires_at_ms REAL, state TEXT)"
+          "CREATE TABLE browser_login_pairings (email_work_id TEXT, email_address TEXT, email_expires_at_ms REAL, email_state TEXT)"
         )
         .run()
     );
@@ -53,7 +53,7 @@ it.live("sanitizes both email proof Workflow params before native persistence", 
         )
         .run()
     );
-    for (const table of ["browser_pairing_email_proofs", "email_replacements"]) {
+    for (const table of ["browser_login_pairings", "email_replacements"]) {
       yield* Effect.tryPromise(() =>
         db
           .prepare(`INSERT INTO ${table} VALUES (?, ?, ?, ?)`)

@@ -1,5 +1,4 @@
-import { Data, DateTime, Effect, Schema } from "effect";
-import { allowancePeriod } from "../../../src/core/quotas/operations";
+import { Data, Effect, Schema } from "effect";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
   allowanceConsumptionProof,
@@ -25,7 +24,7 @@ export const prepareEmailProcessingAdmission = ({
     subject: { _tag: "Owner", column: "r.user_id" },
     requirement: state === "queued" ? "granted" : "active",
     statement: {
-      sql: "SELECT r.user_id AS userId FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ? AND r.state = ? AND r.expires_at_ms > ? AND EXISTS (SELECT 1 FROM email_forwarding_addresses a WHERE a.user_id = r.user_id)",
+      sql: "SELECT r.user_id AS userId FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ? AND r.state = ? AND r.expires_at_ms > ? AND EXISTS (SELECT 1 FROM users a WHERE a.id=r.user_id AND a.forwarding_address_id IS NOT NULL)",
       params: [receiptId, userId, state, current],
     },
   });
@@ -34,7 +33,6 @@ export const prepareEmailProcessingAdmission = ({
     allowance: "forwarded_email",
     identity: receiptId,
   });
-  const reset = DateTime.toEpochMillis(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt);
   return [
     ...prepareAvailableConsumption({
       db,
@@ -46,22 +44,13 @@ export const prepareEmailProcessingAdmission = ({
     }),
     db
       .prepare(
-        "UPDATE forwarded_email_receipts SET state = 'queued' WHERE id = ? AND user_id = ? AND state = ?"
+        `UPDATE forwarded_email_receipts SET state = 'queued',deferred_checked_at_ms = CASE WHEN EXISTS (${accepted.sql}) THEN NULL ELSE ? END WHERE id = ? AND user_id = ? AND state = ?`
       )
-      .bind(receiptId, userId, state),
+      .bind(...accepted.params, current, receiptId, userId, state),
     db
       .prepare(
-        `INSERT INTO forwarded_email_deferrals SELECT id,user_id,?,? FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'queued' AND NOT EXISTS (${accepted.sql}) ON CONFLICT(receipt_id) DO UPDATE SET resume_at_ms = excluded.resume_at_ms,checked_at_ms = excluded.checked_at_ms`
-      )
-      .bind(reset, current, receiptId, userId, ...accepted.params),
-    db
-      .prepare(
-        `INSERT INTO forwarded_email_outbox (receipt_id,user_id) SELECT id,user_id FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'queued' AND EXISTS (${accepted.sql}) ON CONFLICT(receipt_id) DO NOTHING`
-      )
-      .bind(receiptId, userId, ...accepted.params),
-    db
-      .prepare(
-        `DELETE FROM forwarded_email_deferrals WHERE receipt_id = ? AND user_id = ? AND EXISTS (${accepted.sql})`
+        `UPDATE forwarded_email_receipts SET dispatch_user_id=user_id
+        WHERE id=? AND user_id=? AND state='queued' AND dispatch_user_id IS NULL AND EXISTS (${accepted.sql})`
       )
       .bind(receiptId, userId, ...accepted.params),
   ];
@@ -84,7 +73,7 @@ export const activateDeferredEmails = ({
       try: () =>
         db
           .prepare(
-            "SELECT d.receipt_id AS receiptId,d.user_id AS userId FROM forwarded_email_deferrals d JOIN forwarded_email_receipts r ON r.id = d.receipt_id AND r.user_id = d.user_id WHERE r.state = 'queued' AND r.expires_at_ms > ? ORDER BY d.checked_at_ms,d.receipt_id LIMIT 25"
+            "SELECT r.id AS receiptId,r.user_id AS userId FROM forwarded_email_receipts r WHERE r.deferred_checked_at_ms IS NOT NULL AND r.state = 'queued' AND r.expires_at_ms > ? ORDER BY r.deferred_checked_at_ms,r.id LIMIT 25"
           )
           .bind(current)
           .all(),
@@ -96,7 +85,7 @@ export const activateDeferredEmails = ({
         try: () =>
           db
             .prepare(
-              "UPDATE forwarded_email_deferrals SET checked_at_ms = MAX(checked_at_ms,?) WHERE receipt_id = ? AND user_id = ?"
+              "UPDATE forwarded_email_receipts SET deferred_checked_at_ms = MAX(deferred_checked_at_ms,?) WHERE id = ? AND user_id = ? AND deferred_checked_at_ms IS NOT NULL"
             )
             .bind(current, row.receiptId, row.userId)
             .run(),

@@ -1,6 +1,6 @@
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { RecurringConfirmationId } from "../../src/core/recurring/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
 
 import {
@@ -103,36 +103,88 @@ export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, Recurri
     });
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
 
-/** Discover at most four pending User identities; recheck authority inside each coordinator before reading facts. */
+const recurringWeekMs = 604800000;
+const recurringDiscoveryIntervalMs = 3600000;
+const recurringWorkBatchSize = 4;
+const DiscoverySchedule = Schema.Struct({ next_discovery_at_ms: Schema.Int });
+const discoveryOrder = `ORDER BY (userId > (SELECT last_user FROM recurring_dispatch WHERE id=1)) DESC,userId LIMIT ${recurringWorkBatchSize}`;
+const discoveryStatement = ({
+  db,
+  current,
+  discover,
+}: Readonly<{ db: D1Database; current: number; discover: boolean }>): D1PreparedStatement =>
+  discover
+    ? prepareFactRevisionProjection({
+        db,
+        statement: {
+          sql: `SELECT f.userId FROM transaction_fact_revisions f LEFT JOIN recurring_progress p ON p.user_id=f.userId
+          WHERE p.user_id IS NULL OR p.phase<>'complete'
+          OR (p.revision<>f.revision AND (p.evaluated_at IS NULL OR p.evaluated_at<=?)) ${discoveryOrder}`,
+          params: [DateTime.formatIso(DateTime.makeUnsafe(current - recurringWeekMs))],
+        },
+      })
+    : db.prepare(
+        `SELECT user_id AS userId FROM recurring_progress WHERE phase<>'complete' ${discoveryOrder}`
+      );
+const discoveryCheckpoint = ({
+  db,
+  current,
+  discover,
+  users,
+}: Readonly<{
+  db: D1Database;
+  current: number;
+  discover: boolean;
+  users: ReadonlyArray<UserId>;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const last = users.at(-1);
+  if (discover) {
+    // A full batch may leave a backlog. Keep discovering until a shorter batch drains it.
+    return [
+      db
+        .prepare(`INSERT INTO recurring_dispatch(id,last_user,next_discovery_at_ms)
+      VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET
+      last_user=CASE WHEN ? IS NULL THEN recurring_dispatch.last_user ELSE excluded.last_user END,
+      next_discovery_at_ms=excluded.next_discovery_at_ms`)
+        .bind(
+          last ?? "",
+          users.length === recurringWorkBatchSize ? 0 : current + recurringDiscoveryIntervalMs,
+          last ?? null
+        ),
+    ];
+  }
+  return last === undefined
+    ? []
+    : [db.prepare("UPDATE recurring_dispatch SET last_user=? WHERE id=1").bind(last)];
+};
+
+/** Discover changed Users at most weekly, with hourly idle discovery. Resume unfinished work and drain a full batch promptly; recheck processing authority inside each coordinator. */
 export const discoverRecurringWork = (
   db: D1Database
 ): Effect.Effect<ReadonlyArray<UserId>, RecurringUnavailable> =>
   Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const schedule = yield* query({
+      db,
+      sql: "SELECT next_discovery_at_ms FROM recurring_dispatch WHERE id=1",
+      values: [],
+    });
+    const stored = schedule[0];
+    const discover =
+      stored === undefined ||
+      (yield* decode({ schema: DiscoverySchedule, input: stored })).next_discovery_at_ms <= current;
     const result = yield* Effect.tryPromise({
-      try: () =>
-        prepareFactRevisionProjection({
-          db,
-          statement: {
-            sql: `SELECT f.userId FROM transaction_fact_revisions f LEFT JOIN recurring_progress p ON p.user_id = f.userId WHERE p.revision IS NULL OR p.revision <> f.revision OR p.phase <> 'complete' ORDER BY (f.userId > (SELECT last_user FROM recurring_dispatch WHERE id = 1)) DESC, f.userId LIMIT 4`,
-            params: [],
-          },
-        }).all(),
+      try: () => discoveryStatement({ db, current, discover }).all(),
       catch: () => new RecurringUnavailable(),
     });
     const rows = yield* decode({
       schema: Schema.Array(Schema.Struct({ userId: UserId })),
       input: result.results,
     });
-    const last = rows.at(-1);
-    if (last !== undefined) {
-      yield* batch({
-        db,
-        statements: [
-          db.prepare("UPDATE recurring_dispatch SET last_user = ? WHERE id = 1").bind(last.userId),
-        ],
-      });
-    }
-    return rows.map((row) => row.userId);
+    const users = rows.map((row) => row.userId);
+    const statements = discoveryCheckpoint({ db, current, discover, users });
+    if (statements.length > 0) yield* batch({ db, statements });
+    return users;
   });
 
 /** Read immutable confirmation snapshots under current Consent inside this User's coordinator; invalid patterns are excluded. */
@@ -157,7 +209,7 @@ export const readRecurringConfirmations = ({
       subject: { _tag: "User", userId },
       requirement: "active",
       statement: {
-        sql: `SELECT c.id, c.context_json, c.confirmation_json FROM recurring_confirmations c JOIN recurring_series s ON s.user_id = c.user_id AND s.id = c.series_id WHERE c.user_id = ? AND ? = 1 AND s.valid = 1 AND json_type(c.confirmation_json,'$.counterparty') IS NOT NULL AND (c.confirmed_at, c.id) > (?, ?)`,
+        sql: `SELECT confirmation_id AS id, confirmation_context_json AS context_json, confirmation_json FROM recurring_series WHERE user_id = ? AND ? = 1 AND valid = 1 AND confirmation_id IS NOT NULL AND json_type(confirmation_json,'$.counterparty') IS NOT NULL AND (confirmed_at, confirmation_id) > (?, ?)`,
         params: [userId, Option.isSome(snapshot) ? 1 : 0, ...after],
       },
     });
@@ -173,7 +225,9 @@ export const readRecurringConfirmations = ({
             ],
           }),
           db
-            .prepare(`${protectedRead.sql} ORDER BY c.confirmed_at, c.id LIMIT ${pageSize + 1}`)
+            .prepare(
+              `${protectedRead.sql} ORDER BY confirmed_at, confirmation_id LIMIT ${pageSize + 1}`
+            )
             .bind(...protectedRead.params),
         ]),
       catch: () => new RecurringUnavailable(),
@@ -228,7 +282,7 @@ export const findRecurringDiscovery = (
       subject: { _tag: "User", userId: input.userId },
       requirement: "active",
       statement: {
-        sql: "SELECT id FROM recurring_confirmations WHERE user_id=? ORDER BY confirmed_at,id LIMIT 1",
+        sql: "SELECT confirmation_id AS id FROM recurring_series WHERE user_id=? AND confirmation_id IS NOT NULL ORDER BY confirmed_at,confirmation_id LIMIT 1",
         params: [input.userId],
       },
     });
@@ -247,7 +301,7 @@ export const findRecurringDiscovery = (
 
 /** Metadata-only complete evaluation identities for fair digest discovery; no financial content or execution authority is projected. */
 export const recurringDigestSourceIdentities = (): OwnedStatement => ({
-  sql: "SELECT p.user_id,p.evaluated_revision||':'||p.evaluated_at||':'||(SELECT coalesce(max(rowid),0) FROM recurring_confirmations WHERE user_id=p.user_id)||':'||(SELECT count(*) FROM recurring_confirmations WHERE user_id=p.user_id) AS source_identity FROM recurring_progress AS p WHERE p.phase='complete'",
+  sql: "SELECT p.user_id,p.evaluated_revision||':'||p.evaluated_at||':'||(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL)||':'||(SELECT count(*) FROM recurring_series WHERE user_id=p.user_id AND confirmation_sequence IS NOT NULL) AS source_identity FROM recurring_progress AS p WHERE p.phase='complete'",
   params: [],
 });
 

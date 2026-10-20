@@ -24,7 +24,7 @@ import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
 import { makeCoreHttp } from "../core-http/runtime";
 import { SubscriptionEnrollmentGroup } from "../../src/shell/subscription/contract";
-import { applyTestMigration } from "../d1-test-fixture";
+import { consentHistoryTestSchema } from "../d1-test-fixture";
 import { type TransactionSubject } from "../canonical-work/contract";
 import {
   loadWompiIntegritySecret,
@@ -39,10 +39,7 @@ import {
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
-  Effect.tryPromise({
-    try: () => Promise.resolve(promise()),
-    catch: () => new TestPromiseFailure(),
-  }).pipe(Effect.orDie);
+  Effect.tryPromise(() => Promise.resolve(promise())).pipe(Effect.orDie);
 const publicKey = `pub_test_${"f1d7c0de".repeat(3)}`;
 const secret = `prv_test_${"f1d7c0de".repeat(3)}`;
 const token = "A".repeat(43);
@@ -89,24 +86,15 @@ const setup = (): Promise<{
   Effect.runPromise(
     Effect.gen(function* () {
       const { db } = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO') STRICT",
-        "CREATE TABLE verified_email_credentials (user_id TEXT PRIMARY KEY, email_address TEXT NOT NULL) STRICT",
-        "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
-        "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
-        "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
-        "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
-        "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
+        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+        "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)",
+        consentHistoryTestSchema,
+
         `CREATE TABLE web_sessions (id TEXT NOT NULL, user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
       revoked_at_ms INTEGER, fresh_until_ms INTEGER NOT NULL, idle_expires_at_ms INTEGER NOT NULL,
       hard_expires_at_ms INTEGER NOT NULL) STRICT`,
       ]);
 
-      yield* fromTestPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0016_subscription_standing.sql", import.meta.url),
-        })
-      );
       yield* fromTestPromise(() =>
         db
           .prepare(
@@ -118,14 +106,16 @@ const setup = (): Promise<{
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO verified_email_credentials VALUES (?, 'payer@example.com'), (?, 'other@example.com')"
+            "WITH incoming(user_id,email_address) AS (VALUES (?, 'payer@example.com'), (?, 'other@example.com')) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
           )
           .bind(userA, userB)
           .run()
       );
       yield* fromTestPromise(() =>
         db
-          .prepare("INSERT INTO onboarding_consent_records VALUES (?), (?)")
+          .prepare(
+            "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?), ('processing_grant',?)"
+          )
           .bind(userA, userB)
           .run()
       );
@@ -137,8 +127,8 @@ const setup = (): Promise<{
       const now = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
         db
-          .prepare("INSERT INTO trial_periods VALUES (?, ?, ?), (?, ?, ?)")
-          .bind(userA, now - 604_800_000, now, userB, now - 604_800_000, now)
+          .prepare("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=? WHERE id IN (?,?)")
+          .bind(now - 604_800_000, now, userA, userB)
           .run()
       );
       yield* fromTestPromise(() =>
@@ -213,10 +203,10 @@ const retainHistoricalConfirmation = Effect.fn(function* (
   if (input.supportConfirmed) {
     yield* fromTestPromise(() =>
       input.db
-        .prepare(`INSERT INTO billing_no_charge_confirmations
-      (attempt_id,wompi_reference,wompi_environment,provider_case_id,operator_id,confirmed_at_ms)
-      VALUES (?,?,'sandbox','synthetic-provider-case','synthetic-operator',?)`)
-        .bind(input.attemptId, input.reference, input.now)
+        .prepare(
+          `UPDATE billing_attempts SET no_charge_reference=?,no_charge_environment='sandbox',no_charge_case_id='synthetic-provider-case',no_charge_operator_id='synthetic-operator',no_charge_confirmed_at_ms=? WHERE id=?`
+        )
+        .bind(input.reference, input.now, input.attemptId)
         .run()
     );
   }
@@ -224,7 +214,9 @@ const retainHistoricalConfirmation = Effect.fn(function* (
     // Retained historical evidence precedes repair of the derived failed-attempt projection.
     yield* fromTestPromise(() =>
       input.db
-        .prepare("UPDATE billing_transaction_evidence SET status=? WHERE attempt_id=?")
+        .prepare(
+          "UPDATE billing_provider_transactions SET status=? WHERE attempt_id=? AND status IS NOT NULL"
+        )
         .bind(input.lateEvidence, input.attemptId)
         .run()
     );
@@ -686,9 +678,9 @@ it.each(
         ).toEqual([{ status: "failed" }, { status: "succeeded" }]);
         expect(
           yield* fromTestPromise(() =>
-            environment.DB.prepare("SELECT count(*) AS count FROM billing_paid_periods").first(
-              "count"
-            )
+            environment.DB.prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+            ).first("count")
           )
         ).toBe(1);
         expect(
@@ -733,7 +725,9 @@ it("shows enrollment availability to a signed-in User without an optional mailbo
       const fixture = yield* fromTestPromise(setup);
       yield* fromTestPromise(() =>
         fixture.db
-          .prepare("DELETE FROM verified_email_credentials WHERE user_id = ?")
+          .prepare(
+            "UPDATE users SET verified_email_address=NULL,email_verified_at_ms=NULL WHERE id = ?"
+          )
           .bind(userA)
           .run()
       );
@@ -758,13 +752,18 @@ it.each([false, true])(
         const { db, environment, request } = yield* fromTestPromise(setup);
         if (!hasMailboxCredential) {
           yield* fromTestPromise(() =>
-            db.prepare("DELETE FROM verified_email_credentials WHERE user_id = ?").bind(userA).run()
+            db
+              .prepare(
+                "UPDATE users SET verified_email_address=NULL,email_verified_at_ms=NULL WHERE id = ?"
+              )
+              .bind(userA)
+              .run()
           );
         } else {
           yield* fromTestPromise(() =>
             db
               .prepare(
-                "UPDATE verified_email_credentials SET email_address = 'verified@example.com' WHERE user_id = ?"
+                "UPDATE users SET verified_email_address = 'verified@example.com' WHERE id = ?"
               )
               .bind(userA)
               .run()
@@ -1279,7 +1278,7 @@ it.each(Object.values(SubscriptionEnrollmentGroup.endpoints))(
           for (const update of [
             "UPDATE web_sessions SET fresh_until_ms = 0",
             "UPDATE web_sessions SET revoked_at_ms = 1",
-            "INSERT INTO consent_user_revocations VALUES ('10000000-0000-4000-8000-000000000001')",
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal','10000000-0000-4000-8000-000000000001')",
           ]) {
             yield* fromTestPromise(() => fixture.db.prepare(update).run());
             const refused = yield* fromTestPromise(() =>
@@ -1291,7 +1290,9 @@ it.each(Object.values(SubscriptionEnrollmentGroup.endpoints))(
                 fixture.db.prepare(
                   "UPDATE web_sessions SET fresh_until_ms = hard_expires_at_ms, revoked_at_ms = NULL"
                 ),
-                fixture.db.prepare("DELETE FROM consent_user_revocations"),
+                fixture.db.prepare(
+                  "DELETE FROM consent_history WHERE record_type='processing_withdrawal'"
+                ),
               ])
             );
           }
@@ -1359,7 +1360,12 @@ it.each([
         }
         if (failure === "withdrawn-consent") {
           yield* fromTestPromise(() =>
-            fixture.db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userA).run()
+            fixture.db
+              .prepare(
+                "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+              )
+              .bind(userA)
+              .run()
           );
         }
         for (const operation of ["availability", "prepare"]) {
@@ -1745,7 +1751,9 @@ it.each([
         expect(submission.billingAttempt.status).toBe("pending");
         expect(
           yield* fromTestPromise(() =>
-            environment.DB.prepare("SELECT count(*) AS count FROM billing_paid_periods").first()
+            environment.DB.prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+            ).first()
           )
         ).toEqual({ count: 0 });
         expect((yield* fromTestPromise(send)).status).toBe(200);
@@ -1797,7 +1805,9 @@ it.each([
             environment.DB.prepare("SELECT * FROM card_enrollments"),
             environment.DB.prepare("SELECT * FROM card_payment_sources"),
             environment.DB.prepare("SELECT * FROM billing_attempts"),
-            environment.DB.prepare("SELECT * FROM pat_audit"),
+            environment.DB.prepare(
+              "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+            ),
           ])
         );
         const retainedText = yield* Schema.encodeEffect(UnknownJsonString)(retained);
@@ -2034,7 +2044,11 @@ it("does not schedule a Nequi charge when the fresh session is revoked during so
       ).toEqual({ count: 0 });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM billing_collection_outbox").first()
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work"
+            )
+            .first()
         )
       ).toEqual({ count: 0 });
       expect(
@@ -2054,8 +2068,10 @@ it.each(["missing-consent", "revoked-consent", "stale-session"] as const)(
         const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
         vi.stubGlobal("fetch", provider);
         const sql = {
-          "missing-consent": "DELETE FROM onboarding_consent_records WHERE user_id = ?",
-          "revoked-consent": "INSERT INTO consent_user_revocations VALUES (?)",
+          "missing-consent":
+            "DELETE FROM consent_history AS onboarding_consent_records WHERE onboarding_consent_records.record_type='processing_grant' AND user_id = ?",
+          "revoked-consent":
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)",
           "stale-session": "UPDATE web_sessions SET fresh_until_ms = 1 WHERE user_id = ?",
         }[failure];
         yield* fromTestPromise(() => db.prepare(sql).bind(userA).run());
@@ -2095,7 +2111,7 @@ it.each([
         db
           .prepare(
             scenario.withdrawal === "consent"
-              ? "INSERT INTO consent_user_revocations VALUES (?)"
+              ? "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
               : "UPDATE web_sessions SET fresh_until_ms = 1 WHERE user_id = ?"
           )
           .bind(userA)
@@ -2166,7 +2182,7 @@ it.each([
       for (const table of [
         "card_payment_sources",
         "billing_attempts",
-        "billing_collection_outbox",
+        "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
       ]) {
         expect(
           yield* fromTestPromise(() => db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
@@ -2208,7 +2224,7 @@ const proveSandboxSettlement = (
         expect(
           yield* fromTestPromise(() =>
             environment.DB.prepare(
-              "SELECT count(*) AS count FROM billing_paid_periods WHERE attempt_id = ?"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods WHERE attempt_id = ?"
             )
               .bind(attemptId)
               .first()
@@ -2706,7 +2722,9 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       expect(
         yield* fromTestPromise(() =>
           db
-            .prepare("SELECT state FROM billing_collection_arms WHERE attempt_id = ?")
+            .prepare(
+              "SELECT state FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
+            )
             .bind(expectedId)
             .first()
         )
@@ -2714,11 +2732,13 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       expect(
         yield* fromTestPromise(() =>
           db
-            .prepare("SELECT version FROM billing_collection_outbox WHERE attempt_id = ?")
+            .prepare(
+              "SELECT last_attempt_at_ms FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE attempt_id = ?"
+            )
             .bind(expectedId)
             .first()
         )
-      ).toMatchObject({ version: 1 });
+      ).toMatchObject({ last_attempt_at_ms: null });
       expect(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result).pipe(Effect.orDie)
       ).not.toMatch(/tok_test_browser_only|prv_test|fidy-/u);
@@ -2772,16 +2792,17 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       ).toHaveLength(1);
       const confirmation = (ref: string): Promise<D1Result> =>
         db
-          .prepare(`INSERT INTO billing_no_charge_confirmations
-        (attempt_id, wompi_reference, wompi_environment, provider_case_id, operator_id, confirmed_at_ms)
-        VALUES (?, ?, 'sandbox', 'case-123', 'operator-42', 180002)`)
+          .prepare(
+            `UPDATE billing_attempts SET no_charge_reference=incoming.wompi_reference,no_charge_environment=incoming.wompi_environment,no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-123' AS provider_case_id,'operator-42' AS operator_id,180002 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL`
+          )
           .bind(expectedId, ref)
           .run();
       yield* fromTestPromise(() => expect(confirmation(`fidy-${expectedId}`)).rejects.toThrow());
       yield* fromTestPromise(() =>
         db
-          .prepare(`UPDATE billing_collection_arms
-        SET state = 'sent', sent_at_ms = 1 WHERE attempt_id = ?`)
+          .prepare(
+            `UPDATE billing_attempts AS billing_collection_work SET collection_state = 'sent', collection_sent_at_ms = 1 WHERE collection_state IS NOT NULL AND id = ?`
+          )
           .bind(expectedId)
           .run()
       );
@@ -2916,7 +2937,7 @@ it.each([8_640_000_000_000_001, 1_800_000_000_000.5])(
         for (const table of [
           "card_payment_sources",
           "billing_attempts",
-          "billing_collection_outbox",
+          "(SELECT id FROM billing_attempts WHERE collection_state IS NOT NULL)",
         ]) {
           expect(
             yield* fromTestPromise(() =>
@@ -2989,7 +3010,11 @@ it("inherits the workflow Clock through source authorization and live settlement
       ).toEqual({ accepted_at_ms: current });
       expect(
         yield* fromTestPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM billing_collection_outbox").first()
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work"
+            )
+            .first()
         )
       ).toEqual({ count: 1 });
     })

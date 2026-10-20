@@ -54,7 +54,7 @@ const heldDocument = (): Effect.Effect<
           .bind(caller.userId, current),
         db
           .prepare(
-            "INSERT INTO onboarding_consent_records VALUES ('consent',?,'{}','disclosure','decision',1,1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','consent',?,'{}','disclosure','decision',1,1)"
           )
           .bind(caller.userId),
         db
@@ -69,7 +69,7 @@ const heldDocument = (): Effect.Effect<
           .bind(caller.userId, current),
         db
           .prepare(
-            "INSERT INTO statement_whatsapp_documents(turn_id,user_id,media_id,created_at_ms) VALUES ('turn',?,'media',?)"
+            "WITH incoming(turn_id,user_id,media_id,created_at_ms) AS (VALUES ('turn',?,'media',?)) UPDATE hosted_turns SET document_media_id=incoming.media_id,document_created_at_ms=incoming.created_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
           )
           .bind(caller.userId, current),
       ])
@@ -141,7 +141,9 @@ it("refuses a held document at exact supplied Clock lease expiry before retainin
       expect(
         yield* wait(() =>
           db
-            .prepare("SELECT upload_grant_id FROM statement_whatsapp_documents")
+            .prepare(
+              "SELECT upload_grant_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
+            )
             .first("upload_grant_id")
         )
       ).toBeNull();
@@ -166,7 +168,9 @@ it("recovers the same staged reference without provider retrieval or another upl
       expect(
         yield* wait(() =>
           work.db
-            .prepare("SELECT upload_grant_id FROM statement_whatsapp_documents")
+            .prepare(
+              "SELECT upload_grant_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
+            )
             .first("upload_grant_id")
         )
       ).toBeNull();
@@ -204,7 +208,11 @@ it("refuses another User's admitted document without provider work, charges or s
       ).toBe(0);
       expect(
         yield* wait(() =>
-          work.db.prepare("SELECT staging_id FROM statement_whatsapp_documents").first("staging_id")
+          work.db
+            .prepare(
+              "SELECT staging_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
+            )
+            .first("staging_id")
         )
       ).toBeNull();
     })

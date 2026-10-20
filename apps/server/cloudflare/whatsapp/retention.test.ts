@@ -26,11 +26,19 @@ const other = UserId.make("00000000-0000-4000-8000-000000000002");
 const now = 5_000_000_000;
 const lifetime = 2_592_000_000;
 const owners = [
-  { kind: "weekly", table: "weekly_governor_questions", sweep: expireWeeklyQuestions },
-  { kind: "insight", table: "insight_whatsapp_claims", sweep: sweepInsightChannelEvidence },
+  {
+    kind: "weekly",
+    table: "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question')",
+    sweep: expireWeeklyQuestions,
+  },
+  {
+    kind: "insight",
+    table: "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')",
+    sweep: sweepInsightChannelEvidence,
+  },
   {
     kind: "proactivity",
-    table: "proactivity_whatsapp_claims",
+    table: "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity')",
     sweep: sweepProactivityChannelEvidence,
   },
 ] as const;
@@ -42,7 +50,9 @@ const prepare = (): Promise<D1Database> =>
       yield* io(() => installRetentionTestSchema(db));
       yield* io(() =>
         db
-          .prepare("INSERT INTO users VALUES (?,'CO','es-CO','UTC',0),(?,'CO','es-CO','UTC',0)")
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','UTC',0),(?,'CO','es-CO','UTC',0)"
+          )
           .bind(user, other)
           .run()
       );
@@ -72,13 +82,13 @@ const seed = (
         yield* io(() =>
           db.batch([
             db
-              .prepare(`${cte}INSERT INTO weekly_consent_offers(id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms)
+              .prepare(`${cte}INSERT INTO consent_offers(id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms)
         SELECT ?||i,?,'p','b','{}',?,? FROM n`)
               .bind(input.count, input.prefix, owner, created, expires),
             db
-              .prepare(`${cte}INSERT INTO weekly_governor_questions
-        (id,user_id,offer_id,created_at_ms,expires_at_ms,state,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,offer_json,time_zone)
-        SELECT ?||i,?,?||i,?,?,?,?||i,'p','b','phone',?,NULL,'UTC' FROM n`)
+              .prepare(
+                `${cte}INSERT INTO whatsapp_deliveries AS weekly_governor_questions(kind,id,user_id,offer_id,created_at_ms,expires_at_ms,state,correlation_token,portfolio_id,bsuid,business_phone_number_id,text,offer_json,time_zone) SELECT 'weekly-question', ?||i,?,?||i,?,?,?,?||i,'p','b','phone',?,NULL,'UTC' FROM n`
+              )
               .bind(
                 input.count,
                 input.prefix,
@@ -100,9 +110,9 @@ const seed = (
         SELECT ?||i,?,'weekly-summary',?,1,'CO','es-CO','UTC',cast(i AS text),'[]' FROM n`)
               .bind(input.count, input.prefix, owner, input.prefix),
             db
-              .prepare(`${cte}INSERT INTO insight_whatsapp_claims
-        (user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,text)
-        SELECT ?,?||i,?||i,'p','b','phone',?,?,'UTC',?,?,? FROM n`)
+              .prepare(
+                `${cte}INSERT INTO whatsapp_deliveries AS insight_whatsapp_claims(kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,text) SELECT 'insight', ?,?||i,?||i,'p','b','phone',?,?,'UTC',?,?,? FROM n`
+              )
               .bind(
                 input.count,
                 owner,
@@ -119,9 +129,9 @@ const seed = (
       } else {
         yield* io(() =>
           db
-            .prepare(`${cte}INSERT INTO proactivity_whatsapp_claims
-      (user_id,delivery_id,role,correlation_token,portfolio_id,bsuid,business_phone_number_id,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,text)
-      SELECT ?,?||i,'budget-offer',?||i,'p','b','phone',?,?,'UTC',?,?,? FROM n`)
+            .prepare(
+              `${cte}INSERT INTO whatsapp_deliveries AS proactivity_whatsapp_claims(kind,user_id,delivery_id,role,correlation_token,portfolio_id,bsuid,business_phone_number_id,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,text) SELECT 'proactivity', ?,?||i,'budget-offer',?||i,'p','b','phone',?,?,'UTC',?,?,? FROM n`
+            )
             .bind(
               input.count,
               owner,
@@ -138,14 +148,23 @@ const seed = (
       }
     })
   );
+const deliveryKind = (table: Owner["table"]): "weekly-question" | "insight" | "proactivity" => {
+  if (table === "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question')") {
+    return "weekly-question";
+  }
+  if (table === "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')") return "insight";
+  return "proactivity";
+};
 const contentCount = (
   db: D1Database,
   table: Owner["table"],
   owner: UserId = user
 ): Promise<unknown> =>
   db
-    .prepare(`SELECT count(*) AS count FROM ${table} WHERE user_id=? AND text IS NOT NULL`)
-    .bind(owner)
+    .prepare(
+      "SELECT count(*) AS count FROM whatsapp_deliveries WHERE kind=? AND user_id=? AND text IS NOT NULL"
+    )
+    .bind(deliveryKind(table), owner)
     .first("count");
 
 it.each(owners)(
@@ -249,7 +268,12 @@ it.each(owners)(
           expect(yield* io(() => contentCount(db, table, other))).toBe(1);
         }
         expect(
-          yield* io(() => db.prepare(`SELECT count(*) AS count FROM ${table}`).first("count"))
+          yield* io(() =>
+            db
+              .prepare("SELECT count(*) AS count FROM whatsapp_deliveries WHERE kind=?")
+              .bind(deliveryKind(table))
+              .first("count")
+          )
         ).toBe(601);
         const repeated = observeRetentionCost(db);
         yield* sweep({ db: repeated.database, now });
@@ -287,10 +311,20 @@ it("User-scoped insight expiry bounds a single User backlog and cannot clear ano
         const observed = observeRetentionCost(db);
         yield* expireInsightChannelEvidence({ db: observed.database, userId: user, now });
         expect(observed.cost().rowsRead).toBeLessThanOrEqual(1_000);
-        expect(yield* io(() => contentCount(db, "insight_whatsapp_claims"))).toBe(
-          Math.max(0, 300 - 64 * (tick + 1))
-        );
-        expect(yield* io(() => contentCount(db, "insight_whatsapp_claims", other))).toBe(4_000);
+        expect(
+          yield* io(() =>
+            contentCount(db, "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')")
+          )
+        ).toBe(Math.max(0, 300 - 64 * (tick + 1)));
+        expect(
+          yield* io(() =>
+            contentCount(
+              db,
+              "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')",
+              other
+            )
+          )
+        ).toBe(4_000);
       }
       const repeated = observeRetentionCost(db);
       yield* expireInsightChannelEvidence({ db: repeated.database, userId: user, now });
@@ -327,8 +361,8 @@ it.each(owners)(
         );
         yield* io(() =>
           db
-            .prepare(`CREATE TRIGGER refuse_content_retention BEFORE UPDATE ON ${table}
-      WHEN OLD.state IN ('ready','staged') BEGIN SELECT RAISE(ABORT,'test_retention_failure'); END`)
+            .prepare(`CREATE TRIGGER refuse_content_retention BEFORE UPDATE ON whatsapp_deliveries
+      WHEN OLD.kind='${deliveryKind(table)}' AND OLD.state IN ('ready','staged') BEGIN SELECT RAISE(ABORT,'test_retention_failure'); END`)
             .run()
         );
         const result = yield* Effect.result(sweep({ db, now }));

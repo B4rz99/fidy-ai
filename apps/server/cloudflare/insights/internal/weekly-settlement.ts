@@ -20,31 +20,25 @@ export const prepareWeeklyDeliverySettlement = (
 ): ReadonlyArray<D1PreparedStatement> => [
   ...prepareCount(input),
   input.db
-    .prepare(`INSERT INTO insight_delivery_attempts(id,user_id,insight_event_id,sent_at,channel,provider,provider_message_id)
- SELECT ?,v.user_id,v.insight_event_id,strftime('%Y-%m-%dT%H:%M:%fZ',v.send_started_at_ms / 1000.0,'unixepoch'),'whatsapp','kapso',v.provider_message_id FROM (${input.proof.sql}) AS v
- WHERE v.user_id=? AND v.insight_event_id=? AND NOT EXISTS (SELECT 1 FROM insight_delivery_attempts WHERE user_id=? AND insight_event_id=?)`)
+    .prepare(`UPDATE insight_events SET
+      delivery_receipt_id=coalesce(delivery_receipt_id,?),
+      delivery_sent_at=coalesce(delivery_sent_at,strftime('%Y-%m-%dT%H:%M:%fZ',v.send_started_at_ms/1000.0,'unixepoch')),
+      delivery_channel=coalesce(delivery_channel,'whatsapp'),
+      delivery_provider=coalesce(delivery_provider,'kapso'),
+      delivery_provider_message_id=coalesce(delivery_provider_message_id,v.provider_message_id),
+      lifecycle_state=CASE WHEN lifecycle_state='pending' THEN 'delivered' ELSE lifecycle_state END
+      FROM (${input.proof.sql}) AS v WHERE insight_events.user_id=? AND insight_events.id=?
+      AND v.user_id=insight_events.user_id AND v.insight_event_id=insight_events.id
+      AND (delivery_receipt_id IS NULL OR lifecycle_state='pending')`)
     .bind(
       DeliveryAttemptId.make(newId()),
       ...input.proof.params,
       input.userId,
-      input.insightEventId,
-      input.userId,
       input.insightEventId
     ),
   input.db
     .prepare(
-      `UPDATE insight_events SET lifecycle_state='delivered' WHERE user_id=? AND id=? AND lifecycle_state='pending' AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?)`
-    )
-    .bind(
-      input.userId,
-      input.insightEventId,
-      ...input.proof.params,
-      input.userId,
-      input.insightEventId
-    ),
-  input.db
-    .prepare(
-      `UPDATE weekly_summary_outbox SET state='settled' WHERE user_id=? AND insight_event_id=? AND state <> 'settled' AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?)`
+      `UPDATE insight_reports SET dispatch_state='settled' WHERE dispatch_state IS NOT NULL AND kind='weekly-summary' AND user_id=? AND delivery_id=? AND dispatch_state <> 'settled' AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.insight_event_id=?)`
     )
     .bind(
       input.userId,

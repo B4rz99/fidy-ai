@@ -1,9 +1,10 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
 import type { StatementDecisionWork } from "../contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { StatementSubmission } from "../../../src/shell/ingestion/contract";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
-import { dailyAuditExhausted } from "../../../src/shell/audit/operations";
+
 import {
   type PreparedStatementPublication,
   type StatementPublicationRefusal,
@@ -14,14 +15,9 @@ import {
   recordStatementRefusal,
   statementAbortRefusal,
   statementRefusal,
-  statementSubmissionCompletion,
   submissionProjection,
 } from "./statement-staging";
-import {
-  statementDailyBudgetMessage,
-  statementDailyBudgetResponse,
-  statementRefusalResponse,
-} from "./statement-ingestion";
+import { statementRefusalResponse } from "./statement-ingestion";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -41,18 +37,6 @@ import {
 } from "../../canonical-operations/contract";
 
 const StatementInput = Schema.toType(getCanonicalOperationInput("ingestion.submitForExtraction"));
-/** One statement-owned budget policy; a trigger abort cannot promise an individual HTTP refusal. */
-export const statementDailyBudgetRefusal = (
-  phase: "preflight" | "trigger"
-): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: statementDailyBudgetMessage,
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () =>
-    Effect.succeed(
-      phase === "preflight" ? statementDailyBudgetResponse() : transactionUnavailable()
-    ),
-});
 
 /** Preserve the statement owner's metadata-only refusal audit and individual response. */
 export const canonicalStatementRefusal = ({
@@ -79,7 +63,6 @@ export const canonicalStatementRefusal = ({
     ).pipe(Effect.orElseSucceed(() => "unavailable" as const)),
   respond: (disposition) => {
     if (disposition === "recorded") return Effect.succeed(statementRefusalResponse(refusal));
-    if (disposition === "rate_limited") return Effect.succeed(statementDailyBudgetResponse());
     return Effect.succeed(transactionUnavailable());
   },
 });
@@ -151,7 +134,6 @@ const heldPublicationRefusal = ({
     ).pipe(Effect.orElseSucceed(() => "unavailable" as const)),
   respond: (disposition) => {
     if (disposition === "recorded") return Effect.succeed(statementRefusalResponse(refusal));
-    if (disposition === "rate_limited") return Effect.succeed(statementDailyBudgetResponse());
     return Effect.succeed(transactionUnavailable());
   },
 });
@@ -168,12 +150,19 @@ const bindPublicationOrigin = ({
   stagingId: string;
 }>): ReadonlyArray<D1PreparedStatement> => [
   work.db
-    .prepare(`INSERT INTO statement_hosted_origins (submission_id,user_id,session_id,turn_id,expires_at_ms)
-      SELECT ?,user_id,session_id,turn_id,expires_at_ms FROM (${origin.sql}) AS proof WHERE user_id = ? AND EXISTS (SELECT 1 FROM statement_whatsapp_documents d WHERE d.turn_id=proof.turn_id AND d.user_id=proof.user_id AND d.staging_id=?)
-      ON CONFLICT(submission_id) DO UPDATE SET expires_at_ms = statement_hosted_origins.expires_at_ms
-      WHERE statement_hosted_origins.user_id = excluded.user_id AND statement_hosted_origins.session_id = excluded.session_id AND statement_hosted_origins.turn_id = excluded.turn_id`)
-    .bind(submissionId, ...origin.params, work.userId, stagingId),
-  work.db.prepare(statementSubmissionCompletion),
+    .prepare(`UPDATE statement_submissions SET hosted_session_id=(SELECT session_id FROM (${origin.sql})),hosted_turn_id=(SELECT turn_id FROM (${origin.sql})),hosted_expires_at_ms=coalesce(hosted_expires_at_ms,(SELECT expires_at_ms FROM (${origin.sql})))
+      WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM (${origin.sql}) AS proof JOIN (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,document_created_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL) d ON d.turn_id=proof.turn_id AND d.user_id=proof.user_id WHERE proof.user_id=? AND d.staging_id=? AND (hosted_session_id IS NULL OR (hosted_session_id=proof.session_id AND hosted_turn_id=proof.turn_id)))`)
+    .bind(
+      ...origin.params,
+      ...origin.params,
+      ...origin.params,
+      submissionId,
+      work.userId,
+      ...origin.params,
+      work.userId,
+      stagingId
+    ),
+  prepareChangedRowAssertion({ db: work.db, scope: "statement_submission" }),
 ];
 
 const heldPublicationConfig = ({
@@ -220,7 +209,7 @@ export const prepareHeldStatementSubmission = (
       mutation: {
         oauthReview: Option.none(),
         requiredScope: Option.none(),
-        auditBudget: "shared",
+
         commitGuards: Option.none(),
         statements: [
           ...publication.statements,
@@ -259,13 +248,6 @@ export const statementMutationAdapter = {
       };
       const parsed = Schema.decodeUnknownOption(StatementInput)(work.input);
       if (Option.isNone(parsed)) return failedPreparation();
-      const spent = yield* Effect.tryPromise(() =>
-        dailyAuditExhausted({ db: work.db, userId: work.subject.userId, current: work.current })
-      ).pipe(Effect.option);
-      if (Option.isNone(spent)) return failedPreparation();
-      if (spent.value) {
-        return refusedPreparation(statementDailyBudgetRefusal("preflight"));
-      }
       const prepared = yield* prepareStagedStatementPublication(config, {
         authority: callerAuthority({ subject: work.subject, current: work.current }),
         current: work.current,
@@ -293,7 +275,7 @@ export const statementMutationAdapter = {
           requiredScope: callerScope(work.subject),
           statements: publication.statements,
           guardRefusal: guardedStatementRefusal(config, publication),
-          auditBudget: "shared",
+
           commitGuards: Option.none(),
           outcome: {
             _tag: "StatementSubmission",

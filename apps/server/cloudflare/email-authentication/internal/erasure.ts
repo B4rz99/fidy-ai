@@ -2,55 +2,31 @@ import type { ErasureProjection } from "../../erasure-store/contract";
 
 export const projections: ReadonlyArray<ErasureProjection> = [
   {
-    id: "browser_pairing_email_outbox",
-    dataClass: "credentials",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM browser_pairing_email_outbox r WHERE EXISTS(SELECT 1 FROM browser_pairing_email_proofs p WHERE p.work_id=r.id AND p.user_id=?)",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM browser_pairing_email_outbox r WHERE EXISTS(SELECT 1 FROM browser_pairing_email_proofs p WHERE p.work_id=r.id AND p.user_id=?)",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM browser_pairing_email_outbox r WHERE EXISTS(SELECT 1 FROM browser_pairing_email_proofs p WHERE p.work_id=r.id AND p.user_id=?)",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM browser_pairing_email_outbox AS r WHERE EXISTS(SELECT 1 FROM browser_pairing_email_proofs p WHERE p.work_id=r.id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "browser_pairing_email_proofs",
     dataClass: "credentials",
-    dependencies: ["browser_pairing_email_outbox"],
+    dependencies: [],
     quiescence: {
       _tag: "Durable",
       select: ({ current, userId }) => ({
-        sql: "SELECT 1 FROM browser_pairing_email_proofs WHERE user_id=? AND state IN('awaiting_delivery','sending') AND expires_at_ms>?",
+        sql: "SELECT 1 FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS browser_pairing_email_proofs WHERE user_id=? AND state IN('awaiting_delivery','sending') AND expires_at_ms>?",
         params: [userId, current],
       }),
     },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM browser_pairing_email_proofs r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM browser_pairing_email_proofs r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM browser_pairing_email_proofs r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM browser_pairing_email_proofs AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE browser_login_pairings AS r SET email_work_id=NULL,email_user_id=NULL,email_address=NULL,email_credential_verified_at_ms=NULL,email_state=NULL,email_public_code=NULL,email_proof_digest=NULL,email_proof_expires_at_ms=NULL,email_expires_at_ms=NULL,email_generation=NULL,email_wrong_attempts=NULL,email_last_requested_at_ms=NULL,email_dispatch_attempted_at_ms=NULL WHERE email_work_id IS NOT NULL AND r.email_user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -104,33 +80,9 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
   },
   {
-    id: "email_replacement_outbox",
-    dataClass: "credentials",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM email_replacement_outbox r WHERE EXISTS(SELECT 1 FROM email_replacements p WHERE p.work_id=r.id AND p.user_id=?)",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM email_replacement_outbox r WHERE EXISTS(SELECT 1 FROM email_replacements p WHERE p.work_id=r.id AND p.user_id=?)",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM email_replacement_outbox r WHERE EXISTS(SELECT 1 FROM email_replacements p WHERE p.work_id=r.id AND p.user_id=?)",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM email_replacement_outbox AS r WHERE EXISTS(SELECT 1 FROM email_replacements p WHERE p.work_id=r.id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "email_replacements",
     dataClass: "credentials",
-    dependencies: ["email_replacement_outbox"],
+    dependencies: [],
     quiescence: {
       _tag: "Durable",
       select: ({ current, userId }) => ({
@@ -163,20 +115,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM verified_email_credentials r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,'{}' AS body FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM verified_email_credentials r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM verified_email_credentials r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM verified_email_credentials AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE users AS r SET verified_email_address=NULL,email_verified_at_ms=NULL WHERE r.id=? AND r.verified_email_address IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

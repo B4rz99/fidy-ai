@@ -1,10 +1,10 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { ConnectionContinuationReview } from "../../../src/shell/connections/contract";
 import { Connection } from "../../../src/core/connections/contract";
 import {
   prepareAuditQueryCall,
   prepareAuthorizedAuditCall,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import {
   type TransactionAuthority,
@@ -17,7 +17,7 @@ import type { ConnectionBrowserAdmission } from "../contract";
 
 const missingStatus = 404;
 const unavailableStatus = 503;
-const limitedStatus = 429;
+
 const ContinuationRow = Schema.Struct({
   ...Connection.fields,
   expiresAtMilliseconds: Schema.Int,
@@ -28,19 +28,17 @@ export const continuationFailure = (status: number): Response =>
     { error: { code: "continuation_unavailable" } },
     { status, headers: transactionNoStore }
   );
-const databaseFailure = (cause: unknown): Response => {
-  if (refusedByAuditBudget(cause)) return continuationFailure(limitedStatus);
-  return continuationFailure(
+const databaseFailure = (cause: unknown): Response =>
+  continuationFailure(
     cause instanceof Error && cause.message.includes("connection_browser_commit")
       ? missingStatus
       : unavailableStatus
   );
-};
 const query = `SELECT c.id, c.institution_id AS institutionId, c.state, a.expires_at_ms AS expiresAtMilliseconds,
   CASE WHEN a.status = 'pending' THEN 'ready' ELSE 'prepared' END AS phase
   FROM connection_attempts a JOIN connections c ON c.user_id = a.user_id AND c.id = a.connection_id
   WHERE a.public_reference = ? AND a.user_id = ? AND a.expires_at_ms > ? AND c.state = 'Connecting'
-    AND (a.status = 'pending' OR (a.status = 'consumed' AND EXISTS (SELECT 1 FROM connection_authorization_executions e WHERE e.attempt_id = a.id)))
+    AND (a.status = 'pending' OR (a.status = 'consumed' AND a.prepared_session_id IS NOT NULL))
     AND NOT EXISTS (SELECT 1 FROM connection_attempts newer WHERE newer.user_id = a.user_id AND newer.connection_id = a.connection_id AND newer.rowid > a.rowid)
     AND EXISTS (SELECT 1 FROM connection_institution_gate WHERE institution_id = a.institution_id AND enabled = 1)`;
 const present = (candidate: unknown): Effect.Effect<Response, Schema.SchemaError> =>
@@ -60,10 +58,6 @@ const present = (candidate: unknown): Effect.Effect<Response, Schema.SchemaError
     });
     return Response.json(body, { headers: transactionNoStore });
   });
-const assertion = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    "INSERT INTO connection_browser_atomic_assertion VALUES (1,CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
-  );
 const guardedQuery = (authority: TransactionAuthority): string =>
   `${query} AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`;
 /** Review and its metadata-only Audit use the same authoritative snapshot. */
@@ -91,7 +85,7 @@ export const reviewContinuation = (
             current: input.current,
             missingWhen: { sql: `SELECT 1 WHERE NOT EXISTS (${sql})`, params: bindings },
           }),
-          assertion(input.db),
+          prepareChangedRowAssertion({ db: input.db, scope: "connection_browser" }),
         ]),
       catch: databaseFailure,
     });
@@ -104,6 +98,25 @@ export const reviewContinuation = (
     )
   );
 
+const freshAuthority = (
+  admission: ConnectionBrowserAdmission,
+  current: number
+): ReturnType<typeof callerAuthority> => {
+  const live = callerAuthority({
+    subject: {
+      id: admission.sessionId,
+      userId: admission.userId,
+      digest: new Uint8Array(admission.digest),
+    },
+    current,
+  });
+  return {
+    ...live,
+    predicate: `${live.predicate} AND fresh_until_ms > ?`,
+    bindings: [...live.bindings, current],
+  };
+};
+
 /** Consume and prepare once under fresh same-User authority; no bank effect can run in this slice. */
 export const beginContinuation = (
   input: Readonly<{ db: D1Database; admission: ConnectionBrowserAdmission; signal: AbortSignal }>
@@ -114,33 +127,25 @@ export const beginContinuation = (
       return continuationFailure(unavailableStatus);
     }
     const { admission, db } = input;
-    const live = callerAuthority({
-      subject: {
-        id: admission.sessionId,
-        userId: admission.userId,
-        digest: new Uint8Array(admission.digest),
-      },
-      current,
-    });
-    const authority = {
-      ...live,
-      predicate: `${live.predicate} AND fresh_until_ms > ?`,
-      bindings: [...live.bindings, current],
-    };
+    const authority = freshAuthority(admission, current);
     const result = yield* Effect.tryPromise({
       try: () =>
         db.batch([
           db
-            .prepare(`UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?
+            .prepare(`UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?, prepared_session_id = ?, prepared_at_ms = ?
       WHERE public_reference = ? AND user_id = ? AND status = 'pending' AND expires_at_ms > ?
       AND EXISTS (SELECT 1 FROM connections c WHERE c.id = connection_attempts.connection_id AND c.user_id = connection_attempts.user_id AND c.state = 'Connecting')
       AND EXISTS (SELECT 1 FROM connection_institution_gate WHERE institution_id = connection_attempts.institution_id AND enabled = 1)
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-            .bind(current, admission.attempt, admission.userId, current, ...authority.bindings),
-          db
-            .prepare(`INSERT INTO connection_authorization_executions (attempt_id,session_id,prepared_at_ms)
-      SELECT id,?,? FROM connection_attempts WHERE public_reference = ? AND user_id = ? AND changes() = 1`)
-            .bind(admission.sessionId, current, admission.attempt, admission.userId),
+            .bind(
+              current,
+              admission.sessionId,
+              current,
+              admission.attempt,
+              admission.userId,
+              current,
+              ...authority.bindings
+            ),
           prepareAuthorizedAuditCall({
             db,
             authority,
@@ -150,7 +155,7 @@ export const beginContinuation = (
             outcome: "accepted",
             afterOwnerWrite: true,
           }),
-          assertion(db),
+          prepareChangedRowAssertion({ db, scope: "connection_browser" }),
           db
             .prepare(guardedQuery(authority))
             .bind(admission.attempt, admission.userId, current, ...authority.bindings),

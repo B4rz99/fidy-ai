@@ -3,10 +3,9 @@ import { categoryIds } from "../../src/core/categories/contract";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { Clock, DateTime, Deferred, Effect, Exit, Fiber, Option, Predicate, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
-import { applyTestMigration } from "../d1-test-fixture";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { authenticateOAuth } from "./operations";
-import { dailyAuditCount, recordOAuthCall } from "../../src/shell/audit/operations";
+import { recordOAuthCall } from "../../src/shell/audit/operations";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import { browseTransactions } from "../transactions/operations";
 import {
@@ -19,7 +18,6 @@ import {
   refreshFixture,
   revokeFixtureConsent,
   sessionFor,
-  sessionForUser,
   transactionArguments,
   transactionChildren,
   wait,
@@ -76,197 +74,21 @@ const authenticatedHistoryFixture = Effect.fn(function* (auditMigration: boolean
   return { ...fixture, current, subject, read, audit };
 });
 
-it("upgrades retained OAuth Audit evidence into the shared budget and atomically refuses work above 256", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* authenticatedHistoryFixture(false);
-      const { db, subject, current } = fixture;
-      yield* wait(fixture.audit("retained-oauth").run());
-      expect(
-        yield* wait(
-          db
-            .prepare("SELECT count(*) FROM canonical_audit_usage WHERE user_id = ?")
-            .bind(subject.userId)
-            .first<number>("count(*)")
-        )
-      ).toBe(0);
-      expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current }))).toBe(1);
-      yield* wait(
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0037_oauth_shared_audit_budget.sql", import.meta.url),
-        })
-      );
-      yield* wait(
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0062_pat_activity.sql", import.meta.url),
-        })
-      );
-      expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current }))).toBe(1);
-      yield* wait(
-        db.batch([
-          fixture.audit("batch-envelope", "operations.executeAtomicBatch"),
-          ...Array.from({ length: 254 }, (_, index) =>
-            fixture.audit(
-              `budget-${index}`,
-              "transactions.listTransactions",
-              index % 2 === 0 ? "rejected" : "accepted"
-            )
-          ),
-        ])
-      );
-      expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current }))).toBe(255);
-      expect((yield* fixture.read()).status).toBe(200);
-      const refused = yield* fixture.read();
-      expect(refused.status).toBe(429);
-      expect(yield* wait(refused.json())).toMatchObject({ error: { code: "rate_limited" } });
-      yield* wait(db.exec("CREATE TABLE fixture_rollback (value INTEGER)"));
-      yield* wait(
-        expect(
-          db.batch([
-            db.prepare("INSERT INTO fixture_rollback VALUES (1)"),
-            fixture.audit("overflow"),
-          ])
-        ).rejects.toThrow("transaction_audit_limit")
-      );
-      expect(
-        yield* wait(db.prepare("SELECT count(*) FROM fixture_rollback").first<number>("count(*)"))
-      ).toBe(0);
-      expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current }))).toBe(256);
-      expect(
-        yield* wait(
-          db
-            .prepare("SELECT count(*) FROM pat_audit WHERE id = 'retained-oauth'")
-            .first<number>("count(*)")
-        )
-      ).toBe(1);
-    })
-  ));
-
-it("preserves mixed PAT and OAuth attribution, exclusions, User isolation and half-open UTC days", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* authenticatedHistoryFixture();
-      const { db, subject, current } = fixture;
-      const start = Math.floor(current / 86_400_000) * 86_400_000;
-      yield* wait(
-        db
-          .prepare(
-            "INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES ('mixed-pat',?,'abcdefgh',?,'Fixture','[\"read\"]',7,?,?,?,'mixed-request')"
-          )
-          .bind(subject.userId, new Uint8Array(32), current, current, current + 60_000)
-          .run()
-      );
-      const plain = {
-        at: current,
-        pat: Option.none<string>(),
-        connection: Option.none<string>(),
-        credential: Option.none<string>(),
-        user: String(subject.userId),
-      };
-      const row = ({
-        id,
-        operation,
-        at,
-        pat,
-        connection,
-        credential,
-        user,
-      }: Readonly<{
-        id: string;
-        operation: string;
-        at: number;
-        pat: Option.Option<string>;
-        connection: Option.Option<string>;
-        credential: Option.Option<string>;
-        user: string;
-      }>): D1PreparedStatement =>
-        db
-          .prepare(
-            "INSERT INTO pat_audit (id,user_id,operation,outcome,occurred_at_ms,pat_id,oauth_connection_id,oauth_credential_id) VALUES (?,?,?,'accepted',?,?,?,?)"
-          )
-          .bind(
-            id,
-            user,
-            operation,
-            at,
-            Option.getOrNull(pat),
-            Option.getOrNull(connection),
-            Option.getOrNull(credential)
-          );
-      yield* sessionForUser({ db, index: 8, userIndex: 8 });
-      const peer = "80000000-0000-4000-8000-000000000001";
-      yield* wait(
-        db.batch([
-          fixture.audit("mixed-oauth"),
-          row({
-            ...plain,
-            id: "mixed-pat-read",
-            operation: "transactions.listTransactions",
-            pat: Option.some("mixed-pat"),
-          }),
-          row({
-            ...plain,
-            id: "management",
-            operation: "pats.createPAT",
-            pat: Option.some("mixed-pat"),
-          }),
-          row({ ...plain, id: "metadata", operation: "pats.listPATs" }),
-          row({ ...plain, id: "recurring", operation: "recurring.listRecurringSeries" }),
-          row({ ...plain, id: "unattributed", operation: "transactions.listTransactions" }),
-          row({
-            ...plain,
-            id: "partial-connection",
-            operation: "transactions.listTransactions",
-            connection: Option.some(subject.oauthConnectionId),
-          }),
-          row({
-            ...plain,
-            id: "partial-credential",
-            operation: "transactions.listTransactions",
-            credential: Option.some(subject.credentialId),
-          }),
-          fixture.audit("excluded-envelope", "operations.executeAtomicBatch"),
-          row({
-            ...plain,
-            id: "previous-day",
-            operation: "transactions.listTransactions",
-            at: start - 1,
-            connection: Option.some(subject.oauthConnectionId),
-            credential: Option.some(subject.credentialId),
-          }),
-          row({
-            ...plain,
-            id: "next-day",
-            operation: "transactions.listTransactions",
-            at: start + 86_400_000,
-            connection: Option.some(subject.oauthConnectionId),
-            credential: Option.some(subject.credentialId),
-          }),
-          row({ ...plain, id: "peer-metadata", operation: "pats.listPATs", user: peer }),
-        ])
-      );
-      expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current }))).toBe(4);
-      expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current: start - 1 }))).toBe(
-        1
-      );
-      expect(
-        yield* wait(dailyAuditCount({ db, userId: subject.userId, current: start + 86_400_000 }))
-      ).toBe(1);
-      expect(yield* wait(dailyAuditCount({ db, userId: peer, current }))).toBe(1);
-      expect(
-        yield* wait(
-          db
-            .prepare(
-              "SELECT count(*) FROM canonical_audit_usage WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?"
-            )
-            .bind(subject.userId, start, start + 86_400_000)
-            .first<number>("count(*)")
-        )
-      ).toBe(4);
-    })
-  ));
+const countAuditEntries = ({
+  db,
+  userId,
+  current,
+}: Readonly<{ db: D1Database; userId: string; current: number }>): Promise<number> => {
+  const dayStart = Math.floor(current / 86_400_000) * 86_400_000;
+  return db
+    .prepare(`SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id=?
+    AND (pat_id IS NOT NULL OR (oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL))
+    AND operation NOT LIKE 'pats.%' AND operation != 'operations.executeAtomicBatch'
+    AND occurred_at_ms >= ? AND occurred_at_ms < ?`)
+    .bind(userId, dayStart, dayStart + 86_400_000)
+    .first<number>("count(*)")
+    .then((count) => count ?? 0);
+};
 
 it("keeps the OAuth history caller scope open until its started native query and Audit batch settles", () =>
   Effect.runPromise(
@@ -310,7 +132,7 @@ it("keeps the OAuth history caller scope open until its started native query and
         expect(batches).toBe(1);
         expect(
           yield* wait(
-            dailyAuditCount({
+            countAuditEntries({
               db: fixture.db,
               userId: fixture.subject.userId,
               current: fixture.current,
@@ -328,7 +150,9 @@ it("resamples OAuth authority at canonical commit using the invocation Clock whi
       const expires = fixture.current + 60_000;
       yield* wait(
         fixture.db
-          .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ? WHERE id = ?")
+          .prepare(
+            "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = ? WHERE kind='access' AND id = ?"
+          )
           .bind(expires, fixture.subject.credentialId)
           .run()
       );
@@ -362,7 +186,7 @@ it("resamples OAuth authority at canonical commit using the invocation Clock whi
       ).toBe(0);
       expect(
         yield* wait(
-          dailyAuditCount({
+          countAuditEntries({
             db: fixture.db,
             userId: fixture.subject.userId,
             current: fixture.current,
@@ -380,7 +204,7 @@ it("resamples OAuth authority at canonical commit using the invocation Clock whi
       ).toBe(1);
       expect(
         yield* wait(
-          dailyAuditCount({
+          countAuditEntries({
             db: fixture.db,
             userId: fixture.subject.userId,
             current: fixture.current,
@@ -397,7 +221,9 @@ it("resamples OAuth authority after a native canonical abort before classifying 
       const expires = fixture.current + 60_000;
       yield* wait(
         fixture.db
-          .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ? WHERE id = ?")
+          .prepare(
+            "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = ? WHERE kind='access' AND id = ?"
+          )
           .bind(expires, fixture.subject.credentialId)
           .run()
       );
@@ -453,7 +279,7 @@ it("resamples OAuth authority after a native canonical abort before classifying 
       ).toBe(0);
       expect(
         yield* wait(
-          dailyAuditCount({
+          countAuditEntries({
             db: fixture.db,
             userId: fixture.subject.userId,
             current: fixture.current,
@@ -463,7 +289,7 @@ it("resamples OAuth authority after a native canonical abort before classifying 
     })
   ));
 
-it("counts fully attributed OAuth reads in the shared User Audit budget", () =>
+it("records fully attributed OAuth reads under the same User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* approvedFixture({
@@ -482,7 +308,7 @@ it("counts fully attributed OAuth reads in the shared User Audit budget", () =>
       );
       if (userId === null) throw new Error("Fixture connection missing");
       const current = yield* Clock.currentTimeMillis;
-      const before = yield* wait(dailyAuditCount({ db: fixture.db, userId, current }));
+      const before = yield* wait(countAuditEntries({ db: fixture.db, userId, current }));
       for (let index = 0; index < 3; index += 1) {
         const response = yield* wait(
           mcpFixture({
@@ -497,12 +323,12 @@ it("counts fully attributed OAuth reads in the shared User Audit budget", () =>
         expect(response.status).toBe(200);
         expect(yield* wait(response.json())).toMatchObject({ result: { isError: false } });
       }
-      expect(yield* wait(dailyAuditCount({ db: fixture.db, userId, current }))).toBe(before + 3);
+      expect(yield* wait(countAuditEntries({ db: fixture.db, userId, current }))).toBe(before + 3);
       expect(
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND pat_id IS NULL AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND pat_id IS NULL AND outcome = 'accepted'"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -511,7 +337,9 @@ it("counts fully attributed OAuth reads in the shared User Audit budget", () =>
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM canonical_audit_usage WHERE user_id = ?")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE (pat_id IS NOT NULL OR (oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL)) AND operation NOT LIKE 'pats.%' AND operation != 'operations.executeAtomicBatch' AND user_id = ?"
+            )
             .bind(userId)
             .first<number>("count(*)")
         )
@@ -562,7 +390,7 @@ it("creates a Transaction through the ordinary OAuth mutation with one protected
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'accepted'"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -631,7 +459,7 @@ it("commits an authorized OAuth atomic batch with exact correlated results and o
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -671,7 +499,13 @@ it("preserves the canonical owner's invalid ordinary OAuth mutation refusal", ()
         },
       });
       expect(
-        yield* wait(fixture.db.prepare("SELECT operation, outcome FROM pat_audit").all())
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+            )
+            .all()
+        )
       ).toMatchObject({
         results: [{ operation: "transactions.createTransaction", outcome: "rejected" }],
       });
@@ -703,9 +537,15 @@ const assertAttributedBatchRefusal = (
         },
       },
     });
-    expect(yield* wait(db.prepare("SELECT operation, outcome FROM pat_audit").all())).toMatchObject(
-      { results: [{ operation, outcome: "rejected" }] }
-    );
+    expect(
+      yield* wait(
+        db
+          .prepare(
+            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+          )
+          .all()
+      )
+    ).toMatchObject({ results: [{ operation, outcome: "rejected" }] });
   });
 
 it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audit"])(
@@ -750,7 +590,7 @@ it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audi
           yield* wait(
             fixture.db
               .prepare(
-                "CREATE TRIGGER skip_oauth_mutation_audit BEFORE INSERT ON pat_audit WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(IGNORE); END"
+                "CREATE TRIGGER skip_oauth_mutation_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(IGNORE); END"
               )
               .run()
           );
@@ -793,13 +633,19 @@ it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audi
         ).toBe(0);
         expect(
           yield* wait(
-            fixture.db.prepare("SELECT count(*) FROM dashboard_documents").first<number>("count(*)")
+            fixture.db
+              .prepare(
+                "SELECT count(*) FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+              )
+              .first<number>("count(*)")
           )
         ).toBe(0);
         expect(
           yield* wait(
             fixture.db
-              .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+              .prepare(
+                "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+              )
               .first<number>("count(*)")
           )
         ).toBe(0);
@@ -841,7 +687,13 @@ it.each(["empty", "oversized", "unattributed"])(
           },
         });
         expect(
-          yield* wait(fixture.db.prepare("SELECT operation, outcome FROM pat_audit").all())
+          yield* wait(
+            fixture.db
+              .prepare(
+                "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+              )
+              .all()
+          )
         ).toMatchObject({
           results: [{ operation: "operations.executeAtomicBatch", outcome: "rejected" }],
         });
@@ -914,7 +766,9 @@ it("rejects read-only and cross-User mutation admissions at the authoritative co
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
@@ -966,7 +820,7 @@ it("settles concurrent OAuth batches once per child and never retries ambiguous 
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -1041,14 +895,18 @@ it("keeps Memory and Dashboard owner construction independent of read scope and 
       ).toBe(1);
       expect(
         yield* wait(
-          fixture.db.prepare("SELECT count(*) FROM dashboard_documents").first<number>("count(*)")
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+            )
+            .first<number>("count(*)")
         )
       ).toBe(1);
       expect(
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -1131,7 +989,13 @@ it("fails Memory batches closed when owner inference construction is unavailable
         },
       });
       expect(
-        yield* wait(fixture.db.prepare("SELECT operation, outcome FROM pat_audit").all())
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+            )
+            .all()
+        )
       ).toMatchObject({ results: [{ operation: "memory.forget", outcome: "rejected" }] });
       const ordinary = yield* wait(
         mcpFixture({
@@ -1187,7 +1051,7 @@ it("reports interruption after a committed OAuth mutation without undoing or ret
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -1337,7 +1201,7 @@ it("reuses Category and Budget owner behavior in one OAuth mutation unit with ex
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -1451,7 +1315,7 @@ it("refuses a foreign Transaction child after preparing an owned child without c
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -1543,7 +1407,7 @@ it("links and unlinks exact owned Transactions through ordinary OAuth mutations 
         yield* wait(
           fixture.db
             .prepare(
-              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
             )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
@@ -1599,7 +1463,9 @@ it.each(["single", "mixed"])(
         const expiresAt = (yield* Clock.currentTimeMillis) + 20;
         yield* wait(
           fixture.db
-            .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ?")
+            .prepare(
+              "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = ? WHERE kind='access'"
+            )
             .bind(expiresAt)
             .run()
         );
@@ -1619,13 +1485,19 @@ it.each(["single", "mixed"])(
         ).toBe(0);
         expect(
           yield* wait(
-            fixture.db.prepare("SELECT count(*) FROM dashboard_documents").first<number>("count(*)")
+            fixture.db
+              .prepare(
+                "SELECT count(*) FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard') AS dashboard_documents"
+              )
+              .first<number>("count(*)")
           )
         ).toBe(0);
         expect(
           yield* wait(
             fixture.db
-              .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+              .prepare(
+                "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+              )
               .first<number>("count(*)")
           )
         ).toBe(0);
@@ -1684,7 +1556,9 @@ it.each(["single", "mixed"])(
           if (withdrawn === "scope") {
             yield* wait(
               fixture.db
-                .prepare("UPDATE oauth_access_credentials SET scopes_json = ?")
+                .prepare(
+                  "UPDATE oauth_credentials AS oauth_credentials SET scopes_json = ? WHERE kind='access'"
+                )
                 .bind(unit === "single" ? '["dashboard"]' : '["write"]')
                 .run()
             );
@@ -1695,7 +1569,11 @@ it.each(["single", "mixed"])(
           expect(yield* wait(response.json()), `${unit}: ${withdrawn}`).toMatchObject({
             result: { isError: true },
           });
-          for (const table of ["transactions", "source_attestations", "dashboard_documents"]) {
+          for (const table of [
+            "transactions",
+            "source_attestations",
+            "(SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard')",
+          ]) {
             expect(
               yield* wait(
                 fixture.db.prepare(`SELECT count(*) FROM ${table}`).first<number>("count(*)")
@@ -1706,7 +1584,9 @@ it.each(["single", "mixed"])(
           expect(
             yield* wait(
               fixture.db
-                .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+                .prepare(
+                  "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+                )
                 .first<number>("count(*)")
             )
           ).toBe(0);
@@ -1729,7 +1609,12 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       });
       approvalClock.mockRestore();
       yield* wait(
-        fixture.db.prepare("UPDATE oauth_codes SET expires_at_ms = ?").bind(expiresAt).run()
+        fixture.db
+          .prepare(
+            "UPDATE oauth_connections AS oauth_codes SET code_expires_at_ms = ? WHERE code_digest IS NOT NULL "
+          )
+          .bind(expiresAt)
+          .run()
       );
       const original = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1743,7 +1628,9 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       );
       yield* wait(
         fixture.db
-          .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ?")
+          .prepare(
+            "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = ? WHERE kind='access'"
+          )
           .bind(expiresAt + 60000)
           .run()
       );
@@ -1771,7 +1658,11 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       expect(yield* wait(response.json())).toMatchObject({
         error: { code: -32603, message: "Internal error" },
       });
-      for (const table of ["transactions", "source_attestations", "dashboard_documents"]) {
+      for (const table of [
+        "transactions",
+        "source_attestations",
+        "(SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard')",
+      ]) {
         expect(
           yield* wait(
             fixture.db.prepare(`SELECT count(*) FROM ${table}`).first<number>("count(*)")
@@ -1782,7 +1673,9 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);

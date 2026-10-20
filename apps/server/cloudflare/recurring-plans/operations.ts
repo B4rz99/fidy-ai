@@ -1,5 +1,6 @@
-import { Clock, Effect, Option, Schema } from "effect";
-import { refusedByAuditBudget } from "../../src/shell/audit/operations";
+import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
+import { Effect, Option, Schema } from "effect";
+
 import {
   RecurringWorkspace,
   RecurringWorkspaceQuery,
@@ -10,7 +11,6 @@ import {
   type QueryCaller,
   boundaryFailure,
   callerScope,
-  canonicalAuditRateLimitedResponse,
   credentialRefusedPreparation,
   failedPreparation,
   isOAuthCaller,
@@ -31,9 +31,7 @@ import { snapshotCompletions } from "./internal/snapshot";
 import { workspaceValue } from "./internal/query";
 import { outcome, validReversal, validateReferences } from "./internal/mutation";
 import { audit, credentialUse } from "./internal/audit";
-import { completion, encodeDocument, readDocument, writeDocument } from "./internal/store";
-
-import { TransactionBoundaryFailure } from "../canonical-work/contract";
+import { encodeDocument, readDocument, writeDocument } from "./internal/store";
 
 const operation = "recurringPlans.applyRecurringEdit";
 
@@ -86,18 +84,12 @@ export const browseRecurringPlans = ({
             operation: "recurringPlans.getRecurringWorkspace",
             outcome: "accepted",
           }),
-          db.prepare(completion),
+          prepareChangedRowAssertion({ db, scope: "recurring_plan" }),
         ]),
       catch: boundaryFailure,
     });
     return Response.json({ data, next: [] }, { headers: transactionNoStore });
-  }).pipe(
-    Effect.catch((cause) =>
-      cause instanceof TransactionBoundaryFailure && refusedByAuditBudget(cause.cause)
-        ? Effect.map(Clock.currentTimeMillis, canonicalAuditRateLimitedResponse)
-        : Effect.succeed(transactionUnavailable())
-    )
-  );
+  }).pipe(Effect.orElseSucceed(() => transactionUnavailable()));
 
 /** Prepare, never commit, a revision-bound User mutation inside the existing canonical unit. */
 export const prepareRecurringEdit = ({
@@ -131,11 +123,11 @@ export const prepareRecurringEdit = ({
             guard:
               base.revision === 0
                 ? {
-                    sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM recurring_plan_documents WHERE user_id = ?)",
+                    sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM user_documents WHERE kind='recurring-plan' AND user_id = ?)",
                     params: [work.subject.userId],
                   }
                 : {
-                    sql: "SELECT 1 FROM recurring_plan_documents WHERE user_id = ? AND revision = ?",
+                    sql: "SELECT 1 FROM user_documents WHERE kind='recurring-plan' AND user_id = ? AND revision = ?",
                     params: [work.subject.userId, base.revision],
                   },
           })
@@ -146,12 +138,12 @@ export const prepareRecurringEdit = ({
       mutation: {
         oauthReview,
         requiredScope: callerScope(work.subject),
-        auditBudget: "shared" as const,
+
         commitGuards: Option.none(),
         statements: [
           ...credentialUse(work),
           writeDocument({ work, document: decision.value, encoded }),
-          work.db.prepare(completion),
+          prepareChangedRowAssertion({ db: work.db, scope: "recurring_plan" }),
           audit({ work, operation, outcome: "accepted" }),
         ],
         outcome: outcome(),
@@ -168,7 +160,7 @@ export const recurringRefusal = (work: RecurringAuditWork): CanonicalMutationRef
       work.db.batch([
         ...credentialUse(work),
         audit({ work, operation: "recurringPlans.applyRecurringEdit", outcome: "rejected" }),
-        work.db.prepare(completion),
+        prepareChangedRowAssertion({ db: work.db, scope: "recurring_plan" }),
       ])
     ).pipe(
       Effect.as("recorded" as const),

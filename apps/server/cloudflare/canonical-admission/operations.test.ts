@@ -46,7 +46,9 @@ const setup = Effect.gen(function* () {
   yield* io(() =>
     db.batch([
       db
-        .prepare("INSERT INTO users VALUES (?,'CO','es-CO','America/Bogota',?)")
+        .prepare(
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+        )
         .bind(userId, current),
       db
         .prepare(
@@ -142,7 +144,7 @@ it("publishes the reusable uncapped response contract during Trial without hidin
       const trialDuration = 604_800_000;
       yield* io(() =>
         fixture.db
-          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
           .bind(userId, fixture.current - 1, fixture.current - 1 + trialDuration)
           .run()
       );
@@ -175,38 +177,6 @@ it("publishes the reusable uncapped response contract during Trial without hidin
     })
   ));
 
-it("keeps recovery Audit saturation distinct from commercial exhaustion and store failure", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* setup;
-      yield* io(() =>
-        fixture.db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<256)
-   INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-   SELECT printf('quota-budget-%d',n),?,?,'transactions.listTransactions','accepted',? FROM seq`)
-          .bind(userId, patId, fixture.current)
-          .run()
-      );
-      for (const id of ["quota.getQuota", "subscription.getUpgradeUrl"] as const) {
-        const response = yield* inspect(fixture, id);
-        expect(response.status).toBe(429);
-        expect(response.headers.get("retry-after")).toBe("1");
-      }
-      expect(
-        yield* io(() =>
-          fixture.db
-            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
-            .first()
-        )
-      ).toEqual({ total: 0 });
-      expect(
-        yield* io(() =>
-          fixture.db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
-        )
-      ).toEqual({ last_used_at_ms: null });
-    })
-  ));
-
 it("attributes malformed retry references without commercial consumption or successful PAT activity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -215,7 +185,9 @@ it("attributes malformed retry references without commercial consumption or succ
       expect(
         yield* io(() =>
           fixture.db
-            .prepare("SELECT operation,outcome FROM pat_audit WHERE user_id = ?")
+            .prepare(
+              "SELECT operation,outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ?"
+            )
             .bind(userId)
             .all()
         )
@@ -339,7 +311,9 @@ it("attributes completed replay disclosure to the current PAT without reexecutin
       expect(
         yield* io(() =>
           fixture.db
-            .prepare("SELECT user_id,pat_id,operation,outcome FROM pat_audit WHERE pat_id = ?")
+            .prepare(
+              "SELECT user_id,pat_id,operation,outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE pat_id = ?"
+            )
             .bind(otherId)
             .all()
         )
@@ -471,7 +445,7 @@ it("requires batch child capabilities before charging and charges an authorized 
         yield* io(() =>
           fixture.db
             .prepare(
-              "SELECT user_id AS userId,pat_id AS patId,operation FROM canonical_request_acceptances"
+              "SELECT user_id AS userId,pat_id AS patId,operation FROM (SELECT id,user_id,pat_id,operation,accepted_at_ms FROM audit_entries WHERE record_type='request_admission') AS canonical_request_acceptances"
             )
             .first()
         )

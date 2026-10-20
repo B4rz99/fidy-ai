@@ -421,7 +421,7 @@ const createBrowserSession = (
           onSome: (id) => [
             input.db
               .prepare(
-                "INSERT INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+                "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 1, 1)"
               )
               .bind(id, user),
           ],
@@ -872,7 +872,7 @@ export const revokeFixtureConsent = (db: D1Database): Effect.Effect<void, TestFa
       wait(
         db
           .prepare(
-            "INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('revoked',?,'grant-test','10000000-0000-4000-8000-000000000003',?)"
+            "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal','revoked',?,'grant-test','10000000-0000-4000-8000-000000000003',?)"
           )
           .bind("10000000-0000-4000-8000-000000000001", current)
           .run()
@@ -921,7 +921,7 @@ export const nativePeer = ({
     yield* wait(
       fixture.db
         .prepare(
-          "INSERT OR IGNORE INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+          "INSERT OR IGNORE INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 1, 1)"
         )
         .bind(`native-peer-${userIndex}`, `${userIndex}0000000-0000-4000-8000-000000000001`)
         .run()

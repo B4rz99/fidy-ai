@@ -1,12 +1,11 @@
 import { prepareConsentAction } from "../../consent/operations";
 import { EmailForwardingAddress } from "../../../src/core/ingestion/contract";
 import { Effect, Option, Schema } from "effect";
-import { dailyAuditExhausted, refusedByAuditBudget } from "../../../src/shell/audit/operations";
+
 import { forwardingAddressAudit, forwardingAddressGuardAudit } from "./forwarding-address";
 import {
   callerScope,
   failedPreparation,
-  refusedPreparation,
   transactionFailure,
   transactionNoStore,
   transactionUnavailable,
@@ -19,28 +18,6 @@ import {
 } from "../../canonical-operations/contract";
 
 /** Keep a commit-time forwarding Audit refusal on its existing unavailable response path. */
-export const forwardingAuditLimitRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: "Daily canonical work budget exhausted.",
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(transactionUnavailable()),
-});
-
-const limited = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: "Daily canonical work budget exhausted.",
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () =>
-    Effect.succeed(
-      Response.json(
-        {
-          error: { code: "rate_limited", message: "Daily canonical work budget exhausted." },
-          next: [],
-        },
-        { status: 429, headers: transactionNoStore }
-      )
-    ),
-});
 
 const forwardingAddressGuardRefusal = ({
   db,
@@ -55,11 +32,7 @@ const forwardingAddressGuardRefusal = ({
         Effect.map((result) =>
           result.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
         ),
-        Effect.catch((cause) =>
-          Effect.succeed(
-            refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
-          )
-        )
+        Effect.orElseSucceed(() => "unavailable" as const)
       ),
     respond: () =>
       Effect.succeed(
@@ -79,28 +52,19 @@ export const prepareForwardingAddress = Effect.fn(function* (work: CanonicalPrep
       subject: { _tag: "User", userId: work.subject.userId },
       requirement: "active",
       statement: {
-        sql: "SELECT id FROM email_forwarding_addresses WHERE user_id = ?",
+        sql: "SELECT forwarding_address_id AS id FROM users WHERE id=? AND forwarding_address_id IS NOT NULL",
         params: [work.subject.userId],
       },
     }).first()
   ).pipe(Effect.option);
   if (Option.isNone(existing) || existing.value === null) return failedPreparation();
-  const exhausted = yield* Effect.tryPromise(() =>
-    dailyAuditExhausted({
-      db: work.db,
-      userId: work.subject.userId,
-      current: work.current,
-    })
-  ).pipe(Effect.option);
-  if (Option.isNone(exhausted)) return failedPreparation();
-  if (exhausted.value) return refusedPreparation(limited());
   return {
     _tag: "Prepared",
     mutation: {
       oauthReview: Option.none(),
       requiredScope: callerScope(work.subject),
       guardRefusal: forwardingAddressGuardRefusal,
-      auditBudget: "shared",
+
       commitGuards: Option.none(),
       statements: forwardingAddressAudit({
         db: work.db,

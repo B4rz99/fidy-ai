@@ -60,6 +60,22 @@ idle writes (10% of the Free allowance) and 750,000 reads. This protects idle ov
 account usage: real work, incidents and other databases still consume the account-wide allowance.
 The opt-in performance benchmark also includes the recovery guard.
 
+## Recurring-charge detection cadence
+
+A completed User evaluation becomes eligible again after seven days, and only changed Transaction
+facts require another analysis. The first evaluation is eligible at the next discovery. Completion
+times anchor each User's cadence rather than one product-wide weekday. Discovery checks for newly
+due Users hourly when idle, recording its next wakeup on the existing fair-dispatch cursor.
+
+Core's other maintenance still runs each minute. Between discovery sweeps, recurring work reads only
+its schedule row and indexed unfinished User identities. Interrupted evaluations resume on these
+minute ticks, including when changed facts require restarting that unfinished evaluation. Full
+four-User batches keep discovery open until the backlog drains; each tick retains bounded work and
+round-robin fairness rather than postponing all remaining Users for another hour. A missed tick
+catches up from the durable due timestamp, and account erasure can remove and recreate the cursor.
+The seven-day boundary is an eligibility time, not an exact delivery deadline: discovery, backlog,
+retries and bounded evaluation steps can delay completion. No Transaction write triggers detection.
+
 ## Operational signals
 
 The Production stack enables Core's `ASYNC_HEALTH_ENABLED` inspection and binds `AsyncDeadLetters`.

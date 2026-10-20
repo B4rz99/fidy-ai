@@ -1,8 +1,8 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Data, Effect, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { DashboardUnavailable } from "../../../src/shell/dashboard/contract";
@@ -13,7 +13,6 @@ import {
   isPATCaller,
   transactionId,
 } from "../../canonical-work/operations";
-import { dashboardCompletion } from "./dashboard-mutation";
 import { type DashboardQueryOperation } from "../contract";
 
 export const editBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -69,9 +68,8 @@ export const accountQuery = ({
             )
           : []),
         audit,
-        db.prepare(dashboardCompletion),
+        prepareChangedRowAssertion({ db, scope: "dashboard" }),
       ]);
     },
-    catch: (cause) =>
-      refusedByAuditBudget(cause) ? new DashboardQueryLimited() : new DashboardUnavailable(),
+    catch: () => new DashboardUnavailable(),
   }).pipe(Effect.asVoid);

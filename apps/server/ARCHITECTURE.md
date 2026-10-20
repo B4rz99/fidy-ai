@@ -961,7 +961,6 @@ shared erasure projection retains each original purpose, owner predicate and arc
 Reminder control decisions use `audit_entries` as exact same-User/message replay evidence. Ordinary
 Audit retention never expires those decisions or counts them as product usage.
 
-
 ## Financial companion consolidation
 
 Verified payment sources are an optional immutable field group on their original `card_enrollments`

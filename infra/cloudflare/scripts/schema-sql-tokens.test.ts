@@ -32,3 +32,10 @@ it("distinguishes changed literals, identifiers, operators and column order", ()
     );
   }
 });
+
+it("preserves non-ASCII identifier characters rather than treating them as formatting", () => {
+  expect(schemaSqlTokens("CREATE TABLE t(a\u0301 TEXT)")).not.toEqual(
+    schemaSqlTokens("CREATE TABLE t(a \u0301 TEXT)")
+  );
+  expect(schemaSqlTokens("SELECT a\u00a0FROM t")).not.toEqual(schemaSqlTokens("SELECT a FROM t"));
+});

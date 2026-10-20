@@ -147,7 +147,7 @@ it("uses the inherited Clock for Refund authority admission and retained accepta
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT last_attempt_at_ms,published_at_ms FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox WHERE refund_id=?"
+              "SELECT last_attempt_at_ms,published_at_ms FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox WHERE refund_id=?"
             )
             .bind(accepted.id)
             .first()
@@ -307,7 +307,7 @@ it("isolates mismatched coordinator Users and foreign charge identities before a
           .prepare(`SELECT
     (SELECT COUNT(*) FROM refund_attempts) AS attempts,
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
-    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox) AS outbox,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
@@ -989,7 +989,7 @@ it.each(["missing-submission-claim", "unpublished-revision"])(
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
-    (SELECT verification_attempts FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox) AS revisions`)
+    (SELECT verification_attempts FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox) AS revisions`)
             .first()
         );
         expect(retained).toEqual({
@@ -1071,7 +1071,7 @@ it("contains publication failure without releasing the reservation or claiming a
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox WHERE published_at_ms IS NULL) AS unpublished`)
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox WHERE published_at_ms IS NULL) AS unpublished`)
           .first()
       );
       expect(retained).toEqual({ reserved: 400000, claims: 0, outcomes: 0, unpublished: 1 });
@@ -1175,7 +1175,7 @@ it.each(["pending", "hourly"])(
             .prepare(`SELECT
     (SELECT COUNT(*) FROM refund_attempts) AS attempts,
     (SELECT SUM(amount_in_cents) FROM refund_attempts WHERE status<>'failed') AS reserved,
-    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,1 AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE verification_attempts IS NOT NULL) AS refund_outbox) AS outbox,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
     (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,

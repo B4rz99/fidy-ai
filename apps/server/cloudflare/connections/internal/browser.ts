@@ -132,7 +132,7 @@ export const beginContinuation = (
       try: () =>
         db.batch([
           db
-            .prepare(`UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?, prepared_session_id = ?, prepared_at_ms = ?
+            .prepare(`UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?, prepared_session_id = ?
       WHERE public_reference = ? AND user_id = ? AND status = 'pending' AND expires_at_ms > ?
       AND EXISTS (SELECT 1 FROM connections c WHERE c.id = connection_attempts.connection_id AND c.user_id = connection_attempts.user_id AND c.state = 'Connecting')
       AND EXISTS (SELECT 1 FROM connection_institution_gate WHERE institution_id = connection_attempts.institution_id AND enabled = 1)
@@ -140,7 +140,6 @@ export const beginContinuation = (
             .bind(
               current,
               admission.sessionId,
-              current,
               admission.attempt,
               admission.userId,
               current,

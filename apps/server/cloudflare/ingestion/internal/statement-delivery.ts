@@ -81,9 +81,9 @@ export const dispatchStatementExtraction = (
     const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT user_id, id AS submission_id, work_revision AS revision
+      environment.DB.prepare(`SELECT user_id, id AS submission_id, 1 AS revision
         FROM statement_submissions
-        WHERE work_revision IS NOT NULL AND status IN ('queued', 'processing')
+        WHERE work_published_at_ms IS NOT NULL AND status IN ('queued', 'processing')
           AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)
         ORDER BY work_published_at_ms, id LIMIT ?`)
         .bind(now - dispatchCooldownMs, dispatchLimit)
@@ -96,7 +96,7 @@ export const dispatchStatementExtraction = (
     for (const entry of entries) {
       const claimed = yield* attempt(() =>
         environment.DB.prepare(`UPDATE statement_submissions SET work_last_attempt_at_ms = ?
-          WHERE work_revision IS NOT NULL AND id = ? AND user_id = ?
+          WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?
           AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)`)
           .bind(now, entry.submission_id, entry.user_id, now - dispatchCooldownMs)
           .run()
@@ -213,9 +213,9 @@ export const reconcileStatementExtraction = (
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const selected = yield* attempt(() =>
-      input.DB.prepare(`SELECT user_id, id AS submission_id, work_revision AS revision
+      input.DB.prepare(`SELECT user_id, id AS submission_id, 1 AS revision
       FROM statement_submissions
-      WHERE work_revision IS NOT NULL AND work_published_at_ms > 0
+      WHERE work_published_at_ms IS NOT NULL AND work_published_at_ms > 0
         AND status IN ('queued', 'processing') AND retention_expires_at_ms > ?
       ORDER BY work_last_reconciled_at_ms, work_published_at_ms, id LIMIT ?`)
         .bind(now, dispatchLimit)
@@ -227,7 +227,7 @@ export const reconcileStatementExtraction = (
     for (const row of work) {
       yield* attempt(() =>
         input.DB.prepare(
-          `UPDATE statement_submissions SET work_last_reconciled_at_ms = ? WHERE work_revision IS NOT NULL AND id = ? AND user_id = ?`
+          `UPDATE statement_submissions SET work_last_reconciled_at_ms = ? WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?`
         )
           .bind(now, row.submission_id, row.user_id)
           .run()

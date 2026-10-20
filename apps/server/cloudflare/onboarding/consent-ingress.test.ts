@@ -394,7 +394,7 @@ it.each([
           (yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) i ON i.turn_id = d.turn_id"
+                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) i ON i.turn_id = d.turn_id"
               )
               .all()
           )).results

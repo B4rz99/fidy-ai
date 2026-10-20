@@ -424,7 +424,7 @@ export const retainedChannelState = (db: D1Database): Promise<ReadonlyArray<unkn
       db.prepare("SELECT * FROM hosted_turns ORDER BY id"),
       db.prepare("SELECT * FROM transcript_entries ORDER BY user_id, sequence"),
       db.prepare(
-        "SELECT * FROM (SELECT turn_id,dispatch_user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS hosted_whatsapp_outbox ORDER BY turn_id"
+        "SELECT * FROM (SELECT turn_id,user_id AS user_id,dispatch_offered_at_ms AS offered_at_ms,dispatch_created_at_ms AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE dispatch_created_at_ms IS NOT NULL) AS hosted_whatsapp_outbox ORDER BY turn_id"
       ),
       db.prepare(
         "SELECT * FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery ORDER BY turn_id"
@@ -849,7 +849,7 @@ export const publishStatementWithRecovery = ({
       (yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT submission_id FROM (SELECT rowid,id AS submission_id,user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE user_id=?"
+            "SELECT submission_id FROM (SELECT rowid,id AS submission_id,user_id AS user_id,1 AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_published_at_ms IS NOT NULL) AS statement_ingestion_outbox WHERE user_id=?"
           )
           .bind(users[0])
           .all()

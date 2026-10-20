@@ -906,8 +906,8 @@ const publicationAccountabilityStatements = (
     }),
     database
       .prepare(
-        `UPDATE statement_submissions SET work_revision=1,work_published_at_ms=?
-         WHERE user_id=? AND id=? AND changes()=1 AND work_revision IS NULL`
+        `UPDATE statement_submissions SET work_published_at_ms=?
+         WHERE user_id=? AND id=? AND changes()=1 AND work_published_at_ms IS NULL`
       )
       .bind(nowEpochMs, userId, submissionId),
   ];

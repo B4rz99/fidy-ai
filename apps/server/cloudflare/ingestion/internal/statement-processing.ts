@@ -115,7 +115,7 @@ const markFailed = ({
       WHERE id = ? AND user_id = ? AND status IN ('queued', 'processing')`)
           .bind(current, current, reason, submissionId, userId),
         db
-          .prepare(`UPDATE statement_submissions SET work_revision=NULL,work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_revision IS NOT NULL AND id = ? AND user_id = ? AND work_revision = 1
+          .prepare(`UPDATE statement_submissions SET work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?
             AND status IN ('completed', 'failed')`)
           .bind(submissionId, userId),
       ])
@@ -490,7 +490,7 @@ const completeSubmission = (
           submissionId,
           submissionId
         ),
-        DB.prepare(`UPDATE statement_submissions SET work_revision=NULL,work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_revision IS NOT NULL AND id = ? AND user_id = ? AND work_revision = 1
+        DB.prepare(`UPDATE statement_submissions SET work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_published_at_ms IS NOT NULL AND id = ? AND user_id = ?
             AND status = 'completed'`).bind(submissionId, userId),
       ])
     );

@@ -1003,3 +1003,10 @@ They do not store another User identity. Their existing revision or timestamp id
 clearing an optional group never clears the parent owner. Dispatch, acknowledgment and retention read
 those parent fields directly. Erasure archive projections derive the former optional owner fields,
 including their absent state, so retained archive contents keep their original meaning.
+
+Statement extraction and refund dispatch retain no per-row protocol version: their work messages use
+version 1, while publication time and the nullable verification counter respectively identify retained
+work. Hosted dispatch inherits its Turn's User and uses its creation time for presence. Connection
+preparation uses the consumed attempt timestamp, retaining its authenticated session binding. The
+constant billing `attempt_number` is removed; `renewal_attempt_number` remains the actual retry count.
+Historical erasure projections derive these removed values without changing archive shapes.

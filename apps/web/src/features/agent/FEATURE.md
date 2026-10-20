@@ -43,6 +43,13 @@ Effect 4.0.2 retest, 2026-10-14, production `6708a0e76cf9e0c82157c0caa5e3fe12b22
 
 ## Evidence and remaining checks
 
+The 20-10-2026 production rerun restored successful signed-in date and recurring reads, with
+automatic delivery acknowledgement and retained conversation across month navigation. It exposed
+a separate missing discovery step: a recurring stop request asked for `expectedRevision` instead
+of reading it. The stricter two-round live check and follow-up are recorded in the
+[recurring audit](../recurring/FEATURE.md#quota-reset-verification-20-10-2026). The full synthetic
+provider probe passed after the fix; production mutation approval still needs its deployed rerun.
+
 Quota-reset provider check, 2026-10-17: the strict remote Workers AI conformance probe passed
 with HTTP 200 and `outcome: conforming`, after all 47 deterministic inference checks passed.
 The installed adapter correctly proposed query, capture, Correction, deletion, date-only and

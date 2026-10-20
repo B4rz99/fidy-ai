@@ -39,7 +39,7 @@ export const RecurringPlansGroup = HttpApiGroup.make("recurringPlans")
     })
       .annotate(
         OpenApi.Description,
-        "Read a complete filtered recurring month, currency-separated totals and one previous-month page without changing plans or confirming payments. Follow previousMonth to inspect older unresolved items. Historical detected suggestions remain in recurring.listRecurringSeries."
+        "Read a recurring month and Currency-separated totals. Get plan IDs from data.document.plans and expectedRevision from data.document.revision before editing; never ask the User. Follow previousMonth for older unresolved items."
       )
       .annotateMerge(
         operationPolicy({
@@ -58,7 +58,7 @@ export const RecurringPlansGroup = HttpApiGroup.make("recurringPlans")
     })
       .annotate(
         OpenApi.Description,
-        "Explicitly create, edit, pause, resume or stop a recurring plan; skip an occurrence; record/reverse a tracking mark or associate an effective Transaction; dismiss, restore or link a detected suggestion. Supply the observed document revision and stable UUIDs. Unknown outcomes require a reread, never blind replay. Manual marks create no Transactions; stopping tracking never cancels external services. Propose a clearly requested edit directly; the host obtains exact User confirmation before execution. Do not ask for a separate informal confirmation."
+        "Create/edit plans, lifecycle, occurrences, tracking, Transaction associations or suggestions. Read recurringPlans.getRecurringWorkspace for the revision and plan ID, then propose the edit; the host obtains exact approval. Reread unknown outcomes; never replay blindly. Tracking creates no Transactions and never cancels external services."
       )
       .annotateMerge(
         operationPolicy({

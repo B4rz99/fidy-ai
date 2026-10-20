@@ -242,6 +242,33 @@ eliminating assertion writes on successful reads. The [chat audit](../agent/FEAT
 the exact deployment and diagnostic limits. The hosted stop request and fixture cleanup remain
 pending production recovery; local checks do not close those live gaps.
 
+### Quota-reset verification, 20-10-2026
+
+Rebased onto trunk `6ce993fdef95c12bc31f5656d801517e1f202a19`. Before that sync,
+production health reported available at `82c937fbd410f89cdd9378ab12c58ec883929398`.
+The existing signed-in browser completed a Bogotá date question (20/21 October) and a
+November read of `PRUEBA QA CHAT RECURRENTE 20261017`. Each submission produced one
+User/assistant pair with automatic delivery acknowledgement. Closing and reopening chat
+across month navigation retained the conversation. The recurring workspace returned HTTP 200,
+with one plan and document revision 1; the plan was still active.
+
+A natural-language request to stop only that fixture from 17 October failed to produce a host
+review. The agent asked the User for `expectedRevision`, although the canonical workspace already
+supplies it. No edit executed. The former synthetic lifecycle check supplied the ID and revision
+in its request, so it did not exercise this missing discovery step. Its replacement requires a
+workspace read followed by the exact requested stop proposal using the returned ID and revision.
+Negative cases reject asking for internal fields before or after the read, skipping discovery,
+stale revisions, timestamps and the wrong calendar day.
+
+The follow-up directs the model to execute necessary tools in the current response rather than
+announcing a future lookup, and documents the recurring workspace's revision source. Canonical
+validation and host-owned exact approval remain unchanged. All 59 deterministic inference checks
+passed, including complete-catalog request capacity. A targeted live recurring probe passed, and
+then the full strict live provider probe returned HTTP 200 / `outcome: conforming`. An intervening
+full probe returned `canonical_correction / ProviderUnavailable`; it is not counted as passing.
+These probes execute no canonical mutations. Production lifecycle approval and stopped-state
+verification remain pending deployment of this follow-up.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

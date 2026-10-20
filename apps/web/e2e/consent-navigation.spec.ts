@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
-import { openUpgradeThroughCore, signInThroughCore } from "./real-core-fixture";
+import { openUpgradeThroughCore, signInNavigationThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const { api } = browserAcceptanceTopology();
@@ -42,7 +42,9 @@ test("Upgrade observes its own Consent response after an outgoing page read is a
   const abortOutgoing = Promise.withResolvers<void>();
   return Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        signInNavigationThroughCore({ page, request, identity: "navigationConsent" })
+      );
       const held = yield* Effect.tryPromise(() => holdOutgoingRead(page, abortOutgoing.promise));
       const current = page.waitForResponse(
         (response) =>

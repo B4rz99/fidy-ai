@@ -326,6 +326,16 @@ unproven. The combined regression, reused-source Subscription, first-card and Da
 run passed all 14 checks including shared prerequisites. Temporary stage diagnostics were removed.
 Deployed wallet coverage remains separate.
 
+The [next CI run](https://github.com/B4rz99/fidy-ai/actions/runs/39438032993) passed DaviPlata
+and the navigation regression but failed an existing Transactions loading assertion. Its full local
+shard passed with a real 200 response, so that CI failure was not reproduced locally. The loading
+test now holds its request until loading is observed, then requires the real Core response to be
+200 before checking that loading ends; the former one-second sleep is removed. That stronger
+observation reproduced a real 429 under parallel load: unrelated journeys shared the primary
+fixture User's admission budget. The loading and Consent regression journeys now each own a
+separate seeded User through the same public pairing flow. The resulting full local shard passed
+91 checks, with three pre-existing skips. No counters, limits, deadlines or admission guards changed.
+
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and

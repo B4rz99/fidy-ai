@@ -113,6 +113,8 @@ const signInWithIdentity = ({
       | "privacyErasure"
       | RecurringIdentity
       | "navigationTransactions"
+      | "navigationLoading"
+      | "navigationConsent"
       | "navigationBudget"
       | "navigationRecurring"
       | "navigationReviewBudget"
@@ -292,6 +294,8 @@ type NavigationFixture = SignInFixture &
   Readonly<{
     identity:
       | "navigationTransactions"
+      | "navigationLoading"
+      | "navigationConsent"
       | "navigationBudget"
       | "navigationRecurring"
       | "navigationReviewBudget"

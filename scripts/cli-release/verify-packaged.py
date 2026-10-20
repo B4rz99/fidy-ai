@@ -7,6 +7,7 @@ from pathlib import Path
 import platform
 import re
 import secrets
+import shutil
 import subprocess
 import tempfile
 import zipfile
@@ -88,8 +89,12 @@ def credentials(binary, root):
             'Credential verification requires an isolated GitHub-hosted runner')
     native('empty')
     print('Native empty-slot preflight passed.', flush=True)
-    home = root / 'home'
+    # macOS Keychain resolution depends on HOME. Keep the disposable runner's
+    # initialized home; a made-up home does not have an initialized native store.
+    home = Path(os.environ['HOME']) if platform.system() == 'Darwin' else root / 'home'
     directory = home / '.fidy' / 'cli'
+    require(not directory.exists() and not directory.is_symlink(),
+            'Packaged credential directory already exists; existing access was preserved')
     directory.mkdir(parents=True, mode=0o700)
     metadata = directory / 'grant.json'
     bearer = 'fin_relcheck_' + secrets.token_urlsafe(32)
@@ -121,6 +126,7 @@ def credentials(binary, root):
         require(not (directory / 'login.lock').exists(), 'Packaged CLI retained its lock')
     finally:
         native('cleanup', bearer)
+        shutil.rmtree(directory)
     print('Packaged executable: native load, redaction, malformed-state refusal and logout passed.')
 
 
@@ -161,6 +167,7 @@ if __name__ == '__main__':
     except ValueError as failure:
         safe = {
             'Native credential precondition or cleanup failed; existing access was preserved',
+            'Packaged credential directory already exists; existing access was preserved',
             'Credential verification requires an isolated GitHub-hosted runner',
             'Packaged CLI disclosed credential material',
             'Packaged CLI returned an unexpected status',

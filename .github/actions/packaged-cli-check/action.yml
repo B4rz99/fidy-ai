@@ -10,6 +10,17 @@ runs:
     - name: Verify archive refusal and credential isolation
       shell: bash
       run: python3 scripts/cli-release/test-packaged.py
+    - name: Initialize disposable macOS test keychain
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        [[ "$GITHUB_ACTIONS" == true && "$RUNNER_ENVIRONMENT" == github-hosted ]]
+        keychain="$RUNNER_TEMP/fidy-packaged-test.keychain-db"
+        security create-keychain -p fidy-synthetic-ci-only "$keychain"
+        security list-keychains -d user -s "$keychain"
+        security default-keychain -d user -s "$keychain"
+        security unlock-keychain -p fidy-synthetic-ci-only "$keychain"
+        security set-keychain-settings -lut 21600 "$keychain"
     - name: Verify archived executables and native credential lifecycle
       shell: bash
       env:

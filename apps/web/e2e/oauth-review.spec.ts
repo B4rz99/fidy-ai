@@ -12,6 +12,7 @@ import {
 const { test, expect } = playwright;
 const { api, app, operator } = browserAcceptanceTopology();
 const firstPoll = 5000;
+const completeOAuthJourneyMilliseconds = 60_000;
 const created = 201;
 const found = 302;
 const noContent = 204;
@@ -142,11 +143,13 @@ test("built browser returns from established sign-in to a text-only request revi
 test("built browser approves an exact connection and exchanges its callback code without Fidy bearer storage", ({
   page,
   request,
-}) =>
-  Effect.runPromise(
+}) => {
+  test.setTimeout(completeOAuthJourneyMilliseconds);
+  return Effect.runPromise(
     Effect.gen(function* () {
       const query = yield* authorization(request);
       query.set("state", "browser-callback-state");
+      query.set("scope", "read write");
       const path = yield* beginReview(request, query);
       yield* loginFromReview(page, request, path);
       yield* Effect.tryPromise(() =>
@@ -189,9 +192,11 @@ test("built browser approves an exact connection and exchanges its callback code
         (yield* Effect.tryPromise(() => request.post(`${api}/oauth/token`, { form }))).status()
       ).toBe(invalid);
       yield* assertResidentHostSession(request, token.access_token);
+      yield* exerciseBrowserOperationApproval(page, request, token.access_token);
       yield* inspectAndRevoke({ page, request, query, token });
     })
-  ));
+  );
+});
 
 const assertResidentHostSession = (
   request: APIRequestContext,
@@ -654,3 +659,112 @@ test(
   "real built-browser ingress bounds registration and discovery floods with metadata-safe refusals",
   assertFloodBounds
 );
+
+type ReviewedCall = Readonly<{
+  name: string;
+  input: Schema.Json;
+  continuation: Readonly<Record<string, Schema.Json>>;
+}>;
+const callReviewedOperation = (
+  request: APIRequestContext,
+  bearer: string,
+  call: ReviewedCall
+): Promise<APIResponse> =>
+  request.post(`${api}/mcp`, {
+    headers: {
+      authorization: `Bearer ${bearer}`,
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2026-07-28",
+      "mcp-method": "tools/call",
+      "mcp-name": call.name,
+    },
+    data: {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: call.name,
+        arguments: call.input,
+        ...call.continuation,
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": { elicitation: { form: {} } },
+        },
+      },
+    },
+  });
+const exerciseBrowserOperationApproval = (
+  page: Page,
+  request: APIRequestContext,
+  bearer: string
+): Effect.Effect<void, TestFailure> =>
+  Effect.gen(function* () {
+    const { args, reference } = yield* prepareBrowserOperation(request, bearer);
+    const continuation = {
+      requestState: reference,
+      inputResponses: { review: { action: "accept", content: { confirm: true } } },
+    };
+    const forged = yield* Effect.tryPromise(() =>
+      callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation })
+    );
+    expect(yield* Effect.tryPromise(() => forged.json())).toMatchObject({
+      result: { isError: true },
+    });
+    yield* Effect.tryPromise(() => page.goto(`/oauth/operation/${reference}`));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("heading", { name: "Revisar operación del agente" })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByText("Cliente (nombre declarado): <img src=x onerror=alert(1)>")
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("main").locator("img")).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Aprobar operación" })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Aprobar operación" }).click());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("status")).toContainText("Aprobación registrada")
+    );
+    const executed = yield* Effect.tryPromise(() =>
+      callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation })
+    );
+    expect(yield* Effect.tryPromise(() => executed.json())).toMatchObject({
+      result: { isError: false },
+    });
+    const replay = yield* Effect.tryPromise(() =>
+      callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation })
+    );
+    expect(yield* Effect.tryPromise(() => replay.json())).toMatchObject({
+      result: { isError: true },
+    });
+    expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
+  });
+
+const prepareBrowserOperation = Effect.fn(function* (request: APIRequestContext, bearer: string) {
+  const createdMemory = yield* Effect.tryPromise(() =>
+    callReviewedOperation(request, bearer, {
+      name: "memory.remember",
+      input: {
+        payload: { text: "Synthetic browser approval memory" },
+      },
+      continuation: {},
+    })
+  );
+  const memory = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      result: Schema.Struct({
+        structuredContent: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
+      }),
+    })
+  )(yield* Effect.tryPromise(() => createdMemory.json()));
+  const args = { params: { id: memory.result.structuredContent.data.id } };
+  const reviewResponse = yield* Effect.tryPromise(() =>
+    callReviewedOperation(request, bearer, { name: "memory.forget", input: args, continuation: {} })
+  );
+  const pending = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
+  )(yield* Effect.tryPromise(() => reviewResponse.json()));
+  return { args, reference: pending.result.requestState };
+});

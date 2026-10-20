@@ -206,6 +206,7 @@ it("hides non-PAT operations from PAT suggestions while allowing an eligible web
     access: webOrHosted,
     requiredTier: "free",
     agentConfirmation: "not-required",
+    oauthApproval: "native",
     kind: "query",
   } as const;
 
@@ -223,6 +224,7 @@ it("keeps Pro operations out of free responses", () => {
     access: userOwnedAgentScoped("read"),
     requiredTier: "pro",
     agentConfirmation: "not-required",
+    oauthApproval: "native",
     kind: "query",
   } as const;
 

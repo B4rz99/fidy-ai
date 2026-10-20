@@ -51,6 +51,8 @@ export {
   OAuthConnectionMetadata,
   OAuthRequestId,
   OAuthReview,
+  OAuthOperationReview,
+  OAuthOperationDecision,
   OAuthReviewChoice,
 } from "@fidy/server/client";
 export {

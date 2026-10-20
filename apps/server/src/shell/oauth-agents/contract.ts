@@ -46,6 +46,8 @@ export const oauthPaths = {
   review: "/web/oauth/review",
   cancel: "/web/oauth/cancel",
   connect: "/web/oauth/connect",
+  operationReview: "/web/oauth/operation-review",
+  operationDecision: "/web/oauth/operation-decision",
   connections: "/web/oauth/connections",
   revoke: "/web/oauth/revoke",
   revokeAll: "/web/oauth/revoke-all",
@@ -131,6 +133,27 @@ export const OAuthReviewChoice = Schema.Struct({
   expiresAt: Schema.DateTimeUtcFromString,
 });
 export type OAuthReviewChoice = typeof OAuthReviewChoice.Type;
+const maximumOperationInputCharacters = 16384;
+/** A browser reviews immutable canonical work; possession of the reference grants no authority. */
+export const OAuthOperationReview = Schema.Struct({
+  reference: OAuthRequestId,
+  connectionId: OAuthConnectionId,
+  claimedClientName: OAuthRegistration.fields.client_name,
+  operation: Schema.String,
+  inputJson: Schema.String.check(Schema.isMaxLength(maximumOperationInputCharacters)),
+  effects: Schema.Array(Schema.String),
+  inputDigest: Schema.String.check(Schema.isPattern(/^[A-F0-9]{64}$/u)),
+  disclosureRevision: Schema.String,
+  expiresAtMilliseconds: Schema.Int,
+  approved: Schema.Boolean,
+});
+export type OAuthOperationReview = typeof OAuthOperationReview.Type;
+export const OAuthOperationDecision = Schema.Struct({
+  reference: OAuthRequestId,
+  inputDigest: OAuthOperationReview.fields.inputDigest,
+  disclosureRevision: Schema.String,
+  decision: Schema.Literals(["approve", "cancel"]),
+});
 /** The sole code-bearing browser destination is the exact validated initiating callback. */
 export const OAuthConnected = Schema.Struct({
   connectionId: OAuthConnectionId,
@@ -212,6 +235,20 @@ export const OAuthConnectionsGroup = HttpApiGroup.make("oauthConnections")
   );
 /** Browser-only request review: these declarations never enter the canonical tool catalog. */
 export const OAuthReviewGroup = HttpApiGroup.make("oauthReview")
+  .add(
+    HttpApiEndpoint.get("operationReview", oauthPaths.operationReview, {
+      query: Schema.Struct({ reference: OAuthRequestId }),
+      success: OAuthOperationReview,
+      error: managementErrors,
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("operationDecision", oauthPaths.operationDecision, {
+      payload: OAuthOperationDecision,
+      success: Schema.Struct({ decided: Schema.Literal(true) }),
+      error: managementErrors,
+    })
+  )
   .add(
     HttpApiEndpoint.get("review", oauthPaths.review, {
       query: Schema.Struct({ requestId: OAuthRequestId }),

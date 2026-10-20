@@ -345,3 +345,14 @@ and require recovery if superseded. A completed autosave releases its draft barr
 bulk decisions use the fresh workspace revision.
 
 `/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Each feature retains its own proof and disclosure lifetime. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
+
+## First-party OAuth operation review
+
+`oauth-connections/feature.tsx` publishes the operation review route alongside connection review.
+`/oauth/operation/<reference>` reads the exact immutable input, ordered effects, connection identity
+and expiry through the browser-safe WebAuth client. References confer no authority. Approval and
+cancellation are explicit events under a fresh same-User WebSession, Origin and session-binding
+checks. Raw inputs and client names render as text. No bearer enters browser state or storage.
+Approval does not execute the operation: the User returns to the native MCP continuation, whose
+canonical unit consumes it once with all live owner guards. An uncertain POST outcome disables
+further decisions until a fresh read; login resumes only this fixed UUID-selected route.

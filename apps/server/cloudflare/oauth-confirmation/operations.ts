@@ -1,15 +1,18 @@
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
+import { browserOperationReview } from "./internal/browser-review";
 import { Array as Arr, type Cause, Clock, Effect, Option, Predicate, Schema } from "effect";
 import { digestBytes, newId } from "../secret-material/operations";
 import { liveOAuthCommitAuthority } from "../../src/shell/oauth-agents/operations";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import {
+  type OAuthBrowserReviewInput,
   type OAuthConfirmationWork,
   type OAuthMutationReview,
   OAuthNativeReview,
   OAuthReviewBinding,
 } from "./contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import { operationCatalog } from "../../src/shell/api";
 
 /** Compose an owner's exact observed revision predicate into the protected unit. The owner must
  * provide the same facts in its effect/revision disclosure; values remain bound SQL parameters.
@@ -32,7 +35,10 @@ export const oauthMutationReview = (
   ],
 });
 
-const disclosureRevision = "oauth-native-988-v1";
+export const reviewOAuthOperation = (input: OAuthBrowserReviewInput): Effect.Effect<Response> =>
+  browserOperationReview({ ...input, disclosureRevision });
+
+const disclosureRevision = "oauth-first-party-1381-v1";
 const lifetimeMilliseconds = 300000;
 const maximumInputBytes = 16384;
 const AcceptedResponse = Schema.Struct({
@@ -106,10 +112,15 @@ const consumeIntent = (
   }
   const { db, subject } = work.input;
   const live = `EXISTS (SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`;
+  const requiresBrowser = work.input.binding.some(
+    ({ operation }) => operationCatalog.byId.get(operation)?.policy.oauthApproval === "first-party"
+  );
   const consumed = db
     .prepare(`DELETE FROM oauth_operation_intents WHERE reference = ? AND user_id = ? AND connection_id = ?
         AND operation = ? AND input_json = ? AND input_digest = ? AND binding_json = ? AND disclosure_revision = ?
-        AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrent} AND ${live}`)
+        AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrent} AND ${live}
+        AND (? = 0 OR (typeof(browser_approved_at_ms) = 'integer' AND browser_approved_at_ms >= created_at_ms AND browser_approved_at_ms < expires_at_ms
+          AND EXISTS (SELECT 1 FROM web_sessions s WHERE s.id = browser_session_id AND s.user_id = oauth_operation_intents.user_id)))`)
     .bind(
       attempt.reference,
       subject.userId,
@@ -120,7 +131,8 @@ const consumeIntent = (
       work.binding,
       disclosureRevision,
       work.current,
-      ...work.authority.bindings
+      ...work.authority.bindings,
+      requiresBrowser ? 1 : 0
     );
   return Effect.succeed({
     _tag: "Prepared",
@@ -160,14 +172,22 @@ const issueIntent = (
   work: IntentWork
 ): Effect.Effect<ConfirmationPreparation, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    const reference = newId();
+    const requiresBrowser = work.input.binding.some(
+      ({ operation }) =>
+        operationCatalog.byId.get(operation)?.policy.oauthApproval === "first-party"
+    );
     const message =
       `Fidy: ${work.input.binding
         .filter(({ effect }) => effect.length > 0)
         .map(({ effect }) => effect)
         .join("\n")}\n` +
+      (requiresBrowser
+        ? `Aprueba primero esta operación en Fidy: https://app.fidyapp.com/oauth/operation/${reference}\nDespués vuelve aquí para continuar. El enlace vence en cinco minutos.\n`
+        : "") +
       `Operación exacta${work.input.binding.length > 1 ? " (lote completo, en este orden)" : ""}: ${work.input.work.operation}\n${work.encoded}\n¿Confirmas esta acción?`;
     const review = yield* Schema.decodeEffect(OAuthNativeReview)({
-      reference: newId(),
+      reference,
       message,
       expiresAtMilliseconds: work.current + lifetimeMilliseconds,
     });
@@ -180,7 +200,8 @@ const issueIntent = (
   });
 
 /** Issue immutable bounded review or lend single-use consumption to the caller's protected atomic unit.
- * A valid native response is an authorized-client assertion, not independent human attestation.
+ * Selected work additionally requires its first-party decision; native assertion alone cannot approve it.
+ * Neither accepted authority contract independently attests physical human presence.
  * The caller must supply owner-observed bindings and compose their revision guards with all writes and Audit.
  */
 export const prepareOAuthConfirmation = (

@@ -565,6 +565,13 @@ const reviewTestMigrations = (names: ReadonlyArray<string>): ReadonlyArray<strin
     : []),
 ];
 
+const oauthAuthorityTestMigrations = [
+  "0033_oauth_authority",
+  "0037_oauth_shared_audit_budget",
+  "0038_oauth_confirmation",
+  "0163_oauth_first_party_approval",
+] as const;
+
 export const canonicalAdmissionMigrationNames = (
   names: ReadonlyArray<string>
 ): ReadonlyArray<string> =>
@@ -620,9 +627,7 @@ export const canonicalAdmissionMigrationNames = (
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",
       "0035_media_submissions",
-      "0033_oauth_authority",
-      "0037_oauth_shared_audit_budget",
-      "0038_oauth_confirmation",
+      ...oauthAuthorityTestMigrations,
     ]),
   ].sort();
 /** Shared final clarification schema; processing and the shared Audit base must precede it. */

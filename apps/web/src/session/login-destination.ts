@@ -11,6 +11,7 @@ export const LoginSearch = Schema.Struct({
   resume: Schema.optionalKey(Schema.Literals(["pat", "account"])),
   cliCode: Schema.optionalKey(PATPairingPublicCode),
   oauthRequest: Schema.optionalKey(OAuthRequestId),
+  oauthOperation: Schema.optionalKey(OAuthRequestId),
   connectionAttempt: Schema.optionalKey(ConnectionAttemptReference),
 });
 
@@ -22,6 +23,9 @@ export const destinationAfterLogin = (input: unknown): string => {
   if (requested.resume === "account") return "/settings/account";
   if (requested.cliCode !== undefined) {
     return `/connect/cli?cliCode=${encodeURIComponent(requested.cliCode)}`;
+  }
+  if (requested.oauthOperation !== undefined) {
+    return `/oauth/operation/${encodeURIComponent(requested.oauthOperation)}`;
   }
   if (requested.oauthRequest !== undefined) {
     return `/oauth/review/${encodeURIComponent(requested.oauthRequest)}`;

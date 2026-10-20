@@ -38,14 +38,10 @@ type SignInFixture = Readonly<{ page: Page; request: APIRequestContext }>;
 type ConsentRead = Readonly<{ status: number }>;
 const observeConsentRead = (page: Page): Promise<ConsentRead> =>
   page
-    .waitForRequest(
-      (request) => request.url().endsWith("/web/consent") && request.method() === "GET"
+    .waitForResponse(
+      (response) => response.url().endsWith("/web/consent") && response.request().method() === "GET"
     )
-    .then((request) => request.response())
-    .then((response) => {
-      if (response === null) throw new Error("Expected the new consent read response");
-      return { status: response.status() };
-    });
+    .then((response) => ({ status: response.status() }));
 const confirmConsentRead = (page: Page, first: ConsentRead): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -1,6 +1,7 @@
 import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
 import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
-import { Cause, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+import type { Cause } from "effect";
 import { playwright } from "./playwright-runtime";
 import {
   boundSessionRequests,
@@ -821,16 +822,8 @@ const assertDaviplataSecrecy = (bodies: ReadonlyArray<ObservedFidyBody>): void =
   expect(approved[0]?.body).toContain('"method":"daviplata"');
   expect(approved[0]?.body).toContain('"billingEmail":"daviplata@example.com"');
 };
-const atDaviplataStage = <A>(
-  stage: string,
-  pending: Promise<A>
-): Effect.Effect<A, Cause.UnknownError> =>
-  Effect.tryPromise({
-    try: () => pending,
-    catch: (cause) => new Cause.UnknownError(cause, `DaviPlata: ${stage}`),
-  });
 const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
-  yield* atDaviplataStage("open Upgrade and observe Consent", openUpgradeThroughCore(page));
+  yield* fromPlaywright(openUpgradeThroughCore(page));
   yield* fromPlaywright(page.getByRole("button", { name: "DaviPlata" }).click());
   yield* fromPlaywright(page.getByRole("button", { name: "Elegir mensual" }).click());
   yield* fromPlaywright(
@@ -850,7 +843,7 @@ const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
     (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
   );
   yield* fromPlaywright(page.getByRole("button", { name: "Confirmar código" }).click());
-  const submitted = yield* atDaviplataStage("wait for enrollment submission", submission);
+  const submitted = yield* fromPlaywright(submission);
   expect(submitted.status()).toBe(ok);
   const { enrollmentId } = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Struct({ enrollmentId: PaymentEnrollmentId }))
@@ -879,7 +872,7 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
   Effect.runPromise(
     Effect.gen(function* () {
       test.setTimeout(enrollmentJourneyMilliseconds);
-      yield* atDaviplataStage("email sign-in", signInFirstDaviplataThroughCore({ page, request }));
+      yield* fromPlaywright(signInFirstDaviplataThroughCore({ page, request }));
       const providerCalls: Array<DaviplataFixtureStep> = [];
       const fidyBodies: Array<ObservedFidyBody> = [];
       captureDaviplataFidyBodies(page, fidyBodies);

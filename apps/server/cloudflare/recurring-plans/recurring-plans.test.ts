@@ -1,7 +1,8 @@
+import { type CanonicalWork } from "../canonical-operations/contract";
+import { type QueryCaller } from "../canonical-work/operations";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { withErasureRecovery } from "../erasure/runtime";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
-import type { CanonicalWork } from "../canonical-operations/contract";
-import type { QueryCaller } from "../canonical-work/operations";
 import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -9,7 +10,6 @@ import { UserId } from "../../src/core/identity/contract";
 import { RecurringSeriesPage } from "../../src/core/recurring/contract";
 import { evaluateRecurringSeries } from "../recurring/operations";
 import { afterAll, expect, it } from "vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
@@ -75,18 +75,7 @@ const seedUser = ({
 const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
-    yield* Effect.tryPromise(() =>
-      installTestSchema({
-        db,
-        sources: [
-          ...new Bun.Glob("*.sql").scanSync({
-            cwd: new URL("../migrations/", import.meta.url).pathname,
-          }),
-        ]
-          .sort()
-          .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-      })
-    );
+    yield* Effect.tryPromise(() => installTestSchema({ db }));
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (user, index) => seedUser({ db, user, index, current }), {
       discard: true,

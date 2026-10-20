@@ -12,17 +12,7 @@ const userA = UserId.make("10000000-0000-4000-8000-000000000001");
 const userB = UserId.make("20000000-0000-4000-8000-000000000002");
 const missingUser = UserId.make("30000000-0000-4000-8000-000000000003");
 const setup = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    installTestSchema({
-      db,
-      sources: [
-        "0003_pending_consent",
-        "0004_onboarding_email",
-        "0005_verified_onboarding",
-        "0069_retire_email_code_signup",
-      ].map((name) => new URL(`../../migrations/${name}.sql`, import.meta.url)),
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installTestSchema({ db }).then(() => db));
 
 it("reads only the explicit User's independent context, without identity storage fields", () =>
   Effect.runPromise(

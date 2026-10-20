@@ -7,10 +7,9 @@ import { TestClock } from "effect/testing";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
-  applyForwardingFixtureMigration,
-  applyTestMigration,
   consentHistoryTestSchema,
   installAuditTestSchema,
+  installForwardingTestSchema,
   isolatedTestStorage,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, vi } from "vitest";
@@ -24,7 +23,6 @@ import {
 } from "./runtime";
 import { listNeedsReviewItems, processForwardedEmail } from "./operations";
 import { currentMillis } from "../runtime/operations";
-
 import { UserTransactionCoordinator } from "../transactions/runtime";
 
 const userA = "10000000-0000-4000-8000-000000000101";
@@ -185,7 +183,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE categories (id TEXT PRIMARY KEY);
     INSERT INTO categories (id) VALUES ('10000000-0000-4000-8000-000000000016');
     CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE(user_id, id));
-    CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT);
+    CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT,received_email_id TEXT,message_content_sha256 TEXT,message_evidence TEXT,deterministic_interpretation TEXT,extractor_revision TEXT);
     CREATE TABLE statement_submissions (id TEXT PRIMARY KEY,user_id TEXT,clarification_state TEXT,clarification_expires_at_ms INTEGER,clarification_ended_at_ms INTEGER);
     CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
     CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
@@ -217,7 +215,26 @@ const setup = Effect.fn(function* () {
       db.prepare(`CREATE TRIGGER ${name} BEFORE ${event} ON ${table} BEGIN SELECT 1; END`).run()
     );
   }
-  yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(userA).run());
+  yield* wait(() =>
+    installForwardingTestSchema({
+      db,
+      tables: [
+        "media_submissions",
+        "ingestion_review_state",
+        "ingestion_statement_review_decisions",
+        "anonymized_email_samples",
+      ],
+    })
+  );
+  yield* wait(() => installAuditTestSchema(db));
+  yield* wait(() =>
+    db
+      .prepare(
+        "WITH fixture_user(id) AS (VALUES (?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) SELECT id,'CO','es-CO','America/Bogota',0 FROM fixture_user"
+      )
+      .bind(userA)
+      .run()
+  );
   yield* wait(() =>
     db
       .prepare(
@@ -226,39 +243,15 @@ const setup = Effect.fn(function* () {
       .bind(userA)
       .run()
   );
-  for (const name of [
-    "0017_forwarded_email",
-    "0018_forwarded_email_processing",
-    "0032_commercial_allowances",
-    "0091_free_email_allowance",
-    "0034_forwarded_email_deferral",
-    "0035_media_submissions",
-    "0109_review_state",
-    "0038_proactivity_consent",
-    "0092_queued_processing_cutoff",
-    "0095_titular_erasure",
-    "0115_ingestion_audit",
-    "0120_email_deferral",
-    "0117_media_capacity",
-    "0119_media_review",
-    "0140_email_companions",
-  ]) {
-    yield* wait(() =>
-      applyForwardingFixtureMigration({
-        db,
-        source: new URL(`../migrations/${name}.sql`, import.meta.url),
-      })
-    );
-  }
+
   yield* wait(() =>
-    applyTestMigration({
-      db,
-      source: new URL("../migrations/0145_parent_work.sql", import.meta.url),
-      includeStatement: (sql) => sql.includes("forwarded_email"),
-    })
+    db
+      .prepare(
+        "WITH fixture_user(id) AS (VALUES (?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) SELECT id,'CO','es-CO','America/Bogota',0 FROM fixture_user"
+      )
+      .bind(userB)
+      .run()
   );
-  yield* wait(() => installAuditTestSchema(db));
-  yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(userB).run());
   yield* wait(() =>
     db
       .prepare(
@@ -1301,7 +1294,12 @@ it("enforces the global outstanding cap atomically across Users", () =>
       const now = yield* Clock.currentTimeMillis;
       for (let index = 1; index < 10; index++) {
         yield* wait(() =>
-          db.prepare("INSERT INTO users (id) VALUES (?)").bind(`fidy-test-${index}`).run()
+          db
+            .prepare(
+              "WITH fixture_user(id) AS (VALUES (?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) SELECT id,'CO','es-CO','America/Bogota',0 FROM fixture_user"
+            )
+            .bind(`fidy-test-${index}`)
+            .run()
         );
         yield* wait(() =>
           db

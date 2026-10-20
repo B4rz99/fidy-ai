@@ -1,21 +1,22 @@
+import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
+import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
+import { type Cause, DateTime, Effect, Fiber, Option, Schema } from "effect";
+import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import {
   OAuthClientId,
   OAuthConnectionId,
   OAuthCredentialId,
 } from "../../src/core/oauth-agents/contract";
-import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
-import type { OAuthConfirmationWork } from "../oauth-confirmation/contract";
 import { it as effectIt } from "@effect/vitest";
 import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { applyTestMigration, consentHistoryTestSchema } from "../d1-test-fixture";
+import { consentHistoryTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
 import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { afterEach, expect, it, vi } from "vitest";
-import { type Cause, DateTime, Effect, Fiber, Option, Schema } from "effect";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import {
   dispatchSubscriptionRenewals,
@@ -23,13 +24,13 @@ import {
   receiveBillingCollection,
   runBillingCollectionWorkflow,
 } from "./runtime";
-import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import { Price } from "../../src/core/subscription/contract";
 import {
   executeProtectedSubscriptionQuery,
   executeSubscriptionRenewalAdmission,
   publishWeeklyPrice,
 } from "./operations";
+import {} from "./contract";
 
 const RecordedTransaction = Schema.Struct({
   data: Schema.Struct({
@@ -100,7 +101,11 @@ const fixture = (
       }[calendar.billingPeriod];
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')").bind(userId),
+          db
+            .prepare(
+              "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+            )
+            .bind(userId),
           db
             .prepare(
               "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
@@ -332,7 +337,9 @@ it.each(renewalCalendars)(
         yield* fromPromise(() =>
           db.batch([
             db
-              .prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')")
+              .prepare(
+                "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+              )
               .bind(foreignUserId),
             db
               .prepare(
@@ -805,7 +812,9 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
       yield* fromPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')")
+            .prepare(
+              "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+            )
             .bind(foreignUserId),
           db
             .prepare(
@@ -1268,12 +1277,7 @@ CREATE TABLE category_audit (user_id TEXT,occurred_at_ms INTEGER);
 CREATE TABLE memory_audit (user_id TEXT,occurred_at_ms INTEGER);
 `)
     );
-    yield* fromPromise(() =>
-      applyTestMigration({
-        db,
-        source: new URL("../migrations/0019_canonical_child_guards.sql", import.meta.url),
-      })
-    );
+    yield* fromPromise(() => installCurrentTestObjects({ db, tables: ["canonical_child_guard"] }));
     yield* fromPromise(() =>
       db
         .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
@@ -1341,12 +1345,17 @@ it("routes HTTP cancellation through the User coordinator and preserves paid acc
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* cancellationFixture("card");
-      for (const name of [
-        "0032_commercial_allowances.sql",
-        "0033_canonical_request_protection.sql",
-      ]) {
+      {
         yield* fromPromise(() =>
-          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
+          installCurrentTestObjects({
+            db,
+            tables: [
+              "commercial_allowance_consumptions",
+              "canonical_request_replays",
+              "canonical_request_buckets",
+              "canonical_request_leases",
+            ],
+          })
         );
       }
       const bearer = "1".repeat(43);
@@ -2018,10 +2027,7 @@ CREATE TABLE oauth_credentials(kind TEXT NOT NULL, id TEXT PRIMARY KEY,user_id T
 ${consentHistoryTestSchema};`)
         );
         yield* fromPromise(() =>
-          applyTestMigration({
-            db,
-            source: new URL("../migrations/0038_oauth_confirmation.sql", import.meta.url),
-          })
+          installCurrentTestObjects({ db, tables: ["oauth_operation_intents"] })
         );
         const subject: OAuthCaller = {
           oauthConnectionId: OAuthConnectionId.make(enrollmentId),

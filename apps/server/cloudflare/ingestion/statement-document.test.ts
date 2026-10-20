@@ -1,11 +1,11 @@
+import { type HostedCanonicalCaller } from "../canonical-work/contract";
+import { type OutboundHttpService } from "../../src/shell/outbound-http/operations";
 import { Clock, Data, DateTime, Effect, Exit, Option } from "effect";
 import { deepStrictEqual } from "node:assert";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
-import type { HostedCanonicalCaller } from "../canonical-work/contract";
 import { recoverHeldStatementDocument } from "./operations";
 import { WhatsAppBusinessPhoneNumberId } from "../../src/shell/channels/whatsapp/contract";
-import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
 import { StatementDocumentUnavailable } from "./contract";
 
 const storage = isolatedTestStorage();
@@ -20,16 +20,7 @@ const heldDocument = (): Effect.Effect<
 > =>
   Effect.gen(function* () {
     const { db, bucket } = yield* wait(storage.acquire);
-    yield* wait(() =>
-      installTestSchema({
-        db,
-        sources: Array.from(
-          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-        )
-          .sort()
-          .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-      })
-    );
+    yield* wait(() => installTestSchema({ db }));
     const current = yield* Clock.currentTimeMillis;
     const caller: HostedCanonicalCaller = {
       _tag: "HostedCanonical",

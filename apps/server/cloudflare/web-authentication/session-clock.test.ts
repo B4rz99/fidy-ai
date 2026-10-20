@@ -3,19 +3,14 @@ import { deepStrictEqual } from "node:assert";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 import { TestClock } from "effect/testing";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import { installCurrentTestObjects, isolatedTestDatabases } from "../d1-test-fixture";
 import { handleWebAuthentication } from "./operations";
 import { seedSession, sessionId, sessionRequest, sessionUser } from "./session.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const sessionDatabase = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    applyTestMigration({
-      db,
-      source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installCurrentTestObjects({ db, tables: [] }).then(() => db));
 const current = 4102444800000;
 
 it.effect.each([

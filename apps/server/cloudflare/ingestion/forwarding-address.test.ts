@@ -1,9 +1,9 @@
 import { Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import {
-  applyForwardingFixtureMigration,
   consentHistoryTestSchema,
   installAuditTestSchema,
+  installForwardingTestSchema,
 } from "../d1-test-fixture";
 import { afterEach, expect, it } from "vitest";
 import { forwardingAddressResponse } from "./operations";
@@ -70,24 +70,17 @@ const setup = Effect.fn(function* () {
       db.prepare(`CREATE TRIGGER ${name} BEFORE ${event} ON ${table} BEGIN SELECT 1; END`).run()
     );
   }
-  for (const name of [
-    "0017_forwarded_email",
-    "0019_canonical_child_guards",
-    "0032_commercial_allowances",
-    "0034_forwarded_email_deferral",
-    "0115_ingestion_audit",
-    "0120_email_deferral",
-  ]) {
-    yield* wait(() =>
-      applyForwardingFixtureMigration({
-        db,
-        source: new URL(`../migrations/${name}.sql`, import.meta.url),
-      })
-    );
-  }
+  yield* wait(() => installForwardingTestSchema({ db, tables: [] }));
   yield* wait(() => installAuditTestSchema(db));
   for (const user of [userA, userB]) {
-    yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(user).run());
+    yield* wait(() =>
+      db
+        .prepare(
+          "WITH fixture_user(id) AS (VALUES (?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) SELECT id,'CO','es-CO','America/Bogota',0 FROM fixture_user"
+        )
+        .bind(user)
+        .run()
+    );
     yield* wait(() =>
       db
         .prepare(

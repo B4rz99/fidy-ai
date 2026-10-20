@@ -1,7 +1,6 @@
-import { afterAll, expect, it } from "vitest";
 import { type Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { afterAll, expect, it } from "vitest";
 import { UserContext, UserId } from "../../src/core/identity/contract";
-
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { CategoryId } from "../../src/core/categories/contract";
 import { prepareUserContext } from "../identity/user-context/operations";
@@ -30,35 +29,7 @@ const transactionId = (index: number): string =>
 const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
-    yield* Effect.tryPromise(() =>
-      installTestSchema({
-        db,
-        sources: [
-          "0001_categories",
-          "0003_pending_consent",
-          "0004_onboarding_email",
-          "0005_verified_onboarding",
-          "0006_browser_login",
-          "0009_transactions",
-          "0010_pat_lifecycle",
-          "0011_transaction_corrections",
-          "0012_statement_staging",
-          "0012_transaction_search",
-          "0013_category_keyword_rules",
-          "0013_transaction_reconciliation",
-          "0014_memory",
-          "0015_statement_submission",
-          "0016_budgets",
-          "0037_budget_crossing_facts",
-          "0017_statement_dispatch",
-          "0018_dashboard",
-          "0019_canonical_child_guards",
-          "0020_dashboard_projection",
-          "0075_transaction_query_costs",
-          "0027_recurring",
-        ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-      })
-    );
+    yield* Effect.tryPromise(() => installTestSchema({ db }));
     yield* Effect.tryPromise(() =>
       db.batch(
         [userId, otherUserId].map((subject) =>

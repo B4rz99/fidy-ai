@@ -1,6 +1,6 @@
 import { Data, Effect, Option, Result } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import { installCurrentTestObjects, isolatedTestDatabases } from "../d1-test-fixture";
 import { sweepExpiredWorkersAiAdmission } from "../ai/runtime";
 import { sweepExpiredEnrollmentAdmission } from "../subscription/runtime";
 import { sweepExpiredUploadAdmission } from "../ingestion/runtime";
@@ -32,9 +32,12 @@ const owners: ReadonlyArray<
 const prepareDatabase = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const db = yield* fromPromise(() => databases.acquire());
-    for (const name of ["0002_resource_admission", "0073_admission_retention"]) {
+    {
       yield* fromPromise(() =>
-        applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+        installCurrentTestObjects({
+          db,
+          tables: ["resource_admission_grants", "resource_admission_events"],
+        })
       );
     }
     return db;

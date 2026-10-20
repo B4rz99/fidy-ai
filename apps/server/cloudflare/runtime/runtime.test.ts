@@ -1,3 +1,4 @@
+import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
 import { Clock, Effect, Exit, FileSystem, Option } from "effect";
@@ -6,7 +7,6 @@ import { afterAll, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
 import { NodeFileSystem } from "@effect/platform-node";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
-import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { makePlatformMaintenance } from "./runtime";
 
 const storage = isolatedTestStorage();
@@ -357,15 +357,8 @@ it.effect(
         yield* inspect(unavailableDb);
         yield* inspect(db);
         expect(bodies.filter((body) => body.includes(" / d1 "))).toHaveLength(1);
-        const names = Array.from(
-          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-        ).sort();
-        yield* Effect.tryPromise(() =>
-          installTestSchema({
-            db,
-            sources: names.map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-          })
-        );
+
+        yield* Effect.tryPromise(() => installTestSchema({ db }));
         yield* inspect(db);
         yield* inspect(db);
         expect(

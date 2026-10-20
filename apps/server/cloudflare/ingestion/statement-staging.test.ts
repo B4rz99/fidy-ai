@@ -5,8 +5,6 @@ import {
   StatementStagingId,
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
-import { it as effectIt } from "@effect/vitest";
-import { NodeFileSystem } from "@effect/platform-node";
 import {
   DateTime,
   Effect,
@@ -18,14 +16,7 @@ import {
   Result,
   type Scope,
 } from "effect";
-import { readCanonicalSubmission } from "./internal/statement-ingestion";
-import { prepareHeldStatementReviewDecision, prepareHeldStatementSubmission } from "./operations";
-import type { StatementDecisionWork } from "./contract";
-import assert from "node:assert/strict";
-import { Hex } from "effect/encoding";
-import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { delayedUpload, persistentStagingStorage } from "./statement-upload-race.test-fixture";
+import { type StatementDecisionWork } from "./contract";
 import {
   StatementStaging,
   StatementStagingFailed,
@@ -33,6 +24,15 @@ import {
   type StatementStagingSweep,
   StatementStagingUnavailable,
 } from "./internal/statement-staging";
+import { it as effectIt } from "@effect/vitest";
+import { NodeFileSystem } from "@effect/platform-node";
+import { readCanonicalSubmission } from "./internal/statement-ingestion";
+import { prepareHeldStatementReviewDecision, prepareHeldStatementSubmission } from "./operations";
+import assert from "node:assert/strict";
+import { Hex } from "effect/encoding";
+import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { delayedUpload, persistentStagingStorage } from "./statement-upload-race.test-fixture";
 
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(promise())).pipe(Effect.orDie);
@@ -49,42 +49,7 @@ type StagingResult<A> = Result.Result<A, StatementStagingFailed | StatementStagi
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
-const migrationsDirectoryUrl = new URL("../migrations/", import.meta.url);
-const migrationNames = [
-  "0001_categories",
-  "0003_pending_consent",
-  "0004_onboarding_email",
-  "0005_verified_onboarding",
-  "0006_browser_login",
-  "0009_card_enrollment",
-  "0009_transactions",
-  "0010_pat_lifecycle",
-  "0011_transaction_corrections",
-  "0012_statement_staging",
-  "0012_billing_collection",
-  "0012_transaction_search",
-  "0013_category_keyword_rules",
-  "0013_transaction_reconciliation",
-  "0014_memory",
-  "0015_statement_submission",
-  "0016_budgets",
-  "0037_budget_crossing_facts",
-  "0016_statement_processing",
-  "0017_forwarded_email",
-  "0017_statement_dispatch",
-  "0032_statement_capture_entitlement",
-  "0033_oauth_authority",
-  "0033_statement_clarification",
-  "0034_statement_clarification_audit",
-  "0035_statement_hosted_origin",
-  "0018_batch_envelope_audit",
-  "0019_canonical_child_guards",
-  "0035_billing_corrections",
-  "0052_weekly_card_renewal",
-  "0108_review_suggestions",
-  "0109_review_state",
-  "0110_ingestion_review",
-] as const;
+
 type Runtime = Readonly<{
   readonly database: D1Database;
   readonly bucket: R2Bucket;
@@ -98,12 +63,7 @@ const makeRuntime = (acquire = storage.acquire): Promise<Runtime> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db: database, bucket } = yield* fromTestPromise(acquire);
-      yield* fromTestPromise(() =>
-        installTestSchema({
-          db: database,
-          sources: migrationNames.map((name) => new URL(`${name}.sql`, migrationsDirectoryUrl)),
-        })
-      );
+      yield* fromTestPromise(() => installTestSchema({ db: database }));
       yield* fromTestPromise(() =>
         [userA, userB].reduce<Promise<unknown>>(
           (previous, userId) =>

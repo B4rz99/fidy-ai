@@ -1,16 +1,16 @@
-import { statementParserLimits } from "../../src/shell/ingestion/contract";
-import { Clock, Config, Effect, Exit, Option, Schema } from "effect";
 import {
   CapturedFieldIssue,
   type NeedsReviewStatementRow,
   StatementRowEvidence,
 } from "../../src/core/ingestion/contract";
+import { statementParserLimits } from "../../src/shell/ingestion/contract";
+import { Clock, Config, Effect, Exit, Option, Schema } from "effect";
 import { statementReviewAdmission } from "./internal/statement-review-budget";
 import { deepStrictEqual } from "node:assert/strict";
 import { inspect } from "node:util";
 import { StatementProcessingUnavailable } from "./contract";
 import {
-  applyTestMigration,
+  installCurrentTestObjects,
   installTestSchema,
   isolatedTestStorage,
   observeRetentionCost,
@@ -34,66 +34,17 @@ const userB = "10000000-0000-4000-8000-000000000102";
 const submissionId = "10000000-0000-4000-8000-000000000601";
 const stagingId = "10000000-0000-4000-8000-000000000602";
 const retentionMs = 86_400_000;
-const migrations = [
-  "0001_categories",
-  "0003_pending_consent",
-  "0004_onboarding_email",
-  "0005_verified_onboarding",
-  "0006_browser_login",
-  "0009_card_enrollment",
-  "0009_transactions",
-  "0010_pat_lifecycle",
-  "0011_transaction_corrections",
-  "0012_statement_staging",
-  "0012_billing_collection",
-  "0013_transaction_reconciliation",
-  "0013_category_keyword_rules",
-  "0014_memory",
-  "0015_statement_submission",
-  "0016_statement_processing",
-  "0017_statement_dispatch",
-  "0035_billing_corrections",
-  "0052_weekly_card_renewal",
-  "0032_statement_capture_entitlement",
-  "0033_statement_clarification",
-  "0035_statement_hosted_origin",
-  "0077_statement_materialization",
-  "0078_statement_materialization_binding",
-  "0079_statement_progress",
-  "0082_statement_review_capacity",
-  "0108_review_suggestions",
-  "0109_review_state",
-  "0110_ingestion_review",
-];
+
 const storage = isolatedTestStorage();
 
 const setup = (
   content: string | Uint8Array,
-  sourceFormat: "csv" | "xlsx" = "csv",
-  schemaMigrations: ReadonlyArray<string> = migrations
+  sourceFormat: "csv" | "xlsx" = "csv"
 ): Promise<{ db: D1Database; bucket: R2Bucket; submittedAt: number }> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, bucket } = yield* fromTestPromise(() => storage.acquire());
-      yield* fromTestPromise(() =>
-        schemaMigrations === migrations || schemaMigrations.length > migrations.length
-          ? installTestSchema({
-              db,
-              sources: schemaMigrations.map(
-                (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
-              ),
-            })
-          : schemaMigrations.reduce(
-              (pending, name) =>
-                pending.then(() =>
-                  applyTestMigration({
-                    db,
-                    source: new URL(`../migrations/${name}.sql`, import.meta.url),
-                  })
-                ),
-              Promise.resolve()
-            )
-      );
+      yield* fromTestPromise(() => installTestSchema({ db }));
       const current = currentMillis();
       yield* fromTestPromise(() =>
         Promise.all(
@@ -154,9 +105,7 @@ const setup = (
       yield* fromTestPromise(() =>
         db
           .prepare(
-            schemaMigrations === migrations || schemaMigrations.length > migrations.length
-              ? "UPDATE statement_submissions SET work_user_id=?2,work_revision=1,work_published_at_ms=?3 WHERE id=?1 AND work_revision IS NULL"
-              : "INSERT INTO statement_ingestion_outbox(submission_id,user_id,revision,published_at_ms) VALUES (?1,?2,1,?3)"
+            "UPDATE statement_submissions SET work_user_id=?2,work_revision=1,work_published_at_ms=?3 WHERE id=?1 AND work_revision IS NULL"
           )
           .bind(submissionId, userA, current)
           .run()
@@ -2131,18 +2080,7 @@ effectIt.effect(
   "migration preserves existing row receipts and atomically rejects a skipped cursor",
   () =>
     Effect.gen(function* () {
-      const { db } = yield* fromTestPromise(() =>
-        setup(
-          "Header\nvalue",
-          "csv",
-          migrations.filter(
-            (name) =>
-              name !== "0077_statement_materialization" &&
-              name !== "0078_statement_materialization_binding" &&
-              name !== "0079_statement_progress"
-          )
-        )
-      );
+      const { db } = yield* fromTestPromise(() => setup("Header\nvalue", "csv"));
       yield* fromTestPromise(() =>
         db
           .prepare(
@@ -2152,10 +2090,7 @@ effectIt.effect(
           .run()
       );
       yield* fromTestPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0077_statement_materialization.sql", import.meta.url),
-        })
+        installCurrentTestObjects({ db, tables: ["statement_materialization_parts"] })
       );
       const progress = (): ReturnType<D1PreparedStatement["first"]> =>
         db
@@ -2736,74 +2671,6 @@ effectIt.effect(
     })
 );
 
-it.each([false, true])(
-  "validates already-processing progress during migration (corrupt=%s)",
-  (corrupt) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const { db } = yield* fromTestPromise(() =>
-          setup(
-            "unmapped\n" + "row\n".repeat(33),
-            "csv",
-            migrations.filter((name) => name !== "0079_statement_progress")
-          )
-        );
-        yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "UPDATE statement_submissions SET status='processing',started_at_ms=1 WHERE id=?"
-            )
-            .bind(submissionId)
-            .run()
-        );
-        yield* seedReceipts({ db, rows: 32, from: 0, owner: userA, submission: submissionId });
-        if (corrupt) {
-          yield* fromTestPromise(() =>
-            db
-              .prepare(
-                "UPDATE statement_submissions SET processed_accepted_rows=1,processed_review_rows=31 WHERE id=?"
-              )
-              .bind(submissionId)
-              .run()
-          );
-          yield* fromTestPromise(() =>
-            expect(
-              applyTestMigration({
-                db,
-                source: new URL("../migrations/0079_statement_progress.sql", import.meta.url),
-              })
-            ).rejects.toThrow()
-          );
-          expect(
-            yield* fromTestPromise(() =>
-              db
-                .prepare("SELECT status,input_rows FROM statement_submissions WHERE id=?")
-                .bind(submissionId)
-                .first()
-            )
-          ).toEqual({ status: "processing", input_rows: null });
-        } else {
-          yield* fromTestPromise(() =>
-            applyTestMigration({
-              db,
-              source: new URL("../migrations/0079_statement_progress.sql", import.meta.url),
-            })
-          );
-          yield* seedReceipts({ db, rows: 33, from: 32, owner: userA, submission: submissionId });
-          expect(
-            yield* fromTestPromise(() =>
-              db
-                .prepare(
-                  "SELECT processed_rows AS input_rows,processed_accepted_rows AS accepted_rows,processed_review_rows AS needs_review_rows FROM statement_submissions WHERE id=?"
-                )
-                .bind(submissionId)
-                .first()
-            )
-          ).toEqual({ input_rows: 33, accepted_rows: 0, needs_review_rows: 33 });
-        }
-      })
-    )
-);
 effectIt.effect(
   "settles aggregate XLSX rejection, releases Free reservation and replays without rereading",
   () =>
@@ -2907,16 +2774,9 @@ it.skipIf(!measureFullStatements)(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const fullMigrations = Array.from(
-          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-        )
-          .sort()
-          .map((name) => name.slice(0, -4));
         for (const { kind, rows, sample } of fullStatementCohorts) {
           const content = fullStatementContent(kind, rows);
-          const { db, bucket } = yield* fromTestPromise(() =>
-            setup(content, "csv", fullMigrations)
-          );
+          const { db, bucket } = yield* fromTestPromise(() => setup(content, "csv"));
           if (kind === "captures") {
             yield* fromTestPromise(() =>
               db
@@ -3008,13 +2868,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const { db } = yield* fromTestPromise(() =>
-          setup(
-            "unmapped\nrow\n",
-            "csv",
-            migrations.filter((name) => name !== "0082_statement_review_capacity")
-          )
-        );
+        const { db } = yield* fromTestPromise(() => setup("unmapped\nrow\n", "csv"));
         const insert = (reviewId: string, record: number): D1PreparedStatement =>
           db
             .prepare(`INSERT INTO statement_needs_review
@@ -3025,10 +2879,7 @@ it(
             .bind(reviewId, userA, submissionId, record);
         yield* fromTestPromise(() => insert("template", 1).run());
         yield* fromTestPromise(() =>
-          applyTestMigration({
-            db,
-            source: new URL("../migrations/0082_statement_review_capacity.sql", import.meta.url),
-          })
+          installCurrentTestObjects({ db, tables: ["statement_review_capacity"] })
         );
         const count = (): Promise<number> =>
           db

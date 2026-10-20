@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type {
+  GitMigrationChange,
   MigrationRepairStatus,
   ProductionWorkflowRunSnapshot,
 } from "../infra/cloudflare/scripts/migration-history";
@@ -55,9 +56,67 @@ const readMigrationRepairEvidence = (
   ),
 });
 
+const migrationFilesAt = (ref: string): ReadonlyArray<string> =>
+  runMigrationEditPolicyCommand([
+    "git",
+    "ls-tree",
+    "-r",
+    "--name-only",
+    ref,
+    "--",
+    "apps/server/cloudflare/migrations",
+  ])
+    .trim()
+    .split("\n")
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
+
+/** Only the already reviewed schema snapshot may replace the complete migration directory. */
+const isVerifiedBaselineSquash = (
+  changes: ReadonlyArray<GitMigrationChange>,
+  base: string
+): boolean => {
+  const baseline = "apps/server/cloudflare/migrations/0001_schema.sql";
+  if (!changes.some((change) => change.status === "A" && change.path === baseline)) {
+    return false;
+  }
+  if (
+    !changes.every(
+      (change) => change.status === "D" || (change.status === "A" && change.path === baseline)
+    )
+  ) {
+    return false;
+  }
+  const files = migrationFilesAt("HEAD");
+  if (files.length !== 1 || files[0] !== baseline) {
+    return false;
+  }
+  const previous = migrationFilesAt(base);
+  const deleted = changes
+    .filter((change) => change.status === "D")
+    .map((change) => change.path)
+    .sort();
+  if (JSON.stringify(previous) !== JSON.stringify(deleted)) {
+    return false;
+  }
+  return (
+    runMigrationEditPolicyCommand(["git", "show", `HEAD:${baseline}`])
+      .replace(/^--> statement-breakpoint\n/gmu, "")
+      .trim() ===
+    runMigrationEditPolicyCommand([
+      "git",
+      "show",
+      `${base}:apps/server/cloudflare/schema.sql`,
+    ]).trim()
+  );
+};
+
+const outsidePullRequest = (): boolean =>
+  Bun.env.BASE_REF === undefined && Bun.env.GITHUB_ACTIONS !== "true";
+
 const main = (): void => {
   const baseRef = Bun.env.BASE_REF;
-  if (baseRef === undefined && Bun.env.GITHUB_ACTIONS !== "true") {
+  if (outsidePullRequest()) {
     process.stdout.write("Skipped the PR-only migration edit policy outside GitHub Actions.\n");
     return;
   }
@@ -77,6 +136,13 @@ const main = (): void => {
   );
   if (changes.every(({ status }) => status === "A")) {
     process.stdout.write("No existing D1 migration files were edited, removed, or renamed.\n");
+    return;
+  }
+
+  if (isVerifiedBaselineSquash(changes, base)) {
+    process.stdout.write(
+      "The sole D1 baseline exactly matches the base branch's reviewed schema snapshot.\n"
+    );
     return;
   }
 

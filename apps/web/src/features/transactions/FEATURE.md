@@ -80,7 +80,7 @@ An additional built-browser journey, `transaction-native-pagination.spec.ts`, si
 bun run --cwd apps/web test src/features/transactions
 bun run --cwd apps/server test:core src/core/transactions --coverage.enabled=false
 bun run --cwd apps/server test:cloudflare cloudflare/transactions --maxWorkers=1
-INFRA_PERFORMANCE_MEASURE=1 bun run --cwd apps/server test:cloudflare cloudflare/transactions/query-costs.test.ts cloudflare/transactions/performance.test.ts cloudflare/transactions/projection-write-costs.test.ts --maxWorkers=1
+INFRA_PERFORMANCE_MEASURE=1 bun run --cwd apps/server test:cloudflare cloudflare/transactions/query-costs.test.ts cloudflare/transactions/performance.test.ts --maxWorkers=1
 INFRA_PERFORMANCE_GROWTH=1 bun run --cwd apps/server test:cloudflare cloudflare/transactions/transactions.test.ts --maxWorkers=1 --testNamePattern="measures sustained mixed public requests"
 bun run --cwd apps/web test:browser transaction-pagination.spec.ts financial-journeys.spec.ts --workers=1
 bun run --cwd apps/web test:browser transaction-native-pagination.spec.ts transaction-deletion.spec.ts --workers=1

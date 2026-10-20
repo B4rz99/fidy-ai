@@ -15,12 +15,7 @@ const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const prepareDatabase = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    installTestSchema({
-      db,
-      sources: [new URL("../migrations/0005_verified_onboarding.sql", import.meta.url)],
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installTestSchema({ db }).then(() => db));
 
 const modelUserId = "10000000-0000-4000-8000-000000000001";
 const seedModelConsent = (database: D1Database): Promise<unknown> =>

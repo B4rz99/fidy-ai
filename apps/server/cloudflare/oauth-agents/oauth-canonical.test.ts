@@ -25,11 +25,10 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 
-const authenticatedHistoryFixture = Effect.fn(function* (auditMigration: boolean = true) {
+const authenticatedHistoryFixture = Effect.fn(function* () {
   const fixture = yield* approvedFixture({
     scopes: ["read", "write"],
     lifetimeDays: 7,
-    auditMigration,
   });
   const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
     yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -295,7 +294,6 @@ it("records fully attributed OAuth reads under the same User", () =>
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -353,7 +351,6 @@ it("creates a Transaction through the ordinary OAuth mutation with one protected
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -408,7 +405,6 @@ it("commits an authorized OAuth atomic batch with exact correlated results and o
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -474,7 +470,6 @@ it("preserves the canonical owner's invalid ordinary OAuth mutation refusal", ()
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -557,7 +552,6 @@ it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audi
         const fixture = yield* approvedFixture({
           scopes,
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
           yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -661,7 +655,6 @@ it.each(["empty", "oversized", "unattributed"])(
         const fixture = yield* approvedFixture({
           scopes: ["write"],
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
           yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -712,7 +705,6 @@ it("rejects read-only and cross-User mutation admissions at the authoritative co
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -781,7 +773,6 @@ it("settles concurrent OAuth batches once per child and never retries ambiguous 
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -842,7 +833,6 @@ it("keeps Memory and Dashboard owner construction independent of read scope and 
       const fixture = yield* approvedFixture({
         scopes: ["write", "dashboard"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -921,7 +911,6 @@ it("fails Memory batches closed when owner inference construction is unavailable
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1018,7 +1007,6 @@ it("reports interruption after a committed OAuth mutation without undoing or ret
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1074,7 +1062,6 @@ it("shares bounded mutation concurrency across OAuth credentials for the same Us
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1138,7 +1125,6 @@ it("reuses Category and Budget owner behavior in one OAuth mutation unit with ex
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1216,7 +1202,6 @@ it("refuses a foreign Transaction child after preparing an owned child without c
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1330,7 +1315,6 @@ it("links and unlinks exact owned Transactions through ordinary OAuth mutations 
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1424,7 +1408,6 @@ it.each(["single", "mixed"])(
         const fixture = yield* approvedFixture({
           scopes: ["write", "dashboard"],
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
           yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1514,7 +1497,6 @@ it.each(["single", "mixed"])(
           const fixture = yield* approvedFixture({
             scopes: ["write", "dashboard"],
             lifetimeDays: 7,
-            auditMigration: true,
           });
           const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
             yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1605,7 +1587,6 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       const fixture = yield* approvedFixture({
         scopes: ["write", "dashboard"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       approvalClock.mockRestore();
       yield* wait(

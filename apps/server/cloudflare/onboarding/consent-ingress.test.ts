@@ -7,12 +7,11 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import {
   consentHistoryTestSchema,
+  installCurrentTestObjects,
   installRetentionTestSchema,
-  installTestSchema,
   isolatedTestDatabases,
 } from "../d1-test-fixture";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/contract";
-
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 
@@ -76,25 +75,17 @@ const setup = (
         : yield* Effect.tryPromise(() => databases.acquire());
       if (Option.isNone(preparedDatabase)) {
         yield* Effect.tryPromise(() =>
-          installTestSchema({
+          installCurrentTestObjects({
             db,
-            sources: [
-              new URL("../migrations/0002_resource_admission.sql", import.meta.url),
-              new URL("../migrations/0025_voice_refusal.sql", import.meta.url),
+            tables: [
+              "resource_admission_grants",
+              "resource_admission_events",
+              "hosted_voice_refusals",
+              "pending_consent_exchanges",
+              "hosted_whatsapp_windows",
             ],
           })
         );
-        const currentSchema = yield* Effect.tryPromise(() =>
-          Bun.file(new URL("../schema.sql", import.meta.url)).text()
-        );
-        const pendingStatements = currentSchema
-          .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
-          .filter((sql) =>
-            /^(?:CREATE TABLE pending_consent_exchanges\b|CREATE (?:UNIQUE )?INDEX \w+\s+ON pending_consent_exchanges\b|CREATE TRIGGER \w+[^;]*? ON pending_consent_exchanges\b)/u.test(
-              sql.trim()
-            )
-          );
-        yield* Effect.tryPromise(() => db.batch(pendingStatements.map((sql) => db.prepare(sql))));
         yield* Effect.tryPromise(() =>
           db
             .prepare(
@@ -132,18 +123,6 @@ const setup = (
               "CREATE TABLE proactivity_whatsapp_claims (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
             ),
           ])
-        );
-        yield* Effect.tryPromise(() =>
-          db.batch(
-            currentSchema
-              .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
-              .filter((sql) =>
-                /^CREATE (?:TABLE hosted_whatsapp_windows\b|INDEX hosted_whatsapp_windows_expiry\b)/u.test(
-                  sql.trim()
-                )
-              )
-              .map((sql) => db.prepare(sql))
-          )
         );
       }
       const send = (

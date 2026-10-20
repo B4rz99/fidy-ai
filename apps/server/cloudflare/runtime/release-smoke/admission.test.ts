@@ -5,7 +5,7 @@ import { Effect, FileSystem, Path } from "effect";
 import { expect } from "vitest";
 import { maxActiveProbes, smokeAdmissionSql, smokeClaimSql } from "./internal/admission";
 
-const migration = new URL("../../migrations/0027_release_smoke.sql", import.meta.url);
+const migration = new URL("../../migrations/0001_schema.sql", import.meta.url);
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const now = 1_000_000;
 const expires = now + 300_000;

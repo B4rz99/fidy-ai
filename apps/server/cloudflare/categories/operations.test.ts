@@ -2,7 +2,6 @@ import { deepStrictEqual } from "node:assert";
 import { Effect, Exit, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { CategoryId, CategoryNotFound } from "../../src/core/categories/contract";
-
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   categorizeCaptures,
@@ -15,12 +14,7 @@ import { CategoriesUnavailable } from "./contract";
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const setup = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    installTestSchema({
-      db,
-      sources: [new URL("../migrations/0001_categories.sql", import.meta.url)],
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installTestSchema({ db }).then(() => db));
 
 it("requires a stable Category while keeping its current label independent of identity", () =>
   Effect.runPromise(
@@ -85,28 +79,7 @@ it("returns only bounded current Category projections in presentation order and 
   ));
 
 const setupRules = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    installTestSchema({
-      db,
-      sources: [
-        "0001_categories",
-        "0002_resource_admission",
-        "0003_pending_consent",
-        "0004_onboarding_email",
-        "0005_verified_onboarding",
-        "0006_browser_login",
-        "0007_browser_pairing_email",
-        "0008_support_recovery",
-        "0009_email_replacement",
-        "0009_transactions",
-        "0010_pat_lifecycle",
-        "0011_transaction_corrections",
-        "0012_statement_staging",
-        "0012_transaction_search",
-        "0013_category_keyword_rules",
-      ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installTestSchema({ db }).then(() => db));
 
 it("categorizes each User's captures without exposing or borrowing another User's keyword instructions", () =>
   Effect.runPromise(

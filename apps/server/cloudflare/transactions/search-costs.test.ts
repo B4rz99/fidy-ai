@@ -21,16 +21,7 @@ const foreignPrefix = "30000000-0000-4000-8000-";
 const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const db = yield* fromTestPromise(() => databases.acquire());
-    yield* fromTestPromise(() =>
-      installTestSchema({
-        db,
-        sources: Array.from(
-          new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-        )
-          .sort()
-          .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-      })
-    );
+    yield* fromTestPromise(() => installTestSchema({ db }));
     yield* fromTestPromise(() =>
       db.batch(
         [userId, foreignUserId].map((subject) =>

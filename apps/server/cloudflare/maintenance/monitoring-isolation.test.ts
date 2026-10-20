@@ -1,11 +1,11 @@
-import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import { type ProactivityDeliveryWork } from "../insights/contract";
+import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./contract";
+import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import { coordinatorProbeName } from "../runtime/operational-health/contract";
 import assert from "node:assert/strict";
 import { Clock, Effect, Exit, Option } from "effect";
 import { afterAll, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
-import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./contract";
 import { runCoreMaintenance } from "./runtime";
 
 const databases = isolatedTestDatabases();
@@ -62,15 +62,8 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      const names = Array.from(
-        new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-      ).sort();
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: names.map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-        })
-      );
+
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
@@ -259,15 +252,8 @@ it.each([
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      const names = Array.from(
-        new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-      ).sort();
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: names.map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-        })
-      );
+
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
       const now = yield* Clock.currentTimeMillis;
       const userId = "90000000-0000-4000-8000-000000000011";
       const deliveryId = "90000000-0000-4000-8000-000000000012";

@@ -1,11 +1,11 @@
 import { type WorkflowStepConfig } from "cloudflare:workers";
+import { type Cause, Clock, Effect, Exit, Schema } from "effect";
+import { type RefundStartCall, RefundSupportAdmission, RefundWorkFailure } from "./contract";
 import assert from "node:assert/strict";
 import { afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, Effect, Exit, Schema } from "effect";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { seedRefundCharge } from "./refund-charge.test-fixture";
 import { executeProtectedSubscriptionQuery, getRefund, startRefund } from "./operations";
-import { type RefundStartCall, RefundSupportAdmission, RefundWorkFailure } from "./contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   dispatchRefunds,
@@ -232,7 +232,9 @@ it("isolates mismatched coordinator Users and foreign charge identities before a
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users (id,time_zone) VALUES (?,'America/Bogota')")
+            .prepare(
+              "WITH fixture_user(id,time_zone) AS (VALUES (?,'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+            )
             .bind(otherUserId),
           db
             .prepare(

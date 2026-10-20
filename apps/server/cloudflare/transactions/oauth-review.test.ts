@@ -1,3 +1,6 @@
+import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
+import { type TransactionCaller } from "../canonical-work/contract";
+import { type PreparedCanonicalMutation } from "../canonical-operations/contract";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -9,18 +12,9 @@ import {
   OAuthCredentialId,
 } from "../../src/core/oauth-agents/contract";
 import { TransactionPairInput, UpdateTransactionInput } from "../../src/core/transactions/contract";
-import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
-import type { TransactionCaller } from "../canonical-work/contract";
-import type { PreparedCanonicalMutation } from "../canonical-operations/contract";
 import { installedCanonicalOperations } from "../canonical-operations/operations";
 import { prepareOAuthConfirmation } from "../oauth-confirmation/operations";
-import {
-  canonicalAdmissionMigrationNames,
-  hostedTurnTestMigrations,
-  installTestSchema,
-  isolatedTestDatabases,
-  statementAuditTestMigrations,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { prepareCorrection, prepareUnlink } from "./operations";
 
 const databases = isolatedTestDatabases();
@@ -56,45 +50,7 @@ const correction = Schema.decodeSync(Schema.toCodecJson(UpdateTransactionInput))
 const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
   Effect.gen(function* () {
     const db = yield* fromTestPromise(() => databases.acquire());
-    yield* fromTestPromise(() =>
-      installTestSchema({
-        db,
-        sources: canonicalAdmissionMigrationNames([
-          "0001_categories",
-          "0002_resource_admission",
-          "0003_pending_consent",
-          "0004_onboarding_email",
-          "0005_verified_onboarding",
-          "0006_browser_login",
-          "0009_transactions",
-          "0010_pat_lifecycle",
-          "0011_transaction_corrections",
-          "0012_statement_staging",
-          "0012_transaction_search",
-          "0013_category_keyword_rules",
-          "0013_transaction_reconciliation",
-          "0014_memory",
-          "0015_statement_submission",
-          "0016_statement_processing",
-          "0016_budgets",
-          "0016_hosted_turn",
-          "0017_hosted_compaction",
-          "0017_forwarded_email",
-          "0017_statement_dispatch",
-          "0018_batch_envelope_audit",
-          "0019_canonical_child_guards",
-          "0020_dashboard_projection",
-          "0075_transaction_query_costs",
-          "0009_email_replacement",
-          "0018_dashboard",
-          "0018_insight_events",
-          "0032_oauth_review",
-          "0034_oauth_refresh",
-          ...hostedTurnTestMigrations,
-          ...statementAuditTestMigrations,
-        ]).map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-      })
-    );
+    yield* fromTestPromise(() => installTestSchema({ db }));
     const now = yield* Clock.currentTimeMillis;
     yield* fromTestPromise(() =>
       db.batch([

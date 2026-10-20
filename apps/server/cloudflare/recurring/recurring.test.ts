@@ -6,12 +6,7 @@ import { UserId } from "../../src/core/identity/contract";
 import { Money } from "../../src/core/_shared/money";
 import { RecurringSeriesPage } from "../../src/core/recurring/contract";
 import { Transaction } from "../../src/core/transactions/contract";
-import {
-  applyTestMigration,
-  installTestSchema,
-  isolatedTestDatabases,
-  observeRetentionCost,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import {
   discoverRecurringWork,
   evaluateRecurringSeries,
@@ -25,7 +20,6 @@ import { advanceRecurringWork } from "./runtime";
 import { makeCoordinators, sendBackground } from "./recurring.test-fixture";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
-
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
@@ -75,11 +69,8 @@ const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(DateTime.nowUnsafe().epochMilliseconds);
     const db = yield* fromPromise(() => databases.acquire());
-    const folder = new URL("../migrations/", import.meta.url);
-    const names = [...new Bun.Glob("*.sql").scanSync({ cwd: folder.pathname })].sort();
-    yield* fromPromise(() =>
-      installTestSchema({ db, sources: names.map((name) => new URL(name, folder)) })
-    );
+
+    yield* fromPromise(() => installTestSchema({ db }));
     for (const subject of [userId, otherUserId]) {
       yield* fromPromise(() =>
         db.batch([
@@ -1196,129 +1187,4 @@ it.effect("discovers new Users hourly while resuming interrupted evaluation on t
       )
     ).toBe("detect");
   })
-);
-
-it.live(
-  "preserves the exact historical digest exclusions and confirmation immutability through migration",
-  () =>
-    Effect.gen(function* () {
-      const db = yield* fromPromise(() => databases.acquire());
-      const directory = new URL("../migrations/", import.meta.url);
-      const names = [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
-        .filter((name) => name < "0129_")
-        .sort();
-      for (const name of names) {
-        yield* fromPromise(() => applyTestMigration({ db, source: new URL(name, directory) }));
-      }
-      yield* fromPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','UTC',0)"
-          )
-          .bind(userId)
-          .run()
-      );
-      for (const [index, snapshot] of [
-        [1, "{}"],
-        [2, "{}"],
-        [3, '{"counterparty":"Netflix"}'],
-      ] as const) {
-        yield* fromPromise(() =>
-          db.batch([
-            db
-              .prepare("INSERT INTO recurring_series VALUES(?,?,'COP','merchant','{}','{}','{}',1)")
-              .bind(userId, `series-${index}`),
-            db
-              .prepare(
-                "INSERT INTO recurring_confirmations(rowid,user_id,id,series_id,confirmed_at,context_json,confirmation_json) VALUES(?,?,?,?,'2026-10-01T00:00:00Z','{}',?)"
-              )
-              .bind(
-                [7, 3, 11][index - 1],
-                userId,
-                `confirmation-${index}`,
-                `series-${index}`,
-                snapshot
-              ),
-          ])
-        );
-      }
-      // Only the original marker is authoritative; another malformed snapshot is not silently excused.
-      yield* fromPromise(() =>
-        db
-          .prepare("INSERT INTO recurring_legacy_confirmations VALUES(?,?)")
-          .bind(userId, "confirmation-1")
-          .run()
-      );
-      const before = yield* fromPromise(() =>
-        db.prepare("SELECT * FROM recurring_confirmations ORDER BY id").all()
-      );
-      yield* fromPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("0129_recurring_digest_exclusions.sql", directory),
-        })
-      );
-      expect(
-        (yield* fromPromise(() =>
-          db
-            .prepare(
-              "SELECT user_id,id,series_id,confirmed_at,context_json,confirmation_json FROM recurring_confirmations ORDER BY id"
-            )
-            .all()
-        )).results
-      ).toEqual(before.results);
-      expect(
-        (yield* fromPromise(() =>
-          db.prepare("SELECT id,digest_excluded FROM recurring_confirmations ORDER BY id").all()
-        )).results
-      ).toEqual([
-        { id: "confirmation-1", digest_excluded: 1 },
-        { id: "confirmation-2", digest_excluded: 0 },
-        { id: "confirmation-3", digest_excluded: 0 },
-      ]);
-      yield* fromPromise(() =>
-        expect(
-          db
-            .prepare(
-              "UPDATE recurring_confirmations SET digest_excluded=0 WHERE id='confirmation-1'"
-            )
-            .run()
-        ).rejects.toThrow("recurring_confirmation_immutable")
-      );
-      for (const name of [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
-        .filter((name) => name > "0129_recurring_digest_exclusions.sql")
-        .sort()) {
-        yield* fromPromise(() => applyTestMigration({ db, source: new URL(name, directory) }));
-      }
-      expect(
-        (yield* fromPromise(() =>
-          db
-            .prepare(
-              "SELECT user_id,confirmation_id AS id,id AS series_id,confirmed_at,confirmation_context_json AS context_json,confirmation_json FROM recurring_series ORDER BY confirmation_id"
-            )
-            .all()
-        )).results
-      ).toEqual(before.results);
-      expect(
-        (yield* fromPromise(() =>
-          db
-            .prepare(
-              "SELECT confirmation_id AS id,digest_excluded,confirmation_sequence FROM recurring_series ORDER BY confirmation_sequence"
-            )
-            .all()
-        )).results
-      ).toEqual([
-        { id: "confirmation-2", digest_excluded: 0, confirmation_sequence: 3 },
-        { id: "confirmation-1", digest_excluded: 1, confirmation_sequence: 7 },
-        { id: "confirmation-3", digest_excluded: 0, confirmation_sequence: 11 },
-      ]);
-      yield* fromPromise(() =>
-        db.prepare("UPDATE recurring_series SET valid=0 WHERE id='series-1'").run()
-      );
-      yield* fromPromise(() =>
-        expect(
-          db.prepare("UPDATE recurring_series SET digest_excluded=0 WHERE id='series-1'").run()
-        ).rejects.toThrow("recurring_confirmation_immutable")
-      );
-    })
 );

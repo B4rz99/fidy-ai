@@ -3,8 +3,8 @@ import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
 import {
-  applyTestMigration,
   consentHistoryTestSchema,
+  installCurrentTestObjects,
   isolatedTestDatabases,
 } from "../d1-test-fixture";
 import { freshSessionQuery } from "../../src/shell/web-session/operations";
@@ -26,12 +26,7 @@ it("rechecks one User's current mailbox, fresh session and Consent in the protec
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
-        })
-      );
+      yield* Effect.tryPromise(() => installCurrentTestObjects({ db, tables: [] }));
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(

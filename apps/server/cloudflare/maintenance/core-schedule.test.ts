@@ -57,18 +57,7 @@ it("refuses an unavailable maintenance executor without falling back to cleanup 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* awaitPromise(() => databases.acquire());
-      yield* awaitPromise(() =>
-        installTestSchema({
-          db,
-          sources: Array.from(
-            new Bun.Glob("*.sql").scanSync({
-              cwd: new URL("../migrations/", import.meta.url).pathname,
-            })
-          )
-            .sort()
-            .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-        })
-      );
+      yield* awaitPromise(() => installTestSchema({ db }));
       const created = (yield* Clock.currentTimeMillis) - 86_400_000 - 660_000;
       yield* awaitPromise(() =>
         db.batch([
@@ -191,18 +180,7 @@ it(
         });
         try {
           const db = yield* awaitPromise(() => runtime.getD1Database("DB"));
-          yield* awaitPromise(() =>
-            installTestSchema({
-              db,
-              sources: Array.from(
-                new Bun.Glob("*.sql").scanSync({
-                  cwd: new URL("../migrations/", import.meta.url).pathname,
-                })
-              )
-                .sort()
-                .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-            })
-          );
+          yield* awaitPromise(() => installTestSchema({ db }));
           const now = yield* Clock.currentTimeMillis;
           yield* awaitPromise(() =>
             db.batch(

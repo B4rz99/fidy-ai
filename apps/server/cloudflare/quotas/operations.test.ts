@@ -1,6 +1,6 @@
 import { Data, DateTime, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import { installCurrentTestObjects, isolatedTestDatabases } from "../d1-test-fixture";
 import { prepareConsumption, quotaFailure, readQuotaStatus } from "./operations";
 
 const pool = isolatedTestDatabases();
@@ -34,14 +34,18 @@ const database = Effect.gen(function* () {
       ),
       db.prepare("CREATE TABLE authority (userId TEXT PRIMARY KEY, live INTEGER)"),
       db.prepare("CREATE TABLE publication (id TEXT PRIMARY KEY)"),
-      db.prepare("INSERT INTO users (id) VALUES (?),(?)").bind(userId, otherUser),
+      db
+        .prepare(
+          "WITH fixture_user(id) AS (VALUES (?),(?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) SELECT id,'CO','es-CO','America/Bogota',0 FROM fixture_user"
+        )
+        .bind(userId, otherUser),
       db.prepare("INSERT INTO authority VALUES (?,1),(?,1)").bind(userId, otherUser),
     ])
   );
   yield* io(() =>
-    applyTestMigration({
+    installCurrentTestObjects({
       db,
-      source: new URL("../migrations/0032_commercial_allowances.sql", import.meta.url),
+      tables: ["commercial_allowance_consumptions", "canonical_request_replays"],
     })
   );
   return db;

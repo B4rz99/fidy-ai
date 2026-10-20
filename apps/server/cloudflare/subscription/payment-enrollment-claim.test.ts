@@ -31,7 +31,12 @@ const setup = (): Effect.Effect<D1Database> =>
     ]);
 
     yield* fromPromise(() =>
-      db.prepare("INSERT INTO users (id) VALUES (?), (?)").bind(userA, userB).run()
+      db
+        .prepare(
+          "WITH fixture_user(id) AS (VALUES (?), (?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) SELECT id,'CO','es-CO','America/Bogota',0 FROM fixture_user"
+        )
+        .bind(userA, userB)
+        .run()
     );
     yield* fromPromise(() =>
       db

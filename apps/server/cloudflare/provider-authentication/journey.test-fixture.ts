@@ -1,4 +1,4 @@
-import type { SignJWT } from "jose";
+import { type SignJWT } from "jose";
 import { Effect, Option, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import publicWorker from "../public-worker";
@@ -99,36 +99,7 @@ const setupJourney = (
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources:
-            options.whatsapp === true
-              ? Array.from(
-                  new Bun.Glob("*.sql").scanSync({
-                    cwd: new URL("../migrations/", import.meta.url).pathname,
-                  })
-                )
-                  .sort()
-                  .map((name) => new URL(`../migrations/${name}`, import.meta.url))
-              : [
-                  "0002_resource_admission",
-                  "0003_pending_consent",
-                  "0004_onboarding_email",
-                  "0005_verified_onboarding",
-                  "0006_browser_login",
-                  "0007_browser_pairing_email",
-                  "0008_support_recovery",
-                  "0066_provider_authentication",
-                  "0067_microsoft_authentication",
-                  "0068_whatsapp_provider_handoff",
-                  "0069_retire_email_code_signup",
-                  "0070_recovery_retention",
-                  "0071_recovery_admission",
-                  "0072_disclosure_transport",
-                ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-        })
-      );
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
       const send = sendThroughWorkers(db, options.sandboxPhoneNumberId, options.coordinatorFetch);
       const response = yield* Effect.tryPromise(() => send("/web/pairings", {}));
       const pairing = yield* Schema.decodeUnknownEffect(Pairing)(

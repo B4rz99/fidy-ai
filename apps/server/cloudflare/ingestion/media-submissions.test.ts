@@ -1,3 +1,9 @@
+import {
+  WhatsAppBusinessPhoneNumberId,
+  type WhatsAppInboundEvent,
+  WhatsAppMediaId,
+  WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/contract";
 import { TranscriptText } from "../../src/core/agent/contract";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -7,15 +13,9 @@ import {
   WhatsAppBusinessScopedUserId,
 } from "../../src/core/identity/contract";
 import {
-  WhatsAppBusinessPhoneNumberId,
-  type WhatsAppInboundEvent,
-  WhatsAppMediaId,
-  WhatsAppProviderMessageId,
-} from "../../src/shell/channels/whatsapp/contract";
-import {
-  applyTestMigration,
   auditEntriesTestSchema,
   consentHistoryTestSchema,
+  installCurrentTestObjects,
   isolatedTestDatabases,
 } from "../d1-test-fixture";
 import { acceptWhatsAppMedia, listNeedsReviewItems } from "./operations";
@@ -49,7 +49,11 @@ const setup = Effect.gen(function* () {
   );
   yield* io(() =>
     db.batch([
-      db.prepare("INSERT INTO users(id) VALUES (?),(?)").bind(userId, otherUser),
+      db
+        .prepare(
+          "WITH fixture_user(id) AS (VALUES (?),(?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) SELECT id,'CO','es-CO','America/Bogota',0 FROM fixture_user"
+        )
+        .bind(userId, otherUser),
       db
         .prepare(
           "WITH incoming(user_id,portfolio_id,bsuid) AS (VALUES (?,'portfolio','CO.actor'),(?,'portfolio','CO.other')) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
@@ -62,15 +66,18 @@ const setup = Effect.gen(function* () {
         .bind(userId, otherUser),
     ])
   );
-  for (const name of [
-    "0032_commercial_allowances",
-    "0035_media_submissions",
-    "0109_review_state",
-    "0117_media_capacity",
-    "0119_media_review",
-  ]) {
+  {
     yield* io(() =>
-      applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+      installCurrentTestObjects({
+        db,
+        tables: [
+          "commercial_allowance_consumptions",
+          "canonical_request_replays",
+          "media_submissions",
+          "ingestion_review_state",
+          "ingestion_statement_review_decisions",
+        ],
+      })
     );
   }
   // This focused fixture retains the production media cascade used by expiry cleanup.
@@ -362,7 +369,7 @@ it.each([
   { table: "media_submissions", column: "review_created_at_ms" },
   { table: "media_submissions", column: "expires_at_ms" },
 ] as const)(
-  "returns safe unavailable for corrupt retained $table.$column without partial review output",
+  "returns safe unavailable for corrupt retained $table / $column without partial review output",
   ({ table, column }) =>
     Effect.runPromise(
       Effect.gen(function* () {

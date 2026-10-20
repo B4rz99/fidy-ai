@@ -1,8 +1,9 @@
+import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Schema, type Scope } from "effect";
+import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
+import { RecoveryRetentionUnavailable, type SupportAccessConfiguration } from "./contract";
 import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
 import { HttpClient } from "effect/http";
 import { deepStrictEqual } from "node:assert";
-import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Schema, type Scope } from "effect";
-import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { UserId } from "../../src/core/identity/contract";
 import { startBrowserPairing } from "../browser-login/operations";
@@ -13,8 +14,6 @@ import {
   retainedRecoveryPairingsQuery,
 } from "./operations";
 import { sweepRecoveryEvidence } from "./runtime";
-import type { SupportAccessConfiguration } from "./contract";
-import { RecoveryRetentionUnavailable } from "./contract";
 
 class TestFailure extends Data.TaggedError("TestFailure")<{ cause: unknown }> {}
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A, TestFailure> =>
@@ -62,21 +61,7 @@ type Fixture = Readonly<{
 const setup = (current: number): Effect.Effect<Fixture, TestFailure, Scope.Scope> =>
   Effect.gen(function* () {
     const db = yield* wait(() => databases.acquire());
-    yield* wait(() =>
-      installTestSchema({
-        db,
-        sources: [
-          "0003_pending_consent",
-          "0004_onboarding_email",
-          "0005_verified_onboarding",
-          "0006_browser_login",
-          "0007_browser_pairing_email",
-          "0008_support_recovery",
-          "0070_recovery_retention",
-          "0071_recovery_admission",
-        ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-      })
-    );
+    yield* wait(() => installTestSchema({ db }));
     yield* wait(() =>
       db
         .prepare(

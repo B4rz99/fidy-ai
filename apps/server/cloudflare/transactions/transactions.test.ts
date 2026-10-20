@@ -1,13 +1,15 @@
+import {
+  type AtomicBatchCall,
+  AtomicBatchCallId,
+  AtomicBatchRejected,
+} from "../../src/shell/operations/contract";
 import { hostedDeliveryReceipt, pendingExecutionRecoveryMs } from "../agent/contract";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
-  canonicalAdmissionMigrationNames,
   coordinatorTestDatabase,
-  hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
-  statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Config, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -19,11 +21,6 @@ import {
 } from "../../src/core/transactions/contract";
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { UserTransactionCoordinator } from "./runtime";
-import {
-  type AtomicBatchCall,
-  AtomicBatchCallId,
-  AtomicBatchRejected,
-} from "../../src/shell/operations/contract";
 import { ErrorCode, ScopeMissing } from "../../src/shell/public-http/contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
@@ -176,44 +173,7 @@ const setup = (platform = false, userCount = 2): Promise<D1Database> =>
       const db = platform
         ? yield* fromTestPromise(() => platformDatabase())
         : yield* fromTestPromise(() => databases.acquire());
-      yield* fromTestPromise(() =>
-        installTestSchema({
-          db,
-          sources: canonicalAdmissionMigrationNames([
-            "0001_categories",
-            "0002_resource_admission",
-            "0003_pending_consent",
-            "0004_onboarding_email",
-            "0005_verified_onboarding",
-            "0006_browser_login",
-            "0009_transactions",
-            "0010_pat_lifecycle",
-            "0011_transaction_corrections",
-            "0012_statement_staging",
-            "0012_transaction_search",
-            "0013_category_keyword_rules",
-            "0013_transaction_reconciliation",
-            "0014_memory",
-            "0015_statement_submission",
-            "0016_statement_processing",
-            "0016_budgets",
-            "0037_budget_crossing_facts",
-            "0016_hosted_turn",
-            "0017_hosted_compaction",
-            "0017_forwarded_email",
-            "0017_statement_dispatch",
-            "0018_batch_envelope_audit",
-            "0019_canonical_child_guards",
-            "0020_dashboard_projection",
-            "0075_transaction_query_costs",
-            ...hostedTurnTestMigrations,
-            "0009_email_replacement",
-            "0018_dashboard",
-            "0018_insight_events",
-            ...statementAuditTestMigrations,
-          ]).map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-        })
-      );
+      yield* fromTestPromise(() => installTestSchema({ db }));
       const current = yield* Clock.currentTimeMillis;
       yield* Effect.forEach(
         Array.from({ length: userCount }, (_, index) => loadUserId(index)),

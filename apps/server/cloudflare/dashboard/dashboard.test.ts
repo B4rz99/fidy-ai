@@ -1,9 +1,10 @@
+import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { ScopeMissing } from "../../src/shell/public-http/contract";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { findRecurringSnapshot, repairDashboardProjection } from "../transactions/operations";
 import { DashboardDocument, DashboardEdit } from "../../src/core/dashboard/contract";
 import { prepareDashboard } from "./operations";
@@ -13,7 +14,6 @@ import {
   OAuthConnectionId,
   OAuthCredentialId,
 } from "../../src/core/oauth-agents/contract";
-import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { Transaction } from "../../src/core/transactions/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { resolveDashboardPeriod } from "../../src/core/dashboard/operations";
@@ -86,14 +86,8 @@ const seedUser = ({
 const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
-    const sources = [
-      ...new Bun.Glob("*.sql").scanSync({
-        cwd: new URL("../migrations/", import.meta.url).pathname,
-      }),
-    ]
-      .sort()
-      .map((name) => new URL(`../migrations/${name}`, import.meta.url));
-    yield* Effect.tryPromise(() => installTestSchema({ db, sources }));
+
+    yield* Effect.tryPromise(() => installTestSchema({ db }));
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (user, index) => seedUser({ db, user, index, current }), {
       discard: true,

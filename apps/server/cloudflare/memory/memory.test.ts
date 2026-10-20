@@ -1,10 +1,4 @@
-import {
-  canonicalAdmissionMigrationNames,
-  hostedTurnTestMigrations,
-  installTestSchema,
-  isolatedTestDatabases,
-  statementAuditTestMigrations,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { ErrorCode } from "../../src/shell/public-http/contract";
@@ -45,6 +39,7 @@ const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
 const bearer = (index: number): string => String(index + 1).repeat(43);
+
 let identifierSequence = 0;
 const identifier = (): string =>
   `20000000-0000-4000-8000-${String((identifierSequence += 1)).padStart(12, "0")}`;
@@ -67,46 +62,7 @@ const setup = (): Promise<D1Database> =>
     Effect.gen(function* () {
       coordinators.clear();
       const db = yield* fromTestPromise(() => databases.acquire());
-      yield* fromTestPromise(() =>
-        installTestSchema({
-          db,
-          sources: canonicalAdmissionMigrationNames([
-            "0001_categories",
-            "0002_resource_admission",
-            "0003_pending_consent",
-            "0004_onboarding_email",
-            "0005_verified_onboarding",
-            "0006_browser_login",
-            "0007_browser_pairing_email",
-            "0008_support_recovery",
-            "0009_email_replacement",
-            "0009_transactions",
-            "0010_pat_lifecycle",
-            "0011_transaction_corrections",
-            "0012_statement_staging",
-            "0012_transaction_search",
-            "0013_category_keyword_rules",
-            "0013_transaction_reconciliation",
-            "0014_memory",
-            "0015_statement_submission",
-            "0016_statement_processing",
-            "0016_budgets",
-            "0037_budget_crossing_facts",
-            "0016_hosted_turn",
-            "0017_hosted_compaction",
-            "0017_forwarded_email",
-            "0017_statement_dispatch",
-            "0018_batch_envelope_audit",
-            "0019_canonical_child_guards",
-            "0020_dashboard_projection",
-            "0075_transaction_query_costs",
-            ...hostedTurnTestMigrations,
-            "0018_dashboard",
-            "0018_insight_events",
-            ...statementAuditTestMigrations,
-          ]).map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-        })
-      );
+      yield* fromTestPromise(() => installTestSchema({ db }));
       const current = clock();
       yield* Effect.forEach(
         users,

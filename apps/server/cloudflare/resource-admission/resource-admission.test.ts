@@ -1,15 +1,4 @@
 import {
-  admitResource,
-  admitResourceWithAttemptPressure,
-  releaseOutstandingResource,
-} from "./operations";
-import { NodeFileSystem } from "@effect/platform-node";
-import { it as effectIt } from "@effect/vitest";
-import { Data, Effect, Fiber, FileSystem, Result } from "effect";
-import { Miniflare } from "miniflare";
-import { rolldown } from "rolldown";
-import { afterEach, describe, expect, it } from "vitest";
-import {
   type ResourceAdmissionAuthorityConfig,
   type ResourceAdmissionCharge,
   ResourceAdmissionCharges,
@@ -26,6 +15,18 @@ import {
   ResourceAdmissionUnavailable,
   ResourceAdmissionUnits,
 } from "./contract";
+import { installCurrentTestObjects } from "../d1-test-fixture";
+import {
+  admitResource,
+  admitResourceWithAttemptPressure,
+  releaseOutstandingResource,
+} from "./operations";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it as effectIt } from "@effect/vitest";
+import { Data, Effect, Fiber, FileSystem, Result } from "effect";
+import { Miniflare } from "miniflare";
+import { rolldown } from "rolldown";
+import { afterEach, describe, expect, it } from "vitest";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -34,7 +35,7 @@ const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
     catch: () => new TestPromiseFailure(),
   }).pipe(Effect.orDie);
 const workerScript = "export default { fetch() { return new Response('ok') } }";
-const migrationUrl = new URL("../migrations/0002_resource_admission.sql", import.meta.url);
+
 const workerFixtureUrl = new URL("./resource-admission-worker.fixture.ts", import.meta.url);
 const activeMiniflare = new Set<Miniflare>();
 
@@ -69,23 +70,10 @@ const makeMiniflare = (resourcePersistencePath?: string): Promise<Miniflare> =>
   );
 
 const migrateDatabase = (database: D1Database): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const migration = (yield* fromTestPromise(() => Bun.file(migrationUrl).text())).replace(
-        /^--.*$/gmu,
-        ""
-      );
-      yield* fromTestPromise(() =>
-        migration
-          .trim()
-          .split(/\n\s*\n/u)
-          .reduce<Promise<unknown>>(
-            (previous, statement) => previous.then(() => database.prepare(statement).run()),
-            Promise.resolve()
-          )
-      );
-    })
-  );
+  installCurrentTestObjects({
+    db: database,
+    tables: ["resource_admission_events", "resource_admission_grants"],
+  });
 
 const prepareDatabase = (miniflare: Miniflare): Promise<D1Database> =>
   Effect.runPromise(

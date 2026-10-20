@@ -1,6 +1,6 @@
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { makeSubscriptionErasureStores } from "./runtime";
 
 const databases = isolatedTestDatabases();
@@ -36,56 +36,33 @@ const seed = (db: D1Database, user: string, index: number): Promise<unknown> =>
     VALUES(?,?,?,?,?,'22700000-0000-4000-8000-000000000001','9900','COP','weekly','CO','not-taxable','America/Bogota','sandbox',?,0)`)
       .bind(id(4, index), user, id(2, index), id(5, index), id(3, index), `fidy-${index}`),
     db
-      .prepare("UPDATE billing_collection_arms SET state='sent',sent_at_ms=1 WHERE attempt_id=?")
+      .prepare(
+        "UPDATE billing_attempts SET collection_state='sent',collection_sent_at_ms=1 WHERE id=?"
+      )
       .bind(id(4, index)),
     db
-      .prepare("INSERT INTO billing_transaction_candidates(transaction_id,attempt_id) VALUES(?,?)")
+      .prepare("INSERT INTO billing_provider_transactions(transaction_id,attempt_id) VALUES(?,?)")
       .bind(`declined-${index}`, id(4, index)),
     db
-      .prepare("INSERT INTO billing_checkout_responses VALUES(?,?)")
+      .prepare("UPDATE billing_attempts SET checkout_transaction_id=?2 WHERE id=?1")
       .bind(id(4, index), `declined-${index}`),
     db
-      .prepare("INSERT INTO billing_transaction_evidence VALUES(?,?,'DECLINED',1,1,1)")
+      .prepare(
+        "UPDATE billing_provider_transactions SET status='DECLINED',first_observed_at_ms=1,negative_observed_at_ms=1,finalized_at_ms=1 WHERE transaction_id=?1 AND attempt_id=?2"
+      )
       .bind(`declined-${index}`, id(4, index)),
     db
       .prepare("UPDATE billing_attempts SET status='failed',finalized_at_ms=181001 WHERE id=?")
       .bind(id(4, index)),
   ]);
 
-it("preserves populated billing and erasure guards across replacement migration, then disposes only the reviewed User", () =>
+it("preserves billing erasure guards and disposes only the reviewed User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* wait(() => databases.acquire());
-      const sources = Array.from(
-        new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-      )
-        .filter((name) => name < "0107")
-        .sort()
-        .map((name) => new URL(`../migrations/${name}`, import.meta.url));
-      yield* Effect.forEach(sources, (source) => wait(() => applyTestMigration({ db, source })));
+      yield* wait(() => installTestSchema({ db }));
       yield* wait(() => seed(db, userId, 1));
       yield* wait(() => seed(db, foreignUser, 2));
-      const before = yield* wait(() =>
-        db.prepare("SELECT * FROM billing_attempts ORDER BY id").all()
-      );
-      yield* wait(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0107_failed_card_replacement.sql", import.meta.url),
-        })
-      );
-      expect(
-        (yield* wait(() => db.prepare("SELECT * FROM billing_attempts ORDER BY id").all())).results
-      ).toEqual(before.results);
-      expect(
-        (yield* wait(() =>
-          db
-            .prepare(
-              "SELECT name FROM sqlite_master WHERE type='trigger' AND (name LIKE 'erasure_fence_card_payment_sources_%' OR name='erasure_preserve_card_payment_sources_delete')"
-            )
-            .all()
-        )).results
-      ).toHaveLength(4);
       yield* wait(() =>
         db
           .prepare("UPDATE card_payment_sources SET retired_at_ms=200000 WHERE user_id=?")
@@ -105,44 +82,6 @@ it("preserves populated billing and erasure guards across replacement migration,
             .bind(id(3, 3), userId, id(2, 3)),
         ])
       );
-      yield* wait(() =>
-        db.prepare("UPDATE billing_collection_outbox SET last_attempt_at_ms=180000").run()
-      );
-      const collectionBefore = yield* wait(() =>
-        db
-          .prepare(`SELECT a.attempt_id,a.state,a.sent_at_ms,o.last_attempt_at_ms
-        FROM billing_collection_arms a JOIN billing_collection_outbox o USING(attempt_id) ORDER BY a.attempt_id`)
-          .all()
-      );
-      for (const name of ["0124_billing_collection_work.sql", "0128_payment_assertions.sql"]) {
-        yield* wait(() =>
-          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
-        );
-      }
-      expect(
-        (yield* wait(() =>
-          db
-            .prepare(
-              "SELECT attempt_id,state,sent_at_ms,last_attempt_at_ms FROM billing_collection_work ORDER BY attempt_id"
-            )
-            .all()
-        )).results
-      ).toEqual(collectionBefore.results);
-      const remaining = Array.from(
-        new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-      )
-        .filter(
-          (name) =>
-            name > "0107_failed_card_replacement.sql" &&
-            name <= "0153_user_companions.sql" &&
-            !["0124_billing_collection_work.sql", "0128_payment_assertions.sql"].includes(name)
-        )
-        .sort();
-      for (const name of remaining) {
-        yield* wait(() =>
-          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
-        );
-      }
       const current = yield* Clock.currentTimeMillis;
       const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
         dispositions: { billing: { action: "Retain", retention: { untilMs: current + 86400000 } } },

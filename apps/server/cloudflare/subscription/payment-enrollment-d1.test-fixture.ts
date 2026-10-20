@@ -1,10 +1,9 @@
 import { Effect } from "effect";
 import { afterAll } from "vitest";
 import {
-  applyTestMigration,
   auditEntriesTestSchema,
   consentHistoryTestSchema,
-  installTestSchemaWithPrefix,
+  installCurrentTestObjects,
   isolatedTestDatabases,
 } from "../d1-test-fixture";
 
@@ -21,40 +20,33 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
 ) {
   const db = yield* fromPromise(() => databases.acquire());
   yield* fromPromise(() =>
-    installTestSchemaWithPrefix({
-      db,
-      prefixStatements: [...authSchema, auditEntriesTestSchema, consentHistoryTestSchema],
-      sources: [
-        "0002_resource_admission.sql",
-        "0009_card_enrollment.sql",
-        "0012_billing_collection.sql",
-        "0030_payment_enrollment.sql",
-        "0031_daviplata_enrollment.sql",
-        "0035_billing_corrections.sql",
-        "0052_weekly_card_renewal.sql",
-        "0053_calendar_card_renewal.sql",
-        "0058_wallet_renewal.sql",
-        "0059_subscription_retries.sql",
-        "0060_subscription_cancellation.sql",
-        "0106_declined_card_retry.sql",
-        "0107_failed_card_replacement.sql",
-        "0112_failed_card_wallet_replacement.sql",
-      ].map((file) => new URL(`../migrations/${file}`, import.meta.url)),
-    })
+    db.batch(
+      [...authSchema, auditEntriesTestSchema, consentHistoryTestSchema]
+        .filter((sql) => sql.trim().length > 0)
+        .map((sql) => db.prepare(sql))
+    )
   );
+  yield* fromPromise(() => db.prepare("ALTER TABLE users ADD COLUMN subscription_id TEXT").run());
   yield* fromPromise(() =>
-    applyTestMigration({
+    installCurrentTestObjects({
       db,
-      source: new URL("../migrations/0153_user_companions.sql", import.meta.url),
-      includeStatement: (sql) =>
-        sql.startsWith("PRAGMA ") ||
-        sql.startsWith("ALTER TABLE users ADD COLUMN subscription_id ") ||
-        sql.startsWith("UPDATE users SET subscription_id=") ||
-        sql.startsWith("CREATE UNIQUE INDEX users_subscription_id ") ||
-        sql.includes("refund_attempts") ||
-        sql.includes("subscription_renewal_fences") ||
-        sql.startsWith("DROP TABLE subscription_identities") ||
-        sql.startsWith("CREATE TRIGGER subscription_identities_field_"),
+      tables: [
+        "resource_admission_grants",
+        "resource_admission_events",
+        "billing_attempts",
+        "billing_event_candidates",
+        "billing_price_notices",
+        "billing_provider_transactions",
+        "billing_retry_clearances",
+        "card_enrollments",
+        "card_payment_sources",
+        "refund_attempts",
+        "subscription_cancellations",
+        "subscription_prices",
+        "subscription_renewal_fences",
+        "subscriptions",
+      ],
+      objects: ["users_subscription_id", "subscription_identities_field_"],
     })
   );
   return { db };

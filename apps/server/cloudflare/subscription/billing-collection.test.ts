@@ -1,6 +1,6 @@
 import { type WorkflowStepConfig } from "cloudflare:workers";
-import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { afterEach, expect, it, vi } from "vitest";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import {
@@ -9,7 +9,6 @@ import {
   reconcileBillingCandidates,
   runBillingCollectionWorkflow,
 } from "./runtime";
-
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 
@@ -35,7 +34,11 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
       const db = created.db;
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users(id,time_zone) VALUES (?, 'America/Bogota')").bind(userId),
+          db
+            .prepare(
+              "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+            )
+            .bind(userId),
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
@@ -840,7 +843,9 @@ it("rejects a signed callback with another User's source even when its reference
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users(id,time_zone) VALUES (?, 'America/Bogota')")
+            .prepare(
+              "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+            )
             .bind(otherUser),
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,

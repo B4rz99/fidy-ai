@@ -2,12 +2,7 @@ import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/opera
 import assert from "node:assert/strict";
 import { InsightUnavailable } from "./contract";
 import { UserId } from "../../src/core/identity/contract";
-import {
-  canonicalAdmissionMigrationNames,
-  installTestSchema,
-  isolatedTestDatabases,
-  statementAuditTestMigrations,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -78,46 +73,8 @@ const seedUser = (db: D1Database, index: number, current: number): Effect.Effect
 const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const db = yield* fromTestPromise(() => databases.acquire());
-    const migrations = [
-      "0001_categories",
-      "0002_resource_admission",
-      "0003_pending_consent",
-      "0004_onboarding_email",
-      "0005_verified_onboarding",
-      "0006_browser_login",
-      "0007_browser_pairing_email",
-      "0008_support_recovery",
-      "0009_transactions",
-      "0010_pat_lifecycle",
-      "0011_transaction_corrections",
-      "0012_statement_staging",
-      "0012_transaction_search",
-      "0013_category_keyword_rules",
-      "0013_transaction_reconciliation",
-      "0014_memory",
-      "0015_statement_submission",
-      "0016_budgets",
-      "0037_budget_crossing_facts",
-      "0016_statement_processing",
-      "0017_forwarded_email",
-      "0017_statement_dispatch",
-      "0018_batch_envelope_audit",
-      "0018_insight_events",
-      "0019_canonical_child_guards",
-      "0020_dashboard_projection",
-      "0075_transaction_query_costs",
-      "0009_email_replacement",
-      "0018_dashboard",
-      ...statementAuditTestMigrations,
-    ];
-    yield* fromTestPromise(() =>
-      installTestSchema({
-        db,
-        sources: canonicalAdmissionMigrationNames(migrations).map(
-          (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
-        ),
-      })
-    );
+
+    yield* fromTestPromise(() => installTestSchema({ db }));
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (_user, index) => seedUser(db, index, current), {
       concurrency: 1,

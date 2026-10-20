@@ -1,3 +1,4 @@
+import { type CoreHttpEnvironment } from "../contract";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -7,7 +8,6 @@ import {
   makeTelemetryService,
 } from "../../../src/shell/observability/operations";
 import { installTestSchema, isolatedTestDatabases } from "../../d1-test-fixture";
-import type { CoreHttpEnvironment } from "../contract";
 import { executeCoreHttp } from "./http";
 
 const databases = isolatedTestDatabases();
@@ -40,16 +40,7 @@ for (const path of [
     () =>
       Effect.gen(function* () {
         const db = yield* Effect.tryPromise(() => databases.acquire());
-        yield* Effect.tryPromise(() =>
-          installTestSchema({
-            db,
-            sources: Array.from(
-              new Bun.Glob("*.sql").scanSync(new URL("../../migrations/", import.meta.url).pathname)
-            )
-              .sort()
-              .map((name) => new URL(`../../migrations/${name}`, import.meta.url)),
-          })
-        );
+        yield* Effect.tryPromise(() => installTestSchema({ db }));
         expect(
           yield* Effect.tryPromise(() =>
             db

@@ -79,7 +79,6 @@ it("shares the canonical-call allowance between PAT ingress and OAuth MCP", () =
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -134,7 +133,6 @@ it("accounts OAuth mutation attempts and atomic batches once and replays across 
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -261,7 +259,6 @@ it("refuses exhausted OAuth mutations and batches without partial effects across
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -375,7 +372,6 @@ it("linearizes parallel PAT and OAuth mutation admission at the last Free canoni
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -439,7 +435,6 @@ it("resets the shared OAuth and PAT allowance at the exact Bogota month boundary
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -619,7 +614,6 @@ it("shares one retry admission during parallel PAT and OAuth mutations without r
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -679,7 +673,6 @@ it("rechecks live OAuth capabilities and revocation before disclosing retained f
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())

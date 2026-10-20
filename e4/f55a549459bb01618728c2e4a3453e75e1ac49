@@ -1,0 +1,32 @@
+apps/web/e2e/real-core-fixture.ts
+  s_6d017cc65783af::t_6ab3960b46da7b 116,297
+  s_6d017cc65783af::t_9e3d965beebf1a 117,298
+apps/web/e2e/consent-navigation.spec.ts
+  s_6d017cc65783af::t_9e3d965beebf1a 5,45-47
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_6d017cc65783af::t_9e3d965beebf1a 46
+  s_6d017cc65783af::t_6ab3960b46da7b 47
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_6d017cc65783af::t_6ab3960b46da7b 14,438,441
+  s_6d017cc65783af::t_b01ceffbf676c0 41-52,433-435,444,453-456,464-466
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_2ce54218a96580 333-334
+  s_6d017cc65783af::t_8b641db5da0b83 335-337
+  s_6d017cc65783af::t_5449025c2a4dd2 329-332,338
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e4f55a549459bb01618728c2e4a3453e75e1ac49",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -59,7 +59,16 @@ def invoke(binary, home, arguments, bearer, expected_code=0):
     environment['USERPROFILE' if os.name == 'nt' else 'HOME'] = str(home)
     result = run([str(binary), *arguments], env=environment)
     require(bearer not in result.stdout + result.stderr, 'Packaged CLI disclosed credential material')
-    require(result.returncode == expected_code, 'Packaged CLI returned an unexpected status')
+    if result.returncode != expected_code:
+        code = None
+        try:
+            code = json.loads(result.stderr).get('code')
+        except (ValueError, AttributeError):
+            pass
+        allowed = {'StorageUnavailable', 'StorageInconsistent', 'UnsupportedRuntime', 'InvalidInput'}
+        if code in allowed:
+            print('Packaged CLI closed failure: ' + code, flush=True)
+        raise ValueError('Packaged CLI returned an unexpected status')
     return result
 
 

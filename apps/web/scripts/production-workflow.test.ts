@@ -7,6 +7,9 @@ const cliRelease = await Bun.file(`${repositoryRoot}/.github/workflows/cli-relea
 const manualRollback = await Bun.file(
   `${repositoryRoot}/.github/workflows/production-rollback.yml`
 ).text();
+const inspection = await Bun.file(
+  `${repositoryRoot}/.github/workflows/production-inspect.yml`
+).text();
 const profileAction = await Bun.file(
   `${repositoryRoot}/.github/actions/configure-alchemy-cloudflare-profile/action.yml`
 ).text();
@@ -15,6 +18,27 @@ const preflight = await Bun.file(
 ).text();
 
 describe("Production release workflow policy", () => {
+  it("verifies the live database only on protected opt-in inspection without changing traffic", () => {
+    expect(inspection).toContain("verify_database:");
+    expect(inspection).toContain("type: boolean\n        default: false");
+    expect(inspection).toContain("if: github.ref == 'refs/heads/trunk'");
+    expect(inspection).toContain("environment: production");
+    expect(inspection).toContain("group: production-deployment");
+    expect(inspection).toContain("cancel-in-progress: false");
+    const capture = inspection.indexOf("bun production-release.ts capture");
+    const identity = inspection.indexOf('echo "RELEASE_GIT_SHA=$(jq -r .stableRevision');
+    const proof = inspection.indexOf("bun verify-production-smoke.ts promoted");
+    const fullPass = inspection.indexOf("grep -Fxq 'Production smoke passed.'");
+    expect(capture).toBeGreaterThan(0);
+    expect(identity).toBeGreaterThan(capture);
+    expect(proof).toBeGreaterThan(identity);
+    expect(fullPass).toBeGreaterThan(proof);
+    expect(inspection.match(/if: \$\{\{ inputs.verify_database \}\}/gu)).toHaveLength(3);
+    expect(inspection).toContain("set -euo pipefail");
+    expect(inspection).not.toMatch(
+      /production-resources\.ts|production-release\.ts (stage|promote|rollback)/u
+    );
+  });
   it("defers resource retirement until normal traffic and edge checks pass in the same release", () => {
     const upload = workflow.indexOf("bun production-resources.ts upload");
     const promote = workflow.indexOf("bun production-release.ts promote");

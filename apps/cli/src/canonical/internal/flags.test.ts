@@ -81,7 +81,7 @@ it("a schema extension generates new help and assembly without a parallel field 
     {
       name: "page-size",
       required: false,
-      constraints: { minimum: 1, maximum: 20, allOf: [{ minimum: 1, maximum: 20 }] },
+      constraints: { minimum: 1, maximum: 20 },
     },
   ]);
   expect(

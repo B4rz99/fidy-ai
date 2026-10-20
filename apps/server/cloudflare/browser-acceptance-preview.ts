@@ -239,9 +239,9 @@ const deliverEmailLoginProof = (code: string): Promise<Response> =>
     db
       .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_state = 'awaiting_proof',
     email_public_code = ?, email_proof_digest = ?, email_proof_expires_at_ms = ?
-    WHERE email_work_id IS NOT NULL AND id = (SELECT id FROM browser_login_pairings WHERE email_public_code = ?)
+    WHERE email_work_id IS NOT NULL AND id = (SELECT id FROM browser_login_pairings WHERE public_code = ?)
       AND email_state = 'awaiting_delivery'`)
-      .bind(replacementCode.slice(0, publicCodeLength), digest, expiry, code)
+      .bind(code, digest, expiry, code)
       .run()
   );
 

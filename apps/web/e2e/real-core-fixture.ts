@@ -179,7 +179,7 @@ export const signInWithVerifiedEmailThroughCore = ({
         request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
       );
       expect(delivered.status()).toBe(noContentStatus);
-      const proof = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+      const proof = `${code}-JKLM-NPQR-STUV-WXYZ`;
       yield* Effect.tryPromise(() => page.getByLabel("Código recibido por correo").fill(proof));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Aprobar este navegador" }).click()

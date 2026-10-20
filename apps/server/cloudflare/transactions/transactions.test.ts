@@ -1676,19 +1676,22 @@ it("links one exact pair into one effective Transaction while retaining both ori
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: visible,
-            id: "30000000-0000-4000-8000-000000000201",
-          }),
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: suppressed,
-            id: "30000000-0000-4000-8000-000000000202",
-          }),
-        ])
+        ]).then(() =>
+          Promise.all([
+            seedManualAttestation({
+              db,
+              userId: owner,
+              transactionId: visible,
+              id: "30000000-0000-4000-8000-000000000201",
+            }),
+            seedManualAttestation({
+              db,
+              userId: owner,
+              transactionId: suppressed,
+              id: "30000000-0000-4000-8000-000000000202",
+            }),
+          ])
+        )
       );
       const send = (path: string, body?: object): Promise<Response> =>
         sendPublicRequest(
@@ -1878,13 +1881,16 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: suppressed,
-            id: "30000000-0000-4000-8000-000000000402",
-          }),
-        ])
+        ]).then(() =>
+          Promise.all([
+            seedManualAttestation({
+              db,
+              userId: owner,
+              transactionId: suppressed,
+              id: "30000000-0000-4000-8000-000000000402",
+            }),
+          ])
+        )
       );
       const send = (path: string, body: object): Promise<Response> =>
         sendPublicRequest(
@@ -2179,13 +2185,16 @@ it("keeps the effective Transaction consistent after corrections to either membe
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: visible,
-            id: "30000000-0000-4000-8000-000000000801",
-          }),
-        ])
+        ]).then(() =>
+          Promise.all([
+            seedManualAttestation({
+              db,
+              userId: owner,
+              transactionId: visible,
+              id: "30000000-0000-4000-8000-000000000801",
+            }),
+          ])
+        )
       );
       const send = (path: string, method: string, body: object): Promise<Response> =>
         sendPublicRequest(
@@ -4348,13 +4357,16 @@ it("links and unlinks pair children inside one atomic batch", () =>
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-          seedManualAttestation({
-            db,
-            userId: owner,
-            transactionId: suppressed,
-            id: "30000000-0000-4000-8000-000000000903",
-          }),
-        ])
+        ]).then(() =>
+          Promise.all([
+            seedManualAttestation({
+              db,
+              userId: owner,
+              transactionId: suppressed,
+              id: "30000000-0000-4000-8000-000000000903",
+            }),
+          ])
+        )
       );
       const linked = yield* fromTestPromise(() =>
         sendPublicRequest(

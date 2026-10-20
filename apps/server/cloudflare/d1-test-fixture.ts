@@ -332,6 +332,33 @@ export const installTestSchemaWithPrefix = (
     return pending;
   }
 
+  if (install !== undefined && !controlSchemas.has(input.db)) {
+    const pending = Promise.all([
+      loadMigrationStatements(privacySchema),
+      loadMigrationStatements(assertionSchema),
+      loadMigrationStatements(
+        new URL("./migrations/0130_specialized_assertions.sql", import.meta.url)
+      ),
+      testSchemaStatements(input),
+    ])
+      .then(([privacy, assertions, specialized, owner]) =>
+        install([
+          ...privacy,
+          ...assertions,
+          ...specialized.filter((sql) =>
+            sql.trim().startsWith("CREATE TRIGGER IF NOT EXISTS sql_assertions_")
+          ),
+          ...owner,
+        ])
+      )
+      .catch((cause: unknown) => {
+        controlSchemas.delete(input.db);
+        throw cause;
+      });
+    controlSchemas.set(input.db, pending);
+    return pending;
+  }
+
   return installControlSchemas(input.db)
     .then(() => testSchemaStatements(input))
     .then((sql) => {

@@ -395,23 +395,23 @@ const expireInsightClaims = (
       input.db
         .prepare(
           `UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET text=NULL,summary_json=NULL
-           WHERE kind='insight' AND ${scope}rowid IN (
+           WHERE kind='insight' AND rowid IN (
              SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims
              WHERE ${scope}(text IS NOT NULL OR summary_json IS NOT NULL) AND send_started_at_ms <= ?
              ORDER BY send_started_at_ms LIMIT 64
            ) AND (text IS NOT NULL OR summary_json IS NOT NULL)`
         )
-        .bind(...user, ...user, input.now - hostedTranscriptRetentionMs),
+        .bind(...user, input.now - hostedTranscriptRetentionMs),
       input.db
         .prepare(
           `UPDATE whatsapp_deliveries AS insight_whatsapp_claims SET text=NULL,summary_json=NULL
-           WHERE kind='insight' AND ${scope}rowid IN (
+           WHERE kind='insight' AND rowid IN (
              SELECT rowid FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims
              WHERE ${scope}(text IS NOT NULL OR summary_json IS NOT NULL) AND state='staged' AND expires_at_ms <= ?
              ORDER BY expires_at_ms LIMIT 64
            ) AND (text IS NOT NULL OR summary_json IS NOT NULL)`
         )
-        .bind(...user, ...user, input.now),
+        .bind(...user, input.now),
     ])
   ).pipe(Effect.asVoid);
 };

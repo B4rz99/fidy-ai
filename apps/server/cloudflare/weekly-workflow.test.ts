@@ -95,7 +95,7 @@ const workflowBinding: Workflow<ProactivityDeliveryWork> = {
 const snapshot = (db: D1Database): Effect.Effect<ReadonlyArray<ReadonlyArray<unknown>>> =>
   Effect.forEach(
     [
-      "proactivity_delivery_outbox",
+      "(SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL)",
       "weekly_question_intents",
       "whatsapp_deliveries",
       "consent_offers",

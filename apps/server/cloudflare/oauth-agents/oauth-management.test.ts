@@ -568,7 +568,9 @@ it("reports malformed connection metadata and unavailable canonical activity rat
       yield* wait(
         fixture.db.prepare("UPDATE oauth_connections SET scopes_json = '[\"read\"]'").run()
       );
-      yield* wait(fixture.db.prepare("ALTER TABLE pat_audit RENAME TO unavailable_audit").run());
+      yield* wait(
+        fixture.db.prepare("ALTER TABLE audit_entries RENAME TO unavailable_audit").run()
+      );
       expect(
         (yield* wait(fixture.send("/web/oauth/connections", { headers: fixture.headers }))).status
       ).toBe(503);

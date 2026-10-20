@@ -18,24 +18,13 @@ const prepareDatabase = (): Promise<D1Database> =>
   databases.acquire().then((db) =>
     installTestSchema({
       db,
-      sources: [new URL("../migrations/0002_resource_admission.sql", import.meta.url)],
+      sources: [new URL("../migrations/0005_verified_onboarding.sql", import.meta.url)],
     }).then(() => db)
   );
 
 const modelUserId = "10000000-0000-4000-8000-000000000001";
 const seedModelConsent = (database: D1Database): Promise<unknown> =>
-  installTestSchema({
-    db: database,
-    sources: [
-      "0001_categories",
-      "0003_pending_consent",
-      "0004_onboarding_email",
-      "0005_verified_onboarding",
-      "0006_browser_login",
-      "0009_transactions",
-      "0010_pat_lifecycle",
-    ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-  }).then(() =>
+  Promise.resolve().then(() =>
     database.batch([
       database
         .prepare(

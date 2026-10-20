@@ -227,7 +227,7 @@ const migrationNames = [
   ...statementAuditTestMigrations,
 ] as const;
 
-export const setup = (): Promise<D1Database> =>
+export const setup = (firstGrant: string = grants[0]): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -248,7 +248,7 @@ export const setup = (): Promise<D1Database> =>
         const user = users[index];
         const pairing = pairings[index];
         const session = sessions[index];
-        const grant = grants[index];
+        const grant = index === 0 ? firstGrant : grants[index];
         if (
           user === undefined ||
           pairing === undefined ||

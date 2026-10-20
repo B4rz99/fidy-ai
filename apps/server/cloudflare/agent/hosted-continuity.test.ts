@@ -2518,15 +2518,8 @@ it("uses the owner's Clock throughout hosted preflight, inference and delivery s
 it("admits a web-provider onboarding grant through the native Agent service and returns a delivery proposal", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => setup());
+      const db = yield* Effect.tryPromise(() => setup("a".repeat(43)));
       const credentials = yield* Effect.tryPromise(() => subject(0));
-      const attemptId = "a".repeat(43);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("UPDATE onboarding_consent_records SET id = ? WHERE user_id = ?")
-          .bind(attemptId, users[0])
-          .run()
-      );
       const model = vi.fn(() => Promise.resolve(reply("Conexión verificada")));
       const service = makeAgentService({
         environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },

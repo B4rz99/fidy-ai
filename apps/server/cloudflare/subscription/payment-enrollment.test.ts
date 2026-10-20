@@ -203,10 +203,10 @@ const retainHistoricalConfirmation = Effect.fn(function* (
   if (input.supportConfirmed) {
     yield* fromTestPromise(() =>
       input.db
-        .prepare(`INSERT INTO billing_no_charge_confirmations
-      (attempt_id,wompi_reference,wompi_environment,provider_case_id,operator_id,confirmed_at_ms)
-      VALUES (?,?,'sandbox','synthetic-provider-case','synthetic-operator',?)`)
-        .bind(input.attemptId, input.reference, input.now)
+        .prepare(
+          `UPDATE billing_attempts SET no_charge_reference=?,no_charge_environment='sandbox',no_charge_case_id='synthetic-provider-case',no_charge_operator_id='synthetic-operator',no_charge_confirmed_at_ms=? WHERE id=?`
+        )
+        .bind(input.reference, input.now, input.attemptId)
         .run()
     );
   }
@@ -214,7 +214,9 @@ const retainHistoricalConfirmation = Effect.fn(function* (
     // Retained historical evidence precedes repair of the derived failed-attempt projection.
     yield* fromTestPromise(() =>
       input.db
-        .prepare("UPDATE billing_transaction_evidence SET status=? WHERE attempt_id=?")
+        .prepare(
+          "UPDATE billing_provider_transactions SET status=? WHERE attempt_id=? AND status IS NOT NULL"
+        )
         .bind(input.lateEvidence, input.attemptId)
         .run()
     );

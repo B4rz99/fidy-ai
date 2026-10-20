@@ -353,7 +353,10 @@ const persistDecision = ({
         statements: [statement],
       })
     );
-    if (Exit.isSuccess(committed)) return answer(HTTP_OK);
+    if (Exit.isSuccess(committed)) {
+      const recorded = yield* findRecordedDecision(db, input);
+      return Option.getOrElse(recorded, () => answer(HTTP_CONFLICT));
+    }
     const latest = yield* findExchange(db, input.event);
     return answer(
       Option.isSome(latest) && latest.value.state !== "awaiting_decision"

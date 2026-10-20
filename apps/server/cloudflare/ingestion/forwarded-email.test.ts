@@ -700,7 +700,11 @@ it.each([
         yield* wait(() => processForwardedEmail(work));
         expect(
           (yield* wait(() =>
-            db.prepare("SELECT user_id,reason FROM forwarded_email_needs_review").all()
+            db
+              .prepare(
+                "SELECT user_id,review_reason AS reason FROM forwarded_email_receipts WHERE review_id IS NOT NULL"
+              )
+              .all()
           )).results
         ).toEqual([{ user_id: userA, reason }]);
         expect(

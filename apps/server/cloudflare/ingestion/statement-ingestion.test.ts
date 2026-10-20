@@ -960,6 +960,9 @@ const expectCanonicalState = (
   });
 
 const relationSql = (relation: string): string => {
+  if (relation === "statement_ingestion_outbox") {
+    return "(SELECT * FROM statement_submissions WHERE work_revision IS NOT NULL)";
+  }
   if (relation === "publication" || relation === "session_call") {
     return `(SELECT * FROM audit_entries WHERE record_type='${relation}')`;
   }

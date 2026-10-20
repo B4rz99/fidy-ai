@@ -231,7 +231,7 @@ it.each(["missing", "recovery-audience", "expired", "mismatched-user"])(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO users VALUES ('10000000-0000-4000-8000-000000000002','America/Bogota')"
+              "INSERT INTO users(id,time_zone) VALUES ('10000000-0000-4000-8000-000000000002','America/Bogota')"
             )
             .run()
         );
@@ -256,15 +256,15 @@ it.each(["missing", "recovery-audience", "expired", "mismatched-user"])(
             db.batch(
               [
                 "refund_attempts",
-                "refund_outbox",
-                "refund_submission_claims",
-                "refund_outcome_evidence",
-                "billing_access_adjustments",
-                "subscription_renewal_stops",
+                "(SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL)",
+                "(SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL)",
                 "subscriptions",
                 "billing_attempts",
-                "billing_paid_periods",
-                "billing_transaction_evidence",
+                "(SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL)",
+                "(SELECT transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL)",
               ].map((table) => db.prepare(`SELECT * FROM ${table}`))
             )
           ).pipe(Effect.map((rows) => rows.map((row) => row.results)));

@@ -1306,7 +1306,7 @@ const grantBudgetDelivery = (
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES(?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO NOTHING"
+          "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES(?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms WHERE users.whatsapp_portfolio_id IS NULL"
         )
         .bind(
           userId,
@@ -1790,7 +1790,7 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
           [
             "insight_reports",
             "whatsapp_deliveries",
-            "proactivity_delivery_outbox",
+            "(SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL)",
             "insight_events",
             "proactivity_governors",
             "consent_offers",

@@ -856,7 +856,10 @@ WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.enrollment_id<>OLD.enroll
   OR NOT EXISTS (SELECT 1 FROM billing_attempts a WHERE a.payment_source_id=OLD.id)
   OR EXISTS (SELECT 1 FROM subscriptions sub WHERE sub.user_id=OLD.user_id)
   OR EXISTS (SELECT 1 FROM billing_attempts a WHERE a.payment_source_id=OLD.id
-    AND (a.status<>'failed' OR NOT EXISTS (SELECT 1 FROM billing_retry_clearances clear WHERE clear.attempt_id=a.id)))
+    AND (a.status<>'failed'
+      OR EXISTS (SELECT 1 FROM billing_provider_transactions e WHERE e.attempt_id=a.id AND e.status IN ('PENDING','APPROVED'))
+      OR (NOT EXISTS (SELECT 1 FROM billing_retry_clearances clear WHERE clear.attempt_id=a.id)
+        AND NOT (a.no_charge_confirmed_at_ms IS NOT NULL AND a.no_charge_reference=a.wompi_reference AND a.no_charge_environment=a.wompi_environment))))
 BEGIN
  SELECT RAISE(ABORT, 'card_source_immutable');
 END;

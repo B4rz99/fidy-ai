@@ -238,7 +238,13 @@ it("keeps an image caption's forged authority as private pending evidence withou
         yield* io(() => db.prepare("SELECT user_id,caption FROM media_submissions").all())
       ).toMatchObject({ results: [{ user_id: userId, caption: hostile }] });
       expect(
-        yield* io(() => db.prepare("SELECT count(*) AS total FROM media_needs_review").first())
+        yield* io(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM media_submissions WHERE review_created_at_ms IS NOT NULL"
+            )
+            .first()
+        )
       ).toEqual({ total: 1 });
       expect(
         yield* io(() =>

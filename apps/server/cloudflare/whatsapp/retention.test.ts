@@ -26,11 +26,19 @@ const other = UserId.make("00000000-0000-4000-8000-000000000002");
 const now = 5_000_000_000;
 const lifetime = 2_592_000_000;
 const owners = [
-  { kind: "weekly", table: "weekly_governor_questions", sweep: expireWeeklyQuestions },
-  { kind: "insight", table: "insight_whatsapp_claims", sweep: sweepInsightChannelEvidence },
+  {
+    kind: "weekly",
+    table: "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question')",
+    sweep: expireWeeklyQuestions,
+  },
+  {
+    kind: "insight",
+    table: "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')",
+    sweep: sweepInsightChannelEvidence,
+  },
   {
     kind: "proactivity",
-    table: "proactivity_whatsapp_claims",
+    table: "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity')",
     sweep: sweepProactivityChannelEvidence,
   },
 ] as const;
@@ -141,8 +149,10 @@ const seed = (
     })
   );
 const deliveryKind = (table: Owner["table"]): "weekly-question" | "insight" | "proactivity" => {
-  if (table === "weekly_governor_questions") return "weekly-question";
-  if (table === "insight_whatsapp_claims") return "insight";
+  if (table === "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question')") {
+    return "weekly-question";
+  }
+  if (table === "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')") return "insight";
   return "proactivity";
 };
 const contentCount = (
@@ -301,10 +311,20 @@ it("User-scoped insight expiry bounds a single User backlog and cannot clear ano
         const observed = observeRetentionCost(db);
         yield* expireInsightChannelEvidence({ db: observed.database, userId: user, now });
         expect(observed.cost().rowsRead).toBeLessThanOrEqual(1_000);
-        expect(yield* io(() => contentCount(db, "insight_whatsapp_claims"))).toBe(
-          Math.max(0, 300 - 64 * (tick + 1))
-        );
-        expect(yield* io(() => contentCount(db, "insight_whatsapp_claims", other))).toBe(4_000);
+        expect(
+          yield* io(() =>
+            contentCount(db, "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')")
+          )
+        ).toBe(Math.max(0, 300 - 64 * (tick + 1)));
+        expect(
+          yield* io(() =>
+            contentCount(
+              db,
+              "(SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight')",
+              other
+            )
+          )
+        ).toBe(4_000);
       }
       const repeated = observeRetentionCost(db);
       yield* expireInsightChannelEvidence({ db: repeated.database, userId: user, now });

@@ -6,6 +6,7 @@ import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import {
+  consentHistoryTestSchema,
   installRetentionTestSchema,
   installTestSchema,
   isolatedTestDatabases,
@@ -42,7 +43,6 @@ const dayMs = 86_400_000;
 const bsuid = "CO.13491208655302741918";
 
 const nowSeconds = Math.floor(Effect.runSync(Clock.currentTimeMillis) / 1000);
-const migration = new URL("../migrations/0003_pending_consent.sql", import.meta.url);
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 
@@ -80,12 +80,21 @@ const setup = (
             db,
             sources: [
               new URL("../migrations/0002_resource_admission.sql", import.meta.url),
-              migration,
-              new URL("../migrations/0072_disclosure_transport.sql", import.meta.url),
               new URL("../migrations/0025_voice_refusal.sql", import.meta.url),
             ],
           })
         );
+        const currentSchema = yield* Effect.tryPromise(() =>
+          Bun.file(new URL("../schema.sql", import.meta.url)).text()
+        );
+        const pendingStatements = currentSchema
+          .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
+          .filter((sql) =>
+            /^(?:CREATE TABLE pending_consent_exchanges\b|CREATE (?:UNIQUE )?INDEX \w+\s+ON pending_consent_exchanges\b|CREATE TRIGGER \w+[^;]*? ON pending_consent_exchanges\b)/u.test(
+              sql.trim()
+            )
+          );
+        yield* Effect.tryPromise(() => db.batch(pendingStatements.map((sql) => db.prepare(sql))));
         yield* Effect.tryPromise(() =>
           db
             .prepare(
@@ -100,16 +109,14 @@ const setup = (
             )
             .run()
         );
-        yield* Effect.tryPromise(() =>
-          db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT)").run()
-        );
+        yield* Effect.tryPromise(() => db.prepare(consentHistoryTestSchema).run());
         yield* Effect.tryPromise(() =>
           db.prepare("CREATE TABLE consent_user_revocations (user_id TEXT)").run()
         );
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TABLE hosted_whatsapp_delivery (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, proposed_at_ms INTEGER, state TEXT)"
+              "CREATE TABLE whatsapp_deliveries (kind TEXT,user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, proposed_at_ms INTEGER, state TEXT,send_started_at_ms INTEGER)"
             )
             .run()
         );
@@ -127,10 +134,16 @@ const setup = (
           ])
         );
         yield* Effect.tryPromise(() =>
-          installTestSchema({
-            db,
-            sources: [new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url)],
-          })
+          db.batch(
+            currentSchema
+              .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
+              .filter((sql) =>
+                /^CREATE (?:TABLE hosted_whatsapp_windows\b|INDEX hosted_whatsapp_windows_expiry\b)/u.test(
+                  sql.trim()
+                )
+              )
+              .map((sql) => db.prepare(sql))
+          )
         );
       }
       const send = (
@@ -331,7 +344,7 @@ it.each([
               .bind(userId, portfolio, bsuid, timestamp),
             db
               .prepare(
-                "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+                "INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
               )
               .bind("10000000-0000-4000-8000-000000000073", userId, snapshot, timestamp, timestamp),
           ])
@@ -402,7 +415,7 @@ it.each([
           (yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM hosted_whatsapp_delivery d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) i ON i.turn_id = d.turn_id"
+                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) i ON i.turn_id = d.turn_id"
               )
               .all()
           )).results

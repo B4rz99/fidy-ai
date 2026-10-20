@@ -29,7 +29,7 @@ it("migrates retained card authority without changing BillingAttempt, outbox or 
       }
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users VALUES (?)").bind(userId),
+          db.prepare("INSERT INTO users(id) VALUES (?)").bind(userId),
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,

@@ -35,7 +35,7 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
       const db = created.db;
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userId),
+          db.prepare("INSERT INTO users(id,time_zone) VALUES (?, 'America/Bogota')").bind(userId),
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
@@ -839,7 +839,9 @@ it("rejects a signed callback with another User's source even when its reference
       const otherAttempt = "40000000-0000-4000-8000-000000000002";
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(otherUser),
+          db
+            .prepare("INSERT INTO users(id,time_zone) VALUES (?, 'America/Bogota')")
+            .bind(otherUser),
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,

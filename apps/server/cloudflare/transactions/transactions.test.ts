@@ -4575,8 +4575,7 @@ it("aborts a batch unlink when a competing unlink commits before the unit", () =
             occurredAt: "2025-01-06T12:00:00.000Z",
             createdAt: "2025-01-06T12:00:00.000Z",
           }),
-          seedLinkedPair({ db, userId: owner, first, second, visible: first }),
-        ])
+        ]).then(() => seedLinkedPair({ db, userId: owner, first, second, visible: first }))
       );
       const response = yield* fromTestPromise(() =>
         sendPublicRequest(

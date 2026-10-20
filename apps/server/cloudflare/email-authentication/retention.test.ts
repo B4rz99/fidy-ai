@@ -34,7 +34,8 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
 
 const seedUser = (
   db: D1Database,
-  index: number
+  index: number,
+  legacy = false
 ): Effect.Effect<ReadonlyArray<D1Result<unknown>>, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db.batch([
@@ -45,7 +46,9 @@ const seedUser = (
         .bind(id(1, index), now - day),
       db
         .prepare(
-          "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+          legacy
+            ? "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) VALUES (?,?,?)"
+            : "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
         )
         .bind(id(1, index), `user${index}@example.test`, now - day),
       db
@@ -109,10 +112,10 @@ const seedPairingProof = (
 const seedReplacement = (
   db: D1Database,
   index: number,
-  { expires }: { expires: number } = { expires: now }
+  { expires, legacy }: { expires: number; legacy: boolean } = { expires: now, legacy: false }
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* seedUser(db, index);
+    yield* seedUser(db, index, legacy);
     yield* Effect.tryPromise(() =>
       db.batch([
         db
@@ -207,7 +210,7 @@ it("expires replacement candidates in bounded sweeps while preserving the curren
         (index) => seedReplacement(db, index),
         { discard: true }
       );
-      yield* seedReplacement(db, 34, { expires: now + 1 });
+      yield* seedReplacement(db, 34, { expires: now + 1, legacy: false });
       const live = yield* Effect.tryPromise(() =>
         db.prepare("SELECT * FROM email_replacements WHERE user_id = ?").bind(id(1, 34)).all()
       );
@@ -307,10 +310,10 @@ it("abandons interrupted replacement sends without reusable proof, credential re
       const db = yield* setup();
       yield* Effect.forEach(
         Array.from({ length: 33 }, (_, index) => index + 1),
-        (index) => seedReplacement(db, index, { expires: now - 600_001 }),
+        (index) => seedReplacement(db, index, { expires: now - 600_001, legacy: false }),
         { discard: true }
       );
-      yield* seedReplacement(db, 34, { expires: now + 600_000 });
+      yield* seedReplacement(db, 34, { expires: now + 600_000, legacy: false });
       yield* Effect.tryPromise(() =>
         db.prepare("UPDATE email_replacements SET state = 'sending'").run()
       );
@@ -368,7 +371,7 @@ it("keeps email dispatch cooldowns through migration and retries only the curren
           applyTestMigration({ db, source: new URL(name, directory) })
         );
       }
-      yield* seedUser(db, 1);
+      yield* seedUser(db, 1, true);
       yield* Effect.tryPromise(() =>
         db.batch([
           db
@@ -383,7 +386,7 @@ it("keeps email dispatch cooldowns through migration and retries only the curren
             .bind(id(4, 1), id(5, 1), id(1, 1), now - day, now + 600_000, now),
         ])
       );
-      yield* seedReplacement(db, 2, { expires: now + 600_000 });
+      yield* seedReplacement(db, 2, { expires: now + 600_000, legacy: true });
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(

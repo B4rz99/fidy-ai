@@ -715,7 +715,7 @@ it.live("routes the private canary Queue to a real Workflow handoff, not to appl
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TABLE operational_canary (kind TEXT PRIMARY KEY, last_succeeded_ms INTEGER NOT NULL)"
+            "CREATE TABLE operational_health_view (operation TEXT PRIMARY KEY,state TEXT NOT NULL,observed_at_ms INTEGER NOT NULL,last_succeeded_ms INTEGER)"
           )
           .run()
       );
@@ -761,7 +761,13 @@ it.live("routes the private canary Queue to a real Workflow handoff, not to appl
       );
       expect(created).toBe(true);
       expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT kind FROM operational_canary").all())
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT operation AS kind FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
+            )
+            .all()
+        )
       ).toMatchObject({
         results: [{ kind: "queueExecution" }],
       });
@@ -807,7 +813,7 @@ it.live(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (kind, bucket_ms))"
+              "CREATE TABLE operational_event_buckets (kind TEXT NOT NULL, bucket_ms INTEGER NOT NULL, count INTEGER NOT NULL, observed_at_ms INTEGER, PRIMARY KEY (kind, bucket_ms))"
             )
             .run()
         );
@@ -815,14 +821,18 @@ it.live(
         const current = Math.floor((yield* Clock.currentTimeMillis) / minuteMs) * minuteMs;
         const oldBuckets = Array.from({ length: 200 }, (_, index) =>
           db
-            .prepare("INSERT INTO operational_event_buckets VALUES ('worker_exception', ?, 1)")
+            .prepare(
+              "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('worker_exception', ?, 1)"
+            )
             .bind(current - 172_800_000 - index * minuteMs)
         );
         yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(0, 100)));
         yield* Effect.tryPromise(() => db.batch(oldBuckets.slice(100)));
         yield* Effect.tryPromise(() =>
           db
-            .prepare("INSERT INTO operational_event_buckets VALUES ('workflow_failure', ?, 1)")
+            .prepare(
+              "INSERT INTO operational_event_buckets(kind,bucket_ms,count) VALUES ('workflow_failure', ?, 1)"
+            )
             .bind(current)
             .run()
         );

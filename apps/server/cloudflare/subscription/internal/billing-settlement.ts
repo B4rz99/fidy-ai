@@ -109,13 +109,13 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
       WHERE id=? AND status='succeeded' AND no_charge_confirmed_at_ms IS NOT NULL AND recovery_case_id IS NULL`)
       .bind(observedAtMs, attemptId),
     db
-      .prepare(`UPDATE billing_attempts SET followup_kind=NULL,followup_due_at_ms=NULL
-      WHERE user_id=(SELECT user_id FROM billing_attempts WHERE id=?) AND followup_kind IS NOT NULL
+      .prepare(`UPDATE billing_attempts SET followup_due_at_ms=NULL
+      WHERE user_id=(SELECT user_id FROM billing_attempts WHERE id=?) AND followup_due_at_ms IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)`)
       .bind(attemptId),
     db
-      .prepare(`UPDATE billing_attempts SET followup_kind='renewal_due',followup_due_at_ms=paid_ends_at_ms
-      WHERE id=? AND paid_starts_at_ms IS NOT NULL AND followup_kind IS NULL
+      .prepare(`UPDATE billing_attempts SET followup_due_at_ms=paid_ends_at_ms
+      WHERE id=? AND paid_starts_at_ms IS NOT NULL AND followup_due_at_ms IS NULL
       AND EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)`)
       .bind(attemptId),
   ];

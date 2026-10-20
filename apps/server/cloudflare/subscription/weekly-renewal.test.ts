@@ -173,7 +173,7 @@ const fixture = (
             ),
           db
             .prepare(
-              "UPDATE billing_attempts SET followup_kind=incoming.kind,followup_due_at_ms=incoming.due_at_ms FROM (SELECT ? AS attempt_id,'renewal_due' AS kind,? AS due_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.followup_kind IS NULL"
+              "UPDATE billing_attempts SET followup_due_at_ms=incoming.due_at_ms FROM (SELECT ? AS attempt_id,'renewal_due' AS kind,? AS due_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.followup_due_at_ms IS NULL"
             )
             .bind(attemptId, Date.parse(calendar.endsAt)),
         ])
@@ -318,7 +318,7 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
         (yield* fromPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) AS billing_followup_outbox"
+              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
             )
             .all()
         )).results
@@ -678,7 +678,7 @@ it("aborts an interrupted renewal coordinator dispatch", () =>
       yield* fromPromise(() =>
         db
           .prepare(
-            "UPDATE billing_attempts AS billing_followup_outbox SET followup_due_at_ms=0 WHERE followup_kind IS NOT NULL "
+            "UPDATE billing_attempts AS billing_followup_outbox SET followup_due_at_ms=0 WHERE followup_due_at_ms IS NOT NULL "
           )
           .run()
       );

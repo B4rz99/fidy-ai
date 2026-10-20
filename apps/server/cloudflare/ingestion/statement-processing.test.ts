@@ -1348,7 +1348,7 @@ effectIt.effect(
 );
 
 effectIt.effect(
-  "refuses changed interpretation context without reinterpreting partial captures",
+  "rejects changing retained interpretation context without reinterpreting partial captures",
   () =>
     Effect.gen(function* () {
       const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
@@ -1356,12 +1356,13 @@ effectIt.effect(
       const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
       expect(yield* processStatementSubmission(input)).toBe("continue");
       yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE statement_submissions SET time_zone='America/New_York' WHERE id=?")
-          .bind(submissionId)
-          .run()
+        expect(
+          db
+            .prepare("UPDATE statement_submissions SET time_zone='America/New_York' WHERE id=?")
+            .bind(submissionId)
+            .run()
+        ).rejects.toThrow("statement_interpretation_context_immutable")
       );
-      expect(yield* processStatementSubmission(input)).toBe("completed");
       expect(
         yield* fromTestPromise(() =>
           db
@@ -1372,11 +1373,14 @@ effectIt.effect(
             .first()
         )
       ).toEqual({
-        status: "failed",
-        failure_reason: "malformed-file",
+        status: "processing",
+        failure_reason: null,
         attestations: 32,
         captures: 32,
       });
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
       expect(reads.observed.gets).toBe(1);
     })
 );

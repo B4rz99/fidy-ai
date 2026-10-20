@@ -1010,3 +1010,15 @@ work. Hosted dispatch inherits its Turn's User and uses its creation time for pr
 preparation uses the consumed attempt timestamp, retaining its authenticated session binding. The
 constant billing `attempt_number` is removed; `renewal_attempt_number` remains the actual retry count.
 Historical erasure projections derive these removed values without changing archive shapes.
+
+Statement materialization uses its submission's interpretation context directly: parser revision,
+source format, ServiceMarket, locale and time zone become immutable while material is retained.
+Manifest publication compares the supplied context inside its guarded write, rather than storing
+five copies and comparing them on every retry. Source/parts hashes, representation revision and
+material expiry remain independent validation evidence. Migration rejects mismatched historical
+context instead of silently reinterpreting cached rows. Archive projections preserve the old fields
+by deriving them only when material is present.
+
+Billing renewal work is represented by its optional due timestamp; its former kind had only the
+`renewal_due` value. Discovery reads the BillingAttempt directly. Cancellation, refund and paid
+standing guards still control installation and removal of that timestamp.

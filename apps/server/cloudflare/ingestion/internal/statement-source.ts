@@ -117,7 +117,7 @@ const findManifest = (
 ): Effect.Effect<Option.Option<Manifest>, BoundaryFailure> =>
   foreign(() =>
     input.DB.prepare(
-      `SELECT material_source_sha256 AS source_sha256,material_parts_sha256 AS parts_sha256,material_parser_revision AS parser_revision,material_source_format AS source_format,material_representation_revision AS representation_revision,material_service_market AS service_market,material_locale AS locale,material_time_zone AS time_zone,material_expires_at_ms AS expires_at_ms,material_headers_json AS headers_json,material_row_count AS row_count,material_part_count AS part_count,material_byte_length AS byte_length,material_state AS state FROM statement_submissions WHERE id=? AND user_id=? AND material_state IS NOT NULL`
+      `SELECT material_source_sha256 AS source_sha256,material_parts_sha256 AS parts_sha256,parser_revision,source_format,material_representation_revision AS representation_revision,service_market,locale,time_zone,material_expires_at_ms AS expires_at_ms,material_headers_json AS headers_json,material_row_count AS row_count,material_part_count AS part_count,material_byte_length AS byte_length,material_state AS state FROM statement_submissions WHERE id=? AND user_id=? AND material_state IS NOT NULL`
     )
       .bind(input.submissionId, input.userId)
       .first()
@@ -387,24 +387,24 @@ const prepareManifest = (
     }
     const installed = yield* foreign(() =>
       input.DB.prepare(
-        `UPDATE statement_submissions SET material_source_sha256=?,material_parser_revision=?,material_source_format=?,material_expires_at_ms=?,material_headers_json=?,material_row_count=?,material_part_count=?,material_byte_length=?,material_representation_revision=?,material_service_market=?,material_locale=?,material_time_zone=?,material_parts_sha256=?,material_state='building' WHERE id=? AND user_id=? AND material_state IS NULL`
+        `UPDATE statement_submissions SET material_source_sha256=?,material_expires_at_ms=?,material_headers_json=?,material_row_count=?,material_part_count=?,material_byte_length=?,material_representation_revision=?,material_parts_sha256=?,material_state='building' WHERE id=? AND user_id=? AND material_state IS NULL AND parser_revision=? AND source_format=? AND service_market=? AND locale=? AND time_zone=?`
       )
         .bind(
           input.sourceHash,
-          input.parserRevision,
-          input.sourceFormat,
           input.expiresAtMs,
           encoded.headersJson,
           parsed.rows.length,
           encoded.parts.length,
           encoded.byteLength,
           representationRevision,
-          input.serviceMarket,
-          input.locale,
-          input.timeZone,
           encoded.partsHash,
           input.submissionId,
-          input.userId
+          input.userId,
+          input.parserRevision,
+          input.sourceFormat,
+          input.serviceMarket,
+          input.locale,
+          input.timeZone
         )
         .run()
     );

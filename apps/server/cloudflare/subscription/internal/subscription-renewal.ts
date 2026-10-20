@@ -173,10 +173,9 @@ export const dispatchSubscriptionRenewals = (
       requirement: "active",
       statement: {
         sql: `SELECT a.user_id, a.id
-    FROM (SELECT rowid,id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) due JOIN subscription_standing s ON s.attempt_id = due.attempt_id
-    JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
+    FROM billing_attempts a JOIN subscription_standing s ON s.attempt_id = a.id AND a.user_id = s.user_id
     JOIN verified_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
-    WHERE due.due_at_ms <= ?
+    WHERE a.followup_due_at_ms <= ?
       AND a.wompi_environment = ?
       AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
       AND (NOT EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id)
@@ -191,7 +190,7 @@ export const dispatchSubscriptionRenewals = (
       },
     });
     const result = yield* fromPromise(() =>
-      input.DB.prepare(`${discovery.sql} ORDER BY due.due_at_ms, a.id LIMIT 32`)
+      input.DB.prepare(`${discovery.sql} ORDER BY a.followup_due_at_ms, a.id LIMIT 32`)
         .bind(...discovery.params)
         .all()
     );

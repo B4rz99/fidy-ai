@@ -284,7 +284,7 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
         (yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT * FROM (SELECT id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) AS billing_followup_outbox"
+              "SELECT * FROM (SELECT id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
             )
             .all()
         )).results
@@ -1073,7 +1073,7 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       const followup = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT attempt_id FROM (SELECT rowid,id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) AS billing_followup_outbox"
+            "SELECT attempt_id FROM (SELECT rowid,id AS attempt_id,'renewal_due' AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_due_at_ms IS NOT NULL) AS billing_followup_outbox"
           )
           .all<{ attempt_id: string }>()
       );

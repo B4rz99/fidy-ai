@@ -13,6 +13,25 @@ const failureReason = (error: unknown): string => {
   return ["ENOBUFS", "ETIMEDOUT", "ENOENT"].includes(code) ? code : "command_exit";
 };
 
+/** Fixed categories only: command bodies and provider messages never enter diagnostics. */
+const providerFailureCategory = (output: string): string => {
+  const categories: ReadonlyArray<readonly [RegExp, string]> = [
+    [/not authorized|unauthorized|permission|authentication|forbidden/iu, "authorization"],
+    [/read.?only|SQLITE_READONLY/iu, "read_only"],
+    [/no such column|unknown column/iu, "missing_column"],
+    [/no such table/iu, "missing_table"],
+    [/constraint|not null/iu, "constraint"],
+    [/syntax|parse error|unterminated|unrecognized token/iu, "sql_syntax"],
+    [/bind|parameter/iu, "binding"],
+    [/too many|too long|limit exceeded|SQLITE_TOOBIG/iu, "query_limit"],
+    [/network|fetch failed|connection|temporar|internal error/iu, "provider_unavailable"],
+    [/not supported|unsupported/iu, "unsupported_operation"],
+    [/database is locked|SQLITE_BUSY|SQLITE_LOCKED/iu, "database_busy"],
+    [/invalid/iu, "invalid_request"],
+  ];
+  return categories.find(([pattern]) => pattern.test(output))?.[1] ?? "unclassified";
+};
+
 /**
  * Runs a migration-management command in the inherited process environment and supplied working
  * directory. The command must name an executable. Returns stdout and throws when the command
@@ -33,9 +52,15 @@ export const runMigrationCommand = (
   });
   if (result.status !== 0) {
     const reason = failureReason(result.error);
-    const providerCode = /\[code:\s*(\d+)\]/u.exec(result.stderr)?.[1] ?? "none";
+    const output = result.stderr + result.stdout;
+    const providerCode = /(?:\[code:|"code"\s*:)\s*(\d+)/u.exec(output)?.[1] ?? "none";
+    const category = providerFailureCategory(output);
+    const sqliteCode =
+      /\b(SQLITE_(?:AUTH|ERROR|CONSTRAINT|READONLY|BUSY|LOCKED|FULL|TOOBIG|IOERR|CORRUPT|NOTADB))\b/u.exec(
+        output
+      )?.[1] ?? "none";
     throw new MigrationCommandError(
-      `External migration command failed (status ${result.status ?? "none"}, reason ${reason}, provider code ${providerCode})`
+      `External migration command failed (status ${result.status ?? "none"}, reason ${reason}, provider code ${providerCode}, category ${category}, SQLite code ${sqliteCode})`
     );
   }
   return result.stdout;

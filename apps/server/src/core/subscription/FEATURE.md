@@ -314,6 +314,11 @@ and isolated Price-change notification. Reusing the historical Gmail card still 
 attributable Wompi no-charge confirmation under the [ambiguity runbook](../../../../../docs/runbooks/billing-ambiguity.md).
 No new sign-in is requested while that prerequisite remains unresolved. Earlier DaviPlata browser
 timeouts remain unexplained; passing subsequent runs does not establish a causal timeout fix.
+The [follow-up CI rerun](https://github.com/B4rz99/fidy-ai/actions/runs/39429914340/attempts/2)
+reproduced the sixty-second DaviPlata browser timeout, alongside a Google connection reset.
+The deployed release and real-provider protocol results above remain valid, but this intermittent
+browser failure remains open. Focused and full-shard local DaviPlata runs passed; they do not
+override the failing CI result.
 
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),

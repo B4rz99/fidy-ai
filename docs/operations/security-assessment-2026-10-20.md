@@ -58,7 +58,33 @@ expiry behavior and packaged CLI checks across supported operating systems are n
 here. The live 125-sample model evaluation retains its own evidence and request accounting.
 No prompt, model, authorization or MCP confirmation policy changed in this assessment.
 
-MCP's accepted client-asserted confirmation risk remains: valid client acceptance does not attest
-human presence. Independent Fidy browser approval for selected destructive operations is a product
-and authority-contract decision, not a fix silently included in these tests. Operational detection
+The initial assessment retained MCP's client-asserted confirmation boundary. The separately approved
+#1381 follow-up below changes selected destructive operations to require first-party browser approval.
+Neither approval mode independently attests physical human presence. Operational detection
 and fallback gaps remain tracked separately in [#1262](https://github.com/B4rz99/fidy-ai/issues/1262).
+
+## Approved follow-up: first-party MCP approval and packaged CLI verification
+
+[#1382](https://github.com/B4rz99/fidy-ai/pull/1382) is merged. Linux x64, macOS arm64 and Windows x64
+run exact executables from candidate archives and the downloaded immutable published release against
+real native stores. Checks cover asset/manifest/tag identity, version/help, synthetic credential loading,
+JSON and human-output redaction, malformed metadata refusal, logout and empty-store state. All attached
+CI passed on the merged head. The macOS fixture uses a dedicated disposable keychain and test-only
+access permissions. This is not cryptographic build-provenance attestation, a production login/revocation
+test, or verification of interactive production Keychain prompts.
+
+The approved #1381 MCP change adds fresh same-User first-party browser approval for canonical policies
+covering Budget and Transaction update/deletion, Memory revision/forgetting and confirmed Ingestion
+operations. One selected child requires review of its complete ordered batch. Approval marks the exact
+five-minute intent; native continuation still consumes it once with live authority, revisions and Audit.
+Client-only acceptance is refused. The remaining client-assertion exception is restricted to other
+sensitive operations, as documented in SECURITY_STANDARDS.md and ADR 0033.
+
+Local verification passed 225 OAuth integration tests, including 13 first-party approval cases;
+5 real browser OAuth journeys, including explicit operation approval and replay refusal; 4 erasure
+checks; 14 canonical policy checks; 15 login-destination checks; and full static verification.
+Pinned Claude Code 2.1.289 and Codex 0.160.0 also pass all six acceptance, cancellation and headless
+refusal cases through public ingress/Core/coordinator/native D1; the explicit first-party browser API
+decision is synthetic and separate from automated native controls. Metadata-only evidence is retained
+in `scripts/mcp/native-confirmation-hosts.evidence.json`. The browser assessment's limits above still apply. All provider/model responses remain synthetic;
+this follow-up makes no paid inference calls and does not reopen the exhausted live evaluation budget.

@@ -1,3 +1,5 @@
+import { approveFirstPartyOperation } from "./oauth-first-party.test-fixture";
+import type { FixtureHeaders } from "./oauth-ingress.test-fixture";
 import { Config, Data, Effect, Option, Schema } from "effect";
 
 class HostFixtureFailure extends Data.TaggedError("HostFixtureFailure")<{ cause: unknown }> {}
@@ -8,6 +10,8 @@ type HostFixture = Readonly<{
   db: D1Database;
   send: (path: string, init?: RequestInit) => Promise<Response>;
   bearer: string;
+  connectionId: string;
+  headers: FixtureHeaders;
   id: string;
 }>;
 const Capabilities = Schema.Struct({
@@ -54,6 +58,7 @@ type Trace = Readonly<{
 type BridgeState = {
   fixture: HostFixture;
   trace: Array<Trace>;
+  browserApproval: boolean;
   finished: ReturnType<typeof Promise.withResolvers<void>>;
 };
 const decisionAction = (metadata: Metadata): string =>
@@ -122,6 +127,8 @@ const forward = (
 ): Effect.Effect<Response, HostFixtureFailure> =>
   Effect.gen(function* () {
     const headers = new Headers(request.headers);
+    // The bridge rewrites loopback coordinates to the public fixture URL, including Host.
+    headers.delete("host");
     // Only this fixture holds the disposable, genuinely approved OAuth credential; it is never
     // put in model context. Ingress validates the real credential on every forwarded request.
     headers.set("authorization", `Bearer ${state.fixture.bearer}`);
@@ -130,6 +137,7 @@ const forward = (
         ? Option.some(yield* wait(() => request.text()))
         : Option.none<string>();
     const metadata = Option.flatMap(body, traceMetadata);
+    yield* approveFixtureDecision(state, metadata);
     const response = yield* wait(() =>
       state.fixture.send(`/mcp${new URL(request.url).search}`, {
         method: request.method,
@@ -167,6 +175,7 @@ const route = <E>(
     switch (new URL(request.url).pathname) {
       case "/reset":
         state.fixture = yield* setup();
+        state.browserApproval = new URL(request.url).searchParams.get("firstParty") === "approve";
         state.trace.length = 0;
         return Response.json({ budgetId: state.fixture.id });
       case "/status":
@@ -206,6 +215,7 @@ export const runNativeHostFixture = <E>(
     const state: BridgeState = {
       fixture: yield* setup(),
       trace: [],
+      browserApproval: false,
       finished: Promise.withResolvers<void>(),
     };
     const context = yield* Effect.context<never>();
@@ -218,4 +228,27 @@ export const runNativeHostFixture = <E>(
       (bridge) => awaitHost(bridge, state),
       (bridge) => wait(() => bridge.stop(false)).pipe(Effect.orDie)
     );
+  });
+
+const approveFixtureDecision = (
+  state: BridgeState,
+  metadata: Option.Option<Trace>
+): Effect.Effect<void, HostFixtureFailure> =>
+  Effect.gen(function* () {
+    if (state.browserApproval && Option.isSome(metadata) && metadata.value.action === "accept") {
+      // This explicit synthetic first-party action is independent of the client's assertion.
+      const reference = yield* wait(() =>
+        state.fixture.db
+          .prepare(
+            "SELECT reference FROM oauth_operation_intents WHERE connection_id = ? AND browser_approved_at_ms IS NULL ORDER BY rowid DESC LIMIT 1"
+          )
+          .bind(state.fixture.connectionId)
+          .first<string>("reference")
+      );
+      if (reference !== null) {
+        yield* approveFirstPartyOperation(state.fixture, reference).pipe(
+          Effect.mapError((cause) => new HostFixtureFailure({ cause }))
+        );
+      }
+    }
   });

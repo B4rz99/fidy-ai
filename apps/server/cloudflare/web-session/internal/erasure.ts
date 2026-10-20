@@ -14,6 +14,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "email_replacements",
       "insight_audit",
       "oauth_grant_consents",
+      "oauth_operation_intents",
       "oauth_user_revocation_consents",
       "pat_audit",
       "pat_grant_consents",

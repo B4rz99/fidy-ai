@@ -169,6 +169,7 @@ it("derives hosted turn completion without a separate operation allowlist", () =
   const mutationPolicy = {
     requiredTier: "free",
     agentConfirmation: "not-required",
+    oauthApproval: "native",
     kind: "mutation",
   } as const;
 

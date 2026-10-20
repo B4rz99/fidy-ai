@@ -2,6 +2,7 @@
 
 - **Status:** Accepted (OAuth and native confirmation implemented; production onboarding and launch gates remain open)
 - **Date:** 2026-10-03
+- **Amended:** 2026-10-20 — #1381 requires first-party browser decisions for selected sensitive operations and batches; native continuation remains required.
 - **Amended:** 2026-10-05 — Claude Code/Codex-only support and accepted client-native confirmation authority; supersedes this ADR's original browser confirmation contract, not browser OAuth connection approval.
 - **Issues:** [#33](https://github.com/B4rz99/fidy-ai/issues/33), [#977](https://github.com/B4rz99/fidy-ai/issues/977), [#988](https://github.com/B4rz99/fidy-ai/issues/988)
 - **Supersedes:** only ADR 0016's exclusion of remote MCP and an OAuth authorization server.
@@ -46,13 +47,13 @@ Owner publications follow ADR 0031:
 - `shell/mcp` owns the catalog-derived protocol projection, not domain behavior. Its native runtime
   uses Effect's HTTP/protocol implementation and invokes published Canonical Operations under the
   existing User coordinator. OAuth browser and token transports are neither tools nor batch children.
-- `cloudflare/oauth-confirmation` owns server-validated pending/approved/consumed client-asserted
-  confirmation evidence. It lends guarded, transaction-composable consumption to Canonical
+- `cloudflare/oauth-confirmation` owns server-validated pending/approved/consumed
+  confirmation evidence, including selected first-party browser decisions. It lends guarded, transaction-composable consumption to Canonical
   Operations, never a reusable permission. Hosted Agent confirmation remains privately hosted
   and cannot authorize OAuth work. MCP owns native protocol/UI projection, not approval persistence.
 - Web `oauth-connections` owns initial connection approval and settings presentation, deriving types
   from the browser-safe server declarations. It neither parses nor stores OAuth credentials and
-  does not own the native sensitive-operation review.
+  presents the selected first-party sensitive-operation review; persistence remains with confirmation.
 
 Ingress retains no D1 binding. Private Core/D1 is authoritative, and the existing per-User Durable
 Object serializes canonical work, refresh, confirmation and revocation. All protected D1 work
@@ -165,20 +166,25 @@ OAuth-wide revocation are distinct controls and independent lifecycles.
 ## Sensitive-operation handoff and resume
 
 Ordinary authorized mutations need no repeated approval. Destructive/irreversible policy is derived
-from canonical metadata, including each batch child. Sensitive confirmation uses a server-requested
-native MCP form in Claude Code or Codex, separate from initial browser OAuth connection approval
-and local tool permissions. There is no browser detour, URL/repeat fallback, chat “yes”, extension,
-private approval tool or host-name-based authority.
+from canonical metadata, including each batch child. Native MCP confirmation remains required in
+Claude Code or Codex, separate from initial OAuth connection approval and local tool permissions.
 
-**Accepted trust boundary (User-approved 2026-10-05):** Fidy trusts the OAuth-authorized client's
-native confirmation response as client-asserted approval for the exact server-owned intent. This
-replaces the previous fresh same-User WebSession requirement for sensitive-operation confirmation
-only. A modified client or host hook can fabricate/automate a valid acceptance without showing a
-form or obtaining a human click; this risk is explicitly accepted. Neither protocol state, signatures,
-capability advertisement nor a claimed host name independently attests human presence. Model
-claims, arbitrary tool arguments, annotations and local tool permission still grant no confirmation.
-Initial OAuth grants, scope escalation and connection management retain fresh first-party browser
-authority and their existing origin/CSRF requirements; PAT and hosted confirmation are unchanged.
+**2026-10-20 decision (#1381):** Budget and Transaction update/deletion, Memory revision/forgetting,
+and confirmed Ingestion review/resolution/skip/abandon operations additionally require an authenticated
+first-party browser decision. A selected child makes the entire ordered batch require that decision.
+The native review links to Fidy's fixed operation-review route. A fresh same-User WebSession reviews
+immutable input, exact effects, connection identity and expiry, then explicitly approves or cancels
+under Origin/session-binding checks and current Consent. GET never approves. Approval records the
+browser session and instant on the existing intent without executing it or extending its expiry.
+The User then returns to the original native continuation. Client acceptance alone cannot approve
+selected work. This is the primary required authority, not a fallback when native confirmation fails.
+
+**Remaining accepted trust boundary (2026-10-05):** other sensitive OAuth operations still trust the
+authorized client's exact native assertion. A modified client or hook can automate acceptance without
+showing a form. No mode independently attests physical human presence; authenticated browser automation
+or stolen browser authority remain separate risks. Public references, model claims, arbitrary tool
+arguments, annotations, local permissions and claimed host names confer no approval. Initial grants,
+scope escalation, connection management, PAT and hosted confirmation retain their existing contracts.
 
 1. An authorized sensitive invocation validates its canonical input and creates one immutable
    pending intent for that User/connection. Store canonical encoded input privately, its cryptographic
@@ -192,9 +198,9 @@ authority and their existing origin/CSRF requirements; PAT and hosted confirmati
    Waiting for the decision is bounded by the intent deadline and must not hold User coordination
    so as to block credential refresh, revocation or unrelated work throughout human review.
 3. Decode the standard native form response and bind it to the issuing intent, same stable User and
-   OAuthConnection under current authority. Only `accept` with explicit `confirm: true` may approve;
+   OAuthConnection under current authority. Only `accept` with explicit `confirm: true` may continue; selected work also requires its browser decision;
    decline, cancel, false/missing content, malformed responses or expiry authorize nothing. Retain
-   only bounded, purpose-needed approval evidence; it records client assertion, not human attestation.
+   only bounded, purpose-needed approval evidence; it records the required authority decision, not human attestation.
 4. Resume through Effect's standard host/protocol semantics, not invented model arguments. Claude
    Code repeats unchanged arguments with top-level keyed `inputResponses` and `requestState`;
    default Codex answers native elicitation within the original legacy-protocol invocation. These
@@ -218,7 +224,7 @@ negative/malformed acceptance, exact binding, expiry, replay, concurrency, autho
 and bounded native waits. Tests distinguish untrusted model claims from valid client assertions,
 including the accepted automation risk, without claiming independent human proof. Unsupported
 native interactions remain refused. Production onboarding and operator launch approval remain open. No custom MCP method, parallel tool
-registry, form-collected secret, hosted confirmation shortcut or browser fallback is allowed.
+registry, form-collected secret, hosted confirmation shortcut or unapproved confirmation fallback is allowed.
 
 ## Approved Spanish UX
 

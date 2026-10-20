@@ -35,6 +35,8 @@ export {
   OAuthConnectionMetadata,
   OAuthRequestId,
   OAuthReview,
+  OAuthOperationReview,
+  OAuthOperationDecision,
   OAuthReviewChoice,
 } from "~/shell/oauth-agents/contract";
 export { CanonicalAllowance, canonicalAllowanceHeaders } from "~/shell/quotas/contract";

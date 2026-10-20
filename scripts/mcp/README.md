@@ -75,3 +75,10 @@ this bounded live run. Local integration checks cover exact expiry boundaries.
 
 The local confirmation bridge uses `native-confirmation-hosts.ts`; it never runs
 Production OAuth. See the opt-in instructions in the owning confirmation test.
+
+For selected first-party policies, the local bridge's acceptance cases explicitly exercise the browser
+review/decision API with a synthetic fresh same-User WebSession before forwarding native acceptance.
+Cancellation and headless cases receive no such approval. This scripted first-party decision is a
+fixture action, not evidence of a physical human click; the actual built-browser flow is covered
+separately in `apps/web/e2e/oauth-review.spec.ts`. Loopback forwarding rewrites Host along with the
+fixture URL so that public ingress keeps enforcing its real Host/Origin policy.

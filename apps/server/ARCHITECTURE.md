@@ -240,17 +240,21 @@ collision policy, live authority, accounting and Audit. Sensitive operations req
 from canonical confirmation metadata, including batch children. Account-security operations
 remain unavailable; OAuth callers never inherit PAT, WebSession or Hosted Agent Session lifecycle authority.
 
-The installed #988 implementation uses native MCP form confirmation in **Claude Code and Codex only**,
-not a browser approval detour or a model-callable approval operation. MCP projects the server-owned
-exact effect and standard continuation; the confirmation owner validates the authorized client's
-assertion and lends single-use consumption to the canonical mutation unit. Review waits must not
-hold User coordination throughout the native UI interaction. The same User/connection, immutable
-inputs and revisions, expiry and all live authority/domain guards remain mandatory. This is client
-approval, not independent human attestation; ADR 0033 records the explicitly accepted automation
-risk. Missing capability, unsupported interaction or invalid acceptance refuses safely. Pinned-host
-accept/cancel/headless evidence exercises the public ingress, coordinator, Core and native D1;
-it does not authorize deployment or onboarding.
+MCP projects the exact owner-observed effects and standard native continuation in **Claude Code
+and Codex only**. Canonical `oauthApproval` metadata additionally requires a fresh same-User
+first-party browser decision for Budget and Transaction update/deletion, Memory revision/forgetting,
+and confirmed Ingestion operations, including any containing atomic batch. The browser reviews
+immutable input/effects; its decision marks the existing bounded intent without executing it.
+Client-native acceptance alone cannot approve selected work. Other sensitive operations retain
+ADR 0033's accepted client-assertion boundary. Neither contract independently attests human presence.
 
+The confirmation owner consumes the exact intent once with the live credential/grant, scope,
+Consent, owner revision guards, mutation and Audit. Review waits never hold User coordination
+throughout the native interaction. Missing capability, unsupported interaction, wrong subject,
+changed input/revision, expiry, revocation or invalid acceptance refuses safely. Browser decisions
+use the existing first-party Origin/session-binding and fresh WebSession boundary. Pending browser
+approval records expire with their original five-minute intent and are erased before the referenced
+WebSession. No approval operation enters the model's canonical tool catalog.
 Live first-party browser sessions list bounded connection metadata and at most three attributable
 canonical activity entries. Revoking one or all owned connections requires a fresh session and commits
 atomically with append-only Consent evidence. Safety controls remain reachable after processing Consent withdrawal. Revocation

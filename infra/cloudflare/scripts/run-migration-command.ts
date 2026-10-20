@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
 
+export class MigrationCommandError extends Error {}
+
 type MigrationCommand = readonly [string, ...Array<string>];
 type MigrationCommandOptions = Readonly<{ readonly cwd: string }>;
+
+const failureReason = (error: unknown): string => {
+  const code =
+    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+      ? error.code
+      : "command_exit";
+  return ["ENOBUFS", "ETIMEDOUT", "ENOENT"].includes(code) ? code : "command_exit";
+};
 
 /**
  * Runs a migration-management command in the inherited process environment and supplied working
@@ -21,6 +31,12 @@ export const runMigrationCommand = (
     maxBuffer: 1_048_576,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  if (result.status !== 0) throw new Error("External migration command failed");
+  if (result.status !== 0) {
+    const reason = failureReason(result.error);
+    const providerCode = /\[code:\s*(\d+)\]/u.exec(result.stderr)?.[1] ?? "none";
+    throw new MigrationCommandError(
+      `External migration command failed (status ${result.status ?? "none"}, reason ${reason}, provider code ${providerCode})`
+    );
+  }
   return result.stdout;
 };

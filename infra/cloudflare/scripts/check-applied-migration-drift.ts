@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { MigrationCommandError } from "./run-migration-command";
 import { BaselineVerificationError, adoptSchemaBaseline } from "./adopt-schema-baseline";
 import * as BunCrypto from "@effect/platform-bun/BunCrypto";
 import * as Effect from "effect/Effect";
@@ -66,7 +67,7 @@ const main = async (): Promise<void> => {
 
     process.stdout.write("Production D1 applied migration hashes match checked-in SQL.\n");
   } catch (error) {
-    if (error instanceof BaselineVerificationError) {
+    if (error instanceof BaselineVerificationError || error instanceof MigrationCommandError) {
       process.stderr.write(`${error.message}.\n`);
     }
     process.stderr.write(

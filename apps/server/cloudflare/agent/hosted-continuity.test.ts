@@ -507,10 +507,11 @@ it("compacts a long session of short Turns before its exact-entry capacity is re
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
+      const trialStartedAt = now() - 1_000;
       yield* Effect.tryPromise(() =>
         db
           .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
-          .bind(users[0], now() - 1_000, now() - 1_000 + 604_800_000)
+          .bind(users[0], trialStartedAt, trialStartedAt + 604_800_000)
           .run()
       );
       const awaited27 = yield* Effect.tryPromise(() => subject(0));
@@ -1462,10 +1463,11 @@ it.each([
       Effect.gen(function* () {
         const db = yield* Effect.tryPromise(() => setup());
         if (trial) {
+          const trialStartedAt = now() - 1_000;
           yield* Effect.tryPromise(() =>
             db
               .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
-              .bind(users[0], now() - 1_000, now() - 1_000 + 604_800_000)
+              .bind(users[0], trialStartedAt, trialStartedAt + 604_800_000)
               .run()
           );
         }

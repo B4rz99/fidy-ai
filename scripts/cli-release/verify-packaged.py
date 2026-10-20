@@ -24,7 +24,7 @@ if (action === 'empty') {
   process.stdout.write(JSON.stringify(current === null));
 } else if (action === 'seed') {
   if (current !== null) process.exit(1);
-  await Bun.secrets.set({...options, value: input.value, persist: 'local'});
+  await Bun.secrets.set({...options, value: input.value, persist: 'local', allowUnrestrictedAccess: true});
   process.stdout.write('true');
 } else if (action === 'cleanup') {
   if (current !== null && current !== input.value) process.exit(1);

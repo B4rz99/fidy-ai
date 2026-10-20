@@ -1,0 +1,25 @@
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_a8e911d2529fdb 272-303
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_a8e911d2529fdb 46-54
+apps/web/src/features/dashboard/FEATURE.md
+  s_241024bc81d268::t_a8e911d2529fdb 3-13
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_241024bc81d268::t_02074e80fe0202 3,25,30,100,318-324,328,347
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b76df8beee08f1d99f36b7bfafef475fa2cedaac",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

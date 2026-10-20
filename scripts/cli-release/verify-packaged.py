@@ -78,12 +78,14 @@ def credentials(binary, root):
             and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted',
             'Credential verification requires an isolated GitHub-hosted runner')
     native('empty')
+    print('Native empty-slot preflight passed.', flush=True)
     home = root / 'home'
     directory = home / '.fidy' / 'cli'
     directory.mkdir(parents=True, mode=0o700)
     metadata = directory / 'grant.json'
     bearer = 'fin_relcheck_' + secrets.token_urlsafe(32)
     native('seed', bearer)
+    print('Synthetic native credential seeded.', flush=True)
     try:
         metadata.write_text(json.dumps(grant()))
         metadata.chmod(0o600)
@@ -93,10 +95,12 @@ def credentials(binary, root):
                     'Packaged CLI could not load native credentials')
             require('Synthetic release verification' in output.stdout,
                     'Packaged CLI did not load the intended grant')
+        print('Packaged native credential loading and redaction passed.', flush=True)
         metadata.write_text('{invalid synthetic metadata')
         refusal = invoke(binary, home, ['status', '--json'], bearer, expected_code=1)
         require(json.loads(refusal.stderr).get('code') == 'StorageInconsistent',
                 'Malformed metadata did not fail safely')
+        print('Packaged malformed-metadata refusal passed.', flush=True)
         metadata.write_text(json.dumps(grant()))
         logout = invoke(binary, home, ['logout', '--json'], bearer)
         require(json.loads(logout.stdout) == {'_tag': 'LoggedOut'}, 'Logout was not confirmed')
@@ -145,5 +149,19 @@ if __name__ == '__main__':
     arguments = parser.parse_args()
     try:
         verify(arguments.directory, version=arguments.version, credential_check=arguments.credentials)
-    except (ValueError, OSError, subprocess.SubprocessError, zipfile.BadZipFile):
+    except ValueError as failure:
+        safe = {
+            'Native credential precondition or cleanup failed; existing access was preserved',
+            'Credential verification requires an isolated GitHub-hosted runner',
+            'Packaged CLI disclosed credential material',
+            'Packaged CLI returned an unexpected status',
+            'Packaged CLI could not load native credentials',
+            'Packaged CLI did not load the intended grant',
+            'Malformed metadata did not fail safely',
+            'Logout was not confirmed', 'Logout retained grant metadata',
+            'Logged-out executable retained usable local access', 'Packaged CLI retained its lock',
+        }
+        message = str(failure) if str(failure) in safe else 'Artifact or output verification failed'
+        raise SystemExit(message + '; no credential material is reported.') from None
+    except (OSError, subprocess.SubprocessError, zipfile.BadZipFile):
         raise SystemExit('Packaged CLI verification failed; no credential material is reported.') from None

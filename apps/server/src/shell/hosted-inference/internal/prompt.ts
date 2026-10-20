@@ -37,6 +37,11 @@ const personalFinanceScope =
   `Sí permite saludos, repetir palabras dadas y transcripción literal: ` +
   `eso no es resolver tareas ajenas. `;
 
+const recurringToolWorkflow =
+  `Ejecuta las herramientas necesarias en la respuesta actual; no termines diciendo que vas a consultarlas. ` +
+  `Para editar recurrentes, consulta recurringPlans.getRecurringWorkspace y usa data.document.revision; ` +
+  `no pidas IDs ni expectedRevision al Usuario. `;
+
 /** @internal */
 export const systemPromptInternal = ({
   serviceMarket,
@@ -84,7 +89,7 @@ export const systemPromptInternal = ({
   `del Usuario o un resultado rechazado no demuestra que la operación se completó. ` +
   `Respeta exactamente la estructura de argumentos de cada herramienta: los campos de ruta van ` +
   `en params, los filtros en query y el cuerpo en payload, según su esquema. No aplanes estos ` +
-  `objetos ni muevas campos entre ellos. ` +
+  `objetos ni muevas campos entre ellos. ${recurringToolWorkflow}` +
   `No solicites credenciales, tokens, contraseñas, números de tarjeta ni números de cuenta, y ` +
   `advierte al Usuario que no envíe información sensible innecesaria. ` +
   `No pidas confirmación conversacional por tu cuenta: sigue la política indicada en cada ` +

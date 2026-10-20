@@ -1,0 +1,75 @@
+.agents/skills/cloudflare/references/observability/configuration.md
+  s_6d017cc65783af::t_094c0867803f51 50
+.patterns/INDEX.md
+  s_6d017cc65783af::t_e3e73faacae4e2 6
+.patterns/ai.md
+  s_6d017cc65783af::t_31a137f19e35fb 3
+.patterns/effect-4-stable.md
+  s_6d017cc65783af::t_444a4304bc823a 3-4,18,22
+.patterns/http-api.md
+  s_6d017cc65783af::t_f4d36b5fcdb355 3,59
+.patterns/http-client.md
+  s_6d017cc65783af::t_3ca03cf03220ac 3,49,102
+.patterns/mcp.md
+  s_6d017cc65783af::t_b3847ef948f86a 5,52
+.patterns/observability.md
+  s_6d017cc65783af::t_7ef25d67d9e90c 3
+.patterns/processes.md
+  s_6d017cc65783af::t_173c7b49f35464 4
+.patterns/schema.md
+  s_6d017cc65783af::t_24d1be9032a596 45
+.patterns/sources.json
+  s_6d017cc65783af::t_7a9f661c423a09 4,10,17,22
+.patterns/streams.md
+  s_6d017cc65783af::t_d9c1430d44e3b6 27
+apps/cli/package.json
+  s_6d017cc65783af::t_ecfefd5caafef9 18,20,23
+apps/server/contracts/openapi.json
+  s_b75995d26622a8::t_35d5382b2be831 313,2590-2591,2595-2596,2600-2601,3985,4241-4242,4256-4257,4385,4531,4573,4966,5097-5098,5112-5113,6524-6525,6588-6589,6687-6688,6692-6693,6707-6708,6712-6713,7048,7627-7628,7650,7655,7660,7665,7670,7971,9708,9769,11108,11189-11190,11428,11603,11655,11720,11749,11854,11859,11880,13907,13971,17904,17909
+apps/server/contracts/pat-pairing-openapi.json
+  s_b75995d26622a8::t_48eee30ebfe7a3 253
+apps/server/package.json
+  s_6d017cc65783af::t_1183fee771ce86 288,290,300-303,311
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_d9705ca1b29476 278-297
+apps/web/package.json
+  s_6d017cc65783af::t_59b449a65738df 25-26,30,35,48,62
+infra/cloudflare/package.json
+  s_6d017cc65783af::t_f6ecd6ba8d225d 17,20-22,26
+infra/cloudflare/verify-edge-policy.ts
+  s_6d017cc65783af::t_f11fad08bbf927 5
+package.json
+  s_71e18c09dc0768::t_8b05c01f430cd4 61,67,69-71,76-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6900702acff76c84632915e1f15d5b17e4cad5d6",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_71e18c09dc0768": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12211-fdc6-7bc2-adfd-036f70a7254f",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

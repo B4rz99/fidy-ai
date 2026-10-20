@@ -985,3 +985,8 @@ have neither a verified status nor an attempt identity. Collection or a verified
 the attempt binding once; verified approval cannot regress. Provider and callback lookup budgets,
 cooldowns and archive shapes remain independent. Callback erasure clears only hint fields; provider
 erasure removes its binding/evidence while preserving any independently retained unowned hint.
+
+Moved source, membership and callback groups retain their original archive row references. Their
+read projections expose those retained references; newly created groups use purpose-qualified stable
+record identities. Erasure chunks therefore keep addressing the same record across migration without
+rewriting archives or external recovery objects. Clearing a group also clears its reference.

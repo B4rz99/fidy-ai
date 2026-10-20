@@ -212,7 +212,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "UPDATE transactions AS r SET reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE r.reconciliation_first_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE transactions AS r SET reconciliation_row_ref=NULL,reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE r.reconciliation_first_id IS NOT NULL AND r.user_id=? AND COALESCE(r.reconciliation_row_ref,'member:'||r.id) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

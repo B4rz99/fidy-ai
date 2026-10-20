@@ -259,18 +259,19 @@ CREATE TABLE "card_enrollments" (
   method TEXT NOT NULL DEFAULT 'card' CHECK (method IN ('card', 'nequi', 'daviplata')),
   wompi_environment TEXT CHECK (wompi_environment IN ('sandbox', 'production')),
   authorization_digest TEXT CHECK (authorization_digest IS NULL OR length(authorization_digest) = 64),
-payment_source_id TEXT UNIQUE CHECK(payment_source_id IS NULL OR length(payment_source_id)=36),
+source_row_ref TEXT UNIQUE,
+ payment_source_id TEXT UNIQUE CHECK(payment_source_id IS NULL OR length(payment_source_id)=36),
  source_wompi_id INTEGER UNIQUE CHECK(source_wompi_id IS NULL OR source_wompi_id>0),
  source_billing_email TEXT,source_created_at_ms INTEGER,source_retired_at_ms INTEGER CHECK(source_retired_at_ms IS NULL OR source_retired_at_ms>0),
  source_method TEXT CHECK(source_method IN ('card','nequi','daviplata')),
- CHECK((payment_source_id IS NULL AND source_wompi_id IS NULL AND source_billing_email IS NULL AND source_created_at_ms IS NULL AND source_retired_at_ms IS NULL AND source_method IS NULL)
+ CHECK((payment_source_id IS NULL AND source_row_ref IS NULL AND source_wompi_id IS NULL AND source_billing_email IS NULL AND source_created_at_ms IS NULL AND source_retired_at_ms IS NULL AND source_method IS NULL)
  OR (payment_source_id IS NOT NULL AND source_wompi_id IS NOT NULL AND source_billing_email IS NOT NULL AND source_created_at_ms IS NOT NULL AND source_method IS NOT NULL)),
   CHECK ((status = 'prepared' AND payment_request_id IS NULL AND accepted_at_ms IS NULL)
     OR (status <> 'prepared'))
 ) STRICT;
 --> statement-breakpoint
 
-INSERT INTO card_enrollments(rowid,id,user_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,accepted_at_ms,payment_request_id,wompi_candidate_source_id,verification_attempts,last_verification_at_ms,refusal_reason,method,wompi_environment,authorization_digest,payment_source_id,source_wompi_id,source_billing_email,source_created_at_ms,source_retired_at_ms,source_method) SELECT e.original_rowid,e.id,e.user_id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,e.wompi_environment,e.authorization_digest,s.payment_source_id,s.wompi_source_id,s.billing_email,s.created_at_ms,s.retired_at_ms,s.method FROM _enrollment_rows e LEFT JOIN card_payment_sources s ON s.enrollment_id=e.id;
+INSERT INTO card_enrollments(rowid,id,user_id,price_id,billing_email,status,payment_source_mode,contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,accepted_at_ms,payment_request_id,wompi_candidate_source_id,verification_attempts,last_verification_at_ms,refusal_reason,method,wompi_environment,authorization_digest,source_row_ref,payment_source_id,source_wompi_id,source_billing_email,source_created_at_ms,source_retired_at_ms,source_method) SELECT e.original_rowid,e.id,e.user_id,e.price_id,e.billing_email,e.status,e.payment_source_mode,e.contracts_json,e.disclosure_json,e.prepared_at_ms,e.expires_at_ms,e.accepted_at_ms,e.payment_request_id,e.wompi_candidate_source_id,e.verification_attempts,e.last_verification_at_ms,e.refusal_reason,e.method,e.wompi_environment,e.authorization_digest,CAST(s.rowid AS TEXT),s.payment_source_id,s.wompi_source_id,s.billing_email,s.created_at_ms,s.retired_at_ms,s.method FROM _enrollment_rows e LEFT JOIN card_payment_sources s ON s.enrollment_id=e.id;
 --> statement-breakpoint
 
 INSERT INTO sql_assertions(scope,accepted) SELECT 'schema_upgrade',0 WHERE EXISTS(SELECT 1 FROM card_payment_sources s LEFT JOIN card_enrollments e ON e.id=s.enrollment_id AND e.user_id=s.user_id WHERE e.id IS NULL);
@@ -305,15 +306,15 @@ CREATE TABLE transactions (
   notes TEXT,
   occurred_at TEXT NOT NULL,
   created_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0), user_decisions TEXT NOT NULL DEFAULT '{}', deleted_at_ms INTEGER,
-reconciliation_first_id TEXT,reconciliation_second_id TEXT,
+reconciliation_row_ref TEXT UNIQUE,reconciliation_first_id TEXT,reconciliation_second_id TEXT,
  FOREIGN KEY(user_id,reconciliation_first_id,reconciliation_second_id) REFERENCES transaction_reconciliation_decisions(user_id,first_transaction_id,second_transaction_id),
- CHECK((reconciliation_first_id IS NULL AND reconciliation_second_id IS NULL) OR (reconciliation_first_id IS NOT NULL AND reconciliation_second_id IS NOT NULL AND id IN(reconciliation_first_id,reconciliation_second_id))),
+ CHECK((reconciliation_first_id IS NULL AND reconciliation_second_id IS NULL AND reconciliation_row_ref IS NULL) OR (reconciliation_first_id IS NOT NULL AND reconciliation_second_id IS NOT NULL AND id IN(reconciliation_first_id,reconciliation_second_id))),
  CHECK(reconciliation_first_id IS NULL OR deleted_at_ms IS NULL),
   UNIQUE (user_id, id)
 ) STRICT;
 --> statement-breakpoint
 
-INSERT INTO transactions(rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at,created_at,revision,user_decisions,deleted_at_ms,reconciliation_first_id,reconciliation_second_id) SELECT t.original_rowid,t.id,t.user_id,t.amount,t.currency,t.direction,t.counterparty,t.category_id,t.notes,t.occurred_at,t.created_at,t.revision,t.user_decisions,t.deleted_at_ms,m.first_transaction_id,m.second_transaction_id FROM _transaction_rows t LEFT JOIN transaction_reconciliation_members m ON m.user_id=t.user_id AND m.transaction_id=t.id;
+INSERT INTO transactions(rowid,id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at,created_at,revision,user_decisions,deleted_at_ms,reconciliation_row_ref,reconciliation_first_id,reconciliation_second_id) SELECT t.original_rowid,t.id,t.user_id,t.amount,t.currency,t.direction,t.counterparty,t.category_id,t.notes,t.occurred_at,t.created_at,t.revision,t.user_decisions,t.deleted_at_ms,CAST(m.rowid AS TEXT),m.first_transaction_id,m.second_transaction_id FROM _transaction_rows t LEFT JOIN transaction_reconciliation_members m ON m.user_id=t.user_id AND m.transaction_id=t.id;
 --> statement-breakpoint
 
 DROP TABLE transaction_reconciliation_members;
@@ -335,21 +336,21 @@ CREATE TABLE billing_provider_transactions (
  status TEXT CHECK(status IN ('PENDING','APPROVED','DECLINED','VOIDED','ERROR')),
  first_observed_at_ms INTEGER,negative_observed_at_ms INTEGER,finalized_at_ms INTEGER,
  evidence_transaction_id TEXT GENERATED ALWAYS AS(CASE WHEN status IS NOT NULL THEN transaction_id END) VIRTUAL UNIQUE,
-event_received_at_ms INTEGER,event_signed_at INTEGER,event_signed_status TEXT,
+event_row_ref TEXT UNIQUE,event_received_at_ms INTEGER,event_signed_at INTEGER,event_signed_status TEXT,
  event_lookup_attempts INTEGER CHECK(event_lookup_attempts>=0),event_last_checked_at_ms INTEGER,event_resolved_at_ms INTEGER,
  CHECK(attempt_id IS NOT NULL OR event_received_at_ms IS NOT NULL),
  CHECK(attempt_id IS NOT NULL OR (status IS NULL AND first_observed_at_ms IS NULL AND negative_observed_at_ms IS NULL AND finalized_at_ms IS NULL)),
- CHECK((event_received_at_ms IS NULL AND event_signed_at IS NULL AND event_signed_status IS NULL AND event_lookup_attempts IS NULL AND event_last_checked_at_ms IS NULL AND event_resolved_at_ms IS NULL)
+ CHECK((event_received_at_ms IS NULL AND event_row_ref IS NULL AND event_signed_at IS NULL AND event_signed_status IS NULL AND event_lookup_attempts IS NULL AND event_last_checked_at_ms IS NULL AND event_resolved_at_ms IS NULL)
  OR (event_received_at_ms IS NOT NULL AND event_signed_at IS NOT NULL AND event_signed_status IS NOT NULL AND event_lookup_attempts IS NOT NULL)),
  CHECK((status IS NULL AND first_observed_at_ms IS NULL AND negative_observed_at_ms IS NULL AND finalized_at_ms IS NULL)
   OR (status IS NOT NULL AND first_observed_at_ms IS NOT NULL AND (status<>'APPROVED' OR finalized_at_ms IS NOT NULL)))
 ) STRICT;
 --> statement-breakpoint
 
-INSERT INTO billing_provider_transactions(rowid,transaction_id,attempt_id,lookup_attempts,last_checked_at_ms,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts,event_last_checked_at_ms,event_resolved_at_ms) SELECT p.original_rowid,p.transaction_id,p.attempt_id,p.lookup_attempts,p.last_checked_at_ms,p.status,p.first_observed_at_ms,p.negative_observed_at_ms,p.finalized_at_ms,e.received_at_ms,e.signed_at,e.signed_status,e.lookup_attempts,e.last_checked_at_ms,e.resolved_at_ms FROM _provider_rows p LEFT JOIN billing_event_candidates e ON e.transaction_id=p.transaction_id;
+INSERT INTO billing_provider_transactions(rowid,transaction_id,attempt_id,lookup_attempts,last_checked_at_ms,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms,event_row_ref,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts,event_last_checked_at_ms,event_resolved_at_ms) SELECT p.original_rowid,p.transaction_id,p.attempt_id,p.lookup_attempts,p.last_checked_at_ms,p.status,p.first_observed_at_ms,p.negative_observed_at_ms,p.finalized_at_ms,CAST(e.rowid AS TEXT),e.received_at_ms,e.signed_at,e.signed_status,e.lookup_attempts,e.last_checked_at_ms,e.resolved_at_ms FROM _provider_rows p LEFT JOIN billing_event_candidates e ON e.transaction_id=p.transaction_id;
 --> statement-breakpoint
 
-INSERT INTO billing_provider_transactions(transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts,event_last_checked_at_ms,event_resolved_at_ms) SELECT e.transaction_id,e.received_at_ms,e.signed_at,e.signed_status,e.lookup_attempts,e.last_checked_at_ms,e.resolved_at_ms FROM billing_event_candidates e WHERE NOT EXISTS(SELECT 1 FROM billing_provider_transactions p WHERE p.transaction_id=e.transaction_id);
+INSERT INTO billing_provider_transactions(transaction_id,event_row_ref,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts,event_last_checked_at_ms,event_resolved_at_ms) SELECT e.transaction_id,CAST(e.rowid AS TEXT),e.received_at_ms,e.signed_at,e.signed_status,e.lookup_attempts,e.last_checked_at_ms,e.resolved_at_ms FROM billing_event_candidates e WHERE NOT EXISTS(SELECT 1 FROM billing_provider_transactions p WHERE p.transaction_id=e.transaction_id);
 --> statement-breakpoint
 
 DROP TABLE billing_event_candidates;
@@ -358,13 +359,13 @@ DROP TABLE billing_event_candidates;
 DROP TABLE _provider_rows;
 --> statement-breakpoint
 
-CREATE VIEW verified_payment_sources AS SELECT rowid,payment_source_id AS id,user_id,id AS enrollment_id,source_wompi_id AS wompi_source_id,source_billing_email AS billing_email,source_created_at_ms AS created_at_ms,source_retired_at_ms AS retired_at_ms,source_method AS method FROM card_enrollments WHERE payment_source_id IS NOT NULL;
+CREATE VIEW verified_payment_sources AS SELECT COALESCE(source_row_ref,'source:'||payment_source_id) AS rowid,payment_source_id AS id,user_id,id AS enrollment_id,source_wompi_id AS wompi_source_id,source_billing_email AS billing_email,source_created_at_ms AS created_at_ms,source_retired_at_ms AS retired_at_ms,source_method AS method FROM card_enrollments WHERE payment_source_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE VIEW reconciled_transactions AS SELECT rowid,user_id,id AS transaction_id,reconciliation_first_id AS first_transaction_id,reconciliation_second_id AS second_transaction_id FROM transactions WHERE reconciliation_first_id IS NOT NULL;
+CREATE VIEW reconciled_transactions AS SELECT COALESCE(reconciliation_row_ref,'member:'||id) AS rowid,user_id,id AS transaction_id,reconciliation_first_id AS first_transaction_id,reconciliation_second_id AS second_transaction_id FROM transactions WHERE reconciliation_first_id IS NOT NULL;
 --> statement-breakpoint
 
-CREATE VIEW billing_callback_hints AS SELECT rowid,transaction_id,event_received_at_ms AS received_at_ms,event_signed_at AS signed_at,event_signed_status AS signed_status,event_lookup_attempts AS lookup_attempts,event_last_checked_at_ms AS last_checked_at_ms,event_resolved_at_ms AS resolved_at_ms FROM billing_provider_transactions WHERE event_received_at_ms IS NOT NULL;
+CREATE VIEW billing_callback_hints AS SELECT COALESCE(event_row_ref,'callback:'||transaction_id) AS rowid,transaction_id,event_received_at_ms AS received_at_ms,event_signed_at AS signed_at,event_signed_status AS signed_status,event_lookup_attempts AS lookup_attempts,event_last_checked_at_ms AS last_checked_at_ms,event_resolved_at_ms AS resolved_at_ms FROM billing_provider_transactions WHERE event_received_at_ms IS NOT NULL;
 --> statement-breakpoint
 
 CREATE INDEX billing_provider_transaction_attempt ON billing_provider_transactions(attempt_id,status);
@@ -994,13 +995,16 @@ END;
 CREATE UNIQUE INDEX payment_source_active_user ON card_enrollments(user_id) WHERE payment_source_id IS NOT NULL AND source_retired_at_ms IS NULL;
 --> statement-breakpoint
 
+CREATE INDEX payment_sources_by_owner ON card_enrollments(user_id) WHERE payment_source_id IS NOT NULL;
+--> statement-breakpoint
+
 CREATE INDEX reconciliation_members_by_pair ON transactions(user_id,reconciliation_first_id,reconciliation_second_id,id) WHERE reconciliation_first_id IS NOT NULL;
 --> statement-breakpoint
 
 CREATE INDEX billing_callback_pending ON billing_provider_transactions(event_resolved_at_ms,event_received_at_ms,event_last_checked_at_ms) WHERE event_received_at_ms IS NOT NULL;
 --> statement-breakpoint
 
-CREATE TRIGGER card_source_immutable BEFORE UPDATE ON card_enrollments WHEN OLD.payment_source_id IS NOT NULL AND (NEW.payment_source_id IS NOT OLD.payment_source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id OR NEW.source_wompi_id IS NOT OLD.source_wompi_id OR NEW.source_billing_email IS NOT OLD.source_billing_email OR NEW.source_created_at_ms IS NOT OLD.source_created_at_ms OR NEW.source_retired_at_ms IS NOT OLD.source_retired_at_ms OR NEW.source_method IS NOT OLD.source_method) AND NOT(NEW.payment_source_id IS NULL) AND (NEW.payment_source_id<>OLD.payment_source_id OR NEW.user_id<>OLD.user_id OR NEW.id<>OLD.id
+CREATE TRIGGER card_source_immutable BEFORE UPDATE ON card_enrollments WHEN OLD.payment_source_id IS NOT NULL AND (NEW.source_row_ref IS NOT OLD.source_row_ref OR NEW.payment_source_id IS NOT OLD.payment_source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id OR NEW.source_wompi_id IS NOT OLD.source_wompi_id OR NEW.source_billing_email IS NOT OLD.source_billing_email OR NEW.source_created_at_ms IS NOT OLD.source_created_at_ms OR NEW.source_retired_at_ms IS NOT OLD.source_retired_at_ms OR NEW.source_method IS NOT OLD.source_method) AND NOT(NEW.payment_source_id IS NULL) AND (NEW.payment_source_id<>OLD.payment_source_id OR NEW.user_id<>OLD.user_id OR NEW.id<>OLD.id
   OR NEW.source_wompi_id<>OLD.source_wompi_id OR NEW.source_billing_email<>OLD.source_billing_email
   OR NEW.source_created_at_ms<>OLD.source_created_at_ms OR NEW.source_method<>OLD.source_method
   OR OLD.source_retired_at_ms IS NOT NULL OR NEW.source_retired_at_ms IS NULL
@@ -1011,7 +1015,7 @@ CREATE TRIGGER card_source_immutable BEFORE UPDATE ON card_enrollments WHEN OLD.
     AND (a.status<>'failed'
       OR EXISTS (SELECT 1 FROM billing_provider_transactions e WHERE e.attempt_id=a.id AND e.status IN ('PENDING','APPROVED'))
       OR (NOT EXISTS (SELECT 1 FROM billing_retry_clearances clear WHERE clear.attempt_id=a.id)
-        AND NOT (a.no_charge_confirmed_at_ms IS NOT NULL AND a.no_charge_reference=a.wompi_reference AND a.no_charge_environment=a.wompi_environment))))) BEGIN SELECT RAISE(ABORT,'card_source_immutable'); END;
+        AND NOT (a.no_charge_confirmed_at_ms IS NOT NULL AND a.no_charge_reference=a.wompi_reference AND a.no_charge_environment=a.wompi_environment)))) OR NEW.source_row_ref IS NOT OLD.source_row_ref) BEGIN SELECT RAISE(ABORT,'card_source_immutable'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER card_source_requires_claim BEFORE UPDATE ON card_enrollments WHEN OLD.payment_source_id IS NULL AND NEW.payment_source_id IS NOT NULL AND NOT(OLD.status IN('creating','verifying') AND OLD.payment_source_mode='create' AND NEW.source_billing_email=OLD.billing_email AND NEW.source_wompi_id IS OLD.wompi_candidate_source_id AND NEW.source_retired_at_ms IS NULL) BEGIN SELECT RAISE(ABORT,'card_source_invalid_claim'); END;
@@ -1084,7 +1088,7 @@ CREATE TRIGGER erasure_fence_card_payment_sources_insert BEFORE INSERT ON card_e
 CREATE TRIGGER erasure_fence_card_payment_sources_delete BEFORE DELETE ON card_enrollments WHEN OLD.payment_source_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_card_payment_sources_update BEFORE UPDATE ON card_enrollments WHEN (OLD.payment_source_id IS NOT NULL OR NEW.payment_source_id IS NOT NULL) AND (NEW.payment_source_id IS NOT OLD.payment_source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id OR NEW.source_wompi_id IS NOT OLD.source_wompi_id OR NEW.source_billing_email IS NOT OLD.source_billing_email OR NEW.source_created_at_ms IS NOT OLD.source_created_at_ms OR NEW.source_retired_at_ms IS NOT OLD.source_retired_at_ms OR NEW.source_method IS NOT OLD.source_method) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((OLD.user_id=q.user_id) OR (NEW.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_card_payment_sources_update BEFORE UPDATE ON card_enrollments WHEN (OLD.payment_source_id IS NOT NULL OR NEW.payment_source_id IS NOT NULL) AND (NEW.source_row_ref IS NOT OLD.source_row_ref OR NEW.payment_source_id IS NOT OLD.payment_source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id OR NEW.source_wompi_id IS NOT OLD.source_wompi_id OR NEW.source_billing_email IS NOT OLD.source_billing_email OR NEW.source_created_at_ms IS NOT OLD.source_created_at_ms OR NEW.source_retired_at_ms IS NOT OLD.source_retired_at_ms OR NEW.source_method IS NOT OLD.source_method) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((OLD.user_id=q.user_id) OR (NEW.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_card_payment_sources_delete BEFORE DELETE ON card_enrollments
@@ -1119,7 +1123,7 @@ CREATE TRIGGER erasure_fence_transaction_reconciliation_members_insert BEFORE IN
 CREATE TRIGGER erasure_fence_transaction_reconciliation_members_delete BEFORE DELETE ON transactions WHEN OLD.reconciliation_first_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_members')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_transaction_reconciliation_members_update BEFORE UPDATE ON transactions WHEN (OLD.reconciliation_first_id IS NOT NULL OR NEW.reconciliation_first_id IS NOT NULL) AND (NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id OR NEW.reconciliation_first_id IS NOT OLD.reconciliation_first_id OR NEW.reconciliation_second_id IS NOT OLD.reconciliation_second_id) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((OLD.user_id=q.user_id) OR (NEW.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_members')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_transaction_reconciliation_members_update BEFORE UPDATE ON transactions WHEN (OLD.reconciliation_first_id IS NOT NULL OR NEW.reconciliation_first_id IS NOT NULL) AND (NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id OR NEW.reconciliation_first_id IS NOT OLD.reconciliation_first_id OR NEW.reconciliation_second_id IS NOT OLD.reconciliation_second_id OR NEW.reconciliation_row_ref IS NOT OLD.reconciliation_row_ref) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((OLD.user_id=q.user_id) OR (NEW.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_members')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_transaction_reconciliation_members_delete BEFORE DELETE ON transactions
@@ -1154,7 +1158,7 @@ CREATE TRIGGER erasure_fence_billing_event_candidates_insert BEFORE INSERT ON bi
 CREATE TRIGGER erasure_fence_billing_event_candidates_delete BEFORE DELETE ON billing_provider_transactions WHEN OLD.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM billing_attempts a WHERE a.id=OLD.attempt_id AND OLD.status IS NOT NULL AND a.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_event_candidates')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_billing_event_candidates_update BEFORE UPDATE ON billing_provider_transactions WHEN (OLD.event_received_at_ms IS NOT NULL OR NEW.event_received_at_ms IS NOT NULL) AND (NEW.transaction_id IS NOT OLD.transaction_id OR NEW.event_received_at_ms IS NOT OLD.event_received_at_ms OR NEW.event_signed_at IS NOT OLD.event_signed_at OR NEW.event_signed_status IS NOT OLD.event_signed_status OR NEW.event_lookup_attempts IS NOT OLD.event_lookup_attempts OR NEW.event_last_checked_at_ms IS NOT OLD.event_last_checked_at_ms OR NEW.event_resolved_at_ms IS NOT OLD.event_resolved_at_ms) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM billing_attempts a WHERE a.id=OLD.attempt_id AND OLD.status IS NOT NULL AND a.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM billing_attempts a WHERE a.id=NEW.attempt_id AND NEW.status IS NOT NULL AND a.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_event_candidates')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+CREATE TRIGGER erasure_fence_billing_event_candidates_update BEFORE UPDATE ON billing_provider_transactions WHEN (OLD.event_received_at_ms IS NOT NULL OR NEW.event_received_at_ms IS NOT NULL) AND (NEW.transaction_id IS NOT OLD.transaction_id OR NEW.event_row_ref IS NOT OLD.event_row_ref OR NEW.event_received_at_ms IS NOT OLD.event_received_at_ms OR NEW.event_signed_at IS NOT OLD.event_signed_at OR NEW.event_signed_status IS NOT OLD.event_signed_status OR NEW.event_lookup_attempts IS NOT OLD.event_lookup_attempts OR NEW.event_last_checked_at_ms IS NOT OLD.event_last_checked_at_ms OR NEW.event_resolved_at_ms IS NOT OLD.event_resolved_at_ms) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM billing_attempts a WHERE a.id=OLD.attempt_id AND OLD.status IS NOT NULL AND a.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM billing_attempts a WHERE a.id=NEW.attempt_id AND NEW.status IS NOT NULL AND a.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_event_candidates')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_billing_event_candidates_delete BEFORE DELETE ON billing_provider_transactions

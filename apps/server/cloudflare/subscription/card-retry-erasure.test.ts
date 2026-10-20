@@ -95,7 +95,7 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
           .run()
       );
       for (const sql of [
-        "UPDATE card_enrollments SET payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE payment_source_id IS NOT NULL AND user_id=?",
+        "UPDATE card_enrollments SET source_row_ref=NULL,payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE payment_source_id IS NOT NULL AND user_id=?",
         "UPDATE card_enrollments SET source_retired_at_ms=1 WHERE user_id=?",
         "UPDATE billing_attempts AS billing_checkout_responses SET checkout_transaction_id=NULL WHERE checkout_transaction_id IS NOT NULL AND id IN(SELECT id FROM billing_attempts WHERE user_id=?)",
         "UPDATE billing_attempts SET checkout_transaction_id=checkout_transaction_id||'x' WHERE user_id=?",
@@ -137,7 +137,7 @@ it("preserves billing erasure guards and disposes only the reviewed User", () =>
       yield* wait(() =>
         db
           .prepare(
-            "UPDATE card_enrollments SET payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE payment_source_id=?"
+            "UPDATE card_enrollments SET source_row_ref=NULL,payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE payment_source_id=?"
           )
           .bind(id(3, 3))
           .run()

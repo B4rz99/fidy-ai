@@ -4554,7 +4554,7 @@ it("aborts a batch unlink when a competing unlink commits before the unit", () =
                 .bind(owner, first, second),
               db
                 .prepare(
-                  `UPDATE transactions SET reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND user_id = ? AND reconciliation_first_id = ? AND reconciliation_second_id = ?`
+                  `UPDATE transactions SET reconciliation_row_ref=NULL,reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND user_id = ? AND reconciliation_first_id = ? AND reconciliation_second_id = ?`
                 )
                 .bind(owner, first, second),
             ])

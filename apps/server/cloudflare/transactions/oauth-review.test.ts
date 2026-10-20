@@ -332,7 +332,7 @@ const changedPremises: ReadonlyArray<
     change: (db) =>
       db
         .prepare(
-          "UPDATE transactions SET reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND id = ?"
+          "UPDATE transactions SET reconciliation_row_ref=NULL,reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND id = ?"
         )
         .bind(second)
         .run(),

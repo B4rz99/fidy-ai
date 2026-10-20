@@ -207,7 +207,7 @@ const attachMember = (work: PairWork & Readonly<{ transactionId: string }>): D1P
 
 const detachMember = (work: PairWork & Readonly<{ transactionId: string }>): D1PreparedStatement =>
   work.db
-    .prepare(`UPDATE transactions SET reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND user_id = ? AND id = ? AND reconciliation_first_id = ? AND reconciliation_second_id = ?
+    .prepare(`UPDATE transactions SET reconciliation_row_ref=NULL,reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND user_id = ? AND id = ? AND reconciliation_first_id = ? AND reconciliation_second_id = ?
         AND changes() = 1`)
     .bind(
       work.subject.userId,

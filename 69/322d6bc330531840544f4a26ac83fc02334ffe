@@ -1,0 +1,40 @@
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_241024bc81d268::t_366876d765fe79 41,82-86,98,106-112,225-232
+  s_241024bc81d268::t_6771c03d314c7a 63,78-81,90,233-238
+  s_241024bc81d268::t_38bac71f0ab810 224,239-240
+  s_241024bc81d268::t_a476d7bdf6f193 23-28,32,36,87-89,91-97,99,179,206,223
+apps/server/contracts/openapi.json
+  s_241024bc81d268::t_40900ed14adda1 22527
+  s_241024bc81d268::t_6771c03d314c7a 22174
+apps/web/src/features/recurring/FEATURE.md
+  s_241024bc81d268::t_788d4b8b511b56 245-271
+apps/server/src/shell/recurring-plans/contract.ts
+  s_241024bc81d268::t_1769b050577ecb 42
+  s_241024bc81d268::t_073ece2bf2b03e 61
+apps/server/src/shell/hosted-inference/internal/conformance.ts
+  s_241024bc81d268::t_19a39c92bfeb0d 261
+  s_241024bc81d268::t_03c4a68ab63268 7,210,236,252-253,285-287
+  s_241024bc81d268::t_41ce9a0bb2edf6 270,292
+  s_241024bc81d268::t_0a96c55e6f51fc 9-11,211-226,237-248,263-266,268,271-278,280-284,288-291
+  s_241024bc81d268::t_c89d6967476b7a 209,227-235,249-251,254,279
+apps/web/src/features/agent/FEATURE.md
+  s_241024bc81d268::t_788d4b8b511b56 46-52
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_241024bc81d268::t_40630d7fdf6c96 40-44,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "69322d6bc330531840544f4a26ac83fc02334ffe",
+  "prompts": {},
+  "sessions": {
+    "s_241024bc81d268": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1503a-d0a2-74d0-b430-80c1c5b5d016",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

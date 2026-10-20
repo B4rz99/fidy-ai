@@ -159,6 +159,15 @@ export type Harness = Readonly<{
   }>;
 }>;
 
+const omittedAuditMigrations = new Set([
+  "0037_oauth_shared_audit_budget.sql",
+  "0062_pat_activity.sql",
+  "0063_connections.sql",
+  "0064_connection_browser_execution.sql",
+  "0065_connection_attempt_retention.sql",
+  "0093_recurring_plans.sql",
+]);
+
 export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure> =>
   Effect.gen(function* () {
     const db = yield* wait(databases.acquire());
@@ -169,13 +178,8 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
       .filter(
         (name) =>
           auditMigration ||
-          (name < "0095_" &&
-            name !== "0037_oauth_shared_audit_budget.sql" &&
-            name !== "0062_pat_activity.sql" &&
-            name !== "0063_connections.sql" &&
-            name !== "0064_connection_browser_execution.sql" &&
-            name !== "0065_connection_attempt_retention.sql" &&
-            name !== "0093_recurring_plans.sql")
+          name === "0113_oauth_first_party_approval.sql" ||
+          (name < "0095_" && !omittedAuditMigrations.has(name))
       )
       .map((name) => new URL(`../migrations/${name}`, import.meta.url));
     if (auditMigration) yield* wait(installTestSchema({ db, sources }));

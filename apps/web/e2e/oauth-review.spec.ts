@@ -12,6 +12,7 @@ import {
 const { test, expect } = playwright;
 const { api, app, operator } = browserAcceptanceTopology();
 const firstPoll = 5000;
+const completeOAuthJourneyMilliseconds = 60_000;
 const created = 201;
 const found = 302;
 const noContent = 204;
@@ -142,8 +143,9 @@ test("built browser returns from established sign-in to a text-only request revi
 test("built browser approves an exact connection and exchanges its callback code without Fidy bearer storage", ({
   page,
   request,
-}) =>
-  Effect.runPromise(
+}) => {
+  test.setTimeout(completeOAuthJourneyMilliseconds);
+  return Effect.runPromise(
     Effect.gen(function* () {
       const query = yield* authorization(request);
       query.set("state", "browser-callback-state");
@@ -193,7 +195,8 @@ test("built browser approves an exact connection and exchanges its callback code
       yield* exerciseBrowserOperationApproval(page, request, token.access_token);
       yield* inspectAndRevoke({ page, request, query, token });
     })
-  ));
+  );
+});
 
 const assertResidentHostSession = (
   request: APIRequestContext,

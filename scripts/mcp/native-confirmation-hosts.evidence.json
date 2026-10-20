@@ -177,18 +177,6 @@
           "httpStatus": 202
         },
         {
-          "method": "tools/list",
-          "tool": "",
-          "action": "",
-          "continuation": false,
-          "advertisedForm": false,
-          "declaredClient": "",
-          "offeredProtocol": "",
-          "protocolHeader": "2025-11-25",
-          "negotiatedProtocol": "2025-11-25",
-          "httpStatus": 200
-        },
-        {
           "method": "GET",
           "tool": "",
           "action": "",
@@ -199,6 +187,18 @@
           "protocolHeader": "2025-11-25",
           "negotiatedProtocol": "",
           "httpStatus": 405
+        },
+        {
+          "method": "tools/list",
+          "tool": "",
+          "action": "",
+          "continuation": false,
+          "advertisedForm": false,
+          "declaredClient": "",
+          "offeredProtocol": "",
+          "protocolHeader": "2025-11-25",
+          "negotiatedProtocol": "2025-11-25",
+          "httpStatus": 200
         },
         {
           "method": "tools/call",
@@ -502,7 +502,7 @@
       "passed": true
     }
   ],
-  "verifiedAt": "2026-10-20T14:37:04.021755+00:00",
+  "verifiedAt": "2026-10-20T15:03:57.850660+00:00",
   "versions": {
     "claude": "2.1.289",
     "codex": "0.160.0"

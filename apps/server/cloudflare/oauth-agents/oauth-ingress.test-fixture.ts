@@ -178,7 +178,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
       .filter(
         (name) =>
           auditMigration ||
-          name === "0113_oauth_first_party_approval.sql" ||
+          name === "0163_oauth_first_party_approval.sql" ||
           (name < "0095_" && !omittedAuditMigrations.has(name))
       )
       .map((name) => new URL(`../migrations/${name}`, import.meta.url));

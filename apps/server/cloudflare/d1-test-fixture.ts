@@ -569,7 +569,7 @@ const oauthAuthorityTestMigrations = [
   "0033_oauth_authority",
   "0037_oauth_shared_audit_budget",
   "0038_oauth_confirmation",
-  "0113_oauth_first_party_approval",
+  "0163_oauth_first_party_approval",
 ] as const;
 
 export const canonicalAdmissionMigrationNames = (

@@ -80,10 +80,10 @@ five-minute intent; native continuation still consumes it once with live authori
 Client-only acceptance is refused. The remaining client-assertion exception is restricted to other
 sensitive operations, as documented in SECURITY_STANDARDS.md and ADR 0033.
 
-Local verification passed 225 OAuth integration tests, including 13 first-party approval cases;
-5 real browser OAuth journeys, including explicit operation approval and replay refusal; 85 canonical
-Transaction-owner and Ingestion checks with the current approval schema/preconditions; 4 erasure
-checks; 14 canonical policy checks; 15 login-destination checks; and full static verification.
+After integrating the database consolidation, local verification passed 312 OAuth, Transaction-owner,
+Ingestion and erasure integration checks, including the 13 first-party approval cases; 5 real browser
+OAuth journeys with explicit operation approval and replay refusal; 14 canonical policy checks;
+15 login-destination checks; and 136 CI-tool regressions. Full static verification passes.
 Pinned Claude Code 2.1.289 and Codex 0.160.0 also pass all six acceptance, cancellation and headless
 refusal cases through public ingress/Core/coordinator/native D1; the explicit first-party browser API
 decision is synthetic and separate from automated native controls. Metadata-only evidence is retained

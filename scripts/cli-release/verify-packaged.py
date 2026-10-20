@@ -8,6 +8,7 @@ import platform
 import re
 import secrets
 import shutil
+import shlex
 import subprocess
 import tempfile
 import zipfile
@@ -22,6 +23,8 @@ const options = {service: 'com.fidy.cli.api.fidyapp.com', name: 'login'};
 const current = await Bun.secrets.get(options);
 if (action === 'empty') {
   process.stdout.write(JSON.stringify(current === null));
+} else if (action === 'matches') {
+  process.stdout.write(JSON.stringify(current === input.value));
 } else if (action === 'seed') {
   if (current !== null) process.exit(1);
   await Bun.secrets.set({...options, value: input.value, persist: 'local'});
@@ -101,13 +104,20 @@ def credentials(binary, root):
     if platform.system() == 'Darwin':
         # security reads the synthetic password from stdin, never process arguments.
         # Trust these exact executables on this disposable CI-only credential.
-        result = run(['security', 'add-generic-password', '-a', 'login',
-                      '-s', 'com.fidy.cli.api.fidyapp.com', '-T', str(binary),
-                      '-T', shutil.which('bun'), '-w'], data=bearer + '\n')
+        command = shlex.join(['add-generic-password', '-a', 'login',
+                              '-s', 'com.fidy.cli.api.fidyapp.com', '-T', str(binary),
+                              '-T', shutil.which('bun'), '-w', bearer])
+        result = run(['security', '-i'], data=command + '\n')
         require(result.returncode == 0, 'Synthetic native credential seed failed')
+        keychain = str(Path(os.environ['RUNNER_TEMP']) / 'fidy-packaged-test.keychain-db')
+        access = run(['security', 'set-generic-password-partition-list',
+                      '-a', 'login', '-s', 'com.fidy.cli.api.fidyapp.com',
+                      '-S', 'apple-tool:,apple:,unsigned:', '-k', 'fidy-synthetic-ci-only', keychain])
+        require(access.returncode == 0, 'Synthetic native credential seed failed')
     else:
         native('seed', bearer)
-    print('Synthetic native credential seeded.', flush=True)
+    native('matches', bearer)
+    print('Synthetic native credential seeded and verified.', flush=True)
     try:
         metadata.write_text(json.dumps(grant()))
         metadata.chmod(0o600)

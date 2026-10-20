@@ -306,6 +306,7 @@ separately verifies pairing, issuance, canonical calls and revocation with synth
 
 The synthetic macOS item is created through the OS `security` utility, with its password on stdin
 and an explicit access list for Bun and the exact extracted executable. The runner uses a dedicated
-unlocked test keychain. Production credential writes do not use this fixture permission. This
+unlocked test keychain; its synthetic item permits unsigned test processes through the macOS
+partition list. Production credential writes do not use this fixture permission. This
 verifies native retrieval and redaction, not the production item's application access-control list
 or interactive first-use Keychain approval. Linux and Windows seed through `Bun.secrets`.

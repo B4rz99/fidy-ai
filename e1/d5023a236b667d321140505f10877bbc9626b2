@@ -1,0 +1,22 @@
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_6d017cc65783af::t_882936c796e422 3,824-831,833,853
+  s_6d017cc65783af::t_5ef2e71085a344 882
+apps/server/src/core/subscription/FEATURE.md
+  s_6d017cc65783af::t_c8073a03ab5372 317-321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e1d5023a236b667d321140505f10877bbc9626b2",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

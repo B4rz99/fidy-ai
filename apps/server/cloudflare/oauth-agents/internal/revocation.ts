@@ -42,7 +42,7 @@ const commitRevocation = (input: RevocationPlan): Effect.Effect<unknown, Bootstr
     input.db.batch([
       input.db
         .prepare(
-          `INSERT INTO oauth_atomic_assertion VALUES (1,CASE WHEN ${guard.sql} AND (SELECT count(*) FROM (${selection.sql})) <= ? AND (? = 1 OR EXISTS (${owned.sql})) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`
+          `INSERT INTO sql_assertions (scope, accepted) VALUES ('oauth_atomic',CASE WHEN ${guard.sql} AND (SELECT count(*) FROM (${selection.sql})) <= ? AND (? = 1 OR EXISTS (${owned.sql})) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
         )
         .bind(
           ...guard.params,
@@ -59,7 +59,7 @@ const commitRevocation = (input: RevocationPlan): Effect.Effect<unknown, Bootstr
         .bind(input.current, ...proof.params, input.session.user_id, ...guard.params),
       input.db
         .prepare(
-          `INSERT INTO oauth_atomic_assertion VALUES (1,CASE WHEN NOT EXISTS (${selection.sql}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`
+          `INSERT INTO sql_assertions (scope, accepted) VALUES ('oauth_atomic',CASE WHEN NOT EXISTS (${selection.sql}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
         )
         .bind(...selection.params),
     ])

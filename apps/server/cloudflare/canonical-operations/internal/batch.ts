@@ -23,7 +23,6 @@ import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
   childCaller,
-  dailyAuditMessage,
   isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
@@ -172,11 +171,7 @@ const recordedRefusalResponse = ({
   disposition: CanonicalRefusalDisposition;
 }>): Effect.Effect<Response> => {
   if (disposition === "credential_refused") return refusedCredentialResponse({ db, subject });
-  if (disposition === "rate_limited") {
-    return Effect.succeed(
-      batchRejection({ code: "rate_limited", message: dailyAuditMessage, index, operation })
-    );
-  }
+
   if (disposition === "unavailable") return Effect.succeed(transactionUnavailable());
   return Effect.succeed(
     batchRejection({ code: refusal.code, message: refusal.message, index, operation })

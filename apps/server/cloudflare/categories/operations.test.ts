@@ -119,7 +119,9 @@ it("categorizes each User's captures without exposing or borrowing another User'
         db.batch([
           ...[userA, userB].map((userId) =>
             db
-              .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)")
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1)"
+              )
               .bind(userId)
           ),
           db

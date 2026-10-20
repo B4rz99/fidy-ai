@@ -9,11 +9,7 @@ import { recordBrowserCategoryWork } from "./canonical-work";
 import { readConsentStatus } from "../../consent/operations";
 import { ListCategoriesResponse } from "../../../src/shell/categories/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
-import {
-  recordCanonicalPATWork,
-  recordOAuthCall,
-  refusedByAuditBudget,
-} from "../../../src/shell/audit/operations";
+import { recordCanonicalPATWork, recordOAuthCall } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
@@ -21,11 +17,8 @@ import { commitPATUnit } from "../../tokens/operations";
 import {
   type TransactionCaller,
   boundaryFailure,
-  canonicalAuditRateLimitedResponse,
   isPATCaller,
 } from "../../canonical-work/operations";
-
-import { TransactionBoundaryFailure } from "../../canonical-work/contract";
 
 type CategoryCaller = TransactionCaller | OAuthCaller;
 const oauthCaller = (subject: CategoryCaller): subject is OAuthCaller =>
@@ -136,7 +129,7 @@ const presentCategoryWork = (
     return new Response(body, { status: 200, headers });
   });
 
-/** Query, live authority and shared User budget commit in one D1 unit for either credential. */
+/** Query, live authority and required Audit commit in one D1 unit for either credential. */
 export const executeProtectedCategories = ({
   db,
   subject,
@@ -149,11 +142,8 @@ export const executeProtectedCategories = ({
     });
     return yield* presentCategoryWork(db, subject, results);
   }).pipe(
-    Effect.catch((cause) =>
+    Effect.catch(() =>
       Effect.gen(function* () {
-        if (cause instanceof TransactionBoundaryFailure && refusedByAuditBudget(cause.cause)) {
-          return canonicalAuditRateLimitedResponse(yield* Clock.currentTimeMillis);
-        }
         if (!oauthCaller(subject)) return unavailable();
         const current = yield* Clock.currentTimeMillis;
         const authority = liveOAuthAuthority({ subject, current });

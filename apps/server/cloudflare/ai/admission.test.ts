@@ -38,11 +38,13 @@ const seedModelConsent = (database: D1Database): Promise<unknown> =>
   }).then(() =>
     database.batch([
       database
-        .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1000)")
+        .prepare(
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1000)"
+        )
         .bind(modelUserId),
       database
         .prepare(
-          "INSERT INTO onboarding_consent_records VALUES ('30000000-0000-4000-8000-000000000001', ?, ?, 'disclosed', 'accepted', 1000, 1000)"
+          "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','30000000-0000-4000-8000-000000000001', ?, ?, 'disclosed', 'accepted', 1000, 1000)"
         )
         .bind(modelUserId, JSON.stringify(currentDisclosureFor())),
     ])

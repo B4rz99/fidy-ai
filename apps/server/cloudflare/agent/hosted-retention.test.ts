@@ -28,16 +28,28 @@ const setup = (includeRetention = true): Promise<D1Database> =>
             (includeRetention || (name < "0096_" && name !== "0074_hosted_retention.sql"))
         )
         .sort();
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: names.map((name) => new URL(name, directory)),
-        })
-      );
+      if (includeRetention) {
+        yield* Effect.tryPromise(() =>
+          installTestSchema({
+            db,
+            sources: names.map((name) => new URL(name, directory)),
+          })
+        );
+      } else {
+        for (const name of names) {
+          yield* Effect.tryPromise(() =>
+            applyTestMigration({ db, source: new URL(name, directory) })
+          );
+        }
+      }
       yield* Effect.tryPromise(() =>
         db.batch(
           [userId, otherUserId].flatMap((user) => [
-            db.prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'UTC', 0)").bind(user),
+            db
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'UTC', 0)"
+              )
+              .bind(user),
             db
               .prepare(`INSERT INTO hosted_agent_sessions
         (id,user_id,consent_basis_json,started_at_ms,status) VALUES (?,?,'{}',0,'active')`)
@@ -100,8 +112,9 @@ it("keeps repeated idle sweeps independent of permanent terminal history", () =>
       SELECT 'compact-'||i,?,'{}',?,'idle-ended' FROM n`)
             .bind(userId, now),
           db
-            .prepare(`INSERT INTO hosted_compacted_conversations
-      SELECT user_id,id,'retained',0,1,id,? FROM hosted_agent_sessions WHERE id LIKE 'compact-%'`)
+            .prepare(
+              `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,id AS hosted_session_id,'retained' AS text,0 AS through_sequence,1 AS revision,id AS nonce,? AS updated_at_ms FROM hosted_agent_sessions WHERE id LIKE 'compact-%') AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
+            )
             .bind(now),
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
@@ -225,16 +238,29 @@ it("backfills only retained terminal evidence and drops its deadline with the la
           source: new URL("../migrations/0074_hosted_retention.sql", import.meta.url),
         })
       );
+      // Inspect the preserved backfill through the current storage projection.
+      const directory = new URL("../migrations/", import.meta.url);
+      for (const name of [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
+        .filter((name) => name >= "0096_")
+        .sort()) {
+        yield* Effect.tryPromise(() =>
+          applyTestMigration({ db, source: new URL(name, directory) })
+        );
+      }
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM hosted_turn_retention").first("count")
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
+            )
+            .first("count")
         )
       ).toBe(100);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO hosted_compacted_conversations
-    SELECT user_id,hosted_session_id,'compacted',max(sequence),1,'compaction',?
-    FROM transcript_entries GROUP BY user_id,hosted_session_id`)
+          .prepare(
+            `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,hosted_session_id AS hosted_session_id,'compacted' AS text,max(sequence) AS through_sequence,1 AS revision,'compaction' AS nonce,? AS updated_at_ms FROM transcript_entries GROUP BY user_id,hosted_session_id) AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
+          )
           .bind(now)
           .run()
       );
@@ -249,7 +275,11 @@ it("backfills only retained terminal evidence and drops its deadline with the la
       expect(observed.cost().rowsWritten).toBeLessThanOrEqual(1_000);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM hosted_turn_retention").first("count")
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
+            )
+            .first("count")
         )
       ).toBe(0);
       const idle = observeRetentionCost(db);
@@ -276,8 +306,9 @@ it("bounds every due branch before grouping a large retained backlog", () =>
         INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,status)
         SELECT 'old-compact-'||i,?,'{}',0,'idle-ended' FROM n`)
             .bind(userId),
-          db.prepare(`INSERT INTO hosted_compacted_conversations
-        SELECT user_id,id,'expired',0,1,id,1 FROM hosted_agent_sessions WHERE id LIKE 'old-compact-%'`),
+          db.prepare(
+            `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,id AS hosted_session_id,'expired' AS text,0 AS through_sequence,1 AS revision,id AS nonce,1 AS updated_at_ms FROM hosted_agent_sessions WHERE id LIKE 'old-compact-%') AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
+          ),
           db
             .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4000)
         INSERT INTO hosted_compaction_attempts SELECT ?, -i*86400000, 1 FROM n`)
@@ -325,16 +356,20 @@ it("keeps compacted mutation receipts discoverable until their own retention bou
             .prepare("INSERT INTO hosted_mutation_commits VALUES ('retained-1','call',?,1,1)")
             .bind(userId),
           db
-            .prepare(`INSERT INTO hosted_compacted_conversations
-        SELECT user_id,hosted_session_id,'compacted',max(sequence),1,'compaction',?
-        FROM transcript_entries GROUP BY user_id,hosted_session_id`)
+            .prepare(
+              `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,hosted_session_id AS hosted_session_id,'compacted' AS text,max(sequence) AS through_sequence,1 AS revision,'compaction' AS nonce,? AS updated_at_ms FROM transcript_entries GROUP BY user_id,hosted_session_id) AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
+            )
             .bind(now),
           db.prepare("DELETE FROM transcript_entries WHERE user_id=?").bind(userId),
         ])
       );
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM hosted_turn_retention").first("count")
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
+            )
+            .first("count")
         )
       ).toBe(1);
       const before = observeRetentionCost(db);
@@ -349,7 +384,11 @@ it("keeps compacted mutation receipts discoverable until their own retention bou
       ).toBe(0);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM hosted_turn_retention").first("count")
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
+            )
+            .first("count")
         )
       ).toBe(0);
     })
@@ -362,19 +401,19 @@ it("drains channel event backlogs without losing their parent deadline or touchi
       yield* Effect.tryPromise(() => seedHistory(db));
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare(`INSERT INTO hosted_whatsapp_inbound
-        (turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms)
-        SELECT id,user_id,'p','b',id,'phone',1,1 FROM hosted_turns WHERE id IN ('retired-1','other-retired')`),
-          db.prepare(`INSERT INTO hosted_whatsapp_delivery
-        (turn_id,user_id,text,correlation_token,business_phone_number_id,proposed_at_ms,state,send_started_at_ms)
-        SELECT turn_id,user_id,'retained',turn_id,'phone',1,'accepted',1 FROM hosted_whatsapp_inbound`),
+          db.prepare(
+            `WITH incoming(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) AS (SELECT id,user_id,'p','b',id,'phone',1,1 FROM hosted_turns WHERE id IN ('retired-1','other-retired')) UPDATE hosted_turns SET inbound_portfolio_id=incoming.portfolio_id,inbound_bsuid=incoming.bsuid,inbound_message_id=incoming.message_id,inbound_business_phone_number_id=incoming.business_phone_number_id,inbound_occurred_at_ms=incoming.occurred_at_ms,inbound_received_at_ms=incoming.received_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id`
+          ),
+          db.prepare(
+            `INSERT INTO whatsapp_deliveries AS hosted_whatsapp_delivery(kind,turn_id,user_id,text,correlation_token,business_phone_number_id,proposed_at_ms,state,send_started_at_ms) SELECT 'hosted', turn_id,user_id,'retained',turn_id,'phone',1,'accepted',1 FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL)`
+          ),
           db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<600)
         INSERT INTO hosted_whatsapp_delivery_events SELECT 'retired-1','message-'||i,'sent',1,1 FROM n`),
           db.prepare(
             "INSERT INTO hosted_whatsapp_delivery_events VALUES ('other-retired','foreign-message','sent',1,1)"
           ),
           db.prepare(
-            "INSERT INTO hosted_whatsapp_outbox SELECT turn_id,user_id,NULL,1 FROM hosted_whatsapp_inbound"
+            "UPDATE hosted_turns SET dispatch_user_id=incoming.user_id,dispatch_offered_at_ms=incoming.offered_at_ms,dispatch_created_at_ms=incoming.created_at_ms FROM (SELECT turn_id AS turn_id,user_id AS user_id,NULL AS offered_at_ms,1 AS created_at_ms FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL)) AS incoming WHERE hosted_whatsapp_inbound.turn_id=incoming.turn_id AND hosted_whatsapp_inbound.dispatch_created_at_ms IS NULL"
           ),
         ])
       );
@@ -396,7 +435,7 @@ it("drains channel event backlogs without losing their parent deadline or touchi
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS count FROM hosted_turn_retention WHERE turn_id='retired-1'"
+                "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention WHERE turn_id='retired-1'"
               )
               .first("count")
           )
@@ -413,7 +452,11 @@ it("drains channel event backlogs without losing their parent deadline or touchi
       ).toBe(1);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT user_id FROM hosted_whatsapp_delivery").first("user_id")
+          db
+            .prepare(
+              "SELECT user_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery"
+            )
+            .first("user_id")
         )
       ).toBe(otherUserId);
     })

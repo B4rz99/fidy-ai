@@ -10,7 +10,7 @@ import type { CategoryAuditOperation } from "../contract";
 
 /** A live credential re-evaluated inside the same D1 unit as the rule write. */
 type Authority = Readonly<{
-  table: "pats" | "web_sessions" | "oauth_access_credentials";
+  table: "pats" | "web_sessions" | "oauth_credentials";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
@@ -144,8 +144,3 @@ export const recordBrowserKeywordRuleWork = (input: BrowserKeywordRuleWork): Own
 /** One accepted browser rule read, attributable to its exact live WebSession. */
 export const recordBrowserKeywordRuleRead = (input: BrowserKeywordRuleWork): OwnedStatement =>
   browserKeywordRuleAudit(input, false);
-
-/** A skipped guarded rule audit aborts the whole keyword-rule D1 batch. */
-export const categoryMutationCompletion = `INSERT INTO category_mutation_assertion (id, accepted)
-VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;

@@ -103,7 +103,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'version',r.\"version\",'readiness',r.\"readiness\",'cursor_id',r.\"cursor_id\",'attempted_at_ms',r.\"attempted_at_ms\") AS body FROM dashboard_projection_state r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'version',r.\"version\",'readiness',r.\"readiness\",'cursor_id',r.\"cursor_id\",'attempted_at_ms',r.\"attempted_at_ms\",'fact_revision',r.fact_revision,'first_captured_at',r.first_captured_at,'time_zone',r.time_zone) AS body FROM dashboard_projection_state r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -170,38 +170,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
   },
   {
-    id: "transaction_fact_state",
-    dataClass: "projections",
-    dependencies: [
-      "dashboard_projection_leaf",
-      "hosted_mutation_commits",
-      "hosted_whatsapp_inbound",
-      "transaction_reconciliation_decisions",
-      "transaction_reconciliation_members",
-      "transactions",
-      "transcript_entries",
-    ],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'revision',r.\"revision\",'first_captured_at',r.\"first_captured_at\",'time_zone',r.\"time_zone\") AS body FROM transaction_fact_state r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transaction_fact_state r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM transaction_fact_state r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM transaction_fact_state AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "transaction_reconciliation_decisions",
     dataClass: "projections",
     dependencies: ["transaction_reconciliation_members"],
@@ -254,10 +222,9 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dataClass: "transactions",
     dependencies: [
       "ingestion_review_state",
-      "forwarded_email_outcomes",
       "source_attestations",
+      "forwarded_email_receipts",
       "statement_record_outcomes",
-      "statement_review_decisions",
       "transaction_corrections",
       "transaction_reconciliation_decisions",
       "transaction_reconciliation_members",

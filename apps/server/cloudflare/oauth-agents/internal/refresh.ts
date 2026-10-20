@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { Clock, Effect, Option, type PlatformError, Redacted, Schema } from "effect";
 import { OAuthRefreshAdmission } from "../contract";
@@ -79,7 +80,7 @@ export const forwardRefresh = (
       try: () =>
         input.db
           .prepare(`SELECT r.id AS credentialId,r.connection_id AS connectionId,r.user_id AS userId
-    FROM oauth_refresh_credentials r JOIN oauth_connections g ON g.id = r.connection_id
+    FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') r JOIN oauth_connections g ON g.id = r.connection_id
     WHERE r.digest = ? AND r.user_id = g.user_id AND g.client_id = ? AND g.resource = ?`)
           .bind(digest, input.payload.client_id, input.payload.resource)
           .first(),
@@ -122,10 +123,10 @@ const boundCredential = (
   const authority = protectOAuthGrantConsentAuthority({
     subject: { userId: admission.userId, connectionId: admission.connectionId },
     authority: {
-      table: "oauth_refresh_credentials",
-      predicate: `id = ? AND connection_id = ? AND user_id = ? AND digest = ?
-    AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = oauth_refresh_credentials.connection_id
-      AND g.user_id = oauth_refresh_credentials.user_id AND g.client_id = ? AND g.resource = ? AND g.refresh_allowed = 1)`,
+      table: "oauth_credentials",
+      predicate: `kind='refresh' AND id = ? AND connection_id = ? AND user_id = ? AND digest = ?
+    AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = oauth_credentials.connection_id
+      AND g.user_id = oauth_credentials.user_id AND g.client_id = ? AND g.resource = ? AND g.refresh_allowed = 1)`,
       bindings: [
         admission.credentialId,
         admission.connectionId,
@@ -138,10 +139,7 @@ const boundCredential = (
   });
   return { sql: authority.predicate, params: authority.bindings };
 };
-const assertion = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    "INSERT INTO oauth_atomic_assertion VALUES (1,CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
-  );
+
 export const revokeReplay = ({
   input,
   current,
@@ -154,7 +152,7 @@ export const revokeReplay = ({
       connectionId: input.admission.connectionId,
       current,
       replay: {
-        sql: `SELECT 1 FROM oauth_refresh_credentials WHERE ${bound.sql} AND consumed_at_ms IS NOT NULL
+        sql: `SELECT 1 FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials WHERE ${bound.sql} AND consumed_at_ms IS NOT NULL
           AND EXISTS (SELECT 1 FROM oauth_connections WHERE id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?)`,
         params: [...bound.params, input.admission.connectionId, current],
       },
@@ -162,13 +160,13 @@ export const revokeReplay = ({
     yield* dbWork(() =>
       input.db.batch([
         input.db.prepare(evidence.sql).bind(...evidence.params),
-        assertion(input.db),
+        prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
         input.db
           .prepare(
             "UPDATE oauth_connections SET revoked_at_ms = ? WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND changes() = 1"
           )
           .bind(current, input.admission.connectionId, input.admission.userId),
-        assertion(input.db),
+        prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
       ])
     );
   });
@@ -182,7 +180,7 @@ export const findGrant = ({
   Effect.gen(function* () {
     const found = yield* dbWork(() =>
       input.db
-        .prepare(`SELECT g.expires_at_ms,r.scopes_json,r.consumed_at_ms FROM oauth_refresh_credentials r JOIN oauth_connections g ON g.id = r.connection_id
+        .prepare(`SELECT g.expires_at_ms,r.scopes_json,r.consumed_at_ms FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') r JOIN oauth_connections g ON g.id = r.connection_id
     WHERE r.id = ? AND r.user_id = ? AND r.digest = ? AND g.id = ? AND g.user_id = r.user_id AND g.client_id = ? AND g.resource = ?
       AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ? AND g.refresh_allowed = 1`)
         .bind(
@@ -233,7 +231,7 @@ const issuanceStatements = (
 ): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      "INSERT INTO oauth_access_credentials(id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES (?,?,?,?,?,?,?)"
+      "INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access',?,?,?,?,?,?,?)"
     )
     .bind(
       newId(),
@@ -244,10 +242,10 @@ const issuanceStatements = (
       issuance.accessExpiresAt,
       issuance.scopesJson
     ),
-  assertion(input.db),
+  prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
   input.db
     .prepare(
-      "INSERT INTO oauth_refresh_credentials(id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES (?,?,?,?,?,?,?)"
+      "INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('refresh',?,?,?,?,?,?,?)"
     )
     .bind(
       issuance.refreshId,
@@ -258,10 +256,10 @@ const issuanceStatements = (
       issuance.refreshExpiresAt,
       issuance.scopesJson
     ),
-  assertion(input.db),
+  prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
   input.db
     .prepare(
-      "INSERT INTO oauth_refresh_events(id,user_id,connection_id,consumed_credential_id,issued_credential_id,occurred_at_ms) VALUES (?,?,?,?,?,?)"
+      "INSERT INTO audit_entries(record_type,id,user_id,refresh_connection_id,consumed_refresh_id,issued_refresh_id,occurred_at_ms) VALUES ('oauth_refresh',?,?,?,?,?,?)"
     )
     .bind(
       newId(),
@@ -271,7 +269,7 @@ const issuanceStatements = (
       issuance.refreshId,
       current
     ),
-  assertion(input.db),
+  prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
 ];
 
 export const commitRotation = ({
@@ -289,7 +287,7 @@ export const commitRotation = ({
       subject: { _tag: "User", userId: input.admission.userId },
       requirement: "active",
       statement: {
-        sql: `UPDATE oauth_refresh_credentials SET consumed_at_ms = ? WHERE ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis}
+        sql: `UPDATE oauth_credentials AS oauth_credentials SET consumed_at_ms = ? WHERE kind='refresh' AND ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis}
       AND scopes_json = ? AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = ? AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ? AND g.expires_at_ms > ${databaseCurrentMillis}
         AND NOT EXISTS (SELECT 1 FROM json_each(?) s WHERE NOT EXISTS (SELECT 1 FROM json_each(g.scopes_json) a WHERE a.value = s.value)))`,
         params: [
@@ -306,7 +304,7 @@ export const commitRotation = ({
     return yield* dbWork(() =>
       input.db.batch([
         input.db.prepare(consumption.sql).bind(...consumption.params),
-        assertion(input.db),
+        prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
         ...issuanceStatements(input, current, issuance),
       ])
     ).pipe(Effect.asVoid);

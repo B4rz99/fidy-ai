@@ -1,6 +1,6 @@
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Schema } from "effect";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { makeSubscriptionErasureStores } from "./runtime";
 
 const databases = isolatedTestDatabases();
@@ -62,7 +62,7 @@ it("preserves populated billing and erasure guards across replacement migration,
         .filter((name) => name < "0107")
         .sort()
         .map((name) => new URL(`../migrations/${name}`, import.meta.url));
-      yield* wait(() => installTestSchema({ db, sources }));
+      yield* Effect.forEach(sources, (source) => wait(() => applyTestMigration({ db, source })));
       yield* wait(() => seed(db, userId, 1));
       yield* wait(() => seed(db, foreignUser, 2));
       const before = yield* wait(() =>
@@ -105,6 +105,44 @@ it("preserves populated billing and erasure guards across replacement migration,
             .bind(id(3, 3), userId, id(2, 3)),
         ])
       );
+      yield* wait(() =>
+        db.prepare("UPDATE billing_collection_outbox SET last_attempt_at_ms=180000").run()
+      );
+      const collectionBefore = yield* wait(() =>
+        db
+          .prepare(`SELECT a.attempt_id,a.state,a.sent_at_ms,o.last_attempt_at_ms
+        FROM billing_collection_arms a JOIN billing_collection_outbox o USING(attempt_id) ORDER BY a.attempt_id`)
+          .all()
+      );
+      for (const name of ["0124_billing_collection_work.sql", "0128_payment_assertions.sql"]) {
+        yield* wait(() =>
+          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
+        );
+      }
+      expect(
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT attempt_id,state,sent_at_ms,last_attempt_at_ms FROM billing_collection_work ORDER BY attempt_id"
+            )
+            .all()
+        )).results
+      ).toEqual(collectionBefore.results);
+      const remaining = Array.from(
+        new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
+      )
+        .filter(
+          (name) =>
+            name > "0107_failed_card_replacement.sql" &&
+            name <= "0153_user_companions.sql" &&
+            !["0124_billing_collection_work.sql", "0128_payment_assertions.sql"].includes(name)
+        )
+        .sort();
+      for (const name of remaining) {
+        yield* wait(() =>
+          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
+        );
+      }
       const current = yield* Clock.currentTimeMillis;
       const decision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
         dispositions: { billing: { action: "Retain", retention: { untilMs: current + 86400000 } } },
@@ -120,11 +158,13 @@ it("preserves populated billing and erasure guards across replacement migration,
       for (const sql of [
         "DELETE FROM card_payment_sources WHERE user_id=?",
         "UPDATE card_payment_sources SET retired_at_ms=1 WHERE user_id=?",
-        "DELETE FROM billing_checkout_responses WHERE attempt_id IN(SELECT id FROM billing_attempts WHERE user_id=?)",
-        "INSERT INTO billing_checkout_responses SELECT r.* FROM billing_checkout_responses r JOIN billing_attempts a ON a.id=r.attempt_id WHERE a.user_id=?",
+        "UPDATE billing_attempts AS billing_checkout_responses SET checkout_transaction_id=NULL WHERE checkout_transaction_id IS NOT NULL AND id IN(SELECT id FROM billing_attempts WHERE user_id=?)",
+        "UPDATE billing_attempts SET checkout_transaction_id=checkout_transaction_id||'x' WHERE user_id=?",
       ]) {
         yield* wait(() =>
-          expect(db.prepare(sql).bind(userId).run()).rejects.toThrow("erasure_fenced")
+          expect(db.prepare(sql).bind(userId).run()).rejects.toThrow(
+            /erasure_fenced|card_source_immutable|billing_checkout_response_immutable/
+          )
         );
       }
       yield* wait(() =>
@@ -142,7 +182,9 @@ it("preserves populated billing and erasure guards across replacement migration,
       yield* wait(() =>
         expect(
           db
-            .prepare("DELETE FROM billing_checkout_responses WHERE attempt_id=?")
+            .prepare(
+              "UPDATE billing_attempts AS billing_checkout_responses SET checkout_transaction_id=NULL WHERE checkout_transaction_id IS NOT NULL AND id=?"
+            )
             .bind(id(4, 1))
             .run()
         ).rejects.toThrow()
@@ -206,10 +248,7 @@ it("preserves populated billing and erasure guards across replacement migration,
       );
       const removal = [
         "billing_checkout_responses",
-        "billing_transaction_candidates",
-        "billing_transaction_evidence",
-        "billing_collection_arms",
-        "billing_collection_outbox",
+        "billing_provider_transactions",
         "billing_history",
         "card_payment_sources",
         "card_enrollments",

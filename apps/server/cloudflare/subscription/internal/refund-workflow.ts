@@ -85,10 +85,10 @@ const settle = (
     Effect.flatMap((current) =>
       Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO refund_outcome_evidence(refund_id,provider_id,verified_status,observed_at_ms)
-    SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM refund_attempts WHERE id=? AND status='pending')
-    ON CONFLICT(refund_id) DO NOTHING`)
-          .bind(id, evidence.value.providerId, evidence.value.status, current, id)
+          .prepare(
+            `UPDATE refund_attempts SET provider_refund_id=?,verified_status=?,observed_at_ms=? WHERE id=? AND status='pending' AND verified_status IS NULL`
+          )
+          .bind(evidence.value.providerId, evidence.value.status, current, id)
           .run()
       )
     ),
@@ -103,39 +103,34 @@ const submissionClaim = (
   if (work.kind === "refund-void-verification") {
     return Effect.tryPromise(() =>
       db
-        .prepare(`SELECT c.refund_id FROM refund_submission_claims c
-      JOIN refund_outbox o ON o.refund_id=c.refund_id WHERE c.refund_id=? AND o.verification_attempts>=?`)
+        .prepare(`SELECT id FROM refund_attempts WHERE id=?
+      AND submission_claimed_at_ms IS NOT NULL AND work_version IS NOT NULL AND verification_attempts>=?`)
         .bind(id, work.verification)
         .first()
     ).pipe(Effect.map((row) => (row === null ? ("absent" as const) : ("existing" as const))));
   }
-  return Clock.currentTimeMillis.pipe(
-    Effect.flatMap((current) =>
-      Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare(`INSERT INTO refund_submission_claims(refund_id,claimed_at_ms) VALUES (?,?)
-      ON CONFLICT(refund_id) DO NOTHING RETURNING refund_id`)
-            .bind(id, current),
-          db
-            .prepare(`UPDATE refund_attempts SET progress='verifying' WHERE id=? AND status='pending'
-          AND EXISTS (SELECT 1 FROM refund_submission_claims WHERE refund_id=refund_attempts.id)`)
-            .bind(id),
-        ])
-      )
-    ),
-    Effect.flatMap((results) =>
-      results[0]?.results.length === 1
-        ? Effect.succeed("claimed" as const)
-        : Effect.tryPromise(() =>
-            db
-              .prepare("SELECT refund_id FROM refund_submission_claims WHERE refund_id=?")
-              .bind(id)
-              .first()
-          ).pipe(Effect.map((row) => (row === null ? ("absent" as const) : ("existing" as const))))
-    )
-  );
+  return Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const row = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`UPDATE refund_attempts
+      SET submission_claimed_at_ms=?,progress='verifying' WHERE id=? AND submission_claimed_at_ms IS NULL
+      RETURNING id`)
+        .bind(current, id)
+        .first()
+    );
+    if (row !== null) return "claimed" as const;
+    const existing = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT id FROM refund_attempts
+      WHERE id=? AND submission_claimed_at_ms IS NOT NULL`)
+        .bind(id)
+        .first()
+    );
+    return existing === null ? ("absent" as const) : ("existing" as const);
+  });
 };
+
 const execute = (
   input: RefundWorkflowExecution,
   wompiHttp: WompiTransportFactory
@@ -155,7 +150,7 @@ const execute = (
     r.original_cents,a.wompi_reference,s.wompi_source_id FROM refund_attempts r
     JOIN billing_attempts a ON a.id=r.billing_attempt_id JOIN card_payment_sources s ON s.id=a.payment_source_id
     WHERE r.id=? AND r.status='pending' AND a.wompi_environment='sandbox'
-      AND (SELECT COUNT(*) FROM billing_transaction_evidence WHERE attempt_id=a.id AND status='APPROVED')=1`)
+      AND (SELECT COUNT(*) FROM billing_provider_transactions WHERE attempt_id=a.id AND status='APPROVED')=1`)
         .bind(work.refundAttemptId)
         .first()
     );
@@ -200,10 +195,10 @@ export const dispatchRefunds = (
     const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
-      input.DB.prepare(`SELECT o.refund_id FROM refund_outbox o
-      JOIN refund_attempts r ON r.id=o.refund_id WHERE r.status='pending' AND r.progress='queued'
-      AND NOT EXISTS (SELECT 1 FROM refund_submission_claims c WHERE c.refund_id=r.id)
-      AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms<=?) ORDER BY r.created_at_ms LIMIT ?`)
+      input.DB.prepare(`SELECT id AS refund_id FROM refund_attempts
+      WHERE work_version IS NOT NULL AND status='pending' AND progress='queued'
+      AND submission_claimed_at_ms IS NULL
+      AND (dispatch_last_attempt_at_ms IS NULL OR dispatch_last_attempt_at_ms<=?) ORDER BY created_at_ms LIMIT ?`)
         .bind(now - publicationCooldownMs, pendingLimit)
         .all()
     );
@@ -212,7 +207,9 @@ export const dispatchRefunds = (
     )(rows.results);
     for (const row of pending) {
       yield* Effect.tryPromise(() =>
-        input.DB.prepare("UPDATE refund_outbox SET last_attempt_at_ms=? WHERE refund_id=?")
+        input.DB.prepare(
+          "UPDATE refund_attempts AS refund_outbox SET dispatch_last_attempt_at_ms=? WHERE work_version IS NOT NULL AND id=?"
+        )
           .bind(now, row.refund_id)
           .run()
       );
@@ -225,7 +222,9 @@ export const dispatchRefunds = (
         })
       );
       yield* Effect.tryPromise(() =>
-        input.DB.prepare("UPDATE refund_outbox SET published_at_ms=? WHERE refund_id=?")
+        input.DB.prepare(
+          "UPDATE refund_attempts AS refund_outbox SET published_at_ms=? WHERE work_version IS NOT NULL AND id=?"
+        )
           .bind(now, row.refund_id)
           .run()
       );
@@ -239,10 +238,10 @@ export const dispatchVoidVerification = (
     const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
-      input.DB.prepare(`SELECT r.id FROM refund_attempts r
-    JOIN refund_outbox o ON o.refund_id=r.id JOIN refund_submission_claims c ON c.refund_id=r.id
-    WHERE r.status='pending' AND r.kind='card-void' AND o.verification_attempts<?
-    AND (o.last_verification_at_ms IS NULL OR o.last_verification_at_ms<=?) ORDER BY r.created_at_ms LIMIT ?`)
+      input.DB.prepare(`SELECT id FROM refund_attempts
+      WHERE work_version IS NOT NULL AND submission_claimed_at_ms IS NOT NULL
+      AND status='pending' AND kind='card-void' AND verification_attempts<?
+      AND (last_verification_at_ms IS NULL OR last_verification_at_ms<=?) ORDER BY created_at_ms LIMIT ?`)
         .bind(maximumVerificationAttempts, now - publicationCooldownMs, pendingLimit)
         .all()
     );
@@ -251,8 +250,8 @@ export const dispatchVoidVerification = (
     )(rows.results);
     for (const row of pending) {
       const advanced = yield* Effect.tryPromise(() =>
-        input.DB.prepare(`UPDATE refund_outbox SET verification_attempts=verification_attempts+1,
-      last_verification_at_ms=? WHERE refund_id=? AND verification_attempts<?
+        input.DB.prepare(`UPDATE refund_attempts AS refund_outbox SET verification_attempts=verification_attempts+1,
+      last_verification_at_ms=? WHERE work_version IS NOT NULL AND id=? AND verification_attempts<?
       AND (last_verification_at_ms IS NULL OR last_verification_at_ms<=?) RETURNING verification_attempts`)
           .bind(now, row.id, maximumVerificationAttempts, now - publicationCooldownMs)
           .first()

@@ -24,7 +24,9 @@ it("resumes original-byte erasure after capture and refuses a mismatched User wi
         db.batch([
           ...[userId, foreignUser].map((id) =>
             db
-              .prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',?)")
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+              )
               .bind(id, current)
           ),
           ...[
@@ -93,7 +95,9 @@ it("keeps a reviewed original outside ordinary storage, retries a failed native 
       yield* Effect.tryPromise(() =>
         db.batch([
           db
-            .prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',?)")
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+            )
             .bind(userId, current),
           db
             .prepare(

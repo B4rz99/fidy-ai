@@ -1,9 +1,9 @@
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { settleStatementReview, writeReviewState } from "./review-decision";
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { type Cause, Data, DateTime, Effect, Option, Schema } from "effect";
 import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
-import {
-  prepareAuthorizedAuditCall,
-  refusedByAuditBudget,
-} from "../../../src/shell/audit/operations";
+import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
 import { StatementSubmission } from "../../../src/core/ingestion/contract";
 import type { TransactionExtraction } from "../../../src/core/transactions/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
@@ -90,7 +90,7 @@ const accountability = (
   accepted: boolean
 ): ReadonlyArray<D1PreparedStatement> => {
   const authority = work.authority;
-  if (authority.table === "oauth_access_credentials") {
+  if (authority.table === "oauth_credentials") {
     return [
       prepareAuthorizedAuditCall({
         db: work.db,
@@ -152,11 +152,7 @@ export const heldClarificationRefusal = ({
       Effect.map((rows): CanonicalRefusalDisposition =>
         rows[0]?.meta.changes === 1 ? "recorded" : "credential_refused"
       ),
-      Effect.catch((cause) =>
-        Effect.succeed(
-          refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
-        )
-      )
+      Effect.orElseSucceed(() => "unavailable" as const)
     ),
   respond: (disposition) =>
     Effect.succeed(
@@ -184,10 +180,11 @@ const eligibleReview = (work: StatementDecisionWork, id: string): OwnedStatement
   const authority = work.authority;
   const origin = originGuard({ work, submission: "r.submission_id" });
   return {
-    sql: `SELECT r.user_id FROM statement_needs_review r JOIN statement_clarifications c
-      ON c.submission_id = r.submission_id AND c.user_id = r.user_id
-      WHERE r.id = ? AND r.user_id = ? AND r.status = 'pending' AND c.state = 'awaiting'
-        AND c.expires_at_ms > ? AND r.evidence_expires_at_ms > ?
+    sql: `SELECT r.user_id FROM statement_needs_review r JOIN statement_submissions c
+      ON c.id = r.submission_id AND c.user_id = r.user_id
+      WHERE r.id = ? AND r.user_id = ? AND r.status = 'pending' AND c.clarification_state = 'awaiting'
+        AND c.clarification_expires_at_ms > ? AND r.evidence_expires_at_ms > ?
+        AND NOT EXISTS(SELECT 1 FROM ingestion_review_state n WHERE n.id=r.id AND n.user_id=r.user_id AND n.status!='pending')
         AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) AND (${origin.sql})`,
     params: [id, work.userId, work.current, work.current, ...authority.bindings, ...origin.params],
   };
@@ -247,7 +244,7 @@ const prepareCapture = ({
     return { statements, categoryId: Option.some(categoryId) };
   });
 
-const decisionStatement = ({
+const decisionStatements = ({
   work,
   decision,
   row,
@@ -259,26 +256,33 @@ const decisionStatement = ({
   row: Review;
   source: OwnedStatement;
   transactionId: string;
-}>): D1PreparedStatement => {
+}>): ReadonlyArray<D1PreparedStatement> => {
   const resolving = Option.isSome(decision.extraction);
-  return prepareConsentAction({
-    db: work.db,
-    subject: { _tag: "User", userId: work.userId },
-    requirement: "active",
-    statement: {
-      sql: `INSERT INTO statement_review_decisions (review_id, submission_id, user_id, decision, transaction_id, decided_at_ms)
-      SELECT ?, ?, ?, ?, ${resolving ? "?" : "NULL"}, ? WHERE EXISTS (${source.sql})`,
-      params: [
-        decision.id,
-        row.submission_id,
-        work.userId,
-        resolving ? "resolved" : "skipped",
-        ...(resolving ? [transactionId] : []),
-        work.current,
-        ...source.params,
-      ],
-    },
-  });
+  return [
+    writeReviewState({
+      db: work.db,
+      userId: work.userId,
+      id: decision.id,
+      status: resolving ? "created" : "skipped",
+      current: work.current,
+      guard: protectConsentStatement({
+        subject: { _tag: "User", userId: work.userId },
+        requirement: "active",
+        statement: source,
+      }),
+      draft: Option.none(),
+      transactionId: resolving ? Option.some(transactionId) : Option.none(),
+    }),
+    prepareChangedRowAssertion({ db: work.db, scope: "ingestion_review" }),
+    ...settleStatementReview({
+      db: work.db,
+      userId: work.userId,
+      id: decision.id,
+      submissionId: row.submission_id,
+      current: work.current,
+      resolved: resolving,
+    }),
+  ];
 };
 
 const readSubmission = ({
@@ -439,7 +443,7 @@ const prepareReviewDecision = ({
         requiredScope: work.requiredScope,
         statements: [
           ...captures.statements,
-          decisionStatement({
+          ...decisionStatements({
             work,
             decision: decision.value,
             row,
@@ -448,7 +452,7 @@ const prepareReviewDecision = ({
           }),
           ...accountability(work, operation, true),
         ],
-        auditBudget: "shared",
+
         commitGuards: Option.none(),
         guardRefusal: () => Effect.succeed(heldClarificationRefusal({ work, operation })),
         outcome: {
@@ -456,7 +460,7 @@ const prepareReviewDecision = ({
           operation,
           collisionKey: Option.some(`statement-review:${decision.value.id}`),
           guardFacts: Option.none(),
-          triggerRefusal: () => Option.some(heldClarificationRefusal({ work, operation })),
+
           read: (db, userId) =>
             Option.isSome(decision.value.extraction)
               ? readCapture(db, userId, transactionId)
@@ -496,7 +500,7 @@ const eligibleAbandonment = (
   Effect.tryPromise(() =>
     work.db
       .prepare(
-        `SELECT 1 FROM statement_clarifications WHERE submission_id = ? AND user_id = ? AND state = 'awaiting' AND expires_at_ms > ? AND (${origin.sql}) AND EXISTS (SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
+        `SELECT 1 FROM statement_submissions WHERE id = ? AND user_id = ? AND clarification_state = 'awaiting' AND clarification_expires_at_ms > ? AND (${origin.sql}) AND EXISTS (SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
       )
       .bind(id, work.userId, work.current, ...origin.params, ...work.authority.bindings)
       .first()
@@ -512,7 +516,7 @@ const abandonmentStatement = (
     subject: { _tag: "User", userId: work.userId },
     requirement: "active",
     statement: {
-      sql: `UPDATE statement_clarifications SET state = 'abandoned', ended_at_ms = ? WHERE submission_id = ? AND user_id = ? AND state = 'awaiting' AND expires_at_ms > ?
+      sql: `UPDATE statement_submissions SET clarification_state = 'abandoned', clarification_ended_at_ms = ? WHERE id = ? AND user_id = ? AND clarification_state = 'awaiting' AND clarification_expires_at_ms > ?
         AND EXISTS (SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate}) AND (${origin.sql})`,
       params: [
         work.current,
@@ -534,7 +538,7 @@ const prepareAbandonment = (
     if (Option.isNone(parsed)) return failedPreparation();
     const id = parsed.value.params.id;
     const operation = "ingestion.abandonStatementSubmission";
-    const origin = originGuard({ work, submission: "statement_clarifications.submission_id" });
+    const origin = originGuard({ work, submission: "statement_submissions.id" });
     if (!(yield* eligibleAbandonment(work, id, origin))) {
       return refusedPreparation(heldClarificationRefusal({ work, operation }));
     }
@@ -555,7 +559,7 @@ const prepareAbandonment = (
       mutation: {
         oauthReview: Option.map(observed, ({ review }) => review),
         requiredScope: work.requiredScope,
-        auditBudget: "shared",
+
         commitGuards: Option.none(),
         guardRefusal: () => Effect.succeed(heldClarificationRefusal({ work, operation })),
         statements: [
@@ -567,7 +571,7 @@ const prepareAbandonment = (
           operation,
           collisionKey: Option.some(`statement:${id}`),
           guardFacts: Option.none(),
-          triggerRefusal: () => Option.some(heldClarificationRefusal({ work, operation })),
+
           read: (db, userId) => readSubmission({ work, submissionId: id, db, userId }),
         },
       },

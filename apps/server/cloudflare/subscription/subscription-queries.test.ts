@@ -12,7 +12,7 @@ import {
 } from "../canonical-operations/operations";
 
 import coreWorker from "../core-worker";
-import { applyTestMigration } from "../d1-test-fixture";
+import { applyTestMigration, auditEntriesTestSchema } from "../d1-test-fixture";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
@@ -29,25 +29,26 @@ const fixture = (): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
-        "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
         "CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_digest BLOB NOT NULL, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER NOT NULL, hard_expires_at_ms INTEGER NOT NULL) STRICT",
-        "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
-        "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
-        "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
+        auditEntriesTestSchema,
+
         "CREATE TABLE pats (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, bearer_digest BLOB NOT NULL, scopes_json TEXT NOT NULL, expires_at_ms INTEGER NOT NULL, revoked_at_ms INTEGER, last_used_at_ms INTEGER) STRICT",
       ]);
 
       const db = created.db;
       const migration = yield* fromTestPromise(() =>
-        Bun.file(new URL("../migrations/0016_subscription_standing.sql", import.meta.url)).text()
+        Bun.file(new URL("../migrations/0133_user_trial.sql", import.meta.url)).text()
       );
       yield* fromTestPromise(() =>
         db.batch(
           migration
             .replace(/^--.*$/gmu, "")
             .trim()
-            .split(/;\s*\n(?=CREATE |DROP |$)/u)
+            .split(/;\s*\n(?=CREATE |DROP |ALTER |UPDATE |$)/u)
+            .filter((statement) =>
+              statement.trim().startsWith("CREATE TRIGGER users_trial_immutable")
+            )
             .map((statement) => db.prepare(statement))
         )
       );
@@ -60,13 +61,13 @@ const fixture = (): Promise<D1Database> =>
       const future = (yield* Clock.currentTimeMillis) + 86_400_000;
       yield* fromTestPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userA),
-          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userB),
+          db.prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')").bind(userA),
+          db.prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')").bind(userB),
           db
-            .prepare("INSERT INTO trial_periods VALUES (?, ?, ?)")
+            .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
             .bind(userA, past, past + 604_800_000),
           db
-            .prepare("INSERT INTO trial_periods VALUES (?, ?, ?)")
+            .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
             .bind(userB, past, past + 604_800_000),
           db
             .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
@@ -115,7 +116,9 @@ effectIt.effect(
       expect(
         (yield* fromTestPromise(() =>
           db
-            .prepare("SELECT user_id, session_id, operation, outcome FROM pat_audit ORDER BY rowid")
+            .prepare(
+              "SELECT user_id, session_id, operation, outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit ORDER BY rowid"
+            )
             .all()
         )).results
       ).toEqual([
@@ -166,8 +169,13 @@ effectIt.effect("inherits the query owner's Clock for credential expiry and Audi
     );
     expect(expired.status).toBe(401);
     expect(
-      (yield* fromTestPromise(() => db.prepare("SELECT occurred_at_ms FROM pat_audit").all()))
-        .results
+      (yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+          )
+          .all()
+      )).results
     ).toEqual([{ occurred_at_ms: acceptedAt }]);
   })
 );
@@ -199,7 +207,13 @@ effectIt.effect(
       });
       expect(foreign.status).toBe(401);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT * FROM pat_audit").all())).results
+        (yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
     })
 );
@@ -210,7 +224,7 @@ effectIt.effect("cannot renew the original TrialPeriod by updating its persisted
     yield* fromTestPromise(() =>
       expect(
         db
-          .prepare("UPDATE trial_periods SET ends_at_ms = ends_at_ms + 604800000 WHERE user_id = ?")
+          .prepare("UPDATE users SET trial_ends_at_ms = trial_ends_at_ms + 604800000 WHERE id = ?")
           .bind(userA)
           .run()
       ).rejects.toThrow()
@@ -249,7 +263,13 @@ effectIt.effect(
         expect(response.status).toBe(401);
       }
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT * FROM pat_audit").all())).results
+        (yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(0);
       expect(
         yield* fromTestPromise(() =>
@@ -306,7 +326,13 @@ effectIt.effect(
       const before = yield* fromTestPromise(() => coreWorker.fetch(request(), environment));
       expect(before.status).toBe(200);
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT * FROM pat_audit").all())).results
+        (yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
       const revokedAt = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
@@ -319,7 +345,13 @@ effectIt.effect(
       expect(after.status).toBe(401);
       expect(yield* fromTestPromise(() => after.text())).not.toContain("trialPeriod");
       expect(
-        (yield* fromTestPromise(() => db.prepare("SELECT * FROM pat_audit").all())).results
+        (yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
     })
 );

@@ -5,7 +5,6 @@ import { prepareUserContext } from "../../identity/user-context/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
-  prepareBrowserAuditBudgetGuard,
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
 import {
@@ -19,7 +18,6 @@ import {
 import {
   type QueryCaller,
   type TransactionCaller,
-  auditLimitRefusal,
   callerAuthority,
   callerScope,
   failedPreparation,
@@ -240,9 +238,8 @@ const insightCallStatements = (input: InsightCall): ReadonlyArray<D1PreparedStat
       : []),
     insightAuditStatement({ ...input, afterOwnerWrite: false }),
     db
-      .prepare(`INSERT INTO insight_mutation_assertion (id, accepted)
-      VALUES (1, CASE WHEN changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END)
-      ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`)
+      .prepare(`INSERT INTO sql_assertions (scope, accepted) VALUES ('insight_mutation', CASE WHEN changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END)
+      ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`)
       .bind(...authority.bindings),
   ];
 };
@@ -424,27 +421,6 @@ type TransitionInput = Readonly<{
       }>
   );
 
-const sendStatement = (
-  input: TransitionInput,
-  attemptId: InsightDeliveryAttempt["id"],
-  sent: DeliveryEvidenceInput
-): D1PreparedStatement => {
-  const { db, subject, id } = input;
-  return db
-    .prepare(`INSERT INTO insight_delivery_attempts (id, user_id, insight_event_id, sent_at,
-    channel, provider, provider_message_id) SELECT ?, user_id, id, ?, ?, ?, ? FROM insight_events
-    WHERE user_id = ? AND id = ? AND lifecycle_state = 'delivered' AND changes() = 1`)
-    .bind(
-      attemptId,
-      DateTime.formatIso(sent.sentAt),
-      sent.channel,
-      sent.provider,
-      sent.providerMessageId,
-      subject.userId,
-      id
-    );
-};
-
 const insightGuardRefusal =
   (input: TransitionInput) =>
   ({ db, subject, current }: GuardRefusalWork): Effect.Effect<CanonicalMutationRefusal> =>
@@ -465,23 +441,6 @@ const insightGuardRefusal =
         respond: () => Effect.succeed(transactionUnavailable()),
       }))
     );
-
-/** Assert the Insight owner's browser Audit limit before its write, naming this exact child. */
-const insightCommitGuards = ({
-  db,
-  userId,
-  current,
-  index,
-  operation,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  current: number;
-  index: number;
-  operation: string;
-}>): ReadonlyArray<D1PreparedStatement> => [
-  prepareBrowserAuditBudgetGuard({ db, owner: "insights", userId, current, index, operation }),
-];
 
 const findCommittedInsight = ({
   db,
@@ -538,24 +497,51 @@ const insightOutcome = ({
   guardFacts: Option.none(),
   collisionKey: Option.none(),
   read: (db, userId) => findCommittedInsight({ db, userId, insightEventId, attemptId }),
-  triggerRefusal: (_work, kind) =>
-    kind === "audit" ? Option.some(auditLimitRefusal()) : Option.none(),
 });
+
+const prepareTransitionWrite = (
+  input: TransitionInput,
+  delivery: Option.Option<
+    Readonly<{ id: InsightDeliveryAttempt["id"]; evidence: DeliveryEvidenceInput }>
+  >
+): D1PreparedStatement => {
+  const { db, subject, id, current, operation } = input;
+  const target = targetOf(operation);
+  const authority = callerAuthority({ subject, current });
+  const receipt = Option.getOrUndefined(delivery);
+  const receiptSet =
+    receipt === undefined
+      ? ""
+      : ",delivery_receipt_id=?,delivery_sent_at=?,delivery_channel=?,delivery_provider=?,delivery_provider_message_id=?";
+  return db
+    .prepare(`UPDATE insight_events SET lifecycle_state = ?${receiptSet} WHERE user_id = ? AND id = ?
+    AND lifecycle_state IN (${allowed(target)
+      .map(() => "?")
+      .join(",")})
+    AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
+    .bind(
+      target,
+      ...(receipt === undefined
+        ? []
+        : [
+            receipt.id,
+            DateTime.formatIso(receipt.evidence.sentAt),
+            receipt.evidence.channel,
+            receipt.evidence.provider,
+            receipt.evidence.providerMessageId,
+          ]),
+      subject.userId,
+      id,
+      ...allowed(target),
+      ...authority.bindings
+    );
+};
 
 const transitionStatements = (
   input: TransitionInput,
   oauthReview: Option.Option<OAuthMutationReview>
 ): Extract<CanonicalMutationPreparation, { _tag: "Prepared" }> => {
   const { db, subject, id, operation, current } = input;
-  const target = targetOf(operation);
-  const authority = callerAuthority({ subject, current });
-  const write = db
-    .prepare(`UPDATE insight_events SET lifecycle_state = ? WHERE user_id = ? AND id = ?
-    AND lifecycle_state IN (${allowed(target)
-      .map(() => "?")
-      .join(",")})
-    AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-    .bind(target, subject.userId, id, ...allowed(target), ...authority.bindings);
   const delivery =
     input.operation === "insights.markInsightDelivered"
       ? Option.some({
@@ -564,6 +550,7 @@ const transitionStatements = (
         })
       : Option.none();
   const attemptId = Option.map(delivery, (attempt) => attempt.id);
+  const write = prepareTransitionWrite(input, delivery);
   return {
     _tag: "Prepared",
     mutation: {
@@ -571,11 +558,8 @@ const transitionStatements = (
       requiredScope: callerScope(subject),
       outcome: insightOutcome({ operation, insightEventId: id, attemptId }),
       guardRefusal: insightGuardRefusal(input),
-      auditBudget: isPATCaller(subject) || isOAuthCaller(subject) ? "shared" : "owner",
-      commitGuards:
-        isPATCaller(subject) || isOAuthCaller(subject)
-          ? Option.none()
-          : Option.some(insightCommitGuards),
+
+      commitGuards: Option.none(),
       statements: [
         ...(isPATCaller(subject)
           ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
@@ -583,9 +567,6 @@ const transitionStatements = (
             )
           : []),
         write,
-        ...Option.toArray(
-          Option.map(delivery, (value) => sendStatement(input, value.id, value.evidence))
-        ),
         insightAuditStatement({
           db,
           subject,
@@ -610,6 +591,18 @@ const reviewAction = (operation: MutationOperation): string => {
   }
 };
 
+const receiptColumns = {
+  id: "delivery_receipt_id",
+  insight_event_id: "id",
+  sent_at: "delivery_sent_at",
+  channel: "delivery_channel",
+  provider: "delivery_provider",
+  provider_message_id: "delivery_provider_message_id",
+} as const;
+const receiptSelection = Object.entries(receiptColumns)
+  .map(([alias, column]) => `${column} AS ${alias}`)
+  .join(",");
+
 const insightReview = ({
   input,
   row,
@@ -628,7 +621,7 @@ const insightReview = ({
       ? Schema.encodeSync(Schema.toCodecJson(DeliveryEvidenceInput))(input.evidence)
       : null;
   const columns = Object.keys(EventRow.fields);
-  const attemptColumns = Object.keys(AttemptRow.fields);
+  const attemptColumns = Object.values(receiptColumns);
   return oauthMutationReview({
     db,
     effect:
@@ -638,8 +631,7 @@ const insightReview = ({
     revision: JSON.stringify({ event: row, attempts }),
     guard: {
       sql: `SELECT 1 FROM insight_events WHERE user_id = ? AND ${columns.map((column) => `${column} IS ?`).join(" AND ")}
-        AND (SELECT COUNT(*) FROM insight_delivery_attempts WHERE user_id = ? AND insight_event_id = ?) = ?
-        ${attempt === undefined ? "" : `AND EXISTS (SELECT 1 FROM insight_delivery_attempts WHERE user_id = ? AND ${attemptColumns.map((column) => `${column} IS ?`).join(" AND ")})`}`,
+        AND ${attempt === undefined ? "delivery_receipt_id IS NULL" : attemptColumns.map((column) => `${column} IS ?`).join(" AND ")}`,
       params: [
         subject.userId,
         row.id,
@@ -652,13 +644,9 @@ const insightReview = ({
         row.scheduled_at,
         row.money_groups_json,
         row.lifecycle_state,
-        subject.userId,
-        id,
-        attempts.length,
         ...(attempt === undefined
           ? []
           : [
-              subject.userId,
               attempt.id,
               attempt.insight_event_id,
               attempt.sent_at,
@@ -694,23 +682,30 @@ const observeOAuthInsight = (
 > =>
   Effect.gen(function* () {
     const { db, subject, id } = input;
-    const rows = yield* Effect.tryPromise({
+    const observed = yield* Effect.tryPromise({
       try: () =>
-        db.batch([
-          db
-            .prepare(`SELECT id, kind, schedule_id, schedule_version, service_market,
-          locale, time_zone, scheduled_at, money_groups_json, lifecycle_state
-          FROM insight_events WHERE user_id = ? AND id = ?`)
-            .bind(subject.userId, id),
-          db
-            .prepare(`SELECT id, insight_event_id, sent_at, channel, provider, provider_message_id
-          FROM insight_delivery_attempts WHERE user_id = ? AND insight_event_id = ?`)
-            .bind(subject.userId, id),
-        ]),
+        db
+          .prepare(`SELECT id,kind,schedule_id,schedule_version,service_market,locale,
+        time_zone,scheduled_at,money_groups_json,lifecycle_state,
+        CASE WHEN delivery_receipt_id IS NOT NULL THEN json_object(
+          'id',delivery_receipt_id,'insight_event_id',id,'sent_at',delivery_sent_at,
+          'channel',delivery_channel,'provider',delivery_provider,'provider_message_id',delivery_provider_message_id)
+        END AS receipt_json FROM insight_events WHERE user_id=? AND id=?`)
+          .bind(subject.userId, id)
+          .all(),
       catch: () => new InsightUnavailable(),
     });
-    const events = yield* Schema.decodeUnknownEffect(Schema.Array(EventRow))(rows[0]?.results);
-    const attempts = yield* Schema.decodeUnknownEffect(Schema.Array(AttemptRow))(rows[1]?.results);
+    const events = yield* Schema.decodeUnknownEffect(Schema.Array(EventRow))(observed.results);
+    const receipts = yield* Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          receipt_json: Schema.NullOr(Schema.fromJsonString(AttemptRow)),
+        })
+      )
+    )(observed.results);
+    const attempts = receipts.flatMap((row) =>
+      row.receipt_json === null ? [] : [row.receipt_json]
+    );
     const row = events[0];
     if (row === undefined) {
       return { event: Option.none<InsightEvent>(), review: Option.none<OAuthMutationReview>() };
@@ -772,8 +767,9 @@ export const findInsightAttempt = ({
 > =>
   Effect.tryPromise(() =>
     db
-      .prepare(`SELECT id, insight_event_id, sent_at, channel, provider,
-    provider_message_id FROM insight_delivery_attempts WHERE user_id = ? AND insight_event_id = ?`)
+      .prepare(
+        `SELECT ${receiptSelection} FROM insight_events WHERE user_id = ? AND id = ? AND delivery_receipt_id IS NOT NULL`
+      )
       .bind(userId, id)
       .first()
   ).pipe(

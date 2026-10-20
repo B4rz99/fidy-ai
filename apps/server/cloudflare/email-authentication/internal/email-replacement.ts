@@ -158,17 +158,17 @@ const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> =>
       (user_id, work_id, session_id, candidate_email, prior_email, prior_verified_at_ms,
        state, created_at_ms, expires_at_ms)
       SELECT v.user_id, ?, ?, ?, v.email_address, v.verified_at_ms, 'awaiting_delivery', ?, ?
-      FROM verified_email_credentials AS v WHERE v.user_id = ? AND v.email_address <> ?
+      FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v WHERE v.user_id = ? AND v.email_address <> ?
         AND EXISTS (SELECT 1 FROM email_replacement_limits AS l
           WHERE l.user_id = v.user_id AND l.last_work_id = ?)
-        AND NOT EXISTS (SELECT 1 FROM verified_email_credentials WHERE email_address = ?)
+        AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) WHERE email_address = ?)
         AND NOT EXISTS (SELECT 1 FROM email_replacements AS r WHERE r.user_id = v.user_id
           AND r.expires_at_ms > ? AND r.state IN ('awaiting_delivery', 'sending', 'awaiting_proof'))
       ON CONFLICT(user_id) DO UPDATE SET work_id = excluded.work_id,
         session_id = excluded.session_id, candidate_email = excluded.candidate_email,
         prior_email = excluded.prior_email, prior_verified_at_ms = excluded.prior_verified_at_ms,
         state = 'awaiting_delivery', created_at_ms = excluded.created_at_ms,
-        expires_at_ms = excluded.expires_at_ms, wrong_attempts = 0,
+        expires_at_ms = excluded.expires_at_ms, wrong_attempts = 0, dispatch_attempted_at_ms = NULL,
         public_code = NULL, proof_digest = NULL, proof_expires_at_ms = NULL
       WHERE email_replacements.expires_at_ms <= ? OR email_replacements.state IN ('rejected', 'ambiguous')`)
           .bind(
@@ -184,10 +184,6 @@ const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> =>
             current,
             current
           ),
-        db
-          .prepare(`INSERT INTO email_replacement_outbox (id, created_at_ms)
-      SELECT work_id, ? FROM email_replacements WHERE work_id = ?`)
-          .bind(current, workId),
       ])
     ).pipe(Effect.asVoid)
   );
@@ -437,15 +433,15 @@ const commitReplacement = (
     attempt(() =>
       db.batch([
         db
-          .prepare(`UPDATE verified_email_credentials SET email_address = (
-          SELECT candidate_email FROM email_replacements WHERE work_id = ?), verified_at_ms = ?
-        WHERE user_id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
+          .prepare(`UPDATE users SET verified_email_address = (
+          SELECT candidate_email FROM email_replacements WHERE work_id = ?), email_verified_at_ms = ?
+        WHERE id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
           WHERE r.work_id = ? AND r.user_id = ? AND r.session_id = ?
             AND r.state = 'awaiting_proof' AND r.public_code = ?
             AND r.proof_expires_at_ms > ? AND r.expires_at_ms > ?
             AND EXISTS (${session.sql})
-            AND verified_email_credentials.email_address = r.prior_email
-            AND verified_email_credentials.verified_at_ms = r.prior_verified_at_ms)`)
+            AND users.verified_email_address = r.prior_email
+            AND users.email_verified_at_ms = r.prior_verified_at_ms)`)
           .bind(
             workId,
             current,

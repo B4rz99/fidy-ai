@@ -1,10 +1,8 @@
 import {
-  dailyAuditExhausted,
   prepareAuditQueryCall,
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   recordOAuthCall,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { nextTransactionPage } from "../../../src/shell/transactions/operations";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
@@ -90,13 +88,12 @@ const failure = (
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_UNAUTHENTICATED = 401;
-const HTTP_RATE_LIMITED = 429;
+
 const invalid = (): Response => failure("validation_failed", HTTP_INVALID);
 const notFound = (): Response => failure("not_found", HTTP_NOT_FOUND);
-const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
+
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
-const failedAudit = (error: unknown): Response =>
-  refusedByAuditBudget(error) ? rateLimited() : unavailable();
+const failedAudit = (): Response => unavailable();
 type Subject = QueryCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
@@ -416,24 +413,20 @@ const invalidQueryAudit = (
 ): Promise<Response> => {
   const { subject } = selection;
   const invalidGet = Option.isSome(selection.id);
-  return dailyAuditExhausted({ db, userId: subject.userId, current })
-    .then((exhausted) => {
-      if (exhausted) return rateLimited();
-      const authority = liveWebSessionAuthority({ subject, current });
-      return prepareAuthorizedAuditCall({
-        db,
-        authority,
-        id: uuid(),
-        operation: historyOperation(selection),
-        outcome: invalidGet ? "not_found" : "validation_failed",
-        current,
-        afterOwnerWrite: false,
-      })
-        .run()
-        .then((audit) => {
-          if (audit.meta.changes !== 1) return noSession();
-          return invalidGet ? notFound() : invalid();
-        });
+  const authority = liveWebSessionAuthority({ subject, current });
+  return prepareAuthorizedAuditCall({
+    db,
+    authority,
+    id: uuid(),
+    operation: historyOperation(selection),
+    outcome: invalidGet ? "not_found" : "validation_failed",
+    current,
+    afterOwnerWrite: false,
+  })
+    .run()
+    .then((audit) => {
+      if (audit.meta.changes !== 1) return noSession();
+      return invalidGet ? notFound() : invalid();
     })
     .catch(failedAudit);
 };
@@ -521,14 +514,6 @@ export const readPrivacyTransactions = ({
   request,
 }: PrivacyTransactionsRead): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const budgetCurrent = DateTime.toEpochMillis(yield* DateTime.now);
-    if (
-      yield* Effect.tryPromise(() =>
-        dailyAuditExhausted({ db, userId: subject.userId, current: budgetCurrent })
-      )
-    ) {
-      return rateLimited();
-    }
     const presentation = yield* readPrivacyPreferences({ db, userId: subject.userId });
     const categories = yield* listCategories({ db });
     const current = DateTime.toEpochMillis(yield* DateTime.now);
@@ -710,10 +695,6 @@ export const browseTransactions = ({
         invalidQueryAudit(db, { ...selection, subject }, current)
       );
     }
-    const exhausted = yield* Effect.tryPromise(() =>
-      dailyAuditExhausted({ db, userId: subject.userId, current })
-    );
-    if (exhausted) return rateLimited();
     if (isOAuthCaller(subject)) return yield* readOAuthHistory({ db, selection, query, current });
     return yield* Effect.tryPromise(() => readAuthorizedHistory(db, { selection, query, current }));
-  }).pipe(Effect.catch((error) => Effect.succeed(failedAudit(error.cause))));
+  }).pipe(Effect.orElseSucceed(() => failedAudit()));

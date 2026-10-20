@@ -129,7 +129,7 @@ const eventFor = (db: D1Database, at: DateTime.Utc): Promise<InsightEventId> =>
 const readSummaryClaim = (db: D1Database, id: InsightEventId): Promise<typeof proofRow.Type> =>
   db
     .prepare(
-      "SELECT correlation_token,provider_message_id FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=?"
+      "SELECT correlation_token,provider_message_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS insight_whatsapp_claims WHERE user_id=? AND insight_event_id=?"
     )
     .bind(userId, id)
     .first()
@@ -137,7 +137,7 @@ const readSummaryClaim = (db: D1Database, id: InsightEventId): Promise<typeof pr
 const readQuestionClaim = (db: D1Database, id: string): Promise<typeof proofRow.Type> =>
   db
     .prepare(
-      "SELECT correlation_token,provider_message_id FROM weekly_governor_questions WHERE user_id=? AND id=?"
+      "SELECT correlation_token,provider_message_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=?"
     )
     .bind(userId, id)
     .first()
@@ -213,10 +213,7 @@ it.each(["reassociation", "withdrawal", "summary-withdrawal", "expiry", "withdra
         expect(fetch).toHaveBeenCalledOnce();
         if (change === "reassociation") {
           yield* testPromise(() =>
-            db
-              .prepare("UPDATE whatsapp_identities SET bsuid='CO.changed' WHERE user_id=?")
-              .bind(userId)
-              .run()
+            db.prepare("UPDATE users SET whatsapp_bsuid='CO.changed' WHERE id=?").bind(userId).run()
           );
         }
         if (change.startsWith("withdrawal")) {
@@ -353,7 +350,9 @@ it("production coordinator sends each summary once, asks separately, counts only
       expect(
         yield* testPromise(() =>
           fixture.db
-            .prepare("SELECT COUNT(*) AS count FROM proactive_transcript_entries WHERE user_id=?")
+            .prepare(
+              "SELECT COUNT(*) AS count FROM proactive_transcript_entries WHERE kind='insight' AND user_id=?"
+            )
             .bind(userId)
             .first()
         )

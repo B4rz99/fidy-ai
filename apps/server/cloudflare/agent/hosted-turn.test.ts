@@ -58,9 +58,6 @@ import {
   encodeJson,
   grants,
   inference,
-  legacySession,
-  legacyTurn,
-  legacyUser,
   makeAbortController,
   now,
   promiseGate,
@@ -156,55 +153,6 @@ it("binds the prepared mutation commit to one pending User Turn and rolls back f
     })
   ));
 
-it("migrates existing hosted evidence and can persist DeliveryUnconfirmed", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => setup(true));
-      expect(
-        (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
-      ).toHaveLength(0);
-      const preserved = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT
-      e.sequence, e.text, m.tool_call_id FROM transcript_entries AS e
-      JOIN hosted_mutation_commits AS m ON m.turn_id = e.turn_id
-      WHERE e.turn_id = ?`)
-          .bind(legacyTurn)
-          .first()
-      );
-      expect(preserved).toMatchObject({ text: "Antes", tool_call_id: "legacy-call" });
-      const terminalAt = now();
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare(`INSERT INTO transcript_entries
-        (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason)
-        VALUES (?, ?, ?, ?, 'failed', ?, 'DeliveryUnconfirmed')`)
-            .bind(newId(), legacyUser, legacySession, legacyTurn, terminalAt),
-          db
-            .prepare(`UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?,
-        failure_reason = 'DeliveryUnconfirmed' WHERE id = ?`)
-            .bind(terminalAt, legacyTurn),
-        ])
-      );
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(`SELECT status, failure_reason
-      FROM hosted_turns WHERE id = ?`)
-            .bind(legacyTurn)
-            .first()
-        )
-      ).toMatchObject({
-        status: "failed",
-        failure_reason: "DeliveryUnconfirmed",
-      });
-      expect(
-        (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
-      ).toHaveLength(0);
-    })
-  ));
-
 it("resolves hosted WhatsApp authority only for the verified portfolio and BSUID", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -212,7 +160,7 @@ it("resolves hosted WhatsApp authority only for the verified portfolio and BSUID
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
@@ -268,7 +216,7 @@ it("does not retain User text when a verified WhatsApp association changes befor
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(userId, "portfolio-1", bsuid, now())
           .run()
@@ -288,7 +236,7 @@ it("does not retain User text when a verified WhatsApp association changes befor
       });
       yield* Effect.tryPromise(() =>
         db
-          .prepare("UPDATE whatsapp_identities SET bsuid = ? WHERE user_id = ?")
+          .prepare("UPDATE users SET whatsapp_bsuid = ? WHERE id = ?")
           .bind("CO.573001234567", userId)
           .run()
       );
@@ -330,7 +278,7 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
         db.batch([
           db
             .prepare(
-              "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
             )
             .bind(userId, "portfolio-1", bsuid, now()),
           db
@@ -753,7 +701,9 @@ it("keeps recovered WhatsApp inference alive past the soft deadline and settles 
         )(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT correlation_token FROM hosted_whatsapp_delivery WHERE turn_id = ?")
+              .prepare(
+                "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE turn_id = ?"
+              )
               .bind(turnId)
               .first()
           )
@@ -894,7 +844,12 @@ it.each([
         const turnId = kind === "missing" ? TranscriptTurnId.make(newId()) : admitted;
         if (kind === "association-revoked") {
           yield* Effect.tryPromise(() =>
-            db.prepare("DELETE FROM whatsapp_identities WHERE user_id = ?").bind(users[0]).run()
+            db
+              .prepare(
+                "UPDATE users SET whatsapp_portfolio_id=NULL,whatsapp_bsuid=NULL,whatsapp_verified_at_ms=NULL WHERE id = ?"
+              )
+              .bind(users[0])
+              .run()
           );
         }
         const before = yield* Effect.tryPromise(() => retainedChannelState(db));
@@ -1055,7 +1010,9 @@ it("rejects malformed delivery proposals before retaining authenticated status e
         db.batch([
           db.prepare("DROP TRIGGER hosted_whatsapp_delivery_identity_immutable"),
           db
-            .prepare("UPDATE hosted_whatsapp_delivery SET text = ' ' WHERE turn_id = ?")
+            .prepare(
+              "UPDATE whatsapp_deliveries AS hosted_whatsapp_delivery SET text = ' ' WHERE kind='hosted' AND turn_id = ?"
+            )
             .bind(turnId),
         ])
       );
@@ -1096,8 +1053,9 @@ it.each([false, true])(
         const db = yield* Effect.tryPromise(() => setup());
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`INSERT INTO whatsapp_identities
-      (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)`)
+            .prepare(
+              `WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms`
+            )
             .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
             .run()
         );
@@ -1144,8 +1102,9 @@ it.each([false, true])(
         expect(offered).toEqual([{ _tag: "HostedWhatsAppWork", userId: users[0], turnId }]);
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`UPDATE hosted_whatsapp_outbox
-      SET offered_at_ms = ? WHERE turn_id = ?`)
+            .prepare(
+              `UPDATE hosted_turns AS hosted_whatsapp_outbox SET dispatch_offered_at_ms = ? WHERE dispatch_created_at_ms IS NOT NULL AND id = ?`
+            )
             .bind(now() - 61_000, turnId)
             .run()
         );
@@ -1182,8 +1141,9 @@ it.each([false, true])(
         expect(invalidAck).toHaveBeenCalledOnce();
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`INSERT INTO consent_user_revocations
-        (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+            .prepare(
+              `INSERT INTO consent_history(record_type,id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES ('processing_withdrawal',?, ?, ?, ?, ?)`
+            )
             .bind(newId(), users[0], grants[0], sessions[0], now())
             .run()
         );
@@ -1237,7 +1197,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
         db.batch([
           db
             .prepare(
-              "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
             )
             .bind(users[0], "portfolio-1", "CO.13491208655302741918", now()),
           db
@@ -1388,8 +1348,9 @@ it("retains a failed WhatsApp Turn without sending invalid model output", () =>
       const db = yield* Effect.tryPromise(() => setup());
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO whatsapp_identities
-      (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)`)
+          .prepare(
+            `WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms`
+          )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
       );
@@ -1426,8 +1387,13 @@ it("retains a failed WhatsApp Turn without sending invalid model output", () =>
         { status: "failed", kind: "failed", text: null, marker: "HostedInferenceFailed" },
       ]);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM hosted_whatsapp_delivery").all()))
-          .results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT * FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery"
+            )
+            .all()
+        )).results
       ).toHaveLength(0);
     })
   ));
@@ -1439,7 +1405,7 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
@@ -1481,7 +1447,11 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
       ).toEqual([200, 202]);
       expect(provider).toHaveBeenCalledTimes(1);
       const evidence = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT correlation_token FROM hosted_whatsapp_delivery").first()
+        db
+          .prepare(
+            "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery"
+          )
+          .first()
       );
       const stored = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
@@ -1507,8 +1477,9 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
       expect(provider).toHaveBeenCalledTimes(1);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO consent_user_revocations
-        (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+          .prepare(
+            `INSERT INTO consent_history(record_type,id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES ('processing_withdrawal',?, ?, ?, ?, ?)`
+          )
           .bind(newId(), users[0], grants[0], sessions[0], now())
           .run()
       );
@@ -1573,7 +1544,7 @@ it("treats signed voice instructions as User text without granting identity or t
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
@@ -1686,7 +1657,7 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now() - 90_000_000)
           .run()
@@ -1775,7 +1746,7 @@ it("interrupts a staged reply once if recovery finds no provider send started", 
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
@@ -1860,7 +1831,7 @@ it("does not send when recovery interrupts a staged reply during scheduling", ()
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
@@ -1908,13 +1879,13 @@ it("does not send when recovery interrupts a staged reply during scheduling", ()
                   .prepare(`INSERT INTO transcript_entries
                   (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
                   SELECT ?, t.user_id, t.hosted_session_id, t.id, 'interrupted', ?
-                  FROM hosted_turns AS t JOIN hosted_whatsapp_delivery AS d ON d.turn_id = t.id
+                  FROM hosted_turns AS t JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d ON d.turn_id = t.id
                   WHERE t.user_id = ? AND t.status = 'pending'`)
                   .bind(newId(), timestamp, users[0]),
                 db
                   .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
                   WHERE user_id = ? AND status = 'pending' AND EXISTS
-                    (SELECT 1 FROM hosted_whatsapp_delivery AS d WHERE d.turn_id = hosted_turns.id)`)
+                    (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d WHERE d.turn_id = hosted_turns.id)`)
                   .bind(timestamp, users[0]),
               ])
               .then(() => undefined);
@@ -1940,7 +1911,7 @@ it("does not send when a window closes while a prepared reply waits for recovery
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
@@ -1977,7 +1948,9 @@ it("does not send when a window closes while a prepared reply waits for recovery
           signal: makeAbortController().signal,
           scheduleRecovery: () =>
             db
-              .prepare("SELECT turn_id FROM hosted_whatsapp_delivery WHERE user_id = ?")
+              .prepare(
+                "SELECT turn_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ?"
+              )
               .bind(users[0])
               .first()
               .then((staged) => {
@@ -2011,7 +1984,7 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
@@ -2066,7 +2039,9 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
       if (id === undefined || token === undefined) return yield* Effect.die("no attempt");
       const proposal = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT proposed_at_ms FROM hosted_whatsapp_delivery WHERE turn_id = ?")
+          .prepare(
+            "SELECT proposed_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE turn_id = ?"
+          )
           .bind(id)
           .first()
       );

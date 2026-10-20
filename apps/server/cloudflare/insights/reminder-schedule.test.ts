@@ -35,12 +35,12 @@ const reminderPersistence = (
       .prepare(`
   SELECT s.*,
     (SELECT count(*) FROM insight_events WHERE user_id=s.user_id) AS events,
-    (SELECT count(*) FROM reminder_occurrence_reports WHERE user_id=s.user_id) AS reports,
-    (SELECT count(*) FROM proactivity_outbox WHERE user_id=s.user_id) AS outbox,
-    (SELECT count(*) FROM reminder_schedule_executions WHERE user_id=s.user_id) AS executions,
-    (SELECT count(*) FROM reminder_schedule_revisions WHERE user_id=s.user_id) AS revisions,
-    (SELECT standing_json FROM reminder_governors WHERE user_id=s.user_id) AS standing_json
-  FROM reminder_schedules s WHERE user_id=?`)
+    (SELECT count(*) FROM insight_reports WHERE kind='proactivity-delivery' AND reminder_grant_id IS NOT NULL AND user_id=s.user_id) AS reports,
+    (SELECT count(*) FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=s.user_id) AS outbox,
+    (SELECT count(*) FROM schedule_executions WHERE kind='reminder' AND user_id=s.user_id) AS executions,
+    (SELECT count(*) FROM schedule_revisions WHERE kind='reminder' AND user_id=s.user_id) AS revisions,
+    (SELECT standing_json FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=s.user_id) AS standing_json
+  FROM schedules s WHERE kind='reminder' AND user_id=?`)
       .bind(proactivityTestUsers[0])
       .first()
   ).pipe(Effect.map(Option.fromNullOr));
@@ -137,7 +137,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                `SELECT decision_message_id,decision FROM proactivity_consent_offers WHERE id=?`
+                `SELECT decision_message_id,decision FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE id=?`
               )
               .bind(offer.id)
               .first()
@@ -147,11 +147,11 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(`SELECT
-    (SELECT count(*) FROM proactivity_consent_records WHERE user_id=u.id) AS consent_records,
-    (SELECT count(*) FROM reminder_schedules WHERE user_id=u.id) AS schedules,
-    (SELECT count(*) FROM reminder_governors WHERE user_id=u.id) AS governors,
+    (SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE user_id=u.id) AS consent_records,
+    (SELECT count(*) FROM schedules WHERE kind='reminder' AND user_id=u.id) AS schedules,
+    (SELECT count(*) FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=u.id) AS governors,
     (SELECT count(*) FROM insight_events WHERE user_id=u.id) AS events,
-    (SELECT count(*) FROM proactivity_outbox WHERE user_id=u.id) AS outbox
+    (SELECT count(*) FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=u.id) AS outbox
     FROM users u WHERE id=?`)
               .bind(input.userId)
               .first()
@@ -258,7 +258,7 @@ it("rolls back reminder occurrence, outbox and execution advancement together wh
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER reject_proactivity_outbox BEFORE INSERT ON proactivity_outbox BEGIN SELECT RAISE(ABORT,'test_outbox_refusal'); END"
+            "CREATE TRIGGER reject_proactivity_outbox BEFORE INSERT ON insight_reports WHEN NEW.dispatch_state IS NOT NULL BEGIN SELECT RAISE(ABORT,'test_outbox_refusal'); END"
           )
           .run()
       );
@@ -280,7 +280,9 @@ it("rolls back reminder occurrence, outbox and execution advancement together wh
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS count FROM proactivity_outbox WHERE user_id=?")
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+            )
             .bind(input.userId)
             .first()
         )

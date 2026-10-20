@@ -290,7 +290,7 @@ export const recordWebOnboardingConsent = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `INSERT INTO onboarding_consent_records(id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES(?,?,?,?,?,?,?)`
+      `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)`
     )
     .bind(
       input.attemptId,

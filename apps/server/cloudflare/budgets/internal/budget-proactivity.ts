@@ -79,7 +79,7 @@ export const findFirstCreation = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT budget_id FROM budget_first_creation WHERE user_id=? AND offer_requested_at_ms IS NULL",
+          sql: "SELECT budget_id FROM (SELECT rowid,user_id,budget_id,created_at_ms,offer_requested_at_ms,first_last_evaluated_at_ms AS last_evaluated_at_ms FROM budget_state WHERE kind='user' AND budget_id IS NOT NULL) AS budget_first_creation WHERE user_id=? AND offer_requested_at_ms IS NULL",
           params: [input.userId],
         },
       }).first()
@@ -104,7 +104,7 @@ export const prepareFirstOffer = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `UPDATE budget_first_creation SET offer_requested_at_ms=? WHERE user_id=? AND budget_id=? AND offer_requested_at_ms IS NULL AND EXISTS (${input.proof.sql})`,
+      sql: `UPDATE budget_state SET offer_requested_at_ms=? WHERE kind='user' AND user_id=? AND budget_id=? AND offer_requested_at_ms IS NULL AND EXISTS (${input.proof.sql})`,
       params: [input.now, input.userId, input.budgetId, ...input.proof.params],
     },
   });
@@ -115,7 +115,7 @@ export const noteEvaluation = (
   Effect.tryPromise(() =>
     input.db.batch([
       input.db
-        .prepare("UPDATE budget_reconciliation_work SET last_evaluated_at_ms=? WHERE user_id=?")
+        .prepare("UPDATE budget_state SET last_evaluated_at_ms=? WHERE kind='work' AND user_id=?")
         .bind(input.now, input.userId),
       input.db
         .prepare(
@@ -124,7 +124,7 @@ export const noteEvaluation = (
         .bind(input.now, input.userId),
       input.db
         .prepare(
-          "UPDATE budget_first_creation SET last_evaluated_at_ms=? WHERE user_id=? AND offer_requested_at_ms IS NULL"
+          "UPDATE budget_state SET first_last_evaluated_at_ms=? WHERE kind='user' AND user_id=? AND offer_requested_at_ms IS NULL"
         )
         .bind(input.now, input.userId),
     ])
@@ -139,7 +139,7 @@ export const discoverUsers = (
     const result = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT user_id FROM (SELECT user_id,last_evaluated_at_ms,detected_at_ms AS pending_at FROM budget_crossing_publications WHERE materialized_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,created_at_ms AS pending_at FROM budget_first_creation WHERE offer_requested_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,0 FROM budget_reconciliation_work) GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(pending_at) LIMIT ?"
+          "SELECT user_id FROM (SELECT user_id,last_evaluated_at_ms,detected_at_ms AS pending_at FROM budget_crossing_publications WHERE materialized_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,created_at_ms AS pending_at FROM (SELECT rowid,user_id,budget_id,created_at_ms,offer_requested_at_ms,first_last_evaluated_at_ms AS last_evaluated_at_ms FROM budget_state WHERE kind='user' AND budget_id IS NOT NULL) AS budget_first_creation WHERE offer_requested_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,0 FROM (SELECT rowid,user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work) GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(pending_at) LIMIT ?"
         )
         .bind(maximumGroups)
         .all()

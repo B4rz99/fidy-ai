@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Effect } from "effect";
 import { CanonicalAdmissionUnavailable, canonicalRequestProtection as policy } from "../contract";
 
@@ -30,8 +31,7 @@ export const acquireRequest = ({
             policy.intervalMs,
             current + (policy.burst - 1) * policy.intervalMs
           ),
-        db.prepare("INSERT INTO canonical_request_assertions VALUES (?,changes())").bind(id),
-        db.prepare("DELETE FROM canonical_request_assertions WHERE id = ?").bind(id),
+        prepareChangedRowAssertion({ db, scope: "canonical_request" }),
       ]),
     catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
   }).pipe(

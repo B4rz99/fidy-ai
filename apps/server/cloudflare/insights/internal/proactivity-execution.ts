@@ -1,4 +1,5 @@
 import { summariesDue } from "./cadence";
+import { settleDeliveryWork } from "./proactivity-delivery-work";
 import { continueQueuedDelivery, queuedDeliveryQuery } from "./queued-delivery";
 import { advance as advanceRecurringDigest } from "./recurring-generation";
 import { findRecurringDiscovery } from "../../recurring/operations";
@@ -52,26 +53,6 @@ export const generateProactivity = (
     return { _tag: "Done" } as const;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-const noteDeliveryState = (
-  input: Readonly<{
-    db: D1Database;
-    userId: UserId;
-    work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
-  }>,
-  state: "started" | "expired"
-): Effect.Effect<void, InsightUnavailable> =>
-  Effect.tryPromise(() =>
-    input.db
-      .prepare(
-        "UPDATE proactivity_outbox SET state=? WHERE user_id=? AND delivery_id=? AND state='ready'"
-      )
-      .bind(state, input.userId, input.work.id)
-      .run()
-  ).pipe(
-    Effect.asVoid,
-    Effect.mapError(() => new InsightUnavailable())
-  );
-
 const finishSend = (
   input: ProactivityChannelScope &
     Readonly<{
@@ -89,9 +70,9 @@ const finishSend = (
         outcome: sent.certainty,
         providerMessageId: sent.providerMessageId,
       });
-      yield* noteDeliveryState(input, "started");
+      yield* settleDeliveryWork({ ...input, state: "started" });
     }
-    if (claim._tag === "Expired") yield* noteDeliveryState(input, "expired");
+    if (claim._tag === "Expired") yield* settleDeliveryWork({ ...input, state: "expired" });
     return { _tag: "Done" } as const;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 

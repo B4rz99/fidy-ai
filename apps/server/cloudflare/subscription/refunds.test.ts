@@ -23,12 +23,8 @@ afterEach(() => {
 const fixture = (activeTrial = false): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const made = yield* makePaymentEnrollmentD1([
-      "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
-      "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
+      "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
       "CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_digest BLOB NOT NULL, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER NOT NULL, hard_expires_at_ms INTEGER NOT NULL) STRICT",
-      "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
-      "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
-      "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
     ]);
 
     const db = made.db;
@@ -37,7 +33,9 @@ const fixture = (activeTrial = false): Effect.Effect<D1Database, Cause.UnknownEr
     yield* seedRefundCharge(db);
     yield* Effect.tryPromise(() =>
       db.batch([
-        db.prepare("INSERT INTO trial_periods VALUES (?,?,?)").bind(userId, trialStart, trialEnd),
+        db
+          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
+          .bind(userId, trialStart, trialEnd),
         db
           .prepare("INSERT INTO web_sessions VALUES (?,?,?,NULL,9999999999999,9999999999999)")
           .bind(requestId, userId, new Uint8Array(32)),
@@ -149,7 +147,7 @@ it("uses the inherited Clock for Refund authority admission and retained accepta
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT last_attempt_at_ms,published_at_ms FROM refund_outbox WHERE refund_id=?"
+              "SELECT last_attempt_at_ms,published_at_ms FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox WHERE refund_id=?"
             )
             .bind(accepted.id)
             .first()
@@ -182,11 +180,11 @@ const assertPendingIntegrity = Effect.fnUntraced(function* (
   const retained = yield* Effect.tryPromise(() =>
     db
       .prepare(`SELECT
-    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
-    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
     (SELECT SUM(amount_in_cents) FROM refund_attempts WHERE status<>'failed') AS reserved,
-    (SELECT COUNT(*) FROM refund_submission_claims WHERE refund_id=?) AS claims`)
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims WHERE refund_id=?) AS claims`)
       .bind(id)
       .first()
   );
@@ -233,8 +231,14 @@ it("isolates mismatched coordinator Users and foreign charge identities before a
       const otherSessionId = "50000000-0000-4000-8000-000000000002";
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users VALUES (?,'America/Bogota')").bind(otherUserId),
-          db.prepare("INSERT INTO trial_periods VALUES (?,1000,604801000)").bind(otherUserId),
+          db
+            .prepare("INSERT INTO users (id,time_zone) VALUES (?,'America/Bogota')")
+            .bind(otherUserId),
+          db
+            .prepare(
+              "UPDATE users SET trial_started_at_ms=1000,trial_ends_at_ms=604801000 WHERE id=?1"
+            )
+            .bind(otherUserId),
           db
             .prepare("INSERT INTO web_sessions VALUES (?,?,?,NULL,9999999999999,9999999999999)")
             .bind(otherSessionId, otherUserId, new Uint8Array(32)),
@@ -301,11 +305,11 @@ it("isolates mismatched coordinator Users and foreign charge identities before a
           .prepare(`SELECT
     (SELECT COUNT(*) FROM refund_attempts) AS attempts,
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
-    (SELECT COUNT(*) FROM refund_outbox) AS outbox,
-    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
-    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
-    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments`)
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments`)
           .first()
       );
       expect(retained).toEqual({
@@ -547,7 +551,7 @@ it("refuses foreign User scope, ambiguous approved charges and an expired suppor
       ).toBe(true);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO billing_transaction_evidence
+          .prepare(`INSERT INTO billing_provider_transactions
     (transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms) VALUES ('another-charge',?,'APPROVED',0,1)`)
           .bind(attemptId)
           .run()
@@ -737,7 +741,7 @@ it("keeps the mutation claim and reservation after provider approval but failed 
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER injected_settlement_failure BEFORE INSERT ON refund_outcome_evidence BEGIN SELECT RAISE(ABORT,'injected durable settlement failure'); END"
+            "CREATE TRIGGER injected_settlement_failure BEFORE UPDATE OF verified_status ON refund_attempts WHEN OLD.verified_status IS NULL AND NEW.verified_status IS NOT NULL BEGIN SELECT RAISE(ABORT,'injected durable settlement failure'); END"
           )
           .run()
       );
@@ -847,10 +851,10 @@ it.each(["production-environment", "live-private-key", "production-captured-char
             .prepare(`SELECT
     (SELECT COUNT(*) FROM refund_attempts) AS attempts,
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
-    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
-    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
-    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops`)
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops`)
             .first()
         );
         expect(retained).toEqual({
@@ -885,14 +889,14 @@ it.each([
           timing === "before-execution"
             ? db
                 .prepare(
-                  "INSERT INTO billing_transaction_evidence(transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms) VALUES ('delayed-approved-charge',?,'APPROVED',0,1)"
+                  "INSERT INTO billing_provider_transactions(transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms) VALUES ('delayed-approved-charge',?,'APPROVED',0,1)"
                 )
                 .bind(attemptId)
                 .run()
             : db
-                .prepare(`CREATE TRIGGER inject_delayed_approval BEFORE INSERT ON refund_submission_claims BEGIN
-            INSERT INTO billing_transaction_evidence(transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms)
-            SELECT 'delayed-approved-charge',billing_attempt_id,'APPROVED',0,1 FROM refund_attempts WHERE id=NEW.refund_id;
+                .prepare(`CREATE TRIGGER inject_delayed_approval BEFORE UPDATE OF submission_claimed_at_ms ON refund_attempts WHEN OLD.submission_claimed_at_ms IS NULL AND NEW.submission_claimed_at_ms IS NOT NULL BEGIN
+            INSERT INTO billing_provider_transactions(transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms)
+            SELECT 'delayed-approved-charge',billing_attempt_id,'APPROVED',0,1 FROM refund_attempts WHERE id=NEW.id;
           END`)
                 .run()
         );
@@ -910,10 +914,10 @@ it.each([
         const retained = yield* Effect.tryPromise(() =>
           db
             .prepare(`SELECT
-    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
-    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
-    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved`)
             .first()
         );
@@ -978,12 +982,12 @@ it.each(["missing-submission-claim", "unpublished-revision"])(
         const retained = yield* Effect.tryPromise(() =>
           db
             .prepare(`SELECT
-    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
-    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
-    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops,
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
-    (SELECT verification_attempts FROM refund_outbox) AS revisions`)
+    (SELECT verification_attempts FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox) AS revisions`)
             .first()
         );
         expect(retained).toEqual({
@@ -1063,9 +1067,9 @@ it("contains publication failure without releasing the reservation or claiming a
         db
           .prepare(`SELECT
     (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
-    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
-    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM refund_outbox WHERE published_at_ms IS NULL) AS unpublished`)
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox WHERE published_at_ms IS NULL) AS unpublished`)
           .first()
       );
       expect(retained).toEqual({ reserved: 400000, claims: 0, outcomes: 0, unpublished: 1 });
@@ -1169,11 +1173,11 @@ it.each(["pending", "hourly"])(
             .prepare(`SELECT
     (SELECT COUNT(*) FROM refund_attempts) AS attempts,
     (SELECT SUM(amount_in_cents) FROM refund_attempts WHERE status<>'failed') AS reserved,
-    (SELECT COUNT(*) FROM refund_outbox) AS outbox,
-    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
-    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
-    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
-    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops`)
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,work_version AS version,dispatch_last_attempt_at_ms AS last_attempt_at_ms,published_at_ms,verification_attempts,last_verification_at_ms FROM refund_attempts WHERE work_version IS NOT NULL) AS refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) AS refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,provider_refund_id AS provider_id,verified_status,observed_at_ms FROM refund_attempts WHERE verified_status IS NOT NULL) AS refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,adjusted_attempt_id AS attempt_id,access_ends_at_ms AS ends_at_ms FROM refund_attempts WHERE adjusted_attempt_id IS NOT NULL) AS billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops) AS stops`)
             .first();
         const before = yield* Effect.tryPromise(financialState);
         const expected =

@@ -16,6 +16,8 @@ and Pro standing is Uncapped commercially, not exempt from Consent, capabilities
 protection, or provider bounds. Standing is re-derived at admission. Creation, empty/failed history
 reads, aggregates, and previously loaded conversation do not consume hosted-history units. Browser
 and hosted canonical calls do not consume external-call units.
+Ordinary canonical work has no additional daily Audit or Transaction-count quota.
+The shared short-term request policy below remains effective for every tier.
 
 ## Canonical admission and replay
 
@@ -74,12 +76,12 @@ remain separately bounded; scheduling timestamps survive refusal rollback to pre
 
 Verified WhatsApp images cross one atomic publication unit: fresh association and Consent,
 capacity assertion, commercial consumption, current User context, submission, accountability,
-visible NeedsReviewItem, and identity-only outbox. Exact delivery replay is free; altered delivery
+visible NeedsReviewItem metadata on the submission. Exact delivery replay is free; altered delivery
 material conflicts. Pasted text is not a media submission. Full retrieval/extraction belongs to
 #21; accepted media currently remains visibly `extraction-unavailable`, never silently successful.
 No provider retrieval or bytes are retained by this admission path.
 
-Media locator/caption/outbox retention is 30 days; submission/review/accountability metadata is
+Media locator/caption retention is 30 days; submission/review/accountability metadata is
 retained for one year. Scheduled cleanup processes at most 512 identities per activity. The
 retained input digest permits exact replay after locator cleanup without restoring personal
 material or charging again.

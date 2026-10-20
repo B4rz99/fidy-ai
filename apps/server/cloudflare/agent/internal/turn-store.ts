@@ -176,7 +176,7 @@ export const readHostedSnapshot = ({
       db
         .prepare(`SELECT id, started_at_ms,
       COALESCE(
-        (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
+        (SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
         (SELECT proposedAtMs FROM (${channelProposals.sql}) WHERE turnId = hosted_turns.id)
       ) AS proposed_at_ms
       FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
@@ -265,7 +265,9 @@ export const recoverHostedTurn = ({
         ${whatsAppInterruptionGuard()} RETURNING id`)
           .bind(timestamp, turn.id, userId),
         db
-          .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
+          .prepare(
+            `UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_user_id=NULL,proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ? AND proposal_user_id = ?`
+          )
           .bind(turn.id, userId),
         prepareWhatsAppWorkCleanup({ db, turnId: turn.id, userId, requireTerminal: false }),
         db
@@ -364,7 +366,7 @@ export const readHostedContinuity = ({
     }
     const compactRaw = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT text, through_sequence, revision FROM hosted_compacted_conversations
+        .prepare(`SELECT text, through_sequence, revision FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
     WHERE user_id = ? AND hosted_session_id = ? AND updated_at_ms >= ?`)
         .bind(subject.userId, sessionId, now - hostedTranscriptRetentionMs)
         .first()
@@ -607,21 +609,17 @@ export const commitHostedCompaction = ({
     return yield* Effect.tryPromise(() =>
       db.batch([
         db
-          .prepare(`INSERT INTO hosted_compacted_conversations
-      (user_id, hosted_session_id, text, through_sequence, revision, nonce, updated_at_ms)
-      SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS
-        (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
+          .prepare(`UPDATE hosted_agent_sessions SET compacted_text=?3,compacted_through_sequence=?4,
+        compacted_revision=?5,compacted_nonce=?6,compacted_at_ms=?7
+      WHERE user_id=?1 AND id=?2 AND EXISTS
+        (SELECT 1 FROM hosted_agent_sessions WHERE user_id=?8 AND id=?9 AND status='active')
       AND EXISTS (${authority.sql})
-      AND (SELECT COUNT(*) FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
-        AND sequence <= ?) = ?
-      AND NOT EXISTS (SELECT 1 FROM transcript_entries AS e JOIN hosted_turns AS t
-        ON t.id = e.turn_id AND t.user_id = e.user_id WHERE e.user_id = ?
-        AND e.hosted_session_id = ? AND e.sequence <= ? AND t.status = 'pending')
-      ON CONFLICT(user_id, hosted_session_id) DO UPDATE SET
-        text = excluded.text, through_sequence = excluded.through_sequence,
-        revision = excluded.revision, nonce = excluded.nonce, updated_at_ms = excluded.updated_at_ms
-      WHERE hosted_compacted_conversations.revision = ?
-        AND hosted_compacted_conversations.through_sequence = ?`)
+      AND (SELECT COUNT(*) FROM transcript_entries WHERE user_id=? AND hosted_session_id=?
+        AND sequence<=?)=?
+      AND NOT EXISTS(SELECT 1 FROM transcript_entries AS e JOIN hosted_turns AS t
+        ON t.id=e.turn_id AND t.user_id=e.user_id WHERE e.user_id=?
+        AND e.hosted_session_id=? AND e.sequence<=? AND t.status='pending')
+      AND (compacted_revision IS NULL OR (compacted_revision=? AND compacted_through_sequence=?))`)
           .bind(
             userId,
             sessionId,
@@ -645,7 +643,7 @@ export const commitHostedCompaction = ({
           ),
         db
           .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
-      AND sequence <= ? AND EXISTS (SELECT 1 FROM hosted_compacted_conversations
+      AND sequence <= ? AND EXISTS (SELECT 1 FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
         WHERE user_id = ? AND hosted_session_id = ? AND nonce = ? AND revision = ?)
       RETURNING sequence`)
           .bind(userId, sessionId, throughSequence, userId, sessionId, nonce, nextRevision),
@@ -922,10 +920,8 @@ export const stageHostedDelivery = ({
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const write = yield* Effect.tryPromise(() =>
       db
-        .prepare(`INSERT INTO hosted_delivery_proposals
-    (turn_id, user_id, receipt_digest, proposed_at_ms, text)
-    SELECT id, user_id, ?, ?, ? FROM hosted_turns
-    WHERE id = ? AND user_id = ? AND status = 'pending'`)
+        .prepare(`UPDATE hosted_turns SET proposal_user_id=user_id,proposal_receipt_digest=?,proposed_at_ms=?,proposal_text=?
+    WHERE id=? AND user_id=? AND status='pending' AND proposed_at_ms IS NULL`)
         .bind(digest, current, text, turnId, userId)
         .run()
     );
@@ -962,7 +958,7 @@ export const refreshHostedDelivery = ({
     }
     const row = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT text FROM hosted_delivery_proposals
+        .prepare(`SELECT text FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals
     WHERE turn_id = ? AND user_id = ?`)
         .bind(turnId, subject.userId)
         .first()
@@ -977,10 +973,9 @@ export const refreshHostedDelivery = ({
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const written = yield* Effect.tryPromise(() =>
       db
-        .prepare(`UPDATE hosted_delivery_proposals
-    SET receipt_digest = ?
-    WHERE turn_id = ? AND user_id = ? AND proposed_at_ms > ? AND EXISTS
-      (SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending')`)
+        .prepare(`UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_receipt_digest = ?
+    WHERE proposed_at_ms IS NOT NULL AND id = ? AND proposal_user_id = ? AND proposed_at_ms > ? AND EXISTS
+      (SELECT 1 FROM hosted_turns WHERE id = ? AND proposal_user_id = ? AND status = 'pending')`)
         .bind(
           digest,
           turnId,
@@ -1020,7 +1015,7 @@ export const acknowledgeHostedDelivery = ({
     const authority = webSessionCredentialAuthority({ subject, current });
     const raw = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT p.text, p.proposed_at_ms, t.started_at_ms FROM hosted_delivery_proposals AS p
+        .prepare(`SELECT p.text, p.proposed_at_ms, t.started_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS p
     JOIN hosted_turns AS t ON t.id = p.turn_id AND t.user_id = p.user_id
     WHERE p.user_id = ? AND p.turn_id = ? AND p.receipt_digest = ?
       AND t.status = 'pending' AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
@@ -1084,7 +1079,7 @@ const sweepHostedTranscript = (
       db
         .prepare(`DELETE FROM hosted_mutation_commits WHERE rowid IN
     (SELECT m.rowid FROM
-      (SELECT turn_id, user_id FROM hosted_turn_retention
+      (SELECT turn_id, user_id FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
         WHERE user_id = ? AND terminal_at_ms < ? ORDER BY terminal_at_ms, turn_id LIMIT ?) AS r
       CROSS JOIN hosted_mutation_commits AS m
       WHERE m.user_id = r.user_id AND m.turn_id = r.turn_id LIMIT ?)`)
@@ -1096,7 +1091,7 @@ const sweepHostedTranscript = (
       db
         .prepare(`DELETE FROM transcript_entries WHERE sequence IN
     (SELECT e.sequence FROM
-      (SELECT turn_id, user_id FROM hosted_turn_retention
+      (SELECT turn_id, user_id FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
         WHERE user_id = ? AND terminal_at_ms < ? ORDER BY terminal_at_ms, turn_id LIMIT ?) AS r
       CROSS JOIN transcript_entries AS e
       WHERE e.user_id = r.user_id AND e.turn_id = r.turn_id LIMIT ?)`)
@@ -1105,10 +1100,10 @@ const sweepHostedTranscript = (
     );
     yield* Effect.tryPromise(() =>
       db
-        .prepare(`DELETE FROM hosted_compacted_conversations
-    WHERE rowid IN
-      (SELECT rowid FROM hosted_compacted_conversations
-        WHERE user_id = ? AND updated_at_ms < ? ORDER BY updated_at_ms LIMIT ?)`)
+        .prepare(`UPDATE hosted_agent_sessions SET compacted_text=NULL,compacted_through_sequence=NULL,
+        compacted_revision=NULL,compacted_nonce=NULL,compacted_at_ms=NULL WHERE rowid IN
+        (SELECT rowid FROM hosted_agent_sessions WHERE user_id=? AND compacted_revision IS NOT NULL
+          AND compacted_at_ms<? ORDER BY compacted_at_ms LIMIT ?)`)
         .bind(userId, cutoff, maximumRetentionRows)
         .run()
     );
@@ -1134,10 +1129,10 @@ const readHostedRetentionDeadline = (
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT MIN(due_ms) AS due_ms FROM (
-        SELECT * FROM (SELECT terminal_at_ms + ? AS due_ms FROM hosted_turn_retention
+        SELECT * FROM (SELECT terminal_at_ms + ? AS due_ms FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
           WHERE user_id=? ORDER BY terminal_at_ms LIMIT 1)
         UNION ALL
-        SELECT * FROM (SELECT updated_at_ms + ? AS due_ms FROM hosted_compacted_conversations
+        SELECT * FROM (SELECT updated_at_ms + ? AS due_ms FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations
           WHERE user_id=? ORDER BY updated_at_ms LIMIT 1)
         UNION ALL
         SELECT * FROM (SELECT expires_at_ms + 1 AS due_ms FROM hosted_confirmations
@@ -1183,7 +1178,7 @@ export const expireHostedPending = ({
       db
         .prepare(`SELECT id, started_at_ms,
     COALESCE(
-      (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
+      (SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
       (SELECT proposedAtMs FROM (${channelProposals.sql}) WHERE turnId = hosted_turns.id)
     ) AS proposed_at_ms
     FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
@@ -1258,8 +1253,8 @@ const hostedFinishStatements = ({
       WHERE id = ? AND user_id = ? AND status = 'pending' ${guard.sql} RETURNING id`)
       .bind(status, time, reason, turnId, userId, ...guard.bindings),
     db
-      .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?
-      AND EXISTS (SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status <> 'pending')`)
+      .prepare(`UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_user_id=NULL,proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ? AND proposal_user_id = ?
+      AND EXISTS (SELECT 1 FROM hosted_turns WHERE id = ? AND proposal_user_id = ? AND status <> 'pending')`)
       .bind(turnId, userId, turnId, userId),
     prepareWhatsAppWorkCleanup({ db, turnId, userId, requireTerminal: true }),
     prepareReminderPauseNoticeCompletion({

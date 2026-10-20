@@ -93,7 +93,7 @@ export const weeklySummaryDatabaseAt = (now: DateTime.Utc): Effect.Effect<D1Data
       yield* attempt(() =>
         db
           .prepare(
-            "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,?,'disclosed','accepted',?,?)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',?,?)"
           )
           .bind(id, id, json, 0, 0)
           .run()
@@ -102,7 +102,7 @@ export const weeklySummaryDatabaseAt = (now: DateTime.Utc): Effect.Effect<D1Data
     yield* attempt(() =>
       db
         .prepare(
-          "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+          "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
         )
         .bind(
           weeklySummaryTestUser,
@@ -325,7 +325,7 @@ export const seedForeignProviderEvidence = (db: D1Database): Effect.Effect<void>
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "INSERT INTO insight_delivery_attempts(id,user_id,insight_event_id,sent_at,channel,provider,provider_message_id) VALUES(?,?,?,?,'whatsapp','kapso','wamid.proactive')"
+          "UPDATE insight_events SET delivery_receipt_id=?1,delivery_sent_at=?4,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='wamid.proactive' WHERE user_id=?2 AND id=?3"
         )
         .bind(
           "30000000-0000-4000-8000-000000000002",

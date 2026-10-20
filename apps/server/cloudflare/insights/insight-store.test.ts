@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import assert from "node:assert/strict";
 import { InsightUnavailable } from "./contract";
 import { UserId } from "../../src/core/identity/contract";
@@ -34,10 +35,7 @@ const users = [
 ] as const;
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const databases = isolatedTestDatabases();
-const insightCompletion = (db: D1Database): D1PreparedStatement =>
-  db.prepare(`INSERT INTO insight_mutation_assertion (id, accepted)
-    VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-    ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`);
+
 afterAll(() => databases.dispose());
 const seedUser = (db: D1Database, index: number, current: number): Effect.Effect<void> =>
   Effect.gen(function* () {
@@ -312,7 +310,10 @@ effectIt.effect(
       expect(prepared._tag).toBe("Prepared");
       if (prepared._tag !== "Prepared") return;
       yield* fromTestPromise(() =>
-        db.batch([...prepared.mutation.statements, insightCompletion(db)])
+        db.batch([
+          ...prepared.mutation.statements,
+          prepareChangedRowAssertion({ db, scope: "insight_mutation" }),
+        ])
       );
       expect(
         Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
@@ -339,7 +340,12 @@ effectIt.effect(
         current: DateTime.nowUnsafe().epochMilliseconds,
       });
       if (read._tag !== "Prepared") throw new Error("read should be prepared");
-      yield* fromTestPromise(() => db.batch([...read.mutation.statements, insightCompletion(db)]));
+      yield* fromTestPromise(() =>
+        db.batch([
+          ...read.mutation.statements,
+          prepareChangedRowAssertion({ db, scope: "insight_mutation" }),
+        ])
+      );
       expect(
         (yield* listPendingInsights({
           db,
@@ -417,16 +423,28 @@ effectIt.effect("a stale read prepared before dismissal cannot regress the dismi
     if (read._tag !== "Prepared" || dismiss._tag !== "Prepared") {
       throw new Error("expected pending");
     }
-    yield* fromTestPromise(() => db.batch([...dismiss.mutation.statements, insightCompletion(db)]));
     yield* fromTestPromise(() =>
-      expect(db.batch([...read.mutation.statements, insightCompletion(db)])).rejects.toThrow()
+      db.batch([
+        ...dismiss.mutation.statements,
+        prepareChangedRowAssertion({ db, scope: "insight_mutation" }),
+      ])
+    );
+    yield* fromTestPromise(() =>
+      expect(
+        db.batch([
+          ...read.mutation.statements,
+          prepareChangedRowAssertion({ db, scope: "insight_mutation" }),
+        ])
+      ).rejects.toThrow()
     );
     expect(
       Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
     ).toBe("dismissed");
     const audits = yield* fromTestPromise(() =>
       db
-        .prepare("SELECT COUNT(*) AS count FROM insight_audit WHERE user_id = ?")
+        .prepare(
+          "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit WHERE user_id = ?"
+        )
         .bind(users[0])
         .first<{ count: number }>()
     );
@@ -572,25 +590,37 @@ effectIt.effect("rejects an under-scoped or revoked PAT before an InsightEvent w
     expect(
       (yield* fromTestPromise(() =>
         db
-          .prepare("SELECT COUNT(*) AS count FROM insight_delivery_attempts")
+          .prepare(
+            "SELECT COUNT(*) AS count FROM insight_events WHERE delivery_receipt_id IS NOT NULL"
+          )
           .first<{ count: number }>()
       ))?.count
     ).toBe(0);
     expect(
       (yield* fromTestPromise(() =>
-        db.prepare("SELECT COUNT(*) AS count FROM insight_audit").first<{ count: number }>()
+        db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit"
+          )
+          .first<{ count: number }>()
       ))?.count
     ).toBe(0);
   })
 );
 
 effectIt.effect(
-  "does not report absent delivery evidence when its authoritative table cannot be read",
+  "does not report absent delivery evidence when its authoritative receipt fields cannot be read",
   () =>
     Effect.gen(function* () {
       const db = yield* setup();
       const event = Option.getOrThrow(yield* generated(db));
-      yield* fromTestPromise(() => db.prepare("DROP TABLE insight_delivery_attempts").run());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "ALTER TABLE insight_events RENAME COLUMN delivery_sent_at TO unavailable_sent_at"
+          )
+          .run()
+      );
       yield* fromTestPromise(() =>
         expect(
           Effect.runPromiseExit(findInsightAttempt({ db, userId: users[0], id: event.id }))
@@ -620,15 +650,17 @@ effectIt.effect(
       const snapshot = (): Promise<ReadonlyArray<ReadonlyArray<Record<string, unknown>>>> =>
         Promise.all([
           db.prepare("SELECT * FROM insight_events ORDER BY user_id, id").all(),
-          db.prepare("SELECT * FROM insight_delivery_attempts ORDER BY user_id, id").all(),
-          db.prepare("SELECT * FROM insight_audit ORDER BY user_id, id").all(),
+          db
+            .prepare(
+              "SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit ORDER BY user_id, id"
+            )
+            .all(),
         ]).then((results) => results.map((result) => result.results));
       const before = yield* fromTestPromise(snapshot);
       yield* fromTestPromise(() =>
         db
           .prepare(
-            `CREATE TRIGGER refuse_missing_insight_audit BEFORE INSERT ON insight_audit
-             WHEN NEW.operation = 'insights.markInsightRead' AND NEW.outcome = 'rejected'
+            `CREATE TRIGGER refuse_missing_insight_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='insight_call' AND NEW.operation = 'insights.markInsightRead' AND NEW.outcome = 'rejected'
              BEGIN SELECT RAISE(ABORT, 'test_refusal_audit_unavailable'); END`
           )
           .run()
@@ -774,7 +806,9 @@ effectIt.effect("refuses a malformed retained occurrence without misclassifying 
     expect(
       (yield* fromTestPromise(() =>
         db
-          .prepare("SELECT COUNT(*) AS count FROM insight_audit WHERE outcome = 'accepted'")
+          .prepare(
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit WHERE outcome = 'accepted'"
+          )
           .first<{ count: number }>()
       ))?.count
     ).toBe(0);
@@ -790,8 +824,7 @@ effectIt.effect(
       const event = Option.getOrThrow(yield* generated(db));
       yield* fromTestPromise(() =>
         db
-          .prepare(`CREATE TRIGGER insight_test_revocation AFTER INSERT ON insight_audit
-      WHEN NEW.operation = 'insights.listPendingInsights'
+          .prepare(`CREATE TRIGGER insight_test_revocation AFTER INSERT ON audit_entries WHEN NEW.record_type='insight_call' AND NEW.operation = 'insights.listPendingInsights'
       BEGIN UPDATE web_sessions SET revoked_at_ms = 1 WHERE user_id = NEW.user_id; END`)
           .run()
       );
@@ -801,7 +834,11 @@ effectIt.effect(
       expect(response.status).toBe(503);
       expect(
         (yield* fromTestPromise(() =>
-          db.prepare("SELECT COUNT(*) AS count FROM insight_audit").first<{ count: number }>()
+          db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit"
+            )
+            .first<{ count: number }>()
         ))?.count
       ).toBe(0);
       expect(

@@ -25,9 +25,11 @@ export const recordConsentDelivery = ({
     const inserted = yield* Effect.exit(
       attempt(() =>
         db
-          .prepare(`INSERT INTO pending_consent_delivery
-      (correlation_token, phone_number_id, message_id, occurred_at_ms, received_at_ms, decision_not_before_ms)
-      VALUES (?, ?, ?, ?, ?, ?)`)
+          .prepare(
+            `UPDATE pending_consent_exchanges SET delivery_phone_number_id=?2,delivery_message_id=?3,
+              delivery_occurred_at_ms=?4,delivery_received_at_ms=?5,delivery_not_before_ms=?6
+              WHERE correlation_token=?1 AND delivery_message_id IS NULL`
+          )
           .bind(
             input.correlationToken,
             input.phoneNumberId,
@@ -39,7 +41,7 @@ export const recordConsentDelivery = ({
           .run()
       )
     );
-    if (Exit.isSuccess(inserted)) return answer(HTTP_OK);
+    if (Exit.isSuccess(inserted) && inserted.value.meta.changes === 1) return answer(HTTP_OK);
     const retry = yield* findDelivery({ db, token: input.correlationToken });
     return answer(
       Option.isSome(retry) && sameDelivery({ row: retry.value, input }) ? HTTP_OK : HTTP_CONFLICT

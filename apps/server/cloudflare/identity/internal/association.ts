@@ -18,7 +18,9 @@ export const resolveCaller = ({
   Effect.tryPromise({
     try: () =>
       db
-        .prepare("SELECT user_id FROM whatsapp_identities WHERE portfolio_id = ? AND bsuid = ?")
+        .prepare(
+          "SELECT user_id FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) WHERE portfolio_id = ? AND bsuid = ?"
+        )
         .bind(portfolioId, bsuid)
         .first(),
     catch: () => new IdentityUnavailable(),
@@ -49,7 +51,7 @@ export const associationProjection = ({
 }: Readonly<{ userId: UserId; statement: IdentityStatement }>): IdentityStatement => ({
   sql: `WITH identity_associations AS (
     SELECT user_id AS userId, portfolio_id AS businessPortfolioId, bsuid AS businessScopedUserId
-    FROM whatsapp_identities WHERE user_id = ?
+    FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) WHERE user_id = ?
   ) ${statement.sql}`,
   params: [userId, ...statement.params],
 });

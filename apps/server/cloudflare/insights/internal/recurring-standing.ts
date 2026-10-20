@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { UserContext, type UserId } from "../../../src/core/identity/contract";
 import { ConsentRecordId } from "../../../src/core/consent/contract";
@@ -52,7 +53,7 @@ export const prepareActivation = (
       prepareUserContext({
         ...input,
         statement: {
-          sql: "INSERT INTO proactivity_message_assertion(id,accepted) SELECT 1,CASE WHEN EXISTS(SELECT 1 FROM identity_user_context WHERE userId=? AND serviceMarket=? AND locale=? AND timeZone=?) THEN 1 ELSE 0 END WHERE 1=1 ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted",
+          sql: "INSERT INTO sql_assertions (scope, accepted) SELECT 'proactivity_message',CASE WHEN EXISTS(SELECT 1 FROM identity_user_context WHERE userId=? AND serviceMarket=? AND locale=? AND timeZone=?) THEN 1 ELSE 0 END WHERE 1=1 ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted",
           params: [
             input.userId,
             context.value.serviceMarket,
@@ -76,9 +77,7 @@ export const prepareActivation = (
           input.userId,
           expected
         ),
-      input.db.prepare(
-        "INSERT INTO proactivity_message_assertion(id,accepted) VALUES(1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
-      ),
+      prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" }),
     ];
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 

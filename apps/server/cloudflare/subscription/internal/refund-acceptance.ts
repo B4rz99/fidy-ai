@@ -117,10 +117,9 @@ const loadCharge = (call: RefundStartCall): Effect.Effect<typeof Charge.Type, Na
       call.db
         .prepare(`SELECT a.id,a.price_id,a.amount,a.currency,
     a.tax_treatment,a.wompi_environment,e.transaction_id,p.method FROM billing_attempts a
-    JOIN billing_transaction_evidence e ON e.attempt_id=a.id AND e.status='APPROVED'
+    JOIN billing_provider_transactions e ON e.attempt_id=a.id AND e.status='APPROVED'
     JOIN card_payment_sources p ON p.id=a.payment_source_id
-    JOIN billing_paid_periods period ON period.attempt_id=a.id
-    WHERE a.id=? AND a.user_id=? AND a.status='succeeded' LIMIT 2`)
+    WHERE a.id=? AND a.user_id=? AND a.status='succeeded' AND a.paid_starts_at_ms IS NOT NULL LIMIT 2`)
         .bind(call.input.billingAttemptId, call.input.userId)
         .all()
     );
@@ -202,15 +201,13 @@ const reserve = (
   return Effect.tryPromise(() =>
     call.db.batch([
       call.db
-        .prepare(
-          "INSERT INTO subscription_identities(user_id,id) VALUES (?,?) ON CONFLICT(user_id) DO NOTHING"
-        )
+        .prepare("UPDATE users SET subscription_id=?2 WHERE id=?1 AND subscription_id IS NULL")
         .bind(call.input.userId, subscriptionId),
       call.db
         .prepare(`INSERT INTO refund_attempts (id,user_id,subscription_id,billing_attempt_id,transaction_id,
       request_id,intent_json,snapshot_json,amount_in_cents,original_cents,kind,operator_id,created_at_ms)
-      SELECT ?,?,s.id,?,?,?,?,json_set(?, '$.subscriptionId',s.id),?,?,?,?,?
-      FROM subscription_identities s WHERE s.user_id=? AND ? > ?
+      SELECT ?,?,s.subscription_id,?,?,?,?,json_set(?, '$.subscriptionId',s.subscription_id),?,?,?,?,?
+      FROM users s WHERE s.id=? AND s.subscription_id IS NOT NULL AND ? > ?
       ON CONFLICT(user_id,request_id) DO NOTHING`)
         .bind(
           id,

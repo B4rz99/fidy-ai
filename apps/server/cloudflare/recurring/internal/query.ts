@@ -1,3 +1,4 @@
+import { preparePredicateAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Data, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { Currency } from "../../../src/core/_shared/money";
@@ -93,7 +94,7 @@ const auditStatements = ({
     audit,
     db
       .prepare(
-        `INSERT INTO recurring_assertion (id, accepted) VALUES (1, CASE WHEN changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`
+        `INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring', CASE WHEN changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
       )
       .bind(...authority.bindings),
   ];
@@ -193,16 +194,6 @@ const pageStatements = (
       .bind(subject.userId, ...position, ...authority.bindings),
   ];
 };
-const revisionAssertion = (
-  db: D1Database,
-  userId: QueryCaller["userId"],
-  revision: number
-): D1PreparedStatement =>
-  db
-    .prepare(
-      "INSERT OR REPLACE INTO recurring_cursor_assertion (id, expected_revision, current_revision) VALUES (1, ?, COALESCE((SELECT evaluated_revision FROM recurring_progress WHERE user_id = ?), 0))"
-    )
-    .bind(revision, userId);
 export const readPage = ({
   call,
   cursor,
@@ -232,7 +223,14 @@ export const readPage = ({
               prepareRecurringFactGuard({ db, userId, revision: value.revision })
             )
           ),
-          revisionAssertion(db, subject.userId, revision),
+          preparePredicateAssertion({
+            db,
+            scope: "recurring_cursor",
+            predicate: {
+              sql: "SELECT 1 WHERE ? = COALESCE((SELECT evaluated_revision FROM recurring_progress WHERE user_id = ?), 0)",
+              params: [revision, subject.userId],
+            },
+          }),
           ...auditStatements(call),
         ]),
       catch: (cause) =>

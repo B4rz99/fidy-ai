@@ -6,7 +6,7 @@ const pendingQueries: Readonly<Record<"statement" | "forwardedEmail", string>> =
   statement: `SELECT id, submitted_at_ms AS created, retention_expires_at_ms AS deadline FROM statement_submissions WHERE status IN ('queued', 'processing') ORDER BY submitted_at_ms LIMIT ?`,
   forwardedEmail: `SELECT r.id, r.received_at_ms AS created, r.expires_at_ms AS deadline
     FROM forwarded_email_receipts AS r WHERE r.state IN ('storing', 'queued')
-    AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes AS o WHERE o.receipt_id = r.id)
+    AND r.outcome IS NULL
     ORDER BY r.received_at_ms LIMIT ?`,
 };
 

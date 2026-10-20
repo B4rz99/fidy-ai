@@ -7,7 +7,6 @@ import {
   proactivityTestCallers as callers,
   proactivityTestDatabases as databases,
   proactivityTestNow as now,
-  proactivityDatabaseBeforeOfferRetention,
   proactivityDatabase as setup,
   proactivityTestUsers as users,
 } from "../proactivity.test-fixture";
@@ -20,31 +19,44 @@ import {
   sweepProactivityConsentOffers,
 } from "./operations";
 
-import { applyTestMigration } from "../d1-test-fixture";
-import { materializeReminder } from "../insights/operations";
-
 afterAll(() => databases.dispose());
 
 it("expires an undecided contextual offer without losing its frozen delivery identity or blocking unrelated retention", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* proactivityDatabaseBeforeOfferRetention;
-      yield* Effect.tryPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0057_recurring_offer_replacement.sql", import.meta.url),
-        })
-      );
+      const db = yield* setup;
       const schedule = yield* activateTestReminder(db);
-      const occurrence = yield* materializeReminder({
-        db,
-        userId: users[0],
-        id: schedule.id,
-        now: DateTime.makeUnsafe("2026-10-06T23:00:00Z"),
-      });
-      if (occurrence._tag !== "Created") {
-        return yield* Effect.die("Expected populated predecessor message links");
-      }
+      const occurrence = { id: "90000000-0000-4000-8000-000000000001" };
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) VALUES (?,?,'manual-entry-reminder',?,1,'CO','es-CO','America/Bogota','2026-10-06T23:00:00Z','[]')"
+            )
+            .bind(occurrence.id, users[0], schedule.id),
+          db
+            .prepare(
+              "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) SELECT 'proactivity-delivery',?,user_id,'manual-entry-reminder',consent_grant_id,'Reminder',?,?,'America/Bogota',? FROM schedules WHERE kind='reminder' AND user_id=?"
+            )
+            .bind(
+              occurrence.id,
+              now.epochMilliseconds,
+              now.epochMilliseconds + 86400000,
+              now.epochMilliseconds,
+              users[0]
+            ),
+          db
+            .prepare(
+              "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) VALUES (?,?,?)"
+            )
+            .bind(users[0], occurrence.id, occurrence.id),
+          db
+            .prepare(
+              "UPDATE insight_reports SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT source.*, 'ready' AS state FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms) AS source) AS source) AS source) AS incoming WHERE insight_reports.user_id=incoming.user_id AND insight_reports.kind=incoming.kind AND insight_reports.delivery_id=incoming.delivery_id AND insight_reports.dispatch_state IS NULL"
+            )
+            .bind(users[0], occurrence.id, now.epochMilliseconds),
+        ])
+      );
       const offer = Option.getOrThrow(
         yield* createProactivityConsentOffer({
           db,
@@ -58,7 +70,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         db.batch([
           db
             .prepare(
-              "INSERT INTO proactivity_reports(delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES(?,?,'reminder-offer',?,?,?,?,?,?)"
+              "INSERT INTO insight_reports(kind,delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES('proactivity-delivery',?,?,'reminder-offer',?,?,?,?,?,?)"
             )
             .bind(
               offer.id,
@@ -72,7 +84,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
             ),
           db
             .prepare(
-              "INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms) VALUES(?,?,?)"
+              "UPDATE insight_reports SET dispatch_created_at_ms=incoming.created_at_ms,dispatch_state=incoming.state,dispatch_last_attempt_at_ms=incoming.last_attempt_at_ms,dispatch_restart_attempts=incoming.restart_attempts FROM (SELECT source.*, 0 AS restart_attempts FROM (SELECT source.*, 0 AS last_attempt_at_ms FROM (SELECT source.*, 'ready' AS state FROM (SELECT 'proactivity-delivery' AS kind,? AS user_id,? AS delivery_id,? AS created_at_ms) AS source) AS source) AS source) AS incoming WHERE insight_reports.user_id=incoming.user_id AND insight_reports.kind=incoming.kind AND insight_reports.delivery_id=incoming.delivery_id AND insight_reports.dispatch_state IS NULL"
             )
             .bind(users[0], offer.id, now.epochMilliseconds),
         ])
@@ -86,30 +98,6 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
           now,
         })
       );
-      yield* Effect.tryPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0047_proactivity_offer_retention.sql", import.meta.url),
-        })
-      );
-      for (const migration of [
-        "0048_retire_reminder_outbox",
-        "0049_proactive_message_transcript",
-        "0050_proactivity_offer_recovery",
-        "0051_budget_reconciliation_recovery",
-        "0053_recurring_digest_source",
-        "0054_recurring_proactivity",
-        "0055_recurring_digests",
-        "0056_recurring_report_audit",
-        "0057_recurring_offer_replacement",
-      ]) {
-        yield* Effect.tryPromise(() =>
-          applyTestMigration({
-            db,
-            source: new URL(`../migrations/${migration}.sql`, import.meta.url),
-          })
-        );
-      }
       yield* sweepProactivityConsentOffers({
         db,
         nowEpochMs: DateTime.makeUnsafe("2026-10-07T23:00:00Z").epochMilliseconds,
@@ -120,7 +108,9 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS n FROM proactivity_consent_offers WHERE id IN (?,?)")
+            .prepare(
+              "SELECT count(*) AS n FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE id IN (?,?)"
+            )
             .bind(offer.id, other.id)
             .first()
         )
@@ -129,7 +119,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT offer_id,text FROM proactivity_reports WHERE user_id=? AND delivery_id=?"
+              "SELECT offer_id,text FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND delivery_id=?"
             )
             .bind(users[0], offer.id)
             .first()
@@ -148,7 +138,9 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+            .prepare(
+              "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+            )
             .bind(users[0], occurrence.id)
             .first()
         )
@@ -346,7 +338,9 @@ it("revokes only the selected category and fences already-prepared send actions 
       const overwrite = yield* Effect.exit(
         Effect.tryPromise(() =>
           db
-            .prepare("UPDATE proactivity_consent_records SET record_json='{}' WHERE id=?")
+            .prepare(
+              "UPDATE consent_history SET record_json='{}' WHERE record_type='proactivity_grant' AND id=?"
+            )
             .bind(grant.id)
             .run()
         )
@@ -493,13 +487,20 @@ it("deletes expired undecided disclosure offers independently while retaining ac
       });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id FROM proactivity_consent_offers WHERE id=?").bind(unused.id).first()
+          db
+            .prepare(
+              "SELECT id FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE id=?"
+            )
+            .bind(unused.id)
+            .first()
         )
       ).toBe(null);
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT id FROM proactivity_consent_offers WHERE id=?")
+            .prepare(
+              "SELECT id FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE id=?"
+            )
             .bind(acceptedOffer.id)
             .first()
         )

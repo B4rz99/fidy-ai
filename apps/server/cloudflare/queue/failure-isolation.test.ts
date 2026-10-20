@@ -46,11 +46,11 @@ const seed = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
         db.prepare(`CREATE TABLE statement_submissions (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, status TEXT NOT NULL,
       retention_expires_at_ms INTEGER NOT NULL) STRICT`),
-        db.prepare(`CREATE TABLE billing_collection_arms (
-      attempt_id TEXT PRIMARY KEY, state TEXT NOT NULL) STRICT`),
-        db.prepare(`CREATE TABLE browser_pairing_email_proofs (
-      work_id TEXT PRIMARY KEY, email_address TEXT NOT NULL,
-      expires_at_ms INTEGER NOT NULL, state TEXT NOT NULL) STRICT`),
+        db.prepare(`CREATE TABLE billing_attempts (
+      id TEXT PRIMARY KEY, collection_state TEXT NOT NULL,collection_sent_at_ms INTEGER,collection_last_attempt_at_ms INTEGER) STRICT`),
+        db.prepare(`CREATE TABLE browser_login_pairings (
+      email_work_id TEXT PRIMARY KEY, email_address TEXT NOT NULL,
+      email_expires_at_ms INTEGER NOT NULL, email_state TEXT NOT NULL) STRICT`),
         db.prepare(`CREATE TABLE email_replacements (
       work_id TEXT PRIMARY KEY, candidate_email TEXT NOT NULL,
       expires_at_ms INTEGER NOT NULL, state TEXT NOT NULL) STRICT`),
@@ -63,11 +63,11 @@ const seed = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
             .prepare("INSERT INTO statement_submissions VALUES (?, ?, 'queued', ?)")
             .bind(identity(index), userId, now + 600_000),
           db
-            .prepare("INSERT INTO billing_collection_arms VALUES (?, 'armed')")
+            .prepare("INSERT INTO billing_attempts(id,collection_state) VALUES (?,'armed')")
             .bind(identity(index)),
           db
             .prepare(
-              "INSERT INTO browser_pairing_email_proofs VALUES (?, 'test@example.com', ?, 'awaiting_delivery')"
+              "INSERT INTO browser_login_pairings VALUES (?,'test@example.com',?,'awaiting_delivery')"
             )
             .bind(identity(index), now + 600_000),
           db
@@ -193,7 +193,9 @@ it.each(
         expect(coordinatorCalls).toBe(0);
         const unchanged = yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS count FROM billing_collection_arms WHERE state = 'armed'")
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state = 'armed'"
+            )
             .first("count")
         );
         expect(unchanged).toBe(10);

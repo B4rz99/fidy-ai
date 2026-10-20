@@ -128,7 +128,7 @@ export const findReport = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT report_json FROM recurring_digest_reports WHERE user_id=? AND insight_event_id=?",
+          sql: "SELECT report_json FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL AND user_id=? AND delivery_id=?",
           params: [input.userId, input.id],
         },
       }).first()

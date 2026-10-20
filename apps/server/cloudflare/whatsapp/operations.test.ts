@@ -35,7 +35,8 @@ it("distinguishes an absent delivery hint from malformed retained User evidence"
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`CREATE TABLE hosted_whatsapp_delivery (
+          .prepare(`CREATE TABLE whatsapp_deliveries (
+          kind TEXT DEFAULT 'hosted',
           user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT
         )`)
           .run()
@@ -50,7 +51,9 @@ it("distinguishes an absent delivery hint from malformed retained User evidence"
       assert.deepStrictEqual(yield* findWhatsAppDeliveryUser(input), Option.none());
       yield* Effect.tryPromise(() =>
         db
-          .prepare("INSERT INTO hosted_whatsapp_delivery VALUES (?, ?, ?)")
+          .prepare(
+            "INSERT INTO whatsapp_deliveries(user_id,correlation_token,business_phone_number_id) VALUES (?, ?, ?)"
+          )
           .bind("malformed-user", input.correlationToken, input.businessPhoneNumberId)
           .run()
       );

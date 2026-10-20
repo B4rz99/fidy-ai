@@ -9,7 +9,7 @@ A sent BillingAttempt arm **must never be rearmed or POSTed again**. Wompi's [ch
    ```sql
    SELECT a.id, a.user_id, a.wompi_reference, a.wompi_environment, arm.sent_at_ms
    FROM billing_attempts AS a
-   JOIN billing_collection_arms AS arm ON arm.attempt_id = a.id
+   JOIN billing_collection_work AS arm ON arm.attempt_id = a.id
    WHERE a.status = 'pending' AND arm.state = 'sent'
      AND NOT EXISTS (SELECT 1 FROM billing_transaction_candidates AS c WHERE c.attempt_id = a.id);
    ```
@@ -32,7 +32,7 @@ A sent BillingAttempt arm **must never be rearmed or POSTed again**. Wompi's [ch
    SELECT :transaction_id, unixepoch('now') * 1000
    WHERE EXISTS (
      SELECT 1 FROM billing_attempts AS a
-     JOIN billing_collection_arms AS arm ON arm.attempt_id = a.id
+     JOIN billing_collection_work AS arm ON arm.attempt_id = a.id
      WHERE a.wompi_reference = :reference AND a.status IN ('pending', 'failed') AND arm.state = 'sent'
    );
    ```
@@ -46,7 +46,7 @@ A sent BillingAttempt arm **must never be rearmed or POSTed again**. Wompi's [ch
    WHERE transaction_id = :transaction_id
      AND EXISTS (
        SELECT 1 FROM billing_attempts AS a
-       JOIN billing_collection_arms AS arm ON arm.attempt_id = a.id
+       JOIN billing_collection_work AS arm ON arm.attempt_id = a.id
        WHERE a.wompi_reference = :reference AND a.status IN ('pending', 'failed') AND arm.state = 'sent'
      );
    ```

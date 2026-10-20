@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { Effect } from "effect";
 import { ErasureUnavailable } from "./contract";
 
@@ -25,9 +26,7 @@ export const prepareOriginalWrite = (
       input.expiresAtMs,
       input.userId
     ),
-  input.db.prepare(
-    "INSERT INTO erasure_writer_assertion(id,accepted) VALUES(1,changes()) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
-  ),
+  prepareChangedRowAssertion({ db: input.db, scope: "erasure_writer" }),
 ];
 
 /** Enclose the entire original-byte write and its publication/cleanup. Only successful publication releases its writer; failure or cancellation leaves the object locator unresolved for reviewed reconciliation. */

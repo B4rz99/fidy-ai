@@ -1,4 +1,3 @@
-import type { Transaction } from "~/core/transactions/contract";
 import { BigDecimal, DateTime, Effect, Schema } from "effect";
 import { type IanaTimeZone } from "~/core/_shared/context";
 import { CurrencyMismatch, Money, type ReadonlyMoney } from "~/core/_shared/money";
@@ -43,38 +42,6 @@ type BudgetStatusInput = Readonly<{
     timeZone: AppliedBudgetMonth["timeZone"];
   }>;
 }>;
-
-type BudgetMovement = Pick<Transaction, "categoryId" | "direction" | "occurredAt"> &
-  Readonly<{ money: ReadonlyMoney }>;
-
-/**
- * Sum only outflows of the Budget's Category and Currency within the applied half-open month.
- * The caller supplies movements for one User; this pure decision never establishes ownership.
- * No numeric conversion or cross-Currency arithmetic is performed.
- */
-export const sumBudgetContributions = ({
-  budget,
-  period,
-  movements,
-}: Readonly<{
-  budget: Readonly<{ categoryId: Budget["categoryId"]; cap: ReadonlyMoney }>;
-  period: AppliedBudgetMonth;
-  movements: ReadonlyArray<BudgetMovement>;
-}>): Money => {
-  let amount = BigDecimal.make(0n, 0);
-  for (const movement of movements) {
-    if (
-      movement.direction === "outflow" &&
-      movement.categoryId === budget.categoryId &&
-      movement.money.currency === budget.cap.currency &&
-      movement.occurredAt.epochMilliseconds >= period.from.epochMilliseconds &&
-      movement.occurredAt.epochMilliseconds < period.to.epochMilliseconds
-    ) {
-      amount = BigDecimal.sum(amount, movement.money.amount);
-    }
-  }
-  return Money.make({ amount, currency: budget.cap.currency });
-};
 
 const threshold80 = 80;
 const threshold100 = 100;

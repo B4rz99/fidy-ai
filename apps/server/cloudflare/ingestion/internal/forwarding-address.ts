@@ -4,7 +4,6 @@ import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   recordOAuthCall,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
@@ -43,7 +42,6 @@ const AddressRow = Schema.Struct({
 });
 const domain = "fidyapp.com";
 const HTTP_OK = 200;
-const HTTP_TOO_MANY_REQUESTS = 429;
 
 /** One authorized canonical forwarding operation; both operations disclose only the User's own address. */
 export type ForwardingAddressOperation =
@@ -55,14 +53,14 @@ const rows = (db: D1Database, userId: string, current: number): D1PreparedStatem
   const pro = activeProUserCondition({ userId, nowEpochMs: current });
   return prepareConsentAction({
     db,
-    subject: { _tag: "Owner", column: "a.user_id" },
+    subject: { _tag: "Owner", column: "a.id" },
     requirement: "active",
     statement: {
-      sql: `SELECT a.id, a.local_part, a.created_at_ms,
+      sql: `SELECT a.forwarding_address_id AS id,a.forwarding_local_part AS local_part,a.forwarding_issued_at_ms AS created_at_ms,
       (${consumption.sql}) AS consumed,
-      (SELECT count(*) FROM forwarded_email_deferrals d WHERE d.user_id = a.user_id) AS deferred,
+      (SELECT count(*) FROM forwarded_email_receipts d WHERE d.user_id = a.id AND d.deferred_checked_at_ms IS NOT NULL) AS deferred,
       ${pro.sql} AS pro
-     FROM email_forwarding_addresses a WHERE a.user_id = ?`,
+     FROM users a WHERE a.id=? AND a.forwarding_address_id IS NOT NULL`,
       params: [...consumption.params, ...pro.params, userId],
     },
   });
@@ -171,17 +169,7 @@ const auditCommitted = (results: D1Result[], subject: QueryCaller): boolean => {
   return committed && (!isPATCaller(subject) || results.at(results.length - 2)?.meta.changes === 1);
 };
 
-const batchFailure = (cause: unknown): Response =>
-  refusedByAuditBudget(cause) ? rateLimited() : transactionUnavailable();
-
-const rateLimited = (): Response =>
-  Response.json(
-    {
-      error: { code: "rate_limited", message: "Daily canonical work budget exhausted." },
-      next: [],
-    },
-    { status: HTTP_TOO_MANY_REQUESTS, headers: transactionNoStore }
-  );
+const batchFailure = (): Response => transactionUnavailable();
 
 const projectAddress = (row: typeof AddressRow.Type): EmailForwardingAddress => ({
   id: row.id,
@@ -251,7 +239,7 @@ export const forwardingAddressResponse = Effect.fn(function* (
     )
   );
   if (result._tag === "Failure") {
-    return batchFailure(result.cause);
+    return batchFailure();
   }
   if (!auditCommitted(result.value, input.subject)) {
     return yield* Effect.tryPromise(() =>

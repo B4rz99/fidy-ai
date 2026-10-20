@@ -14,7 +14,6 @@ import { type OAuthMutationReview } from "../../oauth-confirmation/contract";
 import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import {
   prepareAuthorizedAuditCall,
-  prepareBrowserAuditBudgetGuard,
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
 import { livePATAuthority } from "../../../src/shell/tokens/operations";
@@ -34,22 +33,15 @@ const maximumBudgetsPerUser = 128;
 export const budgetCommitGuards = ({
   db,
   userId,
-  current,
   index,
   operation,
-  browser,
 }: Readonly<{
   db: D1Database;
   userId: string;
-  current: number;
   index: number;
   operation: BudgetOutcome["operation"];
-  browser: boolean;
-}>): ReadonlyArray<D1PreparedStatement> => [
-  ...(browser
-    ? [prepareBrowserAuditBudgetGuard({ db, owner: "budgets", userId, current, index, operation })]
-    : []),
-  ...(operation === "budgets.createBudget"
+}>): ReadonlyArray<D1PreparedStatement> =>
+  operation === "budgets.createBudget"
     ? [
         db
           .prepare(`INSERT INTO canonical_child_guard
@@ -60,8 +52,7 @@ export const budgetCommitGuards = ({
         accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
           .bind(index, operation, userId, maximumBudgetsPerUser),
       ]
-    : []),
-];
+    : [];
 
 export const budgetAudit = ({
   db,
@@ -333,7 +324,7 @@ const groupReview = ({
     const groupSql =
       groupIds.length === 0
         ? ""
-        : ` AND (SELECT json_array(COALESCE((SELECT revision FROM budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at))) FROM (SELECT user_id,id,group_name,updated_at FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets) = ?`;
+        : ` AND (SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at))) FROM (SELECT user_id,id,group_name,updated_at FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets) = ?`;
     const groupRevision =
       groupIds.length === 0
         ? ""
@@ -341,7 +332,7 @@ const groupReview = ({
             try: () =>
               db
                 .prepare(
-                  `SELECT json_array(COALESCE((SELECT revision FROM budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at))) AS revision FROM (SELECT user_id,id,group_name,updated_at FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets`
+                  `SELECT json_array(COALESCE((SELECT revision FROM (SELECT rowid,user_id,revision FROM budget_state WHERE kind='user' AND revision IS NOT NULL) AS budget_user_versions WHERE user_id=budgets.user_id),0),json_group_array(json_array(id,group_name,updated_at))) AS revision FROM (SELECT user_id,id,group_name,updated_at FROM budgets WHERE user_id=? AND category_id IN (${groupIds.map(() => "?").join(",")}) ORDER BY id) budgets`
                 )
                 .bind(userId, ...groupIds)
                 .first<string>("revision")

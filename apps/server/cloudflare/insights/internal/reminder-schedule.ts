@@ -1,3 +1,5 @@
+import * as ScheduleStore from "./schedule-store";
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { MoneyGroups } from "../../../src/core/_shared/money";
@@ -36,10 +38,6 @@ const ScheduleRow = Schema.Struct({
   next_scheduled_at: UtcTimestamp,
   consent_grant_id: ReminderScheduleSnapshot.fields.consentGrantId,
 });
-const assertion = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    "INSERT INTO reminder_schedule_assertion(id,accepted) VALUES (1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
-  );
 
 export const decodeScheduleSnapshot = ({
   raw,
@@ -72,7 +70,7 @@ export const findSchedule = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT id,version,enabled,snapshot_json,next_scheduled_at,consent_grant_id FROM reminder_schedules WHERE user_id=?",
+          sql: "SELECT id,version,enabled,snapshot_json,next_scheduled_at,consent_grant_id FROM schedules WHERE kind='reminder' AND user_id=?",
           params: [input.userId],
         },
       }).first()
@@ -89,7 +87,7 @@ export const findStanding = (input: Scope): Effect.Effect<ReminderStanding, Insi
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT standing_json FROM reminder_governors WHERE user_id=?",
+          sql: "SELECT standing_json FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=?",
           params: [input.userId],
         },
       }).first()
@@ -103,7 +101,7 @@ export const findStanding = (input: Scope): Effect.Effect<ReminderStanding, Insi
 const resetStanding = (input: Scope & Readonly<{ now: DateTime.Utc }>): D1PreparedStatement =>
   input.db
     .prepare(
-      "INSERT INTO reminder_governors(user_id,standing_json,last_reply_at_ms) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET standing_json=excluded.standing_json,last_reply_at_ms=excluded.last_reply_at_ms"
+      "INSERT INTO proactivity_governors AS reminder_governors(kind,user_id,standing_json,last_reply_at_ms) VALUES ('reminder',?, ?, ?) ON CONFLICT(kind,user_id) DO UPDATE SET standing_json=excluded.standing_json,last_reply_at_ms=excluded.last_reply_at_ms"
     )
     .bind(
       input.userId,
@@ -162,24 +160,12 @@ export const prepareActivation = (
       Schema.fromJsonString(Schema.toCodecJson(ReminderSchedule))
     )(schedule);
     return [
-      input.db
-        .prepare(
-          "INSERT INTO reminder_schedules(id,user_id,version,enabled,snapshot_json,next_scheduled_at,consent_grant_id) VALUES (?,?,?,1,?,?,?) ON CONFLICT(user_id) DO UPDATE SET version=excluded.version,enabled=1,snapshot_json=excluded.snapshot_json,next_scheduled_at=excluded.next_scheduled_at,consent_grant_id=excluded.consent_grant_id"
-        )
-        .bind(
-          schedule.id,
-          input.userId,
-          schedule.version,
-          json,
-          DateTime.formatIso(schedule.nextScheduledAt),
-          input.grantId
-        ),
-      assertion(input.db),
-      input.db
-        .prepare(
-          "INSERT INTO reminder_schedule_revisions(user_id,schedule_id,version,snapshot_json) VALUES (?,?,?,?)"
-        )
-        .bind(input.userId, schedule.id, schedule.version, json),
+      ...ScheduleStore.prepareActivation({
+        ...input,
+        kind: "reminder",
+        snapshot: schedule,
+        json,
+      }),
       resetStanding(input),
     ];
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
@@ -220,7 +206,7 @@ export const prepareRevisionWrites = (
       kind: "manual-entry-reminder",
       grantId: old.consentGrantId,
       statement: {
-        sql: `UPDATE reminder_schedules SET version=?,snapshot_json=?,next_scheduled_at=? WHERE user_id=? AND id=? AND version=? AND consent_grant_id=?${Option.isSome(input.authority) ? ` AND EXISTS (${input.authority.value.sql})` : ""}`,
+        sql: `UPDATE schedules SET version=?,snapshot_json=?,next_scheduled_at=? WHERE kind='reminder' AND user_id=? AND id=? AND version=? AND consent_grant_id=?${Option.isSome(input.authority) ? ` AND EXISTS (${input.authority.value.sql})` : ""}`,
         params: [
           schedule.version,
           json,
@@ -237,7 +223,7 @@ export const prepareRevisionWrites = (
       update,
       input.db
         .prepare(
-          "INSERT INTO reminder_schedule_revisions(user_id,schedule_id,version,snapshot_json) SELECT ?,?,?,? WHERE changes()=1"
+          "INSERT INTO schedule_revisions(kind,user_id,schedule_id,version,snapshot_json) SELECT 'reminder',?,?,?,? WHERE changes()=1"
         )
         .bind(input.userId, schedule.id, schedule.version, json),
     ];
@@ -250,11 +236,16 @@ export const prepareRevision = (
   InsightUnavailable | ReminderRevisionConflict
 > =>
   prepareRevisionWrites({ ...input, authority: Option.none() }).pipe(
-    Effect.map((statements) => statements.flatMap((statement) => [statement, assertion(input.db)]))
+    Effect.map((statements) =>
+      statements.flatMap((statement) => [
+        statement,
+        prepareChangedRowAssertion({ db: input.db, scope: "reminder_schedule" }),
+      ])
+    )
   );
 
 export const prepareDisable = (input: Scope): D1PreparedStatement =>
-  input.db.prepare("UPDATE reminder_schedules SET enabled=0 WHERE user_id=?").bind(input.userId);
+  ScheduleStore.prepareDisable({ ...input, kind: "reminder" });
 
 type GenerationScope = Scope & Readonly<{ snapshot: ReminderScheduleSnapshot; now: DateTime.Utc }>;
 const guard = (input: GenerationScope, statement: OwnedStatement): D1PreparedStatement =>
@@ -264,7 +255,7 @@ const guard = (input: GenerationScope, statement: OwnedStatement): D1PreparedSta
     kind: "manual-entry-reminder",
     grantId: input.snapshot.consentGrantId,
     statement: {
-      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM reminder_schedules AS s JOIN reminder_governors AS g ON g.user_id=s.user_id WHERE s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionPending','QuestionDelivered'))`,
+      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM schedules AS s JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionPending','QuestionDelivered'))`,
       params: [
         ...statement.params,
         input.userId,
@@ -280,28 +271,16 @@ const advance = (
   input: GenerationScope,
   scheduledAt: DateTime.Utc,
   expired: boolean
-): ReadonlyArray<D1PreparedStatement> => {
-  const snapshot = input.snapshot;
-  const next = nextReminderOccurrence({ ...snapshot, after: input.now });
-  return [
-    guard(input, {
-      sql: "INSERT INTO reminder_schedule_executions(user_id,schedule_id,schedule_version,scheduled_at,outcome) SELECT ?,?,?,?,? WHERE 1=1",
-      params: [
-        input.userId,
-        snapshot.id,
-        snapshot.version,
-        DateTime.formatIso(scheduledAt),
-        expired ? "expired" : "generated",
-      ],
-    }),
-    assertion(input.db),
-    guard(input, {
-      sql: "UPDATE reminder_schedules SET next_scheduled_at=? WHERE user_id=? AND id=?",
-      params: [DateTime.formatIso(next), input.userId, snapshot.id],
-    }),
-    assertion(input.db),
-  ];
-};
+): ReadonlyArray<D1PreparedStatement> =>
+  ScheduleStore.prepareAdvance({
+    db: input.db,
+    kind: "reminder",
+    snapshot: input.snapshot,
+    scheduledAt,
+    next: nextReminderOccurrence({ ...input.snapshot, after: input.now }),
+    outcome: expired ? "expired" : "generated",
+    guard: (statement) => guard(input, statement),
+  });
 
 const occurrence = (
   input: GenerationScope &
@@ -321,15 +300,10 @@ const occurrence = (
       Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(MoneyGroups)))([]),
     ],
   }),
-  assertion(input.db),
+  prepareChangedRowAssertion({ db: input.db, scope: "reminder_schedule" }),
   input.db
     .prepare(
-      "INSERT INTO reminder_occurrence_reports(user_id,insight_event_id,consent_grant_id,expires_at_ms) VALUES (?,?,?,?)"
-    )
-    .bind(input.userId, input.id, input.snapshot.consentGrantId, input.expiresAt.epochMilliseconds),
-  input.db
-    .prepare(
-      "INSERT INTO proactivity_reports(delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES (?,?,'manual-entry-reminder',?,?,?,?,?,?)"
+      "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,reminder_grant_id,reminder_expires_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'manual-entry-reminder',?,?,?,?,?,?,?,? ,'ready',?8,0,0)"
     )
     .bind(
       input.id,
@@ -339,16 +313,15 @@ const occurrence = (
       input.scheduledAt.epochMilliseconds,
       input.expiresAt.epochMilliseconds,
       input.snapshot.timeZone,
-      input.now.epochMilliseconds
+      input.now.epochMilliseconds,
+      input.snapshot.consentGrantId,
+      input.expiresAt.epochMilliseconds
     ),
   input.db
     .prepare(
       "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) VALUES (?,?,?)"
     )
     .bind(input.userId, input.id, input.id),
-  input.db
-    .prepare("INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms) VALUES (?,?,?)")
-    .bind(input.userId, input.id, input.now.epochMilliseconds),
 ];
 
 const eligibleSchedule = (

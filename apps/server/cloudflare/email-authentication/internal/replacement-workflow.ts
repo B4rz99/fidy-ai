@@ -62,12 +62,11 @@ export const dispatchEmailReplacement = (
     const identity = environment.identity;
     const current = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT o.id FROM email_replacement_outbox AS o
-      JOIN email_replacements AS r ON r.work_id = o.id
+      environment.DB.prepare(`SELECT r.work_id AS id FROM email_replacements AS r
       WHERE r.state = 'awaiting_delivery' AND r.expires_at_ms > ?
-        AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
-        AND (? IS NULL OR o.id = ?)
-      ORDER BY o.created_at_ms LIMIT 32`)
+        AND (r.dispatch_attempted_at_ms IS NULL OR r.dispatch_attempted_at_ms < ?)
+        AND (? IS NULL OR r.work_id = ?)
+      ORDER BY r.created_at_ms LIMIT 32`)
         .bind(
           current,
           current - dispatchCooldownMilliseconds,
@@ -81,8 +80,8 @@ export const dispatchEmailReplacement = (
     );
     for (const entry of entries) {
       const claimed = yield* attempt(() =>
-        environment.DB.prepare(`UPDATE email_replacement_outbox
-        SET last_attempt_at_ms = ? WHERE id = ? AND (last_attempt_at_ms IS NULL OR last_attempt_at_ms < ?)`)
+        environment.DB.prepare(`UPDATE email_replacements
+        SET dispatch_attempted_at_ms = ? WHERE work_id = ? AND (dispatch_attempted_at_ms IS NULL OR dispatch_attempted_at_ms < ?)`)
           .bind(current, entry.id, current - dispatchCooldownMilliseconds)
           .run()
       );
@@ -157,7 +156,7 @@ const findDeliverable = (
       attempt(() =>
         db
           .prepare(`SELECT r.candidate_email, r.expires_at_ms, r.state
-    FROM email_replacements AS r JOIN verified_email_credentials AS v ON v.user_id = r.user_id
+    FROM email_replacements AS r JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.user_id = r.user_id
       AND v.email_address = r.prior_email AND v.verified_at_ms = r.prior_verified_at_ms
     WHERE r.work_id = ? AND EXISTS (${session.sql})`)
           .bind(id, ...session.params)
@@ -221,7 +220,7 @@ export const deliverEmailReplacement =
           db
             .prepare(`UPDATE email_replacements SET state = 'sending', public_code = ?,
       proof_digest = ?, proof_expires_at_ms = ? WHERE work_id = ? AND state = 'awaiting_delivery'
-        AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM verified_email_credentials AS v
+        AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v
           WHERE v.user_id = email_replacements.user_id AND v.email_address = prior_email
             AND v.verified_at_ms = prior_verified_at_ms)
         AND EXISTS (${session.sql})`)
@@ -293,14 +292,6 @@ export const reconcileEmailReplacement = (db: D1Database): Effect.Effect<void, v
         .prepare(`UPDATE email_replacements SET state = 'ambiguous', public_code = NULL,
     proof_digest = NULL, proof_expires_at_ms = NULL WHERE state = 'sending' AND proof_expires_at_ms < ?`)
         .bind(current - proofLifetimeMilliseconds)
-        .run()
-    );
-    yield* attempt(() =>
-      db
-        .prepare(`DELETE FROM email_replacement_outbox WHERE id IN
-    (SELECT o.id FROM email_replacement_outbox AS o LEFT JOIN email_replacements AS r ON r.work_id = o.id
-      WHERE r.work_id IS NULL OR r.expires_at_ms <= ? OR r.state IN ('rejected', 'ambiguous') LIMIT 32)`)
-        .bind(current)
         .run()
     );
     yield* attempt(() =>

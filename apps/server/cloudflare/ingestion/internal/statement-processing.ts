@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import type { CaptureCategoryInput } from "../../categories/contract";
 import {
   type ParsedStatement,
@@ -21,10 +22,7 @@ import {
   unmappedStatementRow,
 } from "../../../src/core/ingestion/operations";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
-import {
-  prepareStatementCapture,
-  statementCaptureCapacityExceeded,
-} from "../../transactions/operations";
+import { prepareStatementCapture } from "../../transactions/operations";
 import { StatementProcessingUnavailable } from "../contract";
 import { newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
@@ -63,7 +61,6 @@ class StatementProcessingDependencyFailed extends Data.TaggedError(
 )<{
   readonly cause: unknown;
 }> {}
-class StatementCaptureBudgetExceeded extends Data.TaggedError("StatementCaptureBudgetExceeded") {}
 class StatementReviewBudgetExceeded extends Data.TaggedError("StatementReviewBudgetExceeded") {}
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, StatementProcessingDependencyFailed> =>
   Effect.tryPromise({
@@ -118,15 +115,9 @@ const markFailed = ({
       WHERE id = ? AND user_id = ? AND status IN ('queued', 'processing')`)
           .bind(current, current, reason, submissionId, userId),
         db
-          .prepare(`UPDATE statement_backfill_entitlements
-      SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
-      WHERE user_id = ? AND submission_id = ? AND changes() = 1`)
-          .bind(userId, submissionId),
-        db
-          .prepare(`DELETE FROM statement_ingestion_outbox
-          WHERE submission_id = ? AND user_id = ? AND revision = 1
+          .prepare(`UPDATE statement_submissions AS statement_ingestion_outbox SET work_user_id=NULL,work_revision=NULL,work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_revision IS NOT NULL AND id = ? AND work_user_id = ? AND work_revision = 1
             AND EXISTS (SELECT 1 FROM statement_submissions
-              WHERE id = ? AND user_id = ? AND status IN ('completed', 'failed'))`)
+              WHERE id = ? AND work_user_id = ? AND status IN ('completed', 'failed'))`)
           .bind(submissionId, userId, submissionId, userId),
       ])
     ).pipe(Effect.asVoid, Effect.uninterruptible);
@@ -279,7 +270,7 @@ const commitOutcome = ({
   id: string;
   activeArgs: ReadonlyArray<string | number>;
   statements: ReadonlyArray<D1PreparedStatement>;
-}>): Effect.Effect<void, StatementProcessingDependencyFailed | StatementCaptureBudgetExceeded> =>
+}>): Effect.Effect<void, StatementProcessingDependencyFailed> =>
   attempt(() =>
     work.db.batch([
       ...statements,
@@ -295,27 +286,13 @@ const commitOutcome = ({
           work.result.outcome === "accepted" ? id : null,
           ...activeArgs
         ),
-      work.db.prepare(`INSERT INTO statement_submission_assertion (id, accepted)
-      VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-      ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`),
+      prepareChangedRowAssertion({ db: work.db, scope: "statement_submission" }),
     ])
-  ).pipe(
-    Effect.mapError((error) =>
-      work.result.outcome === "accepted" && statementCaptureCapacityExceeded(error.cause)
-        ? new StatementCaptureBudgetExceeded()
-        : error
-    ),
-    Effect.asVoid
-  );
+  ).pipe(Effect.asVoid);
 
 const rowOutcome = (
   work: RowWork
-): Effect.Effect<
-  void,
-  | StatementProcessingDependencyFailed
-  | StatementCaptureBudgetExceeded
-  | StatementReviewBudgetExceeded
-> =>
+): Effect.Effect<void, StatementProcessingDependencyFailed | StatementReviewBudgetExceeded> =>
   Effect.gen(function* () {
     const { db, userId, submissionId, row, result } = work;
     const existing = yield* attempt(() =>
@@ -434,10 +411,7 @@ const finalizeChunk = ({
   rows: ReadonlyArray<ParsedStatementRow>;
 }>): Effect.Effect<
   void,
-  | StatementProcessingDependencyFailed
-  | StatementCaptureBudgetExceeded
-  | StatementReviewBudgetExceeded
-  | Schema.SchemaError
+  StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const chunk = rows.slice(0, statementChunkSize);
@@ -508,19 +482,18 @@ const completeSubmission = (
           counts.accepted,
           counts.review
         ),
-        DB.prepare(`UPDATE statement_backfill_entitlements
-      SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
-      WHERE user_id = ? AND submission_id = ? AND changes() = 1
-        AND NOT EXISTS (SELECT 1 FROM statement_clarifications
-          WHERE submission_id = ? AND state = 'awaiting')`).bind(
+        DB.prepare(`UPDATE users
+      SET backfill_submission_id = CASE WHEN backfill_consumed_at_ms IS NULL THEN NULL ELSE backfill_submission_id END
+      WHERE backfill_present IS NOT NULL AND id = ? AND backfill_submission_id = ? AND changes() = 1
+        AND NOT EXISTS (SELECT 1 FROM statement_submissions
+          WHERE id = ? AND clarification_state = 'awaiting')`).bind(
           userId,
           submissionId,
           submissionId
         ),
-        DB.prepare(`DELETE FROM statement_ingestion_outbox
-          WHERE submission_id = ? AND user_id = ? AND revision = 1
+        DB.prepare(`UPDATE statement_submissions AS statement_ingestion_outbox SET work_user_id=NULL,work_revision=NULL,work_published_at_ms=NULL,work_last_attempt_at_ms=NULL,work_last_reconciled_at_ms=NULL WHERE work_revision IS NOT NULL AND id = ? AND work_user_id = ? AND work_revision = 1
             AND EXISTS (SELECT 1 FROM statement_submissions
-              WHERE id = ? AND user_id = ? AND status = 'completed')`).bind(
+              WHERE id = ? AND work_user_id = ? AND status = 'completed')`).bind(
           submissionId,
           userId,
           submissionId,
@@ -541,10 +514,7 @@ const advanceSubmission = (
   parsed: ParsedStatement & Readonly<{ totalRows: number }>
 ): Effect.Effect<
   "continue" | "completed",
-  | StatementProcessingDependencyFailed
-  | StatementCaptureBudgetExceeded
-  | StatementReviewBudgetExceeded
-  | Schema.SchemaError
+  StatementProcessingDependencyFailed | StatementReviewBudgetExceeded | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const rows = yield* Schema.decodeEffect(Schema.toType(Schema.Array(ParsedStatementRow)))(
@@ -639,13 +609,6 @@ export const processStatementSubmission = (
           userId: input.userId,
           submissionId: input.submissionId,
           reason: error.reason,
-        }).pipe(Effect.as("completed" as const)),
-      StatementCaptureBudgetExceeded: () =>
-        markFailed({
-          db: input.DB,
-          userId: input.userId,
-          submissionId: input.submissionId,
-          reason: "resource-limit",
         }).pipe(Effect.as("completed" as const)),
       StatementReviewBudgetExceeded: () =>
         markFailed({

@@ -1,38 +1,25 @@
-import { BigDecimal, DateTime, Effect, Option } from "effect";
+import { BigDecimal } from "effect";
 import type {
   BudgetStatusQueryParameters,
   BudgetStatusReport,
 } from "../../../src/core/budgets/contract";
-import { findDashboardAggregate } from "../../transactions/operations";
+import type { EffectiveTransactionAggregate } from "../../../src/core/transactions/contract";
 
-/** All effective monthly transactions, including categories without expense caps. */
-export const readMonthlyCashFlow = ({
-  db,
-  userId,
-  period,
+/** Cash flow and cap spending use the same complete exact financial snapshot. */
+export const monthlyCashFlow = ({
+  aggregates,
   query,
 }: Readonly<{
-  db: D1Database;
-  userId: string;
-  period: BudgetStatusReport["period"];
+  aggregates: ReadonlyArray<EffectiveTransactionAggregate>;
   query: typeof BudgetStatusQueryParameters.Type;
-}>): Effect.Effect<Option.Option<BudgetStatusReport["cashFlow"]>> =>
-  Effect.gen(function* () {
-    const aggregates = yield* findDashboardAggregate({
-      db,
-      userId,
-      from: DateTime.toEpochMillis(period.from),
-      toExclusive: DateTime.toEpochMillis(period.to),
-    });
-    return Option.map(aggregates, (rows) => {
-      const selected = rows.filter(
-        (row) =>
-          (query.categoryId === undefined || row.categoryId === query.categoryId) &&
-          (query.currency === undefined || row.sum.currency === query.currency)
-      );
-      return { income: total(selected, "inflow"), expenses: total(selected, "outflow") };
-    });
-  });
+}>): BudgetStatusReport["cashFlow"] => {
+  const selected = aggregates.filter(
+    (row) =>
+      (query.categoryId === undefined || row.categoryId === query.categoryId) &&
+      (query.currency === undefined || row.sum.currency === query.currency)
+  );
+  return { income: total(selected, "inflow"), expenses: total(selected, "outflow") };
+};
 
 const total = (
   rows: ReadonlyArray<

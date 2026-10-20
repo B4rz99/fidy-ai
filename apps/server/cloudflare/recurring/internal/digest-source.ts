@@ -36,10 +36,10 @@ const guards = (
   prepareRecurringFactGuard({ ...input, revision: position.revision }),
   evaluationGuard({ ...input, revision: position.revision }),
   input.db
-    .prepare(`INSERT INTO recurring_assertion(id,accepted) VALUES(1,CASE WHEN EXISTS (
+    .prepare(`INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring',CASE WHEN EXISTS (
  SELECT 1 FROM recurring_progress WHERE user_id=? AND phase='complete' AND evaluated_at=?
- AND (SELECT coalesce(max(rowid),0) FROM recurring_confirmations WHERE user_id=?)=? AND (SELECT count(*) FROM recurring_confirmations WHERE user_id=?)=?
- ) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted`)
+ AND (SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL)=? AND (SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL)=?
+ ) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted`)
     .bind(
       input.userId,
       DateTime.formatIso(position.evaluatedAt),
@@ -64,7 +64,7 @@ const readPosition = (
       const raw = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            "SELECT evaluated_at,(SELECT coalesce(max(rowid),0) FROM recurring_confirmations WHERE user_id=?) AS maximum,(SELECT count(*) FROM recurring_confirmations WHERE user_id=?) AS total FROM recurring_progress WHERE user_id=? AND phase='complete' AND evaluated_revision=?"
+            "SELECT evaluated_at,(SELECT coalesce(max(confirmation_sequence),0) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS maximum,(SELECT count(*) FROM recurring_series WHERE user_id=? AND confirmation_sequence IS NOT NULL) AS total FROM recurring_progress WHERE user_id=? AND phase='complete' AND evaluated_revision=?"
           )
           .bind(input.userId, input.userId, input.userId, facts.value.revision)
           .first()
@@ -93,11 +93,9 @@ export const readSource = (
       input.db.batch([
         ...guards(input, position),
         input.db
-          .prepare(`SELECT c.rowid AS sequence,c.id,c.context_json,c.confirmation_json,c.confirmed_at,s.valid,
- CASE WHEN l.confirmation_id IS NULL THEN 0 ELSE 1 END AS legacy FROM recurring_confirmations AS c
- JOIN recurring_series AS s ON s.user_id=c.user_id AND s.id=c.series_id
- LEFT JOIN recurring_legacy_confirmations AS l ON l.user_id=c.user_id AND l.confirmation_id=c.id
- WHERE c.user_id=? AND c.rowid>? AND c.rowid<=? ORDER BY c.rowid LIMIT ?`)
+          .prepare(`SELECT confirmation_sequence AS sequence,confirmation_id AS id,confirmation_context_json AS context_json,confirmation_json,confirmed_at,valid,
+ digest_excluded AS legacy FROM recurring_series
+ WHERE user_id=? AND confirmation_sequence>? AND confirmation_sequence<=? ORDER BY confirmation_sequence LIMIT ?`)
           .bind(input.userId, position.after, position.maximum, pageSize + 1),
       ])
     );

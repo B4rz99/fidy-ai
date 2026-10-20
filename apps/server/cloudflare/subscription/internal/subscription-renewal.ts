@@ -35,10 +35,11 @@ const renewalAdmissionJson = Schema.fromJsonString(SubscriptionRenewalAdmission)
 const unresolvedCollectionSql = (userColumn: "s.user_id" | "sub.user_id"): string => `EXISTS (
   SELECT 1 FROM billing_attempts unresolved WHERE unresolved.user_id=${userColumn}
     AND (unresolved.status='pending' OR (unresolved.status='failed' AND unresolved.previous_paid_attempt_id IS NULL))
-    AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations clear WHERE clear.attempt_id=unresolved.id)
-    AND NOT EXISTS (SELECT 1 FROM billing_collection_arms stopped WHERE stopped.attempt_id=unresolved.id AND stopped.state='rejected'
-      AND unresolved.previous_paid_attempt_id IS NOT NULL AND EXISTS (SELECT 1 FROM billing_attempts success
-        JOIN billing_paid_periods paid ON paid.attempt_id=success.id WHERE success.previous_paid_attempt_id=unresolved.previous_paid_attempt_id)))`;
+    AND unresolved.no_charge_confirmed_at_ms IS NULL
+    AND NOT (unresolved.collection_state='rejected'
+      AND unresolved.previous_paid_attempt_id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM billing_attempts success WHERE success.paid_starts_at_ms IS NOT NULL
+        AND success.previous_paid_attempt_id=unresolved.previous_paid_attempt_id)))`;
 
 type RenewalClaimInput = Readonly<{
   db: D1Database;
@@ -60,9 +61,8 @@ const prepareRenewalClaim = (
       billing_period, service_market, tax_treatment, time_zone, wompi_environment, wompi_reference,
       created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, renewal_attempt_number, calendar_anchor_ms)
       SELECT ?, a.user_id, a.enrollment_id, ?, a.payment_source_id, price.id, price.amount, price.currency,
-      price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, period.starts_at_ms)
-      FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
-      JOIN billing_paid_periods period ON period.attempt_id = a.id
+      price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms)
+      FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
       JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
       WHERE s.user_id = ? AND a.id = ?
@@ -127,11 +127,10 @@ export const claimSubscriptionRenewal = (
   Effect.gen(function* () {
     const row = yield* fromPromise(() =>
       input.db
-        .prepare(`SELECT p.ends_at_ms, a.time_zone, a.billing_period, COALESCE(a.calendar_anchor_ms, p.starts_at_ms) AS calendar_anchor_ms
-    FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
-    JOIN billing_paid_periods p ON p.attempt_id = a.id
+        .prepare(`SELECT a.paid_ends_at_ms AS ends_at_ms, a.time_zone, a.billing_period, COALESCE(a.calendar_anchor_ms, a.paid_starts_at_ms) AS calendar_anchor_ms
+    FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id = s.user_id
     WHERE s.user_id = ? AND a.id = ? AND a.status = 'succeeded'
-    AND a.wompi_environment = ? AND p.ends_at_ms <= ?`)
+    AND a.wompi_environment = ? AND a.paid_ends_at_ms <= ?`)
         .bind(input.userId, input.previousPaidAttemptId, input.environment, input.now)
         .first()
     );
@@ -174,7 +173,7 @@ export const dispatchSubscriptionRenewals = (
       requirement: "active",
       statement: {
         sql: `SELECT a.user_id, a.id
-    FROM billing_followup_outbox due JOIN subscriptions s ON s.attempt_id = due.attempt_id
+    FROM (SELECT rowid,id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) due JOIN subscriptions s ON s.attempt_id = due.attempt_id
     JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
     JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
     WHERE due.due_at_ms <= ?

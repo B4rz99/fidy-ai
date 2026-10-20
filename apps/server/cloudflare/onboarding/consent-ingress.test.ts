@@ -96,7 +96,7 @@ const setup = (
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)"
+              "CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
             )
             .run()
         );
@@ -230,11 +230,16 @@ const voiceInbound = (id: string, transcript?: unknown, caller = bsuid): string 
 
 const seedVoiceUser = (db: D1Database, userId: string): Promise<unknown> =>
   db
-    .prepare("INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid) VALUES (?, ?, ?)")
+    .prepare(
+      "WITH incoming(user_id,portfolio_id,bsuid) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+    )
     .bind(userId, portfolio, bsuid)
     .run()
     .then(() =>
-      db.prepare("INSERT INTO onboarding_consent_records (user_id) VALUES (?)").bind(userId).run()
+      db
+        .prepare("INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)")
+        .bind(userId)
+        .run()
     );
 
 it("refuses image work while extraction is unavailable without treating its caption as a credential or hosted Turn", () =>
@@ -282,7 +287,11 @@ it("refuses image work while extraction is unavailable without treating its capt
       ).toEqual([]);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT exchange_id FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT exchange_id FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toEqual([]);
     })
@@ -317,7 +326,7 @@ it.each([
               .bind(userId, timestamp),
             db
               .prepare(
-                "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)"
+                "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
               )
               .bind(userId, portfolio, bsuid, timestamp),
             db
@@ -393,7 +402,7 @@ it.each([
           (yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM hosted_whatsapp_delivery d JOIN hosted_whatsapp_inbound i ON i.turn_id = d.turn_id"
+                "SELECT d.user_id, i.message_id, d.text, d.provider_message_id, d.state FROM hosted_whatsapp_delivery d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) i ON i.turn_id = d.turn_id"
               )
               .all()
           )).results
@@ -473,14 +482,24 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
       expect((yield* Effect.tryPromise(() => send(missing))).status).toBe(200);
       expect(provider).toHaveBeenCalledTimes(1);
       yield* Effect.tryPromise(() =>
-        db.prepare("INSERT INTO consent_user_revocations (user_id) VALUES (?)").bind(userId).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userId)
+          .run()
       );
       expect((yield* Effect.tryPromise(() => send(voiceInbound("wamid.revoked")))).status).toBe(
         429
       );
       expect(provider).toHaveBeenCalledTimes(1);
       yield* Effect.tryPromise(() =>
-        db.prepare("DELETE FROM consent_user_revocations WHERE user_id = ?").bind(userId).run()
+        db
+          .prepare(
+            "DELETE FROM consent_history WHERE record_type='processing_withdrawal' AND user_id = ?"
+          )
+          .bind(userId)
+          .run()
       );
       const sent = decodeJson(providerBody(provider.mock.calls[0]?.[1]));
       expect(sent).toMatchObject({
@@ -565,8 +584,9 @@ it("routes only signed, correlated Kapso delivery evidence to the same User", ()
       const token = "10000000-0000-4000-8000-000000000122";
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO hosted_whatsapp_delivery
-      (user_id, correlation_token, business_phone_number_id) VALUES (?, ?, ?)`)
+          .prepare(
+            `INSERT INTO whatsapp_deliveries AS hosted_whatsapp_delivery(kind,user_id, correlation_token, business_phone_number_id) VALUES ('hosted',?, ?, ?)`
+          )
           .bind(userId, token, "123456789012345")
           .run()
       );
@@ -674,7 +694,11 @@ const advancePastDecisionProof = (db: D1Database): Promise<string> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const delivery = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT decision_not_before_ms FROM pending_consent_delivery").first()
+        db
+          .prepare(
+            "SELECT decision_not_before_ms FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery"
+          )
+          .first()
       );
       const afterProof = Number(delivery?.decision_not_before_ms) + 2_000;
       vi.useFakeTimers({ toFake: ["Date"] });
@@ -723,7 +747,11 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
       const token = yield* Effect.tryPromise(() => startDisclosure(send));
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toEqual([]);
       expect(
@@ -760,7 +788,7 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
       const { results } = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT decision, disclosure_json, disclosure_message_id, decision_message_id FROM pending_consent_decisions"
+            "SELECT decision, disclosure_json, disclosure_message_id, decision_message_id FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
           )
           .all()
       );
@@ -824,7 +852,11 @@ it("never treats a pre-disclosure acceptance replay as a Consent decision", () =
       ).toBe(409);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toEqual([]);
       expect(forbiddenEffects.queue).not.toHaveBeenCalled();
@@ -852,14 +884,22 @@ it("rejects replay of a pre-delivery reply with a future-dated Kapso timestamp",
       expect((yield* Effect.tryPromise(() => send(early))).status).toBe(409);
       expect((yield* Effect.tryPromise(() => deliver(send, token, deliveryTime))).status).toBe(200);
       const delivery = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT received_at_ms FROM pending_consent_delivery").first()
+        db
+          .prepare(
+            "SELECT received_at_ms FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery"
+          )
+          .first()
       );
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(Number(delivery?.received_at_ms) + 60_000);
       expect((yield* Effect.tryPromise(() => send(early))).status).toBe(409);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toEqual([]);
       const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
@@ -933,7 +973,11 @@ it("fails closed on an impossible stored decision lifecycle", () =>
       ).toBe(503);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toEqual([]);
     })
@@ -1082,7 +1126,11 @@ it("settles simultaneous conflicting decisions at most once", () =>
       ]);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT decision FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT decision FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toHaveLength(1);
     })
@@ -1146,12 +1194,21 @@ it("rejects forged, mismatched, and reordered delivery evidence without opening 
           .status
       ).toBe(401);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM pending_consent_delivery").all()))
-          .results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT * FROM (SELECT correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery"
+            )
+            .all()
+        )).results
       ).toEqual([]);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toEqual([]);
       expect(
@@ -1233,7 +1290,11 @@ it.each([200, 403])(
         expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(200);
         expect(
           (yield* Effect.tryPromise(() =>
-            db.prepare("SELECT * FROM pending_consent_delivery").all()
+            db
+              .prepare(
+                "SELECT * FROM (SELECT correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery"
+              )
+              .all()
           )).results
         ).toHaveLength(1);
         pendingResponse.resolve(
@@ -1297,7 +1358,11 @@ it("records refusal without financial work and rejects a decision before verifie
       expect((yield* Effect.tryPromise(() => send(otherPhone))).status).toBe(409);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_consent_decisions").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+            )
+            .all()
         )).results
       ).toEqual([]);
       const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
@@ -1306,7 +1371,11 @@ it("records refusal without financial work and rejects a decision before verifie
           .status
       ).toBe(200);
       const { results } = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT decision FROM pending_consent_decisions").all()
+        db
+          .prepare(
+            "SELECT decision FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions"
+          )
+          .all()
       );
       expect(results).toEqual([{ decision: "declined" }]);
     })

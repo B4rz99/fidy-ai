@@ -62,7 +62,7 @@ const readReport = (
 ): Effect.Effect<Option.Option<ProactivityReport>, InsightUnavailable> =>
   Effect.gen(function* () {
     const statement: OwnedStatement = {
-      sql: "SELECT delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone FROM proactivity_reports WHERE user_id=? AND delivery_id=?",
+      sql: "SELECT delivery_id,role,consent_grant_id,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND delivery_id=?",
       params: [input.userId, input.id],
     };
     const raw = yield* Effect.tryPromise(() =>
@@ -83,7 +83,7 @@ const readReport = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): OwnedStatement => ({
-  sql: `SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=? AND r.delivery_id=? AND r.text IS NOT NULL AND (r.role<>'new-recurring-series' OR EXISTS(SELECT 1 FROM recurring_digest_reports AS d JOIN recurring_digest_instructions AS i ON i.user_id=d.user_id AND i.id=d.instruction_id WHERE d.user_id=r.user_id AND d.insight_event_id=r.delivery_id AND i.enabled=1 AND i.version=d.instruction_version AND i.grant_id=r.consent_grant_id)) AND (r.role<>'reminder-question' OR EXISTS (SELECT 1 FROM reminder_governors AS g JOIN reminder_schedules AS s ON s.user_id=g.user_id WHERE g.user_id=r.user_id AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND g.question_id=r.delivery_id AND json_extract(g.standing_json,'$._tag')='QuestionPending')) AND (r.role<>'manual-entry-reminder' OR EXISTS (SELECT 1 FROM proactivity_message_events AS l JOIN insight_events AS e ON e.user_id=l.user_id AND e.id=l.insight_event_id JOIN reminder_schedules AS s ON s.user_id=e.user_id AND s.id=e.schedule_id JOIN reminder_governors AS g ON g.user_id=s.user_id WHERE l.user_id=r.user_id AND l.delivery_id=r.delivery_id AND e.kind='manual-entry-reminder' AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND json_extract(g.standing_json,'$._tag')<>'Paused'))`,
+  sql: `SELECT 1 FROM insight_reports AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=? AND r.delivery_id=? AND r.text IS NOT NULL AND (r.role<>'new-recurring-series' OR (r.report_json IS NOT NULL AND EXISTS(SELECT 1 FROM recurring_digest_instructions AS i WHERE i.user_id=r.user_id AND i.id=r.instruction_id AND i.enabled=1 AND i.version=r.instruction_version AND i.grant_id=r.consent_grant_id))) AND (r.role<>'reminder-question' OR EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g JOIN schedules AS s ON s.kind='reminder' AND s.user_id=g.user_id WHERE g.user_id=r.user_id AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND g.question_id=r.delivery_id AND json_extract(g.standing_json,'$._tag')='QuestionPending')) AND (r.role<>'manual-entry-reminder' OR EXISTS (SELECT 1 FROM proactivity_message_events AS l JOIN insight_events AS e ON e.user_id=l.user_id AND e.id=l.insight_event_id JOIN schedules AS s ON s.kind='reminder' AND s.user_id=e.user_id AND s.id=e.schedule_id JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE l.user_id=r.user_id AND l.delivery_id=r.delivery_id AND e.kind='manual-entry-reminder' AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND json_extract(g.standing_json,'$._tag')<>'Paused'))`,
   params: [input.userId, input.id],
 });
 
@@ -93,17 +93,22 @@ export const prepareSettlement = (
 ): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      `INSERT INTO insight_delivery_attempts(id,user_id,insight_event_id,sent_at,channel,provider,provider_message_id) SELECT l.insight_event_id,l.user_id,l.insight_event_id,strftime('%Y-%m-%dT%H:%M:%fZ',v.send_started_at_ms/1000.0,'unixepoch'),'whatsapp','kapso',v.provider_message_id FROM proactivity_message_events AS l JOIN (${input.proof.sql}) AS v ON v.user_id=l.user_id AND v.delivery_id=l.delivery_id WHERE l.user_id=? AND l.delivery_id=? AND NOT EXISTS (SELECT 1 FROM insight_delivery_attempts WHERE user_id=l.user_id AND insight_event_id=l.insight_event_id)`
+      `UPDATE insight_events SET
+      delivery_receipt_id=coalesce(delivery_receipt_id,l.insight_event_id),
+      delivery_sent_at=coalesce(delivery_sent_at,strftime('%Y-%m-%dT%H:%M:%fZ',v.send_started_at_ms/1000.0,'unixepoch')),
+      delivery_channel=coalesce(delivery_channel,'whatsapp'),
+      delivery_provider=coalesce(delivery_provider,'kapso'),
+      delivery_provider_message_id=coalesce(delivery_provider_message_id,v.provider_message_id),
+      lifecycle_state=CASE WHEN lifecycle_state='pending' THEN 'delivered' ELSE lifecycle_state END
+      FROM proactivity_message_events AS l JOIN (${input.proof.sql}) AS v
+        ON v.user_id=l.user_id AND v.delivery_id=l.delivery_id
+      WHERE l.user_id=? AND l.delivery_id=? AND insight_events.user_id=l.user_id
+        AND insight_events.id=l.insight_event_id AND (delivery_receipt_id IS NULL OR lifecycle_state='pending')`
     )
     .bind(...input.proof.params, input.userId, input.id),
   input.db
     .prepare(
-      `UPDATE insight_events SET lifecycle_state='delivered' WHERE user_id=? AND lifecycle_state='pending' AND id IN (SELECT l.insight_event_id FROM proactivity_message_events AS l JOIN (${input.proof.sql}) AS v ON v.user_id=l.user_id AND v.delivery_id=l.delivery_id WHERE l.user_id=? AND l.delivery_id=?)`
-    )
-    .bind(input.userId, ...input.proof.params, input.userId, input.id),
-  input.db
-    .prepare(
-      `UPDATE proactivity_outbox SET state='settled' WHERE user_id=? AND delivery_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)`
+      `UPDATE insight_reports SET dispatch_state='settled' WHERE dispatch_state IS NOT NULL AND kind='proactivity-delivery' AND user_id=? AND delivery_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)`
     )
     .bind(input.userId, input.id, ...input.proof.params, input.userId, input.id),
 ];

@@ -176,7 +176,9 @@ export const seedPersonalClasses = (input: PersonalSeed): Effect.Effect<void> =>
   );
 const identityRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
-    .prepare("INSERT INTO whatsapp_identities VALUES(?,'test-portfolio',?,?)")
+    .prepare(
+      "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES(?,'test-portfolio',?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+    )
     .bind(input.userId, `subject-${input.index}`, input.current),
 
   input.db.prepare(
@@ -214,12 +216,14 @@ const identityRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> =
 const conversationRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      "INSERT INTO onboarding_consent_records VALUES(?,?,'{}','test-disclosure','test-decision',?,?)"
+      "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','test-disclosure','test-decision',?,?)"
     )
     .bind(input.userId, input.userId, input.current, input.current),
 
   input.db
-    .prepare("INSERT INTO hosted_agent_sessions VALUES(?,?,'{}',?,?,'idle-ended')")
+    .prepare(
+      "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status) VALUES(?,?,'{}',?,?,'idle-ended')"
+    )
     .bind(input.userId, input.userId, input.current, input.current),
 
   input.db
@@ -247,21 +251,27 @@ const conversationRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatemen
 ];
 const projectionRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
-    .prepare("INSERT INTO recurring_series VALUES(?,?,'COP','private-merchant','{}','{}','{}',1)")
+    .prepare(
+      "INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid) VALUES(?,?,'COP','private-merchant','{}','{}','{}',1)"
+    )
     .bind(input.userId, input.userId),
 
   input.db
-    .prepare("INSERT INTO dashboard_documents VALUES(?,'{}',1) ON CONFLICT(user_id) DO NOTHING")
+    .prepare(
+      "INSERT INTO user_documents (kind,user_id,document_json,revision) VALUES('dashboard',?,'{}',1) ON CONFLICT(user_id,kind) DO NOTHING"
+    )
     .bind(input.userId),
 
   input.db
     .prepare(
-      "INSERT INTO weekly_schedules(id,user_id,version,enabled,weekday,hour,minute,time_zone,service_market,locale,next_scheduled_at,consent_grant_id) VALUES(?,?,1,0,1,12,0,'America/Bogota','CO','es-CO','2026-11-01T12:00:00.000Z',?)"
+      "INSERT INTO schedules(kind,id,user_id,version,enabled,snapshot_json,next_scheduled_at,consent_grant_id) VALUES('weekly',?,?,1,0,'{}','2026-11-01T12:00:00.000Z',?)"
     )
     .bind(input.userId, input.userId, input.userId),
 
   input.db
-    .prepare("INSERT INTO subscription_identities VALUES(?,?)")
+    .prepare(
+      "UPDATE users SET subscription_id=incoming.id FROM (SELECT ? AS user_id,? AS id) AS incoming WHERE users.id=incoming.user_id AND users.subscription_id IS NULL"
+    )
     .bind(input.userId, input.userId),
 
   input.db
@@ -294,23 +304,26 @@ const credentialRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement>
     ),
 
   input.db
-    .prepare("INSERT INTO memory_audit VALUES(?,?,?,'memory.remember','success',?)")
+    .prepare(
+      "INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms) VALUES ('session_call',?,?,?,'memory.remember','success',?)"
+    )
     .bind(input.userId, input.userId, input.userId, input.current),
 ];
 
 const renewalAndPlanRows = (input: PersonalSeed): ReadonlyArray<D1PreparedStatement> => [
   input.db
     .prepare(
-      "INSERT INTO recurring_plan_documents VALUES(?, json_object('revision',1,'private','User expectation'), 1)"
+      "INSERT INTO user_documents (kind,user_id,document_json,revision) VALUES('recurring-plan',?, json_object('revision',1,'private','User expectation'), 1)"
     )
     .bind(input.userId),
   input.db
-    .prepare("INSERT INTO consent_user_revocations VALUES(?,?,?,?,?)")
+    .prepare(
+      "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES('processing_withdrawal',?,?,?,?,?)"
+    )
     .bind(input.userId, input.userId, input.userId, input.userId, input.current),
   input.db
-    .prepare("INSERT INTO processing_consent_renewals VALUES(?,?,?,?,?,'{}',?)")
+    .prepare(
+      "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
+    )
     .bind(input.userId, input.userId, input.userId, input.userId, input.userId, input.current + 1),
-  input.db
-    .prepare("DELETE FROM consent_user_revocations WHERE id=? AND user_id=?")
-    .bind(input.userId, input.userId),
 ];

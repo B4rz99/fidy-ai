@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Clock, Effect, type PlatformError, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { OAuthRedirect, oauthResource } from "../../../src/shell/oauth-agents/contract";
@@ -97,7 +98,7 @@ const findGrant = (
     const found = yield* dbWork(() =>
       input.db
         .prepare(`SELECT g.id AS connection_id,g.user_id,g.expires_at_ms,g.scopes_json
-    FROM oauth_codes c JOIN oauth_connections g ON g.id = c.connection_id WHERE c.digest = ?
+    FROM (SELECT rowid,code_digest AS digest,id AS connection_id,code_challenge AS challenge,code_expires_at_ms AS expires_at_ms,code_consumed_at_ms AS consumed_at_ms FROM oauth_connections WHERE code_digest IS NOT NULL) c JOIN oauth_connections g ON g.id = c.connection_id WHERE c.digest = ?
     AND c.challenge = ? AND c.consumed_at_ms IS NULL AND c.expires_at_ms > ? AND g.client_id = ?
     AND g.redirect_uri = ? AND g.resource = ? AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ?`)
         .bind(
@@ -122,10 +123,10 @@ const consumptionStatement = (
     subject: { _tag: "User", userId: grant.user_id },
     requirement: "active",
     statement: {
-      sql: `UPDATE oauth_codes SET consumed_at_ms = ? WHERE digest = ? AND connection_id = ?
-    AND consumed_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis} AND challenge = ?
+      sql: `UPDATE oauth_connections AS oauth_codes SET code_consumed_at_ms = ? WHERE code_digest IS NOT NULL AND code_digest = ? AND id = ?
+    AND code_consumed_at_ms IS NULL AND code_expires_at_ms > ? AND code_expires_at_ms > ${databaseCurrentMillis} AND code_challenge = ?
     AND EXISTS (SELECT 1 FROM oauth_connections WHERE id = ? AND user_id = ? AND client_id = ?
-      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis})`,
+      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND code_expires_at_ms > ? AND code_expires_at_ms > ${databaseCurrentMillis})`,
       params: [
         input.current,
         proof.digest,
@@ -158,7 +159,7 @@ const commitExchange = ({
       input.db.prepare(auditStatement.sql).bind(...auditStatement.params),
       input.db
         .prepare(
-          `INSERT INTO oauth_access_credentials (id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) SELECT ?,?,?,?,?,?,? WHERE changes() = 1`
+          `INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) SELECT 'access', ?,?,?,?,?,?,? WHERE changes() = 1`
         )
         .bind(
           newId(),
@@ -171,7 +172,7 @@ const commitExchange = ({
         ),
       input.db
         .prepare(
-          `INSERT INTO oauth_refresh_credentials (id,connection_id,digest,issued_at_ms,expires_at_ms,user_id,scopes_json) SELECT ?,?,?,?,?,?,? WHERE changes() = 1`
+          `INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,digest,issued_at_ms,expires_at_ms,user_id,scopes_json) SELECT 'refresh', ?,?,?,?,?,?,? WHERE changes() = 1`
         )
         .bind(
           newId(),
@@ -182,9 +183,7 @@ const commitExchange = ({
           grant.user_id,
           grant.scopes_json
         ),
-      input.db.prepare(
-        "INSERT INTO oauth_atomic_assertion VALUES (1,CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
-      ),
+      prepareChangedRowAssertion({ db: input.db, scope: "oauth_atomic" }),
     ]);
   });
 /** Exchanges a bound single-use code; failed atomic issuance leaves the code unconsumed. */

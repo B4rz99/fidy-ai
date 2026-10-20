@@ -104,9 +104,9 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
           )
           .bind(userId, now),
         db
-          .prepare(`INSERT INTO onboarding_consent_records
-      (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
-      VALUES (?,?,'{}','disclosed','accepted',?,?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosed','accepted',?,?)`
+          )
           .bind(userId, userId, now, now),
         db
           .prepare(`INSERT INTO browser_login_pairings
@@ -141,14 +141,14 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
             now + 86400000
           ),
         db
-          .prepare(`INSERT INTO oauth_grant_consents
-      (id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms)
-      VALUES (?,?,?,?,'test-v1','Disclosure',?)`)
+          .prepare(
+            `INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES ('oauth_grant',?,?,?,?,'test-v1','Disclosure',?)`
+          )
           .bind(subject.oauthConnectionId, subject.oauthConnectionId, userId, sessionId, now),
         db
-          .prepare(`INSERT INTO oauth_access_credentials
-      (id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json)
-      VALUES (?,?,?,?,?,?,'["write"]')`)
+          .prepare(
+            `INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access',?,?,?,?,?,?,'["write"]')`
+          )
           .bind(
             subject.credentialId,
             subject.oauthConnectionId,
@@ -239,7 +239,7 @@ const persistedState = (
       [
         "transaction_corrections",
         "transaction_reconciliation_members",
-        "pat_audit",
+        "(SELECT * FROM audit_entries WHERE record_type='credential_call')",
         "oauth_operation_intents",
       ],
       (table) =>

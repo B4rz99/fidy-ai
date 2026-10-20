@@ -241,7 +241,9 @@ it("the installed User coordinator generates the latest reminder and frozen mess
       ).toBeGreaterThan(now.epochMilliseconds);
       const report = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT role,text,expires_at_ms FROM proactivity_reports WHERE user_id=?")
+          .prepare(
+            "SELECT role,text,expires_at_ms FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=?"
+          )
           .bind(proactivityTestUsers[0])
           .all()
       );
@@ -317,7 +319,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER test_pause_before_send BEFORE UPDATE ON proactivity_whatsapp_claims WHEN OLD.state='staged' AND NEW.state='sending' BEGIN SELECT RAISE(ABORT,'test_claim_refusal'); END"
+            "CREATE TRIGGER test_pause_before_send BEFORE UPDATE ON whatsapp_deliveries WHEN OLD.kind='proactivity' AND OLD.state='staged' AND NEW.state='sending' BEGIN SELECT RAISE(ABORT,'test_claim_refusal'); END"
           )
           .run()
       );
@@ -331,7 +333,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT correlation_token,state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              "SELECT correlation_token,state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
             )
             .bind(proactivityTestUsers[0], id)
             .first()
@@ -361,7 +363,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              "SELECT state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
             )
             .bind(proactivityTestUsers[0], id)
             .first()
@@ -398,7 +400,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
       const raw = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+            "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
           )
           .bind(proactivityTestUsers[0], id)
           .first()
@@ -443,7 +445,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                "SELECT state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
               )
               .bind(proactivityTestUsers[0], id)
               .first()
@@ -467,7 +469,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT (SELECT count(*) FROM insight_delivery_attempts WHERE user_id=?) AS attempts,(SELECT count(*) FROM proactive_transcript_event_links WHERE user_id=?) AS transcript_links,(SELECT count(*) FROM proactive_message_transcript_entries WHERE user_id=?) AS control_transcripts"
+              "SELECT (SELECT count(*) FROM insight_events WHERE delivery_receipt_id IS NOT NULL AND user_id=?) AS attempts,(SELECT count(*) FROM proactive_transcript_event_links WHERE user_id=?) AS transcript_links,(SELECT count(*) FROM proactive_transcript_entries WHERE kind='message' AND user_id=?) AS control_transcripts"
             )
             .bind(proactivityTestUsers[0], proactivityTestUsers[0], proactivityTestUsers[0])
             .first()
@@ -488,7 +490,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         });
       yield* Effect.tryPromise(() =>
         db.exec(
-          "CREATE TRIGGER test_refuse_exact_transcript BEFORE INSERT ON proactive_transcript_entries BEGIN SELECT RAISE(ABORT,'test settlement unavailable'); END;"
+          "CREATE TRIGGER test_refuse_exact_transcript BEFORE INSERT ON proactive_transcript_entries WHEN NEW.kind='insight' BEGIN SELECT RAISE(ABORT,'test settlement unavailable'); END;"
         )
       );
       expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(503);
@@ -496,7 +498,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              "SELECT state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
             )
             .bind(proactivityTestUsers[0], id)
             .first()
@@ -614,7 +616,7 @@ it("refuses approved-template drift between a deferred staging and the irreversi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state,send_started_at_ms FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              "SELECT state,send_started_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
             )
             .bind(proactivityTestUsers[0], created.id)
             .first()
@@ -689,7 +691,7 @@ const revokeScenarioCategory = (
     const grant = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT offer_id FROM proactivity_consent_records WHERE user_id=? AND kind='manual-entry-reminder' AND grant_id IS NULL"
+          "SELECT offer_id FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE user_id=? AND kind='manual-entry-reminder' AND grant_id IS NULL"
         )
         .bind(proactivityTestUsers[0])
         .first<{ offer_id: string }>()
@@ -738,7 +740,7 @@ const executeDeliveryScenario = (
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+            "SELECT state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
           )
           .bind(scenario.workUser, work.id)
           .first()
@@ -747,7 +749,9 @@ const executeDeliveryScenario = (
     expect(
       yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT count(*) AS n FROM proactivity_outbox WHERE user_id=?")
+          .prepare(
+            "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+          )
           .bind(scenario.workUser)
           .first()
       )
@@ -790,7 +794,7 @@ it.each(refusalCases)(
         if (scenario.reassociate === true) {
           yield* Effect.tryPromise(() =>
             db
-              .prepare("UPDATE whatsapp_identities SET bsuid='CO.newuser' WHERE user_id=?")
+              .prepare("UPDATE users SET whatsapp_bsuid='CO.newuser' WHERE id=?")
               .bind(proactivityTestUsers[0])
               .run()
           );
@@ -818,7 +822,7 @@ it.each(refusalCases)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS n FROM proactivity_whatsapp_claims WHERE send_started_at_ms IS NOT NULL"
+                "SELECT count(*) AS n FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE send_started_at_ms IS NOT NULL"
               )
               .first()
           )
@@ -826,7 +830,9 @@ it.each(refusalCases)(
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+              .prepare(
+                "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+              )
               .bind(proactivityTestUsers[0], generated.id)
               .first()
           )
@@ -898,7 +904,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS n FROM proactivity_reports WHERE user_id=? AND role IN ('budget-offer','reminder-offer')"
+                "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role IN ('budget-offer','reminder-offer')"
               )
               .bind(userId)
               .first()
@@ -921,7 +927,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
               )
               .bind(userId, offer.id)
               .first()
@@ -944,7 +950,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TRIGGER reject_message_transcript BEFORE INSERT ON proactive_message_transcript_entries BEGIN SELECT RAISE(ABORT,'test_message_transcript_unavailable'); END"
+              "CREATE TRIGGER reject_message_transcript BEFORE INSERT ON proactive_transcript_entries WHEN NEW.kind='message' BEGIN SELECT RAISE(ABORT,'test_message_transcript_unavailable'); END"
             )
             .run()
         );
@@ -953,7 +959,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                "SELECT state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
               )
               .bind(userId, offer.id)
               .first()
@@ -963,7 +969,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT disclosure_message_id FROM proactivity_consent_offers WHERE user_id=? AND id=?"
+                "SELECT disclosure_message_id FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE user_id=? AND id=?"
               )
               .bind(userId, offer.id)
               .first()
@@ -994,7 +1000,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT disclosure_message_id FROM proactivity_consent_offers WHERE user_id=? AND id=?"
+                "SELECT disclosure_message_id FROM (SELECT rowid,* FROM consent_offers WHERE kind<>'weekly-summary') AS proactivity_consent_offers WHERE user_id=? AND id=?"
               )
               .bind(userId, offer.id)
               .first()
@@ -1176,7 +1182,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
             yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                  "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
                 )
                 .bind(userId, id)
                 .first()
@@ -1223,7 +1229,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT delivery_id FROM proactivity_reports WHERE user_id=? AND role='reminder-question'"
+              "SELECT delivery_id FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
             )
             .bind(userId)
             .first()
@@ -1232,7 +1238,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER crash_after_question_acceptance BEFORE UPDATE ON proactivity_outbox WHEN NEW.state='started' BEGIN SELECT RAISE(ABORT,'test_crash'); END"
+            "CREATE TRIGGER crash_after_question_acceptance BEFORE UPDATE ON insight_reports WHEN NEW.dispatch_state='started' BEGIN SELECT RAISE(ABORT,'test_crash'); END"
           )
           .run()
       );
@@ -1242,7 +1248,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              "SELECT state FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
             )
             .bind(userId, question.delivery_id)
             .first()
@@ -1251,7 +1257,9 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+            .prepare(
+              "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+            )
             .bind(userId, question.delivery_id)
             .first()
         )
@@ -1265,7 +1273,9 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+            .prepare(
+              "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+            )
             .bind(userId, question.delivery_id)
             .first()
         )
@@ -1323,7 +1333,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS n FROM proactivity_reports WHERE user_id=? AND role='reminder-question'"
+              "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
             )
             .bind(userId)
             .first()
@@ -1403,7 +1413,7 @@ it.each(["paused", "stopped"] as const)(
             const raw = yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                  "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
                 )
                 .bind(userId, id)
                 .first()
@@ -1422,7 +1432,7 @@ it.each(["paused", "stopped"] as const)(
                 yield* Effect.tryPromise(() =>
                   db
                     .prepare(
-                      "SELECT count(*) AS n FROM proactivity_reports WHERE user_id=? AND role='reminder-question'"
+                      "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
                     )
                     .bind(userId)
                     .first()
@@ -1473,7 +1483,7 @@ it.each(["paused", "stopped"] as const)(
             const raw = yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT delivery_id FROM proactivity_reports WHERE user_id=? AND role='reminder-question'"
+                  "SELECT delivery_id FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question'"
                 )
                 .bind(userId)
                 .first()
@@ -1525,7 +1535,7 @@ it.each(["paused", "stopped"] as const)(
             const replacementRaw = yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "SELECT delivery_id FROM proactivity_reports WHERE user_id=? AND role='reminder-question' AND delivery_id<>?"
+                  "SELECT delivery_id FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='reminder-question' AND delivery_id<>?"
                 )
                 .bind(userId, question.delivery_id)
                 .first()
@@ -1590,7 +1600,7 @@ it.each(["paused", "stopped"] as const)(
                 yield* Effect.tryPromise(() =>
                   db
                     .prepare(
-                      "SELECT count(*) AS n FROM proactivity_consent_records WHERE user_id=?"
+                      "SELECT count(*) AS n FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE user_id=?"
                     )
                     .bind(userId)
                     .first()
@@ -1646,7 +1656,7 @@ it.each(["paused", "stopped"] as const)(
               yield* Effect.tryPromise(() =>
                 db
                   .prepare(
-                    "SELECT text FROM proactive_message_transcript_entries WHERE user_id=? AND delivery_id=?"
+                    "SELECT text FROM proactive_transcript_entries WHERE kind='message' AND user_id=? AND delivery_id=?"
                   )
                   .bind(userId, replacement.delivery_id)
                   .first()
@@ -1672,7 +1682,9 @@ it.each(["paused", "stopped"] as const)(
         expect(after._tag).toBe("NoWork");
         const raw = yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT question_id FROM reminder_governors WHERE user_id=?")
+            .prepare(
+              "SELECT question_id FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS reminder_governors WHERE user_id=?"
+            )
             .bind(userId)
             .first()
         );
@@ -1742,7 +1754,9 @@ it.each(["paused", "stopped"] as const)(
             expect(
               yield* Effect.tryPromise(() =>
                 db
-                  .prepare("SELECT count(*) AS n FROM proactivity_consent_records WHERE user_id=?")
+                  .prepare(
+                    "SELECT count(*) AS n FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE user_id=?"
+                  )
                   .bind(userId)
                   .first()
               )

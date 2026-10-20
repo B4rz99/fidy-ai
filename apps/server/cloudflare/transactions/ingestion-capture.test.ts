@@ -6,7 +6,11 @@ import {
   NotificationInterpretationEvidence,
   TransactionExtraction,
 } from "../../src/core/transactions/contract";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  consentHistoryTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { prepareNotificationEmailCapture, prepareStatementCapture } from "./operations";
 import type { StatementCaptureInput } from "./contract";
 
@@ -32,14 +36,17 @@ const setup = Effect.fn(function* () {
     db.exec(`CREATE TABLE capture_sources (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, active INTEGER NOT NULL);
       CREATE TABLE transactions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, amount TEXT, currency TEXT, direction TEXT, counterparty TEXT, category_id TEXT, notes TEXT, occurred_at TEXT, created_at TEXT, UNIQUE (user_id, id));
       CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, transaction_id TEXT NOT NULL, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT, received_email_id TEXT, message_content_sha256 TEXT, message_evidence TEXT, deterministic_interpretation TEXT, extractor_revision TEXT, FOREIGN KEY (user_id, transaction_id) REFERENCES transactions(user_id, id));
-      CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY);
-      CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY);`)
+      ${consentHistoryTestSchema};
+      `)
   );
   yield* run(() =>
     db.prepare("INSERT INTO capture_sources VALUES (?, ?, 1)").bind(submissionId, userA).run()
   );
   yield* run(() =>
-    db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(userA).run()
+    db
+      .prepare("INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)")
+      .bind(userA)
+      .run()
   );
   return db;
 });
@@ -197,7 +204,12 @@ it.effect("refuses both prepared email writes when Consent is withdrawn before c
     const db = yield* setup();
     const statements = yield* prepareEmail(db);
     yield* run(() =>
-      db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userA).run()
+      db
+        .prepare(
+          "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+        )
+        .bind(userA)
+        .run()
     );
     yield* run(() => db.batch([...statements]));
     const result = yield* run(() =>

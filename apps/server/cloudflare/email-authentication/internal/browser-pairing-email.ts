@@ -114,7 +114,7 @@ const prepareEmailAdmission = (
   db
     .prepare(`INSERT INTO browser_pairing_email_user_limits
             (user_id, window_started_at_ms, requests)
-            SELECT user_id, ?, 1 FROM browser_pairing_email_proofs WHERE work_id = ?
+            SELECT user_id, ?, 1 FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS browser_pairing_email_proofs WHERE work_id = ?
             ON CONFLICT(user_id) DO UPDATE SET
               requests = CASE WHEN window_started_at_ms <= ? THEN 1 ELSE requests + 1 END,
               window_started_at_ms = CASE WHEN window_started_at_ms <= ? THEN excluded.window_started_at_ms ELSE window_started_at_ms END`)
@@ -127,7 +127,7 @@ const prepareEmailAdmission = (
   db
     .prepare(`INSERT INTO browser_pairing_email_global_limit
             (id, window_started_at_ms, requests)
-            SELECT 1, ?, 1 FROM browser_pairing_email_proofs WHERE work_id = ?
+            SELECT 1, ?, 1 FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS browser_pairing_email_proofs WHERE work_id = ?
             ON CONFLICT(id) DO UPDATE SET
               requests = CASE WHEN window_started_at_ms <= ? THEN 1 ELSE requests + 1 END,
               window_started_at_ms = CASE WHEN window_started_at_ms <= ? THEN excluded.window_started_at_ms ELSE window_started_at_ms END`)
@@ -161,28 +161,23 @@ const startPairingEmailIntent = ({
     yield* attempt(() =>
       db.batch([
         db
-          .prepare(`INSERT INTO browser_pairing_email_proofs
-        (pairing_id, work_id, user_id, email_address, credential_verified_at_ms,
-         state, expires_at_ms, generation, last_requested_at_ms)
-        SELECT p.pairingId, ?, v.user_id, v.email_address, v.verified_at_ms,
-          'awaiting_delivery', p.expiresAt, 1, ?
-        FROM (${pairing.sql}) AS p JOIN verified_email_credentials AS v ON v.email_address = ?
-        WHERE p.expiresAt = ?
-          AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_user_limits AS l
-            WHERE l.user_id = v.user_id AND l.window_started_at_ms > ? AND l.requests >= ?)
-          AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_global_limit AS l
-            WHERE l.window_started_at_ms > ? AND l.requests >= ?)
-        ON CONFLICT(pairing_id) DO UPDATE SET work_id = excluded.work_id,
-          email_address = excluded.email_address,
-          user_id = excluded.user_id,
-          credential_verified_at_ms = excluded.credential_verified_at_ms,
-          state = 'awaiting_delivery', generation = generation + 1,
-          last_requested_at_ms = excluded.last_requested_at_ms,
-          public_code = NULL, proof_digest = NULL, proof_expires_at_ms = NULL,
-          wrong_attempts = 0
-        WHERE browser_pairing_email_proofs.state NOT IN ('approved', 'sending')
-          AND browser_pairing_email_proofs.generation < 5
-          AND browser_pairing_email_proofs.last_requested_at_ms <= ?`)
+          .prepare(`UPDATE browser_login_pairings SET email_work_id=incoming.work_id,email_user_id=incoming.user_id,
+          email_address=incoming.email_address,email_credential_verified_at_ms=incoming.verified_at_ms,
+          email_state='awaiting_delivery',email_expires_at_ms=incoming.expires_at_ms,
+          email_generation=coalesce(email_generation,0)+1,email_last_requested_at_ms=incoming.requested_at_ms,
+          email_public_code=NULL,email_proof_digest=NULL,email_proof_expires_at_ms=NULL,
+          email_wrong_attempts=0,email_dispatch_attempted_at_ms=NULL
+        FROM(SELECT p.pairingId AS pairing_id,? AS work_id,v.user_id,v.email_address,v.verified_at_ms,
+          p.expiresAt AS expires_at_ms,? AS requested_at_ms
+          FROM (${pairing.sql}) AS p JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.email_address=?
+          WHERE p.expiresAt=?
+          AND NOT EXISTS(SELECT 1 FROM browser_pairing_email_user_limits l
+            WHERE l.user_id=v.user_id AND l.window_started_at_ms>? AND l.requests>=?)
+          AND NOT EXISTS(SELECT 1 FROM browser_pairing_email_global_limit l
+            WHERE l.window_started_at_ms>? AND l.requests>=?)) AS incoming
+        WHERE browser_login_pairings.id=incoming.pairing_id
+          AND (email_work_id IS NULL OR(email_state NOT IN('approved','sending')
+            AND email_generation<5 AND email_last_requested_at_ms<=?))`)
           .bind(
             workId,
             current,
@@ -196,11 +191,6 @@ const startPairingEmailIntent = ({
             current - emailCooldownMilliseconds
           ),
         ...prepareEmailAdmission(db, current, workId),
-        db
-          .prepare(`INSERT INTO browser_pairing_email_outbox (id, created_at_ms)
-        SELECT work_id, ? FROM browser_pairing_email_proofs
-        WHERE work_id = ? AND state = 'awaiting_delivery'`)
-          .bind(current, workId),
       ])
     );
   });
@@ -240,12 +230,12 @@ const rejectWrongEmailProof = (db: D1Database, workId: string): Promise<void> =>
   Effect.runPromise(
     attempt(() =>
       db
-        .prepare(`UPDATE browser_pairing_email_proofs SET wrong_attempts = wrong_attempts + 1,
-    state = CASE WHEN wrong_attempts + 1 >= 5 THEN 'rejected' ELSE state END,
-    proof_digest = CASE WHEN wrong_attempts + 1 >= 5 THEN NULL ELSE proof_digest END,
-    public_code = CASE WHEN wrong_attempts + 1 >= 5 THEN NULL ELSE public_code END,
-    proof_expires_at_ms = CASE WHEN wrong_attempts + 1 >= 5 THEN NULL ELSE proof_expires_at_ms END
-    WHERE work_id = ? AND state = 'awaiting_proof' AND wrong_attempts < 5`)
+        .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_wrong_attempts = email_wrong_attempts + 1,
+    email_state = CASE WHEN email_wrong_attempts + 1 >= 5 THEN 'rejected' ELSE email_state END,
+    email_proof_digest = CASE WHEN email_wrong_attempts + 1 >= 5 THEN NULL ELSE email_proof_digest END,
+    email_public_code = CASE WHEN email_wrong_attempts + 1 >= 5 THEN NULL ELSE email_public_code END,
+    email_proof_expires_at_ms = CASE WHEN email_wrong_attempts + 1 >= 5 THEN NULL ELSE email_proof_expires_at_ms END
+    WHERE email_work_id IS NOT NULL AND email_work_id = ? AND email_state = 'awaiting_proof' AND email_wrong_attempts < 5`)
         .bind(workId)
         .run()
     ).pipe(Effect.asVoid)
@@ -265,8 +255,8 @@ const approveEmailPairing = (
             pairingId,
             current,
             subject: {
-              sql: `SELECT e.user_id AS userId FROM browser_pairing_email_proofs AS e
-              JOIN verified_email_credentials AS v ON v.user_id = e.user_id
+              sql: `SELECT e.user_id AS userId FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS e
+              JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.user_id = e.user_id
                 AND v.email_address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
               WHERE e.work_id = ? AND e.pairing_id = ? AND e.state = 'awaiting_proof' AND e.public_code = ?
                 AND e.proof_expires_at_ms > ? AND e.expires_at_ms > ?`,
@@ -274,9 +264,9 @@ const approveEmailPairing = (
             },
           }),
           db
-            .prepare(`UPDATE browser_pairing_email_proofs SET state = 'approved',
-      proof_digest = NULL, public_code = NULL, proof_expires_at_ms = NULL
-      WHERE work_id = ? AND state = 'awaiting_proof' AND changes() = 1`)
+            .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_state = 'approved',
+      email_proof_digest = NULL, email_public_code = NULL, email_proof_expires_at_ms = NULL
+      WHERE email_work_id IS NOT NULL AND email_work_id = ? AND email_state = 'awaiting_proof' AND changes() = 1`)
             .bind(workId),
         ])
       ),
@@ -313,7 +303,7 @@ export const completeBrowserPairingEmail = (input: {
         const raw = yield* attempt(() =>
           db
             .prepare(`SELECT proof_digest, wrong_attempts, work_id
-      FROM browser_pairing_email_proofs WHERE pairing_id = ? AND public_code = ?
+      FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS browser_pairing_email_proofs WHERE pairing_id = ? AND public_code = ?
         AND state = 'awaiting_proof' AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
             .bind(proof.value.pairingId, publicCode, current, current)
             .first()

@@ -2,17 +2,16 @@ import { afterAll, expect, it } from "vitest";
 import { type Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { UserContext, UserId } from "../../src/core/identity/contract";
 
-import { Currency, encodeMoneyAmount } from "../../src/core/_shared/money";
+import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { CategoryId } from "../../src/core/categories/contract";
 import { prepareUserContext } from "../identity/user-context/operations";
 import { listCategories } from "../categories/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { type BudgetContributionQuery, TransactionAggregatesUnavailable } from "./contract";
+import { TransactionAggregatesUnavailable } from "./contract";
 import {
   findRecurringSnapshot,
   preparePeriodAggregateGuard,
   prepareRecurringFactGuard,
-  readBudgetContributions,
   readCompletePeriodAggregates,
   readDashboardTransactions,
   readRecurringFacts,
@@ -75,7 +74,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
         [userId, otherUserId].map((subject) =>
           db
             .prepare(
-              `INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, '{}', 'disclosure', 'decision', 0, 0)`
+              `INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 0, 0)`
             )
             .bind(subject, subject)
         )
@@ -278,97 +277,6 @@ const movement = (
       input.counterparty
     );
 };
-
-const budgetQuery = (db: D1Database): BudgetContributionQuery => ({
-  db,
-  userId,
-  categoryId,
-  currency: Currency.make("COP"),
-  period: { from, to },
-  cursor: { occurredAt: DateTime.formatIso(from), transactionId: "" },
-});
-
-it("reads exact owned Budget outflows in a half-open interval and resumes equal-time identities", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          movement(db, 1, { amount: "9007199254740993.01" }),
-          movement(db, 2, { amount: "0.02" }),
-          movement(db, 3, { userId: otherUserId }),
-          movement(db, 4, { currency: "USD" }),
-          movement(db, 5, { direction: "inflow" }),
-          movement(db, 6, { categoryId: otherCategoryId }),
-          movement(db, 7, { occurredAt: "2026-05-01T04:59:59.999Z" }),
-          movement(db, 8, { occurredAt: DateTime.formatIso(to) }),
-        ])
-      );
-      const first = Option.getOrThrow(yield* readBudgetContributions(budgetQuery(db)));
-      expect(
-        first.movements.map((value) => ({
-          amount: encodeMoneyAmount(value.money.amount),
-          currency: value.money.currency,
-          categoryId: value.categoryId,
-          direction: value.direction,
-          occurredAt: DateTime.formatIso(value.occurredAt),
-        }))
-      ).toEqual([
-        {
-          amount: "9007199254740993.01",
-          currency: "COP",
-          categoryId,
-          direction: "outflow",
-          occurredAt: DateTime.formatIso(from),
-        },
-        {
-          amount: "0.02",
-          currency: "COP",
-          categoryId,
-          direction: "outflow",
-          occurredAt: DateTime.formatIso(from),
-        },
-      ]);
-      const resumed = Option.getOrThrow(
-        yield* readBudgetContributions({
-          ...budgetQuery(db),
-          cursor: { occurredAt: DateTime.formatIso(from), transactionId: transactionId(1) },
-        })
-      );
-      expect(resumed.movements.map((value) => encodeMoneyAmount(value.money.amount))).toEqual([
-        "0.02",
-      ]);
-      expect(resumed.cursor.transactionId).toBe(transactionId(2));
-      expect(resumed.complete).toBe(true);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("UPDATE transactions SET amount = '0.001' WHERE id = ?")
-          .bind(transactionId(2))
-          .run()
-      );
-      expect(Option.isNone(yield* readBudgetContributions(budgetQuery(db)))).toBe(true);
-    })
-  ));
-
-it("caps each contribution page and resumes beyond a full page without losing its final identity", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db.batch(Array.from({ length: 513 }, (_, index) => movement(db, index + 1)))
-      );
-      const first = Option.getOrThrow(yield* readBudgetContributions(budgetQuery(db)));
-      expect(first.movements).toHaveLength(512);
-      expect(first.complete).toBe(false);
-      expect(first.cursor.transactionId).toBe(transactionId(512));
-      const last = Option.getOrThrow(
-        yield* readBudgetContributions({ ...budgetQuery(db), cursor: first.cursor })
-      );
-      expect(last.movements).toHaveLength(1);
-      expect(last.complete).toBe(true);
-      expect(last.cursor.transactionId).toBe(transactionId(513));
-    })
-  ));
 
 it("returns ready owned Dashboard pages with caller context and refuses incomplete or malformed projections", () =>
   Effect.runPromise(

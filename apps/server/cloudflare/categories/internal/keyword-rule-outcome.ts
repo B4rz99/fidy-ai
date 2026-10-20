@@ -4,7 +4,6 @@ import { Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority } from "../../../src/shell/tokens/operations";
@@ -39,7 +38,6 @@ import type {
 import {
   type TransactionCaller,
   callerAuthority,
-  dailyAuditMessage,
   isOAuthCaller,
   isPATCaller,
 } from "../../canonical-work/operations";
@@ -106,7 +104,7 @@ const recordKeywordRuleGuard = ({
   subject: TransactionCaller;
   current: number;
   operation: KeywordRuleOutcome["operation"];
-}>): Effect.Effect<"recorded" | "credential_refused" | "rate_limited" | "unavailable"> => {
+}>): Effect.Effect<"recorded" | "credential_refused" | "unavailable"> => {
   if (isOAuthCaller(subject)) {
     return Effect.tryPromise(() =>
       prepareAuthorizedAuditCall({
@@ -148,11 +146,7 @@ const recordKeywordRuleGuard = ({
     Effect.map((result) =>
       result.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
     ),
-    Effect.catch((cause) =>
-      Effect.succeed(
-        refusedByAuditBudget(cause) ? ("rate_limited" as const) : ("unavailable" as const)
-      )
-    )
+    Effect.orElseSucceed(() => "unavailable" as const)
   );
 };
 
@@ -202,19 +196,6 @@ export const keywordRuleGuardRefusal = ({
       }),
   };
 };
-
-/**
- * The refusal a keyword-rule child reports when the shared daily audit budget, not the child,
- * refused its unit. The batch answers the canonical `rate_limited` result without a row, while the
- * individual entry point keeps its own classification: an aborted rule write that no conflict
- * explains is unavailable.
- */
-export const keywordRuleBudgetRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: dailyAuditMessage,
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(keywordRuleUnavailable()),
-});
 
 /** One owned rule by stable id; a foreign or absent id returns no row. */
 const findOwnedRule = ({
@@ -405,15 +386,4 @@ export const keywordRuleOutcome = (outcome: KeywordRuleOutcome): OwnerOutcome =>
   guardFacts: Option.some(outcome),
   collisionKey: Option.some(`keyword-rule:${outcome.ruleId}`),
   read: (db, userId) => findKeywordRuleValue({ db, userId, outcome }),
-  triggerRefusal: ({ subject }, kind) => {
-    if (kind === "capacity") {
-      return Option.some(
-        keywordRuleRefusal({
-          failure: new KeywordRuleLimitReached({ maximum: maximumKeywordRulesPerUser }),
-          subject,
-        })
-      );
-    }
-    return kind === "audit" ? Option.some(keywordRuleBudgetRefusal()) : Option.none();
-  },
 });

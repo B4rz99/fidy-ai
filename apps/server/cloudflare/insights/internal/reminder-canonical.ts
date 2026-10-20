@@ -8,7 +8,6 @@ import {
 } from "../../../src/core/insights/contract";
 import {
   prepareAuthorizedAuditCall,
-  prepareBrowserAuditBudgetGuard,
   recordCanonicalPATWork,
   recordedPATCallProof,
 } from "../../../src/shell/audit/operations";
@@ -21,7 +20,6 @@ import {
 import {
   type QueryCaller,
   type TransactionCaller,
-  auditLimitRefusal,
   callerAuthority,
   callerScope,
   childCaller,
@@ -104,7 +102,7 @@ const audit = ({
 const assertion = (work: Work): D1PreparedStatement =>
   work.db
     .prepare(
-      `INSERT INTO insight_mutation_assertion(id,accepted) VALUES(1,CASE WHEN changes()=1 AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted`
+      `INSERT INTO sql_assertions (scope, accepted) VALUES ('insight_mutation',CASE WHEN changes()=1 AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted`
     )
     .bind(...work.authority.bindings);
 const instructions = (schedule: ReminderSchedule): ReminderSchedule =>
@@ -143,7 +141,7 @@ export const readHeldReminderSchedule = (input: Work): Effect.Effect<Response> =
         assertion(work),
         work.db
           .prepare(
-            `SELECT id,version,snapshot_json,enabled,next_scheduled_at,consent_grant_id FROM reminder_schedules WHERE user_id=? AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
+            `SELECT id,version,snapshot_json,enabled,next_scheduled_at,consent_grant_id FROM schedules WHERE kind='reminder' AND user_id=? AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
           )
           .bind(work.userId, ...work.authority.bindings),
       ])
@@ -259,8 +257,6 @@ export const prepareHeldReminderRevision = (
           collisionKey: Option.some(`reminder:${work.userId}`),
           guardFacts: Option.none(),
           read: readCommitted,
-          triggerRefusal: (_ownerWork, kind) =>
-            kind === "audit" ? Option.some(auditLimitRefusal()) : Option.none(),
         },
         statements: [
           ...writes,
@@ -272,13 +268,7 @@ export const prepareHeldReminderRevision = (
           }),
         ],
 
-        auditBudget: work.authority.table === "pats" ? "shared" : "owner",
-        commitGuards:
-          work.authority.table === "pats"
-            ? Option.none()
-            : Option.some((input) => [
-                prepareBrowserAuditBudgetGuard({ ...input, owner: "insights" }),
-              ]),
+        commitGuards: Option.none(),
         guardRefusal: () => Effect.succeed(refusal(work, "validation_failed")),
       } satisfies PreparedCanonicalMutation,
     } as const;
@@ -343,7 +333,7 @@ export const readHeldRecurringDigestReport = (
         assertion(work),
         work.db
           .prepare(
-            `SELECT report_json FROM recurring_digest_reports WHERE user_id=? AND insight_event_id=? AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
+            `SELECT report_json FROM insight_reports WHERE kind='proactivity-delivery' AND report_json IS NOT NULL AND user_id=? AND delivery_id=? AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
           )
           .bind(work.userId, params.value.id, ...work.authority.bindings),
       ])

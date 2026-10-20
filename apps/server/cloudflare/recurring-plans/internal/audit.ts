@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
@@ -8,10 +7,8 @@ import {
   type QueryCaller,
   callerAuthority,
   isPATCaller,
-  transactionFailure,
   transactionId,
 } from "../../canonical-work/operations";
-import type { CanonicalMutationRefusal } from "../../canonical-operations/contract";
 import type { RecurringOperation } from "../contract";
 
 type Work = Readonly<{ db: D1Database; subject: QueryCaller; current: number }>;
@@ -53,16 +50,3 @@ export const audit = ({
     afterOwnerWrite: false,
   });
 };
-export const recurringLimitRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: "Se alcanzó el límite diario de operaciones.",
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () =>
-    Effect.succeed(
-      transactionFailure({
-        code: "rate_limited",
-        status: 429,
-        message: "Se alcanzó el límite diario de operaciones.",
-      })
-    ),
-});

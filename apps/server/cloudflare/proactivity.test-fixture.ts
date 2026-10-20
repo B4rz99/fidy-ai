@@ -37,12 +37,12 @@ export const observeTestHostedContext = (
       db.batch([
         db
           .prepare(
-            "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) SELECT id,?,created_at_ms FROM users WHERE id=?"
+            "WITH incoming(user_id,email_address,verified_at_ms) AS (SELECT id,?,created_at_ms FROM users WHERE id=?) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
           )
           .bind(`context-${proof.userId}@example.com`, proof.userId),
         db
           .prepare(
-            "INSERT INTO trial_periods(user_id,started_at_ms,ends_at_ms) SELECT id,created_at_ms,created_at_ms+604800000 FROM users WHERE id=?"
+            "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?"
           )
           .bind(proof.userId),
       ])
@@ -136,7 +136,7 @@ export const proactivityHostedCaller = (
           .bind(turnId, userId, sessionId, current),
         db
           .prepare(
-            "INSERT INTO hosted_whatsapp_inbound(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,'held-reminder-read','123456789',?,?)"
+            "WITH incoming(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) AS (VALUES (?,?,?,?,'held-reminder-read','123456789',?,?)) UPDATE hosted_turns SET inbound_portfolio_id=incoming.portfolio_id,inbound_bsuid=incoming.bsuid,inbound_message_id=incoming.message_id,inbound_business_phone_number_id=incoming.business_phone_number_id,inbound_occurred_at_ms=incoming.occurred_at_ms,inbound_received_at_ms=incoming.received_at_ms FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id"
           )
           .bind(
             turnId,
@@ -285,67 +285,51 @@ export const withdrawTestProcessingConsent = (
     );
   });
 
-const databaseThrough = (
-  boundary: "BeforeCanonicalAudit" | "BeforeOfferRetention" | "Current"
-): Effect.Effect<D1Database, Cause.UnknownError | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const db = yield* Effect.tryPromise(() => proactivityTestDatabases.acquire());
-    const names = Array.from(
-      new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
-    ).sort();
+export const proactivityDatabase: Effect.Effect<
+  D1Database,
+  Cause.UnknownError | Schema.SchemaError
+> = Effect.gen(function* () {
+  const db = yield* Effect.tryPromise(() => proactivityTestDatabases.acquire());
+  const names = Array.from(
+    new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
+  ).sort();
+  const sources = names.map((name) => new URL(`./migrations/${name}`, import.meta.url));
+  yield* Effect.tryPromise(() => installTestSchema({ db, sources }));
+  const disclosure = yield* Schema.encodeEffect(
+    Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+  )(currentDisclosureFor());
+  for (const subject of [
+    { userId: proactivityTestUsers[0], caller: proactivityTestCallers[0] },
+    { userId: proactivityTestUsers[1], caller: proactivityTestCallers[1] },
+  ]) {
+    const { userId, caller } = subject;
     yield* Effect.tryPromise(() =>
-      installTestSchema({
-        db,
-        sources: names
-          .filter(
-            (name) =>
-              boundary === "Current" ||
-              name < (boundary === "BeforeCanonicalAudit" ? "0040" : "0047")
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
           )
-          .map((name) => new URL(`./migrations/${name}`, import.meta.url)),
-      })
+          .bind(userId, proactivityTestNow.epochMilliseconds),
+        db
+          .prepare(
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+          )
+          .bind(
+            userId,
+            caller.businessPortfolioId,
+            caller.businessScopedUserId,
+            proactivityTestNow.epochMilliseconds
+          ),
+        db
+          .prepare(
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',0,0)"
+          )
+          .bind(userId, userId, disclosure),
+      ])
     );
-    const disclosure = yield* Schema.encodeEffect(
-      Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
-    )(currentDisclosureFor());
-    for (const subject of [
-      { userId: proactivityTestUsers[0], caller: proactivityTestCallers[0] },
-      { userId: proactivityTestUsers[1], caller: proactivityTestCallers[1] },
-    ]) {
-      const { userId, caller } = subject;
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare(
-              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
-            )
-            .bind(userId, proactivityTestNow.epochMilliseconds),
-          db
-            .prepare(
-              "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
-            )
-            .bind(
-              userId,
-              caller.businessPortfolioId,
-              caller.businessScopedUserId,
-              proactivityTestNow.epochMilliseconds
-            ),
-          db
-            .prepare(
-              "INSERT INTO onboarding_consent_records(id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,?,'disclosed','accepted',0,0)"
-            )
-            .bind(userId, userId, disclosure),
-        ])
-      );
-    }
-    return db;
-  });
-
-export const proactivityDatabase = databaseThrough("Current");
-/** Independent populated-upgrade baseline; 0040 must be applied separately by the migration test. */
-export const proactivityDatabaseBeforeCanonicalAudit = databaseThrough("BeforeCanonicalAudit");
-/** Populated category delivery predecessor for the offer-reference retention migration. */
-export const proactivityDatabaseBeforeOfferRetention = databaseThrough("BeforeOfferRetention");
+  }
+  return db;
+});
 
 const july = 7;
 const august = 8;

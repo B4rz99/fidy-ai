@@ -40,8 +40,9 @@ const seedSession = (db: D1Database): Promise<unknown> =>
   ]);
 const revoke = (db: D1Database): Promise<unknown> =>
   db
-    .prepare(`INSERT INTO consent_user_revocations
-    (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+    .prepare(
+      `INSERT INTO consent_history(record_type,id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES ('processing_withdrawal',?, ?, ?, ?, ?)`
+    )
     .bind("60000000-0000-4000-8000-000000000001", userA, grantA, sessionA, now + 1)
     .run();
 const hostedSessionA = "70000000-0000-4000-8000-000000000001";
@@ -107,11 +108,19 @@ const setup = (): Promise<D1Database> =>
   );
 const seedGrant = (db: D1Database): Promise<unknown> =>
   db.batch([
-    db.prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)").bind(userA, now),
-    db.prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)").bind(userB, now),
     db
       .prepare(
-        "INSERT INTO onboarding_consent_records VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+        "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+      )
+      .bind(userA, now),
+    db
+      .prepare(
+        "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+      )
+      .bind(userB, now),
+    db
+      .prepare(
+        "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
       )
       .bind(grantA, userA, encodeJson(currentDisclosureFor()), now, now),
   ]);
@@ -341,7 +350,7 @@ it("cannot use another User's Pending Turn to authorize model egress", () =>
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO onboarding_consent_records VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, ?, 'disclosed', 'accepted', ?, ?)"
           )
           .bind(
             "30000000-0000-4000-8000-000000000002",
@@ -380,7 +389,7 @@ it("fails closed when live Consent authority is unavailable after spend commits"
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(setup);
       yield* Effect.tryPromise(() => seedGrant(db));
-      yield* Effect.tryPromise(() => db.prepare("DROP TABLE consent_user_revocations").run());
+      yield* Effect.tryPromise(() => db.prepare("DROP TABLE consent_history").run());
       let providerCalls = 0;
       const run = makeAdmittedWorkersAiRun({
         db,

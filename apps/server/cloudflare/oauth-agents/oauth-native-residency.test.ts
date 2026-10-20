@@ -271,7 +271,7 @@ describe("native2025 residency integration", () => {
             .bind(userId, current),
           db
             .prepare(
-              "INSERT INTO onboarding_consent_records VALUES ('native-consent', ?, '{}', 'disclosure', 'decision', 1, 1)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant','native-consent', ?, '{}', 'disclosure', 'decision', 1, 1)"
             )
             .bind(userId),
           db
@@ -306,12 +306,12 @@ describe("native2025 residency integration", () => {
             ),
           db
             .prepare(
-              "INSERT INTO oauth_grant_consents(id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES ('80000000-0000-4000-8000-000000000001',?,?,'70000000-0000-4000-8000-000000000001','disclosure','decision',?)"
+              "INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES ('oauth_grant','80000000-0000-4000-8000-000000000001',?,?,'70000000-0000-4000-8000-000000000001','disclosure','decision',?)"
             )
             .bind(connectionId, userId, current),
           db
             .prepare(
-              "INSERT INTO oauth_access_credentials(id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES (?,?,?,?,?,?,?)"
+              "INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access',?,?,?,?,?,?,?)"
             )
             .bind(
               credentialId,
@@ -599,7 +599,9 @@ describe("native2025 residency integration", () => {
         const old = yield* initialize(harness.send);
         yield* wait(() =>
           harness.db
-            .prepare("UPDATE oauth_access_credentials SET scopes_json = '[\"read\"]' WHERE id = ?")
+            .prepare(
+              "UPDATE oauth_credentials AS oauth_credentials SET scopes_json = '[\"read\"]' WHERE kind='access' AND id = ?"
+            )
             .bind(credentialId)
             .run()
         );
@@ -642,7 +644,9 @@ describe("native2025 residency integration", () => {
         const session = yield* initialize(harness.send);
         yield* wait(() =>
           harness.db
-            .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ? WHERE id = ?")
+            .prepare(
+              "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = ? WHERE kind='access' AND id = ?"
+            )
             .bind(harness.current + 50000, credentialId)
             .run()
         );
@@ -674,7 +678,7 @@ describe("native2025 residency integration", () => {
         yield* wait(() =>
           harness.db
             .prepare(
-              "INSERT INTO oauth_access_credentials(id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('30000000-0000-4000-8000-000000000002',?,?,?,?,?,'[\"read\"]')"
+              "INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access','30000000-0000-4000-8000-000000000002',?,?,?,?,?,'[\"read\"]')"
             )
             .bind(connectionId, userId, digest, harness.current, harness.current + 50000)
             .run()
@@ -713,7 +717,7 @@ describe("native2025 residency integration", () => {
         yield* wait(() =>
           harness.db
             .prepare(
-              "INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('native-withdrawn',?,'native-consent','70000000-0000-4000-8000-000000000001',?)"
+              "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal','native-withdrawn',?,'native-consent','70000000-0000-4000-8000-000000000001',?)"
             )
             .bind(userId, withdrawnAt)
             .run()
@@ -768,7 +772,7 @@ describe("native2025 residency integration", () => {
           yield* wait(() =>
             harness.db
               .prepare(
-                "INSERT INTO oauth_access_credentials(id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('30000000-0000-4000-8000-000000000002',?,?,?,?,?,?)"
+                "INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access','30000000-0000-4000-8000-000000000002',?,?,?,?,?,?)"
               )
               .bind(
                 connectionId,
@@ -1240,12 +1244,12 @@ describe("native2025 residency integration", () => {
               .bind(peerConnection, connectionId),
             harness.db
               .prepare(
-                "INSERT INTO oauth_grant_consents SELECT '80000000-0000-4000-8000-000000000002', ?, user_id, session_id, disclosure_revision, disclosure_text, accepted_at_ms FROM oauth_grant_consents WHERE connection_id = ?"
+                "INSERT INTO consent_history (record_type,id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) SELECT 'oauth_grant','80000000-0000-4000-8000-000000000002', ?, user_id, session_id, disclosure_revision, disclosure_text, accepted_at_ms FROM (SELECT * FROM consent_history WHERE record_type='oauth_grant') AS oauth_grant_consents WHERE connection_id = ?"
               )
               .bind(peerConnection, connectionId),
             harness.db
               .prepare(
-                "INSERT INTO oauth_access_credentials(id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('30000000-0000-4000-8000-000000000002',?,?,?,?,?,?)"
+                "INSERT INTO oauth_credentials AS oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access','30000000-0000-4000-8000-000000000002',?,?,?,?,?,?)"
               )
               .bind(
                 peerConnection,
@@ -1517,7 +1521,9 @@ describe("native2025 residency integration", () => {
             if (reason !== "revocation") {
               yield* wait(() =>
                 harness.db
-                  .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ? WHERE id = ?")
+                  .prepare(
+                    "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = ? WHERE kind='access' AND id = ?"
+                  )
                   .bind(harness.current + lifetime + 30000, credentialId)
                   .run()
               );

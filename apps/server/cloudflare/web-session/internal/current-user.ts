@@ -72,8 +72,7 @@ const projectCurrentUser = ({
     const recorded = yield* attempt(() =>
       db
         .prepare(
-          `INSERT INTO canonical_user_reads (id, user_id, session_id, occurred_at_ms)
-          SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
+          `INSERT INTO audit_entries(record_type,id, user_id, session_id, occurred_at_ms) SELECT 'identity_read',?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
         )
         .bind(uuid(), session.user_id, session.id, observedAt, ...authority.bindings)
         .run()

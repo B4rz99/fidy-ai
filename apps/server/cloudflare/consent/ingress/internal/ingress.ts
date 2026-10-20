@@ -298,7 +298,7 @@ const findRecordedDecision = (
   attempt(() =>
     db
       .prepare(`SELECT decision_message_id, body_sha256, decision
-    FROM pending_consent_decisions WHERE portfolio_id = ? AND decision_message_id = ?`)
+    FROM (SELECT rowid,id AS exchange_id,decision_portfolio_id AS portfolio_id,decision_bsuid AS bsuid,decision_phone_number_id AS phone_number_id,decision_value AS decision,decision_disclosure_json AS disclosure_json,decision_disclosure_message_id AS disclosure_message_id,decision_message_id,decision_delivery_key AS delivery_key,decision_body_sha256 AS body_sha256,decision_occurred_at_ms AS occurred_at_ms,decision_received_at_ms AS received_at_ms FROM pending_consent_exchanges WHERE decision_value IS NOT NULL) AS pending_consent_decisions WHERE portfolio_id = ? AND decision_message_id = ?`)
       .bind(input.event.caller.businessPortfolioId, input.event.messageEvidence.providerMessageId)
       .first()
   ).pipe(
@@ -330,10 +330,9 @@ const persistDecision = ({
 }>): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const statement = db
-      .prepare(`INSERT INTO pending_consent_decisions
-      (exchange_id, portfolio_id, bsuid, phone_number_id, decision, disclosure_json, disclosure_message_id,
-       decision_message_id, delivery_key, body_sha256, occurred_at_ms, received_at_ms)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .prepare(
+        `UPDATE pending_consent_exchanges SET decision_portfolio_id=incoming.portfolio_id,decision_bsuid=incoming.bsuid,decision_phone_number_id=incoming.phone_number_id,decision_value=incoming.decision,decision_disclosure_json=incoming.disclosure_json,decision_disclosure_message_id=incoming.disclosure_message_id,decision_message_id=incoming.decision_message_id,decision_delivery_key=incoming.delivery_key,decision_body_sha256=incoming.body_sha256,decision_occurred_at_ms=incoming.occurred_at_ms,decision_received_at_ms=incoming.received_at_ms FROM (SELECT ? AS exchange_id,? AS portfolio_id,? AS bsuid,? AS phone_number_id,? AS decision,? AS disclosure_json,? AS disclosure_message_id,? AS decision_message_id,? AS delivery_key,? AS body_sha256,? AS occurred_at_ms,? AS received_at_ms) AS incoming WHERE pending_consent_exchanges.id=incoming.exchange_id AND pending_consent_exchanges.decision_value IS NULL`
+      )
       .bind(
         pending.id,
         input.event.caller.businessPortfolioId,
@@ -416,7 +415,7 @@ export const findDelivery = ({
   attempt(() =>
     db
       .prepare(
-        "SELECT message_id, phone_number_id, occurred_at_ms FROM pending_consent_delivery WHERE correlation_token = ?"
+        "SELECT message_id, phone_number_id, occurred_at_ms FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS pending_consent_delivery WHERE correlation_token = ?"
       )
       .bind(token)
       .first()
@@ -565,7 +564,7 @@ const runDisclosureAttempt = <R>({
           .prepare(`UPDATE pending_consent_exchanges SET rejected_at_ms = MIN(?, expires_at_ms)
           WHERE id = ? AND state = 'outbound_started' AND disclosure_message_id IS NULL
           AND rejected_at_ms IS NULL
-          AND NOT EXISTS (SELECT 1 FROM pending_consent_delivery AS d
+          AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,correlation_token,delivery_phone_number_id AS phone_number_id,delivery_message_id AS message_id,delivery_occurred_at_ms AS occurred_at_ms,delivery_received_at_ms AS received_at_ms,delivery_not_before_ms AS decision_not_before_ms FROM pending_consent_exchanges WHERE delivery_message_id IS NOT NULL) AS d
             WHERE d.correlation_token = pending_consent_exchanges.correlation_token)`)
           .bind(rejectedAt, id)
           .run()

@@ -26,7 +26,11 @@ it("archives reviewed Memory in bounded pages, resumes after reconstruction, and
       });
       const statements = [
         ...[userId, foreignUser].map((id) =>
-          db.prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)").bind(id)
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+            )
+            .bind(id)
         ),
         db
           .prepare(
@@ -105,7 +109,11 @@ it("expires ordinary review drafts while a sealed User remains under erasure dis
       const current = yield* Clock.currentTimeMillis;
       const statements = [
         ...[userId, foreignUser].map((id) =>
-          db.prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',1)").bind(id)
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+            )
+            .bind(id)
         ),
         ...[userId, foreignUser].flatMap((id) =>
           [0, 1].map((index) =>

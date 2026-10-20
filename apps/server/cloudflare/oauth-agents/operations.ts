@@ -97,7 +97,7 @@ export const authenticateOAuth = (
     const found = yield* Effect.tryPromise(() =>
       input.db
         .prepare(`SELECT a.id,a.connection_id,a.user_id,g.client_id,a.scopes_json
-      FROM oauth_access_credentials a JOIN oauth_connections g ON g.id = a.connection_id WHERE a.digest = ?`)
+      FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') a JOIN oauth_connections g ON g.id = a.connection_id WHERE a.digest = ?`)
         .bind(digest)
         .first()
     );

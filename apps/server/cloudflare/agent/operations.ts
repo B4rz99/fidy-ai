@@ -81,7 +81,7 @@ export const prepareHostedChannelRetention = ({
 }>): D1PreparedStatement =>
   db
     .prepare(`WITH channel_retention_turns AS (
-    SELECT turn_id AS id,user_id FROM hosted_turn_retention
+    SELECT turn_id AS id,user_id FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention
     WHERE user_id=? AND terminal_at_ms < ? ORDER BY terminal_at_ms,turn_id LIMIT 100
   ) ${statement.sql}`)
     .bind(userId, now - hostedTranscriptRetentionMs, ...statement.params);

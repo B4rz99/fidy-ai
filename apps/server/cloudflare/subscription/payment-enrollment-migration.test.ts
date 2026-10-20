@@ -16,7 +16,11 @@ it("migrates retained card authority without changing BillingAttempt, outbox or 
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() =>
-        db.prepare("CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL) STRICT").run()
+        db
+          .prepare(
+            "CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT"
+          )
+          .run()
       );
       for (const file of ["0009_card_enrollment", "0012_billing_collection"]) {
         yield* Effect.tryPromise(() =>

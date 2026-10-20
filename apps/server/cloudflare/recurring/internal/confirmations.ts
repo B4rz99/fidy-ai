@@ -28,7 +28,7 @@ export const consentGuard = ({
   });
   return db
     .prepare(
-      `INSERT INTO recurring_assertion (id, accepted) VALUES (1, CASE WHEN EXISTS (${allowed.sql}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`
+      `INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring', CASE WHEN EXISTS (${allowed.sql}) THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`
     )
     .bind(...allowed.params);
 };
@@ -39,7 +39,7 @@ export const evaluationGuard = ({
 }: Readonly<{ db: D1Database; userId: UserId; revision: number }>): D1PreparedStatement =>
   db
     .prepare(
-      "INSERT INTO recurring_assertion (id, accepted) VALUES (1, CASE WHEN EXISTS (SELECT 1 FROM recurring_progress WHERE user_id = ? AND evaluated_revision = ? AND phase = 'complete') THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
+      "INSERT INTO sql_assertions (scope, accepted) VALUES ('recurring', CASE WHEN EXISTS (SELECT 1 FROM recurring_progress WHERE user_id = ? AND evaluated_revision = ? AND phase = 'complete') THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted"
     )
     .bind(userId, revision);
 export const decodeRow = ({

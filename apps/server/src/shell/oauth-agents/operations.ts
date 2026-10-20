@@ -16,18 +16,18 @@ export const liveOAuthAuthority = (
     authority: protectOAuthGrantConsentAuthority({
       subject: { userId: subject.userId, connectionId: subject.oauthConnectionId },
       authority: {
-        table: "oauth_access_credentials",
+        table: "oauth_credentials",
         attribution: {
           userId: subject.userId,
           connectionId: subject.oauthConnectionId,
           credentialId: subject.credentialId,
         },
-        predicate: `id = ? AND user_id = ? AND digest = ? AND connection_id = ? AND expires_at_ms > ?
-        AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = oauth_access_credentials.connection_id
-          AND g.user_id = oauth_access_credentials.user_id AND g.client_id = ? AND g.resource = ?
+        predicate: `kind='access' AND id = ? AND user_id = ? AND digest = ? AND connection_id = ? AND expires_at_ms > ?
+        AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = oauth_credentials.connection_id
+          AND g.user_id = oauth_credentials.user_id AND g.client_id = ? AND g.resource = ?
           AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ?
           ${scope.map(() => "AND EXISTS (SELECT 1 FROM json_each(g.scopes_json) WHERE value = ?)").join(" ")})
-        ${scope.map(() => "AND EXISTS (SELECT 1 FROM json_each(oauth_access_credentials.scopes_json) WHERE value = ?)").join(" ")} `,
+        ${scope.map(() => "AND EXISTS (SELECT 1 FROM json_each(oauth_credentials.scopes_json) WHERE value = ?)").join(" ")} `,
         bindings: [
           subject.credentialId,
           subject.userId,
@@ -58,7 +58,7 @@ export const liveOAuthCommitAuthority = (
     predicate: `${authority.predicate}
       AND expires_at_ms > (${databaseCurrentMillis})
       AND EXISTS (SELECT 1 FROM oauth_connections g
-        WHERE g.id = oauth_access_credentials.connection_id
+        WHERE g.id = oauth_credentials.connection_id
           AND g.expires_at_ms > (${databaseCurrentMillis}))`,
   };
 };

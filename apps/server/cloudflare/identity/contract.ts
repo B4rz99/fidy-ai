@@ -34,10 +34,9 @@ export type UserCreationInput = Readonly<{
   createdAtMs: number;
 }>;
 
-/** Commit both actions with Consent, Recovery and the originating owner's final proof guard. */
+/** Commit User creation with Consent, Recovery and the originating owner's final proof guard. */
 export type UserCreationStatements = Readonly<{
   createUser: D1PreparedStatement;
-  startTrial: D1PreparedStatement;
 }>;
 
 /** The originating accepted channel exchange, never a caller-supplied WhatsApp contact or pair. */

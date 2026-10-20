@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { afterAll, expect, it } from "vitest";
 import { type Cause, DateTime, Effect, Option } from "effect";
 import { makeAudit } from "../../src/shell/audit/runtime";
@@ -128,7 +129,7 @@ it("requires exact live PAT capabilities and atomically accounts for activity wi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT operation,outcome FROM pat_audit WHERE user_id=? AND outcome='accepted' ORDER BY rowid"
+              "SELECT operation,outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id=? AND outcome='accepted' ORDER BY rowid"
             )
             .bind(pat.userId)
             .all()
@@ -142,7 +143,9 @@ it("requires exact live PAT capabilities and atomically accounts for activity wi
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS n FROM proactivity_consent_records WHERE user_id=?")
+            .prepare(
+              "SELECT count(*) AS n FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE user_id=?"
+            )
             .bind(pat.userId)
             .first()
         )
@@ -169,7 +172,11 @@ it("binds held reminder reads to the authority's User and refuses expired sessio
       ).not.toBe(200);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS n FROM insight_audit").first()
+          db
+            .prepare(
+              "SELECT count(*) AS n FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit"
+            )
+            .first()
         )
       ).toEqual({ n: 0 });
     })
@@ -202,10 +209,20 @@ it("rolls back a competing prepared canonical edit and all its Audit without rew
       if (first._tag !== "Prepared" || second._tag !== "Prepared") {
         throw new Error("Expected preparations");
       }
-      yield* Effect.tryPromise(() => db.batch([...first.mutation.statements, completion(db)]));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          ...first.mutation.statements,
+          prepareChangedRowAssertion({ db, scope: "insight_mutation" }),
+        ])
+      );
       expect(
         (yield* Effect.exit(
-          Effect.tryPromise(() => db.batch([...second.mutation.statements, completion(db)]))
+          Effect.tryPromise(() =>
+            db.batch([
+              ...second.mutation.statements,
+              prepareChangedRowAssertion({ db, scope: "insight_mutation" }),
+            ])
+          )
         ))._tag
       ).toBe("Failure");
       expect(
@@ -215,7 +232,7 @@ it("rolls back a competing prepared canonical edit and all its Audit without rew
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT (SELECT count(*) FROM insight_audit) AS audits,(SELECT count(*) FROM reminder_schedule_revisions) AS revisions"
+              "SELECT (SELECT count(*) FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit) AS audits,(SELECT count(*) FROM schedule_revisions WHERE kind='reminder') AS revisions"
             )
             .first()
         )
@@ -244,7 +261,7 @@ it("shares canonical reads with live hosted authority, attributes Audit to the T
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT hosted_turn_id,session_id,operation FROM insight_audit WHERE user_id=?"
+              "SELECT hosted_turn_id,session_id,operation FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit WHERE user_id=?"
             )
             .bind(caller.userId)
             .first()
@@ -293,10 +310,6 @@ it("shares canonical reads with live hosted authority, attributes Audit to the T
     })
   ));
 
-const completion = (db: D1Database): D1PreparedStatement =>
-  db.prepare(
-    "INSERT INTO insight_mutation_assertion(id,accepted) VALUES(1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
-  );
 const seedSession = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() => {
     const now = proactivityTestNow.epochMilliseconds;
@@ -387,7 +400,9 @@ it("reads and revises reminder instructions through live canonical authority wit
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT operation,outcome FROM insight_audit WHERE user_id=? ORDER BY rowid")
+            .prepare(
+              "SELECT operation,outcome FROM (SELECT sequence AS rowid,id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit WHERE user_id=? ORDER BY rowid"
+            )
             .bind(subject.userId)
             .all()
         )
@@ -438,7 +453,12 @@ it("refuses a foreign or expired canonical credential without reading instructio
       );
       expect(
         (yield* Effect.exit(
-          Effect.tryPromise(() => db.batch([...prepared.mutation.statements, completion(db)]))
+          Effect.tryPromise(() =>
+            db.batch([
+              ...prepared.mutation.statements,
+              prepareChangedRowAssertion({ db, scope: "insight_mutation" }),
+            ])
+          )
         ))._tag
       ).toBe("Failure");
       expect(
@@ -447,7 +467,9 @@ it("refuses a foreign or expired canonical credential without reading instructio
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS n FROM insight_audit WHERE user_id=?")
+            .prepare(
+              "SELECT count(*) AS n FROM (SELECT id,user_id,session_id,hosted_turn_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='insight_call') AS insight_audit WHERE user_id=?"
+            )
             .bind(subject.userId)
             .first()
         )

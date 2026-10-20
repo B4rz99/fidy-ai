@@ -12,16 +12,16 @@ export const expireStatementReviewEvidence = ({
     yield* Effect.tryPromise({
       try: () =>
         DB.batch([
-          DB.prepare(`UPDATE statement_hosted_origins SET abandoned_at_ms = ?
-      WHERE submission_id IN (SELECT submission_id FROM statement_hosted_origins
-        WHERE abandoned_at_ms IS NULL AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?)`).bind(
+          DB.prepare(`UPDATE statement_submissions SET hosted_abandoned_at_ms = ?
+      WHERE id IN (SELECT id FROM statement_submissions
+        WHERE hosted_session_id IS NOT NULL AND hosted_abandoned_at_ms IS NULL AND hosted_expires_at_ms <= ? ORDER BY hosted_expires_at_ms LIMIT ?)`).bind(
             current,
             current,
             maximumRetainedReviewEvidence
           ),
-          DB.prepare(`UPDATE statement_clarifications SET state = 'abandoned', ended_at_ms = ?
-      WHERE submission_id IN (SELECT submission_id FROM statement_clarifications
-        WHERE state = 'awaiting' AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?)`).bind(
+          DB.prepare(`UPDATE statement_submissions SET clarification_state = 'abandoned', clarification_ended_at_ms = ?
+      WHERE id IN (SELECT id FROM statement_submissions
+        WHERE clarification_state = 'awaiting' AND clarification_expires_at_ms <= ? ORDER BY clarification_expires_at_ms LIMIT ?)`).bind(
             current,
             current,
             maximumRetainedReviewEvidence

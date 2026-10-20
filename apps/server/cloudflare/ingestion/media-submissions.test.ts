@@ -12,7 +12,12 @@ import {
   WhatsAppMediaId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  auditEntriesTestSchema,
+  consentHistoryTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { acceptWhatsAppMedia, listNeedsReviewItems } from "./operations";
 import { sweepMediaSubmissions } from "./runtime";
 
@@ -31,28 +36,29 @@ const io = <A>(run: () => Promise<A>): Effect.Effect<A> =>
 const setup = Effect.gen(function* () {
   const db = yield* io(() => pool.acquire());
   yield* io(() =>
-    db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,service_market TEXT DEFAULT 'CO',locale TEXT DEFAULT 'es-CO',time_zone TEXT DEFAULT 'America/Bogota');
- CREATE TABLE trial_periods(user_id TEXT,started_at_ms INTEGER,ends_at_ms INTEGER);
+    db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,service_market TEXT DEFAULT 'CO',locale TEXT DEFAULT 'es-CO',time_zone TEXT DEFAULT 'America/Bogota', trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
  CREATE TABLE subscriptions(user_id TEXT,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
- CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT);
+ CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
  CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;
- CREATE TABLE billing_paid_periods(attempt_id TEXT,starts_at_ms INTEGER, ends_at_ms INTEGER);
- CREATE TABLE billing_access_adjustments(attempt_id TEXT,ends_at_ms INTEGER);
- CREATE TABLE whatsapp_identities(user_id TEXT,portfolio_id TEXT,bsuid TEXT);
- CREATE TABLE onboarding_consent_records(user_id TEXT PRIMARY KEY,accepted_at_ms INTEGER);
- CREATE TABLE consent_user_revocations(user_id TEXT PRIMARY KEY);`)
+
+ CREATE TABLE refund_attempts(id TEXT,adjusted_attempt_id TEXT,access_ends_at_ms INTEGER,renewal_stopped_user_id TEXT);
+ CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
+ ${consentHistoryTestSchema};
+ `)
   );
   yield* io(() =>
     db.batch([
       db.prepare("INSERT INTO users(id) VALUES (?),(?)").bind(userId, otherUser),
       db
         .prepare(
-          "INSERT INTO whatsapp_identities VALUES (?,'portfolio','CO.actor'),(?,'portfolio','CO.other')"
+          "WITH incoming(user_id,portfolio_id,bsuid) AS (VALUES (?,'portfolio','CO.actor'),(?,'portfolio','CO.other')) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,0 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
         )
         .bind(userId, otherUser),
       db
-        .prepare("INSERT INTO onboarding_consent_records VALUES (?,1),(?,1)")
+        .prepare(
+          "INSERT INTO consent_history (record_type,user_id,accepted_at_ms) VALUES ('processing_grant',?,1),('processing_grant',?,1)"
+        )
         .bind(userId, otherUser),
     ])
   );
@@ -60,11 +66,24 @@ const setup = Effect.gen(function* () {
     "0032_commercial_allowances",
     "0035_media_submissions",
     "0109_review_state",
+    "0117_media_capacity",
+    "0119_media_review",
   ]) {
     yield* io(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
     );
   }
+  // This focused fixture retains the production media cascade used by expiry cleanup.
+  yield* io(() =>
+    db
+      .prepare(
+        auditEntriesTestSchema.replace(
+          "UNIQUE(record_type,id)",
+          "media_submission_id TEXT GENERATED ALWAYS AS (CASE WHEN record_type='media_admission' THEN id END) VIRTUAL REFERENCES media_submissions(id) ON DELETE CASCADE,UNIQUE(record_type,id)"
+        )
+      )
+      .run()
+  );
   vi.setSystemTime(DateTime.toEpochMillis(current));
   return db;
 });
@@ -93,14 +112,13 @@ const prepareVisibleReviewRead = Effect.fnUntraced(function* (db: D1Database) {
   const now = DateTime.toEpochMillis(current);
   yield* io(() =>
     db.exec(`CREATE TABLE web_sessions(id TEXT PRIMARY KEY,user_id TEXT,token_digest BLOB,revoked_at_ms INTEGER,idle_expires_at_ms INTEGER,hard_expires_at_ms INTEGER);
- CREATE TABLE statement_submission_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
- CREATE TABLE statement_review_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
- CREATE TABLE statement_submissions(id TEXT,user_id TEXT);
- CREATE TABLE statement_clarifications(submission_id TEXT,user_id TEXT,state TEXT,expires_at_ms INTEGER);
+ ${auditEntriesTestSchema};
+ CREATE TABLE statement_submissions(id TEXT,user_id TEXT,clarification_state TEXT,clarification_expires_at_ms INTEGER,clarification_ended_at_ms INTEGER);
+
  CREATE TABLE statement_review_decisions(review_id TEXT,submission_id TEXT,user_id TEXT,decision TEXT,transaction_id TEXT,decided_at_ms INTEGER);
  CREATE TABLE statement_needs_review(id TEXT,submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,issues TEXT,status TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,user_id TEXT);
- CREATE TABLE forwarded_email_needs_review(id TEXT,receipt_id TEXT,reason TEXT,created_at_ms INTEGER,evidence_expires_at_ms INTEGER,user_id TEXT);
- CREATE TABLE forwarded_email_receipts(id TEXT,time_zone TEXT,user_id TEXT);`)
+
+ CREATE TABLE forwarded_email_receipts(id TEXT,time_zone TEXT,user_id TEXT,review_id TEXT,review_reason TEXT,review_created_at_ms INTEGER,review_evidence_expires_at_ms INTEGER);`)
   );
   yield* io(() =>
     db
@@ -143,9 +161,7 @@ it("atomically publishes only two unique Free images with visible review and unc
       });
       for (const table of [
         "media_submissions",
-        "media_submission_audit",
-        "media_submission_outbox",
-        "media_needs_review",
+        "(SELECT * FROM audit_entries WHERE record_type='media_admission')",
       ]) {
         expect(
           yield* io(() => db.prepare(`SELECT count(*) AS total FROM ${table}`).first())
@@ -250,7 +266,9 @@ it("keeps canonical review reads independent of retained evidence size before D1
       });
       yield* io(() =>
         db
-          .prepare("INSERT INTO statement_clarifications VALUES (?,?,'awaiting',?)")
+          .prepare(
+            "INSERT INTO statement_submissions(id,user_id,clarification_state,clarification_expires_at_ms) VALUES (?,?,'awaiting',?)"
+          )
           .bind(submissionId, userId, now + 60000)
           .run()
       );
@@ -333,9 +351,9 @@ it("keeps canonical review reads independent of retained evidence size before D1
 
 it.each([
   { table: "statement_needs_review", column: "created_at_ms" },
-  { table: "forwarded_email_needs_review", column: "created_at_ms" },
-  { table: "forwarded_email_needs_review", column: "evidence_expires_at_ms" },
-  { table: "media_needs_review", column: "created_at_ms" },
+  { table: "forwarded_email_receipts", column: "review_created_at_ms" },
+  { table: "forwarded_email_receipts", column: "review_evidence_expires_at_ms" },
+  { table: "media_submissions", column: "review_created_at_ms" },
   { table: "media_submissions", column: "expires_at_ms" },
 ] as const)(
   "returns safe unavailable for corrupt retained $table.$column without partial review output",
@@ -358,11 +376,13 @@ it.each([
                 userId
               ),
             db
-              .prepare("INSERT INTO forwarded_email_receipts VALUES (?,'America/Bogota',?)")
+              .prepare(
+                "INSERT INTO forwarded_email_receipts(id,time_zone,user_id) VALUES (?,'America/Bogota',?)"
+              )
               .bind("10000000-0000-4000-8000-000000000093", userId),
             db
               .prepare(
-                "INSERT INTO forwarded_email_needs_review VALUES (?,?,'processing-interrupted',?,?,?)"
+                "UPDATE forwarded_email_receipts SET review_id=?1,review_reason='processing-interrupted',review_created_at_ms=?3,review_evidence_expires_at_ms=?4 WHERE id=?2 AND user_id=?5"
               )
               .bind(
                 "10000000-0000-4000-8000-000000000094",
@@ -381,7 +401,7 @@ it.each([
         expect(yield* io(() => before.json())).toMatchObject({ data: [{}, {}, {}] });
         const corruptMillis = 9000000000000000;
         const corruption =
-          table === "media_submissions"
+          table === "media_submissions" && column === "expires_at_ms"
             ? db
                 .prepare(
                   "UPDATE media_submissions SET expires_at_ms = ?, accepted_at_ms = ? - 2592000000 WHERE user_id = ?"
@@ -410,7 +430,12 @@ it("rechecks current association and Consent before publication and exact replay
       ).toBe(403);
       expect((yield* acceptWhatsAppMedia({ db, userId, event: event("first") })).status).toBe(202);
       yield* io(() =>
-        db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userId)
+          .run()
       );
       expect((yield* acceptWhatsAppMedia({ db, userId, event: event("first") })).status).toBe(403);
       expect((yield* acceptWhatsAppMedia({ db, userId, event: event("second") })).status).toBe(403);
@@ -420,20 +445,19 @@ it("rechecks current association and Consent before publication and exact replay
     })
   ));
 
-it("rolls submission, consumption, accountability and review back when outbox publication fails", () =>
+it("rolls submission, consumption, accountability and review back when accountability publication fails", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup;
       yield* io(() =>
         db.exec(
-          "CREATE TRIGGER failed_outbox BEFORE INSERT ON media_submission_outbox BEGIN SELECT RAISE(ABORT,'private failed publication'); END"
+          "CREATE TRIGGER failed_review BEFORE INSERT ON audit_entries WHEN NEW.record_type='media_admission' BEGIN SELECT RAISE(ABORT,'private failed publication'); END"
         )
       );
       expect((yield* acceptWhatsAppMedia({ db, userId, event: event("first") })).status).toBe(503);
       for (const table of [
         "media_submissions",
-        "media_submission_audit",
-        "media_needs_review",
+        "(SELECT * FROM audit_entries WHERE record_type='media_admission')",
         "commercial_allowance_consumptions",
       ]) {
         expect(
@@ -488,7 +512,7 @@ it("keeps Trial media commercially uncapped and derives standing again after Tri
       const now = DateTime.toEpochMillis(current);
       yield* io(() =>
         db
-          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
           .bind(userId, now - 1000, now + 1)
           .run()
       );
@@ -531,7 +555,7 @@ it("expires personal media locators without recharge on exact replay and eventua
         yield* io(() =>
           db
             .prepare(`SELECT media_id,expires_at_ms,
-            (SELECT count(*) FROM media_submission_outbox) AS pending
+            (SELECT count(*) FROM media_submissions WHERE capacity_held=1) AS pending
             FROM media_submissions`)
             .first()
         )
@@ -541,7 +565,11 @@ it("expires personal media locators without recharge on exact replay and eventua
         yield* io(() => db.prepare("SELECT media_id,caption FROM media_submissions").first())
       ).toEqual({ media_id: null, caption: null });
       expect(
-        yield* io(() => db.prepare("SELECT count(*) AS total FROM media_submission_outbox").first())
+        yield* io(() =>
+          db
+            .prepare("SELECT count(*) AS total FROM media_submissions WHERE capacity_held=1")
+            .first()
+        )
       ).toEqual({ total: 0 });
       expect(
         (yield* acceptWhatsAppMedia({
@@ -556,7 +584,10 @@ it("expires personal media locators without recharge on exact replay and eventua
         )
       ).toEqual({ total: 1 });
       yield* sweepMediaSubmissions({ db, now: DateTime.toEpochMillis(current) + 31536000000 });
-      for (const table of ["media_submissions", "media_submission_audit", "media_needs_review"]) {
+      for (const table of [
+        "media_submissions",
+        "(SELECT * FROM audit_entries WHERE record_type='media_admission')",
+      ]) {
         expect(
           yield* io(() => db.prepare(`SELECT count(*) AS total FROM ${table}`).first())
         ).toEqual({ total: 0 });

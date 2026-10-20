@@ -394,8 +394,9 @@ it("does not replace continuity when Consent is revoked during Compaction genera
       const before = (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results;
       const revokeDuringCompaction = (): Promise<Response> =>
         db
-          .prepare(`INSERT INTO consent_user_revocations
-    (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)`)
+          .prepare(
+            `INSERT INTO consent_history(record_type,id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES ('processing_withdrawal',?, ?, ?, ?, ?)`
+          )
           .bind(newId(), users[0], grants[0], sessions[0], now())
           .run()
           .then(() => reply('{"compactedConversation":"Forbidden"}'));
@@ -421,7 +422,9 @@ it("does not replace continuity when Consent is revoked during Compaction genera
       );
       const compacted = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT text FROM hosted_compacted_conversations WHERE user_id = ?")
+          .prepare(
+            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
+          )
           .bind(users[0])
           .all()
       );
@@ -510,7 +513,7 @@ it("compacts a long session of short Turns before its exact-entry capacity is re
       const trialStartedAt = now() - 1_000;
       yield* Effect.tryPromise(() =>
         db
-          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
           .bind(users[0], trialStartedAt, trialStartedAt + 604_800_000)
           .run()
       );
@@ -641,8 +644,8 @@ it("expires old CompactedConversation content without exposing it in a later Wor
       ).toBe(true);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE hosted_compacted_conversations SET updated_at_ms = ?
-    WHERE user_id = ? AND hosted_session_id = ?`)
+          .prepare(`UPDATE hosted_agent_sessions AS hosted_compacted_conversations SET compacted_at_ms = ?
+    WHERE compacted_revision IS NOT NULL AND user_id = ? AND id = ?`)
           .bind(now() - hostedTranscriptRetentionMs - 10_000, users[0], sessionId)
           .run()
       );
@@ -657,7 +660,9 @@ it("expires old CompactedConversation content without exposing it in a later Wor
       yield* makeAgentRetention({ db }).sweep(now());
       const after = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT text FROM hosted_compacted_conversations WHERE user_id = ?")
+          .prepare(
+            "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations WHERE user_id = ?"
+          )
           .bind(users[0])
           .all()
       );
@@ -932,15 +937,16 @@ it("recovers abandoned Pending once, then refuses new work after Consent withdra
       );
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO hosted_delivery_proposals
-    (turn_id, user_id, receipt_digest, proposed_at_ms, text) VALUES (?, ?, ?, ?, ?)`)
+          .prepare(
+            `UPDATE hosted_turns SET proposal_user_id=incoming.user_id,proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.proposed_at_ms IS NULL`
+          )
           .bind(pending, users[0], new Uint8Array(32), timestamp - 121_000, "Unacknowledged answer")
           .run()
       );
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO consent_user_revocations (id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO consent_history(record_type,id, user_id, grant_record_id, session_id, occurred_at_ms) VALUES ('processing_withdrawal',?, ?, ?, ?, ?)"
           )
           .bind("10000000-0000-4000-8000-000000000192", users[0], grants[0], sessions[0], timestamp)
           .run()
@@ -968,7 +974,9 @@ it("recovers abandoned Pending once, then refuses new work after Consent withdra
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT turn_id FROM hosted_delivery_proposals WHERE user_id = ?")
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE user_id = ?"
+            )
             .bind(users[0])
             .all()
         )).results
@@ -1022,7 +1030,7 @@ it("recovers an abandoned staged reply by durable alarm without another User req
             ),
           db
             .prepare(
-              "INSERT INTO hosted_delivery_proposals (turn_id, user_id, receipt_digest, proposed_at_ms, text) VALUES (?, ?, ?, ?, ?)"
+              "UPDATE hosted_turns SET proposal_user_id=incoming.user_id,proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.proposed_at_ms IS NULL"
             )
             .bind(id, users[0], new Uint8Array(32), timestamp - 121_000, "Undelivered"),
         ])
@@ -1058,7 +1066,9 @@ it("recovers an abandoned staged reply by durable alarm without another User req
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT turn_id FROM hosted_delivery_proposals WHERE turn_id = ?")
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+            )
             .bind(id)
             .all()
         )).results
@@ -1098,11 +1108,19 @@ it("expires only one User's eligible channel evidence while preserving pending, 
       const evidenceFor = (turnId: TranscriptTurnId): Promise<ReadonlyArray<unknown>> =>
         db
           .batch([
-            db.prepare("SELECT * FROM hosted_whatsapp_inbound WHERE turn_id = ?").bind(turnId),
-            db.prepare("SELECT * FROM hosted_whatsapp_delivery WHERE turn_id = ?").bind(turnId),
+            db
+              .prepare(
+                "SELECT * FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) WHERE turn_id = ?"
+              )
+              .bind(turnId),
+            db
+              .prepare(
+                "SELECT * FROM (SELECT * FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE turn_id = ?"
+              )
+              .bind(turnId),
             db
               .prepare(`SELECT e.* FROM hosted_whatsapp_delivery_events AS e
-            JOIN hosted_whatsapp_delivery AS d ON d.correlation_token = e.correlation_token
+            JOIN (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d ON d.correlation_token = e.correlation_token
             WHERE d.turn_id = ?`)
               .bind(turnId),
           ])
@@ -1124,9 +1142,9 @@ it("expires only one User's eligible channel evidence while preserving pending, 
             VALUES (?, ?, ?, ?, 'user', ?, 'Retained exact User text')`)
               .bind(newId(), entry.userId, entry.sessionId, entry.turnId, entry.terminalAt - 1),
             db
-              .prepare(`INSERT INTO hosted_whatsapp_inbound
-            (turn_id, user_id, portfolio_id, bsuid, message_id, business_phone_number_id, occurred_at_ms, received_at_ms, sandbox_phone)
-            VALUES (?, ?, 'portfolio-1', 'CO.13491208655302741918', ?, '123456789', ?, ?, '+573001234567')`)
+              .prepare(
+                `WITH incoming(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms,sandbox_phone) AS (VALUES (?, ?, 'portfolio-1', 'CO.13491208655302741918', ?, '123456789', ?, ?, '+573001234567')) UPDATE hosted_turns SET inbound_portfolio_id=incoming.portfolio_id,inbound_bsuid=incoming.bsuid,inbound_message_id=incoming.message_id,inbound_business_phone_number_id=incoming.business_phone_number_id,inbound_occurred_at_ms=incoming.occurred_at_ms,inbound_received_at_ms=incoming.received_at_ms,inbound_sandbox_phone=incoming.sandbox_phone FROM incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id`
+              )
               .bind(
                 entry.turnId,
                 entry.userId,
@@ -1135,10 +1153,8 @@ it("expires only one User's eligible channel evidence while preserving pending, 
                 entry.terminalAt - 1
               ),
             db
-              .prepare(`INSERT INTO hosted_whatsapp_delivery
-            (turn_id, user_id, text, correlation_token, business_phone_number_id, proposed_at_ms,
-              state, provider_message_id, delivered_at_ms, send_started_at_ms)
-            VALUES (?, ?, 'Retained exact reply', ?, '123456789', ?, 'delivered', ?, ?, ?)`)
+              .prepare(`INSERT INTO whatsapp_deliveries AS hosted_whatsapp_delivery(kind,turn_id, user_id, text, correlation_token, business_phone_number_id, proposed_at_ms,
+              state, provider_message_id, delivered_at_ms, send_started_at_ms) VALUES ('hosted',?, ?, 'Retained exact reply', ?, '123456789', ?, 'delivered', ?, ?, ?)`)
               .bind(
                 entry.turnId,
                 entry.userId,
@@ -1466,7 +1482,7 @@ it.each([
           const trialStartedAt = now() - 1_000;
           yield* Effect.tryPromise(() =>
             db
-              .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+              .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
               .bind(users[0], trialStartedAt, trialStartedAt + 604_800_000)
               .run()
           );
@@ -1676,7 +1692,9 @@ it("expires a proposed reply at its original deadline despite repeated authentic
       );
       const original = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = ?")
+          .prepare(
+            "SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+          )
           .bind(visible.turnId)
           .first<{ proposed_at_ms: number }>()
       );
@@ -1707,7 +1725,9 @@ it("expires a proposed reply at its original deadline despite repeated authentic
             ).toBe("Sin acuse");
             const saved = yield* Effect.tryPromise(() =>
               db
-                .prepare("SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = ?")
+                .prepare(
+                  "SELECT proposed_at_ms FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+                )
                 .bind(visible.turnId)
                 .first<{ proposed_at_ms: number }>()
             );
@@ -1726,7 +1746,9 @@ it("expires a proposed reply at its original deadline despite repeated authentic
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT turn_id FROM hosted_delivery_proposals WHERE turn_id = ?")
+            .prepare(
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+            )
             .bind(visible.turnId)
             .all()
         )
@@ -2309,7 +2331,11 @@ it("awaits a dispatched compaction commit before releasing an interrupted owner"
       expect(settled).toBe(true);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT text FROM hosted_compacted_conversations").all()
+          db
+            .prepare(
+              "SELECT text FROM (SELECT rowid,user_id,id AS hosted_session_id,compacted_text AS text,compacted_through_sequence AS through_sequence,compacted_revision AS revision,compacted_nonce AS nonce,compacted_at_ms AS updated_at_ms FROM hosted_agent_sessions WHERE compacted_revision IS NOT NULL) AS hosted_compacted_conversations"
+            )
+            .all()
         )).results
       ).toEqual([{ text: "Compacted exact evidence" }]);
       expect(
@@ -2798,7 +2824,9 @@ it("a recurring lifecycle challenge exposes a readable browser review and confir
       expect(yield* readBrowserConfirmation(metadata)).toEqual(Option.none());
       const stored = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT document_json FROM recurring_plan_documents WHERE user_id=?")
+          .prepare(
+            "SELECT document_json FROM (SELECT user_id,document_json,revision FROM user_documents WHERE kind='recurring-plan') AS recurring_plan_documents WHERE user_id=?"
+          )
           .bind(users[0])
           .first<string>("document_json")
       );

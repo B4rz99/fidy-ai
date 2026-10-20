@@ -60,10 +60,8 @@ export const stageWhatsAppDelivery = ({
         db,
         userId,
         statement: {
-          sql: `INSERT INTO hosted_whatsapp_delivery
-        (turn_id, user_id, text, correlation_token, business_phone_number_id, proposed_at_ms, state)
-        SELECT t.id, t.user_id, ?, ?, i.business_phone_number_id, ?, 'sending'
-        FROM channel_turns AS t JOIN hosted_whatsapp_inbound AS i
+          sql: `INSERT INTO whatsapp_deliveries AS hosted_whatsapp_delivery(kind,turn_id, user_id, text, correlation_token, business_phone_number_id, proposed_at_ms, state) SELECT 'hosted', t.id, t.user_id, ?, ?, i.business_phone_number_id, ?, 'sending'
+        FROM channel_turns AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
           ON i.turn_id = t.id AND i.user_id = t.user_id
         WHERE t.id = ? AND t.user_id = ? AND t.status = 'pending'`,
           params: [text, token, now, turnId, userId],
@@ -94,13 +92,13 @@ export const startWhatsAppSend = ({
         db,
         userId,
         statement: {
-          sql: `UPDATE hosted_whatsapp_delivery
+          sql: `UPDATE whatsapp_deliveries AS hosted_whatsapp_delivery
       SET send_started_at_ms = ?
-      WHERE turn_id = ? AND user_id = ? AND correlation_token = ?
+      WHERE kind='hosted' AND turn_id = ? AND user_id = ? AND correlation_token = ?
         AND state = 'sending' AND send_started_at_ms IS NULL
         AND EXISTS (SELECT 1 FROM (${turns.sql}) AS t
           WHERE t.id = hosted_whatsapp_delivery.turn_id AND t.user_id = ? AND t.status = 'pending')
-        AND EXISTS (SELECT 1 FROM hosted_whatsapp_inbound AS i
+        AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
           JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
             AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
           JOIN identity_associations AS identity ON identity.userId = i.user_id
@@ -132,8 +130,8 @@ export const rejectUnstartedWhatsAppDelivery = ({
         db,
         userId,
         statement: {
-          sql: `UPDATE hosted_whatsapp_delivery
-      SET state = 'rejected' WHERE turn_id = ? AND user_id = ? AND correlation_token = ?
+          sql: `UPDATE whatsapp_deliveries AS hosted_whatsapp_delivery
+      SET state = 'rejected' WHERE kind='hosted' AND turn_id = ? AND user_id = ? AND correlation_token = ?
         AND state = 'sending' AND send_started_at_ms IS NULL
         AND EXISTS (SELECT 1 FROM channel_turns AS t
           WHERE t.id = hosted_whatsapp_delivery.turn_id AND t.user_id = ? AND t.status = 'pending')`,
@@ -164,9 +162,9 @@ export const recordWhatsAppSend = ({
     const id = outcome.kind === "accepted" ? outcome.messageId : null;
     const saved = yield* Effect.tryPromise(() =>
       db
-        .prepare(`UPDATE hosted_whatsapp_delivery
+        .prepare(`UPDATE whatsapp_deliveries AS hosted_whatsapp_delivery
         SET state = ?, provider_message_id = COALESCE(provider_message_id, ?)
-        WHERE turn_id = ? AND user_id = ? AND correlation_token = ? AND state = 'sending'
+        WHERE kind='hosted' AND turn_id = ? AND user_id = ? AND correlation_token = ? AND state = 'sending'
           AND send_started_at_ms IS NOT NULL
           AND (provider_message_id IS NULL OR provider_message_id = ?)`)
         .bind(outcome.kind, id, turnId, userId, token, id)
@@ -193,7 +191,7 @@ const prepareStatusEvidence = ({
   return db
     .prepare(`INSERT OR IGNORE INTO hosted_whatsapp_delivery_events
       (correlation_token, provider_message_id, status, occurred_at_ms, received_at_ms)
-      SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM hosted_whatsapp_delivery
+      SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
         WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
           AND (provider_message_id IS NULL OR provider_message_id = ?))`)
     .bind(
@@ -228,12 +226,12 @@ const retainWhatsAppStatus = ({
     db.batch([
       prepareStatusEvidence({ db, userId, evidence, receivedAtMs }),
       db
-        .prepare(`UPDATE hosted_whatsapp_delivery SET provider_message_id = ?,
+        .prepare(`UPDATE whatsapp_deliveries AS hosted_whatsapp_delivery SET provider_message_id = ?,
       state = CASE WHEN ? = 'delivered' AND ? <= proposed_at_ms + ? THEN 'delivered'
         WHEN ? = 'failed' THEN 'rejected' ELSE state END,
       delivered_at_ms = CASE WHEN ? = 'delivered' AND ? <= proposed_at_ms + ?
         THEN ? ELSE delivered_at_ms END
-      WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
+      WHERE kind='hosted' AND user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
         AND state IN ('sending','accepted','ambiguous') AND send_started_at_ms IS NOT NULL
         AND (provider_message_id IS NULL OR provider_message_id = ?)`)
         .bind(
@@ -278,7 +276,7 @@ export const recordWhatsAppStatus = ({
     const existing = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT turn_id, user_id, text, state, provider_message_id
-        FROM hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
+        FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
           AND (provider_message_id IS NULL OR provider_message_id = ?)`)
         .bind(userId, token, phoneId, id)
         .first()
@@ -289,7 +287,7 @@ export const recordWhatsAppStatus = ({
     const updated = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT turn_id, user_id, text, state, provider_message_id
-        FROM hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
+        FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
           AND (provider_message_id IS NULL OR provider_message_id = ?)`)
         .bind(userId, token, phoneId, id)
         .first()
@@ -345,7 +343,7 @@ export const reconcileWhatsAppStatus = ({
         userId: admission.userId,
         statement: {
           sql: `SELECT t.started_at_ms, i.portfolio_id, i.bsuid
-        FROM channel_turns AS t JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id
+        FROM channel_turns AS t JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_user_id,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i ON i.turn_id = t.id
         WHERE t.id = ? AND t.user_id = ?`,
           params: [matched.value.turnId, admission.userId],
         },

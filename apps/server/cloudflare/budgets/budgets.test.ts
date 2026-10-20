@@ -1,5 +1,3 @@
-import { readBudgetContributions } from "../transactions/operations";
-import { observeBrowserCost } from "../browser-cost/operations";
 import {
   evaluateBudgetAlerts,
   prepareDeleteBudget,
@@ -411,7 +409,7 @@ it.each([
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES(?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
             )
             .bind(
               userId,
@@ -477,7 +475,9 @@ it.each([
           expect(
             yield* Effect.tryPromise(() =>
               db
-                .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+                .prepare(
+                  "SELECT state FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=? AND delivery_id=?"
+                )
                 .bind(userId, prior.value.id)
                 .first()
             )
@@ -530,7 +530,7 @@ it.each([
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
               )
               .bind(userId, offer.id)
               .first()
@@ -615,7 +615,9 @@ it("reports corrupt retained Budget state as unavailable without false caller re
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT operation FROM budget_audit WHERE user_id=? AND outcome='rejected'")
+            .prepare(
+              "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND user_id=? AND outcome='rejected'"
+            )
             .bind(users[0])
             .all()
         )).results
@@ -644,101 +646,6 @@ it("reports corrupt retained Budget state as unavailable without false caller re
     })
   ));
 
-it("attributes a mixed-child Budget Audit limit before the owner's trigger and rolls back", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      const createResponse4 = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budgets", "POST", payload()))
-      );
-      const created = yield* Schema.decodeUnknownEffect(Created)(
-        yield* Effect.tryPromise(() => createResponse4.json())
-      );
-      const current = DateTime.nowUnsafe().epochMilliseconds;
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 253)
-    INSERT INTO budget_audit (id, user_id, session_id, operation, occurred_at_ms)
-    SELECT 'budget-audit-seed-' || n, ?, ?, 'budgets.listBudgets', ? FROM seq`)
-          .bind(users[0], sessions[0], current)
-          .run()
-      );
-      const limited = yield* Effect.tryPromise(() =>
-        send(
-          db,
-          budgetBatch([
-            budgetCall(1, "budgets.updateBudget", {
-              params: { id: created.data.id },
-              payload: payload("200"),
-            }),
-            budgetCall(2, "budgets.updateBudget", {
-              params: { id: created.data.id },
-              payload: payload("300"),
-            }),
-          ])
-        )
-      );
-      expect(limited.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(AtomicBatchRejected)(
-        yield* Effect.tryPromise(() => limited.json())
-      );
-      expect(rejection.error.code).toBe("rate_limited");
-      expect(rejection.error.failedCallIndex).toBe(1);
-      expect(rejection.error.operation).toBe("budgets.updateBudget");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM budget_audit").first<{ count: number }>()
-        ))?.count
-      ).toBe(255);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT cap FROM budgets WHERE id = ?")
-            .bind(created.data.id)
-            .first<{ cap: string }>()
-        ))?.cap
-      ).toBe("100");
-    })
-  ));
-
-it("admits a browser Budget when only the separate shared Audit cap is exhausted", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      const current = DateTime.nowUnsafe().epochMilliseconds;
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
-    INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-    SELECT 'shared-audit-seed-' || n, ?, ?, 'transactions.listTransactions', 'success', ? FROM seq`)
-          .bind(users[0], sessions[0], current)
-          .run()
-      );
-      const response = yield* Effect.tryPromise(() =>
-        send(db, budgetBatch([budgetCall(1, "budgets.createBudget", { payload: payload() })]))
-      );
-      expect(response.status).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM budgets WHERE user_id = ?")
-            .bind(users[0])
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM budget_audit").first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM transaction_audit").first<{ count: number }>()
-        ))?.count
-      ).toBe(256);
-    })
-  ));
-
 it("attributes the second Budget create when the first fills the owner capacity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -761,7 +668,10 @@ it("attributes the second Budget create when the first fills the owner capacity"
           .run()
       );
       yield* Effect.tryPromise(() =>
-        db.prepare("DELETE FROM budget_reconciliation_work WHERE user_id = ?").bind(users[0]).run()
+        db
+          .prepare("DELETE FROM budget_state WHERE kind='work' AND user_id = ?")
+          .bind(users[0])
+          .run()
       );
       const limited = yield* Effect.tryPromise(() =>
         send(
@@ -793,7 +703,11 @@ it("attributes the second Budget create when the first fills the owner capacity"
       ).toBe(127);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM budget_audit").first<{ count: number }>()
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*'"
+            )
+            .first<{ count: number }>()
         ))?.count
       ).toBe(1);
     })
@@ -839,14 +753,18 @@ it("classifies a skipped Budget update after an earlier deletion as not_found wi
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS count FROM budget_audit WHERE outcome = 'accepted'")
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND outcome = 'accepted'"
+            )
             .first<{ count: number }>()
         ))?.count
       ).toBe(1);
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS count FROM budget_audit WHERE outcome = 'rejected'")
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND outcome = 'rejected'"
+            )
             .first<{ count: number }>()
         ))?.count
       ).toBe(1);
@@ -895,7 +813,9 @@ it("classifies a Budget deleted between preparation and its indexed D1 write as 
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS count FROM budget_audit WHERE outcome = 'rejected'")
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND outcome = 'rejected'"
+            )
             .first<{ count: number }>()
         ))?.count
       ).toBe(1);
@@ -998,7 +918,7 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
       const refused = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT operation, outcome FROM budget_audit WHERE user_id = ? ORDER BY operation"
+            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND user_id = ? ORDER BY operation"
           )
           .bind(users[1])
           .all<{ operation: string; outcome: string }>()
@@ -1031,8 +951,9 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
       ).toBe(400);
       const invalidAudits = yield* Effect.tryPromise(() =>
         db
-          .prepare(`SELECT operation FROM budget_audit
-    WHERE user_id = ? AND outcome = 'rejected' ORDER BY operation`)
+          .prepare(
+            `SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND user_id = ? AND outcome = 'rejected' ORDER BY operation`
+          )
           .bind(users[0])
           .all<{ operation: string }>()
       );
@@ -1244,107 +1165,7 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
   ));
 
 it(
-  "ignores more than five thousand unrelated outflows without blocking a Budget mutation",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup();
-        expect(
-          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
-            .status
-        ).toBe(201);
-        yield* seedMonthlyMovements(db, {
-          categoryId: "10000000-0000-4000-8000-000000000001",
-          count: 5001,
-          offset: 0,
-          currency: "COP",
-          occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-        });
-        const report = yield* Effect.tryPromise(() =>
-          send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-        );
-        expect(report.status).toBe(200);
-        const [status] = (yield* Schema.decodeUnknownEffect(Report)(
-          yield* Effect.tryPromise(() => report.json())
-        )).data.statuses;
-        expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe("0");
-        const capture = yield* Effect.tryPromise(() =>
-          send(
-            db,
-            request(0, "/transactions", "POST", {
-              money: { amount: "1", currency: "COP" },
-              categoryId: category,
-              direction: "outflow",
-              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-            })
-          )
-        );
-        expect(capture.status).toBe(201);
-      })
-    ),
-  90000
-);
-
-it(
-  "pages past five thousand qualifying outflows without losing exact totals or blocking mutations",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup();
-        expect(
-          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
-            .status
-        ).toBe(201);
-        yield* seedMonthlyMovements(db, {
-          categoryId: category,
-          currency: "COP",
-          count: 5001,
-          offset: 0,
-          occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-        });
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-          )).status
-        ).toBe(503);
-        const report = yield* Effect.tryPromise(() =>
-          send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-        );
-        expect(report.status).toBe(200);
-        const [status] = (yield* Schema.decodeUnknownEffect(Report)(
-          yield* Effect.tryPromise(() => report.json())
-        )).data.statuses;
-        expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe(
-          "50.01"
-        );
-        expect((yield* Effect.tryPromise(() => send(db, request(0, "/budgets")))).status).toBe(200);
-        const capture = yield* Effect.tryPromise(() =>
-          send(
-            db,
-            request(0, "/transactions", "POST", {
-              money: { amount: "30", currency: "COP" },
-              categoryId: category,
-              direction: "outflow",
-              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-            })
-          )
-        );
-        expect(capture.status).toBe(201);
-        const updated = yield* Effect.tryPromise(() =>
-          send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-        );
-        expect(updated.status).toBe(200);
-        const [next] = (yield* Schema.decodeUnknownEffect(Report)(
-          yield* Effect.tryPromise(() => updated.json())
-        )).data.statuses;
-        expect(next === undefined ? undefined : encodeMoneyAmount(next.spent.amount)).toBe("80.01");
-      })
-    ),
-  90000
-);
-
-it(
-  "shares a bounded page quota across Budgets rather than applying it per Budget",
+  "returns complete exact spending for multiple Budgets in the first request",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -1380,19 +1201,6 @@ it(
           offset: 2500,
           occurredAt,
         });
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-          )).status
-        ).toBe(503);
-        const checkpoint = yield* Effect.tryPromise(() =>
-          db
-            .prepare(`SELECT COUNT(*) AS count FROM budget_report_progress
-    WHERE user_id = ? AND complete = 0`)
-            .bind(users[0])
-            .first<{ count: number }>()
-        );
-        expect(checkpoint?.count).toBe(1);
         const report = yield* Effect.tryPromise(() =>
           send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
         );
@@ -1404,141 +1212,6 @@ it(
           "25",
           "25",
         ]);
-      })
-    ),
-  90000
-);
-
-it(
-  "refuses an expensive capture without partial effects, then resumes the month on retry",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup();
-        expect(
-          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
-            .status
-        ).toBe(201);
-        yield* seedMonthlyMovements(db, {
-          categoryId: category,
-          currency: "COP",
-          count: 5001,
-          offset: 0,
-          occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-        });
-        const capture = (): Promise<Response> =>
-          send(
-            db,
-            request(0, "/transactions", "POST", {
-              money: { amount: "30", currency: "COP" },
-              categoryId: category,
-              direction: "outflow",
-              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-            })
-          );
-        expect((yield* Effect.tryPromise(() => capture())).status).toBe(503);
-        const afterRefusal = yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?")
-            .bind(users[0])
-            .first<{ count: number }>()
-        );
-        expect(afterRefusal?.count).toBe(5001);
-        expect((yield* Effect.tryPromise(() => capture())).status).toBe(201);
-        const report = yield* Effect.tryPromise(() =>
-          send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-        );
-        expect(report.status).toBe(200);
-        const [status] = (yield* Schema.decodeUnknownEffect(Report)(
-          yield* Effect.tryPromise(() => report.json())
-        )).data.statuses;
-        expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe(
-          "80.01"
-        );
-      })
-    ),
-  90000
-);
-
-it(
-  "does not publish a total if a Transaction moves across a paging cursor",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup();
-        expect(
-          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
-            .status
-        ).toBe(201);
-        const period = deriveCurrentBudgetMonth({
-          now: DateTime.nowUnsafe(),
-          timeZone: IanaTimeZone.make("America/Bogota"),
-        });
-        yield* seedMonthlyMovements(db, {
-          categoryId: category,
-          currency: "COP",
-          count: 513,
-          offset: 0,
-          occurredAt: DateTime.formatIso(period.from),
-        });
-        let moved = false;
-        const intercept = (statement: D1PreparedStatement): D1PreparedStatement =>
-          new Proxy(statement, {
-            get(target, property, receiver) {
-              if (property === "bind") {
-                return (...values: Parameters<D1PreparedStatement["bind"]>): D1PreparedStatement =>
-                  intercept(target.bind(...values));
-              }
-              if (property === "all") {
-                return (): Promise<D1Result<Record<string, unknown>>> =>
-                  target.all().then((result) => {
-                    if (moved) return result;
-                    moved = true;
-                    return db
-                      .prepare(
-                        "UPDATE transactions SET occurred_at = ? WHERE user_id = ? AND id = ?"
-                      )
-                      .bind(
-                        DateTime.formatIso(
-                          DateTime.makeUnsafe(period.from.epochMilliseconds + 1000)
-                        ),
-                        users[0],
-                        "30000000-0000-4000-8000-000000000001"
-                      )
-                      .run()
-                      .then(() => result);
-                  });
-              }
-              const value: unknown = Reflect.get(target, property, receiver);
-              return value;
-            },
-          });
-        const racingDb: D1Database = {
-          prepare: (sql) =>
-            sql.includes("ORDER BY occurred_at, id LIMIT")
-              ? intercept(db.prepare(sql))
-              : db.prepare(sql),
-          batch: (statements) => db.batch(statements),
-          exec: (sql) => db.exec(sql),
-          withSession: (constraint) => db.withSession(constraint),
-          dump: () => db.dump(),
-        };
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(racingDb, request(0, "/budget-status?timeZone=America%2FBogota"))
-          )).status
-        ).toBe(503);
-        expect(moved).toBe(true);
-        const report = yield* Effect.tryPromise(() =>
-          send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-        );
-        expect(report.status).toBe(200);
-        const [status] = (yield* Schema.decodeUnknownEffect(Report)(
-          yield* Effect.tryPromise(() => report.json())
-        )).data.statuses;
-        expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe(
-          "5.13"
-        );
       })
     ),
   90000
@@ -1612,7 +1285,7 @@ const seedCrossingConsent = (
         users.map((user) =>
           db
             .prepare(
-              "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,?,'disclosed','accepted',0,0)"
+              "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,?,'disclosed','accepted',0,0)"
             )
             .bind(user, user, disclosure)
         )
@@ -1633,7 +1306,7 @@ const grantBudgetDelivery = (
     yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "INSERT OR IGNORE INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+          "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES(?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO NOTHING"
         )
         .bind(
           userId,
@@ -1841,7 +1514,9 @@ it("installed category generation atomically materializes two Budget events and 
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT count(*) AS n FROM proactivity_outbox WHERE user_id=?")
+              .prepare(
+                "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+              )
               .bind(userId)
               .first()
           )
@@ -1894,7 +1569,7 @@ it("installed category generation atomically materializes two Budget events and 
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                "SELECT correlation_token FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
               )
               .bind(userId, group.id)
               .first()
@@ -1955,7 +1630,9 @@ it("installed category generation atomically materializes two Budget events and 
         expect(
           yield* Effect.tryPromise(() =>
             db
-              .prepare("SELECT count(*) AS n FROM proactivity_outbox WHERE user_id=?")
+              .prepare(
+                "SELECT count(*) AS n FROM (SELECT rowid,user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts FROM insight_reports WHERE dispatch_state IS NOT NULL) AS proactivity_delivery_outbox WHERE kind='proactivity-delivery' AND user_id=?"
+              )
               .bind(userId)
               .first()
           )
@@ -2111,15 +1788,14 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
       > =>
         Effect.forEach(
           [
-            "proactivity_reports",
-            "proactivity_whatsapp_claims",
-            "proactivity_outbox",
+            "insight_reports",
+            "whatsapp_deliveries",
+            "proactivity_delivery_outbox",
             "insight_events",
-            "reminder_governors",
-            "proactivity_consent_offers",
-            "proactivity_consent_records",
+            "proactivity_governors",
+            "consent_offers",
+            "consent_history",
             "proactive_transcript_entries",
-            "proactive_message_transcript_entries",
           ],
           (table) =>
             Effect.tryPromise(() => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()).pipe(
@@ -2237,7 +1913,7 @@ it("accepting Budget opt-in drains pre-opt-in reconciliation as ineligible even 
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES(?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
           )
           .bind(
             userId,
@@ -2280,7 +1956,7 @@ it("accepting Budget opt-in drains pre-opt-in reconciliation as ineligible even 
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS n FROM proactivity_reports WHERE user_id=? AND role='budget-threshold'"
+              "SELECT count(*) AS n FROM insight_reports WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL AND user_id=? AND role='budget-threshold'"
             )
             .bind(userId)
             .first()
@@ -2372,8 +2048,7 @@ it(
         const earlier = DateTime.makeUnsafe(instant.epochMilliseconds - 40 * 86400000);
         const work = Array.from({ length: 9 }, (_, index) =>
           db
-            .prepare(`INSERT INTO budget_reconciliation_work
-    (user_id, occurred_at) VALUES (?, ?)`)
+            .prepare(`INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',?, ?)`)
             .bind(
               users[0],
               DateTime.formatIso(DateTime.makeUnsafe(earlier.epochMilliseconds + index * 1000))
@@ -2391,7 +2066,9 @@ it(
         expect((yield* Effect.tryPromise(() => correction())).status).toBe(503);
         const pending = yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS count FROM budget_reconciliation_work WHERE user_id = ?")
+            .prepare(
+              "SELECT COUNT(*) AS count FROM (SELECT rowid,user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work WHERE user_id = ?"
+            )
             .bind(users[0])
             .first<{ count: number }>()
         );
@@ -2579,7 +2256,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
               ),
             db
               .prepare(
-                "INSERT INTO budget_reconciliation_work (user_id, occurred_at) VALUES (?, 'zz-invalid')"
+                "INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',?, 'zz-invalid')"
               )
               .bind(users[index]),
           ])
@@ -2597,7 +2274,9 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
             )
             .all(),
           db
-            .prepare("SELECT * FROM budget_reconciliation_work ORDER BY user_id, occurred_at")
+            .prepare(
+              "SELECT * FROM (SELECT user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work ORDER BY user_id, occurred_at"
+            )
             .all(),
         ]).then((results) => results.map((result) => result.results));
       const before = yield* Effect.tryPromise(snapshot);
@@ -2676,7 +2355,12 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
       expect(failure.status).toBe(503);
       expect(yield* Effect.tryPromise(snapshot)).toEqual(corrupted);
       const audit = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT operation FROM pat_audit WHERE pat_id = ?").bind(patId).all()
+        db
+          .prepare(
+            "SELECT operation FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE pat_id = ?"
+          )
+          .bind(patId)
+          .all()
       );
       expect(audit.results.length).toBeGreaterThanOrEqual(8);
     })
@@ -2715,56 +2399,6 @@ it("does not drain another User's pending Budget alerts from a non-request evalu
       expect((yield* Effect.tryPromise(thresholds)).results.map((row) => row.threshold)).toEqual([
         80,
       ]);
-    })
-  ));
-
-it("seeks equal-time Budget pages and uses authoritative facts during projection repair", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      const period = deriveCurrentBudgetMonth({
-        now: DateTime.nowUnsafe(),
-        timeZone: IanaTimeZone.make("America/Bogota"),
-      });
-      const occurredAt = DateTime.formatIso(period.from);
-      yield* seedMonthlyMovements(db, {
-        categoryId: category,
-        currency: "COP",
-        count: 513,
-        offset: 0,
-        occurredAt,
-      });
-      const observed = observeBrowserCost(db);
-      const input = {
-        db: observed.database,
-        userId: users[0],
-        categoryId: Transaction.fields.categoryId.make(category),
-        currency: "COP" as const,
-        period,
-        cursor: { occurredAt: "2020-01-01T00:00:00.000Z", transactionId: "" },
-      };
-      const first = Option.getOrThrow(yield* readBudgetContributions(input));
-      expect(first.movements).toHaveLength(512);
-      expect(first.complete).toBe(false);
-      const second = Option.getOrThrow(
-        yield* readBudgetContributions({ ...input, cursor: first.cursor })
-      );
-      expect(second.movements).toHaveLength(1);
-      expect(second.complete).toBe(true);
-      expect(observed.cost().rowsRead).toBeLessThan(1600);
-      expect(
-        Option.getOrThrow(yield* readBudgetContributions({ ...input, userId: users[1] })).movements
-      ).toEqual([]);
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
-            .bind(users[0]),
-          db.prepare("DELETE FROM dashboard_projection_leaf WHERE user_id = ?").bind(users[0]),
-        ])
-      );
-      const fallback = Option.getOrThrow(yield* readBudgetContributions(input));
-      expect(fallback).toEqual(first);
     })
   ));
 

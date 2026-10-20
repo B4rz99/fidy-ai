@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { admitProviderRequest } from "./admission";
 import { PendingConsentExchangeId } from "../../../src/shell/consent/contract";
 import { prepareOnboardingWhatsAppAssociation } from "../../identity/operations";
@@ -71,9 +72,10 @@ const commit =
         }),
         context.input.db
           .prepare(
-            "INSERT INTO completed_provider_authentications(attempt_id,user_id,completed_at_ms,created_user) VALUES(?,?,?,?)"
+            "UPDATE provider_authentication_attempts SET user_id=?,completed_at_ms=?,created_user=?,state='completed',cookie_digest=zeroblob(32),nonce='',contact_email=NULL WHERE id=? AND state='verified' AND completed_at_ms IS NULL"
           )
-          .bind(context.attempt.id, userId, context.current, created ? 1 : 0),
+          .bind(userId, context.current, created ? 1 : 0, context.attempt.id),
+        prepareChangedRowAssertion({ db: context.input.db, scope: "provider_completion" }),
       ])
       .then(() => undefined);
   };

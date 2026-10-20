@@ -1,3 +1,5 @@
+import { writeReviewState } from "./review-decision";
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import type { ReviewEditWork } from "../contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { reviewedCapture } from "./review-create";
@@ -20,7 +22,7 @@ import {
   refusedPreparation,
 } from "../../canonical-work/operations";
 import { oauthMutationReview } from "../../oauth-confirmation/operations";
-import { readReviewDetail, reviewCompletion, reviewDraftJson } from "./review-store";
+import { readReviewDetail, reviewDraftJson } from "./review-store";
 import { reviewAudit, reviewRefusal } from "./review-audit";
 
 const operation = "ingestion.applyReviewEdit";
@@ -60,35 +62,23 @@ const writeReview = ({
   ref: ReviewReference;
   draft: Option.Option<string>;
   transactionId: Option.Option<string>;
-}>): D1PreparedStatement => {
-  const authority = callerAuthority(work);
-  const guard = selectionGuard(work, command, ref);
-  return work.db
-    .prepare(`INSERT INTO ingestion_review_state
-    (id,user_id,status,revision,draft_json,transaction_id,expires_at_ms,updated_at_ms,created_at_ms)
-    SELECT id,user_id,?,revision+1,${Option.isSome(draft) ? "?" : "draft_json"},${Option.isSome(transactionId) ? "?" : "NULL"},expires_at_ms,?,created_at_ms
-    FROM ingestion_review_sources WHERE id = ? AND user_id = ? AND EXISTS (${guard.sql})
-    AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
-    ON CONFLICT(user_id,id) DO UPDATE SET status=excluded.status, revision=excluded.revision,
-      draft_json=excluded.draft_json, transaction_id=excluded.transaction_id, updated_at_ms=excluded.updated_at_ms`)
-    .bind(
-      decisionStatus(command),
-      ...Option.toArray(draft),
-      ...Option.toArray(transactionId),
-      work.current,
-      ref.id,
-      work.subject.userId,
-      ...guard.params,
-      ...authority.bindings
-    );
-};
+}>): D1PreparedStatement =>
+  writeReviewState({
+    db: work.db,
+    userId: work.subject.userId,
+    id: ref.id,
+    status: decisionStatus(command),
+    current: work.current,
+    guard: selectionGuard(work, command, ref),
+    draft,
+    transactionId,
+  });
 const reviewOutcome = (refs: ReadonlyArray<ReviewReference>, current: number): OwnerOutcome => ({
   _tag: "Owner",
   operation,
   collisionKey: Option.none(),
   guardFacts: Option.none(),
-  triggerRefusal: ({ db, subject, current: now }) =>
-    Option.some(reviewRefusal({ db, subject, current: now })),
+
   read: (db, userId) =>
     Effect.gen(function* () {
       const items = yield* Effect.forEach(refs, (ref) =>
@@ -170,7 +160,7 @@ export const prepareReviewEdit = ({
           category: Option.map(capture, (value) => value.categoryId),
         }),
         requiredScope: callerScope(work.subject),
-        auditBudget: "shared" as const,
+
         commitGuards: Option.none(),
         guardRefusal: (current) => Effect.succeed(reviewRefusal(current)),
         statements: [
@@ -183,7 +173,7 @@ export const prepareReviewEdit = ({
               draft,
               transactionId: Option.map(capture, (value) => value.transactionId),
             }),
-            work.db.prepare(reviewCompletion),
+            prepareChangedRowAssertion({ db: work.db, scope: "ingestion_review" }),
           ]),
           ...reviewAudit({ work, operation, accepted: true }),
         ],

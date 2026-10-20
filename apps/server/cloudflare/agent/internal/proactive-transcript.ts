@@ -73,7 +73,7 @@ export const prepareMessageTranscript = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT OR IGNORE INTO proactive_message_transcript_entries(id,user_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT ?,v.user_id,v.delivery_id,v.role,v.delivered_at_ms,v.text,v.delivered_at_ms+? FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('budget-offer','reminder-offer','recurring-offer','reminder-question') AND v.text IS NOT NULL AND v.delivered_at_ms+?>?`,
+      sql: `INSERT OR IGNORE INTO proactive_transcript_entries(kind,id,user_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT 'message',?,v.user_id,v.delivery_id,v.role,v.delivered_at_ms,v.text,v.delivered_at_ms+? FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('budget-offer','reminder-offer','recurring-offer','reminder-question') AND v.text IS NOT NULL AND v.delivered_at_ms+?>?`,
       params: [
         newId(),
         hostedTranscriptRetentionMs,
@@ -95,7 +95,7 @@ export const prepareGroupedProactiveTranscript = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT OR IGNORE INTO proactive_transcript_event_links(user_id,transcript_id,insight_event_id) SELECT p.user_id,p.id,l.insight_event_id FROM proactive_transcript_entries AS p JOIN (${input.links.sql}) AS l ON l.user_id=p.user_id WHERE p.user_id=? AND p.insight_event_id=? AND p.expires_at_ms>?`,
+      sql: `INSERT OR IGNORE INTO proactive_transcript_event_links(user_id,transcript_id,insight_event_id) SELECT p.user_id,p.id,l.insight_event_id FROM proactive_transcript_entries AS p JOIN (${input.links.sql}) AS l ON l.user_id=p.user_id WHERE p.kind='insight' AND p.user_id=? AND p.insight_event_id=? AND p.expires_at_ms>?`,
       params: [...input.links.params, input.userId, input.insightEventId, input.now],
     },
   }),
@@ -118,28 +118,24 @@ export const readContextualProactiveReply = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: `SELECT p.id,p.insight_event_id,p.occurred_at_ms,p.text FROM proactive_transcript_entries AS p WHERE p.user_id=? AND p.expires_at_ms>? AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v WHERE v.user_id=p.user_id AND v.insight_event_id=p.insight_event_id)`,
+          sql: `SELECT p.kind,p.id,p.insight_event_id,p.delivery_id,p.role,p.occurred_at_ms,p.text
+          FROM proactive_transcript_entries AS p WHERE p.user_id=? AND p.expires_at_ms>?
+          AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v WHERE v.user_id=p.user_id
+            AND ((p.kind='insight' AND v.insight_event_id=p.insight_event_id)
+              OR (p.kind='message' AND v.delivery_id=p.delivery_id)))
+          ORDER BY CASE p.kind WHEN 'insight' THEN 0 ELSE 1 END,p.sequence LIMIT 1`,
           params: [input.userId, input.now, ...proof.params],
         },
       }).first()
     );
-    const entry = yield* decodeProactiveEntry(raw);
-    if (Option.isSome(entry)) return Option.some({ userId: input.userId, entry: entry.value });
-    const messageRaw = yield* Effect.tryPromise(() =>
-      prepareProtected({
-        db: input.db,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement: {
-          sql: `SELECT p.id,p.delivery_id,p.role,p.occurred_at_ms,p.text FROM proactive_message_transcript_entries AS p WHERE p.user_id=? AND p.expires_at_ms>? AND EXISTS (SELECT 1 FROM (${proof.sql}) AS v WHERE v.user_id=p.user_id AND v.delivery_id=p.delivery_id)`,
-          params: [input.userId, input.now, ...proof.params],
-        },
-      }).first()
-    );
-    return Option.map(yield* decodeMessageEntry(messageRaw), (value) => ({
-      userId: input.userId,
-      entry: value,
-    }));
+    if (raw === null) return Option.none();
+    const row = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ kind: Schema.Literals(["insight", "message"]) })
+    )(raw);
+    const entry: Option.Option<ProactiveReplyContext["entry"]> = yield* row.kind === "insight"
+      ? decodeProactiveEntry(raw)
+      : decodeMessageEntry(raw);
+    return Option.map(entry, (value) => ({ userId: input.userId, entry: value }));
   }).pipe(Effect.mapError(() => new AgentUnavailable()));
 
 /** Exact same-User evidence for correlated ordinary replies, not a fabricated prior Turn. */
@@ -156,7 +152,7 @@ export const readProactiveTranscript = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT p.id,p.insight_event_id,p.occurred_at_ms,p.text FROM proactive_transcript_entries AS p WHERE p.user_id=? AND EXISTS (SELECT 1 FROM proactive_transcript_event_links AS l WHERE l.user_id=p.user_id AND l.transcript_id=p.id AND l.insight_event_id=?) AND p.expires_at_ms>?",
+          sql: "SELECT p.id,p.insight_event_id,p.occurred_at_ms,p.text FROM proactive_transcript_entries AS p WHERE p.kind='insight' AND p.user_id=? AND EXISTS (SELECT 1 FROM proactive_transcript_event_links AS l WHERE l.user_id=p.user_id AND l.transcript_id=p.id AND l.insight_event_id=?) AND p.expires_at_ms>?",
           params: [input.userId, input.insightEventId, input.now],
         },
       }).first()
@@ -174,7 +170,7 @@ export const findMessageTranscript = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT id,delivery_id,role,occurred_at_ms,text FROM proactive_message_transcript_entries WHERE user_id=? AND delivery_id=? AND expires_at_ms>?",
+          sql: "SELECT id,delivery_id,role,occurred_at_ms,text FROM proactive_transcript_entries WHERE kind='message' AND user_id=? AND delivery_id=? AND expires_at_ms>?",
           params: [input.userId, input.id, input.now],
         },
       }).first()
@@ -233,18 +229,12 @@ export const sweepProactiveTranscript = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() =>
-    input.db.batch([
-      input.db
-        .prepare(
-          "DELETE FROM proactive_transcript_entries WHERE id IN (SELECT id FROM proactive_transcript_entries WHERE expires_at_ms<=? ORDER BY expires_at_ms LIMIT 128)"
-        )
-        .bind(input.now),
-      input.db
-        .prepare(
-          "DELETE FROM proactive_message_transcript_entries WHERE id IN (SELECT id FROM proactive_message_transcript_entries WHERE expires_at_ms<=? ORDER BY expires_at_ms,id LIMIT 128)"
-        )
-        .bind(input.now),
-    ])
+    input.db
+      .prepare(
+        "DELETE FROM proactive_transcript_entries WHERE sequence IN (SELECT sequence FROM proactive_transcript_entries WHERE expires_at_ms<=? ORDER BY expires_at_ms,sequence LIMIT 256)"
+      )
+      .bind(input.now)
+      .run()
   ).pipe(Effect.asVoid);
 
 /** Fixed thirty-day deletion is executable independently of any later User message. */
@@ -252,14 +242,8 @@ export const expireProactiveTranscript = (
   input: Readonly<{ db: D1Database; userId: UserId; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() =>
-    input.db.batch([
-      input.db
-        .prepare("DELETE FROM proactive_transcript_entries WHERE user_id=? AND expires_at_ms<=?")
-        .bind(input.userId, input.now),
-      input.db
-        .prepare(
-          "DELETE FROM proactive_message_transcript_entries WHERE user_id=? AND expires_at_ms<=?"
-        )
-        .bind(input.userId, input.now),
-    ])
+    input.db
+      .prepare("DELETE FROM proactive_transcript_entries WHERE user_id=? AND expires_at_ms<=?")
+      .bind(input.userId, input.now)
+      .run()
   ).pipe(Effect.asVoid);

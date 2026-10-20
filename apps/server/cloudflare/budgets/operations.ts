@@ -1,3 +1,5 @@
+import { Money } from "../../src/core/_shared/money";
+import { findDashboardAggregate } from "../transactions/operations";
 import {
   acceptsGroupCapPrecision,
   acceptsGroupCurrency,
@@ -18,7 +20,7 @@ import {
   type CreateBudgetInput,
   type UpdateBudgetInput,
 } from "../../src/core/budgets/contract";
-import { DateTime, Effect, Option, Ref, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import {
   type QueryCaller,
   type TransactionBoundaryFailure,
@@ -35,7 +37,7 @@ import {
   transactionNoStore,
   transactionUnavailable,
 } from "../canonical-work/operations";
-import { readMonthlyCashFlow } from "./internal/monthly-cash-flow";
+import { monthlyCashFlow } from "./internal/monthly-cash-flow";
 import { recordBudgetCall } from "./internal/budget-audit";
 import { budgetFromRow } from "./internal/budget-row";
 import {
@@ -46,10 +48,10 @@ import {
 import { type OAuthMutationReview } from "../oauth-confirmation/contract";
 import { recordLivePATUse } from "../../src/shell/tokens/operations";
 import { budgetOutcome, findOwnedBudget } from "./internal/budget-outcome";
-import { calculateBudgetStatus, deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
+import { calculateBudgetStatus } from "../../src/core/budgets/operations";
 import { type UserContext, UserId } from "../../src/core/identity/contract";
 import { readUserContext } from "../identity/user-context/operations";
-import { budgetParameters, monthlySpent } from "./internal/budget-queries";
+import { budgetParameters, budgetPeriod } from "./internal/budget-queries";
 import {
   authorityReady,
   budgetAudit,
@@ -170,15 +172,13 @@ const statements = ({
     oauthReview,
     requiredScope: callerScope(subject),
     outcome: budgetOutcome(outcome),
-    auditBudget: isPATCaller(subject) ? "shared" : "owner",
-    commitGuards: Option.some(({ db, userId, current, index }) =>
+
+    commitGuards: Option.some(({ db, userId, index }) =>
       budgetCommitGuards({
         db,
         userId,
-        current,
         index,
         operation: outcome.operation,
-        browser: !isPATCaller(subject),
       })
     ),
     guardRefusal: budgetGuardRefusal(outcome),
@@ -481,8 +481,6 @@ export const prepareDeleteBudget = ({
 const maximumBudgetCount = 128;
 const monthLabelLength = 7;
 
-const maximumReportPages = 8;
-
 const readPlannedCaps = ({
   db,
   userId,
@@ -547,9 +545,9 @@ export const readBudgetCaps = ({
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /**
- * Read exact monthly spending through Transaction-owned contribution pages. The caller supplies
- * one authorized, coordinated User and an explicit IANA zone. Bounded progress is retained for
- * later calls; incomplete or changed-revision totals are unavailable, never partially returned.
+ * Read spending and cash flow from one complete Transaction-owned aggregate snapshot.
+ * The caller supplies one authorized, coordinated User and an explicit IANA zone;
+ * unavailable projections never supply partial totals.
  */
 export const readBudgetSpending = ({
   db,
@@ -563,28 +561,12 @@ export const readBudgetSpending = ({
   now: DateTime.Utc;
 }>): Effect.Effect<Option.Option<BudgetStatusReport>> =>
   Effect.gen(function* () {
-    const period = deriveCurrentBudgetMonth({
-      now:
-        query.month === undefined
-          ? now
-          : DateTime.toUtc(
-              DateTime.makeZonedUnsafe(`${query.month}-01T00:00:00Z`, {
-                timeZone: query.timeZone,
-                adjustForTimeZone: true,
-              })
-            ),
-      timeZone: query.timeZone,
-    });
+    const period = budgetPeriod({ now, query });
     const month = DateTime.formatIsoDate(
       DateTime.setZone(period.from, DateTime.zoneMakeNamedUnsafe(query.timeZone))
     ).slice(0, monthLabelLength);
     const budgets = yield* readPlannedCaps({ db, userId, month, includeInactive: false });
     if (Option.isNone(budgets)) return Option.none<BudgetStatusReport>();
-    const selected = budgets.value.filter(
-      (budget) =>
-        (query.categoryId === undefined || budget.categoryId === query.categoryId) &&
-        (query.currency === undefined || budget.cap.currency === query.currency)
-    );
     const initialized =
       (yield* Effect.tryPromise(() =>
         db
@@ -592,16 +574,38 @@ export const readBudgetSpending = ({
           .bind(userId, month)
           .first()
       )) !== null;
-    const cashFlow = yield* readMonthlyCashFlow({ db, userId, period, query });
-    if (Option.isNone(cashFlow)) return Option.none<BudgetStatusReport>();
-    const pageQuota = yield* Ref.make(maximumReportPages);
-    const statuses: Array<BudgetStatusReport["statuses"][number]> = [];
-    for (const budget of selected) {
-      const spent = yield* monthlySpent({ db, userId, budget, period, pageQuota });
-      if (Option.isNone(spent)) return Option.none<BudgetStatusReport>();
-      statuses.push(yield* calculateBudgetStatus({ budget, spent: spent.value, period }));
-    }
-    return Option.some({ period, statuses, initialized, cashFlow: cashFlow.value });
+    const aggregates = yield* findDashboardAggregate({
+      db,
+      userId,
+      from: DateTime.toEpochMillis(period.from),
+      toExclusive: DateTime.toEpochMillis(period.to),
+    });
+    if (Option.isNone(aggregates)) return Option.none<BudgetStatusReport>();
+    const statuses = yield* Effect.forEach(
+      budgets.value.filter(
+        (budget) =>
+          (query.categoryId === undefined || budget.categoryId === query.categoryId) &&
+          (query.currency === undefined || budget.cap.currency === query.currency)
+      ),
+      (budget) =>
+        calculateBudgetStatus({
+          budget,
+          period,
+          spent:
+            aggregates.value.find(
+              (row) =>
+                row.direction === "outflow" &&
+                row.categoryId === budget.categoryId &&
+                row.sum.currency === budget.cap.currency
+            )?.sum ?? Money.make({ amount: BigDecimal.make(0n, 0), currency: budget.cap.currency }),
+        })
+    );
+    return Option.some({
+      period,
+      statuses,
+      initialized,
+      cashFlow: monthlyCashFlow({ aggregates: aggregates.value, query }),
+    });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const readAuthorizedBudget = ({
@@ -779,7 +783,7 @@ export const evaluateBudgetAlerts = ({
     const pending = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT occurred_at, version
-    FROM budget_reconciliation_work WHERE user_id = ? ORDER BY occurred_at LIMIT ${maximumPendingWork}`)
+    FROM budget_state WHERE kind='work' AND user_id = ? ORDER BY occurred_at LIMIT ${maximumPendingWork}`)
         .bind(userId)
         .all()
     );
@@ -795,15 +799,15 @@ export const evaluateBudgetAlerts = ({
       }
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`DELETE FROM budget_reconciliation_work
-      WHERE user_id = ? AND occurred_at = ? AND version = ?`)
+          .prepare(`DELETE FROM budget_state
+      WHERE kind='work' AND user_id = ? AND occurred_at = ? AND version = ?`)
           .bind(userId, item.value.occurred_at, item.value.version)
           .run()
       );
     }
     const remaining = yield* Effect.tryPromise(() =>
       db
-        .prepare("SELECT 1 FROM budget_reconciliation_work WHERE user_id = ? LIMIT 1")
+        .prepare("SELECT 1 FROM budget_state WHERE kind='work' AND user_id = ? LIMIT 1")
         .bind(userId)
         .first()
     );

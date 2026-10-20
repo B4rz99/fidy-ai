@@ -17,7 +17,6 @@ import {
   prepareCanonicalAdmissionRefusal,
   prepareCanonicalReplayAccess,
   recordedPATReplayCallProof,
-  refusedByAuditBudget,
 } from "../../src/shell/audit/operations";
 import { CanonicalRetryKey, type QuotaStatus } from "../../src/core/quotas/contract";
 import { allowancePeriod } from "../../src/core/quotas/operations";
@@ -169,7 +168,7 @@ const oauthAuthority = (
   caller: Extract<AuthorizedCanonicalCaller, { _tag: "OAuth" }>,
   current: number,
   scopes: ReadonlyArray<CanonicalCapability>
-): AuditAuthority & { table: "oauth_access_credentials" } => {
+): AuditAuthority & { table: "oauth_credentials" } => {
   const authority = liveOAuthAuthority({
     subject: { ...caller.value, requiredScope: Option.none() },
     current,
@@ -214,7 +213,7 @@ const externalAuthority = (
   caller: Exclude<AuthorizedCanonicalCaller, { _tag: "WebSession" }>,
   current: number,
   scopes: ReadonlyArray<CanonicalCapability>
-): AuditAuthority & { table: "pats" | "oauth_access_credentials" } =>
+): AuditAuthority & { table: "pats" | "oauth_credentials" } =>
   caller._tag === "PAT"
     ? patAuthority(caller, current, scopes)
     : oauthAuthority(caller, current, scopes);
@@ -487,7 +486,9 @@ const acceptanceStatements = <E, R>(
     ...(caller._tag === "PAT"
       ? [
           db
-            .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
+            .prepare(
+              "INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,accepted_at_ms) VALUES ('request_admission',?,?,?,?,?)"
+            )
             .bind(identity, caller.value.userId, caller.value.patId, operation.id, current),
         ]
       : []),
@@ -604,7 +605,6 @@ const unadmittedRefusal = <E, R>(
       }),
     ]).pipe(Effect.result);
     if (result._tag === "Failure") {
-      if (refusedByAuditBudget(result.failure.cause)) return rateLimited();
       return yield* result.failure;
     }
     return result.success[0]?.meta.changes === 1 ? response : noAuthority();

@@ -15,10 +15,10 @@ const bindings = (
 ): ReadonlyArray<string | number | Uint8Array> =>
   Option.match(authority, { onNone: () => [], onSome: (value) => value.bindings });
 
-export const paidAccessEndSql = `MIN(p.ends_at_ms, COALESCE(
-  (SELECT MIN(adjustment.ends_at_ms) FROM billing_access_adjustments adjustment WHERE adjustment.attempt_id=p.attempt_id), p.ends_at_ms))
+export const paidAccessEndSql = `MIN(a.paid_ends_at_ms, COALESCE(
+  (SELECT MIN(adjustment.access_ends_at_ms) FROM refund_attempts adjustment WHERE adjustment.adjusted_attempt_id=a.id), a.paid_ends_at_ms))
   + CASE WHEN NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id=s.user_id)
-    AND NOT EXISTS (SELECT 1 FROM billing_access_adjustments adjustment WHERE adjustment.attempt_id=p.attempt_id)
+    AND NOT EXISTS (SELECT 1 FROM refund_attempts adjustment WHERE adjustment.adjusted_attempt_id=a.id)
     THEN ${renewalGraceMs} ELSE 0 END`;
 
 /** Published Prices are ordered and capped before projection as a complete three-Price set. */
@@ -45,14 +45,13 @@ export const subscriptionStandingQuery = ({
   return {
     sql: `SELECT t.startedAtMs AS started_at_ms, t.endsAtMs AS trial_ends_at_ms,
       s.price_id, a.amount, a.currency, a.billing_period, a.service_market, a.tax_treatment,
-      p.starts_at_ms,
-      MIN(p.ends_at_ms,COALESCE((SELECT MIN(adjustment.ends_at_ms) FROM billing_access_adjustments adjustment
-        WHERE adjustment.attempt_id=p.attempt_id),p.ends_at_ms)) AS ends_at_ms,
-      p.renewal_anchor_ms,
+      a.paid_starts_at_ms AS starts_at_ms,
+      MIN(a.paid_ends_at_ms,COALESCE((SELECT MIN(adjustment.access_ends_at_ms) FROM refund_attempts adjustment
+        WHERE adjustment.adjusted_attempt_id=a.id),a.paid_ends_at_ms)) AS ends_at_ms,
+      a.paid_renewal_anchor_ms AS renewal_anchor_ms,
       ${paidAccessEndSql} AS access_ends_at_ms
       FROM (${trial.sql}) AS t LEFT JOIN subscriptions AS s ON s.user_id = ?
       LEFT JOIN billing_attempts AS a ON a.id = s.attempt_id AND a.user_id = s.user_id
-      LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
       LEFT JOIN card_payment_sources AS source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       WHERE TRUE${guard(authority)} LIMIT 1`,
     params: [...trial.params, userId, ...bindings(authority)],
@@ -69,8 +68,7 @@ export const subscriptionAttemptsQuery = ({
 }>): OwnedStatement => ({
   sql: `SELECT a.id, a.price_id, a.amount, a.currency, a.billing_period,
     a.service_market, a.tax_treatment, a.time_zone, a.created_at_ms, a.status, a.finalized_at_ms,
-    p.ends_at_ms, p.renewal_anchor_ms FROM billing_attempts AS a
-    LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
+    a.paid_ends_at_ms AS ends_at_ms, a.paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts AS a
     WHERE a.user_id = ?${guard(authority)} ORDER BY a.created_at_ms DESC, a.id DESC LIMIT 10`,
   params: [userId, ...bindings(authority)],
 });

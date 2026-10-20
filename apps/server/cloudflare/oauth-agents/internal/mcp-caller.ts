@@ -22,7 +22,7 @@ export const mcpCallerSnapshot = (
       input.db
         .prepare(`SELECT scopes_json AS scopes, expires_at_ms AS credentialExpiresAt,
           (SELECT g.expires_at_ms FROM oauth_connections g
-            WHERE g.id = oauth_access_credentials.connection_id) AS grantExpiresAt,
+            WHERE g.id = oauth_credentials.connection_id) AS grantExpiresAt,
           CASE WHEN ${pro.sql} THEN 1 ELSE 0 END AS pro
           FROM ${authority.table} WHERE ${authority.predicate}`)
         .bind(...pro.params, ...authority.bindings)

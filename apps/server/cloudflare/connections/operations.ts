@@ -89,20 +89,6 @@ export const connectionInputRefusal = ({
         ),
 });
 
-const initiationAuditLimit = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: "Daily audit budget exhausted.",
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () =>
-    Effect.succeed(
-      transactionFailure({
-        code: "rate_limited",
-        status: 429,
-        message: "Daily audit budget exhausted.",
-      })
-    ),
-});
-
 /** Prepare a stable Connection and short-lived browser attempt inside the shared canonical unit. */
 export const prepareConnectInstitution = (
   work: CanonicalPreparationWork
@@ -145,7 +131,7 @@ export const prepareConnectInstitution = (
       mutation: {
         requiredScope: callerScope(work.subject),
         oauthReview: Option.none(),
-        auditBudget: "shared",
+
         statements: initiationStatements(work),
         commitGuards: Option.none(),
         guardRefusal: () =>
@@ -156,8 +142,6 @@ export const prepareConnectInstitution = (
           collisionKey: Option.some("connections:bancolombia"),
           guardFacts: Option.none(),
           read: (db, userId) => readInitiationResult({ db, userId }),
-          triggerRefusal: (_work, kind) =>
-            kind === "audit" ? Option.some(initiationAuditLimit()) : Option.none(),
         },
       },
     };

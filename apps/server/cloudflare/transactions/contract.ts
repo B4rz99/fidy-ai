@@ -12,7 +12,6 @@ import { Data, type DateTime, type Option } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type Category, type CategoryId } from "../../src/core/categories/contract";
 
-import type { Money } from "../../src/core/_shared/money";
 import type { WebSessionSubject } from "../../src/shell/web-session/contract";
 import type { PrivacyTransactionRequest } from "../../src/shell/processing-consent/contract";
 
@@ -103,29 +102,6 @@ export type NotificationEmailCaptureInput = CaptureFacts &
 export type BudgetContributionCursor = Readonly<{
   occurredAt: string;
   transactionId: string;
-}>;
-
-/** Only the normalized Transaction facts needed to decide a Budget contribution. */
-export type BudgetContribution = Pick<
-  Transaction,
-  "money" | "categoryId" | "direction" | "occurredAt"
->;
-
-/** One bounded page, including the durable position to resume and whether the interval is exhausted. */
-export type BudgetContributionPage = Readonly<{
-  movements: ReadonlyArray<BudgetContribution>;
-  cursor: BudgetContributionCursor;
-  complete: boolean;
-}>;
-
-/** Explicit subject and half-open interval for one Category's outflows in one Currency. */
-export type BudgetContributionQuery = Readonly<{
-  db: D1Database;
-  userId: string;
-  categoryId: Transaction["categoryId"];
-  currency: Money["currency"];
-  period: Readonly<{ from: DateTime.Utc; to: DateTime.Utc }>;
-  cursor: BudgetContributionCursor;
 }>;
 
 /** A normalized effective Transaction with its public Category metadata. */

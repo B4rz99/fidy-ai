@@ -53,7 +53,9 @@ export const sweepRecoveryEvidence = ({
     yield* Effect.tryPromise(() =>
       db.batch([
         db
-          .prepare(`DELETE FROM support_recovery_events WHERE case_id IN (${placeholders})`)
+          .prepare(
+            `DELETE FROM audit_entries WHERE record_type='support_recovery' AND recovery_case_id IN (${placeholders})`
+          )
           .bind(...ids),
         db.prepare(`DELETE FROM support_recovery_cases WHERE id IN (${placeholders})`).bind(...ids),
         cleanup,

@@ -222,7 +222,7 @@ const preparedRuleWrite = (
     requiredScope: callerScope(write.subject),
     guardRefusal: keywordRuleGuardFor(write.outcome),
     outcome: keywordRuleOutcome(write.outcome),
-    auditBudget: "shared",
+
     commitGuards:
       write.outcome.operation === "categories.createKeywordRule"
         ? Option.some(({ db, userId, index, operation }) => [

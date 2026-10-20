@@ -491,21 +491,15 @@ export const preparePATMetadata = (
   };
 };
 
-/** Final statement for a guarded PAT transition; a skipped prerequisite aborts the whole D1 batch. */
-export const patAtomicAssertion = `INSERT INTO pat_atomic_assertion (id, accepted)
-VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
-ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
-
 /** Reject automatic expiry evidence without its corresponding PAT or pairing transition. */
 export const patExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPATConsentIdentities(current);
   return {
-    sql: `INSERT INTO pat_atomic_assertion (id, accepted)
-      SELECT 1, CASE WHEN NOT EXISTS (
+    sql: `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pats p ON p.id = r.id
         WHERE p.revoked_at_ms IS NULL
-      ) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted
-      WHERE pat_atomic_assertion.accepted <> excluded.accepted`,
+      ) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted
+      WHERE sql_assertions.accepted <> excluded.accepted`,
     params: evidence.params,
   };
 };
@@ -513,24 +507,22 @@ export const patExpiryCompletion = (current: number): OwnedStatement => {
 export const pairingExpiryCompletion = (current: number): OwnedStatement => {
   const evidence = expiredPairingConsentIdentities(current);
   return {
-    sql: `INSERT INTO pat_atomic_assertion (id, accepted)
-      SELECT 1, CASE WHEN NOT EXISTS (
+    sql: `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
         SELECT 1 FROM (${evidence.sql}) r JOIN pat_pairings p ON p.id = r.id
         WHERE p.state = 'approved_awaiting_claim'
-      ) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted
-      WHERE pat_atomic_assertion.accepted <> excluded.accepted`,
+      ) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted
+      WHERE sql_assertions.accepted <> excluded.accepted`,
     params: evidence.params,
   };
 };
 
 /** A revoke-all may succeed with no grants, but cannot leave any active User-owned grant behind. */
-export const patRevokeAllCompletion = `INSERT INTO pat_atomic_assertion (id, accepted)
-SELECT 1, CASE WHEN NOT EXISTS (
+export const patRevokeAllCompletion = `INSERT INTO sql_assertions (scope, accepted) SELECT 'pat_atomic', CASE WHEN NOT EXISTS (
   SELECT 1 FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
 ) AND NOT EXISTS (
   SELECT 1 FROM pat_pairings WHERE user_id = ? AND state = 'approved_awaiting_claim'
 ) THEN 1 ELSE 0 END
-ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
+ON CONFLICT(scope) DO UPDATE SET accepted = excluded.accepted`;
 
 /** Historical ownership only, for Audit attribution; never establishes live PAT authority. */
 export const patOwnershipQuery = (

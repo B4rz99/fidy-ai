@@ -173,7 +173,7 @@ const resolveForwardingRecipient = (
   Effect.gen(function* () {
     const subjectRow = yield* io(() =>
       db
-        .prepare("SELECT user_id FROM email_forwarding_addresses WHERE local_part = ?")
+        .prepare("SELECT id AS user_id FROM users WHERE forwarding_local_part=?")
         .bind(localPart)
         .first()
     );
@@ -187,11 +187,11 @@ const resolveForwardingRecipient = (
         db,
         userId: subject.value.user_id,
         statement: protectConsentStatement({
-          subject: { _tag: "Owner", column: "a.user_id" },
+          subject: { _tag: "Owner", column: "a.id" },
           requirement: "active",
           statement: {
-            sql: `SELECT a.user_id, u.timeZone FROM email_forwarding_addresses a
-            JOIN identity_user_context u ON u.userId = a.user_id WHERE a.local_part = ?`,
+            sql: `SELECT a.id AS user_id, u.timeZone FROM users a
+            JOIN identity_user_context u ON u.userId = a.id WHERE a.forwarding_local_part = ?`,
             params: [localPart],
           },
         }),
@@ -235,9 +235,9 @@ export const receiveForwardedEmail = Effect.fn(function* (
     environment.DB.prepare(
       `SELECT
       (SELECT count(*) FROM forwarded_email_receipts r WHERE state IN ('storing','queued')
-       AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) AS global_count,
+       AND expires_at_ms > ? AND r.outcome IS NULL) AS global_count,
       (SELECT count(*) FROM forwarded_email_receipts r WHERE state IN ('storing','queued')
-       AND user_id = ? AND expires_at_ms > ? AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)) AS user_count,
+       AND user_id = ? AND expires_at_ms > ? AND r.outcome IS NULL) AS user_count,
       (SELECT count(*) FROM forwarded_email_receipts r WHERE r.user_id = ? AND r.received_at_ms > ?) AS retained_user_count,
       (SELECT count(*) FROM forwarded_email_receipts r WHERE r.received_at_ms > ?) AS retained_global_count`
     )
@@ -444,11 +444,11 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
     subject: { _tag: "Owner", column: "o.user_id" },
     requirement: "granted",
     statement: {
-      sql: `SELECT o.receipt_id, o.user_id FROM forwarded_email_outbox o
+      sql: `SELECT o.receipt_id, o.user_id FROM (SELECT rowid,id AS receipt_id,dispatch_user_id AS user_id,dispatch_sent_at_ms AS sent_at_ms FROM forwarded_email_receipts WHERE dispatch_user_id IS NOT NULL) o
         JOIN forwarded_email_receipts r ON r.id = o.receipt_id AND r.user_id = o.user_id
         WHERE (o.sent_at_ms IS NULL OR o.sent_at_ms < ?)
           AND r.state = 'queued' AND r.expires_at_ms > ?
-          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes f WHERE f.receipt_id = r.id)`,
+          AND r.outcome IS NULL`,
       params: [now - dispatchCooldownMs, now],
     },
   });
@@ -462,8 +462,8 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
   for (const row of jobs.value) {
     const claimed = yield* io(() =>
       environment.DB.prepare(
-        `UPDATE forwarded_email_outbox SET sent_at_ms = ? WHERE receipt_id = ? AND user_id = ?
-       AND (sent_at_ms IS NULL OR sent_at_ms < ?)`
+        `UPDATE forwarded_email_receipts AS forwarded_email_outbox SET dispatch_sent_at_ms = ? WHERE dispatch_user_id IS NOT NULL AND id = ? AND dispatch_user_id = ?
+       AND (dispatch_sent_at_ms IS NULL OR dispatch_sent_at_ms < ?)`
       )
         .bind(now, row.receipt_id, row.user_id, now - dispatchCooldownMs)
         .run()
@@ -508,13 +508,10 @@ const prepareCleanupReview = ({
   prepareConsentWithdrawalProjection({
     db,
     statement: {
-      sql: `INSERT INTO forwarded_email_needs_review
-        (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
-        SELECT ?, id, user_id,
-        CASE WHEN EXISTS (SELECT 1 FROM consent_withdrawals c WHERE c.user_id = r.user_id)
-          THEN 'consent-revoked' ELSE 'processing-interrupted' END, ?, ?
-        FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ?
-        AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`,
+      sql: `UPDATE forwarded_email_receipts AS r SET review_id=?,review_reason=
+        CASE WHEN EXISTS (SELECT 1 FROM consent_withdrawals c WHERE c.user_id=r.user_id)
+          THEN 'consent-revoked' ELSE 'processing-interrupted' END,review_created_at_ms=?,review_evidence_expires_at_ms=?
+        WHERE r.id=? AND r.user_id=? AND r.outcome IS NULL AND r.review_id IS NULL`,
       params: [reviewId, current, current, receiptId, userId],
     },
   });
@@ -536,17 +533,13 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
           reviewId,
           current: now,
         }),
-        environment.DB.prepare(`INSERT INTO forwarded_email_outcomes
-          (receipt_id, user_id, outcome, transaction_id, review_id, completed_at_ms)
-          SELECT ?, ?, 'needs-review', NULL, ?, ?
-          WHERE EXISTS (SELECT 1 FROM forwarded_email_needs_review WHERE id = ?)
-          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes WHERE receipt_id = ?)`).bind(
-          row.id,
-          row.user_id,
+        environment.DB.prepare(`UPDATE forwarded_email_receipts SET outcome='needs-review',outcome_review_id=?,outcome_completed_at_ms=?
+          WHERE id=? AND user_id=? AND review_id=? AND outcome IS NULL`).bind(
           reviewId,
           now,
-          reviewId,
-          row.id
+          row.id,
+          row.user_id,
+          reviewId
         ),
       ])
     );

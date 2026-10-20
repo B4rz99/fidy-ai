@@ -179,7 +179,7 @@ it.each(["budget-threshold", "manual-entry-reminder", "new-recurring-series"] as
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS n FROM proactivity_consent_records WHERE user_id=? AND kind=?"
+                "SELECT count(*) AS n FROM (SELECT * FROM consent_history WHERE record_type='proactivity_grant') AS proactivity_consent_records WHERE user_id=? AND kind=?"
               )
               .bind(context.userId, kind)
               .first()

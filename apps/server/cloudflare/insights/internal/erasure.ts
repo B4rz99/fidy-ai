@@ -1,26 +1,103 @@
 import type { ErasureProjection } from "../../erasure-store/contract";
 
+const scheduleProjections: ReadonlyArray<ErasureProjection> = [
+  {
+    id: "schedule_executions",
+    fields: ["kind", "user_id", "schedule_id", "schedule_version", "scheduled_at", "outcome"],
+    dependencies: [],
+  },
+  {
+    id: "schedule_revisions",
+    fields: ["kind", "user_id", "schedule_id", "version", "snapshot_json"],
+    dependencies: [],
+  },
+  {
+    id: "schedules",
+    fields: [
+      "kind",
+      "id",
+      "user_id",
+      "version",
+      "enabled",
+      "snapshot_json",
+      "next_scheduled_at",
+      "consent_grant_id",
+      "last_evaluated_at_ms",
+    ],
+    dependencies: ["schedule_executions", "schedule_revisions"],
+  },
+].map(({ id, fields, dependencies }): ErasureProjection => ({
+  id,
+  dataClass: "schedules",
+  dependencies,
+  quiescence: { _tag: "Synchronous" },
+  select: (userId) => ({
+    sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object(${fields.map((field) => `'${field}',r.${field}`).join(",")}) AS body FROM ${id} r WHERE r.user_id=?`,
+    params: [userId],
+  }),
+  candidates: (userId) => ({
+    sql: `SELECT CAST(r.rowid AS TEXT) AS rowRef FROM ${id} r WHERE r.user_id=?`,
+    params: [userId],
+  }),
+  remaining: (userId) => ({
+    sql: `SELECT 1 FROM ${id} r WHERE r.user_id=?`,
+    params: [userId],
+  }),
+  remove: (scope) => [
+    {
+      sql: `DELETE FROM ${id} AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)`,
+      params: [scope.userId, scope.reference],
+    },
+  ],
+}));
+
 export const projections: ReadonlyArray<ErasureProjection> = [
+  ...scheduleProjections,
+  {
+    id: "insight_reports",
+    dataClass: "schedules",
+    dependencies: ["proactivity_message_events"],
+    quiescence: { _tag: "Synchronous" },
+    select: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('kind',r.kind,'user_id',r.user_id,'delivery_id',r.delivery_id,'role',r.role,'consent_grant_id',r.consent_grant_id,'offer_id',r.offer_id,'text',r.text,'scheduled_at_ms',r.scheduled_at_ms,'expires_at_ms',r.expires_at_ms,'time_zone',r.time_zone,'created_at_ms',r.created_at_ms,'payload_json',r.payload_json,'presentation_json',r.presentation_json,'reminder_grant_id',r.reminder_grant_id,'reminder_expires_at_ms',r.reminder_expires_at_ms,'instruction_id',r.instruction_id,'instruction_version',r.instruction_version,'grant_id',r.grant_id,'local_date',r.local_date,'day_from_ms',r.day_from_ms,'day_to_ms',r.day_to_ms,'report_json',r.report_json,'dispatch_state',r.dispatch_state,'dispatch_created_at_ms',r.dispatch_created_at_ms,'dispatch_last_attempt_at_ms',r.dispatch_last_attempt_at_ms,'dispatch_restart_attempts',r.dispatch_restart_attempts) AS body FROM insight_reports r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    candidates: (userId) => ({
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM insight_reports r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remaining: (userId) => ({
+      sql: "SELECT 1 FROM insight_reports r WHERE r.user_id=?",
+      params: [userId],
+    }),
+    remove: (scope) => [
+      {
+        sql: "DELETE FROM insight_reports AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+    ],
+  },
+
   {
     id: "budget_alert_occurrences",
     dataClass: "schedules",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_group_id',r.\"delivery_group_id\",'threshold',r.\"threshold\",'insight_event_id',r.\"insight_event_id\",'crossing_json',r.\"crossing_json\") AS body FROM budget_alert_occurrences r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_group_id',r.\"delivery_group_id\",'threshold',r.\"threshold\",'insight_event_id',r.\"insight_event_id\",'crossing_json',r.\"crossing_json\") AS body FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM budget_alert_occurrences r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM budget_alert_occurrences r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM budget_alert_occurrences AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE insight_events AS r SET budget_delivery_group_id=NULL,budget_threshold=NULL,budget_crossing_json=NULL WHERE r.budget_delivery_group_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -31,20 +108,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'sent_at',r.\"sent_at\",'channel',r.\"channel\",'provider',r.\"provider\",'provider_message_id',r.\"provider_message_id\") AS body FROM insight_delivery_attempts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"delivery_receipt_id\",'user_id',r.\"user_id\",'insight_event_id',r.\"id\",'sent_at',r.\"delivery_sent_at\",'channel',r.\"delivery_channel\",'provider',r.\"delivery_provider\",'provider_message_id',r.\"delivery_provider_message_id\") AS body FROM insight_events r WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM insight_delivery_attempts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM insight_events r WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM insight_delivery_attempts r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM insight_events r WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM insight_delivery_attempts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE insight_events AS r SET delivery_receipt_id=NULL,delivery_sent_at=NULL,delivery_channel=NULL,delivery_provider=NULL,delivery_provider_message_id=NULL WHERE r.delivery_receipt_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -59,10 +136,8 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "proactive_transcript_entries",
       "proactive_transcript_event_links",
       "proactivity_message_events",
-      "recurring_digest_reports",
-      "reminder_occurrence_reports",
+      "insight_reports",
       "weekly_governor_deliveries",
-      "weekly_summary_reports",
     ],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
@@ -111,7 +186,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "proactivity_offer_requests",
     dataClass: "schedules",
-    dependencies: [],
+    dependencies: ["recurring_digest_opportunities"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
       sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'kind',r.\"kind\",'request_message_id',r.\"request_message_id\",'created_at_ms',r.\"created_at_ms\",'materialized_at_ms',r.\"materialized_at_ms\",'last_evaluated_at_ms',r.\"last_evaluated_at_ms\",'delivery_id',r.\"delivery_id\") AS body FROM proactivity_offer_requests r WHERE r.user_id=?",
@@ -128,60 +203,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     remove: (scope) => [
       {
         sql: "DELETE FROM proactivity_offer_requests AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "proactivity_outbox",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: {
-      _tag: "Durable",
-      select: ({ current, userId }) => ({
-        sql: "SELECT 1 FROM proactivity_outbox o JOIN proactivity_reports r ON r.user_id=o.user_id AND r.delivery_id=o.delivery_id WHERE o.user_id=? AND o.state IN('ready','started') AND r.expires_at_ms>?",
-        params: [userId, current],
-      }),
-    },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_id',r.\"delivery_id\",'created_at_ms',r.\"created_at_ms\",'state',r.\"state\",'last_attempt_at_ms',r.\"last_attempt_at_ms\",'restart_attempts',r.\"restart_attempts\") AS body FROM proactivity_outbox r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM proactivity_outbox r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM proactivity_outbox r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM proactivity_outbox AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "proactivity_reports",
-    dataClass: "schedules",
-    dependencies: ["proactivity_message_events", "proactivity_outbox"],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('delivery_id',r.\"delivery_id\",'user_id',r.\"user_id\",'role',r.\"role\",'consent_grant_id',r.\"consent_grant_id\",'offer_id',r.\"offer_id\",'text',r.\"text\",'scheduled_at_ms',r.\"scheduled_at_ms\",'expires_at_ms',r.\"expires_at_ms\",'time_zone',r.\"time_zone\",'created_at_ms',r.\"created_at_ms\") AS body FROM proactivity_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM proactivity_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM proactivity_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM proactivity_reports AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -240,7 +261,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'id',r.\"id\",'version',r.\"version\",'enabled',r.\"enabled\",'grant_id',r.\"grant_id\",'context_json',r.\"context_json\",'acceptance_from_ms',r.\"acceptance_from_ms\",'accepted_at_ms',r.\"accepted_at_ms\",'last_source_identity',r.\"last_source_identity\",'next_closed_at_ms',r.\"next_closed_at_ms\",'last_evaluated_at_ms',r.\"last_evaluated_at_ms\") AS body FROM recurring_digest_instructions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'id',r.\"id\",'version',r.\"version\",'enabled',r.\"enabled\",'grant_id',r.\"grant_id\",'context_json',r.\"context_json\",'acceptance_from_ms',r.\"acceptance_from_ms\",'accepted_at_ms',r.\"accepted_at_ms\",'last_source_identity',r.\"last_source_identity\",'next_closed_at_ms',r.\"next_closed_at_ms\",'last_evaluated_at_ms',r.\"last_evaluated_at_ms\",'source_checkpoint',r.source_checkpoint,'source_cursor',r.source_cursor,'source_cutoff_at_ms',r.source_cutoff_at_ms,'source_complete',r.source_complete) AS body FROM recurring_digest_instructions r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -264,72 +285,25 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'request_id',r.\"request_id\") AS body FROM recurring_digest_opportunities r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'request_id',r.\"request_id\") AS body FROM (SELECT rowid,user_id,id AS request_id FROM proactivity_offer_requests WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM recurring_digest_opportunities r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,user_id,id AS request_id FROM proactivity_offer_requests WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM recurring_digest_opportunities r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,user_id,id AS request_id FROM proactivity_offer_requests WHERE current_recurring_opportunity=1) r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM recurring_digest_opportunities AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE proactivity_offer_requests AS r SET current_recurring_opportunity=NULL WHERE r.user_id=? AND r.current_recurring_opportunity=1 AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
   },
-  {
-    id: "recurring_digest_reports",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'instruction_id',r.\"instruction_id\",'instruction_version',r.\"instruction_version\",'grant_id',r.\"grant_id\",'local_date',r.\"local_date\",'day_from_ms',r.\"day_from_ms\",'day_to_ms',r.\"day_to_ms\",'report_json',r.\"report_json\") AS body FROM recurring_digest_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM recurring_digest_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM recurring_digest_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM recurring_digest_reports AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "recurring_digest_scans",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'checkpoint',r.\"checkpoint\",'cursor',r.\"cursor\",'cutoff_at_ms',r.\"cutoff_at_ms\",'complete',r.\"complete\") AS body FROM recurring_digest_scans r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM recurring_digest_scans r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM recurring_digest_scans r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM recurring_digest_scans AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
+
   {
     id: "recurring_digest_staging",
     dataClass: "schedules",
@@ -384,20 +358,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_id',r.\"delivery_id\") AS body FROM reminder_delivery_receipts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'delivery_id',r.\"delivery_id\") AS body FROM (SELECT rowid,* FROM governor_delivery_receipts WHERE kind='reminder') r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM reminder_delivery_receipts r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM governor_delivery_receipts WHERE kind='reminder') r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM reminder_delivery_receipts r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,* FROM governor_delivery_receipts WHERE kind='reminder') r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM reminder_delivery_receipts AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM governor_delivery_receipts AS r WHERE kind='reminder' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -408,140 +382,45 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'standing_json',r.\"standing_json\",'last_reply_at_ms',r.\"last_reply_at_ms\",'question_id',r.\"question_id\",'question_delivered_at_ms',r.\"question_delivered_at_ms\",'notice_turn_id',r.\"notice_turn_id\",'notice_completed',r.\"notice_completed\") AS body FROM reminder_governors r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'standing_json',r.\"standing_json\",'last_reply_at_ms',r.\"last_reply_at_ms\",'question_id',r.\"question_id\",'question_delivered_at_ms',r.\"question_delivered_at_ms\",'notice_turn_id',r.\"notice_turn_id\",'notice_completed',r.\"notice_completed\") AS body FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM reminder_governors r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM reminder_governors r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM reminder_governors AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM proactivity_governors AS r WHERE kind='reminder' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
   },
-  {
-    id: "reminder_occurrence_reports",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'consent_grant_id',r.\"consent_grant_id\",'expires_at_ms',r.\"expires_at_ms\") AS body FROM reminder_occurrence_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM reminder_occurrence_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM reminder_occurrence_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM reminder_occurrence_reports AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "reminder_schedule_executions",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'schedule_id',r.\"schedule_id\",'schedule_version',r.\"schedule_version\",'scheduled_at',r.\"scheduled_at\",'outcome',r.\"outcome\") AS body FROM reminder_schedule_executions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM reminder_schedule_executions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM reminder_schedule_executions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM reminder_schedule_executions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "reminder_schedule_revisions",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'schedule_id',r.\"schedule_id\",'version',r.\"version\",'snapshot_json',r.\"snapshot_json\") AS body FROM reminder_schedule_revisions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM reminder_schedule_revisions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM reminder_schedule_revisions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM reminder_schedule_revisions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "reminder_schedules",
-    dataClass: "schedules",
-    dependencies: ["reminder_schedule_executions", "reminder_schedule_revisions"],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'version',r.\"version\",'enabled',r.\"enabled\",'snapshot_json',r.\"snapshot_json\",'next_scheduled_at',r.\"next_scheduled_at\",'consent_grant_id',r.\"consent_grant_id\",'last_evaluated_at_ms',r.\"last_evaluated_at_ms\") AS body FROM reminder_schedules r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM reminder_schedules r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM reminder_schedules r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM reminder_schedules AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
+
   {
     id: "weekly_governor_deliveries",
     dataClass: "schedules",
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM weekly_governor_deliveries r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM (SELECT rowid,* FROM governor_delivery_receipts WHERE kind='weekly') r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM weekly_governor_deliveries r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM governor_delivery_receipts WHERE kind='weekly') r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM weekly_governor_deliveries r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,* FROM governor_delivery_receipts WHERE kind='weekly') r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM weekly_governor_deliveries AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM governor_delivery_receipts AS r WHERE kind='weekly' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -552,20 +431,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'unanswered',r.\"unanswered\",'last_reply_at_ms',r.\"last_reply_at_ms\",'question_needed',r.\"question_needed\",'question_delivered',r.\"question_delivered\",'question_delivered_at_ms',r.\"question_delivered_at_ms\",'question_event_id',r.\"question_event_id\",'paused_at_ms',r.\"paused_at_ms\",'notice_session_id',r.\"notice_session_id\",'notice_turn_id',r.\"notice_turn_id\",'notice_completed',r.\"notice_completed\") AS body FROM weekly_governors r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'unanswered',r.\"unanswered\",'last_reply_at_ms',r.\"last_reply_at_ms\",'question_needed',r.\"question_needed\",'question_delivered',r.\"question_delivered\",'question_delivered_at_ms',r.\"question_delivered_at_ms\",'question_event_id',r.\"question_event_id\",'paused_at_ms',r.\"paused_at_ms\",'notice_session_id',r.\"notice_session_id\",'notice_turn_id',r.\"notice_turn_id\",'notice_completed',r.\"notice_completed\") AS body FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM weekly_governors r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM weekly_governors r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='weekly') r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM weekly_governors AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM proactivity_governors AS r WHERE kind='weekly' AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -590,132 +469,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     remove: (scope) => [
       {
         sql: "DELETE FROM weekly_question_intents AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "weekly_schedule_executions",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'schedule_id',r.\"schedule_id\",'schedule_version',r.\"schedule_version\",'scheduled_at',r.\"scheduled_at\",'outcome',r.\"outcome\") AS body FROM weekly_schedule_executions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM weekly_schedule_executions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM weekly_schedule_executions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM weekly_schedule_executions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "weekly_schedule_revisions",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'schedule_id',r.\"schedule_id\",'version',r.\"version\",'snapshot_json',r.\"snapshot_json\") AS body FROM weekly_schedule_revisions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM weekly_schedule_revisions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM weekly_schedule_revisions r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM weekly_schedule_revisions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "weekly_schedules",
-    dataClass: "schedules",
-    dependencies: ["weekly_schedule_executions", "weekly_schedule_revisions"],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'version',r.\"version\",'enabled',r.\"enabled\",'weekday',r.\"weekday\",'hour',r.\"hour\",'minute',r.\"minute\",'time_zone',r.\"time_zone\",'service_market',r.\"service_market\",'locale',r.\"locale\",'next_scheduled_at',r.\"next_scheduled_at\",'consent_grant_id',r.\"consent_grant_id\",'last_evaluated_at_ms',r.\"last_evaluated_at_ms\") AS body FROM weekly_schedules r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM weekly_schedules r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM weekly_schedules r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM weekly_schedules AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "weekly_summary_outbox",
-    dataClass: "schedules",
-    dependencies: [],
-    quiescence: {
-      _tag: "Durable",
-      select: ({ current, userId }) => ({
-        sql: "SELECT 1 FROM weekly_summary_outbox o JOIN weekly_summary_reports r ON r.user_id=o.user_id AND r.insight_event_id=o.insight_event_id WHERE o.user_id=? AND o.state IN('ready','started') AND r.expires_at_ms>?",
-        params: [userId, current],
-      }),
-    },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'state',r.\"state\",'created_at_ms',r.\"created_at_ms\",'last_attempt_at_ms',r.\"last_attempt_at_ms\",'restart_attempts',r.\"restart_attempts\") AS body FROM weekly_summary_outbox r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM weekly_summary_outbox r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM weekly_summary_outbox r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM weekly_summary_outbox AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "weekly_summary_reports",
-    dataClass: "schedules",
-    dependencies: ["weekly_summary_outbox"],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'consent_grant_id',r.\"consent_grant_id\",'payload_json',r.\"payload_json\",'presentation_json',r.\"presentation_json\",'scheduled_at_ms',r.\"scheduled_at_ms\",'expires_at_ms',r.\"expires_at_ms\") AS body FROM weekly_summary_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM weekly_summary_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM weekly_summary_reports r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM weekly_summary_reports AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

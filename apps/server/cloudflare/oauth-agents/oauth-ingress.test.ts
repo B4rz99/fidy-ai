@@ -81,11 +81,16 @@ it("refuses an otherwise valid code after current Consent withdrawal without con
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_codes WHERE consumed_at_ms IS NOT NULL")
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,code_digest AS digest,id AS connection_id,code_challenge AS challenge,code_expires_at_ms AS expires_at_ms,code_consumed_at_ms AS consumed_at_ms FROM oauth_connections WHERE code_digest IS NOT NULL) AS oauth_codes WHERE consumed_at_ms IS NOT NULL"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
-      for (const table of ["oauth_access_credentials", "oauth_refresh_credentials"]) {
+      for (const table of [
+        "(SELECT * FROM oauth_credentials WHERE kind='access')",
+        "(SELECT * FROM oauth_credentials WHERE kind='refresh')",
+      ]) {
         expect(
           yield* wait(fixture.db.prepare(`SELECT count(*) FROM ${table}`).first<number>("count(*)"))
         ).toBe(0);
@@ -161,7 +166,9 @@ it.each(
         if (withdrawn === "credential") {
           yield* wait(
             fixture.db
-              .prepare("UPDATE oauth_access_credentials SET expires_at_ms = issued_at_ms + 1")
+              .prepare(
+                "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = issued_at_ms + 1 WHERE kind='access'"
+              )
               .run()
           );
         }
@@ -179,7 +186,9 @@ it.each(
         expect(
           yield* wait(
             fixture.db
-              .prepare("SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ?")
+              .prepare(
+                "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+              )
               .bind(fixture.connectionId)
               .first<number>("count(*)")
           )
@@ -195,7 +204,7 @@ it("rolls back approval when required Consent evidence is skipped and code excha
       yield* wait(
         review.db
           .prepare(
-            "CREATE TRIGGER refuse_oauth_consent BEFORE INSERT ON oauth_grant_consents BEGIN SELECT RAISE(IGNORE); END"
+            "CREATE TRIGGER refuse_oauth_consent BEFORE INSERT ON consent_history WHEN NEW.record_type='oauth_grant' BEGIN SELECT RAISE(IGNORE); END"
           )
           .run()
       );
@@ -208,13 +217,14 @@ it("rolls back approval when required Consent evidence is skipped and code excha
           })
         )).status
       ).toBe(503);
-      for (const table of [
-        "oauth_connections",
-        "oauth_grant_consents",
-        "oauth_codes",
-        "oauth_access_credentials",
-        "oauth_refresh_credentials",
-      ]) {
+      expect(
+        yield* wait(
+          review.db
+            .prepare("SELECT count(*) FROM consent_history WHERE record_type='oauth_grant'")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+      for (const table of ["oauth_connections", "oauth_credentials"]) {
         expect(
           yield* wait(review.db.prepare(`SELECT count(*) FROM ${table}`).first<number>("count(*)"))
         ).toBe(0);
@@ -228,7 +238,7 @@ it("rolls back approval when required Consent evidence is skipped and code excha
       yield* wait(
         fixture.db
           .prepare(
-            "CREATE TRIGGER refuse_oauth_refresh BEFORE INSERT ON oauth_refresh_credentials BEGIN SELECT RAISE(IGNORE); END"
+            "CREATE TRIGGER refuse_oauth_refresh BEFORE INSERT ON oauth_credentials WHEN NEW.kind='refresh' BEGIN SELECT RAISE(IGNORE); END"
           )
           .run()
       );
@@ -236,11 +246,16 @@ it("rolls back approval when required Consent evidence is skipped and code excha
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_codes WHERE consumed_at_ms IS NOT NULL")
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,code_digest AS digest,id AS connection_id,code_challenge AS challenge,code_expires_at_ms AS expires_at_ms,code_consumed_at_ms AS consumed_at_ms FROM oauth_connections WHERE code_digest IS NOT NULL) AS oauth_codes WHERE consumed_at_ms IS NOT NULL"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
-      for (const table of ["oauth_access_credentials", "oauth_refresh_credentials"]) {
+      for (const table of [
+        "(SELECT * FROM oauth_credentials WHERE kind='access')",
+        "(SELECT * FROM oauth_credentials WHERE kind='refresh')",
+      ]) {
         expect(
           yield* wait(fixture.db.prepare(`SELECT count(*) FROM ${table}`).first<number>("count(*)"))
         ).toBe(0);
@@ -270,27 +285,35 @@ it("rejects substituted client, redirect, audience, missing PKCE and expired cod
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_codes WHERE consumed_at_ms IS NOT NULL")
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,code_digest AS digest,id AS connection_id,code_challenge AS challenge,code_expires_at_ms AS expires_at_ms,code_consumed_at_ms AS consumed_at_ms FROM oauth_connections WHERE code_digest IS NOT NULL) AS oauth_codes WHERE consumed_at_ms IS NOT NULL"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_access_credentials")
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_refresh_credentials")
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='refresh') AS oauth_credentials"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
       yield* wait(
         fixture.db
-          .prepare("UPDATE oauth_codes SET expires_at_ms = ?")
+          .prepare(
+            "UPDATE oauth_connections AS oauth_codes SET code_expires_at_ms = ? WHERE code_digest IS NOT NULL "
+          )
           .bind(yield* Clock.currentTimeMillis)
           .run()
       );
@@ -298,7 +321,9 @@ it("rejects substituted client, redirect, audience, missing PKCE and expired cod
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM oauth_access_credentials")
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
@@ -392,7 +417,9 @@ it("rejects revoked and exactly expired grants before code exchange or query adm
       expect(
         yield* wait(
           revoked.db
-            .prepare("SELECT count(*) FROM oauth_access_credentials")
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials"
+            )
             .first<number>("count(*)")
         )
       ).toBe(0);
@@ -423,7 +450,9 @@ it("rejects revoked and exactly expired grants before code exchange or query adm
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ?")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+            )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
         )
@@ -446,7 +475,9 @@ it("expires access authority without extending the reviewed connection or disclo
       );
       yield* wait(
         fixture.db
-          .prepare("UPDATE oauth_access_credentials SET expires_at_ms = issued_at_ms + 1")
+          .prepare(
+            "UPDATE oauth_credentials AS oauth_credentials SET expires_at_ms = issued_at_ms + 1 WHERE kind='access'"
+          )
           .run()
       );
       const rejected = yield* wait(
@@ -472,7 +503,9 @@ it("expires access authority without extending the reviewed connection or disclo
       expect(
         yield* wait(
           fixture.db
-            .prepare("SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ?")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+            )
             .bind(fixture.connectionId)
             .first<number>("count(*)")
         )
@@ -489,7 +522,7 @@ it("approves and exchanges a connection with case-insensitive media types, atomi
       yield* wait(
         db
           .prepare(
-            "INSERT INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?, ?, '{}', 'disclosure', 'decision', 1, 1)"
           )
           .bind("10000000-0000-4000-8000-000000000004", "10000000-0000-4000-8000-000000000001")
           .run()
@@ -549,7 +582,11 @@ it("approves and exchanges a connection with case-insensitive media types, atomi
       expect((yield* wait(exchange())).status).toBe(400);
       expect(
         yield* wait(
-          db.prepare("SELECT count(*) FROM oauth_access_credentials").first<number>("count(*)")
+          db
+            .prepare(
+              "SELECT count(*) FROM (SELECT rowid,* FROM oauth_credentials WHERE kind='access') AS oauth_credentials"
+            )
+            .first<number>("count(*)")
         )
       ).toBe(0);
       tokenBody.set("code_verifier", "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk");
@@ -618,7 +655,9 @@ it("approves and exchanges a connection with case-insensitive media types, atomi
       expect(
         yield* wait(
           db
-            .prepare("SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ?")
+            .prepare(
+              "SELECT count(*) FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE oauth_connection_id = ?"
+            )
             .bind(result.connectionId)
             .first<number>("count(*)")
         )
@@ -631,7 +670,11 @@ it("approves and exchanges a connection with case-insensitive media types, atomi
       ).toBe(1);
       expect(
         yield* wait(
-          db.prepare("SELECT count(*) FROM oauth_grant_consents").first<number>("count(*)")
+          db
+            .prepare(
+              "SELECT count(*) FROM (SELECT * FROM consent_history WHERE record_type='oauth_grant') AS oauth_grant_consents"
+            )
+            .first<number>("count(*)")
         )
       ).toBe(1);
       expect(

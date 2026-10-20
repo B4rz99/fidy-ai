@@ -11,7 +11,6 @@ import {
   recordAllPATRevocations,
   recordOnePATRevocation,
   recordPATList,
-  refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { ActivePATList } from "../../../src/core/tokens/contract";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
@@ -24,9 +23,7 @@ import {
 import {
   type SessionRow,
   canonical,
-  httpRateLimited,
   notFound,
-  response,
   sessionExists,
   shortIdIsValid,
   unauthorized,
@@ -76,8 +73,7 @@ export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Effect.Eff
               }),
             ].map(({ sql, params }) => db.prepare(sql).bind(...params))
           ),
-        catch: (error) =>
-          refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
+        catch: () => "unavailable" as const,
       });
       if (recorded?.meta.changes !== 1) return unauthorized();
       if (rows === undefined) return unavailable();
@@ -87,21 +83,7 @@ export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Effect.Eff
             yield* Schema.encodeEffect(Schema.toCodecJson(ActivePATList))(listed.value.data)
           )
         : unavailable();
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.succeed(
-          error === "rate_limited"
-            ? response({
-                body: {
-                  error: { code: "rate_limited", message: "PAT metadata budget exhausted." },
-                  next: [],
-                },
-                status: httpRateLimited,
-              })
-            : unavailable()
-        )
-      )
-    );
+    }).pipe(Effect.orElseSucceed(() => unavailable()));
   });
 
 const revokedPATResponse = (

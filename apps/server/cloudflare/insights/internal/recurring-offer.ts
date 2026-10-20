@@ -20,7 +20,7 @@ export const requestDiscoveryOffer = (
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT q.id,q.delivery_id FROM recurring_digest_opportunities AS o JOIN proactivity_offer_requests AS q ON q.user_id=o.user_id AND q.id=o.request_id WHERE o.user_id=?"
+          "SELECT id,delivery_id FROM proactivity_offer_requests WHERE user_id=? AND current_recurring_opportunity=1"
         )
         .bind(input.userId)
         .first()
@@ -36,7 +36,7 @@ export const requestDiscoveryOffer = (
       const retry = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            `SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=? AND r.delivery_id=? AND ((r.expires_at_ms<=? AND NOT EXISTS(SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id)) OR EXISTS(${rejected.sql}))`
+            `SELECT 1 FROM insight_reports AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=? AND r.delivery_id=? AND ((r.expires_at_ms<=? AND NOT EXISTS(SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id)) OR EXISTS(${rejected.sql}))`
           )
           .bind(input.userId, deliveryId, input.now.epochMilliseconds, ...rejected.params)
           .first()

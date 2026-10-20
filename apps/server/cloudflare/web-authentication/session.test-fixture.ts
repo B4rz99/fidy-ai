@@ -174,19 +174,26 @@ export const seedSession = ({
           .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, 4102444200000, ?, ?)")
           .bind(sessionId, sessionUser, digest, idle, hard),
         db.prepare(
-          "CREATE TABLE users (id TEXT, service_market TEXT, locale TEXT, time_zone TEXT, created_at_ms INTEGER)"
+          "CREATE TABLE users (id TEXT, service_market TEXT, locale TEXT, time_zone TEXT, created_at_ms INTEGER, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER)"
         ),
         db
-          .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 0)")
+          .prepare(
+            "INSERT INTO users (id,service_market,locale,time_zone,created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', 0)"
+          )
+          .bind(sessionUser),
+        db
+          .prepare("UPDATE users SET trial_started_at_ms=0,trial_ends_at_ms=604800000 WHERE id=?1")
           .bind(sessionUser),
         db.prepare(
-          "CREATE TABLE trial_periods (user_id TEXT, started_at_ms INTEGER, ends_at_ms INTEGER)"
+          "CREATE TABLE consent_history (record_type TEXT NOT NULL,user_id TEXT NOT NULL)"
         ),
-        db.prepare("INSERT INTO trial_periods VALUES (?, 0, 604800000)").bind(sessionUser),
-        db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT)"),
-        db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(sessionUser),
+        db
+          .prepare(
+            "INSERT INTO consent_history (record_type,user_id) VALUES ('processing_grant',?)"
+          )
+          .bind(sessionUser),
         db.prepare(
-          "CREATE TABLE canonical_user_reads (id TEXT, user_id TEXT, session_id TEXT, occurred_at_ms INTEGER)"
+          "CREATE TABLE IF NOT EXISTS audit_entries (sequence INTEGER PRIMARY KEY AUTOINCREMENT,record_type TEXT NOT NULL,id TEXT,user_id TEXT,session_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER,pat_id TEXT,oauth_connection_id TEXT,oauth_credential_id TEXT,hosted_turn_id TEXT,attempt_id TEXT,transition TEXT,accepted_at_ms INTEGER,UNIQUE(record_type,id),UNIQUE(attempt_id,transition))"
         ),
       ])
     );

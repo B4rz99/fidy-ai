@@ -19,10 +19,6 @@ import type {
 import { type Effect, type Option, Schema } from "effect";
 import type { CanonicalRefusalDisposition, TransactionCaller } from "../canonical-work/contract";
 
-export type MutationTriggerKind = "movement" | "capacity" | "audit";
-
-type OwnerWork = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
-
 export type OwnerOutcome = Readonly<{
   _tag: "Owner";
   operation: string;
@@ -30,10 +26,6 @@ export type OwnerOutcome = Readonly<{
   /** Owner-specific facts retained for earlier-child guard replay inside one batch. */
   guardFacts: Option.Option<BudgetOutcome | KeywordRuleOutcome>;
   read: (db: D1Database, userId: string) => Effect.Effect<Option.Option<CommittedMutationValue>>;
-  triggerRefusal: (
-    work: OwnerWork,
-    kind: MutationTriggerKind
-  ) => Option.Option<CanonicalMutationRefusal>;
 }>;
 
 /** The committed value an owner must read back and how it presents to the caller. */
@@ -87,7 +79,7 @@ export type PreparedCanonicalMutation = Readonly<{
     ) => ReadonlyArray<D1PreparedStatement>
   >;
   /** Browser Budget Audits use their own cap rather than the shared PAT/Category cap. */
-  auditBudget: "shared" | "owner";
+
   /** Construct the owner's refusal; its metadata-only Audit is recorded only when `record` runs. */
   guardRefusal: (work: GuardRefusalWork) => Effect.Effect<CanonicalMutationRefusal>;
 }>;

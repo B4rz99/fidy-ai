@@ -6,6 +6,7 @@ import {
   observeRetentionCost,
 } from "../d1-test-fixture";
 import { sweepMediaSubmissions } from "./runtime";
+import { activateDeferredEmails } from "./internal/email-allowance";
 import { StatementStaging } from "./internal/statement-staging";
 
 class RetentionTestFailure extends Data.TaggedError("RetentionTestFailure")<{ cause: unknown }> {}
@@ -28,7 +29,9 @@ const prepare = (): Promise<Readonly<{ db: D1Database; bucket: R2Bucket }>> =>
       yield* io(() => installRetentionTestSchema(bindings.db));
       yield* io(() =>
         bindings.db
-          .prepare("INSERT INTO users VALUES (?,'CO','es-CO','UTC',0),(?,'CO','es-CO','UTC',0)")
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','UTC',0),(?,'CO','es-CO','UTC',0)"
+          )
           .bind(user, other)
           .run()
       );
@@ -47,7 +50,7 @@ const seedMedia = (
 ): Promise<unknown> =>
   db
     .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
-    INSERT INTO media_submissions SELECT ?||i,?,'p','b',?||i,'digest',?,?,?,?,'CO','es-CO','UTC' FROM n`)
+    INSERT INTO media_submissions(id,user_id,portfolio_id,bsuid,message_id,input_digest,media_id,caption,accepted_at_ms,expires_at_ms,service_market,locale,time_zone,capacity_held) SELECT ?||i,?,'p','b',?||i,'digest',?,?,?,?,'CO','es-CO','UTC',? FROM n`)
     .bind(
       input.count,
       input.prefix,
@@ -56,7 +59,8 @@ const seedMedia = (
       input.content ? "media" : null,
       input.content ? "caption" : null,
       input.accepted,
-      input.accepted + lifetime
+      input.accepted + lifetime,
+      input.content ? 1 : 0
     )
     .run();
 const seedStaging = (
@@ -88,7 +92,7 @@ const seedStaging = (
     )
     .run();
 
-it("media idle sweeps seek past cleared 30-day history, future outbox work and the annual archive", () =>
+it("media idle sweeps seek past cleared 30-day history, future held capacity and the annual archive", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db } = yield* io(() => prepare());
@@ -110,13 +114,6 @@ it("media idle sweeps seek past cleared 30-day history, future outbox work and t
           content: true,
         })
       );
-      yield* io(() =>
-        db
-          .prepare(
-            "INSERT INTO media_submission_outbox SELECT id,user_id,accepted_at_ms FROM media_submissions WHERE media_id IS NOT NULL"
-          )
-          .run()
-      );
       for (let tick = 0; tick < 3; tick += 1) {
         if (tick === 1) yield* io(() => db.prepare("ANALYZE").run());
         const observed = observeRetentionCost(db);
@@ -127,7 +124,7 @@ it("media idle sweeps seek past cleared 30-day history, future outbox work and t
         for (const index of [
           "media_content_retention",
           "media_accountability_retention",
-          "media_outbox_retention",
+          "media_capacity_expiry",
         ]) {
           expect(plans.some((plan) => plan.includes("SEARCH") && plan.includes(index))).toBe(true);
         }
@@ -166,13 +163,6 @@ it("media retention drains fixed-size batches at the exact content and accountab
           owner: other,
         })
       );
-      yield* io(() =>
-        db
-          .prepare(
-            "INSERT INTO media_submission_outbox SELECT id,user_id,accepted_at_ms FROM media_submissions WHERE media_id IS NOT NULL"
-          )
-          .run()
-      );
       yield* sweepMediaSubmissions({ db, now: now - 1 });
       expect(
         yield* io(() =>
@@ -198,7 +188,9 @@ it("media retention drains fixed-size batches at the exact content and accountab
         )
       ).toBe(701);
       expect(
-        yield* io(() => db.prepare("SELECT user_id FROM media_submission_outbox").first("user_id"))
+        yield* io(() =>
+          db.prepare("SELECT user_id FROM media_submissions WHERE capacity_held=1").first("user_id")
+        )
       ).toBe(other);
       const repeated = observeRetentionCost(db);
       yield* sweepMediaSubmissions({ db: repeated.database, now });
@@ -389,5 +381,40 @@ it("submission expiry commits a complete 200-row page within D1's bind limit", (
             .first("count")
         )
       ).toBe(200);
+    })
+  ));
+
+it("email deferral sweeps skip admitted receipts without scanning or sorting their history", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* io(() => prepare());
+      yield* io(() =>
+        db.batch(
+          [user, other].flatMap((owner, index) => [
+            db
+              .prepare(
+                "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',0,0)"
+              )
+              .bind(owner, owner),
+            db
+              .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<90)
+       INSERT INTO forwarded_email_receipts(id,user_id,delivery_digest,object_key,byte_length,state,received_at_ms,expires_at_ms)
+       SELECT printf('30000000-0000-4000-8000-%012d',i+?),?,printf('%064d',i),?||i,1,'queued',0,10000 FROM n`)
+              .bind(index * 100, owner, owner),
+          ])
+        )
+      );
+      for (let tick = 0; tick < 2; tick++) {
+        if (tick === 1) yield* io(() => db.prepare("ANALYZE").run());
+        const observed = observeRetentionCost(db);
+        yield* activateDeferredEmails({ db: observed.database, current: 1 }).pipe(Effect.orDie);
+        expect(observed.cost().rowsRead).toBeLessThanOrEqual(2);
+        expect(observed.cost().rowsWritten).toBe(0);
+        const plans = yield* io(() => observed.plans());
+        expect(plans.some((plan) => plan.includes("forwarded_email_deferred_activation"))).toBe(
+          true
+        );
+        expect(plans.some((plan) => plan.includes("TEMP B-TREE"))).toBe(false);
+      }
     })
   ));

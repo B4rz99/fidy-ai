@@ -82,21 +82,20 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
       .bind(identity.userId, "CO", "es-CO", "America/Bogota", identity.createdAtMs),
     db
       .prepare(
-        "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
+        "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?,?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
       )
       .bind(identity.userId, "acceptance-portfolio", identity.bsuid, identity.createdAtMs),
     db
       .prepare(
-        "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
+        "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
       )
       .bind(identity.userId, identity.email, identity.createdAtMs),
     db
-      .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
+      .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
       .bind(identity.userId, identity.createdAtMs, identity.createdAtMs + trialDurationMs),
     db
-      .prepare(`INSERT INTO onboarding_consent_records
-    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
-     decision_received_at_ms, accepted_at_ms) VALUES (?,?,?,?,?,?,?)`)
+      .prepare(`INSERT INTO consent_history (record_type,id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
+     decision_received_at_ms, accepted_at_ms) VALUES ('processing_grant',?,?,?,?,?,?,?)`)
       .bind(
         identity.consentId,
         identity.userId,
@@ -319,7 +318,7 @@ await seedIdentity({
 });
 // Provider-authenticated Users need not establish the optional email-login credential.
 await db
-  .prepare("DELETE FROM verified_email_credentials WHERE user_id = ?")
+  .prepare("UPDATE users SET verified_email_address=NULL,email_verified_at_ms=NULL WHERE id = ?")
   .bind(firstCardUserId)
   .run();
 
@@ -342,7 +341,7 @@ await seedIdentity({
 });
 await db
   .prepare(
-    "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?,?,?)"
+    "WITH incoming(user_id,code_digest,created_at_ms) AS (VALUES (?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,recovery_code_digest,recovery_created_at_ms,recovery_revision) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.code_digest,incoming.created_at_ms,1 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET recovery_code_digest=excluded.recovery_code_digest,recovery_created_at_ms=excluded.recovery_created_at_ms,recovery_revision=excluded.recovery_revision"
   )
   .bind(recoveryUserId, recoveryDigest, now)
   .run();
@@ -359,7 +358,7 @@ await seedIdentity({
 });
 await db
   .prepare(
-    "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?,?,?)"
+    "WITH incoming(user_id,code_digest,created_at_ms) AS (VALUES (?,?,?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,recovery_code_digest,recovery_created_at_ms,recovery_revision) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.code_digest,incoming.created_at_ms,1 FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET recovery_code_digest=excluded.recovery_code_digest,recovery_created_at_ms=excluded.recovery_created_at_ms,recovery_revision=excluded.recovery_revision"
   )
   .bind(recoveryDisclosureUserId, recoveryDisclosureDigest, now)
   .run();

@@ -41,7 +41,7 @@ import { sweepExpiredUploadAdmission as sweepUploadAdmission } from "./internal/
 import { sweepMedia } from "./internal/media-retention";
 import { expireStatementReviewEvidence as expireReview } from "./internal/statement-review-retention";
 
-/** Bounded inactive-User cleanup of expired media locators, outbox identities and aged accountability. */
+/** Bounded inactive-User cleanup of expired media locators, held capacity and aged accountability. */
 export const sweepMediaSubmissions: typeof sweepMedia = (input) => sweepMedia(input);
 
 /** Reoffer bounded committed extraction identities; a Queue offer never authorizes extraction. */

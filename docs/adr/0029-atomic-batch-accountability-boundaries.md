@@ -1,6 +1,6 @@
 # Atomic-batch accountability and abort attribution boundaries
 
-- **Status:** Accepted
+- **Status:** Accepted; daily Audit quota policy revised on 2026-10-18
 - **Date:** 2026-09-24
 
 An atomic batch composes canonical child operations into one subject-scoped D1 unit. Its failures
@@ -18,34 +18,31 @@ unit.
 A body that fails the published request envelope (absent, empty, or oversized `calls`), or a child
 that names no canonical operation, writes one metadata-only refusal AuditLogEntry naming the batch
 operation when the WebSession or PAT credential remains live. These pre-admission envelope rows
-are excluded from the stable-User daily canonical-work budget, so malformed probing cannot spend
-its 256 child-work slots. A separate atomic D1 trigger caps these envelope rows at 256 per
-stable User per UTC day across session and PAT callers; after that, requests answer `rate_limited`
-without another row. They carry no input or child success; the PAT envelope needs no child
-scope, only a live credential and Consent. A batch that already writes a child refusal never writes
-an envelope row. Other pre-admission refusals record nothing: a child whose operation has no batch
+do not consume a commercial allowance. Stable-User short-term request admission protects the
+whole invocation before validation and bounds malformed attempts. Audit storage imposes no daily
+quota; the former 256-per-day child/envelope counters and 100-per-day Transaction cap were removed
+on 2026-10-18 because they duplicated admission controls and imposed hidden limits on paid work.
+These refusal rows carry no input or child success; the PAT envelope needs no child scope, only a
+live credential and Consent. A batch that already writes a child refusal never writes an envelope
+row. Other pre-admission refusals record nothing: a child whose operation has no batch
 adapter, a child below the required tier, a child outside the caller's credential scope (the same
 `scope_missing` decision the individual ingress makes, reported through the batch failure
 contract), a child whose encoded input outgrows the per-child body bound an individual call of that
 operation accepts, a second staged statement child (one batch publishes at most one file, so
 staging admission cannot be multiplied), and a repeated `callId`. None of these names work
-the caller was allowed to do, and auditing them would let garbage requests consume the caller's own
-daily audit budget.
+the caller was allowed to do, and they do not need additional canonical accountability rows.
 
 The batch operation writes no second row when a child refusal was recorded. The session audit
-vocabulary includes the batch id for the envelope-only case; the shared budget triggers exclude
-that operation in both session and PAT audit tables.
+vocabulary includes the batch id for the envelope-only case. Successful child work retains its own
+AuditLogEntry, while commercial external-call consumption is one admitted envelope.
 
 ## Attribution stops at what the unit can observe
 
 When the D1 unit aborts, the batch reports the first child it can prove responsible: a stale
 observed revision, a repeated observed revision of one Transaction (the later child's guard cannot
-be satisfied), or a budget trigger. The child's refusal AuditLogEntry is recorded whenever that
-entry can commit. An attributable abort on the shared daily audit budget answers the canonical
-`rate_limited` refusal without a row, because the exhausted budget is what refused it. A mixed
-batch's audit-budget trigger does not name its child: another canonical call can commit an Audit
-row before a post-rollback recount, so assigning a child from that count could record false
-evidence. Until a guard supplies commit-time child identity, this abort answers `unavailable`.
+be satisfied), or an owner capacity assertion. The child's refusal AuditLogEntry is recorded whenever that
+entry can commit. Audit persistence failure remains unavailable and rolls back domain work;
+recording evidence does not exhaust a second product allowance.
 
 An abort that maps to no child answers the canonical `unavailable` failure. Because the unit rolled
 back, no child state and no child success AuditLogEntry exists to report; a misattributed refusal
@@ -70,9 +67,8 @@ cannot correct a Transaction an earlier child creates).
 
 ## Rejected alternatives
 
-Auditing every batch envelope in addition to its children: redundant with per-child rows and a
-budget lever. Issue #794 adopted the narrower deferred alternative A2: only a pre-admission
-refusal with no attributable child earns an envelope row, excluded from canonical-work counts.
+Auditing every batch envelope in addition to its children: redundant with per-child attribution. Issue #794 adopted the narrower deferred alternative A2: only a pre-admission
+refusal with no attributable child earns an envelope row.
 
 Deriving typed child inputs from the catalog: parameterizing `CatalogOperation.input` across the
 whole catalog to serve two consumers, instead of keeping the input codec beside the operation that

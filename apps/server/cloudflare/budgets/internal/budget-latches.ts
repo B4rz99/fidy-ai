@@ -16,7 +16,7 @@ export const prepareOptInFence = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      "INSERT INTO budget_mutation_assertion(id,accepted) SELECT 1,CASE WHEN NOT EXISTS (SELECT 1 FROM budget_reconciliation_work WHERE user_id=?) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
+      "INSERT INTO sql_assertions (scope, accepted) SELECT 'budget_mutation',CASE WHEN NOT EXISTS (SELECT 1 FROM budget_state WHERE kind='work' AND user_id=?) THEN 1 ELSE 0 END ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted"
     )
     .bind(input.userId);
 

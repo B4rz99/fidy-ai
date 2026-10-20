@@ -55,7 +55,9 @@ const readCursor = (
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
       input.db
-        .prepare("SELECT cursor,complete FROM recurring_digest_scans WHERE user_id=?")
+        .prepare(
+          "SELECT cursor,complete FROM (SELECT rowid,user_id,source_checkpoint AS checkpoint,source_cursor AS cursor,source_cutoff_at_ms AS cutoff_at_ms,source_complete AS complete FROM recurring_digest_instructions WHERE source_checkpoint IS NOT NULL) AS recurring_digest_scans WHERE user_id=?"
+        )
         .bind(input.userId)
         .first()
     );
@@ -78,7 +80,9 @@ export const stageSource = (
       Effect.tapError(() =>
         Effect.tryPromise(() =>
           input.db
-            .prepare("DELETE FROM recurring_digest_scans WHERE user_id=?")
+            .prepare(
+              "UPDATE recurring_digest_instructions AS recurring_digest_scans SET source_checkpoint=NULL,source_cursor=NULL,source_cutoff_at_ms=NULL,source_complete=NULL WHERE source_checkpoint IS NOT NULL AND user_id=?"
+            )
             .bind(input.userId)
             .run()
         ).pipe(Effect.ignore)
@@ -98,7 +102,7 @@ export const stageSource = (
     statements.push(
       input.db
         .prepare(
-          "INSERT INTO recurring_digest_scans(user_id,checkpoint,cursor,cutoff_at_ms,complete) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET checkpoint=excluded.checkpoint,cursor=excluded.cursor,cutoff_at_ms=excluded.cutoff_at_ms,complete=excluded.complete"
+          "UPDATE recurring_digest_instructions SET source_checkpoint=?2,source_cursor=?3,source_cutoff_at_ms=?4,source_complete=?5 WHERE user_id=?1"
         )
         .bind(
           input.userId,
@@ -112,7 +116,7 @@ export const stageSource = (
       statements.push(
         input.db
           .prepare(
-            "INSERT INTO proactivity_message_assertion(id,accepted) VALUES(1,CASE WHEN (SELECT count(*) FROM recurring_digest_staging WHERE user_id=?)=? THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
+            "INSERT INTO sql_assertions (scope, accepted) VALUES ('proactivity_message',CASE WHEN (SELECT count(*) FROM recurring_digest_staging WHERE user_id=?)=? THEN 1 ELSE 0 END) ON CONFLICT(scope) DO UPDATE SET accepted=excluded.accepted"
           )
           .bind(input.userId, page.total)
       );

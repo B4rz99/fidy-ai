@@ -6,11 +6,7 @@ import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { AuthorizedPAT } from "../tokens/contract";
 
 /** A recorded refusal stands, whether or not its owner retains Audit; other dispositions identify why durable recording failed. */
-export type CanonicalRefusalDisposition =
-  | "recorded"
-  | "credential_refused"
-  | "rate_limited"
-  | "unavailable";
+export type CanonicalRefusalDisposition = "recorded" | "credential_refused" | "unavailable";
 
 /** A Transaction adapter dependency failure whose kind is classified and never exposed. */
 export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBoundaryFailure")<{
@@ -81,6 +77,3 @@ export type TransactionAuthority =
   | OAuthAuthority
   | HostedCanonicalCaller["authority"];
 export type QueryAuthority = TransactionAuthority;
-
-/** The canonical shared daily-write-budget refusal every owner reports. */
-export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";

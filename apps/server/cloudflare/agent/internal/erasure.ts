@@ -4,10 +4,10 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   {
     id: "hosted_agent_sessions",
     dataClass: "conversation",
-    dependencies: ["hosted_compacted_conversations", "hosted_turns", "transcript_entries"],
+    dependencies: ["hosted_turns", "transcript_entries"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'consent_basis_json',r.\"consent_basis_json\",'started_at_ms',r.\"started_at_ms\",'last_activity_at_ms',r.\"last_activity_at_ms\",'status',r.\"status\") AS body FROM hosted_agent_sessions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'consent_basis_json',r.\"consent_basis_json\",'started_at_ms',r.\"started_at_ms\",'last_activity_at_ms',r.\"last_activity_at_ms\",'status',r.\"status\",'compacted_text',r.compacted_text,'compacted_through_sequence',r.compacted_through_sequence,'compacted_revision',r.compacted_revision,'compacted_at_ms',r.compacted_at_ms) AS body FROM hosted_agent_sessions r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -21,30 +21,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     remove: (scope) => [
       {
         sql: "DELETE FROM hosted_agent_sessions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
-    id: "hosted_compacted_conversations",
-    dataClass: "conversation",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'text',r.\"text\",'through_sequence',r.\"through_sequence\",'revision',r.\"revision\",'updated_at_ms',r.\"updated_at_ms\") AS body FROM hosted_compacted_conversations r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_compacted_conversations r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM hosted_compacted_conversations r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM hosted_compacted_conversations AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -98,30 +74,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
   },
   {
-    id: "hosted_delivery_proposals",
-    dataClass: "conversation",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('turn_id',r.\"turn_id\",'user_id',r.\"user_id\",'proposed_at_ms',r.\"proposed_at_ms\",'text',r.\"text\") AS body FROM hosted_delivery_proposals r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_delivery_proposals r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM hosted_delivery_proposals r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM hosted_delivery_proposals AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "hosted_mutation_commits",
     dataClass: "conversation",
     dependencies: [],
@@ -146,49 +98,19 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
   },
   {
-    id: "hosted_turn_retention",
-    dataClass: "conversation",
-    dependencies: [
-      "dashboard_projection_leaf",
-      "hosted_mutation_commits",
-      "hosted_whatsapp_inbound",
-      "transaction_reconciliation_decisions",
-      "transaction_reconciliation_members",
-      "transactions",
-      "transcript_entries",
-    ],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('turn_id',r.\"turn_id\",'user_id',r.\"user_id\",'terminal_at_ms',r.\"terminal_at_ms\") AS body FROM hosted_turn_retention r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM hosted_turn_retention r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM hosted_turn_retention r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM hosted_turn_retention AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "hosted_turns",
     dataClass: "conversation",
     dependencies: [
+      "dashboard_projection_leaf",
       "hosted_confirmations",
-      "hosted_delivery_proposals",
       "hosted_mutation_commits",
-      "hosted_turn_retention",
       "hosted_whatsapp_inbound",
       "insight_audit",
       "pat_audit",
       "statement_whatsapp_documents",
+      "transaction_reconciliation_decisions",
+      "transaction_reconciliation_members",
+      "transactions",
       "transcript_entries",
     ],
     quiescence: {
@@ -199,7 +121,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       }),
     },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'started_at_ms',r.\"started_at_ms\",'terminal_at_ms',r.\"terminal_at_ms\",'status',r.\"status\",'failure_reason',r.\"failure_reason\") AS body FROM hosted_turns r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'started_at_ms',r.\"started_at_ms\",'terminal_at_ms',r.\"terminal_at_ms\",'status',r.\"status\",'failure_reason',r.\"failure_reason\",'proposal_user_id',r.proposal_user_id,'proposed_at_ms',r.proposed_at_ms,'proposal_text',r.proposal_text,'retention_user_id',r.retention_user_id,'retention_terminal_at_ms',r.retention_terminal_at_ms) AS body FROM hosted_turns r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -218,36 +140,12 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     ],
   },
   {
-    id: "proactive_message_transcript_entries",
-    dataClass: "conversation",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-    select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'delivery_id',r.\"delivery_id\",'role',r.\"role\",'occurred_at_ms',r.\"occurred_at_ms\",'text',r.\"text\",'expires_at_ms',r.\"expires_at_ms\") AS body FROM proactive_message_transcript_entries r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM proactive_message_transcript_entries r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM proactive_message_transcript_entries r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM proactive_message_transcript_entries AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
-        params: [scope.userId, scope.reference],
-      },
-    ],
-  },
-  {
     id: "proactive_transcript_entries",
     dataClass: "conversation",
     dependencies: ["proactive_transcript_event_links"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('sequence',r.\"sequence\",'id',r.\"id\",'user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'occurred_at_ms',r.\"occurred_at_ms\",'text',r.\"text\",'expires_at_ms',r.\"expires_at_ms\") AS body FROM proactive_transcript_entries r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('kind',r.\"kind\",'delivery_id',r.\"delivery_id\",'role',r.\"role\",'sequence',r.\"sequence\",'id',r.\"id\",'user_id',r.\"user_id\",'insight_event_id',r.\"insight_event_id\",'occurred_at_ms',r.\"occurred_at_ms\",'text',r.\"text\",'expires_at_ms',r.\"expires_at_ms\") AS body FROM proactive_transcript_entries r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
@@ -271,7 +169,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'transcript_id',r.\"transcript_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM proactive_transcript_event_links r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transcript_kind',r.\"transcript_kind\",'user_id',r.\"user_id\",'transcript_id',r.\"transcript_id\",'insight_event_id',r.\"insight_event_id\") AS body FROM proactive_transcript_event_links r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({

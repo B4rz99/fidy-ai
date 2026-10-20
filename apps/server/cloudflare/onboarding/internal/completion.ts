@@ -36,12 +36,7 @@ export const completeEnrollment = ({
     commit: (credential) =>
       commit({
         userId,
-        statements: [
-          identity.createUser,
-          ...prepareEvidence(userId),
-          identity.startTrial,
-          credential,
-        ],
+        statements: [identity.createUser, ...prepareEvidence(userId), credential],
       }),
   }).then((recoveryCode) =>
     Response.json(

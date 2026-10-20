@@ -185,7 +185,12 @@ it("executes an eligible canonical query under the live User authority and retai
       expect(outcome._tag).toBe("Succeeded");
       expect(encodeJson(outcome)).toContain('"label":"Restaurantes"');
       const audit = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT operation FROM category_audit WHERE user_id = ?").bind(users[0]).all()
+        db
+          .prepare(
+            "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
+          )
+          .bind(users[0])
+          .all()
       );
       expect(audit.results).toContainEqual(
         expect.objectContaining({ operation: "categories.listCategories" })
@@ -318,7 +323,9 @@ it("executes filtered Transaction history in a hosted Turn without exposing anot
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
+            .prepare(
+              "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
+            )
             .bind(users[0])
             .all()
         )).results
@@ -329,7 +336,9 @@ it("executes filtered Transaction history in a hosted Turn without exposing anot
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ?")
+            .prepare(
+              "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ?"
+            )
             .bind(users[1])
             .first()
         )
@@ -773,7 +782,7 @@ it.each(["memory.forget", "operations.executeAtomicBatch"] as const)(
           (yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT operation FROM memory_audit WHERE user_id = ? AND operation = 'memory.forget'"
+                "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? AND operation = 'memory.forget'"
               )
               .bind(users[0])
               .all()
@@ -1330,7 +1339,12 @@ it("refuses model-requested mutations that the browser hosted toolkit did not ex
       ).toHaveLength(0);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id FROM category_audit WHERE user_id = ?").bind(users[0]).all()
+          db
+            .prepare(
+              "SELECT id FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
+            )
+            .bind(users[0])
+            .all()
         )).results
       ).toHaveLength(0);
     })
@@ -1381,7 +1395,12 @@ it("refuses a cross-User hosted tool request before sending context or writing t
         expect((yield* Effect.tryPromise(() => retained({ db, user }))).results).toHaveLength(0);
         expect(
           (yield* Effect.tryPromise(() =>
-            db.prepare("SELECT id FROM category_audit WHERE user_id = ?").bind(user).all()
+            db
+              .prepare(
+                "SELECT id FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
+              )
+              .bind(user)
+              .all()
           )).results
         ).toHaveLength(0);
       }
@@ -1465,7 +1484,12 @@ it("ends a multi-round Turn at its shared deadline without buying another model 
         ]);
         expect(
           (yield* Effect.tryPromise(() =>
-            db.prepare("SELECT id FROM category_audit WHERE user_id = ?").bind(users[0]).all()
+            db
+              .prepare(
+                "SELECT id FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
+              )
+              .bind(users[0])
+              .all()
           )).results
         ).toHaveLength(0);
       } finally {
@@ -1522,7 +1546,12 @@ it("refuses duplicate tool identities before executing any canonical work", () =
       ]);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id FROM category_audit WHERE user_id = ?").bind(users[0]).all()
+          db
+            .prepare(
+              "SELECT id FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ?"
+            )
+            .bind(users[0])
+            .all()
         )).results
       ).toHaveLength(0);
     })

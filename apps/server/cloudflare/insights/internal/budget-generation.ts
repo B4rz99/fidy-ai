@@ -1,3 +1,4 @@
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { UserId } from "../../../src/core/identity/contract";
 import { BudgetCrossing } from "../../../src/core/budgets/contract";
@@ -14,11 +15,10 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { InsightUnavailable } from "../contract";
 
 const monthDatePrefixLength = 7;
-const assertionSql =
-  "INSERT INTO proactivity_message_assertion(id,accepted) VALUES(1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted";
+
 type Scope = Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>;
 const occurrenceProof = (input: Scope, id: string): OwnedStatement => ({
-  sql: "SELECT 1 FROM budget_alert_occurrences WHERE user_id=? AND delivery_group_id=?",
+  sql: "SELECT 1 FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) WHERE user_id=? AND delivery_group_id=?",
   params: [input.userId, id],
 });
 const messageWrites = (
@@ -33,7 +33,7 @@ const messageWrites = (
   return [
     input.db
       .prepare(
-        "INSERT INTO proactivity_reports(delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES (?,?,'budget-threshold',?,?,?,?,?,?)"
+        "INSERT INTO insight_reports(kind,delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms,dispatch_state,dispatch_created_at_ms,dispatch_last_attempt_at_ms,dispatch_restart_attempts) VALUES ('proactivity-delivery',?,?,'budget-threshold',?,?,?,?,?,? ,CASE WHEN ?6<=?8 THEN 'expired' ELSE 'ready' END,?8,0,0)"
       )
       .bind(
         group.id,
@@ -47,19 +47,9 @@ const messageWrites = (
       ),
     input.db
       .prepare(
-        "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) SELECT user_id,delivery_group_id,insight_event_id FROM budget_alert_occurrences WHERE user_id=? AND delivery_group_id=?"
+        "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) SELECT user_id,delivery_group_id,insight_event_id FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) WHERE user_id=? AND delivery_group_id=?"
       )
       .bind(input.userId, group.id),
-    input.db
-      .prepare(
-        "INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms,state) VALUES (?,?,?,?)"
-      )
-      .bind(
-        input.userId,
-        group.id,
-        input.now.epochMilliseconds,
-        expires.epochMilliseconds <= input.now.epochMilliseconds ? "expired" : "ready"
-      ),
   ];
 };
 const commitGroup = (
@@ -83,7 +73,7 @@ const commitGroup = (
           subject: { _tag: "User", userId: input.userId },
           requirement: "active",
           statement: {
-            sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json) SELECT ?,?,'budget-threshold',?,1,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM budget_alert_occurrences WHERE user_id=? AND delivery_group_id=? AND threshold=?)",
+            sql: "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at,money_groups_json,budget_delivery_group_id,budget_threshold,budget_crossing_json) SELECT ?,?,'budget-threshold',?,1,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM (SELECT rowid,user_id,budget_delivery_group_id AS delivery_group_id,budget_threshold AS threshold,id AS insight_event_id,budget_crossing_json AS crossing_json FROM insight_events WHERE budget_delivery_group_id IS NOT NULL) WHERE user_id=? AND delivery_group_id=? AND threshold=?)",
             params: [
               id,
               input.userId,
@@ -93,6 +83,9 @@ const commitGroup = (
               crossing.period.timeZone,
               DateTime.formatIso(crossing.detectedAt),
               encodedMoney,
+              group.id,
+              crossing.threshold,
+              snapshot,
               input.userId,
               group.id,
               crossing.threshold,
@@ -100,14 +93,7 @@ const commitGroup = (
           },
         })
       );
-      statements.push(input.db.prepare(assertionSql));
-      statements.push(
-        input.db
-          .prepare(
-            "INSERT INTO budget_alert_occurrences(user_id,delivery_group_id,threshold,insight_event_id,crossing_json) VALUES(?,?,?,?,?)"
-          )
-          .bind(input.userId, group.id, crossing.threshold, id, snapshot)
-      );
+      statements.push(prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" }));
     }
     statements.push(
       ...messageWrites(input, group),

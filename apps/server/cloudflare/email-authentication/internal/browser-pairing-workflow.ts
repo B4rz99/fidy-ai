@@ -62,9 +62,8 @@ const publishWork = (
   Effect.gen(function* () {
     const trace = yield* captureWorkTrace;
     const claim = yield* attempt(() =>
-      environment.DB.prepare(`UPDATE browser_pairing_email_outbox
-    SET last_attempt_at_ms = ? WHERE id = ? AND
-    (last_attempt_at_ms IS NULL OR last_attempt_at_ms < ?)`)
+      environment.DB.prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_dispatch_attempted_at_ms = ? WHERE email_work_id IS NOT NULL AND email_work_id = ? AND
+    (email_dispatch_attempted_at_ms IS NULL OR email_dispatch_attempted_at_ms < ?)`)
         .bind(current, id, current - dispatchCooldownMilliseconds)
         .run()
     );
@@ -76,12 +75,6 @@ const publishWork = (
         version: 1,
         id,
       })
-    );
-    yield* attempt(() =>
-      environment.DB.prepare(`UPDATE browser_pairing_email_outbox
-    SET published_at_ms = ? WHERE id = ?`)
-        .bind(current, id)
-        .run()
     );
   });
 
@@ -97,14 +90,13 @@ export const dispatchBrowserPairingEmail = (
       current,
     });
     const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT o.id
-    FROM browser_pairing_email_outbox AS o
-    JOIN browser_pairing_email_proofs AS e ON e.work_id = o.id
+      environment.DB.prepare(`SELECT e.work_id AS id
+    FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS e
     WHERE e.state = 'awaiting_delivery' AND e.expires_at_ms > ?
       AND EXISTS (${pairing.sql})
-      AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
-      AND (? IS NULL OR o.id = ?)
-    ORDER BY o.created_at_ms LIMIT 32`)
+      AND (e.dispatch_attempted_at_ms IS NULL OR e.dispatch_attempted_at_ms < ?)
+      AND (? IS NULL OR e.work_id = ?)
+    ORDER BY e.last_requested_at_ms LIMIT 32`)
         .bind(
           current,
           ...pairing.params,
@@ -142,8 +134,8 @@ export const receiveBrowserPairingEmail =
           continue;
         }
         const row = yield* attempt(() =>
-          environment.DB.prepare(`SELECT email_address, expires_at_ms, state
-        FROM browser_pairing_email_proofs WHERE work_id = ?`)
+          environment.DB.prepare(`SELECT email_address, email_expires_at_ms AS expires_at_ms, email_state AS state
+        FROM browser_login_pairings WHERE email_work_id = ?`)
             .bind(decoded.value.id)
             .first()
         );
@@ -193,8 +185,8 @@ const findPendingProof = (
     const raw = yield* attempt(() =>
       db
         .prepare(`SELECT e.email_address, e.expires_at_ms, e.state
-      FROM browser_pairing_email_proofs AS e
-      JOIN verified_email_credentials AS v ON v.user_id = e.user_id
+      FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS e
+      JOIN (SELECT rowid,id AS user_id,verified_email_address AS email_address,email_verified_at_ms AS verified_at_ms FROM users WHERE verified_email_address IS NOT NULL) AS v ON v.user_id = e.user_id
         AND v.email_address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
       WHERE e.work_id = ? AND EXISTS (${pairing.sql})`)
         .bind(id, ...pairing.params)
@@ -211,11 +203,11 @@ const settlePairingDelivery = (
   const retainProof = nextState === "awaiting_proof" ? nextState : "ambiguous";
   return attempt(() =>
     db
-      .prepare(`UPDATE browser_pairing_email_proofs SET state = ?,
-      public_code = CASE WHEN ? = 'awaiting_proof' THEN public_code ELSE NULL END,
-      proof_digest = CASE WHEN ? = 'awaiting_proof' THEN proof_digest ELSE NULL END,
-      proof_expires_at_ms = CASE WHEN ? = 'awaiting_proof' THEN proof_expires_at_ms ELSE NULL END
-      WHERE work_id = ? AND state = 'sending'`)
+      .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_state = ?,
+      email_public_code = CASE WHEN ? = 'awaiting_proof' THEN email_public_code ELSE NULL END,
+      email_proof_digest = CASE WHEN ? = 'awaiting_proof' THEN email_proof_digest ELSE NULL END,
+      email_proof_expires_at_ms = CASE WHEN ? = 'awaiting_proof' THEN email_proof_expires_at_ms ELSE NULL END
+      WHERE email_work_id IS NOT NULL AND email_work_id = ? AND email_state = 'sending'`)
       .bind(nextState, retainProof, retainProof, retainProof, id)
       .run()
   );
@@ -238,16 +230,15 @@ export const deliverBrowserPairingEmail =
         const proofDigest = yield* attempt(() => digest(secret));
         const pairing = pendingBrowserPairingQuery({
           subject: {
-            sql: "SELECT browser_pairing_email_proofs.pairing_id AS pairingId",
+            sql: "SELECT browser_pairing_email_proofs.id AS pairingId",
             params: [],
           },
           current,
         });
         const claimed = yield* attempt(() =>
           db
-            .prepare(`UPDATE browser_pairing_email_proofs
-      SET state = 'sending', public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
-      WHERE work_id = ? AND state = 'awaiting_delivery' AND expires_at_ms > ?
+            .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_state = 'sending', email_public_code = ?, email_proof_digest = ?, email_proof_expires_at_ms = ?
+      WHERE email_work_id IS NOT NULL AND email_work_id = ? AND email_state = 'awaiting_delivery' AND email_expires_at_ms > ?
         AND EXISTS (${pairing.sql})`)
             .bind(
               publicCode,
@@ -327,25 +318,15 @@ export const reconcileBrowserPairingEmail = (db: D1Database): Effect.Effect<void
     const current = yield* Clock.currentTimeMillis;
     yield* attempt(() =>
       db
-        .prepare(`UPDATE browser_pairing_email_proofs
-      SET state = 'ambiguous', public_code = NULL, proof_digest = NULL, proof_expires_at_ms = NULL
-      WHERE state = 'sending' AND proof_expires_at_ms < ?`)
+        .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_state = 'ambiguous', email_public_code = NULL, email_proof_digest = NULL, email_proof_expires_at_ms = NULL
+      WHERE email_work_id IS NOT NULL AND email_state = 'sending' AND email_proof_expires_at_ms < ?`)
         .bind(current - proofLifetimeMilliseconds)
         .run()
     );
     yield* attempt(() =>
       db
-        .prepare(`DELETE FROM browser_pairing_email_outbox WHERE id IN
-      (SELECT o.id FROM browser_pairing_email_outbox AS o LEFT JOIN browser_pairing_email_proofs AS p
-        ON p.work_id = o.id WHERE p.work_id IS NULL OR p.expires_at_ms <= ?
-        OR p.state IN ('approved', 'rejected', 'ambiguous') ORDER BY o.created_at_ms LIMIT 32)`)
-        .bind(current)
-        .run()
-    );
-    yield* attempt(() =>
-      db
-        .prepare(`DELETE FROM browser_pairing_email_proofs WHERE pairing_id IN
-      (SELECT pairing_id FROM browser_pairing_email_proofs WHERE expires_at_ms <= ? LIMIT 32)`)
+        .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_work_id=NULL,email_user_id=NULL,email_address=NULL,email_credential_verified_at_ms=NULL,email_state=NULL,email_public_code=NULL,email_proof_digest=NULL,email_proof_expires_at_ms=NULL,email_expires_at_ms=NULL,email_generation=NULL,email_wrong_attempts=NULL,email_last_requested_at_ms=NULL,email_dispatch_attempted_at_ms=NULL WHERE email_work_id IS NOT NULL AND id IN
+      (SELECT id FROM browser_login_pairings WHERE email_work_id IS NOT NULL AND email_expires_at_ms <= ? LIMIT 32)`)
         .bind(current)
         .run()
     );

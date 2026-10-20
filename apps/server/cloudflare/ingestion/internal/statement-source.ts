@@ -116,10 +116,9 @@ const findManifest = (
   input: MaterializationIdentity
 ): Effect.Effect<Option.Option<Manifest>, BoundaryFailure> =>
   foreign(() =>
-    input.DB.prepare(`SELECT source_sha256,parts_sha256,parser_revision,source_format,expires_at_ms,
-    representation_revision,service_market,locale,time_zone,
-    headers_json,row_count,part_count,byte_length,state FROM statement_materializations
-    WHERE submission_id=? AND user_id=?`)
+    input.DB.prepare(
+      `SELECT material_source_sha256 AS source_sha256,material_parts_sha256 AS parts_sha256,material_parser_revision AS parser_revision,material_source_format AS source_format,material_representation_revision AS representation_revision,material_service_market AS service_market,material_locale AS locale,material_time_zone AS time_zone,material_expires_at_ms AS expires_at_ms,material_headers_json AS headers_json,material_row_count AS row_count,material_part_count AS part_count,material_byte_length AS byte_length,material_state AS state FROM statement_submissions WHERE id=? AND user_id=? AND material_state IS NOT NULL`
+    )
       .bind(input.submissionId, input.userId)
       .first()
   ).pipe(
@@ -134,12 +133,12 @@ const publish = (
   current: number
 ): Effect.Effect<boolean, Failure> =>
   foreign(() =>
-    input.DB.prepare(`UPDATE statement_materializations SET state='ready'
-    WHERE submission_id=? AND user_id=? AND state='building'
-    AND part_count=(SELECT count(*) FROM statement_materialization_parts WHERE submission_id=?)
-    AND byte_length=(SELECT sum(length(CAST(body AS BLOB))) FROM statement_materialization_parts WHERE submission_id=?)
+    input.DB.prepare(`UPDATE statement_submissions SET material_state='ready'
+    WHERE id=? AND user_id=? AND material_state='building'
+    AND material_part_count=(SELECT count(*) FROM statement_materialization_parts WHERE submission_id=?)
+    AND material_byte_length=(SELECT sum(length(CAST(body AS BLOB))) FROM statement_materialization_parts WHERE submission_id=?)
     AND EXISTS(SELECT 1 FROM statement_submissions WHERE id=? AND user_id=? AND status IN ('queued','processing')
-      AND retention_expires_at_ms>?) RETURNING submission_id`)
+      AND retention_expires_at_ms>?) RETURNING id AS submission_id`)
       .bind(
         input.submissionId,
         input.userId,
@@ -166,8 +165,8 @@ const verifyPublication = (
   Effect.gen(function* () {
     const raw = yield* foreign(() =>
       input.DB.prepare(`SELECT count(*) AS parts, coalesce(sum(length(CAST(p.body AS BLOB))),0) AS bytes
-        FROM statement_materialization_parts p JOIN statement_materializations m ON m.submission_id=p.submission_id
-        WHERE p.submission_id=? AND m.user_id=? AND m.state='building'`)
+        FROM statement_materialization_parts p JOIN statement_submissions m ON m.id=p.submission_id
+        WHERE p.submission_id=? AND m.user_id=? AND m.material_state='building'`)
         .bind(input.submissionId, input.userId)
         .first()
     );
@@ -186,8 +185,8 @@ const verifyPublication = (
     for (let offset = 0; offset < manifest.part_count; offset += writeBatchSize) {
       const response = yield* foreign(() =>
         input.DB.prepare(`SELECT p.chunk_index,p.part_index,p.body,p.sha256 FROM statement_materialization_parts p
-          JOIN statement_materializations m ON m.submission_id=p.submission_id
-          WHERE p.submission_id=? AND m.user_id=? AND m.state='building'
+          JOIN statement_submissions m ON m.id=p.submission_id
+          WHERE p.submission_id=? AND m.user_id=? AND m.material_state='building'
           AND (p.chunk_index,p.part_index)>(?,?)
           ORDER BY p.chunk_index,p.part_index LIMIT ?`)
           .bind(input.submissionId, input.userId, cursorChunk, cursorPart, writeBatchSize)
@@ -219,7 +218,7 @@ const recoverBuilding = (
     }
     yield* foreign(() =>
       input.DB.prepare(`DELETE FROM statement_materialization_parts WHERE submission_id=?
-        AND EXISTS(SELECT 1 FROM statement_materializations WHERE submission_id=? AND user_id=? AND state='building')`)
+        AND EXISTS(SELECT 1 FROM statement_submissions WHERE id=? AND user_id=? AND material_state='building')`)
         .bind(input.submissionId, input.submissionId, input.userId)
         .run()
     );
@@ -262,8 +261,8 @@ const readRows = (
     const chunkIndex = Math.floor(offset / statementChunkSize);
     const response = yield* foreign(() =>
       input.DB.prepare(`SELECT p.part_index,p.body,p.sha256
-      FROM statement_materialization_parts p JOIN statement_materializations m ON m.submission_id=p.submission_id
-      WHERE p.submission_id=? AND m.user_id=? AND m.state='ready' AND p.chunk_index=?
+      FROM statement_materialization_parts p JOIN statement_submissions m ON m.id=p.submission_id
+      WHERE p.submission_id=? AND m.user_id=? AND m.material_state='ready' AND p.chunk_index=?
       AND (SELECT sum(length(CAST(body AS BLOB))) FROM statement_materialization_parts
         WHERE submission_id=? AND chunk_index=?)<=?
       ORDER BY p.part_index LIMIT ?`)
@@ -386,14 +385,11 @@ const prepareManifest = (
       }
       return;
     }
-    yield* foreign(() =>
-      input.DB.prepare(`INSERT INTO statement_materializations
-      (submission_id,user_id,source_sha256,parser_revision,source_format,expires_at_ms,headers_json,row_count,part_count,byte_length,
-        representation_revision,service_market,locale,time_zone,parts_sha256,state)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'building')`)
+    const installed = yield* foreign(() =>
+      input.DB.prepare(
+        `UPDATE statement_submissions SET material_source_sha256=?,material_parser_revision=?,material_source_format=?,material_expires_at_ms=?,material_headers_json=?,material_row_count=?,material_part_count=?,material_byte_length=?,material_representation_revision=?,material_service_market=?,material_locale=?,material_time_zone=?,material_parts_sha256=?,material_state='building' WHERE id=? AND user_id=? AND material_state IS NULL`
+      )
         .bind(
-          input.submissionId,
-          input.userId,
           input.sourceHash,
           input.parserRevision,
           input.sourceFormat,
@@ -406,10 +402,13 @@ const prepareManifest = (
           input.serviceMarket,
           input.locale,
           input.timeZone,
-          encoded.partsHash
+          encoded.partsHash,
+          input.submissionId,
+          input.userId
         )
         .run()
     );
+    if (installed.meta.changes !== 1) return yield* new StatementSourceUnavailable();
   });
 const writeParts = (
   input: MaterializationIdentity,

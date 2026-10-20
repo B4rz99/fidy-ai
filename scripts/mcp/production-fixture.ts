@@ -217,7 +217,7 @@ export const approvePairing = Effect.fn(function* (scope: ApprovedScope, code: s
   const now = yield* Clock.currentTimeMillis;
   yield* query(
     scope,
-    `INSERT INTO browser_login_approvals (portfolio_id,message_id,pairing_id,user_id) SELECT '${scope.portfolio}','${scope.namespace}-fixture-'||id,id,'${scope.fixtureUserId}' FROM browser_login_pairings WHERE public_code='${code}' AND state='pending_approval' AND expires_at_ms>${now};`
+    `UPDATE browser_login_pairings SET approval_portfolio_id=incoming.portfolio_id,approval_message_id=incoming.message_id,approval_user_id=incoming.user_id FROM (SELECT '${scope.portfolio}' AS portfolio_id,'${scope.namespace}-fixture-'||id AS message_id,id AS pairing_id,'${scope.fixtureUserId}' AS user_id FROM browser_login_pairings WHERE public_code='${code}' AND state='pending_approval' AND expires_at_ms>${now};) AS incoming WHERE browser_login_pairings.id=incoming.pairing_id AND browser_login_pairings.approval_message_id IS NULL`
   );
 });
 export const Snapshot = Schema.Struct({

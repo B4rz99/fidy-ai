@@ -18,14 +18,18 @@ const verifyRenewalFence = (
     const withdrawal = "12740000-0000-4000-8000-000000000081";
     yield* Effect.tryPromise(() =>
       input.db
-        .prepare("INSERT INTO consent_user_revocations VALUES(?,?,?,?,?)")
+        .prepare(
+          "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)"
+        )
         .bind(withdrawal, userId, userId, userId, input.current + 1)
         .run()
     );
     yield* Effect.tryPromise(() =>
       expect(
         input.db
-          .prepare("INSERT INTO processing_consent_renewals VALUES(?,?,?,?,?,'{}',?)")
+          .prepare(
+            "INSERT INTO consent_history (record_type,id,user_id,withdrawal_id,grant_record_id,session_id,disclosure_json,accepted_at_ms) VALUES ('processing_renewal',?,?,?,?,?,'{}',?)"
+          )
           .bind(withdrawal, userId, withdrawal, userId, userId, input.current + 2)
           .run()
       ).rejects.toThrow("erasure_fenced")
@@ -34,17 +38,20 @@ const verifyRenewalFence = (
 
 const verifyNewStoreGuards = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    for (const table of ["processing_consent_withdrawal_records", "processing_consent_renewals"]) {
+    for (const recordType of ["processing_withdrawal", "processing_renewal"]) {
       yield* Effect.tryPromise(() =>
         expect(
-          db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(foreignUser).run()
-        ).rejects.toThrow("consent_append_only")
+          db
+            .prepare(`DELETE FROM consent_history WHERE record_type='${recordType}' AND user_id=?`)
+            .bind(foreignUser)
+            .run()
+        ).rejects.toThrow("consent_history_retention_required")
       );
     }
     yield* Effect.tryPromise(() =>
       expect(
         db
-          .prepare("UPDATE recurring_plan_documents SET user_id=? WHERE user_id=?")
+          .prepare("UPDATE user_documents SET user_id=? WHERE kind='recurring-plan' AND user_id=?")
           .bind(foreignUser, userId)
           .run()
       ).rejects.toThrow("erasure_fenced")
@@ -60,7 +67,11 @@ const verifyNativeErasure = Effect.gen(function* () {
   yield* Effect.tryPromise(() =>
     db.batch([
       ...[userId, foreignUser].map((id) =>
-        db.prepare("INSERT INTO users VALUES(?,'CO','es-CO','America/Bogota',?)").bind(id, current)
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,trial_started_at_ms,trial_ends_at_ms) VALUES(?1,'CO','es-CO','America/Bogota',?2,?2,?2+604800000)"
+          )
+          .bind(id, current)
       ),
       db
         .prepare(
@@ -215,22 +226,19 @@ const verifyNativeErasure = Effect.gen(function* () {
   ).toBe("Conservar");
   for (const table of [
     "ingestion_review_state",
-    "whatsapp_identities",
+    "(SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL)",
     "transactions",
     "source_attestations",
     "pats",
-    "onboarding_consent_records",
+    "consent_history",
     "hosted_agent_sessions",
     "transcript_entries",
     "recurring_series",
-    "dashboard_documents",
-    "weekly_schedules",
-    "subscription_identities",
+    "(SELECT user_id,document_json,revision FROM user_documents WHERE kind='dashboard')",
+    "schedules",
     "web_sessions",
-    "memory_audit",
-    "recurring_plan_documents",
-    "processing_consent_withdrawal_records",
-    "processing_consent_renewals",
+    "(SELECT * FROM audit_entries WHERE record_type='session_call')",
+    "(SELECT user_id,document_json,revision FROM user_documents WHERE kind='recurring-plan')",
   ]) {
     expect(
       yield* Effect.tryPromise(() =>
@@ -249,7 +257,12 @@ const verifyNativeErasure = Effect.gen(function* () {
           .first<number>("count")
       ),
       table
-    ).toBe(table === "transcript_entries" ? 2 : 1);
+    ).toBe(
+      new Map([
+        ["transcript_entries", 2],
+        ["consent_history", 3],
+      ]).get(table) ?? 1
+    );
   }
   expect(
     yield* Effect.tryPromise(() => native.originals.head(`staging/statement/v1/${"a".repeat(64)}`))

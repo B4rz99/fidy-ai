@@ -234,7 +234,7 @@ const executeBootstrap = (
     if (path === oauthPaths.mcp) return yield* handleMcpRequest(input);
     return discoveryResponse(path);
   });
-/** Bounds OAuth/MCP ingress before resolving authority; canonical work admits its own shared User budget. */
+/** Bounds OAuth/MCP ingress before resolving authority; canonical admission applies shared User request protection. */
 export const handleOAuthRequest = (input: BootstrapInput): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (new TextEncoder().encode(input.request.url).length > maximumBootstrapBytes) {

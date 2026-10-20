@@ -7,8 +7,8 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import { reviewAudit } from "./review-audit";
-import { readReviewDetail, reviewCompletion } from "./review-store";
+import { commitReviewRead } from "./review-audit";
+import { readReviewDetail } from "./review-store";
 
 export const browseReviewItem = ({
   db,
@@ -23,16 +23,11 @@ export const browseReviewItem = ({
     const current = transactionNow();
     const id = new URL(request.url).pathname.split("/").at(-1) ?? "";
     const found = yield* readReviewDetail({ db, userId: subject.userId, id, current });
-    yield* Effect.tryPromise(() =>
-      db.batch([
-        ...reviewAudit({
-          work: { db, subject, current },
-          operation: "ingestion.getReviewItem",
-          accepted: Option.isSome(found),
-        }),
-        db.prepare(reviewCompletion),
-      ])
-    );
+    yield* commitReviewRead({
+      work: { db, subject, current },
+      operation: "ingestion.getReviewItem",
+      accepted: Option.isSome(found),
+    });
     if (Option.isNone(found)) {
       return transactionFailure({
         code: "not_found",

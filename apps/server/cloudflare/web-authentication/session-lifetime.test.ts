@@ -40,7 +40,7 @@ it.effect.each([
   },
   {
     stage: "current-user Audit",
-    sql: "INSERT INTO canonical_user_reads",
+    sql: "INSERT INTO audit_entries",
     method: "run" as const,
     logout: false,
     audits: 1,
@@ -103,7 +103,11 @@ it.effect.each([
         });
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()
+            db
+              .prepare(
+                "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,occurred_at_ms FROM audit_entries WHERE record_type='identity_read') AS canonical_user_reads"
+              )
+              .first()
           )
         ).toEqual({ count: audits });
       }).pipe(
@@ -159,7 +163,11 @@ it.effect(
         yield* Fiber.join(interrupting);
         expect(
           yield* Effect.tryPromise(() =>
-            db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()
+            db
+              .prepare(
+                "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,occurred_at_ms FROM audit_entries WHERE record_type='identity_read') AS canonical_user_reads"
+              )
+              .first()
           )
         ).toEqual({ count: 0 });
       }).pipe(

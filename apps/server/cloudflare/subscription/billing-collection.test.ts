@@ -29,7 +29,7 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
+        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
       ]);
 
       const db = created.db;
@@ -182,7 +182,11 @@ it("collects a Nequi source without card installment fields and settles the comm
       ).toEqual({ status: "succeeded" });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM billing_paid_periods").first()
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods"
+            )
+            .first()
         )
       ).toEqual({ count: 1 });
     })
@@ -252,12 +256,18 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
       yield* verify();
       expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT attempt_id,transition,occurred_at_ms FROM (SELECT attempt_id,transition,occurred_at_ms FROM audit_entries WHERE record_type='billing_transition') AS billing_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
       const standing = yield* Effect.tryPromise(() =>
         db
           .prepare(`SELECT s.price_id, p.starts_at_ms, p.ends_at_ms
-        FROM subscriptions AS s JOIN billing_paid_periods AS p ON p.attempt_id = s.attempt_id`)
+        FROM subscriptions AS s JOIN (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS p ON p.attempt_id = s.attempt_id`)
           .all()
       );
       expect(standing.results).toEqual([
@@ -268,8 +278,13 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
         },
       ]);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_followup_outbox").all()))
-          .results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT * FROM (SELECT id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) AS billing_followup_outbox"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
     })
   ));
@@ -285,12 +300,16 @@ it("holds verified negative until the retry opportunity and admits a later verif
       expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM billing_transaction_candidates").all()
+          db
+            .prepare(
+              "SELECT * FROM billing_provider_transactions AS billing_transaction_candidates"
+            )
+            .all()
         )).results
       ).toHaveLength(1);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE billing_transaction_evidence
+          .prepare(`UPDATE billing_provider_transactions
       SET negative_observed_at_ms = negative_observed_at_ms - 180001`)
           .run()
       );
@@ -322,16 +341,17 @@ it("holds verified negative until the retry opportunity and admits a later verif
       expect(create).toHaveBeenCalledTimes(2);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE billing_collection_arms
-        SET state = 'sent', sent_at_ms = 1 WHERE attempt_id = ?`)
+          .prepare(
+            `UPDATE billing_attempts AS billing_collection_work SET collection_state = 'sent', collection_sent_at_ms = 1 WHERE collection_state IS NOT NULL AND id = ?`
+          )
           .bind(attemptId)
           .run()
       );
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO billing_no_charge_confirmations
-        (attempt_id, wompi_reference, wompi_environment, provider_case_id, operator_id, confirmed_at_ms)
-        VALUES (?, ?, 'sandbox', 'case-123', 'operator-42', 180002)`)
+          .prepare(
+            `UPDATE billing_attempts SET no_charge_reference=incoming.wompi_reference,no_charge_environment=incoming.wompi_environment,no_charge_case_id=incoming.provider_case_id,no_charge_operator_id=incoming.operator_id,no_charge_confirmed_at_ms=incoming.confirmed_at_ms FROM (SELECT ? AS attempt_id,? AS wompi_reference,'sandbox' AS wompi_environment,'case-123' AS provider_case_id,'operator-42' AS operator_id,180002 AS confirmed_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.no_charge_confirmed_at_ms IS NULL`
+          )
           .bind(attemptId, reference)
           .run()
       );
@@ -339,11 +359,21 @@ it("holds verified negative until the retry opportunity and admits a later verif
       yield* verify();
       expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT attempt_id,transition,occurred_at_ms FROM (SELECT attempt_id,transition,occurred_at_ms FROM audit_entries WHERE record_type='billing_transition') AS billing_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(2);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT provider_case_id FROM billing_recovery_reviews").all()
+          db
+            .prepare(
+              "SELECT provider_case_id FROM (SELECT rowid,id AS attempt_id,recovery_case_id AS provider_case_id,recovery_reviewed_at_ms AS occurred_at_ms FROM billing_attempts WHERE recovery_case_id IS NOT NULL) AS billing_recovery_reviews"
+            )
+            .all()
         )).results
       ).toEqual([{ provider_case_id: "case-123" }]);
     })
@@ -359,7 +389,7 @@ it("restarts the negative retry opportunity after a verified pending observation
       yield* verify();
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE billing_transaction_evidence
+          .prepare(`UPDATE billing_provider_transactions
       SET negative_observed_at_ms = negative_observed_at_ms - 180001`)
           .run()
       );
@@ -478,7 +508,13 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
       expect(provider.mock.calls.filter(([, init]) => init?.method === "GET")).toHaveLength(1);
       expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT attempt_id,transition,occurred_at_ms FROM (SELECT attempt_id,transition,occurred_at_ms FROM audit_entries WHERE record_type='billing_transition') AS billing_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(1);
     })
   ));
@@ -566,7 +602,11 @@ it("rejects forged callback evidence across Public and Core ingress without writ
       ).toHaveLength(0);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM billing_transaction_evidence").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) AS billing_transaction_evidence"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
       expect(provider).not.toHaveBeenCalled();
@@ -591,7 +631,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
         );
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`UPDATE billing_transaction_candidates
+            .prepare(`UPDATE billing_provider_transactions
         SET last_checked_at_ms = last_checked_at_ms - 60001`)
             .run()
         );
@@ -601,7 +641,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
       expect(
         (yield* Effect.tryPromise(() =>
           db
-            .prepare(`SELECT lookup_attempts FROM billing_transaction_candidates
+            .prepare(`SELECT lookup_attempts FROM billing_provider_transactions AS billing_transaction_candidates
       WHERE transaction_id = ?`)
             .bind(transactionId)
             .first<{ lookup_attempts: number }>()
@@ -621,7 +661,7 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`UPDATE billing_transaction_candidates
+            .prepare(`UPDATE billing_provider_transactions
         SET last_checked_at_ms = last_checked_at_ms - 60001`)
             .run()
         );
@@ -879,14 +919,24 @@ it("rejects a signed callback with another User's source even when its reference
       ).toBe("pending");
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM billing_transaction_evidence").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) AS billing_transaction_evidence"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
       expect(
         (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM subscriptions").all())).results
       ).toHaveLength(0);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT attempt_id,transition,occurred_at_ms FROM (SELECT attempt_id,transition,occurred_at_ms FROM audit_entries WHERE record_type='billing_transition') AS billing_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(0);
     })
   ));
@@ -1013,11 +1063,21 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       );
       expect(standing?.attempt_id).toBe(attemptId);
       const followup = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT attempt_id FROM billing_followup_outbox").all<{ attempt_id: string }>()
+        db
+          .prepare(
+            "SELECT attempt_id FROM (SELECT rowid,id AS attempt_id,followup_kind AS kind,followup_due_at_ms AS due_at_ms FROM billing_attempts WHERE followup_kind IS NOT NULL) AS billing_followup_outbox"
+          )
+          .all<{ attempt_id: string }>()
       );
       expect(followup.results.map((row) => row.attempt_id)).toEqual([attemptId]);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_audit").all())).results
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT attempt_id,transition,occurred_at_ms FROM (SELECT attempt_id,transition,occurred_at_ms FROM audit_entries WHERE record_type='billing_transition') AS billing_audit"
+            )
+            .all()
+        )).results
       ).toHaveLength(2);
     })
   ));
@@ -1032,7 +1092,11 @@ it("refuses a mismatched source even with a valid provider id and reference", ()
       expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM billing_transaction_evidence").all()
+          db
+            .prepare(
+              "SELECT * FROM (SELECT transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) AS billing_transaction_evidence"
+            )
+            .all()
         )).results
       ).toHaveLength(0);
     })

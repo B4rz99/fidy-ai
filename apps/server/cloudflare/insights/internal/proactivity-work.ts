@@ -19,7 +19,7 @@ export const discoverProactivityUsers = (
     const rows = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT s.user_id FROM reminder_schedules AS s JOIN reminder_governors AS g ON g.user_id=s.user_id WHERE s.enabled=1 AND (s.next_scheduled_at<=? OR (json_extract(g.standing_json,'$._tag')='QuestionPending' AND (g.question_id IS NULL OR EXISTS (SELECT 1 FROM proactivity_outbox AS o WHERE o.user_id=g.user_id AND o.delivery_id=g.question_id AND o.state='expired')))) AND json_extract(g.standing_json,'$._tag')<>'Paused' ORDER BY s.last_evaluated_at_ms,s.next_scheduled_at,s.id LIMIT 16"
+          "SELECT s.user_id FROM schedules AS s JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE s.kind='reminder' AND s.enabled=1 AND (s.next_scheduled_at<=? OR (json_extract(g.standing_json,'$._tag')='QuestionPending' AND (g.question_id IS NULL OR EXISTS (SELECT 1 FROM insight_reports AS o WHERE o.kind='proactivity-delivery' AND o.user_id=g.user_id AND o.delivery_id=g.question_id AND o.dispatch_state='expired')))) AND json_extract(g.standing_json,'$._tag')<>'Paused' ORDER BY s.last_evaluated_at_ms,s.next_scheduled_at,s.id LIMIT 16"
         )
         .bind(DateTime.formatIso(input.now))
         .all()
@@ -91,7 +91,7 @@ export const noteProactivityEvaluation = (
     );
     yield* Effect.tryPromise(() =>
       input.db
-        .prepare("UPDATE reminder_schedules SET last_evaluated_at_ms=? WHERE user_id=?")
+        .prepare("UPDATE schedules SET last_evaluated_at_ms=? WHERE kind='reminder' AND user_id=?")
         .bind(input.now.epochMilliseconds, input.userId)
         .run()
     );

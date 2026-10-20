@@ -2,15 +2,11 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { PATActivity } from "../../../src/shell/tokens/contract";
 import { TokenShortId } from "../../../src/core/tokens/contract";
 import { patIdentityQuery, preparePATActivityMetadata } from "../../../src/shell/tokens/operations";
-import {
-  preparePATActivity,
-  recordPATActivityQuery,
-  refusedByAuditBudget,
-} from "../../../src/shell/audit/operations";
+import { preparePATActivity, recordPATActivityQuery } from "../../../src/shell/audit/operations";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { newId } from "../../secret-material/operations";
 import type { PATActivityRead, PATMetadataQuery } from "../contract";
-import { canonical, notFound, response, serviceUnavailable, unauthorized } from "./pat-shared";
+import { canonical, notFound, serviceUnavailable, unauthorized } from "./pat-shared";
 
 export const getActivity = (
   input: PATMetadataQuery & Readonly<{ shortId: string }>
@@ -53,8 +49,7 @@ export const getHeldActivity = ({ db, ...read }: PATActivityRead): Effect.Effect
             recordPATActivityQuery({ ...auditInput, id: newId() }),
           ].map(({ sql, params }) => db.prepare(sql).bind(...params))
         ),
-      catch: (error) =>
-        refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
+      catch: () => "unavailable" as const,
     });
     if (results[2]?.meta.changes !== 1) return unauthorized();
     const pat = yield* metadata.decode(results[0]?.results);
@@ -63,18 +58,4 @@ export const getHeldActivity = ({ db, ...read }: PATActivityRead): Effect.Effect
     return canonical(
       yield* Schema.encodeEffect(Schema.toCodecJson(PATActivity))({ pat: pat.value, ...history })
     );
-  }).pipe(
-    Effect.catch((error) =>
-      Effect.succeed(
-        error === "rate_limited"
-          ? response({
-              status: 429,
-              body: {
-                error: { code: "rate_limited", message: "PAT activity budget exhausted." },
-                next: [],
-              },
-            })
-          : serviceUnavailable()
-      )
-    )
-  );
+  }).pipe(Effect.orElseSucceed(() => serviceUnavailable()));

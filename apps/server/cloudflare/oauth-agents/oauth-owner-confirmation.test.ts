@@ -1,3 +1,4 @@
+import { approveFirstPartyOperation } from "./oauth-first-party.test-fixture";
 import { categoryIds } from "../../src/core/categories/contract";
 import { Effect, Option, Schema } from "effect";
 import { nativeHostBridgeFile, runNativeHostFixture } from "./native-host.test-fixture";
@@ -153,6 +154,16 @@ it.each(nativeOwnerJourneys)(
             }),
           })
         )(yield* wait(review.json()));
+        if (
+          [
+            "memory.revise",
+            "memory.forget",
+            "transactions.updateTransaction",
+            "transactions.deleteTransaction",
+          ].some((operation) => operation === name)
+        ) {
+          yield* approveFirstPartyOperation(fixture, pending.result.requestState);
+        }
         const accepted = yield* wait(
           nativeConfirmationCall({
             fixture,

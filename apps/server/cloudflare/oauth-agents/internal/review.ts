@@ -1,3 +1,4 @@
+import { reviewOAuthOperation } from "../../oauth-confirmation/operations";
 import { DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import { approveRequest } from "./approval";
 import type { PlatformError } from "effect";
@@ -190,5 +191,12 @@ export const reviewRequest = (input: ReviewInput): Effect.Effect<Response, Revie
       return response({ body: { error: "unauthenticated" }, status: unauthorizedStatus });
     }
     yield* input.admitUser(session.value.user_id);
+    if (
+      [oauthPaths.operationReview, oauthPaths.operationDecision].some(
+        (path) => path === new URL(input.request.url).pathname
+      )
+    ) {
+      return yield* reviewOAuthOperation({ ...input, session: session.value });
+    }
     return yield* processReview({ ...input, session: session.value });
   });

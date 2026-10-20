@@ -195,7 +195,13 @@ const executeBootstrap = (
       return yield* registerClient({ ...input, current });
     }
     if (
-      [oauthPaths.review, oauthPaths.cancel, oauthPaths.connect].some((owned) => owned === path)
+      [
+        oauthPaths.review,
+        oauthPaths.cancel,
+        oauthPaths.connect,
+        oauthPaths.operationReview,
+        oauthPaths.operationDecision,
+      ].some((owned) => owned === path)
     ) {
       return yield* reviewRequest({
         ...input,

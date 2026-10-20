@@ -1,3 +1,4 @@
+import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { Data, Schema } from "effect";
 import {
   CanonicalCapability,
@@ -8,6 +9,14 @@ import { maximumAtomicBatchCalls } from "../../src/shell/operations/contract";
 import type { OAuthConfirmationAttempt } from "../../src/shell/mcp/contract";
 
 const maximumReviewCharacters = 65536;
+
+/** First-party transport has resolved fresh browser authority and applied Origin/CSRF admission. */
+export type OAuthBrowserReviewInput = Readonly<{
+  request: Request;
+  db: D1Database;
+  current: number;
+  session: FreshSessionSubject;
+}>;
 
 /** The complete original canonical invocation accompanies every native continuation. */
 export type OAuthConfirmationWork = Readonly<{

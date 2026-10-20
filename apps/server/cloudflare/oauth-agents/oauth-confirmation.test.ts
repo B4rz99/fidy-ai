@@ -1,3 +1,4 @@
+import { approveFirstPartyOperation } from "./oauth-first-party.test-fixture";
 import { categoryIds } from "../../src/core/categories/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
@@ -63,6 +64,7 @@ it("reviews an exact Budget deletion natively and consumes client acceptance wit
           result: Schema.Struct({ requestState: Schema.String, inputRequests: Schema.JsonObject }),
         })
       )(yield* wait(review.json()));
+      yield* approveFirstPartyOperation(fixture, pending.result.requestState);
       expect(pending.result.inputRequests).toMatchObject({
         review: {
           method: "elicitation/create",
@@ -148,6 +150,7 @@ it.each(refusingNativeResponses)(
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = yield* pendingBudgetDeletion();
+        yield* approveFirstPartyOperation(fixture, fixture.reference);
         let review = { reference: fixture.reference, call: fixture.call };
         for (const [index, response] of responses.entries()) {
           if (index > 0) review = yield* reviewBudgetDeletion(fixture);
@@ -181,6 +184,7 @@ it("rejects changed canonical input and stale Budget revisions without consuming
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
+      yield* approveFirstPartyOperation(fixture, fixture.reference);
       const changed = yield* wait(
         fixture.call(explicitNativeAccept, { params: { id: fixture.id }, confirm: true })
       );
@@ -213,6 +217,7 @@ it("rejects expired native intents and bounds outstanding intents per User", () 
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
+      yield* approveFirstPartyOperation(fixture, fixture.reference);
       const current = yield* Clock.currentTimeMillis;
       yield* wait(
         fixture.db
@@ -262,6 +267,7 @@ it("rolls back native intent consumption with failed Audit and allows only one c
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
+      yield* approveFirstPartyOperation(fixture, fixture.reference);
       yield* wait(
         fixture.db
           .prepare(
@@ -312,6 +318,7 @@ it("resumes the original legacy native tool call after server-requested form acc
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
+      yield* approveFirstPartyOperation(fixture, fixture.reference);
       const headers = {
         authorization: `Bearer ${fixture.bearer}`,
         "content-type": "application/json",
@@ -397,6 +404,18 @@ it("resumes the original legacy native tool call after server-requested form acc
             .first<number>("count(*)")
         )
       ).toBe(1);
+      const legacyReference = yield* wait(
+        fixture.db
+          .prepare(
+            "SELECT reference FROM oauth_operation_intents WHERE reference <> ? ORDER BY created_at_ms DESC LIMIT 1"
+          )
+          .bind(fixture.reference)
+          .first<string>("reference")
+      );
+      yield* approveFirstPartyOperation(
+        fixture,
+        Option.getOrThrow(Option.fromNullOr(legacyReference))
+      );
       const reviewedAt = yield* Clock.currentTimeMillis;
       yield* wait(vi.advanceTimersByTimeAsync(6_000));
       expect((yield* Clock.currentTimeMillis) - reviewedAt).toBeGreaterThanOrEqual(6_000);
@@ -455,6 +474,7 @@ it("reviews the complete ordered sensitive batch and commits all children once, 
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
+      yield* approveFirstPartyOperation(fixture, fixture.reference);
       const name = "operations.executeAtomicBatch";
       const calls: ReadonlyArray<Schema.Json> = [
         {
@@ -475,6 +495,7 @@ it("reviews the complete ordered sensitive batch and commits all children once, 
       const pending = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
       )(yield* wait(review.json()));
+      yield* approveFirstPartyOperation(fixture, pending.result.requestState);
       const resume = (argumentsOverride: Schema.Json): Promise<Response> =>
         nativeConfirmationCall({
           fixture,
@@ -527,6 +548,7 @@ it("reviews and applies an exact Budget update without accepting a changed cap",
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* pendingBudgetDeletion();
+      yield* approveFirstPartyOperation(fixture, fixture.reference);
       const name = "budgets.updateBudget";
       const args = {
         params: { id: fixture.id },
@@ -538,6 +560,7 @@ it("reviews and applies an exact Budget update without accepting a changed cap",
       const pending = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
       )(yield* wait(review.json()));
+      yield* approveFirstPartyOperation(fixture, pending.result.requestState);
       const changed = yield* wait(
         nativeConfirmationCall({
           fixture,
@@ -593,6 +616,7 @@ it.each(["single", "batch"] as const)(
       Effect.gen(function* () {
         for (const changed of ["grant", "consent", "scope"] as const) {
           const fixture = yield* pendingBudgetDeletion();
+          yield* approveFirstPartyOperation(fixture, fixture.reference);
           const name = unit === "single" ? "budgets.deleteBudget" : "operations.executeAtomicBatch";
           const calls: ReadonlyArray<Schema.Json> = [
             {
@@ -618,6 +642,7 @@ it.each(["single", "batch"] as const)(
           const pending = yield* Schema.decodeUnknownEffect(
             Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
           )(yield* wait(review.json()));
+          yield* approveFirstPartyOperation(fixture, pending.result.requestState);
           const held = fixture.holdMutationCommit();
           const accepted = nativeConfirmationCall({
             fixture,
@@ -697,6 +722,7 @@ it.each([1, 2] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = yield* pendingBudgetDeletion();
+        yield* approveFirstPartyOperation(fixture, fixture.reference);
         const peer = yield* nativePeer({ fixture, userIndex });
         expect(peer.connectionId).not.toBe(fixture.connectionId);
         const refused = yield* wait(

@@ -1,7 +1,11 @@
 import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, describe, expect, vi } from "vitest";
-import { isolatedTestDatabases, isolatedTestStorage } from "../../d1-test-fixture";
+import {
+  isolatedTestDatabases,
+  isolatedTestStorage,
+  observeRetentionCost,
+} from "../../d1-test-fixture";
 import { runOperationalAlerts as deliverAlerts } from "./operations";
 import type { OperationalAlert } from "./contract";
 
@@ -42,6 +46,69 @@ const rejects = (promise: Promise<unknown>): Effect.Effect<void, Cause.UnknownEr
 const accepted = (): Promise<void> => Promise.resolve();
 
 describe("operator email notification", () => {
+  it.effect("keeps an unchanged dead-letter alert firing without rewriting it every minute", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      const measured = observeRetentionCost(db);
+      const phases: string[] = [];
+      const send: Parameters<typeof runOperationalAlerts>[0]["send"] = (_alert, _key, options) => {
+        phases.push(options.phase);
+        return accepted();
+      };
+      const tick = (
+        now: number,
+        alerts: ReadonlyArray<OperationalAlert> = [deadLetter]
+      ): Effect.Effect<void, Cause.UnknownError> =>
+        Effect.tryPromise(() => runOperationalAlerts({ db: measured.database, now, alerts, send }));
+      yield* tick(1_000_000);
+      const initialWrites = measured.cost().rowsWritten;
+      for (let minute = 1; minute < 5; minute++) yield* tick(1_000_000 + minute * 60_000);
+      expect(measured.cost().rowsWritten - initialWrites).toBe(0);
+      expect(phases).toEqual(["firing"]);
+      yield* tick(1_300_000);
+      expect(measured.cost().rowsWritten - initialWrites).toBe(1);
+      yield* tick(1_360_000, []);
+      expect(phases).toEqual(["firing", "resolved"]);
+    })
+  );
+  it.effect("persists severity changes and resolves only absent alerts within the heartbeat", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      const delivered: string[] = [];
+      const send: Parameters<typeof runOperationalAlerts>[0]["send"] = (alert, _key, delivery) => {
+        delivered.push(`${alert.owner}:${alert.severity}:${delivery.phase}`);
+        return accepted();
+      };
+      const warning: OperationalAlert = {
+        kind: "pending_work",
+        owner: "billing",
+        severity: "warning",
+      };
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({ db, now: 1_000_000, alerts: [deadLetter, warning], send })
+      );
+      yield* Effect.tryPromise(() =>
+        runOperationalAlerts({
+          db,
+          now: 1_060_000,
+          alerts: [{ ...warning, severity: "critical" }],
+          send,
+        })
+      );
+      expect(delivered).toContain("billing:critical:firing");
+      expect(delivered).toContain("deadLetters:critical:resolved");
+      expect(delivered).not.toContain("billing:critical:resolved");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT state, severity, last_seen_ms FROM operational_alerts WHERE owner = 'billing'"
+            )
+            .first()
+        )
+      ).toEqual({ state: "firing", severity: "critical", last_seen_ms: 1_060_000 });
+    })
+  );
   it.effect("bounds independent sends at two and preserves confirmations when one send fails", () =>
     Effect.gen(function* () {
       const db = yield* database();

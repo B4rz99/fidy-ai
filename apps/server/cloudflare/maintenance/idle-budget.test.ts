@@ -17,16 +17,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-        yield* Effect.tryPromise(() =>
-          installTestSchema({
-            db,
-            sources: Array.from(
-              new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-            )
-              .sort()
-              .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-          })
-        );
+        yield* Effect.tryPromise(() => installTestSchema({ db }));
         yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
         let current = 86_405_000;
         const live = yield* Clock.Clock;

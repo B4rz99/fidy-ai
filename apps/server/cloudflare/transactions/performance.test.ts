@@ -42,16 +42,7 @@ it.skipIf(!enabled)(
         for (const sample of [0, 1, 2, 3, 4, 5]) {
           const withMaintenance = sample % 2 === 1;
           const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-          yield* Effect.tryPromise(() =>
-            installTestSchema({
-              db,
-              sources: Array.from(
-                new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-              )
-                .sort()
-                .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-            })
-          );
+          yield* Effect.tryPromise(() => installTestSchema({ db }));
           yield* Effect.tryPromise(() =>
             db
               .prepare(`INSERT INTO users

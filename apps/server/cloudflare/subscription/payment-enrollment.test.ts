@@ -1,5 +1,5 @@
+import { type TransactionSubject } from "../canonical-work/contract";
 import { newId } from "../secret-material/operations";
-
 import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -25,7 +25,6 @@ import { executeProtectedSubscriptionQuery } from "./operations";
 import { makeCoreHttp } from "../core-http/runtime";
 import { SubscriptionEnrollmentGroup } from "../../src/shell/subscription/contract";
 import { consentHistoryTestSchema } from "../d1-test-fixture";
-import { type TransactionSubject } from "../canonical-work/contract";
 import {
   loadWompiIntegritySecret,
   loadWompiPrivateKey,
@@ -98,7 +97,7 @@ const setup = (): Promise<{
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "INSERT INTO users (id, time_zone) VALUES (?, 'America/Bogota'), (?, 'America/Bogota')"
+            "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota'), (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
           )
           .bind(userA, userB)
           .run()

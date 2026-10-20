@@ -1,12 +1,6 @@
-import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Schema } from "effect";
-import {
-  canonicalAdmissionMigrationNames,
-  hostedTurnTestMigrations,
-  installTestSchema,
-  isolatedTestDatabases,
-  statementAuditTestMigrations,
-} from "../d1-test-fixture";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
@@ -80,57 +74,8 @@ const seedUser = (
 const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
-    const migrations = [
-      "0063_connections",
-      "0064_connection_browser_execution",
-      "0065_connection_attempt_retention",
-      "0001_categories",
-      "0002_resource_admission",
-      "0003_pending_consent",
-      "0004_onboarding_email",
-      "0005_verified_onboarding",
-      "0006_browser_login",
-      "0009_transactions",
-      "0010_pat_lifecycle",
-      "0011_transaction_corrections",
-      "0012_statement_staging",
-      "0012_transaction_search",
-      "0013_category_keyword_rules",
-      "0013_transaction_reconciliation",
-      "0014_memory",
-      "0015_statement_submission",
-      "0016_budgets",
-      "0016_hosted_turn",
-      "0017_hosted_compaction",
-      "0037_budget_crossing_facts",
-      "0038_proactivity_consent",
-      "0042_budget_proactivity",
-      "0039_reminder_schedules",
-      "0041_proactivity_messages",
-      "0044_proactivity_channel",
-      "0032_proactive_transcript",
-      "0045_budget_messages_transcript",
-      "0016_statement_processing",
-      "0017_forwarded_email",
-      "0017_statement_dispatch",
-      "0018_batch_envelope_audit",
-      "0019_canonical_child_guards",
-      "0020_dashboard_projection",
-      "0075_transaction_query_costs",
-      "0009_email_replacement",
-      "0018_dashboard",
-      "0018_insight_events",
-      ...statementAuditTestMigrations,
-      ...hostedTurnTestMigrations,
-    ];
-    yield* Effect.tryPromise(() =>
-      installTestSchema({
-        db,
-        sources: canonicalAdmissionMigrationNames(migrations).map(
-          (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
-        ),
-      })
-    );
+
+    yield* Effect.tryPromise(() => installTestSchema({ db }));
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (user, index) => seedUser(db, { user, index, current }), {
       discard: true,

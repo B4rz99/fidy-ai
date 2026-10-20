@@ -1,5 +1,10 @@
+import { type OAuthReviewBinding } from "../oauth-confirmation/contract";
+import {
+  type CanonicalMutationPreparation,
+  type CanonicalPreparationWork,
+} from "../canonical-operations/contract";
+import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import type { OAuthReviewBinding } from "../oauth-confirmation/contract";
 import { prepareOAuthConfirmation } from "../oauth-confirmation/operations";
 import {
   WhatsAppBusinessPhoneNumberId,
@@ -20,9 +25,7 @@ import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
-  canonicalAdmissionMigrationNames,
   coordinatorTestDatabase,
-  hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestStorage,
 } from "../d1-test-fixture";
@@ -57,16 +60,11 @@ import {
   processForwardedEmail,
   readStatementSubmission,
 } from "./operations";
-import type {
-  CanonicalMutationPreparation,
-  CanonicalPreparationWork,
-} from "../canonical-operations/contract";
 import {
   OAuthClientId,
   OAuthConnectionId,
   OAuthCredentialId,
 } from "../../src/core/oauth-agents/contract";
-import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import {
   dispatchForwardedEmail,
   dispatchStatementExtraction,
@@ -82,6 +80,7 @@ import { newId } from "../secret-material/operations";
 import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import publicWorker from "../public-worker";
+import type {} from "../canonical-operations/contract";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{
   readonly cause: unknown;
@@ -145,65 +144,6 @@ let sequence = 0;
 const instances: Array<Miniflare> = [];
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
-const migrationNames = [
-  "0109_review_state",
-  "0110_ingestion_review",
-  "0001_categories",
-  "0002_resource_admission",
-  "0003_pending_consent",
-  "0004_onboarding_email",
-  "0005_verified_onboarding",
-  "0006_browser_login",
-  "0007_browser_pairing_email",
-  "0008_support_recovery",
-  "0009_card_enrollment",
-  "0009_email_replacement",
-  "0009_transactions",
-  "0010_pat_lifecycle",
-  "0011_transaction_corrections",
-  "0012_billing_collection",
-  "0012_statement_staging",
-  "0012_transaction_search",
-  "0013_category_keyword_rules",
-  "0013_transaction_reconciliation",
-  "0014_memory",
-  "0015_statement_submission",
-  "0016_async_health",
-  "0016_hosted_turn",
-  "0016_statement_processing",
-  "0016_subscription_standing",
-  "0016_budgets",
-  "0037_budget_crossing_facts",
-  "0017_hosted_compaction",
-  "0017_forwarded_email",
-  "0017_statement_dispatch",
-  "0061_statement_reconciliation",
-  "0018_batch_envelope_audit",
-  "0018_dashboard",
-  "0018_forwarded_email_processing",
-  "0019_canonical_child_guards",
-  "0020_dashboard_projection",
-  "0075_transaction_query_costs",
-  ...hostedTurnTestMigrations,
-  "0027_recurring",
-  "0028_recurring_audit_budget",
-  "0029_audit_owner_retention",
-  "0035_billing_corrections",
-  "0052_weekly_card_renewal",
-  "0032_statement_capture_entitlement",
-  "0033_statement_clarification",
-  "0034_statement_clarification_audit",
-  "0035_statement_hosted_origin",
-  "0036_statement_whatsapp_documents",
-  "0077_statement_materialization",
-  "0078_statement_materialization_binding",
-  "0079_statement_progress",
-  "0082_statement_review_capacity",
-  "0038_proactivity_consent",
-  "0040_reminder_canonical_audit",
-  "0032_oauth_review",
-  "0034_oauth_refresh",
-] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
@@ -368,14 +308,7 @@ const setup = (coordination: Coordination = "direct"): Promise<Runtime> =>
         coordination === "direct"
           ? { ...(yield* fromTestPromise(() => storage.acquire())), coordinator: Option.none() }
           : yield* fromTestPromise(() => boundStorage(coordination));
-      yield* fromTestPromise(() =>
-        installTestSchema({
-          db: runtime.db,
-          sources: canonicalAdmissionMigrationNames(migrationNames).map(
-            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
-          ),
-        })
-      );
+      yield* fromTestPromise(() => installTestSchema({ db: runtime.db }));
       const current = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
         seedUser(runtime.db, {

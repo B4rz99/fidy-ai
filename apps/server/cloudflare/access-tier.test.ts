@@ -52,12 +52,12 @@ it("derives each decision from one User's original trial and current settled pai
           ),
           db
             .prepare(
-              "INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms) VALUES (?1,200,300)"
+              "WITH fixture_user(id,trial_started_at_ms,trial_ends_at_ms) AS (VALUES (?1,200,300)) INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms,service_market,locale,time_zone,created_at_ms) SELECT id,trial_started_at_ms,trial_ends_at_ms,'CO','es-CO','America/Bogota',0 FROM fixture_user"
             )
             .bind(userId),
           db
             .prepare(
-              "INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms) VALUES (?1,100,350)"
+              "WITH fixture_user(id,trial_started_at_ms,trial_ends_at_ms) AS (VALUES (?1,100,350)) INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms,service_market,locale,time_zone,created_at_ms) SELECT id,trial_started_at_ms,trial_ends_at_ms,'CO','es-CO','America/Bogota',0 FROM fixture_user"
             )
             .bind("20000000-0000-4000-8000-000000000002"),
         ])

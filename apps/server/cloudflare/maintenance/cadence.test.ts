@@ -11,16 +11,7 @@ it("waits for hourly cleanup before removing expired grants and preserves curren
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: Array.from(
-            new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-          )
-            .sort()
-            .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-        })
-      );
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
       const now = yield* Clock.currentTimeMillis;
       yield* Effect.tryPromise(() =>
         db.batch([

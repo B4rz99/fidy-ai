@@ -1,18 +1,18 @@
+import {
+  type CatalogOperation,
+  getBoundOperationCatalog,
+} from "../../src/shell/canonical-catalog/contract";
+import { type AuthorizedCanonicalCaller } from "./contract";
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { QuotaStatus } from "../../src/core/quotas/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
-import {
-  type CatalogOperation,
-  getBoundOperationCatalog,
-} from "../../src/shell/canonical-catalog/contract";
-import "../../src/shell/api";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import { protectCanonicalRequest, protectCanonicalSource } from "./operations";
-import type { AuthorizedCanonicalCaller } from "./contract";
+import "../../src/shell/api";
 
 class TestFailure extends Data.TaggedError("TestFailure")<{ cause: unknown }> {}
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, TestFailure> =>
@@ -31,17 +31,8 @@ const operation = (id: string): CatalogOperation =>
   Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(id)));
 const setup = Effect.gen(function* () {
   const db = yield* io(() => databases.acquire());
-  const names = yield* io(() =>
-    Array.fromAsync(
-      new Bun.Glob("*.sql").scan({ cwd: new URL("../migrations/", import.meta.url).pathname })
-    )
-  );
-  yield* io(() =>
-    installTestSchema({
-      db,
-      sources: names.sort().map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-    })
-  );
+
+  yield* io(() => installTestSchema({ db }));
   const current = yield* Clock.currentTimeMillis;
   yield* io(() =>
     db.batch([

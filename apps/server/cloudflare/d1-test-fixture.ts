@@ -9,366 +9,135 @@ export const consentHistoryTestSchema =
 export const auditEntriesTestSchema =
   "CREATE TABLE IF NOT EXISTS audit_entries (sequence INTEGER PRIMARY KEY AUTOINCREMENT,record_type TEXT NOT NULL,id TEXT,user_id TEXT,session_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER,pat_id TEXT,oauth_connection_id TEXT,oauth_credential_id TEXT,hosted_turn_id TEXT,attempt_id TEXT,transition TEXT,accepted_at_ms INTEGER,UNIQUE(record_type,id),UNIQUE(attempt_id,transition))";
 
-const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
+const schemaStatements = new Map<string, Promise<ReadonlyArray<string>>>();
 const schemaInstallers = new WeakMap<D1Database, (sql: ReadonlyArray<string>) => Promise<void>>();
-const controlSchemas = new WeakMap<D1Database, Promise<void>>();
-const privacySchema = new URL("./migrations/0095_titular_erasure.sql", import.meta.url);
-const assertionSchema = new URL("./migrations/0113_sql_assertions.sql", import.meta.url);
-
-const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
-  Option.getOrElse(Option.fromUndefinedOr(migrationStatements.get(source.href)), () => {
-    const loaded = Bun.file(source)
-      .text()
-      .then((sql) =>
-        sql
-          .replace(/^--.*$/gmu, "")
-          .trim()
-          .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
-          .filter((statement) => statement.trim().length > 0)
+const completeSchemas = new WeakMap<D1Database, Promise<void>>();
+const installedObjects = new WeakMap<D1Database, Set<string>>();
+const baseline = new URL("./migrations/0001_schema.sql", import.meta.url);
+const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
+  const previous = schemaStatements.get(baseline.href);
+  if (previous !== undefined) return previous;
+  const loaded = Bun.file(baseline)
+    .text()
+    .then((sql) =>
+      sql
+        .replace(/^--.*$/gmu, "")
+        .trim()
+        .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
+        .filter((statement) => statement.trim().length > 0)
+    );
+  schemaStatements.set(baseline.href, loaded);
+  return loaded;
+};
+const objectName = (sql: string): string =>
+  /^CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) "?(\w+)"?/u.exec(sql.trim())?.[1] ?? "";
+const statementOwner = (sql: string): string =>
+  /^CREATE TABLE "?(\w+)"?/u.exec(sql.trim())?.[1] ??
+  /^CREATE (?:UNIQUE )?INDEX "?\w+"?\s+ON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
+  /^CREATE TRIGGER "?\w+"?[\s\S]*?\bON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
+  "";
+const tableName = (sql: string): string => {
+  const owner = statementOwner(sql);
+  return owner.length > 0 ? owner : (/^INSERT INTO "?(\w+)"?/u.exec(sql.trim())?.[1] ?? "");
+};
+/** Focused owner fixtures stub caller-owned authentication; owner constraints come from the production baseline. */
+export const installCurrentTestObjects = ({
+  db,
+  tables,
+  ...input
+}:
+  | Readonly<{ db: D1Database; tables: ReadonlyArray<string> }>
+  | Readonly<{
+      db: D1Database;
+      tables: ReadonlyArray<string>;
+      objects: ReadonlyArray<string>;
+    }>): Promise<void> => {
+  const objects = "objects" in input ? input.objects : [];
+  const complete = completeSchemas.get(db);
+  if (complete !== undefined) return complete;
+  const installed = installedObjects.get(db) ?? new Set<string>();
+  const owned = new Set(tables);
+  return loadSchemaStatements().then((sql) => {
+    const selected = sql.filter((statement) => {
+      const owner = tableName(statement);
+      const name = objectName(statement);
+      return (
+        (owned.has(owner) ||
+          owned.has(name) ||
+          objects.some((prefix) => name.startsWith(prefix)) ||
+          owner.startsWith("erasure_") ||
+          owner === "sql_assertions") &&
+        !installed.has(name || `seed:${owner}`)
       );
-    migrationStatements.set(source.href, loaded);
-    return loaded;
+    });
+    if (selected.length === 0) return;
+    return db.batch(selected.map((statement) => db.prepare(statement))).then(() => {
+      for (const statement of selected) {
+        installed.add(objectName(statement) || `seed:${tableName(statement)}`);
+      }
+      installedObjects.set(db, installed);
+    });
   });
-
-/** Focused owner fixtures share one metadata-only store; full fixtures install the production constraints. */
+};
 export const installAuditTestSchema = (db: D1Database): Promise<void> =>
   db.batch([db.prepare(auditEntriesTestSchema)]).then(() => undefined);
-
-const installControlSchema = ({
-  db,
-  source,
-  table,
-}: Readonly<{ db: D1Database; source: URL; table: string }>): Promise<void> =>
-  db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
-    .bind(table)
-    .first<string>()
-    .then((existing) =>
-      existing === null
-        ? loadMigrationStatements(source).then((sql) =>
-            db.batch(sql.map((statement) => db.prepare(statement)))
-          )
-        : undefined
-    )
-    .then(() => undefined);
-
-const installControlSchemas = (db: D1Database): Promise<void> => {
-  const installed = controlSchemas.get(db);
-  if (installed !== undefined) return installed;
-  const pending = installControlSchema({
-    db,
-    source: privacySchema,
-    table: "erasure_requests",
-  })
-    .then(() => installControlSchema({ db, source: assertionSchema, table: "sql_assertions" }))
-    .then(() =>
-      loadMigrationStatements(
-        new URL("./migrations/0130_specialized_assertions.sql", import.meta.url)
-      )
-    )
-    .then((statements) =>
-      db.batch(
-        statements
-          .filter((sql) => sql.trim().startsWith("CREATE TRIGGER IF NOT EXISTS sql_assertions_"))
-          .map((sql) => db.prepare(sql))
-      )
-    )
-    .then(() => undefined);
-  controlSchemas.set(db, pending);
+/** Each isolated native binding installs the complete current schema and seeds exactly once. */
+export const installTestSchema = (input: Readonly<{ db: D1Database }>): Promise<void> =>
+  installTestSchemaWithPrefix({ ...input, prefixStatements: [] });
+export const installTestSchemaWithPrefix = (
+  input: Readonly<{ db: D1Database; prefixStatements: ReadonlyArray<string> }>
+): Promise<void> => {
+  const previous = completeSchemas.get(input.db);
+  if (previous !== undefined) return previous;
+  const pending = loadSchemaStatements().then((sql) => {
+    const names = new Set(sql.map(objectName));
+    const prefix = input.prefixStatements.filter((statement) => {
+      const name =
+        /^CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) (?:IF NOT EXISTS )?"?(\w+)"?/u.exec(
+          statement.trim()
+        )?.[1];
+      return name === undefined || !names.has(name);
+    });
+    const statements = [...prefix, ...sql];
+    const install = schemaInstallers.get(input.db);
+    return install !== undefined
+      ? install(statements)
+      : input.db
+          .batch(statements.map((statement) => input.db.prepare(statement)))
+          .then(() => undefined);
+  });
+  completeSchemas.set(input.db, pending);
   return pending;
 };
 
-/** Applies one file in a native transaction after installing the shared control schemas.
- * Only immutable SQL text is cached; every database still executes every migration.
- * Focused current-owner fixtures may select owner statements and their matching DROP statements.
- */
-export const applyTestMigration = (
-  input:
-    | Readonly<{ db: D1Database; source: URL }>
-    | Readonly<{ db: D1Database; source: URL; includeStatement: (sql: string) => boolean }>
-): Promise<void> => {
-  const { db, source } = input;
-  return installControlSchemas(db)
-    .then(() =>
-      source.href === privacySchema.href || source.href === assertionSchema.href
-        ? []
-        : loadMigrationStatements(source).then((sql) => {
-            if (!("includeStatement" in input)) return sql;
-            const ownedObjects = new Set(
-              sql.filter(input.includeStatement).flatMap((statement) => {
-                const name = /^CREATE (?:TRIGGER|VIEW|INDEX) (?:IF NOT EXISTS )?(\w+)/u.exec(
-                  statement.trim()
-                )?.[1];
-                return name === undefined ? [] : [name];
-              })
-            );
-            return sql
-              .filter(
-                (statement) =>
-                  input.includeStatement(statement) ||
-                  ownedObjects.has(
-                    /^DROP (?:TRIGGER|VIEW|INDEX) (?:IF EXISTS )?(\w+)/u.exec(
-                      statement.trim()
-                    )?.[1] ?? ""
-                  )
-              )
-              .map(currentConsentReads);
-          })
-    )
-    .then((sql) =>
-      sql.length === 0 ? undefined : db.batch(sql.map((statement) => db.prepare(statement)))
-    )
-    .then(() => undefined);
-};
-
-const installForwardingFields = (db: D1Database): Promise<void> =>
-  applyTestMigration({
-    db,
-    source: new URL("./migrations/0153_user_companions.sql", import.meta.url),
-    includeStatement: (sql) =>
-      sql.startsWith("ALTER TABLE users ADD COLUMN forwarding_") ||
-      sql.startsWith("UPDATE users SET forwarding_") ||
-      sql.startsWith("CREATE UNIQUE INDEX users_forwarding_") ||
-      sql.startsWith("CREATE TRIGGER email_forwarding_addresses_field_") ||
-      sql.startsWith("CREATE TRIGGER issue_forwarding_address ") ||
-      sql.startsWith("DROP TABLE email_forwarding_addresses"),
-  });
-
-/** Focused forwarding fixtures use current Consent guards from production SQL and omit retired Audit caps.
- * Actual migration-boundary tests continue to execute each original file unchanged.
- */
-export const applyForwardingFixtureMigration = ({
+/** Forwarding owner fixtures keep small caller stubs and install current field guards and receipt constraints. */
+export const installForwardingTestSchema = ({
   db,
-  source,
-}: Readonly<{ db: D1Database; source: URL }>): Promise<void> =>
-  installControlSchemas(db)
-    .then(() =>
-      Promise.all([
-        source.href === privacySchema.href || source.href === assertionSchema.href
-          ? Promise.resolve([])
-          : loadMigrationStatements(source),
-        loadMigrationStatements(new URL("./migrations/0134_consent_history.sql", import.meta.url)),
-      ])
-    )
-    .then(([original, current]) => {
-      const statements = original
-        .filter(
-          (sql) =>
-            !/^(?:CREATE|DROP) TRIGGER (?:IF (?:NOT )?EXISTS )?\w*daily_budget\b/u.test(
-              sql.trim()
-            ) && !sql.includes("canonical_audit_usage")
-        )
-        .map((statement) => {
-          if (
-            !statement.includes("onboarding_consent_records") ||
-            (source.pathname.split("/").at(-1) ?? "") >= "0134"
-          ) {
-            return statement;
-          }
-          const name = /^CREATE TRIGGER (\w+) /u.exec(statement.trim())?.[1];
-          if (name !== undefined) {
-            const replacement = current.find((sql) =>
-              sql.trim().startsWith(`CREATE TRIGGER ${name} `)
-            );
-            if (replacement === undefined) {
-              throw new Error(`Missing current Consent guard: ${name}`);
-            }
-            return replacement;
-          }
-          return statement.replaceAll(
-            "FROM onboarding_consent_records",
-            "FROM (SELECT * FROM consent_history WHERE record_type='processing_grant')"
-          );
-        });
-      return statements.length === 0
-        ? undefined
-        : db
-            .batch(statements.map((sql) => db.prepare(currentConsentReads(sql))))
-            .then(() => undefined);
-    })
-    .then(() =>
-      source.pathname.endsWith("/0017_forwarded_email.sql")
-        ? installForwardingFields(db)
-        : undefined
-    );
-
-/** Installs the shared controls and an ordered baseline before seeding a fresh test database.
- * Native pooled Workers retain only the immutable migrated schema and baseline seeds,
- * never a test's rows. An owner-baseline failure rolls back its complete batch. This does not model migration boundaries;
- * tests of file-by-file migration behavior must use applyTestMigration instead.
- */
-export const installTestSchema = (
-  input: Readonly<{ db: D1Database; sources: ReadonlyArray<URL> }>
-): Promise<void> => installTestSchemaWithPrefix({ ...input, prefixStatements: [] });
-
-const currentBaselines = [
-  {
-    requires: ["0030_weekly_schedules", "0039_reminder_schedules"],
-    migrations: ["0136_schedules"],
-  },
-  { requires: ["0016_budgets"], migrations: ["0132_budget_report_aggregates"] },
-  {
-    requires: [
-      "0032_proactive_transcript",
-      "0045_budget_messages_transcript",
-      "0049_proactive_message_transcript",
-    ],
-    migrations: ["0131_proactive_transcript"],
-  },
-  {
-    requires: [
-      "0033_canonical_request_protection",
-      "0032_commercial_allowances",
-      "0064_connection_browser_execution",
-      "0035_media_submissions",
-      "0027_recurring",
-    ],
-    migrations: ["0130_specialized_assertions"],
-  },
-  {
-    requires: ["0012_billing_collection", "0107_failed_card_replacement"],
-    migrations: ["0124_billing_collection_work", "0144_billing_companions"],
-  },
-  { requires: ["0007_browser_pairing_email"], migrations: ["0125_browser_pairing_dispatch"] },
-  { requires: ["0009_email_replacement"], migrations: ["0126_email_replacement_dispatch"] },
-  {
-    requires: ["0015_statement_submission", "0079_statement_progress"],
-    migrations: ["0127_statement_assertion"],
-  },
-  { requires: ["0030_payment_enrollment"], migrations: ["0128_payment_assertions"] },
-  {
-    requires: ["0027_recurring"],
-    migrations: [
-      "0053_recurring_digest_source",
-      "0129_recurring_digest_exclusions",
-      "0154_recurring_confirmation",
-    ],
-  },
-  {
-    requires: ["0033_weekly_dispatch", "0035_proactivity_governor", "0041_proactivity_messages"],
-    migrations: ["0123_proactivity_delivery"],
-  },
-  {
-    requires: [
-      "0009_transactions",
-      "0014_memory",
-      "0016_budgets",
-      "0018_dashboard",
-      "0009_email_replacement",
-      "0019_canonical_child_guards",
-    ],
-    migrations: ["0122_session_audit"],
-  },
-  { requires: ["0027_recurring"], migrations: ["0121_recurring_schedule"] },
-  { requires: ["0034_statement_clarification_audit"], migrations: ["0115_ingestion_audit"] },
-  {
-    requires: ["0110_ingestion_review", "0033_statement_clarification"],
-    migrations: ["0116_review_decisions"],
-  },
-  {
-    requires: ["0035_media_submissions"],
-    migrations: ["0117_media_capacity", "0119_media_review"],
-  },
-  { requires: ["0034_forwarded_email_deferral"], migrations: ["0120_email_deferral"] },
-];
-/** Current owner behavior uses the current application schema; historical boundaries use applyTestMigration. */
-const currentTestSources = (sources: ReadonlyArray<URL>): ReadonlyArray<URL> => {
-  if (sources.some((source) => source.pathname.endsWith("/0005_verified_onboarding.sql"))) {
-    return [new URL("./schema.sql", import.meta.url)];
-  }
-  const names = new Set(sources.map((source) => source.pathname.split("/").at(-1)));
-  const additions = currentBaselines
-    .filter(({ requires }) => requires.every((name) => names.has(`${name}.sql`)))
-    .flatMap(({ migrations }) =>
-      migrations.map((name) => new URL(`./migrations/${name}.sql`, import.meta.url))
-    );
-  return [
-    ...new Map([...sources, ...additions].map((source) => [source.href, source])).values(),
-  ].sort((left, right) => left.href.localeCompare(right.href));
-};
-
-const currentConsentReads = (sql: string): string =>
-  sql.replaceAll(
-    "FROM consent_user_revocations",
-    "FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id))"
-  );
-
-const testSchemaStatements = (
-  input: Readonly<{ sources: ReadonlyArray<URL>; prefixStatements: ReadonlyArray<string> }>
-): Promise<ReadonlyArray<string>> =>
-  currentTestSources(input.sources)
-    .filter((source) => source.href !== privacySchema.href && source.href !== assertionSchema.href)
-    .reduce<Promise<ReadonlyArray<string>>>(
-      (previous, source) =>
-        previous.then((sql) => loadMigrationStatements(source).then((next) => [...sql, ...next])),
-      Promise.resolve(input.prefixStatements)
-    )
-    .then((sql) =>
-      input.sources.some((source) => source.pathname.endsWith("/0005_verified_onboarding.sql"))
-        ? sql
-        : sql.map(currentConsentReads)
-    );
-
-/** Includes current shared controls and the caller's immutable baseline. */
-export const installTestSchemaWithPrefix = (
-  input: Readonly<{
-    db: D1Database;
-    sources: ReadonlyArray<URL>;
-    prefixStatements: ReadonlyArray<string>;
-  }>
-): Promise<void> => {
-  const install = schemaInstallers.get(input.db);
-  if (input.sources.some((source) => source.pathname.endsWith("/0005_verified_onboarding.sql"))) {
-    const pending = loadMigrationStatements(new URL("./schema.sql", import.meta.url)).then((sql) =>
-      install !== undefined
-        ? install([...input.prefixStatements, ...sql])
-        : input.db
-            .batch(
-              [...input.prefixStatements, ...sql].map((statement) => input.db.prepare(statement))
-            )
-            .then(() => undefined)
-    );
-    controlSchemas.set(input.db, pending);
-    return pending;
-  }
-
-  if (install !== undefined && !controlSchemas.has(input.db)) {
-    const pending = Promise.all([
-      loadMigrationStatements(privacySchema),
-      loadMigrationStatements(assertionSchema),
-      loadMigrationStatements(
-        new URL("./migrations/0130_specialized_assertions.sql", import.meta.url)
-      ),
-      testSchemaStatements(input),
+  tables,
+}: Readonly<{ db: D1Database; tables: ReadonlyArray<string> }>): Promise<void> =>
+  db
+    .batch([
+      db.prepare("ALTER TABLE users ADD COLUMN forwarding_address_id TEXT"),
+      db.prepare("ALTER TABLE users ADD COLUMN forwarding_local_part TEXT"),
+      db.prepare("ALTER TABLE users ADD COLUMN forwarding_issued_at_ms INTEGER"),
     ])
-      .then(([privacy, assertions, specialized, owner]) =>
-        install([
-          ...privacy,
-          ...assertions,
-          ...specialized.filter((sql) =>
-            sql.trim().startsWith("CREATE TRIGGER IF NOT EXISTS sql_assertions_")
-          ),
-          ...owner,
-        ])
-      )
-      .catch((cause: unknown) => {
-        controlSchemas.delete(input.db);
-        throw cause;
-      });
-    controlSchemas.set(input.db, pending);
-    return pending;
-  }
-
-  return installControlSchemas(input.db)
-    .then(() => testSchemaStatements(input))
-    .then((sql) => {
-      if (sql.length === 0) return;
-      if (install !== undefined) return install(sql);
-      return input.db
-        .batch(sql.map((statement) => input.db.prepare(statement)))
-        .then(() => undefined);
-    });
-};
+    .then(() =>
+      installCurrentTestObjects({
+        db,
+        tables: [
+          "forwarded_email_receipts",
+          "canonical_child_guard",
+          "commercial_allowance_consumptions",
+          "canonical_request_replays",
+          ...tables,
+        ],
+        objects: [
+          "users_forwarding_",
+          "email_forwarding_addresses_field_",
+          "issue_forwarding_address",
+        ],
+      })
+    );
 
 type BindingSlot = Readonly<{ runtime: Miniflare; index: number; images: NativeImagePool }>;
 type TestDatabaseTransport = "proxy" | "fetch";
@@ -558,142 +327,9 @@ export const isolatedTestStorage = (): Readonly<{
   };
 };
 
-const reviewTestMigrations = (names: ReadonlyArray<string>): ReadonlyArray<string> => [
-  ...(names.includes("0016_statement_processing") ? ["0108_review_suggestions"] : []),
-  ...(names.includes("0033_statement_clarification")
-    ? ["0018_forwarded_email_processing", "0109_review_state", "0110_ingestion_review"]
-    : []),
-];
-
-const oauthAuthorityTestMigrations = [
-  "0033_oauth_authority",
-  "0037_oauth_shared_audit_budget",
-  "0038_oauth_confirmation",
-  "0163_oauth_first_party_approval",
-] as const;
-
-export const canonicalAdmissionMigrationNames = (
-  names: ReadonlyArray<string>
-): ReadonlyArray<string> =>
-  [
-    ...new Set([
-      ...names,
-      ...reviewTestMigrations(names),
-      "0095_titular_erasure",
-      ...(names.includes("0020_dashboard_projection")
-        ? ["0083_transaction_deletion", "0085_budget_contribution_pages"]
-        : []),
-      ...(names.includes("0029_audit_owner_retention") ? ["0084_transaction_deletion_audit"] : []),
-      ...(names.includes("0016_budgets")
-        ? [
-            "0037_budget_crossing_facts",
-            "0038_proactivity_consent",
-            "0042_budget_proactivity",
-            "0089_budget_month_plans",
-            "0090_budget_group_currencies",
-          ]
-        : []),
-      "0007_browser_pairing_email",
-      "0008_support_recovery",
-      "0009_card_enrollment",
-      "0012_billing_collection",
-      "0016_subscription_standing",
-      "0030_payment_enrollment",
-      "0031_daviplata_enrollment",
-      "0035_billing_corrections",
-      "0052_weekly_card_renewal",
-      "0053_calendar_card_renewal",
-      "0058_wallet_renewal",
-      "0059_subscription_retries",
-      "0060_subscription_cancellation",
-      "0106_declined_card_retry",
-      "0107_failed_card_replacement",
-      "0112_failed_card_wallet_replacement",
-      "0016_hosted_turn",
-      "0062_pat_activity",
-      "0063_connections",
-      "0064_connection_browser_execution",
-      "0065_connection_attempt_retention",
-      "0066_provider_authentication",
-      "0067_microsoft_authentication",
-      "0068_whatsapp_provider_handoff",
-      "0069_retire_email_code_signup",
-      "0070_recovery_retention",
-      "0071_recovery_admission",
-      "0072_disclosure_transport",
-      "0073_admission_retention",
-      "0032_commercial_allowances",
-      "0091_free_email_allowance",
-      "0033_canonical_request_protection",
-      "0034_forwarded_email_deferral",
-      "0035_media_submissions",
-      ...oauthAuthorityTestMigrations,
-    ]),
-  ].sort();
-/** Shared final clarification schema; processing and the shared Audit base must precede it. */
-export const statementClarificationTestMigrations = [
-  "0032_statement_capture_entitlement",
-  "0033_statement_clarification",
-  "0034_statement_clarification_audit",
-  "0035_statement_hosted_origin",
-  "0036_statement_whatsapp_documents",
-  "0077_statement_materialization",
-  "0078_statement_materialization_binding",
-  "0079_statement_progress",
-  "0082_statement_review_capacity",
-] as const;
-export const statementAuditTestMigrations = [
-  "0027_recurring",
-  "0028_recurring_audit_budget",
-  "0029_audit_owner_retention",
-  ...statementClarificationTestMigrations,
-] as const;
-
-export const hostedTurnTestMigrations = [
-  "0027_recurring",
-  "0021_hosted_confirmation",
-  "0022_hosted_mutation_fence",
-  "0023_hosted_delivery_refresh",
-  "0024_hosted_whatsapp",
-  "0025_voice_refusal",
-  "0026_whatsapp_recovery",
-  "0018_insight_events",
-  "0030_weekly_schedules",
-  "0031_proactive_whatsapp",
-  "0032_proactive_transcript",
-  "0033_weekly_dispatch",
-  "0034_insight_provider_scope",
-  "0035_proactivity_governor",
-  "0038_proactivity_consent",
-  "0039_reminder_schedules",
-  "0041_proactivity_messages",
-  "0043_reminder_governor",
-  "0044_proactivity_channel",
-  "0045_budget_messages_transcript",
-  "0046_contextual_offers",
-  "0047_proactivity_offer_retention",
-  "0048_retire_reminder_outbox",
-  "0049_proactive_message_transcript",
-  "0050_proactivity_offer_recovery",
-  "0051_budget_reconciliation_recovery",
-  "0053_recurring_digest_source",
-  "0054_recurring_proactivity",
-  "0055_recurring_digests",
-  "0057_recurring_offer_replacement",
-  "0074_hosted_retention",
-  "0080_whatsapp_sandbox_routing",
-] as const;
-
-/** Resource regressions use the deployed index choices, triggers and foreign keys together. */
+/** Resource regressions use deployed indexes, triggers and foreign keys together. */
 export const installRetentionTestSchema = (db: D1Database): Promise<void> =>
-  installTestSchema({
-    db,
-    sources: Array.from(
-      new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
-    )
-      .sort()
-      .map((name) => new URL(`./migrations/${name}`, import.meta.url)),
-  });
+  installTestSchema({ db });
 
 type RetentionQuery = Readonly<{ sql: string; params: ReadonlyArray<unknown> }>;
 const explainRetentionPlans = (

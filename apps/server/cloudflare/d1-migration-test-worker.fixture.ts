@@ -30,7 +30,6 @@ const TranscriptEvidenceSchema = Schema.Struct({
 type TranscriptEvidence = typeof TranscriptEvidenceSchema.Type;
 
 type Snapshot = {
-  readonly unusedAssertionTables: ReadonlyArray<string>;
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
   readonly hostedVoiceRefusalsExists: boolean;
@@ -49,7 +48,6 @@ type ConstraintChecks = {
 };
 
 type MigrationState = {
-  readonly unusedAssertionTables: ReadonlyArray<string>;
   readonly appliedMigrationNames: ReadonlyArray<string>;
   readonly transcriptHasIteration: boolean;
   readonly hostedVoiceRefusalsExists: boolean;
@@ -162,16 +160,6 @@ const readSnapshot = Effect.fn(function* (db: D1Database) {
 
   return {
     appliedMigrationNames: migrations.map((migration) => migration.name),
-    unusedAssertionTables: tables
-      .map((table) => table.name)
-      .filter((name) =>
-        [
-          "memory_atomic_assertion",
-          "transaction_capture_assertion",
-          "erasure_runtime_assertion",
-        ].includes(name)
-      )
-      .sort(),
     transcriptHasIteration: columns.some((column) => column.name === "iteration"),
     hostedVoiceRefusalsExists: tables.some((table) => table.name === "hosted_voice_refusals"),
     hostedWhatsAppWindowsExists: tables.some((table) => table.name === "hosted_whatsapp_windows"),
@@ -312,7 +300,6 @@ const readMigrationState = Effect.fn(function* (db: D1Database) {
 
   return {
     appliedMigrationNames: snapshot.appliedMigrationNames,
-    unusedAssertionTables: snapshot.unusedAssertionTables,
     transcriptHasIteration: snapshot.transcriptHasIteration,
     hostedVoiceRefusalsExists: snapshot.hostedVoiceRefusalsExists,
     hostedWhatsAppWindowsExists: snapshot.hostedWhatsAppWindowsExists,

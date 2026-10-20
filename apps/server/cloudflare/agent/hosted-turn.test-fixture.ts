@@ -1,4 +1,23 @@
 import {
+  type InvalidRecurringEdit,
+  RecurringDocument,
+  RecurringPlanId,
+  RecurringPlanInput,
+} from "../../src/core/recurring-plans/contract";
+import {
+  type HostedInferenceService,
+  approvedWorkersAiModel,
+} from "../../src/shell/hosted-inference/contract";
+import { type UploadRefusalCase } from "./statement-upload.test-fixture";
+import { type Cause, Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
+import {
+  acknowledgeBrowserTurn,
+  completeHostedTurn as completeHostedTurnWithAlarm,
+  type completeWhatsAppDocumentTurnWithAdmission,
+  type completeWhatsAppTurnWithAdmission,
+  resumeWhatsAppTurn,
+} from "./internal/hosted-turn";
+import {
   CanonicalToolOutcome,
   TranscriptText,
   TranscriptTurnId,
@@ -9,54 +28,26 @@ import {
   WhatsAppBusinessScopedUserId,
 } from "../../src/core/identity/contract";
 import {
-  type InvalidRecurringEdit,
-  RecurringDocument,
-  RecurringPlanId,
-  RecurringPlanInput,
-} from "../../src/core/recurring-plans/contract";
-import {
   applyRecurringEdit,
   emptyRecurringDocument,
 } from "../../src/core/recurring-plans/operations";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
-import {
-  type HostedInferenceService,
-  approvedWorkersAiModel,
-} from "../../src/shell/hosted-inference/contract";
 import { executeStatementExtraction, statementRetention } from "../ingestion/runtime";
 import { publicationOutage } from "./statement-publication-recovery.test-fixture";
 import { confirmationOutage } from "./statement-recovery.test-fixture";
-import { type UploadRefusalCase } from "./statement-upload.test-fixture";
-
-import { type Cause, Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, vi } from "vitest";
-
 import {
   HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
 import { makeCloudflareHostedInference } from "../ai/runtime";
-import {
-  canonicalAdmissionMigrationNames,
-  hostedTurnTestMigrations,
-  installTestSchema,
-  isolatedTestDatabases,
-  isolatedTestStorage,
-  statementAuditTestMigrations,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { newId } from "../secret-material/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { WhatsAppHostedSubject, WhatsAppInboundEvidence } from "../whatsapp/contract";
 import { recordWhatsAppStatus } from "../whatsapp/operations";
-import {
-  acknowledgeBrowserTurn,
-  completeHostedTurn as completeHostedTurnWithAlarm,
-  type completeWhatsAppDocumentTurnWithAdmission,
-  type completeWhatsAppTurnWithAdmission,
-  resumeWhatsAppTurn,
-} from "./internal/hosted-turn";
 import {
   admitHostedTurn,
   finishHostedTurn,
@@ -182,63 +173,11 @@ export const promiseGate = (): {
   return { promise, release: (): void => release() };
 };
 
-const migrationNames = [
-  "0001_categories",
-  "0002_resource_admission",
-  "0003_pending_consent",
-  "0004_onboarding_email",
-  "0005_verified_onboarding",
-  "0006_browser_login",
-  "0007_browser_pairing_email",
-  "0008_support_recovery",
-  "0009_email_replacement",
-  "0009_card_enrollment",
-  "0009_transactions",
-  "0010_pat_lifecycle",
-  "0011_transaction_corrections",
-  "0012_billing_collection",
-  "0012_statement_staging",
-  "0012_transaction_search",
-  "0013_category_keyword_rules",
-  "0013_transaction_reconciliation",
-  "0014_memory",
-  "0015_statement_submission",
-  "0016_subscription_standing",
-  "0016_budgets",
-  "0016_hosted_turn",
-  "0017_hosted_compaction",
-  "0017_forwarded_email",
-  "0017_statement_dispatch",
-  "0018_batch_envelope_audit",
-  "0018_dashboard",
-  "0019_canonical_child_guards",
-  "0020_restore_audit_budgets",
-  "0020_dashboard_projection",
-  "0075_transaction_query_costs",
-  ...hostedTurnTestMigrations,
-  "0035_billing_corrections",
-  "0052_weekly_card_renewal",
-  "0009_email_replacement",
-  "0016_budgets",
-  "0037_budget_crossing_facts",
-  "0016_statement_processing",
-  "0018_dashboard",
-  "0018_insight_events",
-  ...statementAuditTestMigrations,
-] as const;
-
 export const setup = (firstGrant: string = grants[0]): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: canonicalAdmissionMigrationNames(migrationNames).map(
-            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
-          ),
-        })
-      );
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
       const snapshot = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
       )(currentDisclosureFor());

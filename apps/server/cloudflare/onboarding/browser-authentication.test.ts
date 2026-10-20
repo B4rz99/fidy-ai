@@ -17,16 +17,13 @@ import {
 } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approveBrowserPairing, startBrowserPairing } from "../browser-login/operations";
-
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker, { makeCoreWorker } from "../core-worker";
 import {
   DisabledTelemetryResource,
   makeTelemetryService,
 } from "../../src/shell/observability/operations";
-
 import {
   handleSupportRecovery,
   issueInitialBackupRecoveryCode,
@@ -73,24 +70,7 @@ const setup = (
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() =>
-        installTestSchema({
-          db,
-          sources: [
-            "0003_pending_consent",
-            "0004_onboarding_email",
-            "0005_verified_onboarding",
-            "0006_browser_login",
-            "0007_browser_pairing_email",
-            "0087_browser_pairing_email_admission",
-            "0008_support_recovery",
-            "0009_email_replacement",
-            "0069_retire_email_code_signup",
-            "0070_recovery_retention",
-            "0071_recovery_admission",
-          ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-        })
-      );
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
 
       yield* Effect.tryPromise(() => installAuditTestSchema(db));
 

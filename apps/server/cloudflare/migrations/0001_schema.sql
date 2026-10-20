@@ -1,4 +1,5 @@
 PRAGMA foreign_keys=ON;
+--> statement-breakpoint
 
 CREATE TABLE anonymized_email_samples (
   id TEXT PRIMARY KEY NOT NULL,
@@ -11,6 +12,7 @@ CREATE TABLE anonymized_email_samples (
   policy_approved_at_ms INTEGER NOT NULL,
   retained_at_ms INTEGER NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "audit_entries" (
  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,11 +70,13 @@ CREATE TABLE "audit_entries" (
   (record_type='security_mutation' AND id IS NOT NULL AND user_id IS NOT NULL AND session_id IS NOT NULL AND operation IS NOT NULL AND occurred_at_ms IS NOT NULL AND (operation = 'recovery.rotateBackupRecoveryCode') AND outcome IS NULL AND pat_id IS NULL AND oauth_connection_id IS NULL AND oauth_credential_id IS NULL AND hosted_turn_id IS NULL AND attempt_id IS NULL AND transition IS NULL AND accepted_at_ms IS NULL)
  )
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE audit_retention_permits (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   cutoff_ms INTEGER NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "billing_attempts" (
 id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -122,6 +126,7 @@ CHECK((collection_state IS NULL AND collection_state IS NULL AND collection_sent
 CHECK((followup_kind IS NULL AND followup_kind IS NULL AND followup_due_at_ms IS NULL) OR (followup_kind IS NOT NULL AND followup_kind IS NOT NULL AND (followup_kind = 'renewal_due') AND followup_due_at_ms IS NOT NULL)),
 CHECK((no_charge_confirmed_at_ms IS NULL AND no_charge_reference IS NULL AND no_charge_environment IS NULL AND no_charge_case_id IS NULL AND no_charge_operator_id IS NULL AND no_charge_confirmed_at_ms IS NULL) OR (no_charge_confirmed_at_ms IS NOT NULL AND no_charge_reference IS NOT NULL AND no_charge_environment IS NOT NULL AND no_charge_case_id IS NOT NULL AND (length(trim(no_charge_case_id)) BETWEEN 1 AND 128) AND no_charge_operator_id IS NOT NULL AND (length(trim(no_charge_operator_id)) BETWEEN 1 AND 128) AND no_charge_confirmed_at_ms IS NOT NULL AND (no_charge_confirmed_at_ms > 0))),
 CHECK((recovery_case_id IS NULL AND recovery_case_id IS NULL AND recovery_reviewed_at_ms IS NULL) OR (recovery_case_id IS NOT NULL AND recovery_case_id IS NOT NULL AND recovery_reviewed_at_ms IS NOT NULL))) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE billing_event_candidates (
   transaction_id TEXT PRIMARY KEY NOT NULL CHECK (length(transaction_id) BETWEEN 1 AND 128),
@@ -132,6 +137,7 @@ CREATE TABLE billing_event_candidates (
   last_checked_at_ms INTEGER,
   resolved_at_ms INTEGER
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE billing_price_notices (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -142,6 +148,7 @@ CREATE TABLE billing_price_notices (
   accepted_at_ms INTEGER,
   PRIMARY KEY (user_id, price_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE billing_provider_transactions (
  transaction_id TEXT PRIMARY KEY NOT NULL CHECK(length(transaction_id) BETWEEN 1 AND 128),
@@ -153,6 +160,7 @@ CREATE TABLE billing_provider_transactions (
  CHECK((status IS NULL AND first_observed_at_ms IS NULL AND negative_observed_at_ms IS NULL AND finalized_at_ms IS NULL)
   OR (status IS NOT NULL AND first_observed_at_ms IS NOT NULL AND (status<>'APPROVED' OR finalized_at_ms IS NOT NULL)))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE browser_login_pairings (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -169,18 +177,21 @@ CREATE TABLE browser_login_pairings (
   CHECK ((state = 'pending_approval' AND user_id IS NULL) OR state <> 'pending_approval'),
   CHECK ((state = 'ready' OR state = 'consumed') = (user_id IS NOT NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE browser_pairing_email_global_limit (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
   window_started_at_ms INTEGER NOT NULL,
   requests INTEGER NOT NULL CHECK (requests BETWEEN 1 AND 1000)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE browser_pairing_email_user_limits (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
   window_started_at_ms INTEGER NOT NULL,
   requests INTEGER NOT NULL CHECK (requests BETWEEN 1 AND 5)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budget_crossing_publications (
  user_id TEXT NOT NULL REFERENCES users(id),
@@ -190,6 +201,7 @@ CREATE TABLE budget_crossing_publications (
  last_evaluated_at_ms INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(user_id,delivery_group_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budget_group_currencies (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -198,6 +210,7 @@ CREATE TABLE budget_group_currencies (
   currency TEXT NOT NULL,
   PRIMARY KEY(user_id, group_name, month)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budget_month_caps (
   user_id TEXT NOT NULL,
@@ -207,6 +220,7 @@ CREATE TABLE budget_month_caps (
   PRIMARY KEY(user_id, budget_id, month),
   FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budget_month_latches (
   user_id TEXT NOT NULL,
@@ -219,12 +233,14 @@ CREATE TABLE budget_month_latches (
   FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE,
   CHECK(reached_100 = 0 OR reached_80 = 1)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budget_plan_months (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   month TEXT NOT NULL,
   PRIMARY KEY(user_id, month)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budget_state (
  kind TEXT NOT NULL CHECK(kind IN ('user','work')),user_id TEXT NOT NULL REFERENCES users(id),occurred_at TEXT NOT NULL DEFAULT '',
@@ -237,6 +253,7 @@ CREATE TABLE budget_state (
  OR(kind='work' AND revision IS NULL AND budget_id IS NULL AND created_at_ms IS NULL
    AND offer_requested_at_ms IS NULL AND first_last_evaluated_at_ms IS NULL AND version IS NOT NULL AND last_evaluated_at_ms IS NOT NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budget_threshold_alerts (
   user_id TEXT NOT NULL,
@@ -249,6 +266,7 @@ CREATE TABLE budget_threshold_alerts (
   PRIMARY KEY(user_id, budget_id, from_utc, time_zone, threshold),
   FOREIGN KEY(user_id, budget_id) REFERENCES budgets(user_id, id) ON DELETE CASCADE
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE budgets (
   id TEXT PRIMARY KEY NOT NULL,
@@ -261,6 +279,7 @@ CREATE TABLE budgets (
   UNIQUE(user_id, category_id, currency),
   UNIQUE(user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "canonical_child_guard" (
   child_index INTEGER PRIMARY KEY NOT NULL CHECK (child_index BETWEEN 0 AND 11),
@@ -292,17 +311,20 @@ CREATE TABLE "canonical_child_guard" (
   CONSTRAINT canonical_child_capacity_10 CHECK (child_index != 10 OR capacity_ok = 1),
   CONSTRAINT canonical_child_capacity_11 CHECK (child_index != 11 OR capacity_ok = 1)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE canonical_request_buckets (
   subject TEXT PRIMARY KEY NOT NULL,
   virtual_at_ms INTEGER NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE canonical_request_leases (
   id TEXT PRIMARY KEY NOT NULL,
   user_id TEXT NOT NULL REFERENCES users(id),
   expires_at_ms INTEGER NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE canonical_request_replays (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -320,6 +342,7 @@ CREATE TABLE canonical_request_replays (
   PRIMARY KEY (user_id, retry_key_digest),
   CHECK ((state = 'pending' AND status IS NULL AND body IS NULL) OR (state = 'completed' AND status IS NOT NULL AND body IS NOT NULL))
 );
+--> statement-breakpoint
 
 CREATE TABLE "card_enrollments" (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -344,6 +367,7 @@ CREATE TABLE "card_enrollments" (
   CHECK ((status = 'prepared' AND payment_request_id IS NULL AND accepted_at_ms IS NULL)
     OR (status <> 'prepared'))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "card_payment_sources" (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -355,12 +379,14 @@ CREATE TABLE "card_payment_sources" (
   retired_at_ms INTEGER CHECK (retired_at_ms IS NULL OR retired_at_ms > 0),
   method TEXT NOT NULL DEFAULT 'card' CHECK (method IN ('card', 'nequi', 'daviplata'))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE categories (
   id TEXT PRIMARY KEY NOT NULL,
   label TEXT NOT NULL,
   display_order INTEGER NOT NULL UNIQUE CHECK (display_order >= 0)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE commercial_allowance_consumptions (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -371,6 +397,7 @@ CREATE TABLE commercial_allowance_consumptions (
   units INTEGER NOT NULL CHECK (units IN (0,1)),
   PRIMARY KEY (user_id, allowance, identity)
 );
+--> statement-breakpoint
 
 CREATE TABLE connection_attempts (
   id TEXT PRIMARY KEY NOT NULL,
@@ -387,11 +414,13 @@ CREATE TABLE connection_attempts (
     OR (status != 'consumed' AND consumed_at_ms IS NULL)),
   FOREIGN KEY (user_id, connection_id, institution_id) REFERENCES connections(user_id, id, institution_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE connection_institution_gate (
   institution_id TEXT PRIMARY KEY NOT NULL CHECK (institution_id = 'bancolombia'),
   enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE connections (
   id TEXT PRIMARY KEY NOT NULL,
@@ -403,6 +432,7 @@ CREATE TABLE connections (
   UNIQUE (user_id, institution_id),
   UNIQUE (user_id, id, institution_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "consent_history" (
  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -464,6 +494,7 @@ CREATE TABLE "consent_history" (
  FOREIGN KEY (weekly_offer_reference) REFERENCES consent_offers(weekly_offer_id),
  FOREIGN KEY (proactivity_offer_reference) REFERENCES consent_offers(proactivity_offer_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE consent_offers (
  id TEXT NOT NULL,user_id TEXT NOT NULL REFERENCES users(id),
@@ -478,6 +509,7 @@ CREATE TABLE consent_offers (
  CHECK((kind='weekly-summary' AND ((disclosure_message_id IS NULL)=(disclosed_at_ms IS NULL)) AND replaces_offer_id IS NULL)
  OR(kind<>'weekly-summary' AND json_valid(disclosure_json) AND expires_at_ms>created_at_ms AND disclosed_at_ms IS NULL AND source_id IS NULL AND rejection_id IS NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE dashboard_projection_bucket (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -491,6 +523,7 @@ CREATE TABLE dashboard_projection_bucket (
   max_minor TEXT NOT NULL,
   PRIMARY KEY (user_id, size_seconds, bucket, currency, direction, category_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE dashboard_projection_digit (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -503,6 +536,7 @@ CREATE TABLE dashboard_projection_digit (
   digit_sum INTEGER NOT NULL CHECK(digit_sum >= 0),
   PRIMARY KEY (user_id, size_seconds, bucket, currency, direction, category_id, position)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE dashboard_projection_leaf (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -518,6 +552,7 @@ CREATE TABLE dashboard_projection_leaf (
   revision INTEGER NOT NULL,
   PRIMARY KEY (user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE dashboard_projection_state (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
@@ -528,6 +563,7 @@ CREATE TABLE dashboard_projection_state (
 , fact_revision INTEGER CHECK(fact_revision>0), first_captured_at TEXT, time_zone TEXT CHECK(
  (fact_revision IS NULL AND first_captured_at IS NULL AND time_zone IS NULL)
  OR(fact_revision IS NOT NULL AND first_captured_at IS NOT NULL AND time_zone IS NOT NULL))) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE email_replacement_limits (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
@@ -535,6 +571,7 @@ CREATE TABLE email_replacement_limits (
   requests INTEGER NOT NULL CHECK (requests BETWEEN 1 AND 5),
   last_work_id TEXT NOT NULL CHECK (length(last_work_id) = 36)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE email_replacements (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
@@ -553,6 +590,7 @@ CREATE TABLE email_replacements (
   CHECK ((state IN ('sending', 'awaiting_proof') AND public_code IS NOT NULL AND proof_digest IS NOT NULL AND proof_expires_at_ms IS NOT NULL)
     OR (state NOT IN ('sending', 'awaiting_proof') AND public_code IS NULL AND proof_digest IS NULL AND proof_expires_at_ms IS NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_archives (
   request_id TEXT NOT NULL REFERENCES erasure_requests(id),
@@ -562,17 +600,20 @@ CREATE TABLE erasure_archives (
   recovery_written INTEGER NOT NULL DEFAULT 0 CHECK(recovery_written IN(0,1)),
   PRIMARY KEY(request_id,store_id,row_ref)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_chunk (
   request_id TEXT NOT NULL REFERENCES erasure_requests(id),
   row_ref TEXT NOT NULL,
   PRIMARY KEY(request_id,row_ref)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_control_sweeps (
   bucket TEXT PRIMARY KEY NOT NULL CHECK(bucket IN('email','statement','erasure')),
   cursor TEXT NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_custody_events (
   id TEXT PRIMARY KEY NOT NULL,
@@ -582,6 +623,7 @@ CREATE TABLE erasure_custody_events (
   recorded_at_ms INTEGER NOT NULL,
   operator_ref TEXT NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_custody_evidence (
   request_id TEXT NOT NULL REFERENCES erasure_requests(id),
@@ -590,11 +632,13 @@ CREATE TABLE erasure_custody_evidence (
   evidence_json TEXT,
   PRIMARY KEY(request_id,custodian)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_generation (
   id INTEGER PRIMARY KEY CHECK(id=1),
   generation TEXT NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_objects (
   request_id TEXT NOT NULL REFERENCES erasure_requests(id),
@@ -607,12 +651,14 @@ CREATE TABLE erasure_objects (
   done INTEGER NOT NULL DEFAULT 0 CHECK(done IN (0,1)),
   PRIMARY KEY(request_id,bucket,object_key)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_permits (
   request_id TEXT PRIMARY KEY NOT NULL REFERENCES erasure_requests(id),
   user_id TEXT NOT NULL,
   store_id TEXT NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_requests (
   id TEXT PRIMARY KEY NOT NULL,
@@ -642,6 +688,7 @@ CREATE TABLE erasure_requests (
   coordinator_cleared INTEGER NOT NULL DEFAULT 0 CHECK(coordinator_cleared IN (0,1)),
   marker_written INTEGER NOT NULL DEFAULT 0 CHECK(marker_written IN (0,1))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_restore_members (
   generation TEXT NOT NULL,
@@ -649,6 +696,7 @@ CREATE TABLE erasure_restore_members (
   user_id TEXT NOT NULL,
   PRIMARY KEY(generation,request_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_restore_sessions (
   id INTEGER PRIMARY KEY CHECK(id=1),
@@ -656,6 +704,7 @@ CREATE TABLE erasure_restore_sessions (
   cursor TEXT NOT NULL,
   scanned INTEGER NOT NULL CHECK(scanned IN(0,1))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_steps (
   request_id TEXT NOT NULL REFERENCES erasure_requests(id),
@@ -665,6 +714,7 @@ CREATE TABLE erasure_steps (
   delete_done INTEGER NOT NULL DEFAULT 0 CHECK(delete_done IN (0,1)),
   PRIMARY KEY(request_id,store_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE erasure_writers (
   id TEXT PRIMARY KEY NOT NULL,
@@ -674,6 +724,7 @@ CREATE TABLE erasure_writers (
   started_at_ms INTEGER NOT NULL,
   expires_at_ms INTEGER NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE forwarded_email_receipts (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -686,6 +737,7 @@ CREATE TABLE forwarded_email_receipts (
   expires_at_ms INTEGER NOT NULL CHECK (expires_at_ms > received_at_ms), time_zone TEXT NOT NULL DEFAULT 'America/Bogota', deferred_checked_at_ms INTEGER, outcome TEXT, outcome_transaction_id TEXT REFERENCES transactions(id), outcome_review_id TEXT, outcome_completed_at_ms INTEGER, review_id TEXT, review_reason TEXT, review_created_at_ms INTEGER, review_evidence_expires_at_ms INTEGER, dispatch_user_id TEXT REFERENCES users(id), dispatch_sent_at_ms INTEGER CHECK((dispatch_user_id IS NULL AND dispatch_user_id IS NULL AND dispatch_sent_at_ms IS NULL) OR (dispatch_user_id IS NOT NULL AND dispatch_user_id IS NOT NULL)) CHECK(dispatch_user_id IS NULL OR dispatch_user_id=user_id),
   UNIQUE (user_id, delivery_digest)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE governor_delivery_receipts (
  kind TEXT NOT NULL CHECK(kind IN ('weekly','reminder')),user_id TEXT NOT NULL REFERENCES users(id),insight_event_id TEXT,delivery_id TEXT,
@@ -694,6 +746,7 @@ CREATE TABLE governor_delivery_receipts (
  FOREIGN KEY(user_id,insight_event_id) REFERENCES insight_events(user_id,id),
  CHECK((kind='weekly' AND insight_event_id IS NOT NULL AND delivery_id IS NULL) OR(kind='reminder' AND insight_event_id IS NULL AND delivery_id IS NOT NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE hosted_agent_sessions (
   id TEXT PRIMARY KEY NOT NULL,
@@ -704,6 +757,7 @@ CREATE TABLE hosted_agent_sessions (
   status TEXT NOT NULL CHECK (status IN ('active','idle-ended','revoked')), compacted_text TEXT, compacted_through_sequence INTEGER, compacted_revision INTEGER, compacted_nonce TEXT, compacted_at_ms INTEGER CHECK((compacted_revision IS NULL AND compacted_text IS NULL AND compacted_through_sequence IS NULL AND compacted_revision IS NULL AND compacted_nonce IS NULL AND compacted_at_ms IS NULL) OR (compacted_revision IS NOT NULL AND compacted_text IS NOT NULL AND (length(compacted_text) > 0) AND compacted_through_sequence IS NOT NULL AND (compacted_through_sequence >= 0) AND compacted_revision IS NOT NULL AND (compacted_revision > 0) AND compacted_nonce IS NOT NULL AND compacted_at_ms IS NOT NULL)),
   UNIQUE (user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE hosted_compaction_attempts (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -711,6 +765,7 @@ CREATE TABLE hosted_compaction_attempts (
   used INTEGER NOT NULL CHECK (used BETWEEN 1 AND 3),
   PRIMARY KEY (user_id, day_ms)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE hosted_confirmations (
   id TEXT PRIMARY KEY NOT NULL,
@@ -726,6 +781,7 @@ CREATE TABLE hosted_confirmations (
   CHECK (expires_at_ms > issued_at_ms),
   CHECK ((consumed_turn_id IS NULL) = (consumed_at_ms IS NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE hosted_mutation_commits (
   turn_id TEXT NOT NULL,
@@ -736,6 +792,7 @@ CREATE TABLE hosted_mutation_commits (
   PRIMARY KEY (turn_id, tool_call_id),
   FOREIGN KEY (turn_id) REFERENCES hosted_turns(id) ON DELETE CASCADE
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "hosted_turns" (
   id TEXT PRIMARY KEY NOT NULL,
@@ -751,6 +808,7 @@ CREATE TABLE "hosted_turns" (
          (status = 'failed' AND terminal_at_ms >= started_at_ms AND failure_reason IS NOT NULL) OR
          (status IN ('completed','interrupted') AND terminal_at_ms >= started_at_ms AND failure_reason IS NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE hosted_voice_refusals (
   portfolio_id TEXT NOT NULL,
@@ -760,6 +818,7 @@ CREATE TABLE hosted_voice_refusals (
   outcome TEXT NOT NULL DEFAULT 'started' CHECK (outcome IN ('started', 'accepted', 'failed')),
   PRIMARY KEY (portfolio_id, message_id)
 );
+--> statement-breakpoint
 
 CREATE TABLE "hosted_whatsapp_delivery_events" (
   correlation_token TEXT NOT NULL REFERENCES whatsapp_deliveries(hosted_correlation_token),
@@ -769,6 +828,7 @@ CREATE TABLE "hosted_whatsapp_delivery_events" (
   received_at_ms INTEGER NOT NULL,
   PRIMARY KEY (correlation_token, provider_message_id, status, occurred_at_ms)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE hosted_whatsapp_windows (
  user_id TEXT NOT NULL, portfolio_id TEXT NOT NULL, bsuid TEXT NOT NULL,
@@ -776,6 +836,7 @@ CREATE TABLE hosted_whatsapp_windows (
  PRIMARY KEY (user_id, portfolio_id, bsuid),
  CHECK (closes_at_ms = last_verified_inbound_at_ms + 86400000)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE ingestion_review_state (
  id TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id),
@@ -786,6 +847,7 @@ CREATE TABLE ingestion_review_state (
  CHECK((status='created')=(transaction_id IS NOT NULL)),
  CHECK(draft_json IS NULL OR length(draft_json)<=4096)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE insight_events (
   id TEXT PRIMARY KEY NOT NULL,
@@ -803,6 +865,7 @@ CREATE TABLE insight_events (
   UNIQUE(user_id, schedule_id, schedule_version, scheduled_at),
   UNIQUE(user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE insight_reports (
  kind TEXT NOT NULL CHECK(kind IN ('weekly-summary','proactivity-delivery')),
@@ -847,6 +910,7 @@ CREATE TABLE insight_reports (
     ((role IN ('budget-offer','reminder-offer','recurring-offer') AND consent_grant_id IS NULL AND offer_id IS NOT NULL) OR (role NOT IN ('budget-offer','reminder-offer','recurring-offer') AND consent_grant_id IS NOT NULL AND offer_id IS NULL)))
    OR (scheduled_at_ms IS NULL AND role IS NULL AND consent_grant_id IS NULL AND offer_id IS NULL AND text IS NULL AND expires_at_ms IS NULL AND time_zone IS NULL AND created_at_ms IS NULL AND (reminder_grant_id IS NOT NULL OR report_json IS NOT NULL)))))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE keyword_rules (
   id TEXT PRIMARY KEY NOT NULL,
@@ -858,6 +922,7 @@ CREATE TABLE keyword_rules (
   updated_at TEXT NOT NULL,
   UNIQUE (user_id, normalized_keyword)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE media_submissions (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), portfolio_id TEXT NOT NULL,
@@ -866,6 +931,7 @@ CREATE TABLE media_submissions (
  service_market TEXT NOT NULL, locale TEXT NOT NULL, time_zone TEXT NOT NULL, capacity_held INTEGER NOT NULL DEFAULT 1 CHECK(capacity_held IN (0,1)), review_reason TEXT CHECK(review_reason IN ('extraction-unavailable','unparseable-material')), review_created_at_ms INTEGER CHECK((review_reason IS NULL)=(review_created_at_ms IS NULL)),
  UNIQUE(user_id,portfolio_id,message_id), CHECK(expires_at_ms = accepted_at_ms + 2592000000)
 );
+--> statement-breakpoint
 
 CREATE TABLE memories (
   id TEXT PRIMARY KEY NOT NULL,
@@ -875,6 +941,7 @@ CREATE TABLE memories (
   updated_at TEXT NOT NULL,
   UNIQUE (user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE oauth_connections (
   id TEXT PRIMARY KEY NOT NULL,
@@ -889,6 +956,7 @@ CREATE TABLE oauth_connections (
   expires_at_ms INTEGER NOT NULL CHECK (expires_at_ms > approved_at_ms),
   revoked_at_ms INTEGER
 , refresh_allowed INTEGER NOT NULL DEFAULT 0 CHECK (refresh_allowed IN (0,1)), code_digest BLOB, code_challenge TEXT, code_expires_at_ms INTEGER, code_consumed_at_ms INTEGER CHECK((code_digest IS NULL AND code_digest IS NULL AND code_challenge IS NULL AND code_expires_at_ms IS NULL AND code_consumed_at_ms IS NULL) OR (code_digest IS NOT NULL AND code_digest IS NOT NULL AND (length(code_digest) = 32) AND code_challenge IS NOT NULL AND code_expires_at_ms IS NOT NULL))) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE oauth_credentials (
  kind TEXT NOT NULL CHECK(kind IN ('access','refresh')),
@@ -900,6 +968,7 @@ CREATE TABLE oauth_credentials (
  refresh_id TEXT GENERATED ALWAYS AS(CASE WHEN kind='refresh' THEN id END) VIRTUAL UNIQUE,
  PRIMARY KEY(kind,id),UNIQUE(kind,digest),CHECK(kind='refresh' OR(user_id IS NOT NULL AND consumed_at_ms IS NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE oauth_operation_intents (
   reference TEXT PRIMARY KEY,
@@ -915,6 +984,7 @@ CREATE TABLE oauth_operation_intents (
   created_at_ms INTEGER NOT NULL,
   expires_at_ms INTEGER NOT NULL CHECK(expires_at_ms > created_at_ms AND expires_at_ms <= created_at_ms + 300000)
 );
+--> statement-breakpoint
 
 CREATE TABLE oauth_public_clients (
   id TEXT PRIMARY KEY,
@@ -922,6 +992,7 @@ CREATE TABLE oauth_public_clients (
   created_at_ms INTEGER NOT NULL,
   last_used_at_ms INTEGER NOT NULL
 );
+--> statement-breakpoint
 
 CREATE TABLE oauth_review_requests (
   id TEXT PRIMARY KEY,
@@ -933,6 +1004,7 @@ CREATE TABLE oauth_review_requests (
   user_id TEXT,
   state TEXT NOT NULL CHECK (state IN ('pending', 'cancelled')) DEFAULT 'pending'
 );
+--> statement-breakpoint
 
 CREATE TABLE operational_alerts (
   kind TEXT NOT NULL,
@@ -949,16 +1021,19 @@ CREATE TABLE operational_alerts (
   acknowledged_ms INTEGER,
   PRIMARY KEY (kind, owner)
 );
+--> statement-breakpoint
 
 CREATE TABLE operational_canary (
   kind TEXT PRIMARY KEY NOT NULL CHECK (kind IN ('queueExecution', 'workflowExecution')),
   last_succeeded_ms INTEGER NOT NULL CHECK (last_succeeded_ms >= 0)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE operational_core_rejection_burst (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   observed_at_ms INTEGER NOT NULL CHECK (observed_at_ms >= 0 AND observed_at_ms % 60000 = 0)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE operational_event_buckets (
   kind TEXT NOT NULL CHECK (kind IN ('heartbeat', 'tail_overflow', 'worker_exception', 'resource_limit', 'callback_rejection', 'workflow_failure')),
@@ -966,18 +1041,21 @@ CREATE TABLE operational_event_buckets (
   count INTEGER NOT NULL CHECK (count BETWEEN 1 AND 1000),
   PRIMARY KEY (kind, bucket_ms)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE operational_health_view (
   operation TEXT PRIMARY KEY NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('healthy', 'attention', 'unavailable')),
   observed_at_ms INTEGER NOT NULL CHECK (observed_at_ms >= 0)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE pat_pairing_admission (
   source_digest BLOB PRIMARY KEY NOT NULL CHECK (length(source_digest) = 32),
   window_start_ms INTEGER NOT NULL,
   started_count INTEGER NOT NULL CHECK (started_count BETWEEN 1 AND 20)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE pat_pairings (
   id TEXT PRIMARY KEY NOT NULL,
@@ -998,12 +1076,14 @@ CREATE TABLE pat_pairings (
   CHECK ((state = 'pending_approval' AND user_id IS NULL AND approved_at_ms IS NULL AND pat_expires_at_ms IS NULL) OR state <> 'pending_approval'),
   CHECK ((state IN ('approved_awaiting_claim','claimed') AND user_id IS NOT NULL AND approved_at_ms IS NOT NULL AND pat_expires_at_ms IS NOT NULL AND pat_expires_at_ms = approved_at_ms + lifetime_days * 86400000) OR state NOT IN ('approved_awaiting_claim','claimed'))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE pat_review_attempts (
   id TEXT PRIMARY KEY NOT NULL,
   session_id TEXT NOT NULL REFERENCES web_sessions(id),
   occurred_at_ms INTEGER NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE pats (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1023,6 +1103,7 @@ CREATE TABLE pats (
   CHECK ((pairing_id IS NULL) <> (request_id IS NULL)),
   CHECK (expires_at_ms <= created_at_ms + lifetime_days * 86400000)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE pending_consent_exchanges (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 128),
@@ -1045,6 +1126,7 @@ CREATE TABLE pending_consent_exchanges (
   CHECK (expires_at_ms = created_at_ms + 86400000),
   CHECK (disclosed_at_ms IS NULL OR disclosed_at_ms BETWEEN (created_at_ms / 1000) * 1000 AND expires_at_ms)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "proactive_transcript_entries" (
  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1067,6 +1149,7 @@ CREATE TABLE "proactive_transcript_entries" (
    AND role IN ('budget-offer','reminder-offer','recurring-offer','reminder-question'))),
  FOREIGN KEY(user_id,insight_event_id) REFERENCES insight_events(user_id,id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "proactive_transcript_event_links" (
  user_id TEXT NOT NULL,
@@ -1077,6 +1160,7 @@ CREATE TABLE "proactive_transcript_event_links" (
  FOREIGN KEY(user_id,transcript_kind,transcript_id) REFERENCES "proactive_transcript_entries"(user_id,kind,id) ON DELETE CASCADE,
  FOREIGN KEY(user_id,insight_event_id) REFERENCES insight_events(user_id,id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE proactivity_governors (
  kind TEXT NOT NULL CHECK(kind IN ('weekly','reminder')),user_id TEXT NOT NULL REFERENCES users(id),
@@ -1088,6 +1172,7 @@ CREATE TABLE proactivity_governors (
  CHECK((kind='weekly' AND standing_json IS NULL AND question_id IS NULL AND (question_delivered=0)=(question_delivered_at_ms IS NULL) AND question_delivered<=question_needed AND (question_needed=0 OR question_event_id IS NOT NULL))
  OR(kind='reminder' AND standing_json IS NOT NULL AND unanswered=0 AND question_needed=0 AND question_delivered=0 AND question_event_id IS NULL AND paused_at_ms IS NULL AND notice_session_id IS NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "proactivity_message_events" (
  user_id TEXT NOT NULL,
@@ -1097,6 +1182,7 @@ CREATE TABLE "proactivity_message_events" (
  FOREIGN KEY(user_id,delivery_id) REFERENCES insight_reports(user_id,proactivity_reference),
  FOREIGN KEY(user_id,insight_event_id) REFERENCES insight_events(user_id,id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "proactivity_offer_requests" (
  id TEXT PRIMARY KEY NOT NULL,
@@ -1109,6 +1195,7 @@ CREATE TABLE "proactivity_offer_requests" (
  delivery_id TEXT, current_recurring_opportunity INTEGER CHECK(current_recurring_opportunity IS NULL OR (current_recurring_opportunity=1 AND kind='new-recurring-series')),
  UNIQUE(user_id,kind,request_message_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE provider_authentication_attempts (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1127,6 +1214,7 @@ CREATE TABLE provider_authentication_attempts (
   user_id TEXT REFERENCES users(id), provider TEXT NOT NULL DEFAULT 'google' CHECK(provider IN ('google','microsoft')), handoff_id TEXT REFERENCES whatsapp_provider_handoffs(id) ON DELETE CASCADE, completed_at_ms INTEGER, created_user INTEGER CHECK((completed_at_ms IS NULL)=(created_user IS NULL) AND (created_user IS NULL OR created_user IN (0,1))),
   CHECK((intent = 'signup') = (disclosure_json IS NOT NULL AND consent_at_ms IS NOT NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE provider_credentials (
   issuer TEXT NOT NULL,
@@ -1136,6 +1224,7 @@ CREATE TABLE provider_credentials (
   established_at_ms INTEGER NOT NULL,
   PRIMARY KEY(issuer,subject)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_digest_consumption (
  user_id TEXT NOT NULL REFERENCES users(id),
@@ -1143,6 +1232,7 @@ CREATE TABLE recurring_digest_consumption (
  disposition TEXT NOT NULL CHECK(disposition IN ('included','suppressed','invalid','excluded')),
  PRIMARY KEY(user_id,confirmation_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_digest_days (
  user_id TEXT NOT NULL REFERENCES users(id),
@@ -1152,6 +1242,7 @@ CREATE TABLE recurring_digest_days (
  insight_event_id TEXT,
  PRIMARY KEY(user_id,local_date,day_from_ms,day_to_ms)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "recurring_digest_instructions" (
  user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
@@ -1167,6 +1258,7 @@ CREATE TABLE "recurring_digest_instructions" (
  last_evaluated_at_ms INTEGER NOT NULL DEFAULT 0,
  grant_id_history_type TEXT GENERATED ALWAYS AS ('proactivity_grant') VIRTUAL, source_checkpoint TEXT, source_cursor TEXT, source_cutoff_at_ms INTEGER, source_complete INTEGER CHECK((source_checkpoint IS NULL AND source_checkpoint IS NULL AND source_cursor IS NULL AND source_cutoff_at_ms IS NULL AND source_complete IS NULL) OR (source_checkpoint IS NOT NULL AND source_checkpoint IS NOT NULL AND source_cutoff_at_ms IS NOT NULL AND source_complete IS NOT NULL AND (source_complete IN (0,1)))),
  FOREIGN KEY(user_id,grant_id_history_type,grant_id) REFERENCES consent_history(user_id,record_type,id)) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_digest_staging (
  user_id TEXT NOT NULL REFERENCES users(id),
@@ -1177,8 +1269,10 @@ CREATE TABLE recurring_digest_staging (
  eligible TEXT NOT NULL CHECK(eligible IN ('eligible','suppressed','invalid','legacy')),
  PRIMARY KEY(user_id,confirmation_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_dispatch (id INTEGER PRIMARY KEY CHECK(id = 1), last_user TEXT NOT NULL, next_discovery_at_ms INTEGER NOT NULL DEFAULT 0) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_facts (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -1188,6 +1282,7 @@ CREATE TABLE recurring_facts (
   fact_json TEXT NOT NULL,
   PRIMARY KEY(user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_progress (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
@@ -1201,6 +1296,7 @@ CREATE TABLE recurring_progress (
   first_captured_at TEXT NOT NULL,
   time_zone TEXT NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_proposals (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -1208,6 +1304,7 @@ CREATE TABLE recurring_proposals (
   proposal_json TEXT NOT NULL,
   PRIMARY KEY(user_id, proposal_key)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE recurring_series (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -1225,6 +1322,7 @@ CREATE TABLE recurring_series (
   AND confirmation_sequence>0)),
   PRIMARY KEY(user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "refund_attempts" (
 id TEXT PRIMARY KEY CHECK (length(id) = 36),
@@ -1266,6 +1364,7 @@ CHECK((submission_claimed_at_ms IS NULL AND submission_claimed_at_ms IS NULL) OR
 CHECK((verified_status IS NULL AND provider_refund_id IS NULL AND verified_status IS NULL AND observed_at_ms IS NULL) OR (verified_status IS NOT NULL AND (provider_refund_id IS NULL OR length(provider_refund_id) BETWEEN 1 AND 128) AND verified_status IS NOT NULL AND (verified_status IN ('APPROVED','DECLINED','CANCELLED','VOIDED')) AND observed_at_ms IS NOT NULL)),
 CHECK((adjusted_attempt_id IS NULL AND adjusted_attempt_id IS NULL AND access_ends_at_ms IS NULL) OR (adjusted_attempt_id IS NOT NULL AND adjusted_attempt_id IS NOT NULL AND access_ends_at_ms IS NOT NULL)),
 CHECK((renewal_stopped_at_ms IS NULL AND renewal_stopped_user_id IS NULL AND renewal_stopped_at_ms IS NULL) OR (renewal_stopped_at_ms IS NOT NULL AND renewal_stopped_user_id IS NOT NULL AND renewal_stopped_at_ms IS NOT NULL))) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE release_smoke_probes (
   probe_id TEXT PRIMARY KEY NOT NULL CHECK (length(probe_id) = 32),
@@ -1273,6 +1372,7 @@ CREATE TABLE release_smoke_probes (
   expires_at_ms INTEGER NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('pending', 'queued', 'passed'))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE reminder_control_receipts (
  user_id TEXT NOT NULL REFERENCES users(id),
@@ -1280,6 +1380,7 @@ CREATE TABLE reminder_control_receipts (
  choice TEXT NOT NULL,
  PRIMARY KEY(user_id,message_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE resource_admission_events (
   grant_id TEXT NOT NULL
@@ -1305,12 +1406,14 @@ CREATE TABLE resource_admission_events (
   ),
   CHECK (released_at_epoch_ms IS NULL OR released_at_epoch_ms >= admitted_at_epoch_ms)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE resource_admission_grants (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 128),
   admitted_at_epoch_ms INTEGER NOT NULL CHECK (admitted_at_epoch_ms >= 0),
   claim_count INTEGER NOT NULL CHECK (claim_count BETWEEN 1 AND 16)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE schedule_executions (
  kind TEXT NOT NULL CHECK(kind IN ('weekly','reminder')),
@@ -1322,6 +1425,7 @@ CREATE TABLE schedule_executions (
  PRIMARY KEY(user_id,kind,schedule_id,schedule_version,scheduled_at),
  FOREIGN KEY(user_id,kind,schedule_id) REFERENCES schedules(user_id,kind,id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE schedule_revisions (
  kind TEXT NOT NULL CHECK(kind IN ('weekly','reminder')),
@@ -1332,6 +1436,7 @@ CREATE TABLE schedule_revisions (
  PRIMARY KEY(user_id,kind,schedule_id,version),
  FOREIGN KEY(user_id,kind,schedule_id) REFERENCES schedules(user_id,kind,id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE schedules (
  kind TEXT NOT NULL CHECK(kind IN ('weekly','reminder')),
@@ -1349,6 +1454,7 @@ CREATE TABLE schedules (
  UNIQUE(user_id,kind,id),
  FOREIGN KEY(user_id,proactivity_grant_type,consent_grant_id) REFERENCES consent_history(user_id,record_type,id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "source_attestations" (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1385,11 +1491,13 @@ CREATE TABLE "source_attestations" (
   UNIQUE (statement_submission_id, statement_record_number),
   UNIQUE (received_email_id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE sql_assertions (
   scope TEXT PRIMARY KEY NOT NULL,
   accepted INTEGER NOT NULL CHECK (accepted = 1)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "statement_materialization_parts" (
   submission_id TEXT NOT NULL REFERENCES statement_submissions(id) ON DELETE CASCADE,
@@ -1399,6 +1507,7 @@ CREATE TABLE "statement_materialization_parts" (
   sha256 TEXT NOT NULL CHECK(length(sha256)=64),
   PRIMARY KEY(submission_id,chunk_index,part_index)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE statement_needs_review (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1424,6 +1533,7 @@ CREATE TABLE statement_needs_review (
   FOREIGN KEY (user_id, submission_id) REFERENCES statement_submissions(user_id, id),
   CHECK ((status = 'pending') = (original_evidence IS NOT NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE statement_record_outcomes (
   user_id TEXT NOT NULL,
@@ -1436,11 +1546,13 @@ CREATE TABLE statement_record_outcomes (
   FOREIGN KEY (user_id, transaction_id) REFERENCES transactions(user_id, id),
   CHECK ((outcome = 'accepted') = (transaction_id IS NOT NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE statement_review_capacity (
   id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
   pending_count INTEGER NOT NULL CHECK (pending_count BETWEEN 0 AND 5000)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE statement_staging_objects (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1459,6 +1571,7 @@ CREATE TABLE statement_staging_objects (
   CHECK (source_format IS NULL OR source_format IN ('csv', 'xlsx')), object_deleted_at_ms INTEGER,
   CHECK ((status = 'published') = (published_submission_id IS NOT NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE statement_submissions (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1472,6 +1585,7 @@ CREATE TABLE statement_submissions (
     'malformed-file', 'mapping-unavailable', 'retention-expired')), source_parse_attempts INTEGER NOT NULL DEFAULT 0 CHECK(source_parse_attempts BETWEEN 0 AND 3), processed_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_rows>=0), processed_accepted_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_accepted_rows>=0), processed_review_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_review_rows>=0), material_source_sha256 TEXT, material_parts_sha256 TEXT, material_parser_revision TEXT, material_source_format TEXT, material_representation_revision TEXT, material_service_market TEXT, material_locale TEXT, material_time_zone TEXT, material_expires_at_ms INTEGER, material_headers_json TEXT, material_row_count INTEGER, material_part_count INTEGER, material_byte_length INTEGER, material_state TEXT, hosted_session_id TEXT, hosted_turn_id TEXT, hosted_expires_at_ms INTEGER, hosted_abandoned_at_ms INTEGER, clarification_state TEXT, clarification_expires_at_ms INTEGER, clarification_ended_at_ms INTEGER, work_user_id TEXT REFERENCES users(id), work_revision INTEGER, work_published_at_ms INTEGER, work_last_attempt_at_ms INTEGER, work_last_reconciled_at_ms INTEGER CHECK((work_revision IS NULL AND work_user_id IS NULL AND work_revision IS NULL AND work_published_at_ms IS NULL AND work_last_attempt_at_ms IS NULL AND work_last_reconciled_at_ms IS NULL) OR (work_revision IS NOT NULL AND work_user_id IS NOT NULL AND work_revision IS NOT NULL AND (work_revision = 1) AND work_published_at_ms IS NOT NULL AND (work_published_at_ms >= 0) AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms >= 0) AND (work_last_reconciled_at_ms IS NULL OR work_last_reconciled_at_ms >= 0))) CHECK(work_user_id IS NULL OR work_user_id=user_id),
   UNIQUE (user_id, idempotency_key)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "subscription_cancellations" (
   user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id),
@@ -1485,6 +1599,7 @@ CREATE TABLE "subscription_cancellations" (
   verification_count INTEGER NOT NULL DEFAULT 0 CHECK (verification_count BETWEEN 0 AND 8),
   last_offered_at_ms INTEGER
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE subscription_prices (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -1496,6 +1611,7 @@ CREATE TABLE subscription_prices (
   terms_json TEXT NOT NULL,
   published_order INTEGER UNIQUE CHECK (published_order BETWEEN 1 AND 3)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE subscriptions (
   user_id TEXT PRIMARY KEY REFERENCES users(id),
@@ -1504,6 +1620,7 @@ CREATE TABLE subscriptions (
   paid_period_ends_at_ms INTEGER NOT NULL,
   renewal_anchor_ms INTEGER NOT NULL
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE support_recovery_admissions (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1511,6 +1628,7 @@ CREATE TABLE support_recovery_admissions (
   operator_subject TEXT NOT NULL,
   admitted_at_ms INTEGER NOT NULL
 );
+--> statement-breakpoint
 
 CREATE TABLE support_recovery_cases (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1525,6 +1643,7 @@ CREATE TABLE support_recovery_cases (
   closed_at_ms INTEGER NOT NULL,
   CHECK (expires_at_ms > opened_at_ms)
 );
+--> statement-breakpoint
 
 CREATE TABLE support_recovery_operator_limits (
   operator_issuer TEXT NOT NULL,
@@ -1533,6 +1652,7 @@ CREATE TABLE support_recovery_operator_limits (
   attempts INTEGER NOT NULL CHECK (attempts >= 1 AND attempts <= 10),
   PRIMARY KEY (operator_issuer, operator_subject)
 );
+--> statement-breakpoint
 
 CREATE TABLE transaction_corrections (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1546,6 +1666,7 @@ CREATE TABLE transaction_corrections (
   FOREIGN KEY (user_id, transaction_id) REFERENCES transactions(user_id, id),
   UNIQUE (user_id, transaction_id, previous_revision)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE transaction_reconciliation_decisions (
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -1565,6 +1686,7 @@ CREATE TABLE transaction_reconciliation_decisions (
     OR (state = 'keep-separate' AND visible_transaction_id IS NULL)
   )
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE transaction_reconciliation_members (
   user_id TEXT NOT NULL,
@@ -1577,6 +1699,7 @@ CREATE TABLE transaction_reconciliation_members (
     REFERENCES transaction_reconciliation_decisions(user_id, first_transaction_id, second_transaction_id),
   CHECK (transaction_id IN (first_transaction_id, second_transaction_id))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE transactions (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1591,6 +1714,7 @@ CREATE TABLE transactions (
   created_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0), user_decisions TEXT NOT NULL DEFAULT '{}', deleted_at_ms INTEGER,
   UNIQUE (user_id, id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "transcript_entries" (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1618,8 +1742,10 @@ CREATE TABLE "transcript_entries" (
          (kind = 'failed' AND text IS NULL AND failure_reason IN ('HostedInferenceFailed','HostedInferenceTimedOut','DeliveryFailed','DeliveryUnconfirmed')) OR
          (kind = 'interrupted' AND text IS NULL AND failure_reason IS NULL))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE user_documents (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN('dashboard','recurring-plan')),document_json TEXT NOT NULL CHECK(json_valid(document_json)),revision INTEGER NOT NULL CHECK(revision>=1),PRIMARY KEY(user_id,kind)) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE users (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -1630,6 +1756,7 @@ CREATE TABLE users (
 , trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER CHECK ((trial_started_at_ms IS NULL AND trial_ends_at_ms IS NULL) OR (trial_started_at_ms IS NOT NULL AND trial_ends_at_ms IS NOT NULL AND trial_ends_at_ms=trial_started_at_ms+604800000)), subscription_id TEXT CHECK(subscription_id IS NULL OR length(subscription_id)=36), forwarding_address_id TEXT CHECK(forwarding_address_id IS NULL OR length(forwarding_address_id)=36), forwarding_local_part TEXT CHECK(forwarding_local_part IS NULL OR length(forwarding_local_part) BETWEEN 24 AND 64), forwarding_issued_at_ms INTEGER
  CHECK((forwarding_address_id IS NULL AND forwarding_local_part IS NULL AND forwarding_issued_at_ms IS NULL)
  OR (forwarding_address_id IS NOT NULL AND forwarding_local_part IS NOT NULL AND forwarding_issued_at_ms IS NOT NULL)), backfill_present INTEGER CHECK(backfill_present IS NULL OR backfill_present=1), backfill_submission_id TEXT REFERENCES statement_submissions(id), backfill_consumed_at_ms INTEGER CHECK(backfill_consumed_at_ms IS NULL OR backfill_consumed_at_ms>=0) CHECK(backfill_present IS NOT NULL OR (backfill_submission_id IS NULL AND backfill_consumed_at_ms IS NULL)), verified_email_address TEXT COLLATE NOCASE CHECK(verified_email_address IS NULL OR verified_email_address=lower(trim(verified_email_address))), email_verified_at_ms INTEGER CHECK((verified_email_address IS NULL)=(email_verified_at_ms IS NULL)), recovery_code_digest BLOB CHECK(recovery_code_digest IS NULL OR length(recovery_code_digest)=32), recovery_created_at_ms INTEGER, recovery_consumed_at_ms INTEGER, recovery_revision INTEGER CHECK((recovery_code_digest IS NULL AND recovery_created_at_ms IS NULL AND recovery_consumed_at_ms IS NULL AND recovery_revision IS NULL) OR (recovery_code_digest IS NOT NULL AND recovery_created_at_ms IS NOT NULL AND recovery_revision IS NOT NULL)), whatsapp_portfolio_id TEXT, whatsapp_bsuid TEXT, whatsapp_verified_at_ms INTEGER CHECK((whatsapp_portfolio_id IS NULL AND whatsapp_bsuid IS NULL AND whatsapp_verified_at_ms IS NULL) OR (whatsapp_portfolio_id IS NOT NULL AND whatsapp_bsuid IS NOT NULL AND whatsapp_verified_at_ms IS NOT NULL)), route_portfolio_id TEXT, route_bsuid TEXT, route_phone_number_id TEXT, route_verified_at_ms INTEGER CHECK((route_portfolio_id IS NULL AND route_bsuid IS NULL AND route_phone_number_id IS NULL AND route_verified_at_ms IS NULL) OR (route_portfolio_id IS NOT NULL AND route_bsuid IS NOT NULL AND route_phone_number_id IS NOT NULL AND route_verified_at_ms IS NOT NULL))) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE web_sessions (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
@@ -1642,6 +1769,7 @@ CREATE TABLE web_sessions (
   hard_expires_at_ms INTEGER NOT NULL CHECK (hard_expires_at_ms = created_at_ms + 7776000000),
   revoked_at_ms INTEGER
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE weekly_question_intents (
  id TEXT PRIMARY KEY NOT NULL,
@@ -1654,6 +1782,7 @@ CREATE TABLE weekly_question_intents (
  last_attempt_at_ms INTEGER NOT NULL DEFAULT 0, restart_attempts INTEGER NOT NULL DEFAULT 0 CHECK(restart_attempts BETWEEN 0 AND 3),
  UNIQUE(user_id,id)
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE "whatsapp_deliveries" (
  kind TEXT NOT NULL CHECK(kind IN ('insight','proactivity','weekly-question','hosted')),
@@ -1695,6 +1824,7 @@ CREATE TABLE "whatsapp_deliveries" (
  CHECK(kind<>'hosted' OR coalesce((turn_id IS NOT NULL AND user_id IS NOT NULL AND text IS NOT NULL AND correlation_token IS NOT NULL AND business_phone_number_id IS NOT NULL AND proposed_at_ms IS NOT NULL AND state IS NOT NULL) AND (length(text) > 0) AND (state IN ('sending','accepted','ambiguous','rejected','delivered','unconfirmed')) AND ((state = 'delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL)
     OR (state <> 'delivered' AND delivered_at_ms IS NULL)),0))
 ) STRICT;
+--> statement-breakpoint
 
 CREATE TABLE whatsapp_provider_handoffs (
  id TEXT PRIMARY KEY NOT NULL,
@@ -1711,377 +1841,547 @@ CREATE TABLE whatsapp_provider_handoffs (
  confirmed_at_ms INTEGER,
  consumed_at_ms INTEGER
 ) STRICT;
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_admission_expiry ON audit_entries(accepted_at_ms) WHERE record_type='request_admission';
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_history ON audit_entries(user_id,occurred_at_ms,id) WHERE record_type IN('session_call','credential_call','insight_call');
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_media ON audit_entries(media_submission_id);
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_oauth_activity ON audit_entries(user_id,oauth_connection_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call';
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_pat_activity ON audit_entries(user_id,pat_id,occurred_at_ms DESC,id DESC) WHERE record_type='credential_call';
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_recovery_case ON audit_entries(recovery_case_id,occurred_at_ms) WHERE record_type='support_recovery';
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_refresh_connection ON audit_entries(refresh_connection_id) WHERE refresh_connection_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_retention ON audit_entries(occurred_at_ms,id,user_id) WHERE record_type IN('session_call','credential_call','insight_call','publication');
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_user ON audit_entries(user_id,record_type,occurred_at_ms,id);
+--> statement-breakpoint
 
 CREATE INDEX audit_entries_user_retention ON audit_entries(user_id,occurred_at_ms,id) WHERE record_type IN('session_call','credential_call','insight_call','publication');
+--> statement-breakpoint
 
 CREATE INDEX billing_access_by_period ON refund_attempts(adjusted_attempt_id,access_ends_at_ms) WHERE adjusted_attempt_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX billing_collection_work_due ON billing_attempts(collection_last_attempt_at_ms,id) WHERE collection_state='armed' AND collection_state IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX billing_pending_health ON billing_attempts(created_at_ms) WHERE status = 'pending';
+--> statement-breakpoint
 
 CREATE INDEX billing_provider_transaction_attempt ON billing_provider_transactions(attempt_id,status);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX billing_renewal_identity ON billing_attempts(previous_paid_attempt_id, renewal_attempt_number)
 WHERE previous_paid_attempt_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX browser_login_approvals_identity_0 ON browser_login_pairings(approval_portfolio_id,approval_message_id) WHERE approval_message_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX browser_pairing_dispatch_due ON browser_login_pairings(email_dispatch_attempted_at_ms,email_last_requested_at_ms,email_work_id) WHERE email_state='awaiting_delivery' AND email_work_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX browser_pairing_email_proofs_identity_3 ON browser_login_pairings(email_public_code) WHERE email_work_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX browser_pairing_email_proofs_identity_4 ON browser_login_pairings(email_work_id) WHERE email_work_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX budget_crossing_publication_due ON budget_crossing_publications(materialized_at_ms,last_evaluated_at_ms,detected_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX budget_first_offer_due ON budget_state(first_last_evaluated_at_ms,user_id) WHERE kind='user' AND budget_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX budget_work_due ON budget_state(last_evaluated_at_ms,user_id,occurred_at) WHERE kind='work';
+--> statement-breakpoint
 
 CREATE INDEX budgets_by_user ON budgets(user_id, currency, category_id);
+--> statement-breakpoint
 
 CREATE INDEX canonical_request_bucket_expiry ON canonical_request_buckets(virtual_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX canonical_request_global_lease_expiry ON canonical_request_leases(expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX canonical_request_lease_expiry ON canonical_request_leases(user_id,expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX canonical_request_replay_expiry ON canonical_request_replays(expires_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX card_enrollment_active_user ON card_enrollments(user_id)
 WHERE status IN ('preparing', 'prepared', 'creating', 'verifying');
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX card_enrollment_request ON card_enrollments(user_id, payment_request_id)
 WHERE payment_request_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX commercial_allowance_consumption_expiry ON commercial_allowance_consumptions(accepted_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX commercial_allowance_period ON commercial_allowance_consumptions(user_id, allowance, period_start_ms, units);
+--> statement-breakpoint
 
 CREATE INDEX connection_attempt_expiry ON connection_attempts(user_id, expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX connection_attempt_retention ON connection_attempts(expires_at_ms, id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX connection_one_pending_attempt ON connection_attempts(user_id, connection_id) WHERE status = 'pending';
+--> statement-breakpoint
 
 CREATE INDEX consent_history_active_withdrawal ON consent_history(user_id,id) WHERE record_type='processing_withdrawal';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_oauth_grant_unique_0 ON consent_history(connection_id) WHERE record_type='oauth_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_oauth_replay_revocation_unique_0 ON consent_history(connection_id) WHERE record_type='oauth_replay_revocation';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_oauth_user_revocation_unique_0 ON consent_history(connection_id) WHERE record_type='oauth_user_revocation';
+--> statement-breakpoint
 
 CREATE INDEX consent_history_offer ON consent_history(record_type,offer_id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_pat_grant_unique_0 ON consent_history(request_id) WHERE record_type='pat_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_pat_grant_unique_1 ON consent_history(pairing_id) WHERE record_type='pat_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_pat_revocation_unique_1 ON consent_history(pairing_id) WHERE record_type='pat_revocation';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_pat_revocation_unique_2 ON consent_history(pat_id) WHERE record_type='pat_revocation';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_pat_revocation_unique_3 ON consent_history(grant_consent_id) WHERE record_type='pat_revocation';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_proactivity_grant_unique_1 ON consent_history(user_id,kind,id) WHERE record_type='proactivity_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_proactivity_grant_unique_2 ON consent_history(decision_message_id) WHERE record_type='proactivity_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_proactivity_grant_unique_3 ON consent_history(grant_id) WHERE record_type='proactivity_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_processing_grant_unique_0 ON consent_history(user_id) WHERE record_type='processing_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_processing_renewal_unique_0 ON consent_history(withdrawal_id) WHERE record_type='processing_renewal';
+--> statement-breakpoint
 
 CREATE INDEX consent_history_rejection_sequence ON consent_history(user_id,sequence) WHERE record_type='weekly_rejection';
+--> statement-breakpoint
 
 CREATE INDEX consent_history_user_grant ON consent_history(user_id,record_type,kind,grant_id);
+--> statement-breakpoint
 
 CREATE INDEX consent_history_user_time ON consent_history(user_id,record_type,occurred_at_ms,sequence);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_weekly_grant_unique_0 ON consent_history(grant_id) WHERE record_type='weekly_grant' AND ( grant_id IS NOT NULL);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_weekly_grant_unique_2 ON consent_history(offer_id) WHERE record_type='weekly_grant';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_weekly_rejection_unique_1 ON consent_history(decision_message_id) WHERE record_type='weekly_rejection';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_weekly_revocation_unique_0 ON consent_history(decision_message_id) WHERE record_type='weekly_revocation';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_history_weekly_revocation_unique_1 ON consent_history(grant_id) WHERE record_type='weekly_revocation';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_offer_decision_message ON consent_offers((kind='weekly-summary'),decision_message_id) WHERE decision_message_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_offer_replacement ON consent_offers(replaces_offer_id) WHERE kind<>'weekly-summary' AND replaces_offer_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX consent_offer_weekly_disclosure ON consent_offers(disclosure_message_id) WHERE kind='weekly-summary' AND disclosure_message_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX consent_offers_user ON consent_offers(user_id,kind,created_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX dashboard_projection_due ON dashboard_projection_state(attempted_at_ms, user_id)
   WHERE readiness != 'ready' OR version != 1;
+--> statement-breakpoint
 
 CREATE INDEX dashboard_projection_leaf_budget_page ON dashboard_projection_leaf
   (user_id, category_id, currency, direction, occurred_at, id);
+--> statement-breakpoint
 
 CREATE INDEX dashboard_projection_leaf_category_recent ON dashboard_projection_leaf
   (user_id, category_id, occurred_at DESC, created_at DESC, id DESC);
+--> statement-breakpoint
 
 CREATE INDEX dashboard_projection_leaf_max ON dashboard_projection_leaf
   (user_id, currency, direction, category_id, length(amount) DESC, amount DESC, occurred_at);
+--> statement-breakpoint
 
 CREATE INDEX dashboard_projection_leaf_recent ON dashboard_projection_leaf
   (user_id, occurred_at DESC, created_at DESC, id DESC);
+--> statement-breakpoint
 
 CREATE INDEX email_replacement_dispatch_due ON email_replacements(dispatch_attempted_at_ms,created_at_ms,work_id) WHERE state='awaiting_delivery';
+--> statement-breakpoint
 
 CREATE INDEX erasure_writers_by_user ON erasure_writers(user_id);
+--> statement-breakpoint
 
 CREATE INDEX forwarded_email_deferred_activation ON forwarded_email_receipts(state,deferred_checked_at_ms,id) WHERE deferred_checked_at_ms IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX forwarded_email_deferred_user ON forwarded_email_receipts(user_id) WHERE deferred_checked_at_ms IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX forwarded_email_outbox_pending ON forwarded_email_receipts(dispatch_sent_at_ms) WHERE dispatch_user_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX forwarded_email_receipts_capacity ON forwarded_email_receipts(state, user_id, expires_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX forwarded_email_receipts_owned ON forwarded_email_receipts(user_id, id);
+--> statement-breakpoint
 
 CREATE INDEX forwarded_email_review_by_user ON forwarded_email_receipts(user_id,review_created_at_ms DESC) WHERE review_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX forwarded_email_review_identity ON forwarded_email_receipts(review_id) WHERE review_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_agent_sessions_by_user ON hosted_agent_sessions(user_id, started_at_ms DESC);
+--> statement-breakpoint
 
 CREATE INDEX hosted_compacted_retention_due ON hosted_agent_sessions(compacted_at_ms, user_id) WHERE compacted_revision IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_compacted_retention_user ON hosted_agent_sessions(user_id, compacted_at_ms) WHERE compacted_revision IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_compaction_attempts_due ON hosted_compaction_attempts(day_ms, user_id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_confirmations_one_consumption ON hosted_confirmations(consumed_turn_id)
   WHERE consumed_turn_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_confirmations_open_by_user ON hosted_confirmations(user_id, issued_at_ms DESC)
   WHERE consumed_turn_id IS NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_confirmations_retention_due ON hosted_confirmations(expires_at_ms, user_id);
+--> statement-breakpoint
 
 CREATE INDEX hosted_confirmations_retention_user ON hosted_confirmations(user_id, expires_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_delivery_correlation_identity ON whatsapp_deliveries(correlation_token) WHERE kind='hosted';
+--> statement-breakpoint
 
 CREATE INDEX hosted_mutation_commits_retention_user ON hosted_mutation_commits(user_id, turn_id);
+--> statement-breakpoint
 
 CREATE INDEX hosted_turn_retention_due
   ON hosted_turns(retention_terminal_at_ms, retention_user_id, id) WHERE retention_terminal_at_ms IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_turn_retention_user
   ON hosted_turns(retention_user_id, retention_terminal_at_ms, id) WHERE retention_terminal_at_ms IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_turns_by_user_day ON hosted_turns(user_id, started_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX hosted_turns_by_user_session ON hosted_turns(user_id, hosted_session_id, started_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX hosted_turns_document_staging ON hosted_turns(document_staging_id) WHERE document_staging_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_turns_inbound_identity ON hosted_turns(inbound_portfolio_id,inbound_message_id) WHERE inbound_message_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_turns_inbound_turn ON hosted_turns(user_id,inbound_turn_id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_turns_one_pending ON hosted_turns(user_id) WHERE status = 'pending';
+--> statement-breakpoint
 
 CREATE INDEX hosted_turns_pending_due ON hosted_turns(started_at_ms, user_id)
   WHERE status = 'pending';
+--> statement-breakpoint
 
 CREATE INDEX hosted_voice_refusals_user_window
   ON hosted_voice_refusals (user_id, claimed_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX hosted_whatsapp_delivery_identity ON whatsapp_deliveries(turn_id) WHERE kind='hosted';
+--> statement-breakpoint
 
 CREATE INDEX hosted_whatsapp_delivery_retention_user ON whatsapp_deliveries(user_id, turn_id) WHERE kind='hosted';
+--> statement-breakpoint
 
 CREATE INDEX hosted_whatsapp_outbox_offer ON hosted_turns(dispatch_offered_at_ms,dispatch_created_at_ms) WHERE dispatch_created_at_ms IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX hosted_whatsapp_windows_expiry ON hosted_whatsapp_windows(closes_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX ingestion_review_state_expiry ON ingestion_review_state(expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX ingestion_review_state_history ON ingestion_review_state(created_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_correlation_identity ON whatsapp_deliveries(correlation_token) WHERE kind='insight';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_events_budget_occurrence ON insight_events(user_id,budget_delivery_group_id,budget_threshold) WHERE budget_delivery_group_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_events_delivery_receipt ON insight_events(delivery_receipt_id) WHERE delivery_receipt_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX insight_events_due ON insight_events(lifecycle_state, scheduled_at, id);
+--> statement-breakpoint
 
 CREATE INDEX insight_events_pending ON insight_events(user_id, lifecycle_state, scheduled_at, id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_provider_message_identity ON whatsapp_deliveries(provider_message_id) WHERE kind='insight';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_reports_proactivity_identity ON insight_reports(delivery_id) WHERE kind='proactivity-delivery' AND scheduled_at_ms IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_reports_recurring_day ON insight_reports(user_id,local_date,day_from_ms,day_to_ms) WHERE report_json IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX insight_reports_text_expiry ON insight_reports(created_at_ms,user_id,delivery_id) WHERE kind='proactivity-delivery' AND text IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX insight_sent_content_retention
   ON whatsapp_deliveries(send_started_at_ms)
   WHERE kind='insight' AND (text IS NOT NULL OR summary_json IS NOT NULL);
+--> statement-breakpoint
 
 CREATE INDEX insight_staged_content_retention
   ON whatsapp_deliveries(state,expires_at_ms)
   WHERE kind='insight' AND (state='staged' AND (text IS NOT NULL OR summary_json IS NOT NULL));
+--> statement-breakpoint
 
 CREATE INDEX insight_user_sent_content_retention
   ON whatsapp_deliveries(user_id,send_started_at_ms)
   WHERE kind='insight' AND (text IS NOT NULL OR summary_json IS NOT NULL);
+--> statement-breakpoint
 
 CREATE INDEX insight_user_staged_content_retention
   ON whatsapp_deliveries(user_id,state,expires_at_ms)
   WHERE kind='insight' AND (state='staged' AND (text IS NOT NULL OR summary_json IS NOT NULL));
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX insight_whatsapp_claims_identity ON whatsapp_deliveries(user_id,insight_event_id) WHERE kind='insight';
+--> statement-breakpoint
 
 CREATE INDEX insight_whatsapp_verified ON whatsapp_deliveries(state,user_id,insight_event_id) WHERE kind='insight';
+--> statement-breakpoint
 
 CREATE INDEX keyword_rules_by_user ON keyword_rules(user_id, created_at, id);
+--> statement-breakpoint
 
 CREATE INDEX media_accountability_retention ON media_submissions(accepted_at_ms,id);
+--> statement-breakpoint
 
 CREATE INDEX media_capacity_by_user ON media_submissions(user_id) WHERE capacity_held=1;
+--> statement-breakpoint
 
 CREATE INDEX media_capacity_expiry ON media_submissions(expires_at_ms,id) WHERE capacity_held=1;
+--> statement-breakpoint
 
 CREATE INDEX media_content_retention
   ON media_submissions(expires_at_ms,id)
   WHERE media_id IS NOT NULL OR caption IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX media_expiry ON media_submissions(expires_at_ms,id);
+--> statement-breakpoint
 
 CREATE INDEX media_review_user ON media_submissions(user_id,review_created_at_ms DESC,id DESC) WHERE review_reason IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX memories_by_user_creation ON memories(user_id, created_at, id);
+--> statement-breakpoint
 
 CREATE INDEX oauth_clients_unused ON oauth_public_clients(last_used_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX oauth_codes_identity_1 ON oauth_connections(code_digest) WHERE code_digest IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX oauth_connections_user ON oauth_connections(user_id, expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX oauth_credentials_owner ON oauth_credentials(user_id,kind,expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX oauth_operation_intents_expiry ON oauth_operation_intents(expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX oauth_operation_intents_user ON oauth_operation_intents(user_id);
+--> statement-breakpoint
 
 CREATE INDEX oauth_review_expiry ON oauth_review_requests(expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX oauth_review_source ON oauth_review_requests(source_digest, state, expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX oauth_review_user ON oauth_review_requests(user_id, state, expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX pairing_email_pending_health ON browser_login_pairings(email_last_requested_at_ms)
   WHERE email_state IN ('awaiting_delivery', 'sending', 'ambiguous') AND email_work_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX pairing_email_rejected_health ON browser_login_pairings(email_last_requested_at_ms) WHERE email_state = 'rejected' AND email_work_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX pat_pairing_admission_expiry ON pat_pairing_admission(window_start_ms);
+--> statement-breakpoint
 
 CREATE INDEX pat_pairings_capacity ON pat_pairings(created_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX pat_review_expiry ON pat_review_attempts(occurred_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX pat_review_rate ON pat_review_attempts(session_id,occurred_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX pats_user_active ON pats(user_id,revoked_at_ms,expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX pats_user_issuance ON pats(user_id,issued_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX payment_authorization_once ON card_enrollments(authorization_digest)
 WHERE authorization_digest IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX payment_source_active_user ON card_payment_sources(user_id) WHERE retired_at_ms IS NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX pending_consent_decisions_identity_0 ON pending_consent_exchanges(decision_portfolio_id,decision_message_id) WHERE decision_value IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX pending_consent_one_caller ON pending_consent_exchanges(portfolio_id, bsuid)
   WHERE state IN ('awaiting_delivery', 'outbound_started', 'awaiting_decision');
+--> statement-breakpoint
 
 CREATE INDEX proactive_transcript_retention ON proactive_transcript_entries(expires_at_ms,sequence);
+--> statement-breakpoint
 
 CREATE INDEX proactivity_channel_started ON whatsapp_deliveries(user_id,send_started_at_ms) WHERE kind='proactivity';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX proactivity_correlation_identity ON whatsapp_deliveries(correlation_token) WHERE kind='proactivity';
+--> statement-breakpoint
 
 CREATE INDEX proactivity_offer_requests_due ON proactivity_offer_requests(materialized_at_ms,last_evaluated_at_ms,created_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX proactivity_provider_message_identity ON whatsapp_deliveries(user_id,provider_message_id) WHERE kind='proactivity';
+--> statement-breakpoint
 
 CREATE INDEX proactivity_sent_content_retention
   ON whatsapp_deliveries(send_started_at_ms)
   WHERE kind='proactivity' AND (text IS NOT NULL OR template_json IS NOT NULL);
+--> statement-breakpoint
 
 CREATE INDEX proactivity_staged_content_retention
   ON whatsapp_deliveries(state,expires_at_ms)
   WHERE kind='proactivity' AND (state='staged' AND (text IS NOT NULL OR template_json IS NOT NULL));
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX proactivity_whatsapp_claims_identity ON whatsapp_deliveries(user_id,delivery_id) WHERE kind='proactivity';
+--> statement-breakpoint
 
 CREATE INDEX provider_attempt_expiry ON provider_authentication_attempts(expires_at_ms);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX recurring_confirmation_identity ON recurring_series(user_id,confirmation_id) WHERE confirmation_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX recurring_confirmation_order ON recurring_series(user_id,confirmed_at,confirmation_id) WHERE confirmation_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX recurring_confirmation_page ON recurring_series(user_id,confirmation_sequence) WHERE confirmation_sequence IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX recurring_confirmation_sequence ON recurring_series(confirmation_sequence) WHERE confirmation_sequence IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX recurring_current_opportunity ON proactivity_offer_requests(user_id) WHERE current_recurring_opportunity=1;
+--> statement-breakpoint
 
 CREATE INDEX recurring_facts_by_group ON recurring_facts(user_id, group_key, occurred_at, id);
+--> statement-breakpoint
 
 CREATE INDEX recurring_series_by_order ON recurring_series(user_id, currency, counterparty_key, id);
+--> statement-breakpoint
 
 CREATE INDEX recurring_unfinished_users ON recurring_progress(user_id) WHERE phase<>'complete';
+--> statement-breakpoint
 
 CREATE INDEX refunds_by_charge ON refund_attempts(billing_attempt_id,status);
+--> statement-breakpoint
 
 CREATE INDEX refunds_by_user ON refund_attempts(user_id,created_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX release_smoke_expiry ON release_smoke_probes(expires_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX replacement_email_pending_health ON email_replacements(created_at_ms)
   WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous');
+--> statement-breakpoint
 
 CREATE INDEX replacement_email_rejected_health ON email_replacements(created_at_ms) WHERE state = 'rejected';
+--> statement-breakpoint
 
 CREATE INDEX report_dispatch_due ON insight_reports(dispatch_state,dispatch_last_attempt_at_ms,dispatch_created_at_ms,kind,delivery_id,user_id) WHERE dispatch_state IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX report_dispatch_health ON insight_reports(kind,dispatch_created_at_ms,user_id,delivery_id)
  WHERE dispatch_state IN ('ready','started') AND dispatch_state IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX resource_admission_active_scope
   ON resource_admission_events (
@@ -2091,141 +2391,196 @@ CREATE INDEX resource_admission_active_scope
     expires_at_epoch_ms,
     admitted_at_epoch_ms
   );
+--> statement-breakpoint
 
 CREATE INDEX resource_admission_ai_retention
   ON resource_admission_grants (admitted_at_epoch_ms, id)
   WHERE id GLOB 'workers-ai-*';
+--> statement-breakpoint
 
 CREATE INDEX resource_admission_enrollment_retention
   ON resource_admission_grants (admitted_at_epoch_ms, id)
   WHERE id GLOB 'card-preparation-attempt-*';
+--> statement-breakpoint
 
 CREATE INDEX resource_admission_grant_release
   ON resource_admission_events (grant_id, dimension, released_at_epoch_ms);
+--> statement-breakpoint
 
 CREATE INDEX resource_admission_provider_retention
   ON resource_admission_grants (admitted_at_epoch_ms, id)
   WHERE id GLOB 'provider-admission-*';
+--> statement-breakpoint
 
 CREATE INDEX resource_admission_upload_retention
   ON resource_admission_grants (admitted_at_epoch_ms, id)
   WHERE id GLOB 'ingestion-upload-*';
+--> statement-breakpoint
 
 CREATE INDEX schedules_due ON schedules(kind,enabled,last_evaluated_at_ms,next_scheduled_at,id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX source_attestation_review_item ON source_attestations(user_id,review_item_id) WHERE review_item_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX source_attestations_by_transaction ON source_attestations(user_id, transaction_id);
+--> statement-breakpoint
 
 CREATE INDEX statement_clarification_deadline ON statement_submissions(clarification_expires_at_ms) WHERE clarification_state='awaiting';
+--> statement-breakpoint
 
 CREATE INDEX statement_hosted_expiry ON statement_submissions(hosted_expires_at_ms) WHERE hosted_session_id IS NOT NULL AND hosted_abandoned_at_ms IS NULL;
+--> statement-breakpoint
 
 CREATE INDEX statement_hosted_session ON statement_submissions(user_id,hosted_session_id);
+--> statement-breakpoint
 
 CREATE INDEX statement_ingestion_outbox_attempt
   ON statement_submissions(work_last_attempt_at_ms, work_published_at_ms, id) WHERE work_revision IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX statement_ingestion_outbox_reconciliation
   ON statement_submissions(work_last_reconciled_at_ms, work_published_at_ms, id) WHERE work_revision IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX statement_pending_health ON statement_submissions(submitted_at_ms)
   WHERE status IN ('queued', 'processing');
+--> statement-breakpoint
 
 CREATE INDEX statement_review_expiry ON statement_needs_review(evidence_expires_at_ms)
   WHERE status = 'pending';
+--> statement-breakpoint
 
 CREATE INDEX statement_staging_delete_retention
   ON statement_staging_objects(expires_at_ms,id)
   WHERE status='deleting' AND object_deleted_at_ms IS NULL;
+--> statement-breakpoint
 
 CREATE INDEX statement_staging_expiry
   ON statement_staging_objects(expires_at_ms)
   WHERE status != 'published';
+--> statement-breakpoint
 
 CREATE INDEX statement_staging_unpublished_retention
   ON statement_staging_objects(expires_at_ms,id)
   WHERE status IN ('pending','available') AND object_deleted_at_ms IS NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX statement_submissions_owned ON statement_submissions(user_id, id);
+--> statement-breakpoint
 
 CREATE INDEX statement_submissions_retention
   ON statement_submissions(retention_expires_at_ms)
   WHERE status IN ('queued', 'processing');
+--> statement-breakpoint
 
 CREATE INDEX statement_submissions_user_submitted
   ON statement_submissions(user_id, submitted_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX support_recovery_admissions_operator ON support_recovery_admissions(operator_issuer, operator_subject, admitted_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX support_recovery_admissions_time ON support_recovery_admissions(admitted_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX support_recovery_cases_retention ON support_recovery_cases(closed_at_ms, id);
+--> statement-breakpoint
 
 CREATE INDEX support_recovery_cases_user ON support_recovery_cases(user_id, opened_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX support_recovery_operator_limits_retention ON support_recovery_operator_limits(window_started_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX transactions_by_user_creation ON transactions(user_id, created_at);
+--> statement-breakpoint
 
 CREATE INDEX transactions_by_user_occurrence ON transactions(user_id, occurred_at DESC, created_at DESC, id DESC);
+--> statement-breakpoint
 
 CREATE INDEX transcript_entries_by_session ON transcript_entries(user_id, hosted_session_id, sequence);
+--> statement-breakpoint
 
 CREATE INDEX transcript_entries_by_turn ON transcript_entries(user_id, turn_id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX transcript_one_terminal ON transcript_entries(turn_id) WHERE kind IN ('assistant','failed','interrupted');
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX transcript_one_user ON transcript_entries(turn_id) WHERE kind = 'user';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX transcript_tool_call ON transcript_entries(turn_id, tool_call_id) WHERE kind = 'tool_call';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX transcript_tool_result ON transcript_entries(turn_id, tool_call_id) WHERE kind = 'tool_result';
+--> statement-breakpoint
 
 CREATE INDEX users_backfill_submission ON users(backfill_submission_id) WHERE backfill_submission_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX users_forwarding_address_id ON users(forwarding_address_id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX users_forwarding_local_part ON users(forwarding_local_part);
+--> statement-breakpoint
 
 CREATE INDEX users_recovery_digest ON users(recovery_code_digest) WHERE recovery_code_digest IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX users_subscription_id ON users(subscription_id);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX users_verified_email ON users(verified_email_address) WHERE verified_email_address IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX users_whatsapp_identity ON users(whatsapp_portfolio_id,whatsapp_bsuid) WHERE whatsapp_portfolio_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX weekly_consent_offer_source ON consent_offers(user_id,source_id) WHERE kind='weekly-summary' AND source_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX weekly_governor_questions_due ON whatsapp_deliveries(state,last_attempt_at_ms,created_at_ms) WHERE kind='weekly-question';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX weekly_governor_questions_identity ON whatsapp_deliveries(id) WHERE kind='weekly-question';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX weekly_governor_questions_offer ON whatsapp_deliveries(user_id,offer_id) WHERE kind='weekly-question';
+--> statement-breakpoint
 
 CREATE INDEX weekly_question_content_retention
   ON whatsapp_deliveries(created_at_ms,id)
   WHERE kind='weekly-question' AND (text IS NOT NULL OR offer_json IS NOT NULL);
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX weekly_question_correlation_identity ON whatsapp_deliveries(correlation_token) WHERE kind='weekly-question';
+--> statement-breakpoint
 
 CREATE INDEX weekly_question_intents_due ON weekly_question_intents(state,last_attempt_at_ms,created_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX weekly_question_intents_expiry ON weekly_question_intents(state,created_at_ms);
+--> statement-breakpoint
 
 CREATE INDEX weekly_question_intents_health ON weekly_question_intents(created_at_ms, user_id, id)
 WHERE state='ready';
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX weekly_question_provider_identity ON whatsapp_deliveries(user_id,provider_message_id) WHERE kind='weekly-question' AND (provider_message_id IS NOT NULL);
+--> statement-breakpoint
 
 CREATE INDEX weekly_question_ready_retention
   ON whatsapp_deliveries(state,expires_at_ms,id)
   WHERE kind='weekly-question' AND (state='ready' AND (text IS NOT NULL OR offer_json IS NOT NULL));
+--> statement-breakpoint
 
 CREATE UNIQUE INDEX weekly_question_request ON weekly_question_intents(user_id,request_message_id) WHERE request_message_id IS NOT NULL;
+--> statement-breakpoint
 
 CREATE INDEX whatsapp_handoff_exchange ON whatsapp_provider_handoffs(exchange_id,created_at_ms);
+--> statement-breakpoint
 
 CREATE VIEW billing_retry_clearances AS
 SELECT a.id AS attempt_id FROM billing_attempts a
@@ -2236,6 +2591,7 @@ WHERE a.status='failed' AND evidence.status='DECLINED' AND evidence.finalized_at
   AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,lookup_attempts,last_checked_at_ms FROM billing_provider_transactions) candidate
     WHERE candidate.attempt_id=a.id AND candidate.transaction_id<>response.transaction_id)
   AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) paid WHERE paid.attempt_id=a.id);
+--> statement-breakpoint
 
 CREATE VIEW dashboard_effective_source AS
 WITH linked_decision AS (
@@ -2322,6 +2678,7 @@ WITH linked_decision AS (
         AND second_member.transaction_id = decision.second_transaction_id)
 )
 SELECT * FROM effective_transaction;
+--> statement-breakpoint
 
 CREATE VIEW ingestion_review_originals AS
 SELECT r.id, r.user_id, 'statement' AS source, r.reason, r.created_at_ms,
@@ -2334,12 +2691,14 @@ UNION ALL
 SELECT s.id, s.user_id, 'media', s.review_reason, s.review_created_at_ms, s.expires_at_ms,
   s.service_market, s.locale, s.time_zone, NULL, 'pending', NULL
 FROM media_submissions s WHERE s.review_reason IS NOT NULL;
+--> statement-breakpoint
 
 CREATE VIEW ingestion_review_sources AS
 SELECT s.id,s.user_id,s.source,s.reason,s.created_at_ms,s.expires_at_ms,s.service_market,s.locale,s.time_zone,
   CASE WHEN d.status='abandoned' THEN 'expired' ELSE coalesce(d.status,s.status) END AS status,coalesce(d.transaction_id,s.transaction_id) AS transaction_id,
   coalesce(d.revision,0) AS revision,d.draft_json,s.suggestions_json
 FROM ingestion_review_originals s LEFT JOIN ingestion_review_state d ON d.id=s.id AND d.user_id=s.user_id;
+--> statement-breakpoint
 
 CREATE VIEW ingestion_statement_review_decisions AS
 SELECT r.id AS review_id,r.submission_id,r.user_id,
@@ -2347,70 +2706,99 @@ SELECT r.id AS review_id,r.submission_id,r.user_id,
  n.transaction_id,n.updated_at_ms AS decided_at_ms
 FROM statement_needs_review r JOIN ingestion_review_state n ON n.id=r.id AND n.user_id=r.user_id
 WHERE n.status!='pending';
+--> statement-breakpoint
 
 CREATE VIEW proactivity_delivery_metadata AS
  SELECT user_id,kind,delivery_id,dispatch_state AS state,dispatch_created_at_ms AS created_at_ms,
  dispatch_last_attempt_at_ms AS last_attempt_at_ms,dispatch_restart_attempts AS restart_attempts,expires_at_ms,
  (kind='weekly-summary' OR text IS NOT NULL) AS content_available
  FROM insight_reports WHERE dispatch_state IS NOT NULL;
+--> statement-breakpoint
 
 CREATE VIEW subscription_renewal_fences AS
   SELECT refund_id,user_id,stopped_at_ms FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) AS subscription_renewal_stops
   UNION ALL SELECT NULL,user_id,cancelled_at_ms FROM subscription_cancellations;
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000001','Restaurantes',0);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000002','Domicilios',1);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000003','Mercado',2);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000004','Transporte',3);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000005','Vivienda',4);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000006','Servicios',5);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000007','Salud',6);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000008','Educación',7);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000009','Compras',8);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000010','Entretenimiento',9);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000011','Viajes',10);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000012','Impuestos',11);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000013','Transferencias',12);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000014','Retiros de efectivo',13);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000015','Ingresos',14);
+--> statement-breakpoint
 
 INSERT INTO categories(id,label,display_order) VALUES('10000000-0000-4000-8000-000000000016','Otros',15);
+--> statement-breakpoint
 
 INSERT INTO connection_institution_gate(institution_id,enabled) VALUES('bancolombia',0);
+--> statement-breakpoint
 
 INSERT INTO erasure_generation(id,generation) VALUES(1,'initial');
+--> statement-breakpoint
 
 INSERT INTO recurring_dispatch(id,last_user,next_discovery_at_ms) VALUES(1,'',0);
+--> statement-breakpoint
 
 INSERT INTO sql_assertions(scope,accepted) VALUES('statement_submission',1);
+--> statement-breakpoint
 
 INSERT INTO statement_review_capacity(id,pending_count) VALUES(1,0);
+--> statement-breakpoint
 
 INSERT INTO subscription_prices(id,amount,currency,billing_period,service_market,tax_treatment,terms_json,published_order) VALUES('22700000-0000-4000-8000-000000000001','9900','COP','weekly','CO','not-taxable','{"automaticRenewal":true,"renewalReminder":"none","cancellation":"future-renewals-only","paidAccessEnds":"paid-period-end","paymentMethods":["card","nequi","daviplata"]}',1);
+--> statement-breakpoint
 
 INSERT INTO subscription_prices(id,amount,currency,billing_period,service_market,tax_treatment,terms_json,published_order) VALUES('22700000-0000-4000-8000-000000000002','28900','COP','monthly','CO','not-taxable','{"automaticRenewal":true,"renewalReminder":"none","cancellation":"future-renewals-only","paidAccessEnds":"paid-period-end","paymentMethods":["card","nequi","daviplata"]}',2);
+--> statement-breakpoint
 
 INSERT INTO subscription_prices(id,amount,currency,billing_period,service_market,tax_treatment,terms_json,published_order) VALUES('22700000-0000-4000-8000-000000000003','289900','COP','yearly','CO','not-taxable','{"automaticRenewal":true,"renewalReminder":"none","cancellation":"future-renewals-only","paidAccessEnds":"paid-period-end","paymentMethods":["card","nequi","daviplata"]}',3);
+--> statement-breakpoint
 
 CREATE TRIGGER anonymized_email_sample_no_delete BEFORE DELETE ON anonymized_email_samples
 BEGIN SELECT RAISE(ABORT, 'sample_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER anonymized_email_sample_no_update BEFORE UPDATE ON anonymized_email_samples
 BEGIN SELECT RAISE(ABORT, 'sample_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER audit_entries_no_delete BEFORE DELETE ON audit_entries
 WHEN OLD.record_type IN ('session_call','credential_call','insight_call','publication')
@@ -2435,26 +2823,33 @@ WHEN OLD.record_type IN ('session_call','credential_call','insight_call','public
  END
  )
 BEGIN SELECT RAISE(ABORT,'audit_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER audit_entries_no_update BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER backup_recovery_credentials_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER backup_recovery_credentials_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER backup_recovery_credentials_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.recovery_code_digest IS NOT OLD.recovery_code_digest OR NEW.recovery_created_at_ms IS NOT OLD.recovery_created_at_ms OR NEW.recovery_consumed_at_ms IS NOT OLD.recovery_consumed_at_ms OR NEW.recovery_revision IS NOT OLD.recovery_revision) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.recovery_code_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='backup_recovery_credentials'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_access_adjustment_immutable BEFORE UPDATE OF adjusted_attempt_id,access_ends_at_ms ON refund_attempts
 WHEN OLD.adjusted_attempt_id IS NOT NULL AND (NEW.adjusted_attempt_id IS NOT OLD.adjusted_attempt_id OR NEW.access_ends_at_ms IS NOT OLD.access_ends_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'billing_access_adjustment_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_attempt_detached_source BEFORE INSERT ON billing_attempts
 WHEN EXISTS (SELECT 1 FROM subscription_cancellations WHERE payment_source_id=NEW.payment_source_id)
 BEGIN
  SELECT RAISE(ABORT, 'billing_source_detached');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_attempt_requires_claim BEFORE INSERT ON billing_attempts
 WHEN NEW.status <> 'pending' OR NEW.finalized_at_ms IS NOT NULL
@@ -2513,12 +2908,14 @@ WHEN NEW.status <> 'pending' OR NEW.finalized_at_ms IS NOT NULL
 BEGIN
  SELECT RAISE(ABORT, 'billing_attempt_invalid_claim');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_attempt_retired_source BEFORE INSERT ON billing_attempts
 WHEN EXISTS (SELECT 1 FROM card_payment_sources source WHERE source.id=NEW.payment_source_id AND source.retired_at_ms IS NOT NULL)
 BEGIN
  SELECT RAISE(ABORT, 'billing_source_retired');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_attempt_snapshot_immutable BEFORE UPDATE ON billing_attempts
 WHEN NEW.user_id <> OLD.user_id OR NEW.enrollment_id <> OLD.enrollment_id
@@ -2531,6 +2928,7 @@ WHEN NEW.user_id <> OLD.user_id OR NEW.enrollment_id <> OLD.enrollment_id
 BEGIN
  SELECT RAISE(ABORT, 'billing_attempt_snapshot_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_attempt_terminal_monotonic BEFORE UPDATE ON billing_attempts
 WHEN (OLD.status = 'succeeded' AND NEW.status <> 'succeeded')
@@ -2538,6 +2936,7 @@ WHEN (OLD.status = 'succeeded' AND NEW.status <> 'succeeded')
 BEGIN
  SELECT RAISE(ABORT, 'billing_attempt_terminal_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_attempt_user_collection_guard BEFORE INSERT ON billing_attempts
 WHEN EXISTS (SELECT 1 FROM billing_attempts AS prior
@@ -2551,12 +2950,14 @@ WHEN EXISTS (SELECT 1 FROM billing_attempts AS prior
 BEGIN
  SELECT RAISE(ABORT, 'billing_user_collection_unresolved');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_calendar_anchor_immutable BEFORE UPDATE ON billing_attempts
 WHEN NEW.calendar_anchor_ms IS NOT OLD.calendar_anchor_ms
 BEGIN
  SELECT RAISE(ABORT, 'billing_calendar_anchor_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_checkout_response_guard BEFORE UPDATE OF checkout_transaction_id ON billing_attempts
 WHEN OLD.checkout_transaction_id IS NULL AND NEW.checkout_transaction_id IS NOT NULL AND (NOT EXISTS (SELECT 1 FROM billing_attempts a
@@ -2568,33 +2969,40 @@ WHEN OLD.checkout_transaction_id IS NULL AND NEW.checkout_transaction_id IS NOT 
 BEGIN
  SELECT RAISE(ABORT, 'billing_checkout_response_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_checkout_response_no_update BEFORE UPDATE OF checkout_transaction_id ON billing_attempts
 WHEN OLD.checkout_transaction_id IS NOT NULL AND (NEW.checkout_transaction_id IS NOT OLD.checkout_transaction_id) AND NOT(NEW.checkout_transaction_id IS NULL AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='billing_checkout_responses' AND p.user_id=OLD.user_id AND q.user_id=p.user_id AND q.state='Erasing'))
 BEGIN
  SELECT RAISE(ABORT, 'billing_checkout_response_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_companions_initial BEFORE INSERT ON billing_attempts WHEN NEW.paid_starts_at_ms IS NOT NULL OR NEW.checkout_transaction_id IS NOT NULL OR NEW.followup_kind IS NOT NULL OR NEW.no_charge_confirmed_at_ms IS NOT NULL OR NEW.recovery_case_id IS NOT NULL OR NEW.collection_state IS NOT 'armed' OR NEW.collection_sent_at_ms IS NOT NULL OR NEW.collection_last_attempt_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'billing_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_evidence_approval_monotonic BEFORE UPDATE ON billing_provider_transactions
 WHEN OLD.status = 'APPROVED' AND NEW.status IS NOT 'APPROVED'
 BEGIN SELECT RAISE(ABORT, 'billing_evidence_approval_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_evidence_immutable_identity BEFORE UPDATE ON billing_provider_transactions
 WHEN NEW.transaction_id <> OLD.transaction_id OR NEW.attempt_id <> OLD.attempt_id
 BEGIN SELECT RAISE(ABORT, 'billing_evidence_identity_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_evidence_reject_foreign_id BEFORE INSERT ON billing_provider_transactions
 WHEN EXISTS (SELECT 1 FROM billing_provider_transactions AS e
   WHERE e.transaction_id = NEW.transaction_id AND e.attempt_id <> NEW.attempt_id)
 BEGIN SELECT RAISE(ABORT, 'billing_evidence_foreign_transaction'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_followup_cancellation_stop BEFORE UPDATE OF followup_kind,followup_due_at_ms ON billing_attempts
 WHEN OLD.followup_kind IS NULL AND NEW.followup_kind IS NOT NULL AND (EXISTS (SELECT 1 FROM subscription_cancellations c JOIN billing_attempts a ON a.user_id=c.user_id WHERE a.id=NEW.id))
 BEGIN
  SELECT RAISE(IGNORE);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_followup_refund_stop BEFORE UPDATE OF followup_kind,followup_due_at_ms ON billing_attempts
 WHEN OLD.followup_kind IS NULL AND NEW.followup_kind IS NOT NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) s JOIN billing_attempts a ON a.user_id=s.user_id
@@ -2602,17 +3010,20 @@ WHEN OLD.followup_kind IS NULL AND NEW.followup_kind IS NOT NULL AND (EXISTS (SE
 BEGIN
  SELECT RAISE(IGNORE);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_history_no_delete BEFORE DELETE ON billing_attempts
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id
  WHERE p.user_id=OLD.user_id AND p.store_id='billing_history' AND q.user_id=p.user_id AND q.state='Erasing')
 BEGIN SELECT RAISE(ABORT,'billing_history_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_no_charge_immutable_update BEFORE UPDATE OF no_charge_reference,no_charge_environment,no_charge_case_id,no_charge_operator_id,no_charge_confirmed_at_ms ON billing_attempts
 WHEN OLD.no_charge_confirmed_at_ms IS NOT NULL AND (NEW.no_charge_reference IS NOT OLD.no_charge_reference OR NEW.no_charge_environment IS NOT OLD.no_charge_environment OR NEW.no_charge_case_id IS NOT OLD.no_charge_case_id OR NEW.no_charge_operator_id IS NOT OLD.no_charge_operator_id OR NEW.no_charge_confirmed_at_ms IS NOT OLD.no_charge_confirmed_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'billing_no_charge_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_no_charge_requires_sent_arm BEFORE UPDATE OF no_charge_reference,no_charge_environment,no_charge_case_id,no_charge_operator_id,no_charge_confirmed_at_ms ON billing_attempts
 WHEN OLD.no_charge_confirmed_at_ms IS NULL AND NEW.no_charge_confirmed_at_ms IS NOT NULL AND (NOT EXISTS (SELECT 1 FROM billing_attempts AS a
@@ -2623,12 +3034,14 @@ WHEN OLD.no_charge_confirmed_at_ms IS NULL AND NEW.no_charge_confirmed_at_ms IS 
 BEGIN
  SELECT RAISE(ABORT, 'billing_no_charge_unverified_arm');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_paid_period_immutable_update BEFORE UPDATE OF paid_starts_at_ms,paid_ends_at_ms,paid_renewal_anchor_ms ON billing_attempts
 WHEN OLD.paid_starts_at_ms IS NOT NULL AND (NEW.paid_starts_at_ms IS NOT OLD.paid_starts_at_ms OR NEW.paid_ends_at_ms IS NOT OLD.paid_ends_at_ms OR NEW.paid_renewal_anchor_ms IS NOT OLD.paid_renewal_anchor_ms)
 BEGIN
  SELECT RAISE(ABORT, 'billing_paid_period_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_renewal_period_guard BEFORE UPDATE OF paid_starts_at_ms,paid_ends_at_ms,paid_renewal_anchor_ms ON billing_attempts
 WHEN OLD.paid_starts_at_ms IS NULL AND NEW.paid_starts_at_ms IS NOT NULL AND (EXISTS (SELECT 1 FROM billing_attempts a WHERE a.id = NEW.id
@@ -2638,6 +3051,7 @@ WHEN OLD.paid_starts_at_ms IS NULL AND NEW.paid_starts_at_ms IS NOT NULL AND (EX
 BEGIN
  SELECT RAISE(ABORT, 'billing_renewal_period_mismatch');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_renewal_period_once BEFORE UPDATE OF paid_starts_at_ms,paid_ends_at_ms,paid_renewal_anchor_ms ON billing_attempts
 WHEN OLD.paid_starts_at_ms IS NULL AND NEW.paid_starts_at_ms IS NOT NULL AND (EXISTS (SELECT 1 FROM billing_attempts a JOIN billing_attempts sibling
@@ -2647,6 +3061,7 @@ WHEN OLD.paid_starts_at_ms IS NULL AND NEW.paid_starts_at_ms IS NOT NULL AND (EX
 BEGIN
  SELECT RAISE(IGNORE);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_renewal_snapshot_immutable BEFORE UPDATE ON billing_attempts
 WHEN NEW.previous_paid_attempt_id IS NOT OLD.previous_paid_attempt_id
@@ -2656,6 +3071,7 @@ WHEN NEW.previous_paid_attempt_id IS NOT OLD.previous_paid_attempt_id
 BEGIN
  SELECT RAISE(ABORT, 'billing_renewal_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER billing_renewal_success_fence AFTER UPDATE OF paid_starts_at_ms,paid_ends_at_ms,paid_renewal_anchor_ms ON billing_attempts
 WHEN OLD.paid_starts_at_ms IS NULL AND NEW.paid_starts_at_ms IS NOT NULL
@@ -2665,6 +3081,7 @@ BEGIN
       ON success.previous_paid_attempt_id=sibling.previous_paid_attempt_id WHERE success.id=NEW.id
       AND success.previous_paid_attempt_id IS NOT NULL);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER browser_login_approval_set_ready AFTER UPDATE OF approval_portfolio_id,approval_message_id,approval_user_id ON browser_login_pairings
 WHEN OLD.approval_message_id IS NULL AND NEW.approval_message_id IS NOT NULL
@@ -2672,6 +3089,7 @@ BEGIN
  UPDATE browser_login_pairings SET state = 'ready', user_id = NEW.approval_user_id
   WHERE id = NEW.id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER browser_login_approval_valid BEFORE UPDATE OF approval_portfolio_id,approval_message_id,approval_user_id ON browser_login_pairings
 WHEN OLD.approval_message_id IS NULL AND NEW.approval_message_id IS NOT NULL AND (NOT EXISTS (
@@ -2683,27 +3101,36 @@ WHEN OLD.approval_message_id IS NULL AND NEW.approval_message_id IS NOT NULL AND
 BEGIN
  SELECT RAISE(ABORT, 'browser_login_approval_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER browser_login_pairings_companions_initial BEFORE INSERT ON browser_login_pairings WHEN NEW.approval_portfolio_id IS NOT NULL OR NEW.approval_message_id IS NOT NULL OR NEW.approval_user_id IS NOT NULL OR NEW.email_work_id IS NOT NULL OR NEW.email_user_id IS NOT NULL OR NEW.email_address IS NOT NULL OR NEW.email_credential_verified_at_ms IS NOT NULL OR NEW.email_state IS NOT NULL OR NEW.email_public_code IS NOT NULL OR NEW.email_proof_digest IS NOT NULL OR NEW.email_proof_expires_at_ms IS NOT NULL OR NEW.email_expires_at_ms IS NOT NULL OR NEW.email_generation IS NOT NULL OR NEW.email_wrong_attempts IS NOT NULL OR NEW.email_last_requested_at_ms IS NOT NULL OR NEW.email_dispatch_attempted_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'browser_login_pairings_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_alert_occurrences_field_fence_delete BEFORE DELETE ON insight_events WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.budget_delivery_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_alert_occurrences')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_alert_occurrences_field_fence_insert BEFORE INSERT ON insight_events WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.budget_delivery_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_alert_occurrences')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_alert_occurrences_field_fence_update BEFORE UPDATE ON insight_events WHEN (NEW.budget_delivery_group_id IS NOT OLD.budget_delivery_group_id OR NEW.budget_threshold IS NOT OLD.budget_threshold OR NEW.budget_crossing_json IS NOT OLD.budget_crossing_json) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.budget_delivery_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_alert_occurrences')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.budget_delivery_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_alert_occurrences'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_alert_occurrences_field_preserve_delete BEFORE DELETE ON insight_events WHEN OLD.budget_delivery_group_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'budget_alert_occurrences','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'delivery_group_id',OLD.budget_delivery_group_id,'threshold',OLD.budget_threshold,'insight_event_id',OLD.id,'crossing_json',OLD.budget_crossing_json) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_alert_occurrences_field_preserve_update BEFORE UPDATE ON insight_events WHEN OLD.budget_delivery_group_id IS NOT NULL AND NEW.budget_delivery_group_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'budget_alert_occurrences','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.user_id,'delivery_group_id',OLD.budget_delivery_group_id,'threshold',OLD.budget_threshold,'insight_event_id',OLD.id,'crossing_json',OLD.budget_crossing_json) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_capacity BEFORE INSERT ON budgets
 WHEN (SELECT COUNT(*) FROM budgets WHERE user_id = NEW.user_id) >= 128
 BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_capture_work AFTER INSERT ON transactions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, NEW.occurred_at)
   ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET version = version + 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_correction_work AFTER UPDATE ON transactions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
@@ -2711,73 +3138,90 @@ BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user
   ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET version = version + 1;
   INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',OLD.user_id, OLD.occurred_at)
   ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET version = version + 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_created_work AFTER INSERT ON budgets
 BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET version = version + 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_crossing_delivery_frozen BEFORE UPDATE OF delivery_group_id,consent_grant_id ON budget_threshold_alerts
 WHEN NEW.delivery_group_id IS NOT OLD.delivery_group_id OR NEW.consent_grant_id IS NOT OLD.consent_grant_id
 BEGIN SELECT RAISE(ABORT,'budget_delivery_eligibility_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_crossing_facts_immutable BEFORE UPDATE ON budget_threshold_alerts
 WHEN NEW.crossing_json IS NOT OLD.crossing_json
 BEGIN SELECT RAISE(ABORT, 'budget_crossing_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_first_creation_capture AFTER INSERT ON budgets
 BEGIN
  INSERT INTO budget_state(kind,user_id,budget_id,created_at_ms,first_last_evaluated_at_ms,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,NEW.id,CAST(unixepoch(NEW.created_at)*1000 AS INTEGER),0,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET budget_id=excluded.budget_id,created_at_ms=excluded.created_at_ms,first_last_evaluated_at_ms=0 WHERE budget_state.budget_id IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_group_currency_version_insert AFTER INSERT ON budget_group_currencies
 BEGIN
   INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET revision=coalesce(revision,0)+1;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_group_currency_version_update AFTER UPDATE ON budget_group_currencies
 BEGIN
   INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET revision=coalesce(revision,0)+1;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_link_work AFTER INSERT ON transaction_reconciliation_decisions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, occurred_at FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
   ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET version = version + 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_occurrence_frozen BEFORE UPDATE ON insight_events WHEN (NEW.budget_delivery_group_id IS NOT OLD.budget_delivery_group_id OR NEW.budget_threshold IS NOT OLD.budget_threshold OR NEW.budget_crossing_json IS NOT OLD.budget_crossing_json) AND NOT((NEW.budget_delivery_group_id IS NULL AND NEW.budget_threshold IS NULL AND NEW.budget_crossing_json IS NULL) AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='budget_alert_occurrences' AND p.user_id=OLD.user_id AND q.user_id=p.user_id AND q.state='Erasing')) BEGIN SELECT RAISE(ABORT,'budget_occurrence_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_occurrence_no_delete BEFORE DELETE ON insight_events WHEN OLD.budget_delivery_group_id IS NOT NULL AND NOT(EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='budget_alert_occurrences' AND p.user_id=OLD.user_id AND q.user_id=p.user_id AND q.state='Erasing')) BEGIN SELECT RAISE(ABORT,'budget_occurrence_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_removed_version AFTER DELETE ON budgets
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='budgets' AND (OLD.user_id=q.user_id))
 BEGIN INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',OLD.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET revision=coalesce(revision,0)+1;
   DELETE FROM budget_state WHERE kind='work' AND user_id = OLD.user_id
     AND NOT EXISTS (SELECT 1 FROM budgets WHERE user_id = OLD.user_id); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_revised_work AFTER UPDATE ON budgets
 BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) VALUES('work',NEW.user_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET version = version + 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_state_kind_immutable BEFORE UPDATE OF kind ON budget_state WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'budget_state_kind_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_unlink_work AFTER UPDATE ON transaction_reconciliation_decisions
 WHEN EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_state(kind,user_id, occurred_at) SELECT 'work', NEW.user_id, occurred_at FROM transactions
   WHERE user_id = NEW.user_id AND id IN (NEW.first_transaction_id, NEW.second_transaction_id)
   ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET version = version + 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_work_version_insert AFTER INSERT ON budget_state
 WHEN NEW.kind='work'
 BEGIN INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET revision=coalesce(revision,0)+1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER budget_work_version_update AFTER UPDATE ON budget_state
 WHEN NEW.kind='work'
 BEGIN INSERT INTO budget_state(kind,user_id,revision,version,last_evaluated_at_ms) VALUES('user',NEW.user_id,1,NULL,NULL) ON CONFLICT(kind,user_id,occurred_at) DO UPDATE SET revision=coalesce(revision,0)+1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER canonical_request_concurrency BEFORE INSERT ON canonical_request_leases
 WHEN (SELECT count(*) FROM canonical_request_leases WHERE user_id = NEW.user_id AND expires_at_ms > NEW.expires_at_ms - 90000) >= 2
 BEGIN SELECT RAISE(ABORT,'canonical_request_concurrency'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER card_enrollment_evidence_immutable BEFORE UPDATE ON card_enrollments
 WHEN NEW.user_id <> OLD.user_id OR NEW.price_id <> OLD.price_id
@@ -2787,11 +3231,13 @@ WHEN NEW.user_id <> OLD.user_id OR NEW.price_id <> OLD.price_id
   OR NEW.prepared_at_ms <> OLD.prepared_at_ms OR NEW.expires_at_ms <> OLD.expires_at_ms
   OR (OLD.payment_request_id IS NOT NULL AND NEW.payment_request_id IS NOT OLD.payment_request_id)
 BEGIN SELECT RAISE(ABORT, 'card_enrollment_evidence_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER card_enrollment_preparation_limit BEFORE INSERT ON card_enrollments
 WHEN (SELECT count(*) FROM card_enrollments WHERE user_id = NEW.user_id
   AND prepared_at_ms > NEW.prepared_at_ms - 3600000) >= 12
 BEGIN SELECT RAISE(IGNORE); END;
+--> statement-breakpoint
 
 CREATE TRIGGER card_source_immutable BEFORE UPDATE ON card_payment_sources
 WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.enrollment_id<>OLD.enrollment_id
@@ -2809,6 +3255,7 @@ WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.enrollment_id<>OLD.enroll
 BEGIN
  SELECT RAISE(ABORT, 'card_source_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER card_source_requires_claim BEFORE INSERT ON card_payment_sources
 WHEN NOT EXISTS (
@@ -2818,10 +3265,12 @@ WHEN NOT EXISTS (
     AND e.wompi_candidate_source_id = NEW.wompi_source_id
 )
 BEGIN SELECT RAISE(ABORT, 'card_source_invalid_claim'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER card_source_retired_insert BEFORE INSERT ON card_payment_sources
 WHEN NEW.retired_at_ms IS NOT NULL
 BEGIN SELECT RAISE(ABORT, 'card_source_invalid_retirement'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER commercial_allowance_capacity BEFORE INSERT ON commercial_allowance_consumptions
 WHEN NEW.units = 1 AND NOT EXISTS (
@@ -2830,6 +3279,7 @@ WHEN NEW.units = 1 AND NOT EXISTS (
  WHERE user_id = NEW.user_id AND allowance = NEW.allowance AND period_start_ms = NEW.period_start_ms) >=
  CASE NEW.allowance WHEN 'forwarded_email' THEN 30 WHEN 'media_submission' THEN 2 WHEN 'hosted_history_turn' THEN 2 WHEN 'canonical_call' THEN 50 END
 BEGIN SELECT RAISE(ABORT, 'commercial_quota_exhausted'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER connection_attempt_transition BEFORE UPDATE ON connection_attempts
 WHEN OLD.status != 'pending' OR NEW.status = 'pending'
@@ -2837,28 +3287,36 @@ WHEN OLD.status != 'pending' OR NEW.status = 'pending'
   OR NEW.institution_id != OLD.institution_id OR NEW.public_reference != OLD.public_reference
   OR NEW.created_at_ms != OLD.created_at_ms OR NEW.expires_at_ms != OLD.expires_at_ms
 BEGIN SELECT RAISE(ABORT, 'connection_attempt_transition'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER connection_identity_immutable BEFORE UPDATE ON connections
 WHEN NEW.id != OLD.id OR NEW.user_id != OLD.user_id OR NEW.institution_id != OLD.institution_id OR NEW.created_at_ms != OLD.created_at_ms
 BEGIN SELECT RAISE(ABORT, 'connection_identity_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER connection_preparation_binding BEFORE UPDATE ON connection_attempts
 WHEN NEW.prepared_session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM web_sessions s WHERE s.id=NEW.prepared_session_id AND s.user_id=NEW.user_id AND NEW.status='consumed' AND NEW.prepared_at_ms=NEW.consumed_at_ms)
 BEGIN SELECT RAISE(ABORT,'connection_execution_binding'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER connection_preparation_immutable BEFORE UPDATE ON connection_attempts
 WHEN OLD.prepared_session_id IS NOT NULL AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.prepared_session_id IS NOT OLD.prepared_session_id OR NEW.prepared_at_ms IS NOT OLD.prepared_at_ms)
 BEGIN SELECT RAISE(ABORT,'connection_execution_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER connection_preparation_initial BEFORE INSERT ON connection_attempts
 WHEN NEW.prepared_session_id IS NOT NULL OR NEW.prepared_at_ms IS NOT NULL
 BEGIN SELECT RAISE(ABORT,'connection_execution_binding'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER consent_history_no_delete BEFORE DELETE ON consent_history WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.user_id=OLD.user_id AND q.user_id=OLD.user_id AND q.state='Erasing' AND p.store_id=(CASE OLD.record_type WHEN 'processing_grant' THEN 'onboarding_consent_records' WHEN 'processing_withdrawal' THEN 'processing_consent_withdrawal_records' WHEN 'processing_renewal' THEN 'processing_consent_renewals' WHEN 'weekly_grant' THEN 'weekly_consent_records' WHEN 'weekly_rejection' THEN 'weekly_consent_rejections' WHEN 'weekly_revocation' THEN 'weekly_consent_revocation_records' WHEN 'proactivity_grant' THEN 'proactivity_consent_records' WHEN 'pat_grant' THEN 'pat_grant_consents' WHEN 'pat_revocation' THEN 'pat_revocation_consents' WHEN 'oauth_grant' THEN 'oauth_grant_consents' WHEN 'oauth_replay_revocation' THEN 'oauth_revocation_consents' WHEN 'oauth_user_revocation' THEN 'oauth_user_revocation_consents' END)) BEGIN SELECT RAISE(ABORT,'consent_history_retention_required'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER consent_history_no_update BEFORE UPDATE ON consent_history BEGIN SELECT RAISE(ABORT,'consent_history_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER consent_offer_kind_immutable BEFORE UPDATE OF kind ON consent_offers WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'consent_offer_kind_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER consent_user_revocation_requires_grant BEFORE INSERT ON consent_history
 WHEN NEW.record_type='processing_withdrawal' AND NOT EXISTS (
@@ -2869,6 +3327,7 @@ WHEN NEW.record_type='processing_withdrawal' AND NOT EXISTS (
     AND w.idle_expires_at_ms > NEW.occurred_at_ms AND w.hard_expires_at_ms > NEW.occurred_at_ms
 )
 BEGIN SELECT RAISE(ABORT, 'consent_revocation_requires_user_session'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_attested_source AFTER INSERT ON source_attestations
 BEGIN
@@ -2894,6 +3353,7 @@ BEGIN
           AND decision.second_transaction_id = member.second_transaction_id
         WHERE member.user_id = NEW.user_id AND member.transaction_id = NEW.transaction_id));
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_capture AFTER INSERT ON transactions
 BEGIN
@@ -2904,6 +3364,7 @@ BEGIN
     occurred_at, created_at, revision
     FROM dashboard_effective_source WHERE user_id = NEW.user_id AND id = NEW.id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_corrected_source AFTER INSERT ON transaction_corrections
 BEGIN
@@ -2929,6 +3390,7 @@ BEGIN
           AND decision.second_transaction_id = member.second_transaction_id
         WHERE member.user_id = NEW.user_id AND member.transaction_id = NEW.transaction_id));
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_corrected_transaction AFTER UPDATE ON transactions
 BEGIN
@@ -2954,20 +3416,24 @@ BEGIN
           AND decision.second_transaction_id = member.second_transaction_id
         WHERE member.user_id = NEW.user_id AND member.transaction_id = NEW.id));
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_decision_insert AFTER INSERT ON transaction_reconciliation_decisions
 BEGIN UPDATE dashboard_projection_state SET readiness = 'linking'
   WHERE user_id = NEW.user_id AND readiness = 'ready'; END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_decision_update AFTER UPDATE ON transaction_reconciliation_decisions
 BEGIN UPDATE dashboard_projection_state SET readiness = 'linking'
   WHERE user_id = NEW.user_id AND readiness = 'ready'; END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_deleted_transaction AFTER DELETE ON transactions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transactions' AND (OLD.user_id=q.user_id))
 BEGIN
   DELETE FROM dashboard_projection_leaf WHERE user_id = OLD.user_id AND id = OLD.id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_leaf_delete AFTER DELETE ON dashboard_projection_leaf
 WHEN ((SELECT readiness FROM dashboard_projection_state WHERE user_id = OLD.user_id)
@@ -3041,6 +3507,7 @@ BEGIN
     AND bucket = CAST(strftime('%s', OLD.occurred_at) AS INTEGER) / size_seconds
     AND digit_sum = 0;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_leaf_insert AFTER INSERT ON dashboard_projection_leaf
 WHEN (SELECT readiness FROM dashboard_projection_state WHERE user_id = NEW.user_id)
@@ -3080,6 +3547,7 @@ BEGIN
   ON CONFLICT (user_id, size_seconds, bucket, currency, direction, category_id, position)
   DO UPDATE SET digit_sum = digit_sum + excluded.digit_sum;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_link_member AFTER INSERT ON transaction_reconciliation_members
 BEGIN
@@ -3098,10 +3566,12 @@ BEGIN
       WHERE user_id = NEW.user_id AND first_transaction_id = NEW.first_transaction_id
         AND second_transaction_id = NEW.second_transaction_id) = 2;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_new_user AFTER INSERT ON users
 BEGIN INSERT INTO dashboard_projection_state (user_id, version, readiness)
   VALUES (NEW.id, 1, 'ready'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER dashboard_projection_unlink_member AFTER DELETE ON transaction_reconciliation_members
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transaction_reconciliation_members' AND (OLD.user_id=q.user_id))
@@ -3121,20 +3591,26 @@ BEGIN
       WHERE user_id = OLD.user_id AND first_transaction_id = OLD.first_transaction_id
         AND second_transaction_id = OLD.second_transaction_id);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER deleted_transaction_no_link BEFORE INSERT ON transaction_reconciliation_members
 WHEN EXISTS (SELECT 1 FROM transactions WHERE user_id = NEW.user_id AND id = NEW.transaction_id AND deleted_at_ms IS NOT NULL)
 BEGIN SELECT RAISE(ABORT, 'transaction_deleted'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER deleted_transaction_no_update BEFORE UPDATE ON transactions
 WHEN OLD.deleted_at_ms IS NOT NULL
 BEGIN SELECT RAISE(ABORT, 'transaction_deleted'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER email_forwarding_addresses_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.forwarding_address_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_forwarding_addresses')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER email_forwarding_addresses_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.forwarding_address_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_forwarding_addresses')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER email_forwarding_addresses_field_fence_update BEFORE UPDATE ON users WHEN (NEW.forwarding_address_id IS NOT OLD.forwarding_address_id OR NEW.forwarding_local_part IS NOT OLD.forwarding_local_part OR NEW.forwarding_issued_at_ms IS NOT OLD.forwarding_issued_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.forwarding_address_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_forwarding_addresses')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.forwarding_address_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_forwarding_addresses'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER email_forwarding_addresses_field_preserve_delete BEFORE DELETE ON users
 WHEN OLD.forwarding_address_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
@@ -3147,6 +3623,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER email_forwarding_addresses_field_preserve_update BEFORE UPDATE ON users
 WHEN OLD.forwarding_address_id IS NOT NULL AND NEW.forwarding_address_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
@@ -3159,6 +3636,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_audit_entries_delete BEFORE DELETE ON audit_entries
 WHEN EXISTS (
@@ -3184,6 +3662,7 @@ WHEN EXISTS (
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_audit_entries_insert BEFORE INSERT ON audit_entries
 WHEN EXISTS (
@@ -3209,6 +3688,7 @@ WHEN EXISTS (
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_audit_entries_update BEFORE UPDATE ON audit_entries
 WHEN EXISTS (
@@ -3234,1398 +3714,1717 @@ WHEN EXISTS (
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_audit_retention_permits_delete BEFORE DELETE ON audit_retention_permits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_audit_retention_permits_insert BEFORE INSERT ON audit_retention_permits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_audit_retention_permits_update BEFORE UPDATE ON audit_retention_permits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='audit_retention_permits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_attempts_delete BEFORE DELETE ON billing_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_history'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_attempts_insert BEFORE INSERT ON billing_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_history'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_attempts_update BEFORE UPDATE ON billing_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_history')) AND NOT (EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='billing_checkout_responses' AND p.user_id=OLD.user_id AND q.user_id=p.user_id AND q.state='Erasing') AND NEW.checkout_transaction_id IS NULL AND NEW.id IS OLD.id AND NEW.user_id IS OLD.user_id AND NEW.enrollment_id IS OLD.enrollment_id AND NEW.payment_request_id IS OLD.payment_request_id AND NEW.payment_source_id IS OLD.payment_source_id AND NEW.price_id IS OLD.price_id AND NEW.amount IS OLD.amount AND NEW.currency IS OLD.currency AND NEW.billing_period IS OLD.billing_period AND NEW.service_market IS OLD.service_market AND NEW.tax_treatment IS OLD.tax_treatment AND NEW.time_zone IS OLD.time_zone AND NEW.wompi_environment IS OLD.wompi_environment AND NEW.wompi_reference IS OLD.wompi_reference AND NEW.status IS OLD.status AND NEW.created_at_ms IS OLD.created_at_ms AND NEW.finalized_at_ms IS OLD.finalized_at_ms AND NEW.previous_paid_attempt_id IS OLD.previous_paid_attempt_id AND NEW.period_starts_at_ms IS OLD.period_starts_at_ms AND NEW.period_ends_at_ms IS OLD.period_ends_at_ms AND NEW.attempt_number IS OLD.attempt_number AND NEW.calendar_anchor_ms IS OLD.calendar_anchor_ms AND NEW.renewal_attempt_number IS OLD.renewal_attempt_number AND NEW.paid_starts_at_ms IS OLD.paid_starts_at_ms AND NEW.paid_ends_at_ms IS OLD.paid_ends_at_ms AND NEW.paid_renewal_anchor_ms IS OLD.paid_renewal_anchor_ms AND NEW.collection_state IS OLD.collection_state AND NEW.collection_sent_at_ms IS OLD.collection_sent_at_ms AND NEW.collection_last_attempt_at_ms IS OLD.collection_last_attempt_at_ms AND NEW.followup_kind IS OLD.followup_kind AND NEW.followup_due_at_ms IS OLD.followup_due_at_ms AND NEW.no_charge_reference IS OLD.no_charge_reference AND NEW.no_charge_environment IS OLD.no_charge_environment AND NEW.no_charge_case_id IS OLD.no_charge_case_id AND NEW.no_charge_operator_id IS OLD.no_charge_operator_id AND NEW.no_charge_confirmed_at_ms IS OLD.no_charge_confirmed_at_ms AND NEW.recovery_case_id IS OLD.recovery_case_id AND NEW.recovery_reviewed_at_ms IS OLD.recovery_reviewed_at_ms)
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_event_candidates_delete BEFORE DELETE ON billing_event_candidates
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.transaction_id=OLD.transaction_id AND a.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_event_candidates'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_event_candidates_insert BEFORE INSERT ON billing_event_candidates
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.transaction_id=NEW.transaction_id AND a.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_event_candidates'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_event_candidates_update BEFORE UPDATE ON billing_event_candidates
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.transaction_id=NEW.transaction_id AND a.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.transaction_id=OLD.transaction_id AND a.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_event_candidates'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_price_notices_delete BEFORE DELETE ON billing_price_notices
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_price_notices_insert BEFORE INSERT ON billing_price_notices
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_price_notices_update BEFORE UPDATE ON billing_price_notices
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_provider_transactions_delete BEFORE DELETE ON billing_provider_transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_provider_transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_provider_transactions_insert BEFORE INSERT ON billing_provider_transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=NEW.attempt_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_provider_transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_billing_provider_transactions_update BEFORE UPDATE ON billing_provider_transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=NEW.attempt_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_provider_transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_browser_login_pairings_delete BEFORE DELETE ON browser_login_pairings
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_login_pairings'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_browser_login_pairings_insert BEFORE INSERT ON browser_login_pairings
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_login_pairings'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_browser_login_pairings_update BEFORE UPDATE ON browser_login_pairings
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_login_pairings')) AND NOT(NEW.id IS OLD.id AND NEW.public_code IS OLD.public_code AND NEW.verifier_digest IS OLD.verifier_digest AND NEW.user_id IS OLD.user_id AND NEW.state IS OLD.state AND NEW.created_at_ms IS OLD.created_at_ms AND NEW.expires_at_ms IS OLD.expires_at_ms AND NEW.wrong_attempts IS OLD.wrong_attempts AND NEW.last_poll_at_ms IS OLD.last_poll_at_ms AND NEW.minimum_poll_interval_seconds IS OLD.minimum_poll_interval_seconds AND NEW.approval_portfolio_id IS OLD.approval_portfolio_id AND NEW.approval_message_id IS OLD.approval_message_id AND NEW.approval_user_id IS OLD.approval_user_id)
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_delete BEFORE DELETE ON browser_pairing_email_user_limits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_insert BEFORE INSERT ON browser_pairing_email_user_limits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_browser_pairing_email_user_limits_update BEFORE UPDATE ON browser_pairing_email_user_limits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_user_limits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_crossing_publications_delete BEFORE DELETE ON budget_crossing_publications
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_crossing_publications_insert BEFORE INSERT ON budget_crossing_publications
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_crossing_publications_update BEFORE UPDATE ON budget_crossing_publications
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_crossing_publications'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_group_currencies_delete BEFORE DELETE ON budget_group_currencies
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_group_currencies'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_group_currencies_insert BEFORE INSERT ON budget_group_currencies
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_group_currencies'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_group_currencies_update BEFORE UPDATE ON budget_group_currencies
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_group_currencies'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_month_caps_delete BEFORE DELETE ON budget_month_caps
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_month_caps'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_month_caps_insert BEFORE INSERT ON budget_month_caps
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_month_caps'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_month_caps_update BEFORE UPDATE ON budget_month_caps
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_month_caps'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_month_latches_delete BEFORE DELETE ON budget_month_latches
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_month_latches'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_month_latches_insert BEFORE INSERT ON budget_month_latches
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_month_latches'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_month_latches_update BEFORE UPDATE ON budget_month_latches
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_month_latches'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_plan_months_delete BEFORE DELETE ON budget_plan_months
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_plan_months'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_plan_months_insert BEFORE INSERT ON budget_plan_months
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_plan_months'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_plan_months_update BEFORE UPDATE ON budget_plan_months
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_plan_months'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_reconciliation_work_delete BEFORE DELETE ON budget_state
 WHEN OLD.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_reconciliation_work_insert BEFORE INSERT ON budget_state
 WHEN NEW.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_reconciliation_work_update BEFORE UPDATE ON budget_state
 WHEN NEW.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_reconciliation_work'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_threshold_alerts_delete BEFORE DELETE ON budget_threshold_alerts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_threshold_alerts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_threshold_alerts_insert BEFORE INSERT ON budget_threshold_alerts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_threshold_alerts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_threshold_alerts_update BEFORE UPDATE ON budget_threshold_alerts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_threshold_alerts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_user_versions_delete BEFORE DELETE ON budget_state
 WHEN OLD.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_user_versions_insert BEFORE INSERT ON budget_state
 WHEN NEW.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budget_user_versions_update BEFORE UPDATE ON budget_state
 WHEN NEW.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budget_user_state'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budgets_delete BEFORE DELETE ON budgets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budgets'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budgets_insert BEFORE INSERT ON budgets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budgets'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_budgets_update BEFORE UPDATE ON budgets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='budgets'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_buckets_delete BEFORE DELETE ON canonical_request_buckets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.subject='user:'||q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_buckets'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_buckets_insert BEFORE INSERT ON canonical_request_buckets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.subject='user:'||q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_buckets'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_buckets_update BEFORE UPDATE ON canonical_request_buckets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.subject='user:'||q.user_id) OR (OLD.subject='user:'||q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_buckets'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_leases_delete BEFORE DELETE ON canonical_request_leases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_leases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_leases_insert BEFORE INSERT ON canonical_request_leases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_leases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_leases_update BEFORE UPDATE ON canonical_request_leases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_leases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_replays_delete BEFORE DELETE ON canonical_request_replays
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_replays'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_replays_insert BEFORE INSERT ON canonical_request_replays
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_replays'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_canonical_request_replays_update BEFORE UPDATE ON canonical_request_replays
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='canonical_request_replays'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_card_enrollments_delete BEFORE DELETE ON card_enrollments
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_enrollments'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_card_enrollments_insert BEFORE INSERT ON card_enrollments
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_enrollments'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_card_enrollments_update BEFORE UPDATE ON card_enrollments
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_enrollments'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_card_payment_sources_delete BEFORE DELETE ON card_payment_sources
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_card_payment_sources_insert BEFORE INSERT ON card_payment_sources
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_card_payment_sources_update BEFORE UPDATE ON card_payment_sources
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='card_payment_sources'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_commercial_allowance_consumptions_delete BEFORE DELETE ON commercial_allowance_consumptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='commercial_allowance_consumptions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_commercial_allowance_consumptions_insert BEFORE INSERT ON commercial_allowance_consumptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='commercial_allowance_consumptions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_commercial_allowance_consumptions_update BEFORE UPDATE ON commercial_allowance_consumptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='commercial_allowance_consumptions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connection_attempts_delete BEFORE DELETE ON connection_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connection_attempts_insert BEFORE INSERT ON connection_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connection_attempts_update BEFORE UPDATE ON connection_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connection_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connections_delete BEFORE DELETE ON connections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connections'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connections_insert BEFORE INSERT ON connections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connections'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_connections_update BEFORE UPDATE ON connections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='connections'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_consent_history_delete BEFORE DELETE ON consent_history WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.request_id=q.id AND p.user_id=q.user_id AND p.store_id=(CASE OLD.record_type WHEN 'processing_grant' THEN 'onboarding_consent_records' WHEN 'processing_withdrawal' THEN 'processing_consent_withdrawal_records' WHEN 'processing_renewal' THEN 'processing_consent_renewals' WHEN 'weekly_grant' THEN 'weekly_consent_records' WHEN 'weekly_rejection' THEN 'weekly_consent_rejections' WHEN 'weekly_revocation' THEN 'weekly_consent_revocation_records' WHEN 'proactivity_grant' THEN 'proactivity_consent_records' WHEN 'pat_grant' THEN 'pat_grant_consents' WHEN 'pat_revocation' THEN 'pat_revocation_consents' WHEN 'oauth_grant' THEN 'oauth_grant_consents' WHEN 'oauth_replay_revocation' THEN 'oauth_revocation_consents' WHEN 'oauth_user_revocation' THEN 'oauth_user_revocation_consents' END))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_consent_history_insert BEFORE INSERT ON consent_history WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE (q.state NOT IN('AwaitingReview','Draining') OR (NEW.record_type='processing_renewal' AND q.state='Draining')) AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.request_id=q.id AND p.user_id=q.user_id AND p.store_id=(CASE NEW.record_type WHEN 'processing_grant' THEN 'onboarding_consent_records' WHEN 'processing_withdrawal' THEN 'processing_consent_withdrawal_records' WHEN 'processing_renewal' THEN 'processing_consent_renewals' WHEN 'weekly_grant' THEN 'weekly_consent_records' WHEN 'weekly_rejection' THEN 'weekly_consent_rejections' WHEN 'weekly_revocation' THEN 'weekly_consent_revocation_records' WHEN 'proactivity_grant' THEN 'proactivity_consent_records' WHEN 'pat_grant' THEN 'pat_grant_consents' WHEN 'pat_revocation' THEN 'pat_revocation_consents' WHEN 'oauth_grant' THEN 'oauth_grant_consents' WHEN 'oauth_replay_revocation' THEN 'oauth_revocation_consents' WHEN 'oauth_user_revocation' THEN 'oauth_user_revocation_consents' END))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_consent_history_update BEFORE UPDATE ON consent_history WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id OR OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.request_id=q.id AND p.user_id=q.user_id AND p.store_id=(CASE NEW.record_type WHEN 'processing_grant' THEN 'onboarding_consent_records' WHEN 'processing_withdrawal' THEN 'processing_consent_withdrawal_records' WHEN 'processing_renewal' THEN 'processing_consent_renewals' WHEN 'weekly_grant' THEN 'weekly_consent_records' WHEN 'weekly_rejection' THEN 'weekly_consent_rejections' WHEN 'weekly_revocation' THEN 'weekly_consent_revocation_records' WHEN 'proactivity_grant' THEN 'proactivity_consent_records' WHEN 'pat_grant' THEN 'pat_grant_consents' WHEN 'pat_revocation' THEN 'pat_revocation_consents' WHEN 'oauth_grant' THEN 'oauth_grant_consents' WHEN 'oauth_replay_revocation' THEN 'oauth_revocation_consents' WHEN 'oauth_user_revocation' THEN 'oauth_user_revocation_consents' END))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_documents_delete BEFORE DELETE ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((OLD.user_id=q.user_id AND OLD.kind='dashboard')) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_documents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_documents_insert BEFORE INSERT ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id AND NEW.kind='dashboard')) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_documents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_documents_update BEFORE UPDATE ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (((NEW.user_id=q.user_id AND NEW.kind='dashboard')) OR ((OLD.user_id=q.user_id AND OLD.kind='dashboard'))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_documents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_bucket_delete BEFORE DELETE ON dashboard_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_bucket'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_bucket_insert BEFORE INSERT ON dashboard_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_bucket'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_bucket_update BEFORE UPDATE ON dashboard_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_bucket'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_digit_delete BEFORE DELETE ON dashboard_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_digit'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_digit_insert BEFORE INSERT ON dashboard_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_digit'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_digit_update BEFORE UPDATE ON dashboard_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_digit'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_leaf_delete BEFORE DELETE ON dashboard_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_leaf'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_leaf_insert BEFORE INSERT ON dashboard_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_leaf'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_leaf_update BEFORE UPDATE ON dashboard_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_leaf'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_state_delete BEFORE DELETE ON dashboard_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_state_insert BEFORE INSERT ON dashboard_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_dashboard_projection_state_update BEFORE UPDATE ON dashboard_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='dashboard_projection_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacement_limits_delete BEFORE DELETE ON email_replacement_limits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacement_limits_insert BEFORE INSERT ON email_replacement_limits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacement_limits_update BEFORE UPDATE ON email_replacement_limits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacement_limits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacements_delete BEFORE DELETE ON email_replacements
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacements'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacements_insert BEFORE INSERT ON email_replacements
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacements'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_email_replacements_update BEFORE UPDATE ON email_replacements
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='email_replacements'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_forwarded_email_receipts_delete BEFORE DELETE ON forwarded_email_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='forwarded_email_receipts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_forwarded_email_receipts_insert BEFORE INSERT ON forwarded_email_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='forwarded_email_receipts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_forwarded_email_receipts_update BEFORE UPDATE ON forwarded_email_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='forwarded_email_receipts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_agent_sessions_delete BEFORE DELETE ON hosted_agent_sessions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_agent_sessions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_agent_sessions_insert BEFORE INSERT ON hosted_agent_sessions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_agent_sessions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_agent_sessions_update BEFORE UPDATE ON hosted_agent_sessions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_agent_sessions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_compaction_attempts_delete BEFORE DELETE ON hosted_compaction_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_compaction_attempts_insert BEFORE INSERT ON hosted_compaction_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_compaction_attempts_update BEFORE UPDATE ON hosted_compaction_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_compaction_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_confirmations_delete BEFORE DELETE ON hosted_confirmations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_confirmations'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_confirmations_insert BEFORE INSERT ON hosted_confirmations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_confirmations'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_confirmations_update BEFORE UPDATE ON hosted_confirmations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_confirmations'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_mutation_commits_delete BEFORE DELETE ON hosted_mutation_commits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_mutation_commits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_mutation_commits_insert BEFORE INSERT ON hosted_mutation_commits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_mutation_commits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_mutation_commits_update BEFORE UPDATE ON hosted_mutation_commits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_mutation_commits'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_turns_delete BEFORE DELETE ON hosted_turns
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_turns'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_turns_insert BEFORE INSERT ON hosted_turns
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_turns'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_turns_update BEFORE UPDATE ON hosted_turns
 WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.hosted_session_id IS NOT OLD.hosted_session_id OR NEW.started_at_ms IS NOT OLD.started_at_ms OR NEW.terminal_at_ms IS NOT OLD.terminal_at_ms OR NEW.status IS NOT OLD.status OR NEW.failure_reason IS NOT OLD.failure_reason OR NEW.proposal_user_id IS NOT OLD.proposal_user_id OR NEW.proposal_receipt_digest IS NOT OLD.proposal_receipt_digest OR NEW.proposed_at_ms IS NOT OLD.proposed_at_ms OR NEW.proposal_text IS NOT OLD.proposal_text OR NEW.retention_user_id IS NOT OLD.retention_user_id OR NEW.retention_terminal_at_ms IS NOT OLD.retention_terminal_at_ms) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_turns'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_voice_refusals_delete BEFORE DELETE ON hosted_voice_refusals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_voice_refusals'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_voice_refusals_insert BEFORE INSERT ON hosted_voice_refusals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_voice_refusals'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_voice_refusals_update BEFORE UPDATE ON hosted_voice_refusals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_voice_refusals'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_delivery_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='hosted' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_delivery'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_delivery_events_delete BEFORE DELETE ON hosted_whatsapp_delivery_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=OLD.correlation_token AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_delivery_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_delivery_events_insert BEFORE INSERT ON hosted_whatsapp_delivery_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=NEW.correlation_token AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_delivery_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_delivery_events_update BEFORE UPDATE ON hosted_whatsapp_delivery_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=NEW.correlation_token AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=OLD.correlation_token AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_delivery_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_delivery_insert BEFORE INSERT ON whatsapp_deliveries
 WHEN NEW.kind='hosted' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_delivery'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_delivery_update BEFORE UPDATE ON whatsapp_deliveries
 WHEN NEW.kind='hosted' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_delivery'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_delete BEFORE DELETE ON hosted_whatsapp_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_insert BEFORE INSERT ON hosted_whatsapp_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_hosted_whatsapp_windows_update BEFORE UPDATE ON hosted_whatsapp_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_windows'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_ingestion_review_state_delete BEFORE DELETE ON ingestion_review_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id)
 AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='ingestion_review_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_ingestion_review_state_insert BEFORE INSERT ON ingestion_review_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id)
 AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='ingestion_review_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_ingestion_review_state_update BEFORE UPDATE ON ingestion_review_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id OR OLD.user_id=q.user_id)
 AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='ingestion_review_state'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_events_delete BEFORE DELETE ON insight_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_events_insert BEFORE INSERT ON insight_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_events_update BEFORE UPDATE ON insight_events
 WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.kind IS NOT OLD.kind OR NEW.schedule_id IS NOT OLD.schedule_id OR NEW.schedule_version IS NOT OLD.schedule_version OR NEW.service_market IS NOT OLD.service_market OR NEW.locale IS NOT OLD.locale OR NEW.time_zone IS NOT OLD.time_zone OR NEW.scheduled_at IS NOT OLD.scheduled_at OR NEW.money_groups_json IS NOT OLD.money_groups_json OR NEW.lifecycle_state IS NOT OLD.lifecycle_state) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_reports_delete BEFORE DELETE ON insight_reports
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_reports'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_reports_insert BEFORE INSERT ON insight_reports
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_reports'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_reports_update BEFORE UPDATE ON insight_reports
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id OR OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_reports'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_whatsapp_claims_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='insight' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_whatsapp_claims'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_whatsapp_claims_insert BEFORE INSERT ON whatsapp_deliveries
 WHEN NEW.kind='insight' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_whatsapp_claims'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_insight_whatsapp_claims_update BEFORE UPDATE ON whatsapp_deliveries
 WHEN NEW.kind='insight' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_whatsapp_claims'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_keyword_rules_delete BEFORE DELETE ON keyword_rules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='keyword_rules'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_keyword_rules_insert BEFORE INSERT ON keyword_rules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='keyword_rules'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_keyword_rules_update BEFORE UPDATE ON keyword_rules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='keyword_rules'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_media_submissions_delete BEFORE DELETE ON media_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='media_submissions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_media_submissions_insert BEFORE INSERT ON media_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='media_submissions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_media_submissions_update BEFORE UPDATE ON media_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='media_submissions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_memories_delete BEFORE DELETE ON memories
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='memories'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_memories_insert BEFORE INSERT ON memories
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='memories'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_memories_update BEFORE UPDATE ON memories
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='memories'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_access_credentials_delete BEFORE DELETE ON oauth_credentials
 WHEN OLD.kind='access' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_access_credentials_insert BEFORE INSERT ON oauth_credentials
 WHEN NEW.kind='access' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_access_credentials_update BEFORE UPDATE ON oauth_credentials
 WHEN NEW.kind='access' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_connections_delete BEFORE DELETE ON oauth_connections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_connections'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_connections_insert BEFORE INSERT ON oauth_connections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_connections'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_connections_update BEFORE UPDATE ON oauth_connections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_connections'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_operation_intents_delete BEFORE DELETE ON oauth_operation_intents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_operation_intents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_operation_intents_insert BEFORE INSERT ON oauth_operation_intents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_operation_intents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_operation_intents_update BEFORE UPDATE ON oauth_operation_intents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_operation_intents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_refresh_credentials_delete BEFORE DELETE ON oauth_credentials
 WHEN OLD.kind='refresh' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_refresh_credentials_insert BEFORE INSERT ON oauth_credentials
 WHEN NEW.kind='refresh' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_refresh_credentials_update BEFORE UPDATE ON oauth_credentials
 WHEN NEW.kind='refresh' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_credentials'))
 ) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_review_requests_delete BEFORE DELETE ON oauth_review_requests
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_review_requests'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_review_requests_insert BEFORE INSERT ON oauth_review_requests
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_review_requests'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_oauth_review_requests_update BEFORE UPDATE ON oauth_review_requests
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='oauth_review_requests'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pat_pairings_delete BEFORE DELETE ON pat_pairings
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_pairings'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pat_pairings_insert BEFORE INSERT ON pat_pairings
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_pairings'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pat_pairings_update BEFORE UPDATE ON pat_pairings
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_pairings'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pat_review_attempts_delete BEFORE DELETE ON pat_review_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pat_review_attempts_insert BEFORE INSERT ON pat_review_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=NEW.session_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pat_review_attempts_update BEFORE UPDATE ON pat_review_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=NEW.session_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM web_sessions p WHERE p.id=OLD.session_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pat_review_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pats_delete BEFORE DELETE ON pats
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pats'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pats_insert BEFORE INSERT ON pats
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pats'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pats_update BEFORE UPDATE ON pats
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pats'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pending_consent_exchanges_delete BEFORE DELETE ON pending_consent_exchanges
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=q.user_id AND w.portfolio_id=OLD.portfolio_id AND w.bsuid=OLD.bsuid)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pending_consent_exchanges'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pending_consent_exchanges_insert BEFORE INSERT ON pending_consent_exchanges
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=q.user_id AND w.portfolio_id=NEW.portfolio_id AND w.bsuid=NEW.bsuid)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pending_consent_exchanges'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_pending_consent_exchanges_update BEFORE UPDATE ON pending_consent_exchanges
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=q.user_id AND w.portfolio_id=NEW.portfolio_id AND w.bsuid=NEW.bsuid)) OR (EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=q.user_id AND w.portfolio_id=OLD.portfolio_id AND w.bsuid=OLD.bsuid))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='pending_consent_exchanges'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactive_transcript_entries_delete BEFORE DELETE ON proactive_transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactive_transcript_entries'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactive_transcript_entries_insert BEFORE INSERT ON proactive_transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactive_transcript_entries'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactive_transcript_entries_update BEFORE UPDATE ON proactive_transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactive_transcript_entries'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactive_transcript_event_links_delete BEFORE DELETE ON proactive_transcript_event_links
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactive_transcript_event_links'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactive_transcript_event_links_insert BEFORE INSERT ON proactive_transcript_event_links
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactive_transcript_event_links'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactive_transcript_event_links_update BEFORE UPDATE ON proactive_transcript_event_links
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactive_transcript_event_links'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_consent_offers_delete BEFORE DELETE ON consent_offers
 WHEN OLD.kind<>'weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_consent_offers'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_consent_offers_insert BEFORE INSERT ON consent_offers
 WHEN NEW.kind<>'weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_consent_offers'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_consent_offers_update BEFORE UPDATE ON consent_offers
 WHEN NEW.kind<>'weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_consent_offers'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_message_events_delete BEFORE DELETE ON proactivity_message_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_message_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_message_events_insert BEFORE INSERT ON proactivity_message_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_message_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_message_events_update BEFORE UPDATE ON proactivity_message_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_message_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_offer_requests_delete BEFORE DELETE ON proactivity_offer_requests
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_offer_requests'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_offer_requests_insert BEFORE INSERT ON proactivity_offer_requests
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_offer_requests'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_offer_requests_update BEFORE UPDATE ON proactivity_offer_requests
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_offer_requests')) AND NOT(NEW.id IS OLD.id AND NEW.user_id IS OLD.user_id AND NEW.kind IS OLD.kind AND NEW.request_message_id IS OLD.request_message_id AND NEW.created_at_ms IS OLD.created_at_ms AND NEW.materialized_at_ms IS OLD.materialized_at_ms AND NEW.last_evaluated_at_ms IS OLD.last_evaluated_at_ms AND NEW.delivery_id IS OLD.delivery_id)
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_whatsapp_claims_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='proactivity' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_whatsapp_claims'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_whatsapp_claims_insert BEFORE INSERT ON whatsapp_deliveries
 WHEN NEW.kind='proactivity' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_whatsapp_claims'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_proactivity_whatsapp_claims_update BEFORE UPDATE ON whatsapp_deliveries
 WHEN NEW.kind='proactivity' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='proactivity_whatsapp_claims'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_provider_authentication_attempts_delete BEFORE DELETE ON provider_authentication_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='provider_authentication_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_provider_authentication_attempts_insert BEFORE INSERT ON provider_authentication_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='provider_authentication_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_provider_authentication_attempts_update BEFORE UPDATE ON provider_authentication_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='provider_authentication_attempts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_provider_credentials_delete BEFORE DELETE ON provider_credentials
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='provider_credentials'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_provider_credentials_insert BEFORE INSERT ON provider_credentials
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='provider_credentials'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_provider_credentials_update BEFORE UPDATE ON provider_credentials
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='provider_credentials'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_consumption_delete BEFORE DELETE ON recurring_digest_consumption
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_consumption'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_consumption_insert BEFORE INSERT ON recurring_digest_consumption
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_consumption'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_consumption_update BEFORE UPDATE ON recurring_digest_consumption
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_consumption'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_days_delete BEFORE DELETE ON recurring_digest_days
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_days'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_days_insert BEFORE INSERT ON recurring_digest_days
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_days'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_days_update BEFORE UPDATE ON recurring_digest_days
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_days'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_instructions_delete BEFORE DELETE ON recurring_digest_instructions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_instructions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_instructions_insert BEFORE INSERT ON recurring_digest_instructions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_instructions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_instructions_update BEFORE UPDATE ON recurring_digest_instructions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_instructions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_staging_delete BEFORE DELETE ON recurring_digest_staging
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_staging'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_staging_insert BEFORE INSERT ON recurring_digest_staging
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_staging'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_digest_staging_update BEFORE UPDATE ON recurring_digest_staging
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_staging'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_dispatch_delete BEFORE DELETE ON recurring_dispatch
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.last_user=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_dispatch'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_dispatch_insert BEFORE INSERT ON recurring_dispatch
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.last_user=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_dispatch'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_dispatch_update BEFORE UPDATE ON recurring_dispatch
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.last_user=q.user_id) OR (OLD.last_user=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_dispatch'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_facts_delete BEFORE DELETE ON recurring_facts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_facts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_facts_insert BEFORE INSERT ON recurring_facts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_facts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_facts_update BEFORE UPDATE ON recurring_facts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_facts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_plan_documents_delete BEFORE DELETE ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((OLD.user_id=q.user_id AND OLD.kind='recurring-plan'))
 AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_plan_documents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_plan_documents_insert BEFORE INSERT ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id AND NEW.kind='recurring-plan'))
 AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_plan_documents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_plan_documents_update BEFORE UPDATE ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id AND NEW.kind='recurring-plan') OR (OLD.user_id=q.user_id AND OLD.kind='recurring-plan'))
 AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_plan_documents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_progress_delete BEFORE DELETE ON recurring_progress
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_progress'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_progress_insert BEFORE INSERT ON recurring_progress
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_progress'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_progress_update BEFORE UPDATE ON recurring_progress
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_progress'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_proposals_delete BEFORE DELETE ON recurring_proposals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_proposals'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_proposals_insert BEFORE INSERT ON recurring_proposals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_proposals'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_proposals_update BEFORE UPDATE ON recurring_proposals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_proposals'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_series_delete BEFORE DELETE ON recurring_series
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_series'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_series_insert BEFORE INSERT ON recurring_series
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_series'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_recurring_series_update BEFORE UPDATE ON recurring_series
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_series') AND NOT (EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=OLD.user_id AND p.store_id='recurring_confirmations' AND p.request_id=q.id) AND NEW.user_id IS OLD.user_id AND NEW.id IS OLD.id AND NEW.currency IS OLD.currency AND NEW.counterparty_key IS OLD.counterparty_key AND NEW.series_json IS OLD.series_json AND NEW.evidence_json IS OLD.evidence_json AND NEW.reference_json IS OLD.reference_json AND NEW.valid IS OLD.valid))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_refund_attempts_delete BEFORE DELETE ON refund_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='refund_attempts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_refund_attempts_insert BEFORE INSERT ON refund_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='refund_attempts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_refund_attempts_update BEFORE UPDATE ON refund_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='refund_attempts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_control_receipts_delete BEFORE DELETE ON reminder_control_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_control_receipts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_control_receipts_insert BEFORE INSERT ON reminder_control_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_control_receipts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_control_receipts_update BEFORE UPDATE ON reminder_control_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_control_receipts'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_delivery_receipts_delete BEFORE DELETE ON governor_delivery_receipts
 WHEN OLD.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_delivery_receipts'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_delivery_receipts_insert BEFORE INSERT ON governor_delivery_receipts
 WHEN NEW.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_delivery_receipts'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_delivery_receipts_update BEFORE UPDATE ON governor_delivery_receipts
 WHEN NEW.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_delivery_receipts'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_governors_delete BEFORE DELETE ON proactivity_governors
 WHEN OLD.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_governors'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_governors_insert BEFORE INSERT ON proactivity_governors
 WHEN NEW.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_governors'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_reminder_governors_update BEFORE UPDATE ON proactivity_governors
 WHEN NEW.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='reminder_governors'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_delete BEFORE DELETE ON resource_admission_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_insert BEFORE INSERT ON resource_admission_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.scope_key=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_resource_admission_events_update BEFORE UPDATE ON resource_admission_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.scope_key=q.user_id) OR (OLD.scope_key=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='resource_admission_events'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedule_executions_delete BEFORE DELETE ON schedule_executions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedule_executions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedule_executions_insert BEFORE INSERT ON schedule_executions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedule_executions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedule_executions_update BEFORE UPDATE ON schedule_executions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id OR OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedule_executions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedule_revisions_delete BEFORE DELETE ON schedule_revisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedule_revisions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedule_revisions_insert BEFORE INSERT ON schedule_revisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedule_revisions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedule_revisions_update BEFORE UPDATE ON schedule_revisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id OR OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedule_revisions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedules_delete BEFORE DELETE ON schedules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedules'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedules_insert BEFORE INSERT ON schedules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedules'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_schedules_update BEFORE UPDATE ON schedules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id OR OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='schedules'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_source_attestations_delete BEFORE DELETE ON source_attestations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='source_attestations'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_source_attestations_insert BEFORE INSERT ON source_attestations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='source_attestations'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_source_attestations_update BEFORE UPDATE ON source_attestations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='source_attestations'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_materialization_parts_delete BEFORE DELETE ON statement_materialization_parts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_materialization_parts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_materialization_parts_insert BEFORE INSERT ON statement_materialization_parts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=NEW.submission_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_materialization_parts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_materialization_parts_update BEFORE UPDATE ON statement_materialization_parts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=NEW.submission_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_materialization_parts'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_needs_review_delete BEFORE DELETE ON statement_needs_review
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_needs_review'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_needs_review_insert BEFORE INSERT ON statement_needs_review
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_needs_review'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_needs_review_update BEFORE UPDATE ON statement_needs_review
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_needs_review'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_record_outcomes_delete BEFORE DELETE ON statement_record_outcomes
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_record_outcomes'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_record_outcomes_insert BEFORE INSERT ON statement_record_outcomes
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_record_outcomes'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_record_outcomes_update BEFORE UPDATE ON statement_record_outcomes
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_record_outcomes'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_staging_objects_delete BEFORE DELETE ON statement_staging_objects
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_staging_objects'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_staging_objects_insert BEFORE INSERT ON statement_staging_objects
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_staging_objects'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_staging_objects_update BEFORE UPDATE ON statement_staging_objects
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_staging_objects'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_submissions_delete BEFORE DELETE ON statement_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_submissions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_submissions_insert BEFORE INSERT ON statement_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_submissions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_submissions_update BEFORE UPDATE ON statement_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_submissions'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_subscription_cancellations_delete BEFORE DELETE ON subscription_cancellations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscription_cancellations'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_subscription_cancellations_insert BEFORE INSERT ON subscription_cancellations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscription_cancellations'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_subscription_cancellations_update BEFORE UPDATE ON subscription_cancellations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscription_cancellations'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_subscriptions_delete BEFORE DELETE ON subscriptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscriptions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_subscriptions_insert BEFORE INSERT ON subscriptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscriptions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_subscriptions_update BEFORE UPDATE ON subscriptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscriptions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_support_recovery_cases_delete BEFORE DELETE ON support_recovery_cases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='support_recovery_cases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_support_recovery_cases_insert BEFORE INSERT ON support_recovery_cases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='support_recovery_cases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_support_recovery_cases_update BEFORE UPDATE ON support_recovery_cases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='support_recovery_cases'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_corrections_delete BEFORE DELETE ON transaction_corrections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_corrections'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_corrections_insert BEFORE INSERT ON transaction_corrections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_corrections'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_corrections_update BEFORE UPDATE ON transaction_corrections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_corrections'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_reconciliation_decisions_delete BEFORE DELETE ON transaction_reconciliation_decisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_decisions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_reconciliation_decisions_insert BEFORE INSERT ON transaction_reconciliation_decisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_decisions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_reconciliation_decisions_update BEFORE UPDATE ON transaction_reconciliation_decisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_decisions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_reconciliation_members_delete BEFORE DELETE ON transaction_reconciliation_members
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_members'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_reconciliation_members_insert BEFORE INSERT ON transaction_reconciliation_members
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_members'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transaction_reconciliation_members_update BEFORE UPDATE ON transaction_reconciliation_members
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transaction_reconciliation_members'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transactions_delete BEFORE DELETE ON transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transactions_insert BEFORE INSERT ON transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transactions_update BEFORE UPDATE ON transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transcript_entries_delete BEFORE DELETE ON transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transcript_entries'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transcript_entries_insert BEFORE INSERT ON transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transcript_entries'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_transcript_entries_update BEFORE UPDATE ON transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='transcript_entries'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_users_delete BEFORE DELETE ON users
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='users'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_users_insert BEFORE INSERT ON users
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='users'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_users_update BEFORE UPDATE ON users
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.id=q.user_id) OR (OLD.id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='users')) AND NOT(NEW.id IS OLD.id AND NEW.service_market IS OLD.service_market AND NEW.locale IS OLD.locale AND NEW.time_zone IS OLD.time_zone AND NEW.created_at_ms IS OLD.created_at_ms AND NEW.trial_started_at_ms IS OLD.trial_started_at_ms AND NEW.trial_ends_at_ms IS OLD.trial_ends_at_ms)
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_web_sessions_delete BEFORE DELETE ON web_sessions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='web_sessions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_web_sessions_insert BEFORE INSERT ON web_sessions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='web_sessions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_web_sessions_update BEFORE UPDATE ON web_sessions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='web_sessions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_consent_offers_delete BEFORE DELETE ON consent_offers
 WHEN OLD.kind='weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_consent_offers'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_consent_offers_insert BEFORE INSERT ON consent_offers
 WHEN NEW.kind='weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_consent_offers'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_consent_offers_update BEFORE UPDATE ON consent_offers
 WHEN NEW.kind='weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_consent_offers'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governor_deliveries_delete BEFORE DELETE ON governor_delivery_receipts
 WHEN OLD.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governor_deliveries'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governor_deliveries_insert BEFORE INSERT ON governor_delivery_receipts
 WHEN NEW.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governor_deliveries'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governor_deliveries_update BEFORE UPDATE ON governor_delivery_receipts
 WHEN NEW.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governor_deliveries'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governor_questions_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='weekly-question' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governor_questions'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governor_questions_insert BEFORE INSERT ON whatsapp_deliveries
 WHEN NEW.kind='weekly-question' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governor_questions'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governor_questions_update BEFORE UPDATE ON whatsapp_deliveries
 WHEN NEW.kind='weekly-question' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governor_questions'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governors_delete BEFORE DELETE ON proactivity_governors
 WHEN OLD.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governors'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governors_insert BEFORE INSERT ON proactivity_governors
 WHEN NEW.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governors'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_governors_update BEFORE UPDATE ON proactivity_governors
 WHEN NEW.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governors'))
 )
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_question_intents_delete BEFORE DELETE ON weekly_question_intents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (OLD.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_question_intents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_question_intents_insert BEFORE INSERT ON weekly_question_intents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (NEW.user_id=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_question_intents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_weekly_question_intents_update BEFORE UPDATE ON weekly_question_intents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((NEW.user_id=q.user_id) OR (OLD.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_question_intents'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_whatsapp_provider_handoffs_delete BEFORE DELETE ON whatsapp_provider_handoffs
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=OLD.pairing_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_provider_handoffs'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_whatsapp_provider_handoffs_insert BEFORE INSERT ON whatsapp_provider_handoffs
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND (EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=NEW.pairing_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_provider_handoffs'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_whatsapp_provider_handoffs_update BEFORE UPDATE ON whatsapp_provider_handoffs
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND ((EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=NEW.pairing_id AND p.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM browser_login_pairings p WHERE p.id=OLD.pairing_id AND p.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_provider_handoffs'))
 BEGIN
  SELECT RAISE(ABORT,'erasure_fenced');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_billing_transition BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='billing_transition' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id))
@@ -4638,6 +5437,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_identity_read BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='identity_read' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4650,6 +5450,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_insight_call BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='insight_call' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4662,6 +5463,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_media_admission BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='media_admission' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4674,6 +5476,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_publication BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='publication' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4686,6 +5489,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_request_admission BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='request_admission' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4698,6 +5502,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_security_mutation BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='security_mutation' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4710,6 +5515,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_entries_session_call BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='session_call' AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4722,6 +5528,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_audit_retention_permits_delete BEFORE DELETE ON audit_retention_permits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4734,6 +5541,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.audit.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.audit.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_billing_attempts_delete BEFORE DELETE ON billing_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4746,6 +5554,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_billing_event_candidates_delete BEFORE DELETE ON billing_event_candidates
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM (SELECT rowid,transaction_id,attempt_id,status,first_observed_at_ms,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE status IS NOT NULL) p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.transaction_id=OLD.transaction_id AND a.user_id=q.user_id))
@@ -4758,6 +5567,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_billing_price_notices_delete BEFORE DELETE ON billing_price_notices
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4770,6 +5580,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_billing_provider_transactions_delete BEFORE DELETE ON billing_provider_transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id))
@@ -4782,6 +5593,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_crossing_publications_delete BEFORE DELETE ON budget_crossing_publications
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4794,6 +5606,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_group_currencies_delete BEFORE DELETE ON budget_group_currencies
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4806,6 +5619,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_month_caps_delete BEFORE DELETE ON budget_month_caps
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4818,6 +5632,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_month_latches_delete BEFORE DELETE ON budget_month_latches
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4830,6 +5645,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_plan_months_delete BEFORE DELETE ON budget_plan_months
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4842,6 +5658,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_reconciliation_work_delete BEFORE DELETE ON budget_state
 WHEN OLD.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4854,6 +5671,7 @@ WHEN OLD.kind='work' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state=
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_threshold_alerts_delete BEFORE DELETE ON budget_threshold_alerts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4866,6 +5684,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budget_user_versions_delete BEFORE DELETE ON budget_state
 WHEN OLD.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4878,6 +5697,7 @@ WHEN OLD.kind='user' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state=
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_budgets_delete BEFORE DELETE ON budgets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4890,6 +5710,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_canonical_request_buckets_delete BEFORE DELETE ON canonical_request_buckets
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.subject='user:'||q.user_id)
@@ -4902,6 +5723,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_canonical_request_leases_delete BEFORE DELETE ON canonical_request_leases
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4914,6 +5736,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_canonical_request_replays_delete BEFORE DELETE ON canonical_request_replays
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4926,6 +5749,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_card_enrollments_delete BEFORE DELETE ON card_enrollments
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4938,6 +5762,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_card_payment_sources_delete BEFORE DELETE ON card_payment_sources
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4950,6 +5775,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_commercial_allowance_consumptions_delete BEFORE DELETE ON commercial_allowance_consumptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4962,6 +5788,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_connection_attempts_delete BEFORE DELETE ON connection_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4974,6 +5801,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_connections_delete BEFORE DELETE ON connections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -4986,8 +5814,10 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_consent_history_delete BEFORE DELETE ON consent_history WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,CASE OLD.record_type WHEN 'processing_grant' THEN 'onboarding_consent_records' WHEN 'processing_withdrawal' THEN 'processing_consent_withdrawal_records' WHEN 'processing_renewal' THEN 'processing_consent_renewals' WHEN 'weekly_grant' THEN 'weekly_consent_records' WHEN 'weekly_rejection' THEN 'weekly_consent_rejections' WHEN 'weekly_revocation' THEN 'weekly_consent_revocation_records' WHEN 'proactivity_grant' THEN 'proactivity_consent_records' WHEN 'pat_grant' THEN 'pat_grant_consents' WHEN 'pat_revocation' THEN 'pat_revocation_consents' WHEN 'oauth_grant' THEN 'oauth_grant_consents' WHEN 'oauth_replay_revocation' THEN 'oauth_revocation_consents' WHEN 'oauth_user_revocation' THEN 'oauth_user_revocation_consents' END,'drain:'||lower(hex(randomblob(16))),CASE OLD.record_type WHEN 'processing_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'disclosure_json',OLD."disclosure_json",'disclosure_message_id',OLD."disclosure_message_id",'decision_message_id',OLD."decision_message_id",'decision_received_at_ms',OLD."decision_received_at_ms",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'processing_withdrawal' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_record_id',OLD."grant_record_id",'session_id',OLD."session_id",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'processing_renewal' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'withdrawal_id',OLD."withdrawal_id",'grant_record_id',OLD."grant_record_id",'session_id',OLD."session_id",'disclosure_json',OLD."disclosure_json",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'weekly_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'weekly_rejection' THEN json_object('sequence',OLD."sequence",'id',OLD."id",'user_id',OLD."user_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'decision',OLD."decision") WHEN 'weekly_revocation' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'decision',OLD."decision",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'proactivity_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'kind',OLD."kind",'grant_id',OLD."grant_id",'offer_id',OLD."offer_id",'decision_message_id',OLD."decision_message_id",'record_json',OLD."record_json",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'pat_grant' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'session_id',OLD."session_id",'pairing_id',OLD."pairing_id",'request_id',OLD."request_id",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'pat_revocation' THEN json_object('id',OLD."id",'grant_consent_id',OLD."grant_consent_id",'user_id',OLD."user_id",'pat_id',OLD."pat_id",'pairing_id',OLD."pairing_id",'session_id',OLD."session_id",'policy_reason',OLD."policy_reason",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'oauth_grant' THEN json_object('id',OLD."id",'connection_id',OLD."connection_id",'user_id',OLD."user_id",'session_id',OLD."session_id",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'accepted_at_ms',OLD."accepted_at_ms") WHEN 'oauth_replay_revocation' THEN json_object('id',OLD."id",'user_id',OLD."user_id",'connection_id',OLD."connection_id",'reason',OLD."reason",'occurred_at_ms',OLD."occurred_at_ms") WHEN 'oauth_user_revocation' THEN json_object('connection_id',OLD."connection_id",'user_id',OLD."user_id",'session_id',OLD."session_id",'reason',OLD."reason",'disclosure_revision',OLD."disclosure_revision",'disclosure_text',OLD."disclosure_text",'occurred_at_ms',OLD."occurred_at_ms") END FROM erasure_requests q WHERE q.state='Draining' AND q.user_id=OLD.user_id AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_dashboard_documents_delete BEFORE DELETE ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND ((OLD.user_id=q.user_id AND OLD.kind='dashboard'))
@@ -5000,6 +5830,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_dashboard_projection_bucket_delete BEFORE DELETE ON dashboard_projection_bucket
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5012,6 +5843,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_dashboard_projection_digit_delete BEFORE DELETE ON dashboard_projection_digit
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5024,6 +5856,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_dashboard_projection_leaf_delete BEFORE DELETE ON dashboard_projection_leaf
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5036,6 +5869,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_dashboard_projection_state_delete BEFORE DELETE ON dashboard_projection_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5048,6 +5882,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_forwarded_email_receipts_delete BEFORE DELETE ON forwarded_email_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5060,6 +5895,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_agent_sessions_delete BEFORE DELETE ON hosted_agent_sessions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5072,6 +5908,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_compaction_attempts_delete BEFORE DELETE ON hosted_compaction_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5084,6 +5921,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_confirmations_delete BEFORE DELETE ON hosted_confirmations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5096,6 +5934,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_mutation_commits_delete BEFORE DELETE ON hosted_mutation_commits
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5108,6 +5947,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_turns_delete BEFORE DELETE ON hosted_turns
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5120,6 +5960,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_voice_refusals_delete BEFORE DELETE ON hosted_voice_refusals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5132,6 +5973,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_whatsapp_delivery_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='hosted' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5145,6 +5987,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_whatsapp_delivery_events_delete BEFORE DELETE ON hosted_whatsapp_delivery_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') p WHERE p.correlation_token=OLD.correlation_token AND p.user_id=q.user_id))
@@ -5157,6 +6000,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_hosted_whatsapp_windows_delete BEFORE DELETE ON hosted_whatsapp_windows
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5169,6 +6013,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_ingestion_review_state_delete BEFORE DELETE ON ingestion_review_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id
@@ -5181,6 +6026,7 @@ BEGIN
  AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
  AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_ingestion_review_state_update BEFORE UPDATE ON ingestion_review_state
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id
@@ -5193,6 +6039,7 @@ BEGIN
  AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
  AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_insight_events_delete BEFORE DELETE ON insight_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5205,6 +6052,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_insight_reports_delete BEFORE DELETE ON insight_reports
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
@@ -5212,6 +6060,7 @@ BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
  SELECT q.id,'insight_reports','drain:'||lower(hex(randomblob(16))),json_object('kind',OLD.kind,'user_id',OLD.user_id,'delivery_id',OLD.delivery_id,'role',OLD.role,'consent_grant_id',OLD.consent_grant_id,'offer_id',OLD.offer_id,'text',OLD.text,'scheduled_at_ms',OLD.scheduled_at_ms,'expires_at_ms',OLD.expires_at_ms,'time_zone',OLD.time_zone,'created_at_ms',OLD.created_at_ms,'payload_json',OLD.payload_json,'presentation_json',OLD.presentation_json,'reminder_grant_id',OLD.reminder_grant_id,'reminder_expires_at_ms',OLD.reminder_expires_at_ms,'instruction_id',OLD.instruction_id,'instruction_version',OLD.instruction_version,'grant_id',OLD.grant_id,'local_date',OLD.local_date,'day_from_ms',OLD.day_from_ms,'day_to_ms',OLD.day_to_ms,'report_json',OLD.report_json,'dispatch_state',OLD.dispatch_state,'dispatch_created_at_ms',OLD.dispatch_created_at_ms,'dispatch_last_attempt_at_ms',OLD.dispatch_last_attempt_at_ms,'dispatch_restart_attempts',OLD.dispatch_restart_attempts) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_insight_whatsapp_claims_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='insight' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5225,6 +6074,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_keyword_rules_delete BEFORE DELETE ON keyword_rules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5237,6 +6087,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_media_submissions_delete BEFORE DELETE ON media_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5249,6 +6100,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_memories_delete BEFORE DELETE ON memories
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5261,6 +6113,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.memory.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.memory.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_pending_consent_exchanges_delete BEFORE DELETE ON pending_consent_exchanges
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM (SELECT rowid,id AS user_id,whatsapp_portfolio_id AS portfolio_id,whatsapp_bsuid AS bsuid,whatsapp_verified_at_ms AS verified_at_ms FROM users WHERE whatsapp_portfolio_id IS NOT NULL) w WHERE w.user_id=q.user_id AND w.portfolio_id=OLD.portfolio_id AND w.bsuid=OLD.bsuid))
@@ -5273,6 +6126,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_proactive_transcript_entries_delete BEFORE DELETE ON proactive_transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5285,6 +6139,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_proactive_transcript_event_links_delete BEFORE DELETE ON proactive_transcript_event_links
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5297,6 +6152,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_proactivity_consent_offers_delete BEFORE DELETE ON consent_offers
 WHEN OLD.kind<>'weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5310,6 +6166,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_proactivity_message_events_delete BEFORE DELETE ON proactivity_message_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5322,6 +6179,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_proactivity_offer_requests_delete BEFORE DELETE ON proactivity_offer_requests
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5334,6 +6192,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_proactivity_whatsapp_claims_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='proactivity' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5347,6 +6206,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_digest_consumption_delete BEFORE DELETE ON recurring_digest_consumption
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5359,6 +6219,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_digest_days_delete BEFORE DELETE ON recurring_digest_days
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5371,6 +6232,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_digest_instructions_delete BEFORE DELETE ON recurring_digest_instructions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5383,6 +6245,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_digest_staging_delete BEFORE DELETE ON recurring_digest_staging
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5395,6 +6258,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_dispatch_delete BEFORE DELETE ON recurring_dispatch
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.last_user=q.user_id)
@@ -5407,6 +6271,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_facts_delete BEFORE DELETE ON recurring_facts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5419,6 +6284,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_plan_documents_delete BEFORE DELETE ON user_documents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id AND OLD.kind='recurring-plan')
@@ -5431,6 +6297,7 @@ BEGIN
  AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
  AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_progress_delete BEFORE DELETE ON recurring_progress
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5443,6 +6310,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_proposals_delete BEFORE DELETE ON recurring_proposals
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5455,6 +6323,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_recurring_series_delete BEFORE DELETE ON recurring_series
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5467,6 +6336,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_refund_attempts_delete BEFORE DELETE ON refund_attempts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5479,6 +6349,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_reminder_control_receipts_delete BEFORE DELETE ON reminder_control_receipts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5491,6 +6362,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_reminder_delivery_receipts_delete BEFORE DELETE ON governor_delivery_receipts
 WHEN OLD.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5504,6 +6376,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_reminder_governors_delete BEFORE DELETE ON proactivity_governors
 WHEN OLD.kind='reminder' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5517,6 +6390,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_resource_admission_events_delete BEFORE DELETE ON resource_admission_events
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.scope_key=q.user_id)
@@ -5529,6 +6403,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_schedule_executions_delete BEFORE DELETE ON schedule_executions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
@@ -5536,6 +6411,7 @@ BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
  SELECT q.id,'schedule_executions','drain:'||lower(hex(randomblob(16))),json_object('kind',OLD.kind,'user_id',OLD.user_id,'schedule_id',OLD.schedule_id,'schedule_version',OLD.schedule_version,'scheduled_at',OLD.scheduled_at,'outcome',OLD.outcome) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_schedule_revisions_delete BEFORE DELETE ON schedule_revisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
@@ -5543,6 +6419,7 @@ BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
  SELECT q.id,'schedule_revisions','drain:'||lower(hex(randomblob(16))),json_object('kind',OLD.kind,'user_id',OLD.user_id,'schedule_id',OLD.schedule_id,'version',OLD.version,'snapshot_json',OLD.snapshot_json) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_schedules_delete BEFORE DELETE ON schedules
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000)
@@ -5550,6 +6427,7 @@ BEGIN
  INSERT INTO erasure_archives(request_id,store_id,row_ref,body)
  SELECT q.id,'schedules','drain:'||lower(hex(randomblob(16))),json_object('kind',OLD.kind,'id',OLD.id,'user_id',OLD.user_id,'version',OLD.version,'enabled',OLD.enabled,'snapshot_json',OLD.snapshot_json,'next_scheduled_at',OLD.next_scheduled_at,'consent_grant_id',OLD.consent_grant_id,'last_evaluated_at_ms',OLD.last_evaluated_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_source_attestations_delete BEFORE DELETE ON source_attestations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5562,6 +6440,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.transactions.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_statement_materialization_parts_delete BEFORE DELETE ON statement_materialization_parts
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (EXISTS(SELECT 1 FROM statement_submissions p WHERE p.id=OLD.submission_id AND p.user_id=q.user_id))
@@ -5574,6 +6453,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_statement_needs_review_delete BEFORE DELETE ON statement_needs_review
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5586,6 +6466,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_statement_record_outcomes_delete BEFORE DELETE ON statement_record_outcomes
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5598,6 +6479,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_statement_staging_objects_delete BEFORE DELETE ON statement_staging_objects
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5610,6 +6492,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_statement_submissions_delete BEFORE DELETE ON statement_submissions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5622,6 +6505,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_subscription_cancellations_delete BEFORE DELETE ON subscription_cancellations
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5634,6 +6518,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_subscriptions_delete BEFORE DELETE ON subscriptions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5646,6 +6531,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_transaction_corrections_delete BEFORE DELETE ON transaction_corrections
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5658,6 +6544,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.transactions.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_transaction_reconciliation_decisions_delete BEFORE DELETE ON transaction_reconciliation_decisions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5670,6 +6557,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_transaction_reconciliation_members_delete BEFORE DELETE ON transaction_reconciliation_members
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5682,6 +6570,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.projections.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.projections.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_transactions_delete BEFORE DELETE ON transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5694,6 +6583,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.transactions.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.transactions.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_transcript_entries_delete BEFORE DELETE ON transcript_entries
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5706,6 +6596,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_weekly_consent_offers_delete BEFORE DELETE ON consent_offers
 WHEN OLD.kind='weekly-summary' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5719,6 +6610,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.consent.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.consent.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_weekly_governor_deliveries_delete BEFORE DELETE ON governor_delivery_receipts
 WHEN OLD.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5732,6 +6624,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_weekly_governor_questions_delete BEFORE DELETE ON whatsapp_deliveries
 WHEN OLD.kind='weekly-question' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5745,6 +6638,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_weekly_governors_delete BEFORE DELETE ON proactivity_governors
 WHEN OLD.kind='weekly' AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5758,6 +6652,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER erasure_preserve_weekly_question_intents_delete BEFORE DELETE ON weekly_question_intents
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -5770,6 +6665,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_authority BEFORE INSERT ON forwarded_email_receipts
 WHEN NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = NEW.user_id)
@@ -5777,6 +6673,7 @@ WHEN NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type=
 BEGIN
  SELECT RAISE(ABORT, 'forwarded_email_consent');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_capacity BEFORE INSERT ON forwarded_email_receipts
 WHEN (SELECT count(*) FROM forwarded_email_receipts r WHERE r.state IN ('storing', 'queued')
@@ -5790,14 +6687,17 @@ WHEN (SELECT count(*) FROM forwarded_email_receipts r WHERE r.state IN ('storing
 BEGIN
  SELECT RAISE(ABORT, 'forwarded_email_capacity');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_companions_valid_insert BEFORE INSERT ON forwarded_email_receipts WHEN coalesce(((NEW.outcome IS NULL AND NEW.outcome_transaction_id IS NULL AND NEW.outcome_review_id IS NULL AND NEW.outcome_completed_at_ms IS NULL) OR (NEW.outcome_completed_at_ms IS NOT NULL AND ((NEW.outcome='accepted' AND NEW.outcome_transaction_id IS NOT NULL AND NEW.outcome_review_id IS NULL AND EXISTS(SELECT 1 FROM transactions t WHERE t.id=NEW.outcome_transaction_id AND t.user_id=NEW.user_id)) OR (NEW.outcome='needs-review' AND NEW.outcome_transaction_id IS NULL AND NEW.outcome_review_id=NEW.review_id)))) AND ((NEW.review_id IS NULL AND NEW.review_reason IS NULL AND NEW.review_created_at_ms IS NULL AND NEW.review_evidence_expires_at_ms IS NULL) OR (NEW.review_id IS NOT NULL AND NEW.review_reason IN ('unsupported-content','unknown-format','ambiguous-format','invalid-format','canonical-validation-failed','processing-interrupted','consent-revoked') AND NEW.review_created_at_ms IS NOT NULL AND NEW.review_evidence_expires_at_ms IS NOT NULL)),0)=0 BEGIN
  SELECT RAISE(ABORT,'email_record_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_companions_valid_update BEFORE UPDATE ON forwarded_email_receipts WHEN coalesce(((NEW.outcome IS NULL AND NEW.outcome_transaction_id IS NULL AND NEW.outcome_review_id IS NULL AND NEW.outcome_completed_at_ms IS NULL) OR (NEW.outcome_completed_at_ms IS NOT NULL AND ((NEW.outcome='accepted' AND NEW.outcome_transaction_id IS NOT NULL AND NEW.outcome_review_id IS NULL AND EXISTS(SELECT 1 FROM transactions t WHERE t.id=NEW.outcome_transaction_id AND t.user_id=NEW.user_id)) OR (NEW.outcome='needs-review' AND NEW.outcome_transaction_id IS NULL AND NEW.outcome_review_id=NEW.review_id)))) AND ((NEW.review_id IS NULL AND NEW.review_reason IS NULL AND NEW.review_created_at_ms IS NULL AND NEW.review_evidence_expires_at_ms IS NULL) OR (NEW.review_id IS NOT NULL AND NEW.review_reason IN ('unsupported-content','unknown-format','ambiguous-format','invalid-format','canonical-validation-failed','processing-interrupted','consent-revoked') AND NEW.review_created_at_ms IS NOT NULL AND NEW.review_evidence_expires_at_ms IS NOT NULL)),0)=0 BEGIN
  SELECT RAISE(ABORT,'email_record_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_completed_no_delete BEFORE DELETE ON forwarded_email_receipts
 WHEN (OLD.outcome IS NOT NULL OR OLD.review_id IS NOT NULL)
@@ -5806,12 +6706,14 @@ WHEN (OLD.outcome IS NOT NULL OR OLD.review_id IS NOT NULL)
 BEGIN
  SELECT RAISE(ABORT,'email_record_append_only');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_completion_initial BEFORE INSERT ON forwarded_email_receipts
 WHEN NEW.outcome IS NOT NULL OR NEW.review_id IS NOT NULL
 BEGIN
  SELECT RAISE(ABORT,'email_record_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_deferred_capacity_insert BEFORE INSERT ON forwarded_email_receipts
 WHEN NEW.deferred_checked_at_ms IS NOT NULL
@@ -5819,6 +6721,7 @@ WHEN NEW.deferred_checked_at_ms IS NOT NULL
 BEGIN
  SELECT RAISE(ABORT,'forwarded_email_deferred_capacity');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_deferred_capacity_update BEFORE UPDATE OF deferred_checked_at_ms ON forwarded_email_receipts
 WHEN OLD.deferred_checked_at_ms IS NULL AND NEW.deferred_checked_at_ms IS NOT NULL
@@ -5826,12 +6729,14 @@ WHEN OLD.deferred_checked_at_ms IS NULL AND NEW.deferred_checked_at_ms IS NOT NU
 BEGIN
  SELECT RAISE(ABORT,'forwarded_email_deferred_capacity');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_deferred_expiry AFTER UPDATE OF state ON forwarded_email_receipts
 WHEN NEW.state='expired' AND NEW.deferred_checked_at_ms IS NOT NULL
 BEGIN
  UPDATE forwarded_email_receipts SET deferred_checked_at_ms=NULL WHERE id=NEW.id AND user_id=NEW.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_outcome_consent BEFORE UPDATE OF outcome ON forwarded_email_receipts
 WHEN OLD.outcome IS NULL AND NEW.outcome IS NOT NULL AND ((NEW.outcome <> 'needs-review' OR NOT (NEW.review_id=NEW.outcome_review_id AND NEW.review_reason='consent-revoked')) AND (
@@ -5851,10 +6756,12 @@ WHEN OLD.outcome IS NULL AND NEW.outcome IS NOT NULL AND ((NEW.outcome <> 'needs
 BEGIN
  SELECT RAISE(ABORT, 'forwarded_email_authority');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_outcome_no_update BEFORE UPDATE ON forwarded_email_receipts WHEN OLD.outcome IS NOT NULL AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.outcome IS NOT OLD.outcome OR NEW.outcome_transaction_id IS NOT OLD.outcome_transaction_id OR NEW.outcome_review_id IS NOT OLD.outcome_review_id OR NEW.outcome_completed_at_ms IS NOT OLD.outcome_completed_at_ms) BEGIN
  SELECT RAISE(ABORT,'email_record_append_only');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_publication_authority BEFORE UPDATE OF state ON forwarded_email_receipts
 WHEN NEW.state = 'queued' AND (
@@ -5864,16 +6771,21 @@ WHEN NEW.state = 'queued' AND (
 BEGIN
  SELECT RAISE(ABORT, 'forwarded_email_consent');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_receipts_companions_initial BEFORE INSERT ON forwarded_email_receipts WHEN NEW.dispatch_user_id IS NOT NULL OR NEW.dispatch_sent_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'forwarded_email_receipts_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER forwarded_email_review_no_update BEFORE UPDATE ON forwarded_email_receipts WHEN OLD.review_id IS NOT NULL AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.review_id IS NOT OLD.review_id OR NEW.review_reason IS NOT OLD.review_reason OR NEW.review_created_at_ms IS NOT OLD.review_created_at_ms OR NEW.review_evidence_expires_at_ms IS NOT OLD.review_evidence_expires_at_ms) BEGIN
  SELECT RAISE(ABORT,'email_record_append_only');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER governor_delivery_receipts_kind_immutable BEFORE UPDATE OF kind ON governor_delivery_receipts WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'governor_kind_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_agent_sessions_companions_initial BEFORE INSERT ON hosted_agent_sessions WHEN NEW.compacted_text IS NOT NULL OR NEW.compacted_through_sequence IS NOT NULL OR NEW.compacted_revision IS NOT NULL OR NEW.compacted_nonce IS NOT NULL OR NEW.compacted_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'hosted_agent_sessions_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_confirmations_consume_once BEFORE UPDATE ON hosted_confirmations
 WHEN OLD.consumed_turn_id IS NOT NULL OR NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id
@@ -5882,10 +6794,12 @@ WHEN OLD.consumed_turn_id IS NOT NULL OR NEW.id <> OLD.id OR NEW.user_id <> OLD.
   OR NEW.issued_at_ms <> OLD.issued_at_ms OR NEW.expires_at_ms <> OLD.expires_at_ms
   OR NEW.consumed_turn_id IS NULL OR NEW.consumed_at_ms IS NULL
 BEGIN SELECT RAISE(ABORT, 'hosted_confirmation_consume_once'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_confirmations_no_delete_active BEFORE DELETE ON hosted_confirmations
 WHEN (OLD.expires_at_ms >= unixepoch('now') * 1000) AND NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='hosted_confirmations' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN SELECT RAISE(ABORT, 'hosted_confirmation_retention_not_due'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_delivery_proposals_no_update BEFORE UPDATE OF proposal_user_id,proposal_receipt_digest,proposed_at_ms,proposal_text ON hosted_turns
 WHEN OLD.proposed_at_ms IS NOT NULL AND (NEW.proposal_user_id IS NOT OLD.proposal_user_id OR NEW.proposal_receipt_digest IS NOT OLD.proposal_receipt_digest OR NEW.proposed_at_ms IS NOT OLD.proposed_at_ms OR NEW.proposal_text IS NOT OLD.proposal_text) AND NEW.proposed_at_ms IS NOT NULL AND (NEW.id <> OLD.id OR NEW.proposal_user_id <> OLD.proposal_user_id OR NEW.proposal_text <> OLD.proposal_text
@@ -5895,17 +6809,20 @@ WHEN OLD.proposed_at_ms IS NOT NULL AND (NEW.proposal_user_id IS NOT OLD.proposa
 BEGIN
  SELECT RAISE(ABORT, 'hosted_delivery_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_inbound_dispatch_initial BEFORE UPDATE ON hosted_turns
 WHEN OLD.inbound_message_id IS NULL AND NEW.inbound_message_id IS NOT NULL
  AND (NEW.dispatch_user_id IS NOT NULL OR NEW.dispatch_offered_at_ms IS NOT NULL OR NEW.dispatch_created_at_ms IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'hosted_whatsapp_inbound_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_retention_channel_append AFTER UPDATE ON hosted_turns WHEN OLD.inbound_message_id IS NULL AND NEW.inbound_message_id IS NOT NULL
 BEGIN
  UPDATE hosted_turns SET retention_user_id=incoming.user_id,retention_terminal_at_ms=incoming.terminal_at_ms FROM (SELECT id AS turn_id,user_id AS user_id,terminal_at_ms AS terminal_at_ms FROM hosted_turns
   WHERE id = NEW.id AND user_id = NEW.user_id AND status <> 'pending') AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.retention_terminal_at_ms IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_retention_channel_remove AFTER UPDATE ON hosted_turns
 WHEN OLD.inbound_message_id IS NOT NULL AND NEW.inbound_message_id IS NULL AND (NOT EXISTS (
@@ -5919,12 +6836,14 @@ AND NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p
 BEGIN
  UPDATE hosted_turns AS hosted_turn_retention SET retention_user_id=NULL,retention_terminal_at_ms=NULL WHERE retention_terminal_at_ms IS NOT NULL AND id = OLD.id AND retention_user_id = OLD.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_retention_mutation_append AFTER INSERT ON hosted_mutation_commits
 BEGIN
  UPDATE hosted_turns SET retention_user_id=incoming.user_id,retention_terminal_at_ms=incoming.terminal_at_ms FROM (SELECT id AS turn_id,user_id AS user_id,terminal_at_ms AS terminal_at_ms FROM hosted_turns
   WHERE id = NEW.turn_id AND user_id = NEW.user_id AND status <> 'pending') AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.retention_terminal_at_ms IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_retention_mutation_remove AFTER DELETE ON hosted_mutation_commits
 WHEN (NOT EXISTS (
@@ -5938,12 +6857,14 @@ AND NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p
 BEGIN
  UPDATE hosted_turns AS hosted_turn_retention SET retention_user_id=NULL,retention_terminal_at_ms=NULL WHERE retention_terminal_at_ms IS NOT NULL AND id = OLD.turn_id AND retention_user_id = OLD.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_retention_transcript_append AFTER INSERT ON transcript_entries
 BEGIN
  UPDATE hosted_turns SET retention_user_id=incoming.user_id,retention_terminal_at_ms=incoming.terminal_at_ms FROM (SELECT id AS turn_id,user_id AS user_id,terminal_at_ms AS terminal_at_ms FROM hosted_turns
   WHERE id = NEW.turn_id AND user_id = NEW.user_id AND status <> 'pending') AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.retention_terminal_at_ms IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_retention_transcript_remove AFTER DELETE ON transcript_entries
 WHEN (NOT EXISTS (
@@ -5957,6 +6878,7 @@ AND NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p
 BEGIN
  UPDATE hosted_turns AS hosted_turn_retention SET retention_user_id=NULL,retention_terminal_at_ms=NULL WHERE retention_terminal_at_ms IS NOT NULL AND id = OLD.turn_id AND retention_user_id = OLD.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_turn_daily_budget BEFORE INSERT ON hosted_turns
 WHEN (SELECT COUNT(*) FROM hosted_turns WHERE user_id = NEW.user_id
@@ -5965,6 +6887,7 @@ WHEN (SELECT COUNT(*) FROM hosted_turns WHERE user_id = NEW.user_id
 BEGIN
  SELECT RAISE(ABORT, 'hosted_turn_daily_budget');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_turn_requires_consent BEFORE INSERT ON hosted_turns
 WHEN NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = NEW.user_id)
@@ -5972,20 +6895,24 @@ WHEN NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type=
 BEGIN
  SELECT RAISE(ABORT, 'hosted_turn_consent_required');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_turn_retention_terminal AFTER UPDATE ON hosted_turns
 WHEN OLD.status = 'pending' AND NEW.status <> 'pending'
 BEGIN
  UPDATE hosted_turns SET retention_user_id=incoming.user_id,retention_terminal_at_ms=incoming.terminal_at_ms FROM (SELECT NEW.id AS turn_id,NEW.user_id AS user_id,NEW.terminal_at_ms AS terminal_at_ms) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.retention_terminal_at_ms IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_turns_begin_pending BEFORE INSERT ON hosted_turns
 WHEN NEW.status <> 'pending'
 BEGIN
  SELECT RAISE(ABORT, 'hosted_turn_must_begin_pending');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_turns_companions_initial BEFORE INSERT ON hosted_turns WHEN NEW.proposal_user_id IS NOT NULL OR NEW.proposal_receipt_digest IS NOT NULL OR NEW.proposed_at_ms IS NOT NULL OR NEW.proposal_text IS NOT NULL OR NEW.retention_user_id IS NOT NULL OR NEW.retention_terminal_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'hosted_turns_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_turns_terminal_evidence BEFORE UPDATE OF status,terminal_at_ms,failure_reason ON hosted_turns
 WHEN NOT EXISTS (SELECT 1 FROM transcript_entries WHERE turn_id = NEW.id AND user_id = NEW.user_id
@@ -6001,6 +6928,7 @@ WHEN NOT EXISTS (SELECT 1 FROM transcript_entries WHERE turn_id = NEW.id AND use
 BEGIN
  SELECT RAISE(ABORT, 'hosted_turn_terminal_evidence_required');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_turns_terminal_once BEFORE UPDATE OF id,user_id,hosted_session_id,started_at_ms,terminal_at_ms,status,failure_reason ON hosted_turns
 WHEN OLD.status <> 'pending' OR NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id
@@ -6009,9 +6937,11 @@ WHEN OLD.status <> 'pending' OR NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id
 BEGIN
  SELECT RAISE(ABORT, 'hosted_turn_terminal_once');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_delivery_event_immutable BEFORE UPDATE ON hosted_whatsapp_delivery_events
 BEGIN SELECT RAISE(ABORT, 'hosted_whatsapp_event_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_delivery_identity_immutable BEFORE UPDATE ON whatsapp_deliveries
 WHEN NEW.kind='hosted' AND (NEW.turn_id <> OLD.turn_id OR NEW.user_id <> OLD.user_id OR NEW.text <> OLD.text
@@ -6022,32 +6952,46 @@ WHEN NEW.kind='hosted' AND (NEW.turn_id <> OLD.turn_id OR NEW.user_id <> OLD.use
   OR OLD.state IN ('rejected','delivered','unconfirmed')
 )
 BEGIN SELECT RAISE(ABORT, 'hosted_whatsapp_delivery_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_inbound_field_fence_delete BEFORE DELETE ON hosted_turns WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.inbound_message_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_inbound')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_inbound_field_fence_insert BEFORE INSERT ON hosted_turns WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.inbound_message_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_inbound')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_inbound_field_fence_update BEFORE UPDATE ON hosted_turns WHEN (NEW.inbound_portfolio_id IS NOT OLD.inbound_portfolio_id OR NEW.inbound_bsuid IS NOT OLD.inbound_bsuid OR NEW.inbound_message_id IS NOT OLD.inbound_message_id OR NEW.inbound_business_phone_number_id IS NOT OLD.inbound_business_phone_number_id OR NEW.inbound_occurred_at_ms IS NOT OLD.inbound_occurred_at_ms OR NEW.inbound_received_at_ms IS NOT OLD.inbound_received_at_ms OR NEW.inbound_reply_to_message_id IS NOT OLD.inbound_reply_to_message_id OR NEW.inbound_sandbox_phone IS NOT OLD.inbound_sandbox_phone OR NEW.dispatch_user_id IS NOT OLD.dispatch_user_id OR NEW.dispatch_offered_at_ms IS NOT OLD.dispatch_offered_at_ms OR NEW.dispatch_created_at_ms IS NOT OLD.dispatch_created_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.inbound_message_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_inbound')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.inbound_message_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='hosted_whatsapp_inbound'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_inbound_field_preserve_delete BEFORE DELETE ON hosted_turns WHEN OLD.inbound_message_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'hosted_whatsapp_inbound','drain:'||lower(hex(randomblob(16))),json_object('turn_id',OLD.id,'user_id',OLD.user_id,'portfolio_id',OLD.inbound_portfolio_id,'bsuid',OLD.inbound_bsuid,'message_id',OLD.inbound_message_id,'business_phone_number_id',OLD.inbound_business_phone_number_id,'occurred_at_ms',OLD.inbound_occurred_at_ms,'received_at_ms',OLD.inbound_received_at_ms,'reply_to_message_id',OLD.inbound_reply_to_message_id,'sandbox_phone',OLD.inbound_sandbox_phone,'dispatch_user_id',OLD.dispatch_user_id,'dispatch_offered_at_ms',OLD.dispatch_offered_at_ms,'dispatch_created_at_ms',OLD.dispatch_created_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_inbound_field_preserve_update BEFORE UPDATE ON hosted_turns WHEN OLD.inbound_message_id IS NOT NULL AND NEW.inbound_message_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'hosted_whatsapp_inbound','drain:'||lower(hex(randomblob(16))),json_object('turn_id',OLD.id,'user_id',OLD.user_id,'portfolio_id',OLD.inbound_portfolio_id,'bsuid',OLD.inbound_bsuid,'message_id',OLD.inbound_message_id,'business_phone_number_id',OLD.inbound_business_phone_number_id,'occurred_at_ms',OLD.inbound_occurred_at_ms,'received_at_ms',OLD.inbound_received_at_ms,'reply_to_message_id',OLD.inbound_reply_to_message_id,'sandbox_phone',OLD.inbound_sandbox_phone,'dispatch_user_id',OLD.dispatch_user_id,'dispatch_offered_at_ms',OLD.dispatch_offered_at_ms,'dispatch_created_at_ms',OLD.dispatch_created_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER hosted_whatsapp_inbound_immutable BEFORE UPDATE ON hosted_turns WHEN OLD.inbound_message_id IS NOT NULL AND NEW.inbound_message_id IS NOT NULL AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.inbound_portfolio_id IS NOT OLD.inbound_portfolio_id OR NEW.inbound_bsuid IS NOT OLD.inbound_bsuid OR NEW.inbound_message_id IS NOT OLD.inbound_message_id OR NEW.inbound_business_phone_number_id IS NOT OLD.inbound_business_phone_number_id OR NEW.inbound_occurred_at_ms IS NOT OLD.inbound_occurred_at_ms OR NEW.inbound_received_at_ms IS NOT OLD.inbound_received_at_ms OR NEW.inbound_reply_to_message_id IS NOT OLD.inbound_reply_to_message_id OR NEW.inbound_sandbox_phone IS NOT OLD.inbound_sandbox_phone) BEGIN SELECT RAISE(ABORT,'hosted_whatsapp_inbound_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_delivery_attempts_field_fence_delete BEFORE DELETE ON insight_events WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.delivery_receipt_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_delivery_attempts')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_delivery_attempts_field_fence_insert BEFORE INSERT ON insight_events WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.delivery_receipt_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_delivery_attempts')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_delivery_attempts_field_fence_update BEFORE UPDATE ON insight_events WHEN (NEW.delivery_receipt_id IS NOT OLD.delivery_receipt_id OR NEW.delivery_sent_at IS NOT OLD.delivery_sent_at OR NEW.delivery_channel IS NOT OLD.delivery_channel OR NEW.delivery_provider IS NOT OLD.delivery_provider OR NEW.delivery_provider_message_id IS NOT OLD.delivery_provider_message_id) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.delivery_receipt_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_delivery_attempts')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.delivery_receipt_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_delivery_attempts'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_delivery_attempts_field_preserve_delete BEFORE DELETE ON insight_events WHEN OLD.delivery_receipt_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'insight_delivery_attempts','drain:'||lower(hex(randomblob(16))),json_object('id',OLD.delivery_receipt_id,'user_id',OLD.user_id,'insight_event_id',OLD.id,'sent_at',OLD.delivery_sent_at,'channel',OLD.delivery_channel,'provider',OLD.delivery_provider,'provider_message_id',OLD.delivery_provider_message_id) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_delivery_attempts_field_preserve_update BEFORE UPDATE ON insight_events WHEN OLD.delivery_receipt_id IS NOT NULL AND NEW.delivery_receipt_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'insight_delivery_attempts','drain:'||lower(hex(randomblob(16))),json_object('id',OLD.delivery_receipt_id,'user_id',OLD.user_id,'insight_event_id',OLD.id,'sent_at',OLD.delivery_sent_at,'channel',OLD.delivery_channel,'provider',OLD.delivery_provider,'provider_message_id',OLD.delivery_provider_message_id) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_delivery_receipt_immutable BEFORE UPDATE ON insight_events WHEN OLD.delivery_receipt_id IS NOT NULL AND (NEW.delivery_receipt_id IS NOT OLD.delivery_receipt_id OR NEW.delivery_sent_at IS NOT OLD.delivery_sent_at OR NEW.delivery_channel IS NOT OLD.delivery_channel OR NEW.delivery_provider IS NOT OLD.delivery_provider OR NEW.delivery_provider_message_id IS NOT OLD.delivery_provider_message_id) AND NOT((NEW.delivery_receipt_id IS NULL AND NEW.delivery_sent_at IS NULL AND NEW.delivery_channel IS NULL AND NEW.delivery_provider IS NULL AND NEW.delivery_provider_message_id IS NULL) AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='insight_delivery_attempts' AND p.user_id=OLD.user_id AND q.user_id=p.user_id AND q.state='Erasing')) BEGIN SELECT RAISE(ABORT,'insight_delivery_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_delivery_receipt_no_delete BEFORE DELETE ON insight_events WHEN OLD.delivery_receipt_id IS NOT NULL AND NOT(EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='insight_delivery_attempts' AND p.user_id=OLD.user_id AND q.user_id=p.user_id AND q.state='Erasing')) BEGIN SELECT RAISE(ABORT,'insight_delivery_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_events_immutable BEFORE UPDATE ON insight_events
 WHEN NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id OR NEW.kind <> OLD.kind
@@ -6060,14 +7004,17 @@ WHEN NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id OR NEW.kind <> OLD.kind
     OR (OLD.lifecycle_state = 'read' AND NEW.lifecycle_state = 'dismissed')
     OR (NEW.lifecycle_state=OLD.lifecycle_state AND ((NEW.budget_delivery_group_id IS NOT OLD.budget_delivery_group_id OR NEW.budget_threshold IS NOT OLD.budget_threshold OR NEW.budget_crossing_json IS NOT OLD.budget_crossing_json) OR NEW.delivery_receipt_id IS NOT OLD.delivery_receipt_id OR NEW.delivery_sent_at IS NOT OLD.delivery_sent_at OR NEW.delivery_channel IS NOT OLD.delivery_channel OR NEW.delivery_provider IS NOT OLD.delivery_provider OR NEW.delivery_provider_message_id IS NOT OLD.delivery_provider_message_id)))
 BEGIN SELECT RAISE(ABORT, 'insight_transition_invalid'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_reports_immutable BEFORE UPDATE ON insight_reports WHEN NOT(NEW.kind IS OLD.kind AND NEW.user_id IS OLD.user_id AND NEW.delivery_id IS OLD.delivery_id AND NEW.role IS OLD.role AND NEW.consent_grant_id IS OLD.consent_grant_id AND NEW.offer_id IS OLD.offer_id AND NEW.scheduled_at_ms IS OLD.scheduled_at_ms AND NEW.expires_at_ms IS OLD.expires_at_ms AND NEW.time_zone IS OLD.time_zone AND NEW.created_at_ms IS OLD.created_at_ms AND NEW.payload_json IS OLD.payload_json AND NEW.presentation_json IS OLD.presentation_json AND NEW.reminder_grant_id IS OLD.reminder_grant_id AND NEW.reminder_expires_at_ms IS OLD.reminder_expires_at_ms AND NEW.instruction_id IS OLD.instruction_id AND NEW.instruction_version IS OLD.instruction_version AND NEW.grant_id IS OLD.grant_id AND NEW.local_date IS OLD.local_date AND NEW.day_from_ms IS OLD.day_from_ms AND NEW.day_to_ms IS OLD.day_to_ms AND NEW.report_json IS OLD.report_json AND (NEW.text IS OLD.text OR (OLD.kind='proactivity-delivery' AND OLD.text IS NOT NULL AND NEW.text IS NULL))) BEGIN SELECT RAISE(ABORT,'insight_report_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_reports_no_delete BEFORE DELETE ON insight_reports
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='insight_reports' AND p.user_id=q.user_id AND q.state='Erasing' AND OLD.user_id=p.user_id)
 BEGIN
  SELECT RAISE(ABORT,'insight_report_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_whatsapp_claim_identity BEFORE UPDATE ON whatsapp_deliveries
 WHEN NEW.kind='insight' AND (NEW.user_id <> OLD.user_id OR NEW.insight_event_id <> OLD.insight_event_id
@@ -6084,28 +7031,37 @@ WHEN NEW.kind='insight' AND (NEW.user_id <> OLD.user_id OR NEW.insight_event_id 
  OR (NEW.summary_json IS NOT NULL AND NEW.summary_json IS NOT OLD.summary_json)
 )
 BEGIN SELECT RAISE(ABORT,'insight_claim_invalid'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_whatsapp_routes_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.route_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_whatsapp_routes')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_whatsapp_routes_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.route_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_whatsapp_routes')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_whatsapp_routes_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.route_portfolio_id IS NOT OLD.route_portfolio_id OR NEW.route_bsuid IS NOT OLD.route_bsuid OR NEW.route_phone_number_id IS NOT OLD.route_phone_number_id OR NEW.route_verified_at_ms IS NOT OLD.route_verified_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.route_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_whatsapp_routes')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.route_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='insight_whatsapp_routes'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_whatsapp_routes_field_preserve_delete BEFORE DELETE ON users WHEN OLD.route_portfolio_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'insight_whatsapp_routes','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'portfolio_id',OLD.route_portfolio_id,'bsuid',OLD.route_bsuid,'business_phone_number_id',OLD.route_phone_number_id,'verified_at_ms',OLD.route_verified_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER insight_whatsapp_routes_field_preserve_update BEFORE UPDATE ON users WHEN OLD.route_portfolio_id IS NOT NULL AND NEW.route_portfolio_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'insight_whatsapp_routes','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'portfolio_id',OLD.route_portfolio_id,'bsuid',OLD.route_bsuid,'business_phone_number_id',OLD.route_phone_number_id,'verified_at_ms',OLD.route_verified_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.conversation.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.conversation.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER issue_forwarding_address AFTER INSERT ON consent_history WHEN NEW.record_type='processing_grant' BEGIN UPDATE users SET forwarding_address_id=lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
     substr(lower(hex(randomblob(2))), 2, 3) || '-8' ||
     substr(lower(hex(randomblob(2))), 2, 3) || '-' || lower(hex(randomblob(6))),forwarding_local_part=lower(hex(randomblob(24))),forwarding_issued_at_ms=NEW.accepted_at_ms WHERE id=NEW.user_id AND forwarding_address_id IS NULL; END;
+--> statement-breakpoint
 
 CREATE TRIGGER keyword_rule_capacity BEFORE INSERT ON keyword_rules
 WHEN (SELECT COUNT(*) FROM keyword_rules WHERE user_id = NEW.user_id) >= 100
 BEGIN SELECT RAISE(ABORT, 'keyword_rule_limit'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER linked_transaction_no_delete BEFORE UPDATE OF deleted_at_ms ON transactions
 WHEN NEW.deleted_at_ms IS NOT NULL AND EXISTS (SELECT 1 FROM transaction_reconciliation_members WHERE user_id = OLD.user_id AND transaction_id = OLD.id)
 BEGIN SELECT RAISE(ABORT, 'transaction_linked'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER memory_capacity_before_insert BEFORE INSERT ON memories
 WHEN (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLOB))), 0)
@@ -6113,6 +7069,7 @@ WHEN (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLO
    + length(CAST(json_object('id', NEW.id, 'text', NEW.text) AS BLOB))
    + (SELECT COUNT(*) FROM memories WHERE user_id = NEW.user_id) > 15000
 BEGIN SELECT RAISE(ABORT, 'memory_capacity_exceeded'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER memory_capacity_before_revision BEFORE UPDATE OF text ON memories
 WHEN (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLOB))), 0)
@@ -6120,44 +7077,54 @@ WHEN (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLO
    + length(CAST(json_object('id', NEW.id, 'text', NEW.text) AS BLOB))
    + (SELECT COUNT(*) FROM memories WHERE user_id = NEW.user_id) - 1 > 15000
 BEGIN SELECT RAISE(ABORT, 'memory_capacity_exceeded'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_connection_immutable BEFORE UPDATE OF user_id,client_id,claimed_client_name,redirect_uri,resource,scopes_json,approved_at_ms,expires_at_ms ON oauth_connections
 BEGIN
  SELECT RAISE(ABORT,'oauth_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_connections_companions_initial BEFORE INSERT ON oauth_connections WHEN NEW.code_digest IS NOT NULL OR NEW.code_challenge IS NOT NULL OR NEW.code_expires_at_ms IS NOT NULL OR NEW.code_consumed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'oauth_connections_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_credential_kind_immutable BEFORE UPDATE OF kind ON oauth_credentials WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'oauth_credential_kind_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_operation_intents_capacity BEFORE INSERT ON oauth_operation_intents
 WHEN (SELECT count(*) FROM oauth_operation_intents WHERE user_id = NEW.user_id) >= 5
 BEGIN
   SELECT RAISE(ABORT, 'oauth_confirmation_capacity');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_refresh_events_no_delete BEFORE DELETE ON audit_entries
 WHEN OLD.record_type='oauth_refresh' AND (NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='oauth_refresh_events' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id)))
 BEGIN SELECT RAISE(ABORT,'oauth_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_refresh_policy_immutable BEFORE UPDATE OF refresh_allowed ON oauth_connections
 BEGIN
  SELECT RAISE(ABORT,'oauth_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_refresh_subject BEFORE INSERT ON oauth_credentials
 WHEN NEW.kind='refresh' AND (NEW.user_id IS NULL OR NOT EXISTS (SELECT 1 FROM oauth_connections WHERE id = NEW.connection_id AND user_id = NEW.user_id)
 ) BEGIN
  SELECT RAISE(ABORT,'oauth_subject');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_registry_capacity BEFORE INSERT ON oauth_public_clients
 WHEN (SELECT count(*) FROM oauth_public_clients) >= 10000
 BEGIN SELECT RAISE(ABORT, 'oauth_capacity'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER oauth_source_capacity BEFORE INSERT ON oauth_review_requests
 WHEN (SELECT count(*) FROM oauth_review_requests WHERE source_digest = NEW.source_digest AND state = 'pending' AND expires_at_ms > NEW.created_at_ms) >= 5
 BEGIN SELECT RAISE(ABORT, 'oauth_capacity'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER paired_pat_requires_claim BEFORE INSERT ON pats
 WHEN NEW.pairing_id IS NOT NULL AND NOT EXISTS (
@@ -6165,10 +7132,13 @@ WHEN NEW.pairing_id IS NOT NULL AND NOT EXISTS (
     AND state = 'claimed' AND expires_at_ms > NEW.created_at_ms
 )
 BEGIN SELECT RAISE(ABORT,'pat_pairing_not_claimable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER pairing_email_erasure_delete BEFORE DELETE ON browser_login_pairings WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.email_user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_proofs')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER pairing_email_erasure_update BEFORE UPDATE OF email_work_id,email_user_id,email_address,email_credential_verified_at_ms,email_state,email_public_code,email_proof_digest,email_proof_expires_at_ms,email_expires_at_ms,email_generation,email_wrong_attempts,email_last_requested_at_ms,email_dispatch_attempted_at_ms ON browser_login_pairings WHEN (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.email_user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_proofs')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.email_user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='browser_pairing_email_proofs'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER payment_attempt_method_guard BEFORE INSERT ON billing_attempts
 WHEN NOT EXISTS (SELECT 1 FROM card_enrollments AS e
@@ -6182,17 +7152,20 @@ WHEN NOT EXISTS (SELECT 1 FROM card_enrollments AS e
 BEGIN
  SELECT RAISE(ABORT, 'payment_attempt_method_mismatch');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER payment_enrollment_method_immutable BEFORE UPDATE ON card_enrollments
 WHEN NEW.method <> OLD.method OR NEW.wompi_environment IS NOT OLD.wompi_environment
   OR (OLD.authorization_digest IS NOT NULL AND NEW.authorization_digest IS NOT OLD.authorization_digest)
 BEGIN SELECT RAISE(ABORT, 'payment_enrollment_method_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER payment_source_method_guard BEFORE INSERT ON card_payment_sources
 WHEN NOT EXISTS (SELECT 1 FROM card_enrollments AS e
   WHERE e.id = NEW.enrollment_id AND e.user_id = NEW.user_id AND e.method = NEW.method
     AND (e.wompi_environment IS NOT NULL OR e.method = 'card'))
 BEGIN SELECT RAISE(ABORT, 'payment_source_method_mismatch'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_decision_requires_delivery BEFORE UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
 WHEN OLD.decision_value IS NULL AND NEW.decision_value IS NOT NULL AND (NOT EXISTS (
@@ -6209,24 +7182,28 @@ WHEN OLD.decision_value IS NULL AND NEW.decision_value IS NOT NULL AND (NOT EXIS
 BEGIN
  SELECT RAISE(ABORT, 'pending_consent_invalid_decision');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_decision_settles AFTER UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
 WHEN OLD.decision_value IS NULL AND NEW.decision_value IS NOT NULL
 BEGIN
  UPDATE pending_consent_exchanges SET state = NEW.decision_value WHERE id = NEW.id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_decisions_no_update BEFORE UPDATE OF decision_portfolio_id,decision_bsuid,decision_phone_number_id,decision_value,decision_disclosure_json,decision_disclosure_message_id,decision_message_id,decision_delivery_key,decision_body_sha256,decision_occurred_at_ms,decision_received_at_ms ON pending_consent_exchanges
 WHEN OLD.decision_value IS NOT NULL AND (NEW.decision_portfolio_id IS NOT OLD.decision_portfolio_id OR NEW.decision_bsuid IS NOT OLD.decision_bsuid OR NEW.decision_phone_number_id IS NOT OLD.decision_phone_number_id OR NEW.decision_value IS NOT OLD.decision_value OR NEW.decision_disclosure_json IS NOT OLD.decision_disclosure_json OR NEW.decision_disclosure_message_id IS NOT OLD.decision_disclosure_message_id OR NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.decision_delivery_key IS NOT OLD.decision_delivery_key OR NEW.decision_body_sha256 IS NOT OLD.decision_body_sha256 OR NEW.decision_occurred_at_ms IS NOT OLD.decision_occurred_at_ms OR NEW.decision_received_at_ms IS NOT OLD.decision_received_at_ms) AND NEW.decision_value IS NOT NULL
 BEGIN
  SELECT RAISE(ABORT, 'pending_consent_append_only');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_delivery_no_update BEFORE UPDATE OF delivery_phone_number_id,delivery_message_id,delivery_occurred_at_ms,delivery_received_at_ms,delivery_not_before_ms ON pending_consent_exchanges
 WHEN OLD.delivery_message_id IS NOT NULL AND (NEW.delivery_phone_number_id IS NOT OLD.delivery_phone_number_id OR NEW.delivery_message_id IS NOT OLD.delivery_message_id OR NEW.delivery_occurred_at_ms IS NOT OLD.delivery_occurred_at_ms OR NEW.delivery_received_at_ms IS NOT OLD.delivery_received_at_ms OR NEW.delivery_not_before_ms IS NOT OLD.delivery_not_before_ms) AND NEW.delivery_message_id IS NOT NULL
 BEGIN
  SELECT RAISE(ABORT, 'pending_consent_append_only');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_delivery_opens_decision AFTER UPDATE OF delivery_phone_number_id,delivery_message_id,delivery_occurred_at_ms,delivery_received_at_ms,delivery_not_before_ms ON pending_consent_exchanges
 WHEN OLD.delivery_message_id IS NULL AND NEW.delivery_message_id IS NOT NULL
@@ -6235,6 +7212,7 @@ BEGIN
     decision_not_before_ms = NEW.delivery_not_before_ms,
     disclosure_message_id = NEW.delivery_message_id WHERE correlation_token = NEW.correlation_token;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_delivery_requires_attempt BEFORE UPDATE OF delivery_phone_number_id,delivery_message_id,delivery_occurred_at_ms,delivery_received_at_ms,delivery_not_before_ms ON pending_consent_exchanges
 WHEN OLD.delivery_message_id IS NULL AND NEW.delivery_message_id IS NOT NULL AND (NOT EXISTS (
@@ -6247,8 +7225,10 @@ WHEN OLD.delivery_message_id IS NULL AND NEW.delivery_message_id IS NOT NULL AND
 BEGIN
  SELECT RAISE(ABORT, 'pending_consent_invalid_delivery');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_exchanges_companions_initial BEFORE INSERT ON pending_consent_exchanges WHEN NEW.delivery_phone_number_id IS NOT NULL OR NEW.delivery_message_id IS NOT NULL OR NEW.delivery_occurred_at_ms IS NOT NULL OR NEW.delivery_received_at_ms IS NOT NULL OR NEW.delivery_not_before_ms IS NOT NULL OR NEW.decision_portfolio_id IS NOT NULL OR NEW.decision_bsuid IS NOT NULL OR NEW.decision_phone_number_id IS NOT NULL OR NEW.decision_value IS NOT NULL OR NEW.decision_disclosure_json IS NOT NULL OR NEW.decision_disclosure_message_id IS NOT NULL OR NEW.decision_message_id IS NOT NULL OR NEW.decision_delivery_key IS NOT NULL OR NEW.decision_body_sha256 IS NOT NULL OR NEW.decision_occurred_at_ms IS NOT NULL OR NEW.decision_received_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'pending_consent_exchanges_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER pending_consent_rejected_delivery BEFORE UPDATE OF delivery_phone_number_id,delivery_message_id,delivery_occurred_at_ms,delivery_received_at_ms,delivery_not_before_ms ON pending_consent_exchanges
 WHEN OLD.delivery_message_id IS NULL AND NEW.delivery_message_id IS NOT NULL AND (EXISTS (SELECT 1 FROM pending_consent_exchanges
@@ -6256,17 +7236,21 @@ WHEN OLD.delivery_message_id IS NULL AND NEW.delivery_message_id IS NOT NULL AND
 BEGIN
  SELECT RAISE(ABORT, 'pending_consent_rejected_delivery');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER proactive_primary_link AFTER INSERT ON proactive_transcript_entries
 WHEN NEW.kind='insight'
 BEGIN INSERT INTO proactive_transcript_event_links(user_id,transcript_id,insight_event_id) VALUES(NEW.user_id,NEW.id,NEW.insight_event_id); END;
+--> statement-breakpoint
 
 CREATE TRIGGER proactive_transcript_append_only BEFORE UPDATE ON proactive_transcript_entries
 BEGIN SELECT CASE WHEN OLD.kind='message' THEN RAISE(ABORT,'proactive_message_transcript_immutable') ELSE RAISE(ABORT,'proactive_transcript_append_only') END; END;
+--> statement-breakpoint
 
 CREATE TRIGGER proactive_transcript_retention_guard BEFORE DELETE ON proactive_transcript_entries
 WHEN OLD.kind='insight' AND (OLD.expires_at_ms > unixepoch('now') * 1000) AND NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='proactive_transcript_entries' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN SELECT RAISE(ABORT,'proactive_transcript_retention_not_due'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER proactivity_channel_frozen BEFORE UPDATE ON whatsapp_deliveries
 WHEN NEW.kind='proactivity' AND (NEW.user_id IS NOT OLD.user_id OR NEW.delivery_id IS NOT OLD.delivery_id
@@ -6282,8 +7266,10 @@ WHEN NEW.kind='proactivity' AND (NEW.user_id IS NOT OLD.user_id OR NEW.delivery_
  OR (OLD.delivered_at_ms IS NOT NULL AND NEW.delivered_at_ms IS NOT OLD.delivered_at_ms)
 )
 BEGIN SELECT RAISE(ABORT,'proactivity_claim_frozen'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER proactivity_governors_kind_immutable BEFORE UPDATE OF kind ON proactivity_governors WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'governor_kind_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER proactivity_offer_immutable BEFORE UPDATE ON consent_offers
 WHEN NEW.kind<>'weekly-summary' AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.kind IS NOT OLD.kind
@@ -6294,11 +7280,13 @@ WHEN NEW.kind<>'weekly-summary' AND (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT 
  OR (OLD.decision_message_id IS NOT NULL AND (NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.decision IS NOT OLD.decision))
 )
 BEGIN SELECT RAISE(ABORT,'consent_offer_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER proactivity_offer_replacement_immutable BEFORE UPDATE ON consent_offers
  WHEN NEW.kind<>'weekly-summary' AND (NEW.replaces_offer_id IS NOT OLD.replaces_offer_id
  )
 BEGIN SELECT RAISE(ABORT,'consent_offer_replacement_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER processing_consent_renewal_requires_authority BEFORE INSERT ON consent_history
 WHEN NEW.record_type='processing_renewal' AND ( NOT EXISTS (
@@ -6311,8 +7299,10 @@ WHEN NEW.record_type='processing_renewal' AND ( NOT EXISTS (
     AND w.hard_expires_at_ms>NEW.accepted_at_ms
 )
 ) BEGIN SELECT RAISE(ABORT,'consent_renewal_requires_authority'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER processing_withdrawal_once BEFORE INSERT ON consent_history WHEN NEW.record_type='processing_withdrawal' AND EXISTS(SELECT 1 FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) current WHERE current.user_id=NEW.user_id) BEGIN SELECT RAISE(IGNORE); END;
+--> statement-breakpoint
 
 CREATE TRIGGER provider_attempt_requires_handoff BEFORE INSERT ON provider_authentication_attempts
 WHEN NEW.handoff_id IS NOT NULL AND NOT EXISTS(
@@ -6323,15 +7313,18 @@ WHEN NEW.handoff_id IS NOT NULL AND NOT EXISTS(
 BEGIN
  SELECT RAISE(ABORT,'provider_handoff_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER provider_completion_immutable BEFORE UPDATE ON provider_authentication_attempts
 WHEN (OLD.completed_at_ms IS NOT NULL AND (NEW.completed_at_ms IS NOT OLD.completed_at_ms OR NEW.created_user IS NOT OLD.created_user OR NEW.user_id IS NOT OLD.user_id OR NEW.state<>'completed'))
  OR (NEW.completed_at_ms IS NOT OLD.completed_at_ms AND NOT(OLD.completed_at_ms IS NULL AND OLD.state='verified' AND NEW.state='completed' AND NEW.user_id IS NOT NULL AND NEW.cookie_digest=zeroblob(32) AND NEW.nonce='' AND NEW.contact_email IS NULL))
 BEGIN SELECT RAISE(ABORT,'provider_completion_invalid'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER provider_completion_initial BEFORE INSERT ON provider_authentication_attempts
 WHEN NEW.completed_at_ms IS NOT NULL OR NEW.created_user IS NOT NULL
 BEGIN SELECT RAISE(ABORT,'provider_completion_invalid'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER provider_completion_requires_proof BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts
 WHEN OLD.completed_at_ms IS NULL AND NEW.completed_at_ms IS NOT NULL AND NOT EXISTS (
@@ -6351,10 +7344,12 @@ WHEN OLD.completed_at_ms IS NULL AND NEW.completed_at_ms IS NOT NULL AND NOT EXI
 BEGIN
  SELECT RAISE(ABORT,'provider_completion_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_confirmation_before_series_delete BEFORE DELETE ON recurring_series
 WHEN OLD.confirmation_id IS NOT NULL
 BEGIN SELECT RAISE(ABORT,'recurring_confirmation_pending'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_confirmation_no_update BEFORE UPDATE ON recurring_series
 WHEN OLD.confirmation_id IS NOT NULL AND (NEW.confirmation_id IS NOT OLD.confirmation_id OR NEW.confirmed_at IS NOT OLD.confirmed_at OR NEW.confirmation_context_json IS NOT OLD.confirmation_context_json OR NEW.confirmation_json IS NOT OLD.confirmation_json OR NEW.digest_excluded IS NOT OLD.digest_excluded OR NEW.confirmation_sequence IS NOT OLD.confirmation_sequence OR NEW.user_id IS NOT OLD.user_id OR NEW.id IS NOT OLD.id)
@@ -6362,17 +7357,23 @@ WHEN OLD.confirmation_id IS NOT NULL AND (NEW.confirmation_id IS NOT OLD.confirm
   SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id AND q.user_id=p.user_id
   WHERE p.user_id=OLD.user_id AND p.store_id='recurring_confirmations'))
 BEGIN SELECT RAISE(ABORT,'recurring_confirmation_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_digest_consumption_immutable BEFORE UPDATE ON recurring_digest_consumption
  BEGIN SELECT RAISE(ABORT,'recurring_consumption_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_digest_instructions_companions_initial BEFORE INSERT ON recurring_digest_instructions WHEN NEW.source_checkpoint IS NOT NULL OR NEW.source_cursor IS NOT NULL OR NEW.source_cutoff_at_ms IS NOT NULL OR NEW.source_complete IS NOT NULL BEGIN SELECT RAISE(ABORT,'recurring_digest_instructions_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_opportunity_erasure_delete BEFORE DELETE ON proactivity_offer_requests WHEN (OLD.current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_opportunities'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_opportunity_erasure_insert BEFORE INSERT ON proactivity_offer_requests WHEN (NEW.current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_opportunities'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_opportunity_erasure_update BEFORE UPDATE ON proactivity_offer_requests WHEN (NEW.current_recurring_opportunity IS NOT OLD.current_recurring_opportunity) AND ((OLD.current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_opportunities'))) OR (NEW.current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='recurring_digest_opportunities')))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_opportunity_preserve_delete BEFORE DELETE ON proactivity_offer_requests
 WHEN OLD.current_recurring_opportunity=1 AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -6385,6 +7386,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER recurring_opportunity_preserve_update BEFORE UPDATE ON proactivity_offer_requests
 WHEN OLD.current_recurring_opportunity=1 AND NEW.current_recurring_opportunity IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.user_id=q.user_id)
@@ -6397,6 +7399,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.schedules.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.schedules.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_acceptance_limit BEFORE INSERT ON refund_attempts
 WHEN (SELECT COUNT(*) FROM refund_attempts WHERE user_id=NEW.user_id AND status='pending')>=4
@@ -6405,12 +7408,14 @@ WHEN (SELECT COUNT(*) FROM refund_attempts WHERE user_id=NEW.user_id AND status=
 BEGIN
  SELECT RAISE(IGNORE);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_claim_immutable BEFORE UPDATE OF submission_claimed_at_ms ON refund_attempts
 WHEN OLD.submission_claimed_at_ms IS NOT NULL AND (NEW.submission_claimed_at_ms IS NOT OLD.submission_claimed_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'refund_claim_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_claim_requires_pending BEFORE UPDATE OF submission_claimed_at_ms ON refund_attempts
 WHEN OLD.submission_claimed_at_ms IS NULL AND NEW.submission_claimed_at_ms IS NOT NULL AND (NOT EXISTS (SELECT 1 FROM refund_attempts r
@@ -6423,14 +7428,17 @@ WHEN OLD.submission_claimed_at_ms IS NULL AND NEW.submission_claimed_at_ms IS NO
 BEGIN
  SELECT RAISE(IGNORE);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_companions_initial BEFORE INSERT ON refund_attempts WHEN NEW.work_version IS NOT 1 OR NEW.dispatch_last_attempt_at_ms IS NOT NULL OR NEW.published_at_ms IS NOT NULL OR NEW.verification_attempts IS NOT 0 OR NEW.last_verification_at_ms IS NOT NULL OR NEW.submission_claimed_at_ms IS NOT NULL OR NEW.verified_status IS NOT NULL OR NEW.adjusted_attempt_id IS NOT NULL OR NEW.renewal_stopped_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'refund_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_evidence_immutable BEFORE UPDATE OF provider_refund_id,verified_status,observed_at_ms ON refund_attempts
 WHEN OLD.verified_status IS NOT NULL AND (NEW.provider_refund_id IS NOT OLD.provider_refund_id OR NEW.verified_status IS NOT OLD.verified_status OR NEW.observed_at_ms IS NOT OLD.observed_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'refund_evidence_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_evidence_requires_claim BEFORE UPDATE OF provider_refund_id,verified_status,observed_at_ms ON refund_attempts
 WHEN OLD.verified_status IS NULL AND NEW.verified_status IS NOT NULL AND (NOT EXISTS (SELECT 1 FROM refund_attempts r JOIN (SELECT rowid,id AS refund_id,submission_claimed_at_ms AS claimed_at_ms FROM refund_attempts WHERE submission_claimed_at_ms IS NOT NULL) c ON c.refund_id=r.id
@@ -6440,12 +7448,14 @@ WHEN OLD.verified_status IS NULL AND NEW.verified_status IS NOT NULL AND (NOT EX
 BEGIN
  SELECT RAISE(ABORT, 'refund_evidence_invalid_claim');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_no_delete BEFORE DELETE ON refund_attempts
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='refund_attempts' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN
  SELECT RAISE(ABORT, 'refund_history_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_reservation_guard BEFORE INSERT ON refund_attempts
 WHEN NOT EXISTS (SELECT 1 FROM billing_attempts a
@@ -6464,6 +7474,7 @@ WHEN NOT EXISTS (SELECT 1 FROM billing_attempts a
 BEGIN
  SELECT RAISE(IGNORE);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_snapshot_immutable BEFORE UPDATE ON refund_attempts
 WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.subscription_id<>OLD.subscription_id
@@ -6476,6 +7487,7 @@ WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.subscription_id<>OLD.subs
 BEGIN
  SELECT RAISE(ABORT, 'refund_history_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER refund_verified_settlement AFTER UPDATE OF provider_refund_id,verified_status,observed_at_ms ON refund_attempts
 WHEN OLD.verified_status IS NULL AND NEW.verified_status IS NOT NULL
@@ -6493,6 +7505,7 @@ BEGIN
     (SELECT a.id FROM billing_attempts a JOIN refund_attempts r ON r.user_id=a.user_id
       WHERE r.id=NEW.id AND r.status='succeeded');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER reminder_governor_attention_reset AFTER UPDATE OF standing_json ON proactivity_governors
 WHEN NEW.kind='reminder' AND (json_extract(NEW.standing_json,'$._tag')='Attentive' AND json_extract(NEW.standing_json,'$.unanswered')=0
@@ -6500,6 +7513,7 @@ WHEN NEW.kind='reminder' AND (json_extract(NEW.standing_json,'$._tag')='Attentiv
 BEGIN
  UPDATE proactivity_governors AS reminder_governors SET question_id=NULL,question_delivered_at_ms=NULL,notice_turn_id=NULL,notice_completed=0 WHERE kind='reminder' AND user_id=NEW.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER resource_admission_require_every_claim
 BEFORE INSERT ON resource_admission_grants
@@ -6511,6 +7525,7 @@ WHEN (
 BEGIN
   SELECT RAISE(ABORT, 'resource_admission_refused');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER reviewed_statement_entitlement_insert AFTER INSERT ON ingestion_review_state
 WHEN NEW.status='created'
@@ -6518,6 +7533,7 @@ BEGIN
   UPDATE users SET backfill_consumed_at_ms=coalesce(backfill_consumed_at_ms,NEW.updated_at_ms)
   WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=(SELECT submission_id FROM statement_needs_review WHERE id=NEW.id AND user_id=NEW.user_id);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER reviewed_statement_entitlement_update AFTER UPDATE OF status ON ingestion_review_state
 WHEN NEW.status='created' AND OLD.status!='created'
@@ -6525,27 +7541,35 @@ BEGIN
   UPDATE users SET backfill_consumed_at_ms=coalesce(backfill_consumed_at_ms,NEW.updated_at_ms)
   WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=(SELECT submission_id FROM statement_needs_review WHERE id=NEW.id AND user_id=NEW.user_id);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER schedule_executions_no_delete BEFORE DELETE ON schedule_executions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='schedule_executions' AND p.user_id=q.user_id AND q.state='Erasing' AND OLD.user_id=p.user_id)
 BEGIN SELECT RAISE(ABORT,'schedule_history_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER schedule_executions_no_update BEFORE UPDATE ON schedule_executions BEGIN SELECT RAISE(ABORT,'schedule_history_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER schedule_revisions_no_delete BEFORE DELETE ON schedule_revisions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='schedule_revisions' AND p.user_id=q.user_id AND q.state='Erasing' AND OLD.user_id=p.user_id)
 BEGIN SELECT RAISE(ABORT,'schedule_history_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER schedule_revisions_no_update BEFORE UPDATE ON schedule_revisions BEGIN SELECT RAISE(ABORT,'schedule_history_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER schedules_identity_immutable BEFORE UPDATE ON schedules WHEN NEW.kind<>OLD.kind OR NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id BEGIN SELECT RAISE(ABORT,'schedule_identity_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER source_attestation_no_delete BEFORE DELETE ON source_attestations
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='source_attestations' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN SELECT RAISE(ABORT, 'attestation_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER source_attestation_no_update BEFORE UPDATE ON source_attestations
 BEGIN SELECT RAISE(ABORT, 'attestation_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER sql_assertions_refusal_insert BEFORE INSERT ON sql_assertions
 WHEN NEW.accepted IS NOT 1
@@ -6559,6 +7583,7 @@ BEGIN
     WHEN 'recurring_cursor' THEN RAISE(ABORT, 'recurring_cursor_changed')
   END;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER sql_assertions_refusal_update BEFORE UPDATE ON sql_assertions
 WHEN NEW.accepted IS NOT 1
@@ -6572,16 +7597,22 @@ BEGIN
     WHEN 'recurring_cursor' THEN RAISE(ABORT, 'recurring_cursor_changed')
   END;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_backfill_entitlements_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_backfill_entitlements_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_backfill_entitlements_field_fence_update BEFORE UPDATE ON users WHEN (NEW.backfill_present IS NOT OLD.backfill_present OR NEW.backfill_submission_id IS NOT OLD.backfill_submission_id OR NEW.backfill_consumed_at_ms IS NOT OLD.backfill_consumed_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.backfill_present IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_backfill_entitlements'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_backfill_entitlements_field_preserve_delete BEFORE DELETE ON users WHEN OLD.backfill_present IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'statement_backfill_entitlements','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'submission_id',OLD.backfill_submission_id,'consumed_at_ms',OLD.backfill_consumed_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_backfill_entitlements_field_preserve_update BEFORE UPDATE ON users WHEN OLD.backfill_present IS NOT NULL AND NEW.backfill_present IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'statement_backfill_entitlements','drain:'||lower(hex(randomblob(16))),json_object('user_id',OLD.id,'submission_id',OLD.backfill_submission_id,'consumed_at_ms',OLD.backfill_consumed_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_backfill_on_capture AFTER INSERT ON statement_record_outcomes
 WHEN NEW.outcome = 'accepted'
@@ -6590,6 +7621,7 @@ BEGIN
     SET backfill_consumed_at_ms = coalesce(backfill_consumed_at_ms, unixepoch('now') * 1000)
     WHERE backfill_present IS NOT NULL AND id = NEW.user_id AND backfill_submission_id = NEW.submission_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_clarification_abandon AFTER UPDATE OF clarification_state ON statement_submissions
 WHEN NEW.clarification_state='abandoned'
@@ -6605,6 +7637,7 @@ BEGIN
  UPDATE users SET backfill_submission_id=NULL
  WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.id AND backfill_consumed_at_ms IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_clarification_release AFTER UPDATE OF clarification_state ON statement_submissions
 WHEN NEW.clarification_state='completed'
@@ -6612,6 +7645,7 @@ BEGIN
  UPDATE users SET backfill_submission_id=NULL
  WHERE backfill_present IS NOT NULL AND id=NEW.user_id AND backfill_submission_id=NEW.id AND backfill_consumed_at_ms IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_clarification_transition BEFORE UPDATE OF clarification_state ON statement_submissions
 WHEN OLD.clarification_state IS NOT NULL AND NOT ((NEW.clarification_state=OLD.clarification_state AND NEW.clarification_ended_at_ms IS OLD.clarification_ended_at_ms)
@@ -6619,26 +7653,33 @@ WHEN OLD.clarification_state IS NOT NULL AND NOT ((NEW.clarification_state=OLD.c
 BEGIN
  SELECT RAISE(ABORT,'statement_clarification_terminal');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_companions_valid_insert BEFORE INSERT ON statement_submissions WHEN coalesce(((NEW.hosted_session_id IS NULL AND NEW.hosted_turn_id IS NULL AND NEW.hosted_expires_at_ms IS NULL AND NEW.hosted_abandoned_at_ms IS NULL) OR (NEW.hosted_session_id IS NOT NULL AND NEW.hosted_turn_id IS NOT NULL AND NEW.hosted_expires_at_ms IS NOT NULL)) AND ((NEW.clarification_state IS NULL AND NEW.clarification_expires_at_ms IS NULL AND NEW.clarification_ended_at_ms IS NULL) OR (NEW.clarification_state IN ('awaiting','completed','abandoned') AND NEW.clarification_expires_at_ms IS NOT NULL AND ((NEW.clarification_state='awaiting')=(NEW.clarification_ended_at_ms IS NULL)))) AND ((NEW.material_source_sha256 IS NULL AND NEW.material_parts_sha256 IS NULL AND NEW.material_parser_revision IS NULL AND NEW.material_source_format IS NULL AND NEW.material_representation_revision IS NULL AND NEW.material_service_market IS NULL AND NEW.material_locale IS NULL AND NEW.material_time_zone IS NULL AND NEW.material_expires_at_ms IS NULL AND NEW.material_headers_json IS NULL AND NEW.material_row_count IS NULL AND NEW.material_part_count IS NULL AND NEW.material_byte_length IS NULL AND NEW.material_state IS NULL) OR (NEW.material_source_sha256 IS NOT NULL AND NEW.material_parts_sha256 IS NOT NULL AND NEW.material_parser_revision IS NOT NULL AND NEW.material_source_format IS NOT NULL AND NEW.material_representation_revision IS NOT NULL AND NEW.material_service_market IS NOT NULL AND NEW.material_locale IS NOT NULL AND NEW.material_time_zone IS NOT NULL AND NEW.material_expires_at_ms IS NOT NULL AND NEW.material_headers_json IS NOT NULL AND NEW.material_row_count IS NOT NULL AND NEW.material_part_count IS NOT NULL AND NEW.material_byte_length IS NOT NULL AND NEW.material_state IS NOT NULL AND NEW.material_state IN ('building','ready') AND length(NEW.material_source_sha256)=64 AND length(NEW.material_parts_sha256)=64 AND NEW.material_source_format IN ('csv','xlsx') AND json_valid(NEW.material_headers_json) AND length(CAST(NEW.material_headers_json AS BLOB))<=524288 AND NEW.material_row_count BETWEEN 1 AND 20000 AND NEW.material_part_count BETWEEN 1 AND 1024 AND NEW.material_byte_length BETWEEN 1 AND 16777216)),0)=0 BEGIN
  SELECT RAISE(ABORT,'statement_companions_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_companions_valid_update BEFORE UPDATE ON statement_submissions WHEN coalesce(((NEW.hosted_session_id IS NULL AND NEW.hosted_turn_id IS NULL AND NEW.hosted_expires_at_ms IS NULL AND NEW.hosted_abandoned_at_ms IS NULL) OR (NEW.hosted_session_id IS NOT NULL AND NEW.hosted_turn_id IS NOT NULL AND NEW.hosted_expires_at_ms IS NOT NULL)) AND ((NEW.clarification_state IS NULL AND NEW.clarification_expires_at_ms IS NULL AND NEW.clarification_ended_at_ms IS NULL) OR (NEW.clarification_state IN ('awaiting','completed','abandoned') AND NEW.clarification_expires_at_ms IS NOT NULL AND ((NEW.clarification_state='awaiting')=(NEW.clarification_ended_at_ms IS NULL)))) AND ((NEW.material_source_sha256 IS NULL AND NEW.material_parts_sha256 IS NULL AND NEW.material_parser_revision IS NULL AND NEW.material_source_format IS NULL AND NEW.material_representation_revision IS NULL AND NEW.material_service_market IS NULL AND NEW.material_locale IS NULL AND NEW.material_time_zone IS NULL AND NEW.material_expires_at_ms IS NULL AND NEW.material_headers_json IS NULL AND NEW.material_row_count IS NULL AND NEW.material_part_count IS NULL AND NEW.material_byte_length IS NULL AND NEW.material_state IS NULL) OR (NEW.material_source_sha256 IS NOT NULL AND NEW.material_parts_sha256 IS NOT NULL AND NEW.material_parser_revision IS NOT NULL AND NEW.material_source_format IS NOT NULL AND NEW.material_representation_revision IS NOT NULL AND NEW.material_service_market IS NOT NULL AND NEW.material_locale IS NOT NULL AND NEW.material_time_zone IS NOT NULL AND NEW.material_expires_at_ms IS NOT NULL AND NEW.material_headers_json IS NOT NULL AND NEW.material_row_count IS NOT NULL AND NEW.material_part_count IS NOT NULL AND NEW.material_byte_length IS NOT NULL AND NEW.material_state IS NOT NULL AND NEW.material_state IN ('building','ready') AND length(NEW.material_source_sha256)=64 AND length(NEW.material_parts_sha256)=64 AND NEW.material_source_format IN ('csv','xlsx') AND json_valid(NEW.material_headers_json) AND length(CAST(NEW.material_headers_json AS BLOB))<=524288 AND NEW.material_row_count BETWEEN 1 AND 20000 AND NEW.material_part_count BETWEEN 1 AND 1024 AND NEW.material_byte_length BETWEEN 1 AND 16777216)),0)=0 BEGIN
  SELECT RAISE(ABORT,'statement_companions_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_document_immutable BEFORE UPDATE ON hosted_turns WHEN OLD.document_media_id IS NOT NULL AND NOT((NEW.id IS OLD.id AND NEW.user_id IS OLD.user_id AND NEW.document_media_id IS OLD.document_media_id AND NEW.document_created_at_ms IS OLD.document_created_at_ms) AND (OLD.document_staging_id IS NULL OR (NEW.document_staging_id IS OLD.document_staging_id AND NEW.document_reference_json IS OLD.document_reference_json))) AND NOT(NEW.document_media_id IS NULL AND NEW.document_staging_id IS NULL AND NEW.document_upload_grant_id IS NULL AND NEW.document_upload_expires_at_ms IS NULL AND NEW.document_reference_json IS NULL AND NEW.document_created_at_ms IS NULL) BEGIN SELECT RAISE(ABORT,'statement_document_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_document_published AFTER UPDATE OF hosted_session_id ON statement_submissions
 WHEN OLD.hosted_session_id IS NULL AND NEW.hosted_session_id IS NOT NULL
 BEGIN
  UPDATE hosted_turns SET document_media_id=NULL,document_staging_id=NULL,document_upload_grant_id=NULL,document_upload_expires_at_ms=NULL,document_reference_json=NULL,document_created_at_ms=NULL WHERE id=NEW.hosted_turn_id AND user_id=NEW.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_document_same_user BEFORE UPDATE ON hosted_turns WHEN NEW.document_staging_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM statement_staging_objects WHERE id=NEW.document_staging_id AND user_id=NEW.user_id) BEGIN SELECT RAISE(ABORT,'statement_document_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_document_staging_deleted AFTER DELETE ON statement_staging_objects BEGIN UPDATE hosted_turns SET document_media_id=NULL,document_staging_id=NULL,document_upload_grant_id=NULL,document_upload_expires_at_ms=NULL,document_reference_json=NULL,document_created_at_ms=NULL WHERE document_staging_id=OLD.id; END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_extraction_clarification AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status IN ('completed','failed') AND OLD.status IN ('queued','processing') AND NEW.needs_review_rows>0
@@ -6646,10 +7687,12 @@ BEGIN
  UPDATE statement_submissions SET clarification_state='awaiting',clarification_expires_at_ms=(SELECT min(evidence_expires_at_ms) FROM statement_needs_review WHERE submission_id=NEW.id),clarification_ended_at_ms=NULL WHERE id=NEW.id;
  UPDATE statement_submissions SET clarification_state='abandoned',clarification_ended_at_ms=NEW.completed_at_ms WHERE id=NEW.id AND clarification_expires_at_ms<=NEW.completed_at_ms;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_clear BEFORE UPDATE OF material_state ON statement_submissions WHEN OLD.material_state IS NOT NULL AND NEW.material_state IS NULL AND NEW.status NOT IN ('completed','failed') BEGIN
  SELECT RAISE(ABORT,'statement_materialization_identity');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_identity BEFORE UPDATE OF material_source_sha256,material_parts_sha256,material_parser_revision,material_source_format,material_representation_revision,material_service_market,material_locale,material_time_zone,material_expires_at_ms,material_headers_json,material_row_count,material_part_count,material_byte_length,material_state ON statement_submissions
 WHEN OLD.material_state IS NOT NULL AND NEW.material_state IS NOT NULL AND (NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id
@@ -6664,12 +7707,14 @@ WHEN OLD.material_state IS NOT NULL AND NEW.material_state IS NOT NULL AND (NEW.
 BEGIN
  SELECT RAISE(ABORT,'statement_materialization_identity');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_initial BEFORE INSERT ON statement_submissions
 WHEN NEW.material_state IS NOT NULL
 BEGIN
  SELECT RAISE(ABORT,'statement_materialization_owner');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_owner BEFORE UPDATE OF material_state ON statement_submissions
 WHEN OLD.material_state IS NULL AND NEW.material_state IS NOT NULL AND NOT EXISTS (SELECT 1 FROM statement_submissions s JOIN statement_staging_objects o
@@ -6681,6 +7726,7 @@ WHEN OLD.material_state IS NULL AND NEW.material_state IS NOT NULL AND NOT EXIST
 BEGIN
  SELECT RAISE(ABORT,'statement_materialization_owner');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_part_guard BEFORE INSERT ON statement_materialization_parts
 WHEN NOT EXISTS (SELECT 1 FROM statement_submissions m WHERE m.id=NEW.submission_id
@@ -6688,9 +7734,11 @@ WHEN NOT EXISTS (SELECT 1 FROM statement_submissions m WHERE m.id=NEW.submission
 BEGIN
  SELECT RAISE(ABORT,'statement_materialization_part_guard');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_part_immutable BEFORE UPDATE ON statement_materialization_parts
 BEGIN SELECT RAISE(ABORT,'statement_materialization_part_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_materialization_terminal AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status IN ('completed','failed')
@@ -6698,6 +7746,7 @@ BEGIN
  DELETE FROM statement_materialization_parts WHERE submission_id=NEW.id;
  UPDATE statement_submissions SET material_source_sha256=NULL,material_parts_sha256=NULL,material_parser_revision=NULL,material_source_format=NULL,material_representation_revision=NULL,material_service_market=NULL,material_locale=NULL,material_time_zone=NULL,material_expires_at_ms=NULL,material_headers_json=NULL,material_row_count=NULL,material_part_count=NULL,material_byte_length=NULL,material_state=NULL WHERE id=NEW.id AND material_state IS NOT NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_origin_no_resumption BEFORE UPDATE OF hosted_session_id,hosted_turn_id,hosted_expires_at_ms,hosted_abandoned_at_ms ON statement_submissions
 WHEN OLD.hosted_session_id IS NOT NULL AND (OLD.hosted_abandoned_at_ms IS NOT NULL OR NEW.id != OLD.id
@@ -6706,6 +7755,7 @@ WHEN OLD.hosted_session_id IS NOT NULL AND (OLD.hosted_abandoned_at_ms IS NOT NU
 BEGIN
  SELECT RAISE(ABORT, 'statement_origin_terminal');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_partial_accounting_on_failure AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status='failed' AND OLD.status IN ('queued','processing')
@@ -6715,6 +7765,7 @@ BEGIN
     accepted_rows=processed_accepted_rows, needs_review_rows=processed_review_rows
     WHERE id=NEW.id AND user_id=NEW.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_partial_backfill_on_failure AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status = 'failed' AND OLD.status IN ('queued', 'processing')
@@ -6723,6 +7774,7 @@ BEGIN
     SET backfill_submission_id = CASE WHEN backfill_consumed_at_ms IS NULL THEN NULL ELSE backfill_submission_id END
     WHERE backfill_present IS NOT NULL AND id = NEW.user_id AND backfill_submission_id = NEW.id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_progress AFTER INSERT ON statement_record_outcomes
 BEGIN
@@ -6731,6 +7783,7 @@ BEGIN
   processed_review_rows=processed_review_rows+(NEW.outcome='needs-review')
   WHERE id=NEW.submission_id AND user_id=NEW.user_id;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_progress_conservation BEFORE UPDATE ON statement_submissions
 WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id
@@ -6753,12 +7806,14 @@ WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id
 BEGIN
  SELECT RAISE(ABORT,'statement_progress_conservation');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_progress_initial BEFORE INSERT ON statement_submissions
 WHEN NEW.processed_rows<>0 OR NEW.processed_accepted_rows<>0 OR NEW.processed_review_rows<>0
 BEGIN
  SELECT RAISE(ABORT,'statement_progress_initial');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_progress_order BEFORE INSERT ON statement_record_outcomes
 WHEN NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE s.id=NEW.submission_id AND s.user_id=NEW.user_id
@@ -6766,6 +7821,7 @@ WHEN NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE s.id=NEW.submission_
 BEGIN
  SELECT RAISE(ABORT,'statement_progress_order');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_progress_terminal BEFORE UPDATE OF status,processed_rows,processed_accepted_rows,processed_review_rows,input_rows,accepted_rows,needs_review_rows ON statement_submissions
 WHEN (OLD.status IN ('completed','failed') AND NEW.status<>OLD.status)
@@ -6782,30 +7838,37 @@ WHEN (OLD.status IN ('completed','failed') AND NEW.status<>OLD.status)
 BEGIN
  SELECT RAISE(ABORT,'statement_progress_terminal');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_record_outcome_no_delete BEFORE DELETE ON statement_record_outcomes
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='statement_record_outcomes' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN SELECT RAISE(ABORT, 'statement_outcome_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_record_outcome_no_update BEFORE UPDATE ON statement_record_outcomes
 BEGIN SELECT RAISE(ABORT, 'statement_outcome_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_review_capacity_delete AFTER DELETE ON statement_needs_review
 WHEN OLD.status = 'pending'
 BEGIN UPDATE statement_review_capacity SET pending_count = pending_count - 1 WHERE id = 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_review_capacity_insert AFTER INSERT ON statement_needs_review
 WHEN NEW.status = 'pending'
 BEGIN UPDATE statement_review_capacity SET pending_count = pending_count + 1 WHERE id = 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_review_capacity_settlement AFTER UPDATE OF status ON statement_needs_review
 WHEN OLD.status = 'pending' AND NEW.status != 'pending'
 BEGIN UPDATE statement_review_capacity SET pending_count = pending_count - 1 WHERE id = 1; END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_review_pending_cap BEFORE INSERT ON statement_needs_review
 WHEN NEW.status = 'pending' AND
   COALESCE((SELECT pending_count FROM statement_review_capacity WHERE id = 1), 5000) >= 5000
 BEGIN SELECT RAISE(ABORT, 'statement_review_capacity'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_review_settlement_only BEFORE UPDATE ON statement_needs_review
 WHEN NOT (((OLD.status = 'pending' AND NEW.status IN ('expired', 'resolved')
@@ -6823,6 +7886,7 @@ WHEN NOT (((OLD.status = 'pending' AND NEW.status IN ('expired', 'resolved')
   AND (NEW.status = OLD.status OR NEW.status = 'expired' OR EXISTS (SELECT 1 FROM ingestion_review_state
     WHERE id = OLD.id AND user_id = OLD.user_id AND status = 'created')))
 BEGIN SELECT RAISE(ABORT, 'review_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_submission_state_insert BEFORE INSERT ON statement_submissions
 WHEN coalesce((
@@ -6846,6 +7910,7 @@ WHEN coalesce((
 BEGIN
  SELECT RAISE(ABORT, 'statement_submission_state');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_submission_state_update BEFORE UPDATE ON statement_submissions
 WHEN coalesce((
@@ -6869,8 +7934,10 @@ WHEN coalesce((
 BEGIN
  SELECT RAISE(ABORT, 'statement_submission_state');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_submissions_companions_initial BEFORE INSERT ON statement_submissions WHEN NEW.work_user_id IS NOT NULL OR NEW.work_revision IS NOT NULL OR NEW.work_published_at_ms IS NOT NULL OR NEW.work_last_attempt_at_ms IS NOT NULL OR NEW.work_last_reconciled_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'statement_submissions_companions_initial'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_terminal_material AFTER UPDATE OF status ON statement_submissions
 WHEN NEW.status IN ('completed','failed') AND OLD.status IN ('queued','processing')
@@ -6879,16 +7946,22 @@ BEGIN
   WHERE id=NEW.staging_id AND user_id=NEW.user_id AND status='published'
     AND object_deleted_at_ms IS NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_whatsapp_documents_field_fence_delete BEFORE DELETE ON hosted_turns WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.document_media_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_whatsapp_documents')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_whatsapp_documents_field_fence_insert BEFORE INSERT ON hosted_turns WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.document_media_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_whatsapp_documents')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_whatsapp_documents_field_fence_update BEFORE UPDATE ON hosted_turns WHEN (NEW.document_media_id IS NOT OLD.document_media_id OR NEW.document_staging_id IS NOT OLD.document_staging_id OR NEW.document_upload_grant_id IS NOT OLD.document_upload_grant_id OR NEW.document_upload_expires_at_ms IS NOT OLD.document_upload_expires_at_ms OR NEW.document_reference_json IS NOT OLD.document_reference_json OR NEW.document_created_at_ms IS NOT OLD.document_created_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.user_id=q.user_id AND OLD.document_media_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_whatsapp_documents')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.user_id=q.user_id AND NEW.document_media_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='statement_whatsapp_documents'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_whatsapp_documents_field_preserve_delete BEFORE DELETE ON hosted_turns WHEN OLD.document_media_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'statement_whatsapp_documents','drain:'||lower(hex(randomblob(16))),json_object('turn_id',OLD.id,'user_id',OLD.user_id,'media_id',OLD.document_media_id,'staging_id',OLD.document_staging_id,'upload_grant_id',OLD.document_upload_grant_id,'upload_expires_at_ms',OLD.document_upload_expires_at_ms,'reference_json',OLD.document_reference_json,'created_at_ms',OLD.document_created_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER statement_whatsapp_documents_field_preserve_update BEFORE UPDATE ON hosted_turns WHEN OLD.document_media_id IS NOT NULL AND NEW.document_media_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000) BEGIN INSERT INTO erasure_archives(request_id,store_id,row_ref,body) SELECT q.id,'statement_whatsapp_documents','drain:'||lower(hex(randomblob(16))),json_object('turn_id',OLD.id,'user_id',OLD.user_id,'media_id',OLD.document_media_id,'staging_id',OLD.document_staging_id,'upload_grant_id',OLD.document_upload_grant_id,'upload_expires_at_ms',OLD.document_upload_expires_at_ms,'reference_json',OLD.document_reference_json,'created_at_ms',OLD.document_created_at_ms) FROM erasure_requests q WHERE q.state='Draining' AND OLD.user_id=q.user_id AND json_extract(q.decision_json,'$.dispositions.ingestion.action')='Retain' AND json_extract(q.decision_json,'$.dispositions.ingestion.retention.untilMs')>unixepoch('subsec')*1000; END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_cancellation_fence AFTER INSERT ON subscription_cancellations
 BEGIN
@@ -6896,6 +7969,7 @@ BEGIN
  UPDATE billing_attempts AS billing_collection_work SET collection_state='rejected' WHERE collection_state IS NOT NULL AND collection_state='armed'
     AND id IN (SELECT id FROM billing_attempts WHERE user_id=NEW.user_id);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_cancellation_guard BEFORE INSERT ON subscription_cancellations
 WHEN NOT EXISTS (SELECT 1 FROM subscriptions sub JOIN billing_attempts a ON a.id=sub.attempt_id AND a.user_id=sub.user_id
@@ -6906,6 +7980,7 @@ WHEN NOT EXISTS (SELECT 1 FROM subscriptions sub JOIN billing_attempts a ON a.id
 BEGIN
  SELECT RAISE(ABORT, 'subscription_cancellation_invalid');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_cancellation_immutable BEFORE UPDATE ON subscription_cancellations
 WHEN NEW.user_id<>OLD.user_id OR NEW.paid_attempt_id<>OLD.paid_attempt_id OR NEW.payment_source_id<>OLD.payment_source_id
@@ -6916,20 +7991,26 @@ WHEN NEW.user_id<>OLD.user_id OR NEW.paid_attempt_id<>OLD.paid_attempt_id OR NEW
 BEGIN
  SELECT RAISE(ABORT, 'subscription_cancellation_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_cancellation_no_delete BEFORE DELETE ON subscription_cancellations
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='subscription_cancellations' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN
  SELECT RAISE(ABORT, 'subscription_cancellation_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_identities_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscription_identities')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_identities_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscription_identities')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_identities_field_fence_update BEFORE UPDATE ON users WHEN (NEW.subscription_id IS NOT OLD.subscription_id) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscription_identities')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='subscription_identities'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_identities_field_immutable BEFORE UPDATE ON users WHEN OLD.subscription_id IS NOT NULL AND (NEW.subscription_id IS NOT OLD.subscription_id) AND NOT((NEW.subscription_id IS NULL) AND EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE p.store_id='subscription_identities' AND p.user_id=OLD.id AND q.user_id=p.user_id AND q.state='Erasing')) BEGIN SELECT RAISE(ABORT,'subscription_identities_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_identities_field_preserve_delete BEFORE DELETE ON users
 WHEN OLD.subscription_id IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
@@ -6942,6 +8023,7 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_identities_field_preserve_update BEFORE UPDATE ON users
 WHEN OLD.subscription_id IS NOT NULL AND NEW.subscription_id IS NULL AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state='Draining' AND (OLD.id=q.user_id)
@@ -6954,28 +8036,34 @@ BEGIN
     AND json_extract(q.decision_json,'$.dispositions.billing.action')='Retain'
     AND json_extract(q.decision_json,'$.dispositions.billing.retention.untilMs')>unixepoch('subsec')*1000;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_prices_immutable BEFORE UPDATE ON subscription_prices
 WHEN NEW.id <> OLD.id OR NEW.amount <> OLD.amount OR NEW.currency <> OLD.currency
   OR NEW.billing_period <> OLD.billing_period OR NEW.service_market <> OLD.service_market
   OR NEW.tax_treatment <> OLD.tax_treatment OR NEW.terms_json <> OLD.terms_json
 BEGIN SELECT RAISE(ABORT, 'price_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_prices_no_delete BEFORE DELETE ON subscription_prices
 BEGIN SELECT RAISE(ABORT, 'price_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER subscription_renewal_stop_immutable BEFORE UPDATE OF renewal_stopped_user_id,renewal_stopped_at_ms ON refund_attempts
 WHEN OLD.renewal_stopped_at_ms IS NOT NULL AND (NEW.renewal_stopped_user_id IS NOT OLD.renewal_stopped_user_id OR NEW.renewal_stopped_at_ms IS NOT OLD.renewal_stopped_at_ms)
 BEGIN
  SELECT RAISE(ABORT, 'subscription_renewal_stop_immutable');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_correction_no_delete BEFORE DELETE ON transaction_corrections
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits erasurePermit JOIN erasure_requests q ON q.id=erasurePermit.request_id WHERE erasurePermit.store_id='transaction_corrections' AND erasurePermit.user_id=q.user_id AND q.state='Erasing' AND (OLD.user_id=erasurePermit.user_id))
 BEGIN SELECT RAISE(ABORT, 'correction_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_correction_no_update BEFORE UPDATE ON transaction_corrections
 BEGIN SELECT RAISE(ABORT, 'correction_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1,
@@ -6984,12 +8072,14 @@ CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations 
       THEN NEW.time_zone ELSE time_zone END
   WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_delete AFTER DELETE ON transactions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transactions' AND (OLD.user_id=q.user_id))
 BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = OLD.user_id AND fact_revision IS NOT NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_insert AFTER INSERT ON transactions BEGIN
   INSERT INTO dashboard_projection_state(user_id,version,readiness,fact_revision,first_captured_at,time_zone)
@@ -6998,24 +8088,29 @@ CREATE TRIGGER transaction_fact_insert AFTER INSERT ON transactions BEGIN
     first_captured_at=coalesce(first_captured_at,excluded.first_captured_at),
     time_zone=coalesce(dashboard_projection_state.time_zone,excluded.time_zone);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_link_delete AFTER DELETE ON transaction_reconciliation_decisions
 WHEN NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id WHERE q.state='Erasing' AND p.user_id=q.user_id AND p.store_id='transaction_reconciliation_decisions' AND (OLD.user_id=q.user_id))
 BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = OLD.user_id AND fact_revision IS NOT NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_link_insert AFTER INSERT ON transaction_reconciliation_decisions BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_link_update AFTER UPDATE ON transaction_reconciliation_decisions BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_fact_update AFTER UPDATE ON transactions BEGIN
   UPDATE dashboard_projection_state SET fact_revision = fact_revision + 1 WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER transaction_user_decisions BEFORE UPDATE ON transactions
 WHEN EXISTS (
@@ -7040,9 +8135,11 @@ WHEN EXISTS (
   (json_extract(OLD.user_decisions, '$.notes') = 1 AND NEW.notes IS NOT OLD.notes)
 ))
 BEGIN SELECT RAISE(ABORT, 'transaction_user_decision'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER transcript_no_update BEFORE UPDATE ON transcript_entries
 BEGIN SELECT RAISE(ABORT, 'transcript_append_only'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER transcript_retention_guard BEFORE DELETE ON transcript_entries
 WHEN (NOT EXISTS (SELECT 1 FROM hosted_turns WHERE id = OLD.turn_id AND user_id = OLD.user_id
@@ -7054,21 +8151,27 @@ AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,user_id,id AS hosted_session_id,comp
 BEGIN
  SELECT RAISE(ABORT, 'transcript_retention_not_due');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER users_trial_immutable_delete BEFORE DELETE ON users
 WHEN OLD.trial_started_at_ms IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p JOIN erasure_requests q ON q.id=p.request_id
  WHERE p.store_id='users' AND p.user_id=OLD.id AND q.user_id=OLD.id AND q.state='Erasing')
 BEGIN SELECT RAISE(ABORT,'trial_period_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER users_trial_immutable_update BEFORE UPDATE OF trial_started_at_ms,trial_ends_at_ms ON users
 WHEN OLD.trial_started_at_ms IS NOT NULL AND (NEW.trial_started_at_ms IS NOT OLD.trial_started_at_ms OR NEW.trial_ends_at_ms IS NOT OLD.trial_ends_at_ms)
 BEGIN SELECT RAISE(ABORT,'trial_period_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER verified_email_credentials_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER verified_email_credentials_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER verified_email_credentials_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.verified_email_address IS NOT OLD.verified_email_address OR NEW.email_verified_at_ms IS NOT OLD.email_verified_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.verified_email_address IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='verified_email_credentials'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER web_session_requires_pairing BEFORE INSERT ON web_sessions
 WHEN NOT EXISTS (
@@ -7079,6 +8182,7 @@ WHEN NOT EXISTS (
 BEGIN
  SELECT RAISE(ABORT, 'web_session_invalid_pairing');
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER weekly_consent_offer_immutable BEFORE UPDATE ON consent_offers
 WHEN NEW.kind='weekly-summary' AND (NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id OR NEW.portfolio_id <> OLD.portfolio_id
@@ -7088,9 +8192,11 @@ WHEN NEW.kind='weekly-summary' AND (NEW.id <> OLD.id OR NEW.user_id <> OLD.user_
  OR (OLD.decision_message_id IS NOT NULL AND (NEW.decision_message_id IS NOT OLD.decision_message_id OR NEW.decision IS NOT OLD.decision))
 )
 BEGIN SELECT RAISE(ABORT,'weekly_disclosure_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER weekly_consent_source_immutable BEFORE UPDATE ON consent_offers WHEN NEW.kind='weekly-summary' AND (NEW.source_id IS NOT OLD.source_id OR NEW.rejection_id IS NOT OLD.rejection_id )
 BEGIN SELECT RAISE(ABORT,'weekly_disclosure_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER weekly_price_notice AFTER UPDATE OF published_order ON subscription_prices
 WHEN NEW.published_order = 1 AND OLD.published_order IS NULL
@@ -7102,20 +8208,26 @@ BEGIN
     WHERE a.billing_period='weekly' AND source.method='card' AND a.price_id<>NEW.id
       AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS refund_id,renewal_stopped_user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) stop WHERE stop.user_id=s.user_id);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER whatsapp_delivery_kind_immutable BEFORE UPDATE OF kind ON whatsapp_deliveries WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'whatsapp_delivery_kind_immutable'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER whatsapp_identities_field_fence_delete BEFORE DELETE ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER whatsapp_identities_field_fence_insert BEFORE INSERT ON users WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER whatsapp_identities_field_fence_update BEFORE UPDATE ON users WHEN (NEW.id IS NOT OLD.id OR NEW.whatsapp_portfolio_id IS NOT OLD.whatsapp_portfolio_id OR NEW.whatsapp_bsuid IS NOT OLD.whatsapp_bsuid OR NEW.whatsapp_verified_at_ms IS NOT OLD.whatsapp_verified_at_ms) AND (EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND OLD.id=q.user_id AND OLD.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities')) OR EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state NOT IN('AwaitingReview','Draining') AND NEW.id=q.user_id AND NEW.whatsapp_portfolio_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='whatsapp_identities'))) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
+--> statement-breakpoint
 
 CREATE TRIGGER whatsapp_provider_completion_consumes_confirmation AFTER UPDATE OF completed_at_ms ON provider_authentication_attempts
 WHEN OLD.completed_at_ms IS NULL AND NEW.completed_at_ms IS NOT NULL
 BEGIN
  UPDATE whatsapp_provider_handoffs SET consumed_at_ms=NEW.completed_at_ms WHERE id=(SELECT handoff_id FROM provider_authentication_attempts WHERE id=NEW.id);
 END;
+--> statement-breakpoint
 
 CREATE TRIGGER whatsapp_provider_completion_requires_confirmation BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts
 WHEN OLD.completed_at_ms IS NULL AND NEW.completed_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM provider_authentication_attempts WHERE id=NEW.id AND handoff_id IS NOT NULL)
@@ -7131,3 +8243,4 @@ AND NOT EXISTS(
 BEGIN
  SELECT RAISE(ABORT,'whatsapp_provider_confirmation_invalid');
 END;
+--> statement-breakpoint

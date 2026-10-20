@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,8 +11,14 @@ import {
 
 const scriptPath = fileURLToPath(new URL("./check-applied-migration-drift.ts", import.meta.url));
 const infrastructureDirectory = fileURLToPath(new URL("../", import.meta.url));
-const appliedName = "0001_categories.sql";
-const appliedHash = "5c14f7a6901179f89f5ee798c2ff69c36873f2de52316a08478a1fbff92e2019";
+const appliedName = "0001_schema.sql";
+const appliedHash = createHash("sha256")
+  .update(
+    readFileSync(
+      new URL("../../../apps/server/cloudflare/migrations/0001_schema.sql", import.meta.url)
+    )
+  )
+  .digest("hex");
 
 type GateFixture = {
   readonly state: unknown;

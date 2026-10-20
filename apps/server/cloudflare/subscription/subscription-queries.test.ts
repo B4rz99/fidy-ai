@@ -10,9 +10,8 @@ import {
   executeCanonicalHttpQuery,
   executeCanonicalQuery,
 } from "../canonical-operations/operations";
-
 import coreWorker from "../core-worker";
-import { applyTestMigration, auditEntriesTestSchema } from "../d1-test-fixture";
+import { auditEntriesTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
@@ -37,32 +36,33 @@ const fixture = (): Promise<D1Database> =>
       ]);
 
       const db = created.db;
-      const migration = yield* fromTestPromise(() =>
-        Bun.file(new URL("../migrations/0133_user_trial.sql", import.meta.url)).text()
-      );
       yield* fromTestPromise(() =>
-        db.batch(
-          migration
-            .replace(/^--.*$/gmu, "")
-            .trim()
-            .split(/;\s*\n(?=CREATE |DROP |ALTER |UPDATE |$)/u)
-            .filter((statement) =>
-              statement.trim().startsWith("CREATE TRIGGER users_trial_immutable")
-            )
-            .map((statement) => db.prepare(statement))
-        )
+        installCurrentTestObjects({
+          db,
+          tables: [
+            "commercial_allowance_consumptions",
+            "canonical_request_replays",
+            "canonical_request_buckets",
+            "canonical_request_leases",
+            "canonical_request_acceptances",
+          ],
+          objects: ["users_trial_immutable"],
+        })
       );
-      for (const name of ["0032_commercial_allowances", "0033_canonical_request_protection"]) {
-        yield* fromTestPromise(() =>
-          applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
-        );
-      }
       const past = Date.parse("2026-09-01T12:00:00Z");
       const future = (yield* Clock.currentTimeMillis) + 86_400_000;
       yield* fromTestPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')").bind(userA),
-          db.prepare("INSERT INTO users (id,time_zone) VALUES (?, 'America/Bogota')").bind(userB),
+          db
+            .prepare(
+              "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+            )
+            .bind(userA),
+          db
+            .prepare(
+              "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+            )
+            .bind(userB),
           db
             .prepare("UPDATE users SET trial_started_at_ms=?2,trial_ends_at_ms=?3 WHERE id=?1")
             .bind(userA, past, past + 604_800_000),

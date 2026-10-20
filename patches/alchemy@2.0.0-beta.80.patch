@@ -199,3 +199,122 @@ index 798e8499d1db0184d14defbd50e1e5bd0288e291..4a6c2efe3f756846e00737c03c351c15
              } satisfies Worker["Attributes"];
 
              // Centralized ownership decision: the engine routes `read`'s
+diff --git a/lib/Cloudflare/D1/ApplyMigrations.d.ts b/lib/Cloudflare/D1/ApplyMigrations.d.ts
+index 0c9935255b73ac427d76e4e1b19074aafabfcc0b..05f48c9b8e6cc4cd9715077675730399aebfd020 100644
+--- a/lib/Cloudflare/D1/ApplyMigrations.d.ts
++++ b/lib/Cloudflare/D1/ApplyMigrations.d.ts
+@@ -16,15 +16,13 @@ export interface D1QueryResult {
+         meta?: unknown;
+     }>;
+ }
+-export type D1SqlExecutor<E = unknown, R = never> = (sql: string) => Effect.Effect<D1QueryResult, E, R>;
++export type D1SqlExecutor<E = unknown, R = never> = (sql: string | ReadonlyArray<string>) => Effect.Effect<D1QueryResult, E, R>;
+ /**
+  * Adapt a raw D1 executor into the registry's {@link SqlExecutor} contract
+  * (see `src/SQL/Migrations/`). Parameters are inlined as SQL literals — the
+  * D1 HTTP protocol path here is raw-SQL-only, and the only parametrized
+- * queries are the migration formats' own bookkeeping. Batches join into a
+- * single multi-statement query: D1 over HTTP has no transactions, so one
+- * batched call is the closest available unit (matching wrangler's own
+- * behavior).
++ * queries are the migration formats' own bookkeeping. Batches preserve statement boundaries so large schema baselines respect D1
++ * per-statement limits. The migration ledger insert remains the final statement.
+  */
+ export declare const makeD1MigrationExecutor: <E>(raw: D1SqlExecutor<E>) => SqlExecutor;
+ //# sourceMappingURL=ApplyMigrations.d.ts.map
+\ No newline at end of file
+diff --git a/lib/Cloudflare/D1/ApplyMigrations.js b/lib/Cloudflare/D1/ApplyMigrations.js
+index 969249320fda95b2f0ce39544c0520db470bbc0f..1074086744ccbec108f902a35f353805227379e1 100644
+--- a/lib/Cloudflare/D1/ApplyMigrations.js
++++ b/lib/Cloudflare/D1/ApplyMigrations.js
+@@ -21,7 +21,7 @@ export const makeD1MigrationExecutor = (raw) => ({
+         .map((statement) => statement.trim())
+         .filter((statement) => statement.length > 0)
+         .map((statement) => statement.endsWith(";") ? statement : `${statement};`)
+-        .join("\n")).pipe(Effect.asVoid, Effect.mapError((cause) => new MigrationError({
++).pipe(Effect.asVoid, Effect.mapError((cause) => new MigrationError({
+         message: `D1 migration batch failed: ${String(cause)}`,
+         cause,
+     }))),
+diff --git a/lib/Cloudflare/D1/Database.js b/lib/Cloudflare/D1/Database.js
+index 47ddc1d0a5d82948677271089404794bc57f7e5d..1a32c209fd6fea0033c0b36c944e118c6df07f25 100644
+--- a/lib/Cloudflare/D1/Database.js
++++ b/lib/Cloudflare/D1/Database.js
+@@ -346,7 +346,7 @@ export const ProviderLive = () => Provider.succeed(Database, {
+                 stamped: stampedOf(output),
+                 withExecutor: (apply) => Effect.gen(function* () {
+                     const queryDb = yield* d1.queryDatabase;
+-                    yield* apply(makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, sql })));
++                    yield* apply(makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, ...(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) }) })));
+                 }),
+             })
+             : undefined;
+diff --git a/lib/Cloudflare/D1/LocalD1Gateway.js b/lib/Cloudflare/D1/LocalD1Gateway.js
+index 043ef83248abccd0bd8d94856cd421b3e66c1ca1..33a54845df0930937d17ded598ea435375b36a07 100644
+--- a/lib/Cloudflare/D1/LocalD1Gateway.js
++++ b/lib/Cloudflare/D1/LocalD1Gateway.js
+@@ -96,5 +96,5 @@ export const withLocalD1Query = (databaseId, use) => Effect.scoped(Effect.gen(fu
+  * SQL-only view of {@link withLocalD1Query} matching the migration flow's
+  * {@link D1SqlExecutor} contract.
+  */
+-export const withLocalD1Executor = (databaseId, use) => withLocalD1Query(databaseId, (query) => use((sql) => query({ sql })));
++export const withLocalD1Executor = (databaseId, use) => withLocalD1Query(databaseId, (query) => use((sql) => query(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) })));
+ //# sourceMappingURL=LocalD1Gateway.js.map
+\ No newline at end of file
+diff --git a/src/Cloudflare/D1/ApplyMigrations.ts b/src/Cloudflare/D1/ApplyMigrations.ts
+index aa79c99b10f59988b7c92de5cf8bf8ef4473e2f5..ce74814c4974a3e2924a128d94a029914168200d 100644
+--- a/src/Cloudflare/D1/ApplyMigrations.ts
++++ b/src/Cloudflare/D1/ApplyMigrations.ts
+@@ -23,17 +23,15 @@ export interface D1QueryResult {
+ }
+ 
+ export type D1SqlExecutor<E = unknown, R = never> = (
+-  sql: string,
++  sql: string | ReadonlyArray<string>,
+ ) => Effect.Effect<D1QueryResult, E, R>;
+ 
+ /**
+  * Adapt a raw D1 executor into the registry's {@link SqlExecutor} contract
+  * (see `src/SQL/Migrations/`). Parameters are inlined as SQL literals — the
+  * D1 HTTP protocol path here is raw-SQL-only, and the only parametrized
+- * queries are the migration formats' own bookkeeping. Batches join into a
+- * single multi-statement query: D1 over HTTP has no transactions, so one
+- * batched call is the closest available unit (matching wrangler's own
+- * behavior).
++ * queries are the migration formats' own bookkeeping. Batches preserve statement boundaries so large schema baselines respect D1
++ * per-statement limits. The migration ledger insert remains the final statement.
+  */
+ export const makeD1MigrationExecutor = <E>(
+   raw: D1SqlExecutor<E>,
+@@ -65,7 +63,7 @@ export const makeD1MigrationExecutor = <E>(
+         .map((statement) =>
+           statement.endsWith(";") ? statement : `${statement};`,
+         )
+-        .join("\n"),
++        ,
+     ).pipe(
+       Effect.asVoid,
+       Effect.mapError(
+diff --git a/src/Cloudflare/D1/Database.ts b/src/Cloudflare/D1/Database.ts
+index f8a163f50e9cdcc905198002d7f1f94b0b9cf527..d1257791407bc0cc53beca54641ec1fcb4250b5e 100644
+--- a/src/Cloudflare/D1/Database.ts
++++ b/src/Cloudflare/D1/Database.ts
+@@ -526,7 +526,7 @@ export const ProviderLive = () =>
+                 const queryDb = yield* d1.queryDatabase;
+                 yield* apply(
+                   makeD1MigrationExecutor((sql) =>
+-                    queryDb({ accountId: acct, databaseId, sql }),
++                    queryDb({ accountId: acct, databaseId, ...(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) }) }),
+                   ),
+                 );
+               }),
+diff --git a/src/Cloudflare/D1/LocalD1Gateway.ts b/src/Cloudflare/D1/LocalD1Gateway.ts
+index a9c3f808684f40e0c391f480093052846412d065..72c78e2fa19d41d11cdbd3c2cfd03bbcb25e0513 100644
+--- a/src/Cloudflare/D1/LocalD1Gateway.ts
++++ b/src/Cloudflare/D1/LocalD1Gateway.ts
+@@ -147,4 +147,4 @@ export const withLocalD1Query = <A, E, R>(
+ export const withLocalD1Executor = <A, E, R>(
+   databaseId: string,
+   use: (executor: D1SqlExecutor<LocalD1QueryError>) => Effect.Effect<A, E, R>,
+-) => withLocalD1Query(databaseId, (query) => use((sql) => query({ sql })));
++) => withLocalD1Query(databaseId, (query) => use((sql) => query(typeof sql === "string" ? { sql } : { batch: sql.map((statement) => ({ sql: statement })) })));

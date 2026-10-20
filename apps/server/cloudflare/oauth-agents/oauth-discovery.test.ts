@@ -50,7 +50,6 @@ it("refuses deliberately missing canonical query adapters without inventing a bi
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ access_token: Schema.String })
@@ -103,7 +102,6 @@ it("retains a 2025 session across separate initialized and discovery requests th
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -188,7 +186,6 @@ it.each(discoveryCases)(
         const fixture = yield* approvedFixture({
           scopes: capabilities,
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const token = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ access_token: Schema.String })
@@ -254,7 +251,6 @@ it.each(queryGroups)(
         const fixture = yield* approvedFixture({
           scopes: ["read", "write", "dashboard"],
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const cookie = yield* consentedSessionForUser({
           db: fixture.db,
@@ -449,7 +445,6 @@ it.each(queryGroups)(
         const fixture = yield* approvedFixture({
           scopes: ["read", "write", "dashboard"],
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const token = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ access_token: Schema.String })
@@ -509,7 +504,6 @@ it("retains complete query data while removing scope-inaccessible continuations 
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ access_token: Schema.String })
@@ -690,7 +684,6 @@ it("returns a schema-valid unavailable failure from a genuinely unavailable nati
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ access_token: Schema.String })
@@ -728,7 +721,6 @@ it("returns the canonical uninitialized Dashboard outcome without creating domai
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ access_token: Schema.String })
@@ -767,7 +759,6 @@ it("keeps read and account-security tools uncallable by a write-only connection"
       const fixture = yield* approvedFixture({
         scopes: ["write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const exchanged = yield* wait(exchangeFixture(fixture));
       expect(exchanged.status).toBe(200);

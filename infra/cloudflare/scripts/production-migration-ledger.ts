@@ -75,10 +75,9 @@ export const readProductionDatabaseName = (): string => {
   return decodeProductionDatabaseName(output);
 };
 
-export const queryProductionMigrationLedger = (
-  databaseName: string
-): ReadonlyArray<AppliedMigration> => {
-  const output = runMigrationHistoryCommand([
+/** Run a metadata-only query or an explicitly reviewed migration-ledger update. */
+export const queryProductionDatabase = (databaseName: string, sql: string): string =>
+  runMigrationHistoryCommand([
     "bun",
     "run",
     "wrangler",
@@ -88,11 +87,14 @@ export const queryProductionMigrationLedger = (
     "--remote",
     "--yes",
     "--command",
-    ledgerQuery,
+    sql,
     "--json",
   ]);
-  return decodeWranglerMigrationRows(output);
-};
+
+export const queryProductionMigrationLedger = (
+  databaseName: string
+): ReadonlyArray<AppliedMigration> =>
+  decodeWranglerMigrationRows(queryProductionDatabase(databaseName, ledgerQuery));
 
 export const readProductionMigrationLedger = (): ReadonlyArray<AppliedMigration> =>
   queryProductionMigrationLedger(readProductionDatabaseName());

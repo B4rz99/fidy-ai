@@ -15,7 +15,6 @@ it.live(
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())

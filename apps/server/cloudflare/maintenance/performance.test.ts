@@ -47,16 +47,7 @@ it.skipIf(!enabled)(
           { retainedAdmissions: 20_000, expiredAdmissions: 4_096 },
         ]) {
           const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-          yield* Effect.tryPromise(() =>
-            installTestSchema({
-              db,
-              sources: Array.from(
-                new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-              )
-                .sort()
-                .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-            })
-          );
+          yield* Effect.tryPromise(() => installTestSchema({ db }));
           yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
           const now = yield* Clock.currentTimeMillis;
           yield* Effect.tryPromise(() =>
@@ -206,16 +197,7 @@ it.skipIf(!enabled)(
     Effect.runPromise(
       Effect.gen(function* () {
         const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-        yield* Effect.tryPromise(() =>
-          installTestSchema({
-            db,
-            sources: Array.from(
-              new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-            )
-              .sort()
-              .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-          })
-        );
+        yield* Effect.tryPromise(() => installTestSchema({ db }));
         for (const tick of [0, 1, 2]) {
           const measured = observeRetentionCost(db);
           const before = yield* Clock.currentTimeMillis;

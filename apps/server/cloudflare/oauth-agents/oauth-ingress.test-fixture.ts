@@ -1,7 +1,7 @@
 import { categoryIds } from "../../src/core/categories/contract";
 import { Clock, Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { afterAll, expect } from "vitest";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { makeMutationCommitGate } from "./mutation-commit.test-fixture";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { type McpResidency, makeMcpResidency } from "../mcp/runtime";
@@ -159,223 +159,197 @@ export type Harness = Readonly<{
   }>;
 }>;
 
-const omittedAuditMigrations = new Set([
-  "0037_oauth_shared_audit_budget.sql",
-  "0062_pat_activity.sql",
-  "0063_connections.sql",
-  "0064_connection_browser_execution.sql",
-  "0065_connection_attempt_retention.sql",
-  "0093_recurring_plans.sql",
-]);
-
-export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure> =>
-  Effect.gen(function* () {
-    const db = yield* wait(databases.acquire());
-    const sources = Array.from(
-      new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-    )
-      .sort((left, right) => left.localeCompare(right))
-      .filter(
-        (name) =>
-          auditMigration ||
-          name === "0163_oauth_first_party_approval.sql" ||
-          (name < "0095_" && !omittedAuditMigrations.has(name))
-      )
-      .map((name) => new URL(`../migrations/${name}`, import.meta.url));
-    if (auditMigration) yield* wait(installTestSchema({ db, sources }));
-    else for (const source of sources) yield* wait(applyTestMigration({ db, source }));
-    let mcpHandoffCount = 0;
-    const coordinators = new Map<string, UserTransactionCoordinator>();
-    const deliveryResidencies = new Map<string, McpResidency>();
-    let queryGate: Option.Option<QueryGate> = Option.none();
-    const mutationCommit = makeMutationCommitGate(db);
-    const queryDb = new Proxy(mutationCommit.db, {
-      get: (target, key): unknown => {
-        if (key === "prepare") {
-          return (sql: string): D1PreparedStatement =>
-            Option.match(queryGate, {
-              onNone: () => target.prepare(sql),
-              onSome: (gate) => pauseBudgetRead(target.prepare(sql), sql, gate),
-            });
-        }
-        const member: unknown = Reflect.get(target, key);
-        return Predicate.isFunction(member) ? member.bind(target) : member;
-      },
-    });
-    let queryResponseIntercept: Option.Option<
-      (input: Readonly<{ request: Request; response: Response }>) => Promise<Response>
-    > = Option.none();
-    let refreshGate: Option.Option<
-      Readonly<{
-        waiting: ReturnType<typeof Promise.withResolvers<void>>;
-        settled: ReturnType<typeof Promise.withResolvers<void>>;
-        release: ReturnType<typeof Promise.withResolvers<void>>;
-      }>
-    > = Option.none();
-    const environment = {
-      DB: queryDb,
-      RELEASE_GIT_SHA: "a".repeat(40),
-      CONTRACT_DIGEST: "a".repeat(64),
-      BROWSER_ORIGIN: "https://app.fidyapp.com",
-      HOSTED_AI_MODEL: String(approvedWorkersAiModel),
-      AI: {
-        run: (): Promise<never> =>
-          Promise.reject(new Error("Bootstrap must not purchase inference")),
-      },
-      USER_TRANSACTION_COORDINATOR: {
-        getByName: (name: string): Pick<Fetcher, "fetch"> => ({
-          fetch: (incoming): Promise<Response> => {
-            const request = incoming instanceof Request ? incoming : new Request(incoming);
-            if (new URL(request.url).pathname === "/oauth-mcp") mcpHandoffCount += 1;
-            if (admitsCanonicalFault(request, queryResponseIntercept)) {
-              return deliverCanonicalFault({
-                name,
-                request,
-                db: queryDb,
-                residencies: deliveryResidencies,
-                enqueueCanonicalWork: ({ admission, signal }) =>
-                  Effect.gen(function* () {
-                    const body = yield* Schema.encodeEffect(
-                      Schema.fromJsonString(OAuthCanonicalAdmission)
-                    )(admission);
-                    return yield* Effect.tryPromise(() =>
-                      environment.USER_TRANSACTION_COORDINATOR.getByName(name).fetch(
-                        new Request("https://coordinator.internal/oauth-canonical", {
-                          method: "POST",
-                          signal,
-                          body,
-                        })
-                      )
-                    );
-                  }).pipe(Effect.orDie),
-              });
-            }
-            const run = (): Promise<Response> =>
-              fetchCoordinator({ coordinators, name, environment, request });
-            const intercept = queryResponseIntercept;
-            if (new URL(request.url).pathname === "/oauth-canonical" && Option.isSome(intercept)) {
-              return run().then((response) => intercept.value({ request, response }));
-            }
-            const gate = refreshGate;
-            if (new URL(request.url).pathname !== "/oauth-refresh" || Option.isNone(gate)) {
-              return run();
-            }
-            gate.value.waiting.resolve();
-            return gate.value.release.promise.then(run).finally(gate.value.settled.resolve);
-          },
-        }),
-      },
-      KAPSO_API_KEY: "",
-      WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-      KAPSO_WEBHOOK_SECRET: "",
-      WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
-      CLOUDFLARE_ACCESS_ISSUER: "",
-      CLOUDFLARE_ACCESS_AUDIENCE: "",
-      WOMPI_ENVIRONMENT: "",
-      WOMPI_PUBLIC_KEY: "",
-      WOMPI_PRIVATE_KEY: "",
-      WOMPI_INTEGRITY_SECRET: "",
-    };
-    const send = (path: string, init: RequestInit = {}): Promise<Response> =>
-      publicWorker.fetch(
-        new Request(`https://api.fidyapp.com${path}`, {
-          ...init,
-          headers: new Headers({
-            "cf-connecting-ip": "198.51.100.10",
-            ...Object.fromEntries(browserFixtureHeaders(init.headers ?? {})),
-          }),
-        }),
-        {
-          BROWSER_ORIGIN: environment.BROWSER_ORIGIN,
-          LOCAL_CANONICAL_READ_BEARER: "",
-          PAT_ADMISSION_KEY: "test-only-source-admission-key-32-bytes",
-          RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
-          CORE: {
-            fetch: (incoming) => {
-              const forwarded = incoming instanceof Request ? incoming : new Request(incoming);
-              return coreWorker.fetch(forwarded, environment).then((response) => {
-                const location = response.headers.get("location");
-                // Cloudflare's HTTP binding follows redirects on newly constructed Requests.
-                // Keep the redirect target inside this isolated Core, never on the network.
-                if (
-                  forwarded.redirect === "follow" &&
-                  response.status === 302 &&
-                  location !== null
-                ) {
-                  return coreWorker.fetch(new Request(location), environment);
-                }
-                return response;
-              });
-            },
-          },
-        }
-      );
-    return {
-      db: queryDb,
-      send,
-      mcpHandoffs: () => mcpHandoffCount,
-      holdMutationCommit: mutationCommit.hold,
-      disableInference: () => {
-        environment.HOSTED_AI_MODEL = "";
-      },
-      restartCoordinators: () => coordinators.clear(),
-      holdBudgetRead: () => {
-        const gate: QueryGate = {
-          waiting: Promise.withResolvers<void>(),
-          release: Promise.withResolvers<void>(),
-          settled: Promise.withResolvers<void>(),
-          scheduled: [],
-        };
-        queryGate = Option.some(gate);
-        return {
-          waiting: gate.waiting.promise,
-          release: gate.release.resolve,
-          settled: gate.settled.promise,
-          scheduled: () => gate.scheduled.slice(1),
-        };
-      },
-      interceptQueryResponse: (intercept) => {
-        queryResponseIntercept = Option.some(intercept);
-      },
-      holdRefresh: () => {
-        const gate = {
-          waiting: Promise.withResolvers<void>(),
-          settled: Promise.withResolvers<void>(),
-          release: Promise.withResolvers<void>(),
-        };
-        refreshGate = Option.some(gate);
-        return {
-          waiting: gate.waiting.promise,
-          settled: gate.settled.promise,
-          release: gate.release.resolve,
-        };
-      },
-      revokeCoordinate: (userId, payload) =>
-        environment.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
-          new Request("https://coordinator.internal/oauth-revoke", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: Schema.encodeSync(Schema.fromJsonString(Schema.Json))(payload),
-          })
-        ),
-      refreshCoordinate: (userId, payload) =>
-        environment.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
-          new Request("https://coordinator.internal/oauth-refresh", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: Schema.encodeSync(Schema.fromJsonString(Schema.Json))(payload),
-          })
-        ),
-      coordinate: (userId, payload) =>
-        environment.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
-          new Request("https://coordinator.internal/oauth-canonical", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: Schema.encodeSync(Schema.fromJsonString(Schema.Json))(payload),
-          })
-        ),
-    };
+export const setup = Effect.fnUntraced(function* () {
+  const db = yield* wait(databases.acquire());
+  yield* wait(installTestSchema({ db }));
+  let mcpHandoffCount = 0;
+  const coordinators = new Map<string, UserTransactionCoordinator>();
+  const deliveryResidencies = new Map<string, McpResidency>();
+  let queryGate: Option.Option<QueryGate> = Option.none();
+  const mutationCommit = makeMutationCommitGate(db);
+  const queryDb = new Proxy(mutationCommit.db, {
+    get: (target, key): unknown => {
+      if (key === "prepare") {
+        return (sql: string): D1PreparedStatement =>
+          Option.match(queryGate, {
+            onNone: () => target.prepare(sql),
+            onSome: (gate) => pauseBudgetRead(target.prepare(sql), sql, gate),
+          });
+      }
+      const member: unknown = Reflect.get(target, key);
+      return Predicate.isFunction(member) ? member.bind(target) : member;
+    },
   });
+  let queryResponseIntercept: Option.Option<
+    (input: Readonly<{ request: Request; response: Response }>) => Promise<Response>
+  > = Option.none();
+  let refreshGate: Option.Option<
+    Readonly<{
+      waiting: ReturnType<typeof Promise.withResolvers<void>>;
+      settled: ReturnType<typeof Promise.withResolvers<void>>;
+      release: ReturnType<typeof Promise.withResolvers<void>>;
+    }>
+  > = Option.none();
+  const environment = {
+    DB: queryDb,
+    RELEASE_GIT_SHA: "a".repeat(40),
+    CONTRACT_DIGEST: "a".repeat(64),
+    BROWSER_ORIGIN: "https://app.fidyapp.com",
+    HOSTED_AI_MODEL: String(approvedWorkersAiModel),
+    AI: {
+      run: (): Promise<never> => Promise.reject(new Error("Bootstrap must not purchase inference")),
+    },
+    USER_TRANSACTION_COORDINATOR: {
+      getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+        fetch: (incoming): Promise<Response> => {
+          const request = incoming instanceof Request ? incoming : new Request(incoming);
+          if (new URL(request.url).pathname === "/oauth-mcp") mcpHandoffCount += 1;
+          if (admitsCanonicalFault(request, queryResponseIntercept)) {
+            return deliverCanonicalFault({
+              name,
+              request,
+              db: queryDb,
+              residencies: deliveryResidencies,
+              enqueueCanonicalWork: ({ admission, signal }) =>
+                Effect.gen(function* () {
+                  const body = yield* Schema.encodeEffect(
+                    Schema.fromJsonString(OAuthCanonicalAdmission)
+                  )(admission);
+                  return yield* Effect.tryPromise(() =>
+                    environment.USER_TRANSACTION_COORDINATOR.getByName(name).fetch(
+                      new Request("https://coordinator.internal/oauth-canonical", {
+                        method: "POST",
+                        signal,
+                        body,
+                      })
+                    )
+                  );
+                }).pipe(Effect.orDie),
+            });
+          }
+          const run = (): Promise<Response> =>
+            fetchCoordinator({ coordinators, name, environment, request });
+          const intercept = queryResponseIntercept;
+          if (new URL(request.url).pathname === "/oauth-canonical" && Option.isSome(intercept)) {
+            return run().then((response) => intercept.value({ request, response }));
+          }
+          const gate = refreshGate;
+          if (new URL(request.url).pathname !== "/oauth-refresh" || Option.isNone(gate)) {
+            return run();
+          }
+          gate.value.waiting.resolve();
+          return gate.value.release.promise.then(run).finally(gate.value.settled.resolve);
+        },
+      }),
+    },
+    KAPSO_API_KEY: "",
+    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
+    KAPSO_WEBHOOK_SECRET: "",
+    WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+    CLOUDFLARE_ACCESS_ISSUER: "",
+    CLOUDFLARE_ACCESS_AUDIENCE: "",
+    WOMPI_ENVIRONMENT: "",
+    WOMPI_PUBLIC_KEY: "",
+    WOMPI_PRIVATE_KEY: "",
+    WOMPI_INTEGRITY_SECRET: "",
+  };
+  const send = (path: string, init: RequestInit = {}): Promise<Response> =>
+    publicWorker.fetch(
+      new Request(`https://api.fidyapp.com${path}`, {
+        ...init,
+        headers: new Headers({
+          "cf-connecting-ip": "198.51.100.10",
+          ...Object.fromEntries(browserFixtureHeaders(init.headers ?? {})),
+        }),
+      }),
+      {
+        BROWSER_ORIGIN: environment.BROWSER_ORIGIN,
+        LOCAL_CANONICAL_READ_BEARER: "",
+        PAT_ADMISSION_KEY: "test-only-source-admission-key-32-bytes",
+        RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
+        CORE: {
+          fetch: (incoming) => {
+            const forwarded = incoming instanceof Request ? incoming : new Request(incoming);
+            return coreWorker.fetch(forwarded, environment).then((response) => {
+              const location = response.headers.get("location");
+              // Cloudflare's HTTP binding follows redirects on newly constructed Requests.
+              // Keep the redirect target inside this isolated Core, never on the network.
+              if (forwarded.redirect === "follow" && response.status === 302 && location !== null) {
+                return coreWorker.fetch(new Request(location), environment);
+              }
+              return response;
+            });
+          },
+        },
+      }
+    );
+  const harness: Harness = {
+    db: queryDb,
+    send,
+    mcpHandoffs: () => mcpHandoffCount,
+    holdMutationCommit: mutationCommit.hold,
+    disableInference: () => {
+      environment.HOSTED_AI_MODEL = "";
+    },
+    restartCoordinators: () => coordinators.clear(),
+    holdBudgetRead: () => {
+      const gate: QueryGate = {
+        waiting: Promise.withResolvers<void>(),
+        release: Promise.withResolvers<void>(),
+        settled: Promise.withResolvers<void>(),
+        scheduled: [],
+      };
+      queryGate = Option.some(gate);
+      return {
+        waiting: gate.waiting.promise,
+        release: gate.release.resolve,
+        settled: gate.settled.promise,
+        scheduled: () => gate.scheduled.slice(1),
+      };
+    },
+    interceptQueryResponse: (intercept) => {
+      queryResponseIntercept = Option.some(intercept);
+    },
+    holdRefresh: () => {
+      const gate = {
+        waiting: Promise.withResolvers<void>(),
+        settled: Promise.withResolvers<void>(),
+        release: Promise.withResolvers<void>(),
+      };
+      refreshGate = Option.some(gate);
+      return {
+        waiting: gate.waiting.promise,
+        settled: gate.settled.promise,
+        release: gate.release.resolve,
+      };
+    },
+    revokeCoordinate: (userId, payload) =>
+      environment.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
+        new Request("https://coordinator.internal/oauth-revoke", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: Schema.encodeSync(Schema.fromJsonString(Schema.Json))(payload),
+        })
+      ),
+    refreshCoordinate: (userId, payload) =>
+      environment.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
+        new Request("https://coordinator.internal/oauth-refresh", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: Schema.encodeSync(Schema.fromJsonString(Schema.Json))(payload),
+        })
+      ),
+    coordinate: (userId, payload) =>
+      environment.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
+        new Request("https://coordinator.internal/oauth-canonical", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: Schema.encodeSync(Schema.fromJsonString(Schema.Json))(payload),
+        })
+      ),
+  };
+  return harness;
+});
 
 const createBrowserSession = (
   input: Readonly<{
@@ -524,18 +498,16 @@ export const reviewedFixture = (
   {
     scopes,
     lifetimeDays,
-    auditMigration,
   }: Readonly<{
     scopes: ReadonlyArray<string>;
     lifetimeDays: number;
-    auditMigration: boolean;
-  }> = { scopes: ["read"], lifetimeDays: 7, auditMigration: true }
+  }> = { scopes: ["read"], lifetimeDays: 7 }
 ): Effect.Effect<
   Harness & Readonly<{ query: URLSearchParams; choice: string; headers: FixtureHeaders }>,
   TestFailure | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const harness = yield* setup(auditMigration);
+    const harness = yield* setup();
     const query = yield* authorizationQuery(harness.send);
     query.set("scope", scopes.join(" "));
     const started = yield* wait(harness.send(`/oauth/authorize?${query}`));
@@ -574,12 +546,10 @@ export const approvedFixture = (
   {
     scopes,
     lifetimeDays,
-    auditMigration,
   }: Readonly<{
     scopes: ReadonlyArray<string>;
     lifetimeDays: number;
-    auditMigration: boolean;
-  }> = { scopes: ["read"], lifetimeDays: 7, auditMigration: true }
+  }> = { scopes: ["read"], lifetimeDays: 7 }
 ): Effect.Effect<
   Harness & Readonly<{ connectionId: string; body: URLSearchParams; headers: FixtureHeaders }>,
   TestFailure | Schema.SchemaError
@@ -588,7 +558,6 @@ export const approvedFixture = (
     const { choice, query, headers, ...harness } = yield* reviewedFixture({
       scopes,
       lifetimeDays,
-      auditMigration,
     });
     const approved = yield* wait(
       harness.send("/web/oauth/connect", { method: "POST", headers, body: choice })
@@ -747,7 +716,6 @@ export const pendingBudgetDeletion = (
     const fixture = yield* approvedFixture({
       scopes,
       lifetimeDays: 7,
-      auditMigration: true,
     });
     const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
       yield* wait((yield* wait(exchangeFixture(fixture))).json())

@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-if (process.versions.bun !== undefined) {
+if (Object.hasOwn(process.versions, "bun")) {
   console.error(
     "The mutation check runs on Node: Stryker's instrumenter does not work on Bun.\n" +
       "Run `bun run test:mutation`, or `cd apps/server && node ../../tools/mutation/run.mjs` directly."

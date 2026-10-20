@@ -5,7 +5,7 @@ import {
   prepareChangedRowAssertion,
   preparePredicateAssertion,
 } from "../src/shell/sql-assertions/operations";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -17,7 +17,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const db = yield* run(() => databases.acquire());
-      yield* run(() => installTestSchema({ db, sources: [] }));
+      yield* run(() => installTestSchema({ db }));
       yield* run(() =>
         db.prepare("CREATE TABLE records (id TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT").run()
       );
@@ -45,7 +45,11 @@ it.live(
       ).toBe("original");
       expect(
         (yield* run(() =>
-          db.prepare("SELECT scope, accepted FROM sql_assertions ORDER BY scope").all()
+          db
+            .prepare(
+              "SELECT scope, accepted FROM sql_assertions WHERE scope IN ('dashboard','recurring_plan') ORDER BY scope"
+            )
+            .all()
         )).results
       ).toEqual([
         { scope: "dashboard", accepted: 1 },
@@ -54,74 +58,29 @@ it.live(
     })
 );
 
-it.live(
-  "preserves populated singleton slots and uninitialized slots through the consolidation migration",
-  () =>
-    Effect.gen(function* () {
-      const db = yield* run(() => databases.acquire());
-      const source = new URL("./migrations/0114_consolidate_assertions.sql", import.meta.url);
-      const sources = Array.from(
-        new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
-      )
-        .filter((name) => name < "0114_consolidate_assertions.sql")
-        .sort()
-        .map((name) => new URL(`./migrations/${name}`, import.meta.url));
-      for (const historicalSource of sources) {
-        yield* run(() => applyTestMigration({ db, source: historicalSource }));
-      }
-      yield* run(() =>
-        db.batch([
-          db.prepare("INSERT INTO pat_atomic_assertion VALUES (1,1)"),
-          db.prepare("INSERT INTO proactivity_message_assertion VALUES (1,1)"),
-        ])
-      );
-
-      yield* run(() => applyTestMigration({ db, source }));
-
-      expect(
-        (yield* run(() =>
-          db.prepare("SELECT scope, accepted FROM sql_assertions ORDER BY scope").all()
-        )).results
-      ).toEqual([
-        { scope: "pat_atomic", accepted: 1 },
-        { scope: "proactivity_message", accepted: 1 },
-      ]);
-      expect(
-        (yield* run(() =>
-          db
-            .prepare(
-              "SELECT name FROM sqlite_schema WHERE name IN ('pat_atomic_assertion','proactivity_message_assertion')"
-            )
-            .all()
-        )).results
-      ).toEqual([]);
-      expect((yield* run(() => db.prepare("PRAGMA foreign_key_check").all())).results).toEqual([]);
-    })
-);
-
-it.live("preserves initialized controls and scoped rollback failures through consolidation", () =>
+it.live("keeps specialized assertion failures atomic within each scope", () =>
   Effect.gen(function* () {
     const db = yield* run(() => databases.acquire());
-    const directory = new URL("./migrations/", import.meta.url);
-    const names = [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
-      .filter((name) => name < "0130_")
-      .sort();
-    for (const name of names) {
-      yield* run(() => applyTestMigration({ db, source: new URL(name, directory) }));
-    }
+    yield* run(() => installTestSchema({ db }));
     yield* run(() =>
       db.batch([
         db.prepare("CREATE TABLE records(id TEXT PRIMARY KEY,value TEXT NOT NULL) STRICT"),
         db.prepare("INSERT INTO records VALUES('purchase','original')"),
-        db.prepare("INSERT INTO canonical_request_assertions VALUES('first',1),('second',1)"),
-        db.prepare("INSERT INTO commercial_allowance_assertions VALUES('allowance',1)"),
-        db.prepare("INSERT INTO connection_browser_atomic_assertion VALUES(1,1)"),
-        db.prepare("INSERT INTO media_publication_assertions VALUES('media',1,1)"),
-        db.prepare("INSERT INTO recurring_cursor_assertion VALUES(1,7,7)"),
+        ...[
+          "canonical_request",
+          "commercial_allowance",
+          "connection_browser",
+          "media_capacity",
+          "media_publication",
+          "recurring_cursor",
+        ].map((scope) =>
+          db
+            .prepare(
+              "INSERT INTO sql_assertions(scope,accepted) VALUES (?,1) ON CONFLICT(scope) DO UPDATE SET accepted=1"
+            )
+            .bind(scope)
+        ),
       ])
-    );
-    yield* run(() =>
-      applyTestMigration({ db, source: new URL("0130_specialized_assertions.sql", directory) })
     );
     const failures = [
       ["canonical_request", "canonical_request_rate"],

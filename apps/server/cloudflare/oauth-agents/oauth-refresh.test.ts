@@ -992,7 +992,6 @@ it("honors the exact refresh inactivity boundary even before the absolute 90-day
       const fixture = yield* approvedFixture({
         scopes: ["read"],
         lifetimeDays: 90,
-        auditMigration: true,
       });
       const original = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
@@ -1124,7 +1123,6 @@ it("retains narrowed credential scopes across reconnect and never escalates back
       const fixture = yield* approvedFixture({
         scopes: ["read", "write"],
         lifetimeDays: 7,
-        auditMigration: true,
       });
       const original = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())

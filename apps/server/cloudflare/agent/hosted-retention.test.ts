@@ -1,11 +1,6 @@
 import { Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
-import {
-  applyTestMigration,
-  installTestSchema,
-  isolatedTestDatabases,
-  observeRetentionCost,
-} from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { UserId } from "../../src/core/identity/contract";
 import { makeAgentRetention } from "./runtime";
 import { expireHostedPending, hostedTranscriptRetentionMs } from "./internal/turn-store";
@@ -16,32 +11,11 @@ const userId = UserId.make("10000000-0000-4000-8000-000000000001");
 const otherUserId = UserId.make("10000000-0000-4000-8000-000000000002");
 const day = 86_400_000;
 const now = 200 * day;
-const setup = (includeRetention = true): Promise<D1Database> =>
+const setup = (): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
-      const directory = new URL("../migrations/", import.meta.url);
-      const names = Array.from(new Bun.Glob("*.sql").scanSync(directory.pathname))
-        .filter(
-          (name) =>
-            name.endsWith(".sql") &&
-            (includeRetention || (name < "0096_" && name !== "0074_hosted_retention.sql"))
-        )
-        .sort();
-      if (includeRetention) {
-        yield* Effect.tryPromise(() =>
-          installTestSchema({
-            db,
-            sources: names.map((name) => new URL(name, directory)),
-          })
-        );
-      } else {
-        for (const name of names) {
-          yield* Effect.tryPromise(() =>
-            applyTestMigration({ db, source: new URL(name, directory) })
-          );
-        }
-      }
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
       yield* Effect.tryPromise(() =>
         db.batch(
           [userId, otherUserId].flatMap((user) => [
@@ -219,69 +193,6 @@ it("cleans only the addressed User and retains discovery after a terminal marker
           db.prepare("SELECT count(*) AS count FROM transcript_entries").first("count")
         )
       ).toBe(100);
-      const idle = observeRetentionCost(db);
-      yield* makeAgentRetention({
-        db: idle.database,
-      }).sweep(now);
-      expect(idle.cost().rowsRead).toBeLessThanOrEqual(50);
-      expect(idle.cost().rowsWritten).toBe(0);
-    })
-  ));
-it("backfills only retained terminal evidence and drops its deadline with the last entry", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => setup(false));
-      yield* Effect.tryPromise(() => seedHistory(db));
-      yield* Effect.tryPromise(() =>
-        applyTestMigration({
-          db,
-          source: new URL("../migrations/0074_hosted_retention.sql", import.meta.url),
-        })
-      );
-      // Inspect the preserved backfill through the current storage projection.
-      const directory = new URL("../migrations/", import.meta.url);
-      for (const name of [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
-        .filter((name) => name >= "0096_")
-        .sort()) {
-        yield* Effect.tryPromise(() =>
-          applyTestMigration({ db, source: new URL(name, directory) })
-        );
-      }
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
-            )
-            .first("count")
-        )
-      ).toBe(100);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            `UPDATE hosted_agent_sessions SET compacted_text=incoming.text,compacted_through_sequence=incoming.through_sequence,compacted_revision=incoming.revision,compacted_nonce=incoming.nonce,compacted_at_ms=incoming.updated_at_ms FROM (SELECT user_id AS user_id,hosted_session_id AS hosted_session_id,'compacted' AS text,max(sequence) AS through_sequence,1 AS revision,'compaction' AS nonce,? AS updated_at_ms FROM transcript_entries GROUP BY user_id,hosted_session_id) AS incoming WHERE hosted_agent_sessions.user_id=incoming.user_id AND hosted_agent_sessions.id=incoming.hosted_session_id AND hosted_agent_sessions.compacted_revision IS NULL`
-          )
-          .bind(now)
-          .run()
-      );
-      const observed = observeRetentionCost(db);
-      yield* Effect.tryPromise(() =>
-        observed.database
-          .prepare("DELETE FROM transcript_entries WHERE user_id = ?")
-          .bind(userId)
-          .run()
-      );
-      expect(observed.cost().rowsRead).toBeLessThanOrEqual(2_000);
-      expect(observed.cost().rowsWritten).toBeLessThanOrEqual(1_000);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
-            )
-            .first("count")
-        )
-      ).toBe(0);
       const idle = observeRetentionCost(db);
       yield* makeAgentRetention({
         db: idle.database,

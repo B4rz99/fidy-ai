@@ -4,7 +4,6 @@ import * as Test from "alchemy/Test/Vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 import * as Schedule from "effect/Schedule";
@@ -49,10 +48,6 @@ const resetAndDeployLocalMigrationStack = Effect.fn(function* (
   return yield* deployLocalMigrationStack(stack);
 });
 
-const migrationPrefix = (name: string): number => Number.parseInt(name.split("_")[0] ?? "", 10);
-const compareMigrations = (left: string, right: string): number =>
-  migrationPrefix(left) - migrationPrefix(right) || left.localeCompare(right);
-
 const migrationNames = (): Effect.Effect<
   ReadonlyArray<string>,
   PlatformError.PlatformError,
@@ -61,27 +56,7 @@ const migrationNames = (): Effect.Effect<
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const entries = yield* fs.readDirectory(migrationsPath);
-    return entries.filter((entry) => entry.endsWith(".sql")).sort(compareMigrations);
-  });
-
-const createMigrationDirectory = (
-  names: ReadonlyArray<string>
-): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const directory = yield* fs.makeTempDirectory({ prefix: "fidy-d1-migrations-" });
-    const copyMigrations = Effect.forEach(
-      names,
-      (name) => fs.copyFile(path.join(migrationsPath, name), path.join(directory, name)),
-      { discard: true }
-    );
-    yield* copyMigrations.pipe(
-      Effect.onError(() =>
-        fs.remove(directory, { recursive: true, force: true }).pipe(Effect.ignore)
-      )
-    );
-    return directory;
+    return entries.filter((entry) => entry.endsWith(".sql")).sort();
   });
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{ readonly status: number }> {}
@@ -121,7 +96,7 @@ const seedExistingTranscript = Effect.fn(function* (url: string) {
 });
 
 test(
-  "applies the complete Production D1 migration history to a clean local database",
+  "applies the Production schema baseline to a clean local database",
   Effect.gen(function* () {
     const names = yield* migrationNames();
     const migrationStack = createMigrationStack("D1MigrationCleanInstall", migrationsPath);
@@ -131,7 +106,6 @@ test(
 
       const state = yield* readState(yield* workerUrl(Option.fromUndefinedOr(deployed.worker.url)));
       expect(state).toMatchObject({
-        unusedAssertionTables: [],
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
         hostedVoiceRefusalsExists: true,
@@ -146,33 +120,18 @@ test(
 );
 
 test(
-  "preserves populated Transcript evidence while applying the newest migration",
+  "preserves populated Transcript evidence when redeploying the same baseline",
   Effect.gen(function* () {
     const names = yield* migrationNames();
-    const candidate = names.at(-1);
-    if (candidate === undefined) return yield* Effect.die(new Error("No D1 migrations found"));
-    const predecessorNames = names.slice(0, -1);
-    const dir = yield* createMigrationDirectory(predecessorNames);
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const migrationStack = createMigrationStack("D1MigrationPopulatedUpgrade", dir);
+    const migrationStack = createMigrationStack("D1BaselinePopulatedRedeploy", migrationsPath);
 
     const migrationCheck = Effect.gen(function* () {
       const before = yield* resetAndDeployLocalMigrationStack(migrationStack);
-      expect(Object.keys(before.database.migrationsHashes).sort()).toEqual(
-        [...predecessorNames].sort()
-      );
+      expect(Object.keys(before.database.migrationsHashes).sort()).toEqual([...names].sort());
 
       const beforeUrl = yield* workerUrl(Option.fromUndefinedOr(before.worker.url));
       expect(yield* readState(beforeUrl)).toMatchObject({
-        unusedAssertionTables: predecessorNames.includes("0112_retire_unused_assertions.sql")
-          ? []
-          : [
-              "erasure_runtime_assertion",
-              "memory_atomic_assertion",
-              "transaction_capture_assertion",
-            ],
-        appliedMigrationNames: [...predecessorNames].sort(),
+        appliedMigrationNames: [...names].sort(),
         hostedVoiceRefusalsExists: true,
         hostedWhatsAppWindowsExists: true,
         transcriptEvidence: { _tag: "Empty" },
@@ -182,13 +141,11 @@ test(
       expect(seedResponse.status).toBe(200);
       expect(yield* seedResponse.json).toEqual({ seeded: true });
 
-      yield* fs.copyFile(path.join(migrationsPath, candidate), path.join(dir, candidate));
       const after = yield* deployLocalMigrationStack(migrationStack);
       expect(after.database.databaseId).toBe(before.database.databaseId);
 
       const state = yield* readState(yield* workerUrl(Option.fromUndefinedOr(after.worker.url)));
       expect(state).toMatchObject({
-        unusedAssertionTables: [],
         appliedMigrationNames: [...names].sort(),
         transcriptHasIteration: true,
         hostedVoiceRefusalsExists: true,
@@ -217,11 +174,7 @@ test(
         },
       });
     });
-    const cleanup = Effect.ensuring(
-      destroy(migrationStack).pipe(Effect.ignore),
-      fs.remove(dir, { recursive: true, force: true }).pipe(Effect.ignore)
-    );
-    yield* Effect.ensuring(migrationCheck, cleanup);
+    yield* Effect.ensuring(migrationCheck, destroy(migrationStack).pipe(Effect.ignore));
   }).pipe(Effect.orDie),
   { timeout: 120_000 }
 );

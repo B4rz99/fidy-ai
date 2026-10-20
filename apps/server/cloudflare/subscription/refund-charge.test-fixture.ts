@@ -1,11 +1,12 @@
 import { type Cause, Effect } from "effect";
-
 /** Retain one successful Sandbox card charge, paid period, and Subscription for correction proofs. */
 export const seedRefundCharge = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db.batch([
       db
-        .prepare("INSERT INTO users(id,time_zone) VALUES (?, 'America/Bogota')")
+        .prepare(
+          "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
+        )
         .bind("10000000-0000-4000-8000-000000000001"),
       db.prepare(`INSERT INTO card_enrollments (id,user_id,price_id,billing_email,status,payment_source_mode,
         contracts_json,disclosure_json,prepared_at_ms,expires_at_ms,payment_request_id,wompi_candidate_source_id,method,wompi_environment)

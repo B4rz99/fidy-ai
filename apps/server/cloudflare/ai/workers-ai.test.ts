@@ -1,13 +1,13 @@
-import { deepStrictEqual } from "node:assert";
-import { it as effectIt } from "@effect/vitest";
-import { TestClock } from "effect/testing";
-import { TranscriptTurnId } from "../../src/core/agent/contract";
-import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import {
   HostedInferenceError,
   type WorkersAiBindingRun,
   approvedWorkersAiModel,
 } from "../../src/shell/hosted-inference/contract";
+import { deepStrictEqual } from "node:assert";
+import { it as effectIt } from "@effect/vitest";
+import { TestClock } from "effect/testing";
+import { TranscriptTurnId } from "../../src/core/agent/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { Cause, Data, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -90,22 +90,7 @@ const finishTurn = (db: D1Database): Promise<unknown> =>
       .bind(now + 2, turnA, userA),
   ]);
 const setup = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    installTestSchema({
-      db,
-      sources: [
-        "0001_categories",
-        "0002_resource_admission",
-        "0003_pending_consent",
-        "0004_onboarding_email",
-        "0005_verified_onboarding",
-        "0006_browser_login",
-        "0009_transactions",
-        "0010_pat_lifecycle",
-        "0016_hosted_turn",
-      ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installTestSchema({ db }).then(() => db));
 const seedGrant = (db: D1Database): Promise<unknown> =>
   db.batch([
     db

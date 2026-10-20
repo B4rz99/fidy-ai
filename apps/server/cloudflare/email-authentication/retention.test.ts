@@ -1,12 +1,7 @@
+import { type Cause, Effect } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type Cause, Effect, Option } from "effect";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import {
-  dispatchBrowserPairingEmail,
-  dispatchEmailReplacement,
-  reconcileBrowserPairingEmail,
-  reconcileEmailReplacement,
-} from "./runtime";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { reconcileBrowserPairingEmail, reconcileEmailReplacement } from "./runtime";
 
 const databases = isolatedTestDatabases();
 const now = 1_800_000_000_000;
@@ -24,18 +19,14 @@ afterAll(() => databases.dispose());
 const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
-    const directory = new URL("../migrations/", import.meta.url);
-    const names = Array.from(new Bun.Glob("*.sql").scanSync(directory.pathname)).sort();
-    yield* Effect.tryPromise(() =>
-      installTestSchema({ db, sources: names.map((name) => new URL(name, directory)) })
-    );
+
+    yield* Effect.tryPromise(() => installTestSchema({ db }));
     return db;
   });
 
 const seedUser = (
   db: D1Database,
-  index: number,
-  legacy = false
+  index: number
 ): Effect.Effect<ReadonlyArray<D1Result<unknown>>, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db.batch([
@@ -46,9 +37,7 @@ const seedUser = (
         .bind(id(1, index), now - day),
       db
         .prepare(
-          legacy
-            ? "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) VALUES (?,?,?)"
-            : "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
+          "WITH incoming(user_id,email_address,verified_at_ms) AS (VALUES (?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,verified_email_address,email_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.email_address,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET verified_email_address=excluded.verified_email_address,email_verified_at_ms=excluded.email_verified_at_ms"
         )
         .bind(id(1, index), `user${index}@example.test`, now - day),
       db
@@ -112,10 +101,10 @@ const seedPairingProof = (
 const seedReplacement = (
   db: D1Database,
   index: number,
-  { expires, legacy }: { expires: number; legacy: boolean } = { expires: now, legacy: false }
+  { expires }: { expires: number } = { expires: now }
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* seedUser(db, index, legacy);
+    yield* seedUser(db, index);
     yield* Effect.tryPromise(() =>
       db.batch([
         db
@@ -210,7 +199,7 @@ it("expires replacement candidates in bounded sweeps while preserving the curren
         (index) => seedReplacement(db, index),
         { discard: true }
       );
-      yield* seedReplacement(db, 34, { expires: now + 1, legacy: false });
+      yield* seedReplacement(db, 34, { expires: now + 1 });
       const live = yield* Effect.tryPromise(() =>
         db.prepare("SELECT * FROM email_replacements WHERE user_id = ?").bind(id(1, 34)).all()
       );
@@ -310,10 +299,10 @@ it("abandons interrupted replacement sends without reusable proof, credential re
       const db = yield* setup();
       yield* Effect.forEach(
         Array.from({ length: 33 }, (_, index) => index + 1),
-        (index) => seedReplacement(db, index, { expires: now - 600_001, legacy: false }),
+        (index) => seedReplacement(db, index, { expires: now - 600_001 }),
         { discard: true }
       );
-      yield* seedReplacement(db, 34, { expires: now + 600_000, legacy: false });
+      yield* seedReplacement(db, 34, { expires: now + 600_000 });
       yield* Effect.tryPromise(() =>
         db.prepare("UPDATE email_replacements SET state = 'sending'").run()
       );
@@ -355,105 +344,5 @@ it("abandons interrupted replacement sends without reusable proof, credential re
             .first()
         )
       ).toEqual({ count: 0 });
-    })
-  ));
-
-it("keeps email dispatch cooldowns through migration and retries only the current proof identities", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
-      const directory = new URL("../migrations/", import.meta.url);
-      const names = [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
-        .filter((name) => name < "0125_")
-        .sort();
-      for (const name of names) {
-        yield* Effect.tryPromise(() =>
-          applyTestMigration({ db, source: new URL(name, directory) })
-        );
-      }
-      yield* seedUser(db, 1, true);
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare(
-              "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,state,created_at_ms,expires_at_ms) VALUES (?, 'P001-ABCD',zeroblob(32),'pending_approval',?,?)"
-            )
-            .bind(id(4, 1), now, now + 600_000),
-          db
-            .prepare(
-              "INSERT INTO browser_pairing_email_proofs(pairing_id,work_id,user_id,email_address,credential_verified_at_ms,state,expires_at_ms,generation,wrong_attempts,last_requested_at_ms) VALUES (?,?,?,'user1@example.test',?,'awaiting_delivery',?,1,0,?)"
-            )
-            .bind(id(4, 1), id(5, 1), id(1, 1), now - day, now + 600_000, now),
-        ])
-      );
-      yield* seedReplacement(db, 2, { expires: now + 600_000, legacy: true });
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db.prepare(
-            "UPDATE email_replacements SET state='awaiting_delivery',public_code=NULL,proof_digest=NULL,proof_expires_at_ms=NULL"
-          ),
-          db
-            .prepare(
-              "INSERT INTO browser_pairing_email_outbox(id,created_at_ms,last_attempt_at_ms) VALUES(?,?,?)"
-            )
-            .bind(id(5, 1), now, now),
-          db
-            .prepare(
-              "INSERT INTO email_replacement_outbox(id,created_at_ms,last_attempt_at_ms) VALUES(?,?,?)"
-            )
-            .bind(id(6, 2), now, now),
-          // Superseded work must not become another dispatchable identity.
-          db
-            .prepare("INSERT INTO email_replacement_outbox(id,created_at_ms) VALUES(?,?)")
-            .bind(id(6, 3), now),
-        ])
-      );
-      for (const name of [
-        "0125_browser_pairing_dispatch.sql",
-        "0126_email_replacement_dispatch.sql",
-      ]) {
-        yield* Effect.tryPromise(() =>
-          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
-        );
-      }
-      // Continue through the current schema before invoking current dispatch behavior.
-      for (const name of [...new Bun.Glob("*.sql").scanSync(directory.pathname)]
-        .filter((name) => name > "0126_email_replacement_dispatch.sql")
-        .sort()) {
-        yield* Effect.tryPromise(() =>
-          applyTestMigration({ db, source: new URL(name, directory) })
-        );
-      }
-      const offered: string[] = [];
-      const dispatch = (): Effect.Effect<ReadonlyArray<void>, void> =>
-        Effect.all([
-          dispatchBrowserPairingEmail({
-            DB: db,
-            identity: Option.none(),
-            BROWSER_PAIRING_EMAIL_QUEUE: {
-              send: (work) => {
-                offered.push(work.id);
-                return Promise.resolve();
-              },
-            },
-          }),
-          dispatchEmailReplacement({
-            DB: db,
-            identity: Option.none(),
-            EMAIL_REPLACEMENT_QUEUE: {
-              send: (work) => {
-                offered.push(work.id);
-                return Promise.resolve();
-              },
-            },
-          }),
-        ]);
-      yield* dispatch();
-      expect(offered).toEqual([]);
-      vi.setSystemTime(now + 60_001);
-      yield* dispatch();
-      expect(offered.sort()).toEqual([id(5, 1), id(6, 2)]);
-      yield* dispatch();
-      expect(offered).toHaveLength(2);
     })
   ));

@@ -1,10 +1,10 @@
-import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, Effect, Exit, Schema } from "effect";
+import { RefundSupportAdmission, type RefundSupportEnvironment } from "./contract";
+import { afterEach, expect, it, vi } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { seedRefundCharge } from "./refund-charge.test-fixture";
 import { startRefund } from "./operations";
-import { RefundSupportAdmission, type RefundSupportEnvironment } from "./contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -231,7 +231,7 @@ it.each(["missing", "recovery-audience", "expired", "mismatched-user"])(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO users(id,time_zone) VALUES ('10000000-0000-4000-8000-000000000002','America/Bogota')"
+              "WITH fixture_user(id,time_zone) AS (VALUES ('10000000-0000-4000-8000-000000000002','America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
             )
             .run()
         );

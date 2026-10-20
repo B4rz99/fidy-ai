@@ -1,6 +1,3 @@
-import { UserActionRequired } from "../../src/shell/public-http/contract";
-import { readDiscovery } from "./discovery.test-fixture";
-import { executeOAuthCanonicalWork } from "../canonical-operations/operations";
 import {
   type Cause,
   Clock,
@@ -13,6 +10,9 @@ import {
   Schema,
   Scope,
 } from "effect";
+import { UserActionRequired } from "../../src/shell/public-http/contract";
+import { readDiscovery } from "./discovery.test-fixture";
+import { executeOAuthCanonicalWork } from "../canonical-operations/operations";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { makeMcpResidency } from "../mcp/runtime";
@@ -170,16 +170,7 @@ describe("native2025 residency integration", () => {
   > =>
     Effect.gen(function* () {
       const database = yield* wait(() => databases.acquire());
-      yield* wait(() =>
-        installTestSchema({
-          db: database,
-          sources: Array.from(
-            new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-          )
-            .sort()
-            .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-        })
-      );
+      yield* wait(() => installTestSchema({ db: database }));
       const mutation = makeMutationCommitGate(database);
       let readGate: Option.Option<ReadGate> = Option.none();
       let revocationGate: Option.Option<ReadGate> = Option.none();

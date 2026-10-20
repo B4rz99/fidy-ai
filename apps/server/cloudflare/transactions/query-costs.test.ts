@@ -1,7 +1,7 @@
 import { seedHistory } from "./history-growth.test-fixture";
 import { Clock, Config, Data, Effect, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   effectiveHistoryPage,
   effectiveTransactionRelation,
@@ -22,27 +22,11 @@ const categoryId = "10000000-0000-4000-8000-000000000016";
 const prefix = "20000000-0000-4000-8000-";
 const otherPrefix = "30000000-0000-4000-8000-";
 const id = (index: number): string => `${prefix}${String(index).padStart(12, "0")}`;
-const migration = new URL("../migrations/0075_transaction_query_costs.sql", import.meta.url);
-const setup = (upgrade = false): Effect.Effect<D1Database> =>
+
+const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const db = yield* fromTestPromise(() => databases.acquire());
-    const names = Array.from(
-      new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-    ).sort();
-    if (upgrade) {
-      for (const name of names.filter((name) => name < "0075_transaction_query_costs.sql")) {
-        yield* fromTestPromise(() =>
-          applyTestMigration({ db, source: new URL(`../migrations/${name}`, import.meta.url) })
-        );
-      }
-    } else {
-      yield* fromTestPromise(() =>
-        installTestSchema({
-          db,
-          sources: names.map((name) => new URL(`../migrations/${name}`, import.meta.url)),
-        })
-      );
-    }
+    yield* fromTestPromise(() => installTestSchema({ db }));
     yield* fromTestPromise(() =>
       db.batch(
         [userId, otherUserId].map((subject) =>
@@ -444,10 +428,10 @@ it(
     ),
   30_000
 );
-it("upgrades populated projection buckets without changing pre-epoch boundaries or exact maximum replacement", () =>
+it("preserves projection bucket pre-epoch boundaries or exact maximum replacement", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup(true);
+      const db = yield* setup();
       const dates = [
         "1969-12-31T23:57:59.999Z",
         "1969-12-31T23:58:00.000Z",
@@ -481,12 +465,6 @@ it("upgrades populated projection buckets without changing pre-epoch boundaries 
       );
       const before = (yield* fromTestPromise(() => aggregateSnapshot(db))).map(
         (result) => result.results
-      );
-      yield* fromTestPromise(() =>
-        applyTestMigration({
-          db,
-          source: migration,
-        })
       );
       expect(
         (yield* fromTestPromise(() => aggregateSnapshot(db))).map((result) => result.results)

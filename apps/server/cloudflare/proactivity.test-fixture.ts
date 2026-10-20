@@ -1,13 +1,16 @@
+import { type RecurringUnavailable } from "./recurring/contract";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type ConsentUnavailable } from "./consent/contract";
+import { type InsightUnavailable } from "./insights/contract";
+import { type ReminderSchedule } from "../src/core/insights/contract";
+import { type WhatsAppHostedSubject, WhatsAppTurnAdmission } from "./whatsapp/contract";
+import { type AuthorizedPAT } from "./tokens/contract";
+import { type HostedCanonicalCaller, type TransactionSubject } from "./canonical-work/contract";
 import { vi } from "vitest";
 import { evaluateRecurringSeries } from "./recurring/operations";
-import type { RecurringUnavailable } from "./recurring/contract";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { DisclosureSnapshot } from "../src/core/consent/contract";
 import { UserId, WhatsAppCallerReference } from "../src/core/identity/contract";
 import { currentDisclosureFor, protectConsentStatement } from "../src/shell/consent/operations";
-import type { ConsentUnavailable } from "./consent/contract";
-import type { InsightUnavailable } from "./insights/contract";
-import type { ReminderSchedule } from "../src/core/insights/contract";
 import {
   createProactivityConsentOffer,
   readConsentStanding,
@@ -17,15 +20,12 @@ import {
 import { findReminderSchedule, recordProactivityDecision } from "./insights/operations";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 import { makeAgentService } from "./agent/runtime";
-import { WhatsAppTurnAdmission } from "./whatsapp/contract";
 import { approvedWorkersAiModel } from "../src/shell/hosted-inference/contract";
 import { newId } from "./secret-material/operations";
 import { HostedAgentSessionConsentBasis, TranscriptTurnId } from "../src/core/agent/contract";
 import { mintHostedStatementCaller } from "./agent/operations";
-import type { WhatsAppHostedSubject } from "./whatsapp/contract";
-import type { AuthorizedPAT } from "./tokens/contract";
-import type { HostedCanonicalCaller, TransactionSubject } from "./canonical-work/contract";
 import { whatsAppAssociationQuery } from "../src/shell/identity/operations";
+import type {} from "./canonical-work/contract";
 
 /** Observe the genuine hosted provider request after same-User reply admission. Model failure is intentional, never fabricated terminal delivery. */
 export const observeTestHostedContext = (
@@ -290,11 +290,8 @@ export const proactivityDatabase: Effect.Effect<
   Cause.UnknownError | Schema.SchemaError
 > = Effect.gen(function* () {
   const db = yield* Effect.tryPromise(() => proactivityTestDatabases.acquire());
-  const names = Array.from(
-    new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
-  ).sort();
-  const sources = names.map((name) => new URL(`./migrations/${name}`, import.meta.url));
-  yield* Effect.tryPromise(() => installTestSchema({ db, sources }));
+
+  yield* Effect.tryPromise(() => installTestSchema({ db }));
   const disclosure = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
   )(currentDisclosureFor());

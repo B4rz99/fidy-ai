@@ -20,19 +20,7 @@ const userB = "20000000-0000-4000-8000-000000000002";
 const grantA = "30000000-0000-4000-8000-000000000001";
 const now = 1_800_000_000_000;
 const setup = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    installTestSchema({
-      db,
-      sources: [
-        "0003_pending_consent",
-        "0004_onboarding_email",
-        "0005_verified_onboarding",
-        "0006_browser_login",
-        "0009_transactions",
-        "0010_pat_lifecycle",
-      ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installTestSchema({ db }).then(() => db));
 
 it("reads one User's exact Consent basis without borrowing another User's grant", () =>
   Effect.runPromise(

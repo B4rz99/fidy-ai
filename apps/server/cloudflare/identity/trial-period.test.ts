@@ -20,12 +20,12 @@ it("selects only the explicit User's original trial for a caller-owned statement
           ),
           db
             .prepare(
-              "INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms) VALUES (?1,100,200)"
+              "WITH fixture_user(id,trial_started_at_ms,trial_ends_at_ms) AS (VALUES (?1,100,200)) INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms,service_market,locale,time_zone,created_at_ms) SELECT id,trial_started_at_ms,trial_ends_at_ms,'CO','es-CO','America/Bogota',0 FROM fixture_user"
             )
             .bind(userA),
           db
             .prepare(
-              "INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms) VALUES (?1,300,400)"
+              "WITH fixture_user(id,trial_started_at_ms,trial_ends_at_ms) AS (VALUES (?1,300,400)) INSERT INTO users(id,trial_started_at_ms,trial_ends_at_ms,service_market,locale,time_zone,created_at_ms) SELECT id,trial_started_at_ms,trial_ends_at_ms,'CO','es-CO','America/Bogota',0 FROM fixture_user"
             )
             .bind(userB),
         ])

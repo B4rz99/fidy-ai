@@ -42,14 +42,8 @@ const decide = (
 const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const db = yield* testPromise(() => databases.acquire());
-    const names = Array.from(
-      new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
-    );
-    const sources = names
-      .filter((name) => name.endsWith(".sql"))
-      .sort()
-      .map((name) => new URL(`../migrations/${name}`, import.meta.url));
-    yield* testPromise(() => installTestSchema({ db, sources }));
+
+    yield* testPromise(() => installTestSchema({ db }));
     const json = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
     )(currentDisclosureFor()).pipe(Effect.orDie);

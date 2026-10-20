@@ -5,12 +5,8 @@ import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
 export const db = await databases.acquire();
-const migrationDirectory = new URL("./migrations/", import.meta.url);
-const migrations = Array.from(new Bun.Glob("*.sql").scanSync(migrationDirectory.pathname)).sort();
-await installTestSchema({
-  db,
-  sources: migrations.map((name) => new URL(name, migrationDirectory)),
-});
+
+await installTestSchema({ db });
 
 export const fixtureUserId = "24000000-0000-4000-8000-000000000241";
 export const firstCardUserId = "24000000-0000-4000-8000-000000000281";

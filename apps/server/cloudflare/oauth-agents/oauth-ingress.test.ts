@@ -125,7 +125,6 @@ it.each(
         const fixture = yield* approvedFixture({
           scopes: ["read", "write"],
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const token = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ access_token: Schema.String })
@@ -339,7 +338,6 @@ it.each(["abort", "deadline"])(
         const fixture = yield* approvedFixture({
           scopes: ["read"],
           lifetimeDays: 7,
-          auditMigration: true,
         });
         const token = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ access_token: Schema.String })

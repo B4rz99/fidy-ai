@@ -18,20 +18,19 @@ const wait = <A>(work: () => Promise<A>): Effect.Effect<A> =>
 
 it.live("keeps caller-owned auth schema variants and rows independent in native baselines", () =>
   Effect.gen(function* () {
-    const sources = [new URL("./migrations/0001_categories.sql", import.meta.url)];
     const prefix = (locale: string): ReadonlyArray<string> => [
       `CREATE TABLE fixture_users (id TEXT PRIMARY KEY, locale TEXT NOT NULL DEFAULT '${locale}') STRICT`,
       "CREATE TABLE fixture_credentials (user_id TEXT NOT NULL REFERENCES fixture_users(id)) STRICT",
     ];
     const original = yield* wait(() => databases.acquire());
     yield* wait(() =>
-      installTestSchemaWithPrefix({ db: original, sources, prefixStatements: prefix("es-CO") })
+      installTestSchemaWithPrefix({ db: original, prefixStatements: prefix("es-CO") })
     );
     yield* wait(() => original.prepare("INSERT INTO fixture_users(id) VALUES ('private')").run());
     for (const locale of ["en-US", "es-CO"]) {
       const fresh = yield* wait(() => databases.acquire());
       yield* wait(() =>
-        installTestSchemaWithPrefix({ db: fresh, sources, prefixStatements: prefix(locale) })
+        installTestSchemaWithPrefix({ db: fresh, prefixStatements: prefix(locale) })
       );
       expect(
         (yield* wait(() => fresh.prepare("SELECT * FROM fixture_users").all())).results
@@ -51,7 +50,6 @@ it.live("keeps caller-owned auth schema variants and rows independent in native 
 
 it.live("installs schema additions without caching pre-existing test rows or replacing them", () =>
   Effect.gen(function* () {
-    const source = new URL("./migrations/0001_categories.sql", import.meta.url);
     const populated = yield* wait(() => databases.acquire());
     yield* wait(() =>
       populated.batch([
@@ -59,23 +57,18 @@ it.live("installs schema additions without caching pre-existing test rows or rep
         populated.prepare("INSERT INTO retained VALUES ('private')"),
       ])
     );
-    yield* wait(() => installTestSchema({ db: populated, sources: [source] }));
+    yield* wait(() => installTestSchema({ db: populated }));
     expect(yield* wait(() => populated.prepare("SELECT id FROM retained").first("id"))).toBe(
       "private"
     );
     const fresh = yield* wait(() => databases.acquire());
-    yield* wait(() => installTestSchema({ db: fresh, sources: [source] }));
+    yield* wait(() => installTestSchema({ db: fresh }));
     expect(
       (yield* wait(() =>
         fresh.prepare("SELECT name FROM sqlite_master WHERE name = 'retained'").all()
       )).results
     ).toEqual([]);
-    yield* wait(() =>
-      installTestSchema({
-        db: populated,
-        sources: [new URL("./migrations/0002_resource_admission.sql", import.meta.url)],
-      })
-    );
+    yield* wait(() => installTestSchema({ db: populated }));
     yield* wait(() =>
       expect(
         populated
@@ -93,16 +86,11 @@ it.live(
   "restores the migrated baseline with native search, seeds and constraints, without test mutations",
   () =>
     Effect.gen(function* () {
-      const sources = Array.from(
-        new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
-      )
-        .sort()
-        .map((name) => new URL(`./migrations/${name}`, import.meta.url));
       const prefixStatements = [
         "CREATE VIRTUAL TABLE fixture_search USING fts5(search_text, tokenize='trigram')",
       ];
       const original = yield* wait(() => databases.acquire());
-      yield* wait(() => installTestSchemaWithPrefix({ db: original, sources, prefixStatements }));
+      yield* wait(() => installTestSchemaWithPrefix({ db: original, prefixStatements }));
       const catalog =
         "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name";
       const expected = yield* wait(() => original.prepare(catalog).all());
@@ -114,7 +102,7 @@ it.live(
         ])
       );
       const restored = yield* wait(() => databases.acquire());
-      yield* wait(() => installTestSchemaWithPrefix({ db: restored, sources, prefixStatements }));
+      yield* wait(() => installTestSchemaWithPrefix({ db: restored, prefixStatements }));
       expect((yield* wait(() => restored.prepare(catalog).all())).results).toEqual(
         expected.results
       );
@@ -215,15 +203,7 @@ it.live("applies cached baseline seeds independently and retains real foreign-ke
   Effect.gen(function* () {
     for (let index = 0; index < 2; index += 1) {
       const db = yield* wait(() => databases.acquire());
-      yield* wait(() =>
-        installTestSchema({
-          db: index === 0 ? db : new Proxy(db, {}),
-          sources: [
-            new URL("./migrations/0001_categories.sql", import.meta.url),
-            new URL("./migrations/0002_resource_admission.sql", import.meta.url),
-          ],
-        })
-      );
+      yield* wait(() => installTestSchema({ db: index === 0 ? db : new Proxy(db, {}) }));
       expect(
         yield* wait(() => db.prepare("SELECT COUNT(*) AS count FROM categories").first())
       ).toEqual({ count: 16 });
@@ -250,26 +230,6 @@ it.live("applies cached baseline seeds independently and retains real foreign-ke
           .prepare("INSERT INTO selected_category VALUES ('10000000-0000-4000-8000-000000000016')")
           .run()
       );
-    }
-  })
-);
-
-it.live("rolls back the entire fixture schema when a later migration fails", () =>
-  Effect.gen(function* () {
-    const db = yield* wait(() => databases.acquire());
-    const source = new URL("./migrations/0001_categories.sql", import.meta.url);
-    const failing = new URL("./migrations/0057_recurring_offer_replacement.sql", import.meta.url);
-    for (const binding of [db, new Proxy(db, {})]) {
-      yield* wait(() =>
-        expect(
-          installTestSchema({ db: binding, sources: [source, source, failing] })
-        ).rejects.toThrow()
-      );
-      expect(
-        yield* wait(() =>
-          db.prepare("SELECT name FROM sqlite_master WHERE name = 'categories'").all()
-        )
-      ).toMatchObject({ results: [] });
     }
   })
 );
@@ -362,33 +322,6 @@ it.live("counts native execution once and excludes batch and plan reads from dis
     ]);
     expect(observed.cost()).toEqual(expected);
     expect(observed.discovery()).toBe(discovered.meta.rows_read);
-  })
-);
-
-it.live("retries a failed native bootstrap without retaining partial privacy or owner schema", () =>
-  Effect.gen(function* () {
-    const db = yield* wait(() => databases.acquire());
-    const categories = new URL("./migrations/0001_categories.sql", import.meta.url);
-    const failing = new URL("./migrations/0057_recurring_offer_replacement.sql", import.meta.url);
-    yield* wait(() =>
-      expect(installTestSchema({ db, sources: [categories, failing] })).rejects.toThrow()
-    );
-    expect(
-      (yield* wait(() =>
-        db
-          .prepare(
-            "SELECT name FROM sqlite_master WHERE name IN ('categories', 'erasure_requests')"
-          )
-          .all()
-      )).results
-    ).toEqual([]);
-    yield* wait(() => installTestSchema({ db, sources: [categories] }));
-    expect(
-      yield* wait(() => db.prepare("SELECT count(*) AS count FROM categories").first("count"))
-    ).toBe(16);
-    expect(
-      yield* wait(() => db.prepare("SELECT count(*) AS count FROM erasure_requests").first("count"))
-    ).toBe(0);
   })
 );
 

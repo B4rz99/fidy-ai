@@ -1,7 +1,7 @@
+import { type Cause, Effect, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { afterAll, expect } from "vitest";
-import { type Cause, Effect, Schema } from "effect";
-import { applyTestMigration, isolatedTestDatabases } from "../../d1-test-fixture";
+import { installCurrentTestObjects, isolatedTestDatabases } from "../../d1-test-fixture";
 import { makeCoreRejectionObserver } from "./runtime";
 import { decideOperationalAlerts, observeCoreRejections, sweepCoreRejections } from "./operations";
 import { OperationalAlert } from "./contract";
@@ -12,10 +12,7 @@ const database = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
     yield* Effect.tryPromise(() =>
-      applyTestMigration({
-        db,
-        source: new URL("../../migrations/0088_core_rejection_burst.sql", import.meta.url),
-      })
+      installCurrentTestObjects({ db, tables: ["operational_core_rejection_burst"] })
     );
     return db;
   });

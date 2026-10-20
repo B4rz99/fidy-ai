@@ -3,19 +3,14 @@ import { deepStrictEqual } from "node:assert";
 import { afterAll, expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import { installCurrentTestObjects, isolatedTestDatabases } from "../d1-test-fixture";
 import { handleWebAuthentication } from "./operations";
 import { holdSessionCallback, seedSession, sessionRequest } from "./session.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const sessionDatabase = (): Promise<D1Database> =>
-  databases.acquire().then((db) =>
-    applyTestMigration({
-      db,
-      source: new URL("../migrations/0095_titular_erasure.sql", import.meta.url),
-    }).then(() => db)
-  );
+  databases.acquire().then((db) => installCurrentTestObjects({ db, tables: [] }).then(() => db));
 
 /** Observe the real native abort event without starting another Effect runtime. */
 const awaitAbort = (signal: AbortSignal): Effect.Effect<void> =>

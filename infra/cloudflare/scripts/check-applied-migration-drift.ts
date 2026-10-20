@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { adoptSchemaBaseline } from "./adopt-schema-baseline";
 import * as BunCrypto from "@effect/platform-bun/BunCrypto";
 import * as Effect from "effect/Effect";
 import {
@@ -8,6 +9,7 @@ import {
   hashMigrationSources,
 } from "./migration-history";
 import {
+  queryProductionDatabase,
   queryProductionMigrationLedger,
   readCheckedInMigrationSources,
   readProductionDatabaseName,
@@ -29,6 +31,7 @@ type FailureStage =
   | "query the Production D1 migration ledger"
   | "read checked-in D1 migration SQL"
   | "hash checked-in D1 migration SQL"
+  | "adopt the verified schema baseline"
   | "compare applied migration history";
 
 const main = async (): Promise<void> => {
@@ -43,8 +46,16 @@ const main = async (): Promise<void> => {
     const checkedIn = await Effect.runPromise(
       hashMigrationSources(sources).pipe(Effect.provide(BunCrypto.layer))
     );
+    failureStage = "adopt the verified schema baseline";
+    const verified = adoptSchemaBaseline({
+      sources,
+      checkedIn,
+      applied,
+      query: (sql) => queryProductionDatabase(databaseName, sql),
+      ledger: () => queryProductionMigrationLedger(databaseName),
+    });
     failureStage = "compare applied migration history";
-    const drift = Effect.runSync(compareAppliedMigrationRows(applied, checkedIn));
+    const drift = Effect.runSync(compareAppliedMigrationRows(verified, checkedIn));
     if (drift.length > 0) {
       for (const violation of drift) {
         process.stderr.write(`Production D1 migration drift: ${driftDescription(violation)}.\n`);

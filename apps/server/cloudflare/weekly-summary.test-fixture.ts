@@ -1,10 +1,16 @@
-import { DateTime, Effect, Option, Schema } from "effect";
 import {
   type WorkflowStep,
   type WorkflowStepConfig,
   type WorkflowStepContext,
   type WorkflowStepRollbackOptions,
 } from "cloudflare:workers";
+import {
+  type InsightUnavailable,
+  type ProactivityEnvironment,
+  type WeeklyScheduleSnapshot,
+} from "./insights/contract";
+import { type InsightEventId, InsightGenerationInput } from "../src/core/insights/contract";
+import { DateTime, Effect, Option, Schema } from "effect";
 import {
   ProactivityDeliveryWorkflow,
   advanceProactivityWork,
@@ -23,15 +29,12 @@ import {
   generateInsight,
   recordWeeklySummaryDecision,
 } from "./insights/operations";
-import {
-  type InsightUnavailable,
-  type ProactivityEnvironment,
-  type WeeklyScheduleSnapshot,
-} from "./insights/contract";
 import { UserTransactionCoordinator } from "./transactions/runtime";
-import { type InsightEventId, InsightGenerationInput } from "../src/core/insights/contract";
 import { categoryIds } from "../src/core/categories/contract";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
+import {} from "cloudflare:workers";
+
+import {} from "./insights/contract";
 
 export type ProactivityCoordinator = Pick<UserTransactionCoordinator, "fetch">;
 /** Compose the real coordinator with deliberately unavailable inference. */
@@ -69,15 +72,8 @@ const attempt = <A>(run: () => Promise<A>): Effect.Effect<A> =>
 export const weeklySummaryDatabaseAt = (now: DateTime.Utc): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const db = yield* attempt(() => weeklySummaryTestDatabases.acquire());
-    const names = Array.from(
-      new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
-    ).sort();
-    yield* attempt(() =>
-      installTestSchema({
-        db,
-        sources: names.map((name) => new URL(`./migrations/${name}`, import.meta.url)),
-      })
-    );
+
+    yield* attempt(() => installTestSchema({ db }));
     const json = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
     )(currentDisclosureFor()).pipe(Effect.orDie);

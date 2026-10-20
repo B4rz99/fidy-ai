@@ -279,3 +279,26 @@ The web artifact serves canonical installer bytes; the API exposes the bounded a
 version manifest. Installers configure user PATH idempotently and upgrades run on demand.
 See [installation and automated releases](../../docs/guides/cli-installation.md). Runtime guards,
 credential storage and server authorization remain the same.
+
+## Packaged credential verification
+
+Candidate and publication gates extract the checksummed native archive and execute that exact
+binary. On disposable GitHub-hosted runners, a synthetic PAT is seeded directly into the real
+OS credential store, paired with private grant metadata in a temporary home. The executable must
+load it through `status`, exclude the bearer from both human and JSON output, refuse malformed
+metadata safely, and remove both native access and metadata on `logout`. The harness refuses an
+occupied native login slot and local credential-test execution; it never overwrites an existing
+login. Child executables receive only required OS environment values, without CI tokens.
+
+The same gate downloads the current immutable published release, verifies GitHub asset digests,
+the archive checksum and entry, executable version, and agreement between its manifest source
+revision and Git tag. These checks authenticate the recorded release identity; they are not a
+cryptographic attestation that arbitrary source compiled into a particular executable.
+
+`python3 scripts/cli-release/verify-published.py --tag cli-v<VERSION>` performs read-only
+platform/archive/executable checks locally. Native credential verification adds `--credentials`
+and requires an isolated GitHub-hosted runner, with a real unlocked Secret Service on Linux.
+Both candidate and published checks run for Linux x64, macOS arm64 and Windows x64.
+This synthetic seeding proves packaged loading, safe failure, redaction and cleanup, not a live
+production login or server-side revocation. The existing real public/Core/browser CLI journey
+separately verifies pairing, issuance, canonical calls and revocation with synthetic identities.

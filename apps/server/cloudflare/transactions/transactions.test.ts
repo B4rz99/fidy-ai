@@ -524,7 +524,7 @@ const reconciliationState = (
       .all(),
     db
       .prepare(
-        `SELECT transaction_id AS id FROM transaction_reconciliation_members
+        `SELECT transaction_id AS id FROM reconciled_transactions
           WHERE user_id = ? ORDER BY transaction_id`
       )
       .bind(userId)
@@ -557,14 +557,14 @@ const seedLinkedPair = ({
         VALUES (?, ?, ?, 'linked', ?, '2025-01-05T12:00:00.000Z')`)
       .bind(userId, first, second, visible),
     db
-      .prepare(`INSERT INTO transaction_reconciliation_members
-        (user_id, transaction_id, first_transaction_id, second_transaction_id)
-        VALUES (?, ?, ?, ?)`)
+      .prepare(
+        `UPDATE transactions SET reconciliation_first_id=incoming.first_transaction_id,reconciliation_second_id=incoming.second_transaction_id FROM (SELECT column1 AS user_id,column2 AS transaction_id,column3 AS first_transaction_id,column4 AS second_transaction_id FROM (VALUES (?, ?, ?, ?))) incoming WHERE transactions.user_id=incoming.user_id AND transactions.id=incoming.transaction_id`
+      )
       .bind(userId, first, first, second),
     db
-      .prepare(`INSERT INTO transaction_reconciliation_members
-        (user_id, transaction_id, first_transaction_id, second_transaction_id)
-        VALUES (?, ?, ?, ?)`)
+      .prepare(
+        `UPDATE transactions SET reconciliation_first_id=incoming.first_transaction_id,reconciliation_second_id=incoming.second_transaction_id FROM (SELECT column1 AS user_id,column2 AS transaction_id,column3 AS first_transaction_id,column4 AS second_transaction_id FROM (VALUES (?, ?, ?, ?))) incoming WHERE transactions.user_id=incoming.user_id AND transactions.id=incoming.transaction_id`
+      )
       .bind(userId, second, first, second),
   ]);
 
@@ -629,7 +629,7 @@ const publicationStatements = (
     prepare: (sql) =>
       wrap(
         db.prepare(sql),
-        /(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:transaction_corrections|transactions|transaction_reconciliation_members)\b/iu.test(
+        /(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:transaction_corrections|transactions)\b/iu.test(
           sql
         )
       ),
@@ -4553,8 +4553,9 @@ it("aborts a batch unlink when a competing unlink commits before the unit", () =
                   WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ?`)
                 .bind(owner, first, second),
               db
-                .prepare(`DELETE FROM transaction_reconciliation_members
-                  WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ?`)
+                .prepare(
+                  `UPDATE transactions SET reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND user_id = ? AND reconciliation_first_id = ? AND reconciliation_second_id = ?`
+                )
                 .bind(owner, first, second),
             ])
           ),

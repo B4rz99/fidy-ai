@@ -136,15 +136,16 @@ it.effect("an expired preparation cannot authorize a provider source", () =>
     yield* fromPromise(() =>
       expect(
         db
-          .prepare(`INSERT INTO card_payment_sources
-    (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
-    VALUES (?, ?, ?, 42, 'a@example.test', ?)`)
+          .prepare(
+            `UPDATE card_enrollments SET source_method='card',payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, 42, 'a@example.test', ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+          )
           .bind("50000000-0000-4000-8000-000000000001", userA, enrollmentId, nowMs)
           .run()
       ).rejects.toThrow()
     );
     expect(
-      (yield* fromPromise(() => db.prepare("SELECT id FROM card_payment_sources").all())).results
+      (yield* fromPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
+        .results
     ).toEqual([]);
   })
 );
@@ -175,9 +176,9 @@ it.effect("rejects a source with another authorization method or provider enviro
     yield* fromPromise(() =>
       expect(
         db
-          .prepare(`INSERT INTO card_payment_sources
-      (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
-      VALUES (?, ?, ?, 42, ?, ?, 'nequi')`)
+          .prepare(
+            `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 42, ?, ?, 'nequi'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+          )
           .bind("50000000-0000-4000-8000-000000000001", userA, enrollmentId, billingEmail, nowMs)
           .run()
       ).rejects.toThrow()
@@ -191,7 +192,8 @@ it.effect("rejects a source with another authorization method or provider enviro
       ).rejects.toThrow()
     );
     expect(
-      (yield* fromPromise(() => db.prepare("SELECT id FROM card_payment_sources").all())).results
+      (yield* fromPromise(() => db.prepare("SELECT id FROM verified_payment_sources").all()))
+        .results
     ).toEqual([]);
   })
 );
@@ -224,9 +226,9 @@ it.effect("rejects a pending BillingAttempt whose snapshot differs from the sele
     );
     yield* fromPromise(() =>
       db
-        .prepare(`INSERT INTO card_payment_sources
-    (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
-    VALUES (?, ?, ?, 42, ?, ?)`)
+        .prepare(
+          `UPDATE card_enrollments SET source_method='card',payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, 42, ?, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+        )
         .bind(sourceId, userA, enrollmentId, billingEmail, nowMs)
         .run()
     );

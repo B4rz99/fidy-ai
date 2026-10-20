@@ -118,7 +118,7 @@ const loadCharge = (call: RefundStartCall): Effect.Effect<typeof Charge.Type, Na
         .prepare(`SELECT a.id,a.price_id,a.amount,a.currency,
     a.tax_treatment,a.wompi_environment,e.transaction_id,p.method FROM billing_attempts a
     JOIN billing_provider_transactions e ON e.attempt_id=a.id AND e.status='APPROVED'
-    JOIN card_payment_sources p ON p.id=a.payment_source_id
+    JOIN verified_payment_sources p ON p.id=a.payment_source_id
     WHERE a.id=? AND a.user_id=? AND a.status='succeeded' AND a.paid_starts_at_ms IS NOT NULL LIMIT 2`)
         .bind(call.input.billingAttemptId, call.input.userId)
         .all()

@@ -110,7 +110,7 @@ const cancellationStatements = (
     FROM (SELECT s.user_id,s.attempt_id,a.payment_source_id,? AS cancelled_at_ms,? AS paid_through_ms,
       CASE WHEN source.method='daviplata' THEN 'void-pending' ELSE 'detached' END AS source_cancellation
       FROM subscription_standing s JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
-      JOIN card_payment_sources source ON source.id=a.payment_source_id AND source.user_id=s.user_id
+      JOIN verified_payment_sources source ON source.id=a.payment_source_id AND source.user_id=s.user_id
       WHERE s.user_id=? AND s.attempt_id=? AND a.payment_source_id=?
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})) incoming
     WHERE users.id=incoming.user_id`)

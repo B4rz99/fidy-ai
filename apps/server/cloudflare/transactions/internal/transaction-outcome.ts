@@ -258,7 +258,7 @@ const linkPremiseRefusal = ({
     try: () =>
       db
         .prepare(`SELECT
-            (SELECT COUNT(*) FROM transaction_reconciliation_members member
+            (SELECT COUNT(*) FROM reconciled_transactions member
               WHERE member.user_id = ? AND member.transaction_id IN (?, ?)) AS member_total,
             (SELECT COUNT(*) FROM transactions retained
               WHERE retained.user_id = ? AND retained.id IN (?, ?)) AS row_total,

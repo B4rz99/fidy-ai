@@ -46,9 +46,9 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
         VALUES (?, ?, ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891, ?, 'sandbox')`)
             .bind(enrollmentId, userId, priceId, paymentRequestId, method),
           db
-            .prepare(`INSERT INTO card_payment_sources
-        (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
-        VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?)`)
+            .prepare(
+              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+            )
             .bind(sourceId, userId, enrollmentId, method),
           db
             .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
@@ -325,8 +325,8 @@ it("holds verified negative until the retry opportunity and admits a later verif
       const callbackAt = yield* Clock.currentTimeMillis;
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO billing_event_candidates
-        (transaction_id, received_at_ms) VALUES (?, ?)`)
+          .prepare(`INSERT INTO billing_provider_transactions
+        (transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts) VALUES (?, ?,0,'UNKNOWN',0) ON CONFLICT(transaction_id) DO UPDATE SET event_received_at_ms=excluded.event_received_at_ms,event_signed_at=0,event_signed_status='UNKNOWN',event_lookup_attempts=0 WHERE event_received_at_ms IS NULL`)
           .bind(transactionId, callbackAt)
           .run()
       );
@@ -336,8 +336,8 @@ it("holds verified negative until the retry opportunity and admits a later verif
       expect(create).toHaveBeenCalledTimes(1);
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`UPDATE billing_event_candidates
-        SET last_checked_at_ms = last_checked_at_ms - 60001`)
+          .prepare(`UPDATE billing_provider_transactions
+        SET event_last_checked_at_ms = event_last_checked_at_ms - 60001`)
           .run()
       );
       yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
@@ -481,7 +481,7 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
           .status
       ).toBe(400);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_event_candidates").all()))
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_callback_hints").all()))
           .results
       ).toHaveLength(0);
       expect((yield* send()).status).toBe(200);
@@ -570,9 +570,9 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
       const now = yield* Clock.currentTimeMillis;
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT INTO billing_event_candidates
-      (transaction_id, received_at_ms) SELECT ?, ? WHERE EXISTS
-      (SELECT 1 FROM billing_attempts WHERE wompi_reference = ? AND status = 'pending')`)
+          .prepare(`INSERT INTO billing_provider_transactions
+      (transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts) SELECT ?, ?,0,'UNKNOWN',0 WHERE EXISTS
+      (SELECT 1 FROM billing_attempts WHERE wompi_reference = ? AND status = 'pending') ON CONFLICT(transaction_id) DO UPDATE SET event_received_at_ms=excluded.event_received_at_ms,event_signed_at=0,event_signed_status='UNKNOWN',event_lookup_attempts=0 WHERE event_received_at_ms IS NULL`)
           .bind(transactionId, now, reference)
           .run()
       );
@@ -600,7 +600,7 @@ it("rejects forged callback evidence across Public and Core ingress without writ
       expect(response.status).toBe(400);
       expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_event_candidates").all()))
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM billing_callback_hints").all()))
           .results
       ).toHaveLength(0);
       expect(
@@ -674,8 +674,8 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
       const now = yield* Clock.currentTimeMillis;
       yield* Effect.tryPromise(() =>
         db
-          .prepare(`INSERT OR IGNORE INTO billing_event_candidates
-      (transaction_id, received_at_ms) VALUES (?, ?)`)
+          .prepare(`INSERT INTO billing_provider_transactions
+      (transaction_id,event_received_at_ms,event_signed_at,event_signed_status,event_lookup_attempts) VALUES (?, ?,0,'UNKNOWN',0) ON CONFLICT(transaction_id) DO UPDATE SET event_received_at_ms=excluded.event_received_at_ms,event_signed_at=0,event_signed_status='UNKNOWN',event_lookup_attempts=0 WHERE event_received_at_ms IS NULL`)
           .bind(transactionId, now)
           .run()
       );
@@ -755,8 +755,8 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
         yield* reconcileBillingCandidates({ DB: db, BILLING_COLLECTION_WORKFLOW: workflow });
         yield* Effect.tryPromise(() =>
           db
-            .prepare(`UPDATE billing_event_candidates
-        SET last_checked_at_ms = last_checked_at_ms - 60001`)
+            .prepare(`UPDATE billing_provider_transactions
+        SET event_last_checked_at_ms = event_last_checked_at_ms - 60001`)
             .run()
         );
       }
@@ -854,9 +854,9 @@ it("rejects a signed callback with another User's source even when its reference
         VALUES (?, ?, ?, 'other@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3892, 'sandbox')`)
             .bind(otherEnrollment, otherUser, priceId, "50000000-0000-4000-8000-000000000002"),
           db
-            .prepare(`INSERT INTO card_payment_sources
-        (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
-        VALUES (?, ?, ?, 3892, 'other@example.com', 0)`)
+            .prepare(
+              `UPDATE card_enrollments SET source_method='card',payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, 3892, 'other@example.com', 0))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+            )
             .bind(otherSource, otherUser, otherEnrollment),
           db
             .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")

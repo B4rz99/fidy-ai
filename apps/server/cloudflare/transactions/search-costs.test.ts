@@ -271,9 +271,9 @@ it(
                 VALUES (?, ?, ?, 'linked', ?, '2026-01-01T01:00:00.000Z')`)
               .bind(userId, recordId(1), recordId(2), recordId(1)),
             db
-              .prepare(`INSERT INTO transaction_reconciliation_members
-                (user_id, transaction_id, first_transaction_id, second_transaction_id)
-                VALUES (?, ?, ?, ?), (?, ?, ?, ?)`)
+              .prepare(
+                `UPDATE transactions SET reconciliation_first_id=incoming.first_transaction_id,reconciliation_second_id=incoming.second_transaction_id FROM (SELECT column1 AS user_id,column2 AS transaction_id,column3 AS first_transaction_id,column4 AS second_transaction_id FROM (VALUES (?, ?, ?, ?), (?, ?, ?, ?))) incoming WHERE transactions.user_id=incoming.user_id AND transactions.id=incoming.transaction_id`
+              )
               .bind(
                 userId,
                 recordId(1),

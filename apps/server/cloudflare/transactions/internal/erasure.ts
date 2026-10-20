@@ -199,20 +199,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'first_transaction_id',r.\"first_transaction_id\",'second_transaction_id',r.\"second_transaction_id\") AS body FROM transaction_reconciliation_members r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'transaction_id',r.\"transaction_id\",'first_transaction_id',r.\"first_transaction_id\",'second_transaction_id',r.\"second_transaction_id\") AS body FROM reconciled_transactions r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM transaction_reconciliation_members r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM reconciled_transactions r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM transaction_reconciliation_members r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM reconciled_transactions r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM transaction_reconciliation_members AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE transactions AS r SET reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE r.reconciliation_first_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

@@ -24,7 +24,7 @@ const database = Effect.gen(function* () {
       db.prepare(
         "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER)"
       ),
-      db.prepare("CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
+      db.prepare("CREATE TABLE verified_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
       db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
       db.prepare(
         "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
@@ -162,7 +162,9 @@ it("uses corrected paid standing at publication without retroactively charging P
               "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms FROM (SELECT ? AS attempt_id,? AS starts_at_ms,? AS ends_at_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
             )
             .bind("paid-attempt", current - 1, current + 1),
-          db.prepare("INSERT INTO card_payment_sources VALUES ('source', ?, 'nequi')").bind(userId),
+          db
+            .prepare("INSERT INTO verified_payment_sources VALUES ('source', ?, 'nequi')")
+            .bind(userId),
         ])
       );
       yield* io(() => consume(db, "paid"));

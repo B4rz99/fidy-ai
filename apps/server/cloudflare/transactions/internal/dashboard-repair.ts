@@ -132,12 +132,12 @@ const rebuildPage = (db: D1Database, userId: string, previousCursor: string): Pr
           WHERE effective.user_id = ? AND effective.id > dashboard_projection_state.cursor_id)
         AND NOT EXISTS (SELECT 1 FROM transaction_reconciliation_decisions decision
           WHERE decision.user_id = ? AND (
-            (decision.state = 'linked' AND (SELECT COUNT(*) FROM transaction_reconciliation_members member
+            (decision.state = 'linked' AND (SELECT COUNT(*) FROM reconciled_transactions member
               WHERE member.user_id = decision.user_id
                 AND member.first_transaction_id = decision.first_transaction_id
                 AND member.second_transaction_id = decision.second_transaction_id) != 2)
             OR (decision.state = 'keep-separate' AND EXISTS
-              (SELECT 1 FROM transaction_reconciliation_members member
+              (SELECT 1 FROM reconciled_transactions member
                 WHERE member.user_id = decision.user_id
                   AND member.first_transaction_id = decision.first_transaction_id
                   AND member.second_transaction_id = decision.second_transaction_id))))`)

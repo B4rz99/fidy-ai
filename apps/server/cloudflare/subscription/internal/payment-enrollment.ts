@@ -424,7 +424,7 @@ const prepare = ({
     if (Option.isNone(body)) return invalid();
     const currentSource = yield* waitFor(() =>
       environment.DB.prepare(
-        "SELECT id FROM card_payment_sources WHERE user_id=? AND retired_at_ms IS NULL"
+        "SELECT id FROM verified_payment_sources WHERE user_id=? AND retired_at_ms IS NULL"
       )
         .bind(session.user_id)
         .first()
@@ -437,7 +437,7 @@ const prepare = ({
     if (Option.isNone(selected)) return invalid();
     const incompatibleSource = yield* waitFor(() =>
       environment.DB.prepare(
-        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
+        `SELECT s.id FROM verified_payment_sources AS s WHERE s.user_id = ? AND s.retired_at_ms IS NULL AND (EXISTS (SELECT 1 FROM (SELECT rowid,id AS user_id,cancellation_paid_attempt_id AS paid_attempt_id,cancellation_payment_source_id AS payment_source_id,cancellation_cancelled_at_ms AS cancelled_at_ms,cancellation_paid_through_ms AS paid_through_ms,cancellation_source_cancellation AS source_cancellation,cancellation_void_started_at_ms AS void_started_at_ms,cancellation_void_verified_at_ms AS void_verified_at_ms,cancellation_verification_count AS verification_count,cancellation_last_offered_at_ms AS last_offered_at_ms FROM users WHERE cancellation_cancelled_at_ms IS NOT NULL) c WHERE c.payment_source_id=s.id) OR (s.method <> ? AND NOT (? AND s.method='card'))
             OR NOT EXISTS (SELECT 1 FROM card_enrollments AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
                 (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
@@ -543,13 +543,16 @@ const prepare = ({
         }),
         ...(replacing
           ? [
-              environment.DB.prepare(`UPDATE card_payment_sources SET retired_at_ms=?
-          WHERE user_id=? AND method='card' AND retired_at_ms IS NULL`).bind(now, session.user_id),
+              environment.DB.prepare(`UPDATE card_enrollments SET source_retired_at_ms=?
+          WHERE user_id=? AND source_method='card' AND source_retired_at_ms IS NULL`).bind(
+                now,
+                session.user_id
+              ),
               preparePredicateAssertion({
                 db: environment.DB,
                 scope: "payment_replacement",
                 predicate: {
-                  sql: "SELECT 1 WHERE EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND method='card' AND retired_at_ms IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM card_payment_sources WHERE user_id=? AND retired_at_ms IS NULL)",
+                  sql: "SELECT 1 WHERE EXISTS (SELECT 1 FROM verified_payment_sources WHERE user_id=? AND method='card' AND retired_at_ms IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM verified_payment_sources WHERE user_id=? AND retired_at_ms IS NULL)",
                   params: [session.user_id, session.user_id],
                 },
               }),
@@ -602,7 +605,7 @@ const prepare = ({
     });
     const source = yield* waitFor(() =>
       environment.DB.prepare(
-        "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
+        "SELECT id FROM verified_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
       )
         .bind(session.user_id, body.value.method)
         .first()
@@ -610,7 +613,7 @@ const prepare = ({
     const inserted = yield* waitFor(() =>
       environment.DB.prepare(`UPDATE card_enrollments
     SET status = 'prepared', payment_source_mode = ?,
-      billing_email = COALESCE((SELECT billing_email FROM card_payment_sources WHERE user_id = card_enrollments.user_id AND method = card_enrollments.method AND retired_at_ms IS NULL), billing_email),
+      billing_email = COALESCE((SELECT billing_email FROM verified_payment_sources WHERE user_id = card_enrollments.user_id AND method = card_enrollments.method AND retired_at_ms IS NULL), billing_email),
       contracts_json = ?, disclosure_json = ?
     WHERE id = ? AND user_id = ? AND status = 'preparing'`)
         .bind(
@@ -729,9 +732,9 @@ const finish = ({
       ...(Option.isNone(wompiSourceId)
         ? []
         : [
-            environment.DB.prepare(`INSERT INTO card_payment_sources
-      (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(
+            environment.DB.prepare(`UPDATE card_enrollments SET payment_source_id=?1,source_wompi_id=?4,
+      source_billing_email=?5,source_created_at_ms=?6,source_method=?7
+      WHERE id=?3 AND user_id=?2 AND payment_source_id IS NULL`).bind(
               sourceId,
               userId,
               row.id,
@@ -1055,7 +1058,7 @@ const submit = ({
         Schema.Struct({ id: PaymentSourceId }),
         yield* waitFor(() =>
           environment.DB.prepare(
-            "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
+            "SELECT id FROM verified_payment_sources WHERE user_id = ? AND method = ? AND retired_at_ms IS NULL"
           )
             .bind(session.user_id, retained.method)
             .first()

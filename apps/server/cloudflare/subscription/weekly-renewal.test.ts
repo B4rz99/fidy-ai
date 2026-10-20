@@ -119,9 +119,9 @@ const fixture = (
         VALUES (?, ?, ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891, ?, 'sandbox')`)
             .bind(enrollmentId, userId, selectedPriceId, paymentRequestId, method),
           db
-            .prepare(`INSERT INTO card_payment_sources
-        (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
-        VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?)`)
+            .prepare(
+              `UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+            )
             .bind(sourceId, userId, enrollmentId, method),
           db
             .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")

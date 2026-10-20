@@ -79,9 +79,7 @@ export const transactionPairInput = (
 
 const candidateQuery = `SELECT retained.id, retained.amount, retained.currency,
   retained.direction, retained.created_at AS created_at,
-  EXISTS (SELECT 1 FROM transaction_reconciliation_members member
-    WHERE member.user_id = retained.user_id AND member.transaction_id = retained.id)
-    AS already_linked
+  (retained.reconciliation_first_id IS NOT NULL) AS already_linked
 FROM transactions retained`;
 
 const candidateFromRow = (row: MemberRow): Option.Option<Candidate> =>
@@ -196,11 +194,10 @@ const successStatements = ({
   ];
 };
 
-const memberInsert = (work: PairWork & Readonly<{ transactionId: string }>): D1PreparedStatement =>
+const attachMember = (work: PairWork & Readonly<{ transactionId: string }>): D1PreparedStatement =>
   work.db
-    .prepare(`INSERT INTO transaction_reconciliation_members
-      (user_id, transaction_id, first_transaction_id, second_transaction_id)
-      SELECT ?, ?, ?, ? WHERE changes() = 1`)
+    .prepare(`UPDATE transactions SET reconciliation_first_id=?3,reconciliation_second_id=?4
+      WHERE user_id=?1 AND id=?2 AND reconciliation_first_id IS NULL AND changes()=1`)
     .bind(
       work.subject.userId,
       work.transactionId,
@@ -208,10 +205,9 @@ const memberInsert = (work: PairWork & Readonly<{ transactionId: string }>): D1P
       work.pair.secondTransactionId
     );
 
-const memberDelete = (work: PairWork & Readonly<{ transactionId: string }>): D1PreparedStatement =>
+const detachMember = (work: PairWork & Readonly<{ transactionId: string }>): D1PreparedStatement =>
   work.db
-    .prepare(`DELETE FROM transaction_reconciliation_members
-      WHERE user_id = ? AND transaction_id = ? AND first_transaction_id = ? AND second_transaction_id = ?
+    .prepare(`UPDATE transactions SET reconciliation_first_id=NULL,reconciliation_second_id=NULL WHERE reconciliation_first_id IS NOT NULL AND user_id = ? AND id = ? AND reconciliation_first_id = ? AND reconciliation_second_id = ?
         AND changes() = 1`)
     .bind(
       work.subject.userId,
@@ -222,7 +218,7 @@ const memberDelete = (work: PairWork & Readonly<{ transactionId: string }>): D1P
 
 /**
  * The guarded writes of one link: the decision re-asserts both retained rows still exist and still
- * hold equal Currency, exact amount, and direction at commit time, then the member inserts and the
+ * hold equal Currency, exact amount, and direction at commit time, then both member updates and the
  * success Audit are chained on `changes()` so a premise that moved after the candidate read aborts
  * the whole unit.
  */
@@ -244,9 +240,9 @@ const linkStatements = (
               AND first_retained.currency = second_retained.currency
               AND first_retained.amount = second_retained.amount
               AND first_retained.direction = second_retained.direction
+              AND first_retained.reconciliation_first_id IS NULL
+              AND second_retained.reconciliation_first_id IS NULL
           )
-          AND NOT EXISTS (SELECT 1 FROM transaction_reconciliation_members
-            WHERE user_id = ? AND transaction_id IN (?, ?))
           AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
         ON CONFLICT (user_id, first_transaction_id, second_transaction_id) DO UPDATE SET
           state = 'linked', visible_transaction_id = excluded.visible_transaction_id,
@@ -260,13 +256,10 @@ const linkStatements = (
         pair.secondTransactionId,
         subject.userId,
         pair.firstTransactionId,
-        subject.userId,
-        pair.firstTransactionId,
-        pair.secondTransactionId,
         ...authority.bindings
       ),
-    memberInsert({ ...work, transactionId: pair.firstTransactionId }),
-    memberInsert({ ...work, transactionId: pair.secondTransactionId }),
+    attachMember({ ...work, transactionId: pair.firstTransactionId }),
+    attachMember({ ...work, transactionId: pair.secondTransactionId }),
     ...successStatements({ ...work, operation: "transactions.linkTransactions", state: "linked" }),
   ];
 };
@@ -289,8 +282,8 @@ const unlinkStatements = (
         pair.secondTransactionId,
         ...authority.bindings
       ),
-    memberDelete({ ...work, transactionId: pair.firstTransactionId }),
-    memberDelete({ ...work, transactionId: pair.secondTransactionId }),
+    detachMember({ ...work, transactionId: pair.firstTransactionId }),
+    detachMember({ ...work, transactionId: pair.secondTransactionId }),
     ...successStatements({
       ...work,
       operation: "transactions.unlinkTransactions",

@@ -960,3 +960,29 @@ their hosted delivery foreign key, immutable status events and Turn-owned retent
 shared erasure projection retains each original purpose, owner predicate and archived fields.
 Reminder control decisions use `audit_entries` as exact same-User/message replay evidence. Ordinary
 Audit retention never expires those decisions or counts them as product usage.
+
+
+## Financial companion consolidation
+
+Verified payment sources are an optional immutable field group on their original `card_enrollments`
+row. The enrollment UUID and the payment-source UUID remain distinct unique keys: BillingAttempts
+reference each by its own meaning, and cancellation retains its source key. `verified_payment_sources`
+is a read projection, not a writable compatibility store. Authorization installs source identity,
+provider identity, billing email, creation time and method together; reuse does not fabricate another
+source. Retirement retains its existing verified-no-charge rules. The source's independent billing
+erasure purpose archives and clears its fields before enrollment deletion.
+
+Transactions retain optional same-User Reconciliation pair keys beside their original facts.
+`reconciled_transactions` exposes this membership as a read relation. A composite foreign key binds
+it to the retained decision, and a partial pair index supports membership counts and effective reads.
+Link/unlink still commits the decision, both members and accountability atomically. Membership-only
+updates do not masquerade as captured or corrected Money; their own projection triggers retain the
+Dashboard linking transitions. The original membership erasure purpose clears the pair keys before
+Transaction or decision deletion.
+
+`billing_provider_transactions` retains independently optional callback-hint fields and an optional
+attempt binding. `billing_callback_hints` is its bounded lookup projection. A signed hint alone can
+have neither a verified status nor an attempt identity. Collection or a verified lookup may install
+the attempt binding once; verified approval cannot regress. Provider and callback lookup budgets,
+cooldowns and archive shapes remain independent. Callback erasure clears only hint fields; provider
+erasure removes its binding/evidence while preserving any independently retained unowned hint.

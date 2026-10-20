@@ -13,9 +13,8 @@ export const seedRefundCharge = (db: D1Database): Effect.Effect<void, Cause.Unkn
         VALUES ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
         '22700000-0000-4000-8000-000000000001','payer@example.com','creating','create','{}','{}',0,900000,
         '50000000-0000-4000-8000-000000000001',3891,'card','sandbox')`),
-      db.prepare(`INSERT INTO card_payment_sources (id,user_id,enrollment_id,wompi_source_id,billing_email,created_at_ms,method)
-        VALUES ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
-        '20000000-0000-4000-8000-000000000001',3891,'payer@example.com',0,'card')`),
+      db.prepare(`UPDATE card_enrollments SET payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms,source_method=incoming.method FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms,column7 AS method FROM (VALUES ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000001',3891,'payer@example.com',0,'card'))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`),
       db.prepare("UPDATE card_enrollments SET status='available'"),
       db.prepare(`INSERT INTO billing_attempts (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,
         amount,currency,billing_period,service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms)

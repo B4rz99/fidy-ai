@@ -85,7 +85,7 @@ const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
     'members', json((SELECT json_group_array(json_object(
       'transaction_id', transaction_id, 'first_transaction_id', first_transaction_id,
       'second_transaction_id', second_transaction_id))
-      FROM (SELECT * FROM transaction_reconciliation_members
+      FROM (SELECT * FROM reconciled_transactions
         WHERE user_id = ? AND transaction_id IN selected ORDER BY transaction_id)))
   ) AS snapshot`;
 

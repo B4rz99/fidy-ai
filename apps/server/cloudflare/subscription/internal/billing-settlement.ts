@@ -33,6 +33,7 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
       (transaction_id, attempt_id, status, first_observed_at_ms, negative_observed_at_ms, finalized_at_ms)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(transaction_id) DO UPDATE SET
+        attempt_id=excluded.attempt_id,
         first_observed_at_ms=COALESCE(first_observed_at_ms,excluded.first_observed_at_ms),
         status = CASE WHEN status = 'APPROVED' THEN status ELSE excluded.status END,
         negative_observed_at_ms = CASE
@@ -42,7 +43,7 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
           ELSE COALESCE(negative_observed_at_ms, excluded.negative_observed_at_ms) END,
         finalized_at_ms = CASE WHEN status = 'APPROVED' THEN finalized_at_ms
           ELSE excluded.finalized_at_ms END
-      WHERE attempt_id = excluded.attempt_id`)
+      WHERE attempt_id IS NULL OR attempt_id = excluded.attempt_id`)
       .bind(
         transactionId,
         attemptId,

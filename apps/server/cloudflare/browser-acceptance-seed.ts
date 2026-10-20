@@ -290,9 +290,9 @@ await db
   )
   .run();
 await db
-  .prepare(`INSERT INTO card_payment_sources
-  (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
-  VALUES (?, ?, ?, ?, ?, ?)`)
+  .prepare(
+    `UPDATE card_enrollments SET source_method='card',payment_source_id=incoming.id,source_wompi_id=incoming.wompi_source_id,source_billing_email=incoming.billing_email,source_created_at_ms=incoming.created_at_ms FROM (SELECT column1 AS id,column2 AS user_id,column3 AS enrollment_id,column4 AS wompi_source_id,column5 AS billing_email,column6 AS created_at_ms FROM (VALUES (?, ?, ?, ?, ?, ?))) incoming WHERE card_enrollments.id=incoming.enrollment_id AND card_enrollments.user_id=incoming.user_id`
+  )
   .bind(
     "24000000-0000-4000-8000-000000000272",
     fixtureUserId,

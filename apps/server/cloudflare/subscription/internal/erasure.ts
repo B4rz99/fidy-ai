@@ -7,20 +7,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'received_at_ms',r.\"received_at_ms\",'signed_at',r.\"signed_at\",'signed_status',r.\"signed_status\",'lookup_attempts',r.\"lookup_attempts\",'last_checked_at_ms',r.\"last_checked_at_ms\",'resolved_at_ms',r.\"resolved_at_ms\") AS body FROM billing_event_candidates r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('transaction_id',r.\"transaction_id\",'received_at_ms',r.\"received_at_ms\",'signed_at',r.\"signed_at\",'signed_status',r.\"signed_status\",'lookup_attempts',r.\"lookup_attempts\",'last_checked_at_ms',r.\"last_checked_at_ms\",'resolved_at_ms',r.\"resolved_at_ms\") AS body FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_event_candidates r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM billing_event_candidates r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
+      sql: "SELECT 1 FROM billing_callback_hints r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?)",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_event_candidates AS r WHERE EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE billing_provider_transactions AS r SET event_received_at_ms=NULL,event_signed_at=NULL,event_signed_status=NULL,event_lookup_attempts=NULL,event_last_checked_at_ms=NULL,event_resolved_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_provider_transactions p JOIN billing_attempts a ON a.id=p.attempt_id WHERE p.status IS NOT NULL AND p.transaction_id=r.transaction_id AND a.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -94,7 +94,11 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM billing_provider_transactions AS r WHERE EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "DELETE FROM billing_provider_transactions AS r WHERE r.event_received_at_ms IS NULL AND EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        params: [scope.userId, scope.reference],
+      },
+      {
+        sql: "UPDATE billing_provider_transactions AS r SET attempt_id=NULL,lookup_attempts=0,last_checked_at_ms=NULL,status=NULL,first_observed_at_ms=NULL,negative_observed_at_ms=NULL,finalized_at_ms=NULL WHERE r.event_received_at_ms IS NOT NULL AND EXISTS(SELECT 1 FROM billing_attempts p WHERE p.id=r.attempt_id AND p.user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],
@@ -136,20 +140,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: ["billing_history", "subscription_cancellations"],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'enrollment_id',r.\"enrollment_id\",'wompi_source_id',r.\"wompi_source_id\",'billing_email',r.\"billing_email\",'created_at_ms',r.\"created_at_ms\",'method',r.\"method\",'retired_at_ms',r.\"retired_at_ms\") AS body FROM card_payment_sources r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'enrollment_id',r.\"enrollment_id\",'wompi_source_id',r.\"wompi_source_id\",'billing_email',r.\"billing_email\",'created_at_ms',r.\"created_at_ms\",'method',r.\"method\",'retired_at_ms',r.\"retired_at_ms\") AS body FROM verified_payment_sources r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM card_payment_sources r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM verified_payment_sources r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM card_payment_sources r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM verified_payment_sources r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM card_payment_sources AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE card_enrollments AS r SET payment_source_id=NULL,source_wompi_id=NULL,source_billing_email=NULL,source_created_at_ms=NULL,source_retired_at_ms=NULL,source_method=NULL WHERE r.payment_source_id IS NOT NULL AND r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

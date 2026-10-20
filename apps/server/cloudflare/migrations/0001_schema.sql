@@ -8244,4 +8244,3 @@ BEGIN
  SELECT RAISE(ABORT,'whatsapp_provider_confirmation_invalid');
 END;
 --> statement-breakpoint
-

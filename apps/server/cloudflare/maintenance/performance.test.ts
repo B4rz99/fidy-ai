@@ -54,7 +54,7 @@ it.skipIf(!enabled)(
             db.batch([
               db
                 .prepare(
-                  "INSERT INTO operational_canary VALUES ('queueExecution', ?), ('workflowExecution', ?)"
+                  "INSERT INTO operational_health_view(operation,state,observed_at_ms,last_succeeded_ms) VALUES ('queueExecution','healthy',?1,?1),('workflowExecution','healthy',?2,?2)"
                 )
                 .bind(now, now),
               ...(retainedAdmissions === 0

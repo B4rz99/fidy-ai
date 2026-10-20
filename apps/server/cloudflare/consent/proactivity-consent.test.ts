@@ -47,7 +47,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
             ),
           db
             .prepare(
-              "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) VALUES (?,?,?)"
+              "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND id=?3 AND report_delivery_id IS NULL"
             )
             .bind(users[0], occurrence.id, occurrence.id),
           db
@@ -129,7 +129,7 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT insight_event_id FROM proactivity_message_events WHERE user_id=? AND delivery_id=?"
+              "SELECT insight_event_id FROM (SELECT rowid,user_id AS user_id,report_delivery_id AS delivery_id,id AS insight_event_id FROM insight_events WHERE report_delivery_id IS NOT NULL) WHERE user_id=? AND delivery_id=?"
             )
             .bind(users[0], occurrence.id)
             .first()

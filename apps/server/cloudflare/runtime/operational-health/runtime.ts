@@ -97,8 +97,8 @@ export const makeCoreRejectionObserver = (): ((
         Promise.resolve()
           .then(() =>
             db
-              .prepare(`INSERT INTO operational_core_rejection_burst (id, observed_at_ms)
-          VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET observed_at_ms = excluded.observed_at_ms
+              .prepare(`INSERT INTO operational_event_buckets(kind,bucket_ms,count,observed_at_ms)
+          VALUES ('core_rejection',0,1,?) ON CONFLICT(kind,bucket_ms) DO UPDATE SET observed_at_ms = excluded.observed_at_ms
           WHERE excluded.observed_at_ms > observed_at_ms`)
               .bind(observedAtMs)
               .run()

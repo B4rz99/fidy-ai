@@ -83,7 +83,7 @@ const readReport = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): OwnedStatement => ({
-  sql: `SELECT 1 FROM insight_reports AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=? AND r.delivery_id=? AND r.text IS NOT NULL AND (r.role<>'new-recurring-series' OR (r.report_json IS NOT NULL AND EXISTS(SELECT 1 FROM recurring_digest_instructions AS i WHERE i.user_id=r.user_id AND i.id=r.instruction_id AND i.enabled=1 AND i.version=r.instruction_version AND i.grant_id=r.consent_grant_id))) AND (r.role<>'reminder-question' OR EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g JOIN schedules AS s ON s.kind='reminder' AND s.user_id=g.user_id WHERE g.user_id=r.user_id AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND g.question_id=r.delivery_id AND json_extract(g.standing_json,'$._tag')='QuestionPending')) AND (r.role<>'manual-entry-reminder' OR EXISTS (SELECT 1 FROM proactivity_message_events AS l JOIN insight_events AS e ON e.user_id=l.user_id AND e.id=l.insight_event_id JOIN schedules AS s ON s.kind='reminder' AND s.user_id=e.user_id AND s.id=e.schedule_id JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE l.user_id=r.user_id AND l.delivery_id=r.delivery_id AND e.kind='manual-entry-reminder' AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND json_extract(g.standing_json,'$._tag')<>'Paused'))`,
+  sql: `SELECT 1 FROM insight_reports AS r WHERE r.kind='proactivity-delivery' AND r.scheduled_at_ms IS NOT NULL AND r.user_id=? AND r.delivery_id=? AND r.text IS NOT NULL AND (r.role<>'new-recurring-series' OR (r.report_json IS NOT NULL AND EXISTS(SELECT 1 FROM recurring_digest_instructions AS i WHERE i.user_id=r.user_id AND i.id=r.instruction_id AND i.enabled=1 AND i.version=r.instruction_version AND i.grant_id=r.consent_grant_id))) AND (r.role<>'reminder-question' OR EXISTS (SELECT 1 FROM (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g JOIN schedules AS s ON s.kind='reminder' AND s.user_id=g.user_id WHERE g.user_id=r.user_id AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND g.question_id=r.delivery_id AND json_extract(g.standing_json,'$._tag')='QuestionPending')) AND (r.role<>'manual-entry-reminder' OR EXISTS (SELECT 1 FROM insight_events AS e JOIN schedules AS s ON s.kind='reminder' AND s.user_id=e.user_id AND s.id=e.schedule_id JOIN (SELECT rowid,* FROM proactivity_governors WHERE kind='reminder') AS g ON g.user_id=s.user_id WHERE e.user_id=r.user_id AND e.report_delivery_id=r.delivery_id AND e.kind='manual-entry-reminder' AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND json_extract(g.standing_json,'$._tag')<>'Paused'))`,
   params: [input.userId, input.id],
 });
 
@@ -94,16 +94,16 @@ export const prepareSettlement = (
   input.db
     .prepare(
       `UPDATE insight_events SET
-      delivery_receipt_id=coalesce(delivery_receipt_id,l.insight_event_id),
+      delivery_receipt_id=coalesce(delivery_receipt_id,insight_events.id),
       delivery_sent_at=coalesce(delivery_sent_at,strftime('%Y-%m-%dT%H:%M:%fZ',v.send_started_at_ms/1000.0,'unixepoch')),
       delivery_channel=coalesce(delivery_channel,'whatsapp'),
       delivery_provider=coalesce(delivery_provider,'kapso'),
       delivery_provider_message_id=coalesce(delivery_provider_message_id,v.provider_message_id),
       lifecycle_state=CASE WHEN lifecycle_state='pending' THEN 'delivered' ELSE lifecycle_state END
-      FROM proactivity_message_events AS l JOIN (${input.proof.sql}) AS v
-        ON v.user_id=l.user_id AND v.delivery_id=l.delivery_id
-      WHERE l.user_id=? AND l.delivery_id=? AND insight_events.user_id=l.user_id
-        AND insight_events.id=l.insight_event_id AND (delivery_receipt_id IS NULL OR lifecycle_state='pending')`
+      FROM (${input.proof.sql}) AS v
+      WHERE v.user_id=insight_events.user_id AND v.delivery_id=insight_events.report_delivery_id
+        AND insight_events.user_id=? AND insight_events.report_delivery_id=?
+        AND (delivery_receipt_id IS NULL OR lifecycle_state='pending')`
     )
     .bind(...input.proof.params, input.userId, input.id),
   input.db
@@ -115,14 +115,14 @@ export const prepareSettlement = (
 export const transcriptLinksQuery = (
   input: Readonly<{ userId: UserId; id: string; proof: OwnedStatement }>
 ): OwnedStatement => ({
-  sql: `SELECT l.user_id,l.insight_event_id FROM proactivity_message_events AS l JOIN (${input.proof.sql}) AS v ON v.user_id=l.user_id AND v.delivery_id=l.delivery_id WHERE l.user_id=? AND l.delivery_id=?`,
+  sql: `SELECT l.user_id,l.id AS insight_event_id FROM insight_events AS l JOIN (${input.proof.sql}) AS v ON v.user_id=l.user_id AND v.delivery_id=l.report_delivery_id WHERE l.user_id=? AND l.report_delivery_id=?`,
   params: [...input.proof.params, input.userId, input.id],
 });
 /** Channel exact text plus the Insights-owned primary occurrence; Agent alone persists its Transcript. */
 export const transcriptOccurrenceQuery = (
   input: Readonly<{ userId: UserId; id: string; proof: OwnedStatement }>
 ): OwnedStatement => ({
-  sql: `SELECT v.user_id,(SELECT l.insight_event_id FROM proactivity_message_events AS l WHERE l.user_id=v.user_id AND l.delivery_id=v.delivery_id AND l.insight_event_id=v.delivery_id) AS insight_event_id,v.delivered_at_ms,v.text FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND EXISTS (SELECT 1 FROM proactivity_message_events WHERE user_id=v.user_id AND delivery_id=v.delivery_id)`,
+  sql: `SELECT v.user_id,(SELECT l.id FROM insight_events AS l WHERE l.user_id=v.user_id AND l.report_delivery_id=v.delivery_id AND l.id=v.delivery_id) AS insight_event_id,v.delivered_at_ms,v.text FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND EXISTS (SELECT 1 FROM insight_events WHERE user_id=v.user_id AND report_delivery_id=v.delivery_id)`,
   params: [...input.proof.params, input.userId, input.id],
 });
 

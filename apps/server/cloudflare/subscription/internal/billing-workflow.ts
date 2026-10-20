@@ -488,7 +488,7 @@ const claimCollection = (
         requirement: "active",
         statement: {
           sql: `${collectionClaim.sql}
-            AND EXISTS (SELECT 1 FROM subscriptions WHERE user_id = ? AND attempt_id = ?)
+            AND EXISTS (SELECT 1 FROM subscription_standing WHERE user_id = ? AND attempt_id = ?)
             AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences WHERE user_id = ?)
             AND EXISTS (SELECT 1 FROM billing_attempts due WHERE due.id=? AND
               (due.renewal_attempt_number=1 OR due.period_starts_at_ms + ${renewalGraceMs} > ?))`,

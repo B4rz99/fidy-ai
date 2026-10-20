@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { Miniflare } from "miniflare";
 import { type NativeImagePool, nativeImagePool } from "./d1-test-images.test-fixture";
 import { asynchronousNativeDatabase } from "./d1-test-bridge.test-fixture";
@@ -17,15 +18,43 @@ const baseline = new URL("./migrations/0001_schema.sql", import.meta.url);
 const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
   const previous = schemaStatements.get(baseline.href);
   if (previous !== undefined) return previous;
-  const loaded = Bun.file(baseline)
-    .text()
-    .then((sql) =>
-      sql
-        .replace(/^--.*$/gmu, "")
-        .trim()
-        .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
-        .filter((statement) => statement.trim().length > 0)
-    );
+  const loaded = Promise.all([
+    Bun.file(baseline).text(),
+    Bun.file(new URL("./migrations/0002_simplify_companion_stores.sql", import.meta.url)).text(),
+  ]).then((sources) => {
+    // Build only the empty installation image here. Every behavior check still executes native D1.
+    const database = new Database(":memory:");
+    try {
+      for (const source of sources) database.exec(source);
+      const definitions = database
+        .query<{ sql: string }, []>(
+          "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT GLOB 'sqlite_*' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'view' THEN 2 ELSE 3 END,name"
+        )
+        .all()
+        .map((row) => row.sql);
+      const seeds = database
+        .query<{ name: string }, []>(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT GLOB 'sqlite_*'"
+        )
+        .all()
+        .flatMap(({ name }) => {
+          const columns = database
+            .query<{ name: string; hidden: number }, []>(`PRAGMA table_xinfo("${name}")`)
+            .all()
+            .filter((column) => column.hidden === 0)
+            .map((column) => column.name);
+          const values = columns.map((column) => `quote("${column}")`).join("||','||");
+          const columnList = columns.map((column) => '"' + column + '"').join(",");
+          return database
+            .query<{ values: string }, []>(`SELECT ${values} AS "values" FROM "${name}"`)
+            .all()
+            .map((row) => `INSERT INTO "${name}"(${columnList}) VALUES(${row.values})`);
+        });
+      return [...definitions, ...seeds];
+    } finally {
+      database.close();
+    }
+  });
   schemaStatements.set(baseline.href, loaded);
   return loaded;
 };

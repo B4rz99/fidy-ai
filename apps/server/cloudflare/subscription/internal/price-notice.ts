@@ -183,7 +183,7 @@ export const sendPriceNotice = (
       const row = yield* fromPromise(() =>
         environment.DB.prepare(`SELECT source.billing_email, price.amount, price.currency
     FROM billing_price_notices notice JOIN subscription_prices price ON price.id=notice.price_id
-    JOIN subscriptions subscription ON subscription.user_id=notice.user_id
+    JOIN subscription_standing subscription ON subscription.user_id=notice.user_id
     JOIN billing_attempts attempt ON attempt.id=subscription.attempt_id AND attempt.user_id=notice.user_id
     JOIN card_payment_sources source ON source.id=attempt.payment_source_id AND source.user_id=notice.user_id
     WHERE notice.user_id=? AND notice.price_id=? AND notice.send_started_at_ms IS NULL`)

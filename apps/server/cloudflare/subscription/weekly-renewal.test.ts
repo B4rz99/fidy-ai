@@ -88,7 +88,7 @@ const fixture = (
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,audit_retention_cutoff_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
         consentHistoryTestSchema,
         "",
       ]);
@@ -161,7 +161,9 @@ const fixture = (
               Date.parse(calendar.endsAt)
             ),
           db
-            .prepare("INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?)")
+            .prepare(
+              "UPDATE users SET paid_attempt_id=?2,paid_price_id=?3,paid_period_ends_at_ms=?4,paid_renewal_anchor_ms=?5 WHERE id=?1"
+            )
             .bind(
               userId,
               attemptId,
@@ -1227,7 +1229,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           yield* fromPromise(() =>
             db
-              .prepare("SELECT paid_period_ends_at_ms FROM subscriptions WHERE user_id = ?")
+              .prepare("SELECT paid_period_ends_at_ms FROM subscription_standing WHERE user_id = ?")
               .bind(userId)
               .first()
           )
@@ -1677,7 +1679,7 @@ it.each(["card", "nequi", "daviplata"] as const)(
         expect(
           yield* fromPromise(() =>
             db
-              .prepare("SELECT renewal_anchor_ms FROM subscriptions WHERE user_id=?")
+              .prepare("SELECT renewal_anchor_ms FROM subscription_standing WHERE user_id=?")
               .bind(userId)
               .first()
           )

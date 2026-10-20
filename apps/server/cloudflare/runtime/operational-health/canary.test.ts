@@ -40,7 +40,7 @@ it.live(
             yield* Effect.tryPromise(() =>
               db
                 .prepare(
-                  "CREATE TABLE operational_canary (kind TEXT PRIMARY KEY, last_succeeded_ms INTEGER NOT NULL)"
+                  "CREATE TABLE operational_health_view(operation TEXT PRIMARY KEY,state TEXT NOT NULL,observed_at_ms INTEGER NOT NULL,last_succeeded_ms INTEGER)"
                 )
                 .run()
             );

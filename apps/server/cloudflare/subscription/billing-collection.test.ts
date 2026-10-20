@@ -28,7 +28,7 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
+        "CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,audit_retention_cutoff_ms INTEGER,id TEXT PRIMARY KEY, time_zone TEXT NOT NULL ,service_market TEXT,locale TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER) STRICT",
       ]);
 
       const db = created.db;
@@ -270,7 +270,7 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
       const standing = yield* Effect.tryPromise(() =>
         db
           .prepare(`SELECT s.price_id, p.starts_at_ms, p.ends_at_ms
-        FROM subscriptions AS s JOIN (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS p ON p.attempt_id = s.attempt_id`)
+        FROM subscription_standing AS s JOIN (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL) AS p ON p.attempt_id = s.attempt_id`)
           .all()
       );
       expect(standing.results).toEqual([
@@ -934,7 +934,8 @@ it("rejects a signed callback with another User's source even when its reference
         )).results
       ).toHaveLength(0);
       expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM subscriptions").all())).results
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM subscription_standing").all()))
+          .results
       ).toHaveLength(0);
       expect(
         (yield* Effect.tryPromise(() =>
@@ -1064,7 +1065,7 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       yield* verifyProviderTransaction(db, () => older, secondTransaction);
       const standing = yield* Effect.tryPromise(() =>
         db
-          .prepare("SELECT attempt_id FROM subscriptions WHERE user_id = ?")
+          .prepare("SELECT attempt_id FROM subscription_standing WHERE user_id = ?")
           .bind(userId)
           .first<{ attempt_id: string }>()
       );

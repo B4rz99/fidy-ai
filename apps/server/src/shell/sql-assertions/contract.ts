@@ -1,4 +1,5 @@
 export type AssertionScope =
+  | "audit_retention"
   | "provider_completion"
   | "canonical_request"
   | "commercial_allowance"

@@ -25,7 +25,7 @@ import {
 export const prepareProactiveTranscript: typeof prepareProactiveTranscriptOwned = (input) =>
   prepareProactiveTranscriptOwned(input);
 /** Read one same-User, unexpired proactive Transcript entry under current processing Consent for an ordinary correlated reply. */
-export const readProactiveTranscript = (
+export const readAssociatedProactiveTranscript = (
   input: Parameters<typeof readProactiveTranscriptOwned>[0]
 ): Effect.Effect<
   Effect.Success<ReturnType<typeof readProactiveTranscriptOwned>>,

@@ -42,7 +42,7 @@ export const activePaidSubscriptionCondition = ({
   userId,
   nowEpochMs,
 }: Readonly<{ userId: UserId; nowEpochMs: number }>): OwnedStatement => ({
-  sql: `EXISTS (SELECT 1 FROM subscriptions s
+  sql: `EXISTS (SELECT 1 FROM subscription_standing s
     JOIN billing_attempts a ON a.id=s.attempt_id AND a.paid_starts_at_ms IS NOT NULL AND a.user_id=s.user_id
     JOIN card_payment_sources source ON source.id=a.payment_source_id AND source.user_id=a.user_id
     WHERE s.user_id=? AND (${paidAccessEndSql}) > ? AND a.paid_starts_at_ms<=?)`,

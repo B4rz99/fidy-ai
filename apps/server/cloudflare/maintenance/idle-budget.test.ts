@@ -33,7 +33,7 @@ it(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "INSERT INTO operational_canary VALUES ('queueExecution', ?), ('workflowExecution', ?)"
+              "INSERT INTO operational_health_view(operation,state,observed_at_ms,last_succeeded_ms) VALUES ('queueExecution','healthy',?1,?1),('workflowExecution','healthy',?2,?2)"
             )
             .bind(current, current)
             .run()
@@ -47,7 +47,9 @@ it(
           send: () => {
             queueOffers++;
             return db
-              .prepare("UPDATE operational_canary SET last_succeeded_ms = ?")
+              .prepare(
+                "UPDATE operational_health_view SET last_succeeded_ms=? WHERE last_succeeded_ms IS NOT NULL"
+              )
               .bind(current)
               .run()
               .then(() => ({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } }));

@@ -22,6 +22,7 @@ import {
   findReminderSchedule,
   materializeReminder,
   prepareReminderRevision,
+  readProactiveTranscript,
   recordProactivityDecision,
   requestProactivityConsent,
 } from "./operations";
@@ -52,11 +53,7 @@ import {
 } from "./runtime";
 import type { WorkflowStep } from "cloudflare:workers";
 import { expireDeliveryWork, recoverDeliveryWork } from "./internal/proactivity-delivery-work";
-import {
-  readContextualProactiveReply,
-  readProactiveMessageTranscript,
-  readProactiveTranscript,
-} from "../agent/operations";
+import { readContextualProactiveReply, readProactiveMessageTranscript } from "../agent/operations";
 
 const configuration = (db: D1Database): ProactivityEnvironment => ({
   DB: db,
@@ -469,7 +466,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT (SELECT count(*) FROM insight_events WHERE delivery_receipt_id IS NOT NULL AND user_id=?) AS attempts,(SELECT count(*) FROM proactive_transcript_event_links WHERE user_id=?) AS transcript_links,(SELECT count(*) FROM proactive_transcript_entries WHERE kind='message' AND user_id=?) AS control_transcripts"
+              "SELECT (SELECT count(*) FROM insight_events WHERE delivery_receipt_id IS NOT NULL AND user_id=?) AS attempts,(SELECT count(*) FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) WHERE user_id=?) AS transcript_links,(SELECT count(*) FROM proactive_transcript_entries WHERE kind='message' AND user_id=?) AS control_transcripts"
             )
             .bind(proactivityTestUsers[0], proactivityTestUsers[0], proactivityTestUsers[0])
             .first()

@@ -14,6 +14,7 @@ import {
 } from "../../consent/operations";
 import {
   controlManualReminders,
+  prepareInsightTranscriptAssociations,
   prepareProactivityDeliverySettlement,
   prepareReminderDelivery,
   prepareReminderReply,
@@ -47,11 +48,7 @@ import {
   weeklySummaryReplyQuery,
 } from "../../whatsapp/operations";
 import { type AgentEnvironment, AgentUnavailable } from "../contract";
-import {
-  prepareGroupedProactiveTranscript,
-  prepareMessageTranscript,
-  prepareProactiveTranscript,
-} from "./proactive-transcript";
+import { prepareMessageTranscript, prepareProactiveTranscript } from "./proactive-transcript";
 
 const accepted = 202;
 const success = 200;
@@ -108,13 +105,21 @@ const prepareCategorySettlement = (
     ...prepareReminderDelivery({ ...scope, proof }),
     ...prepareProactivityDeliverySettlement({ ...scope, proof }),
     prepareMessageTranscript({ ...scope, now: status.receivedAtMs, proof: transcript }),
-    ...prepareGroupedProactiveTranscript({
-      links: proactivityTranscriptLinksQuery({ ...scope, proof }),
+    ...prepareProactiveTranscript({
       db: environment.DB,
       userId,
       insightEventId: InsightEventId.make(id),
       now: status.receivedAtMs,
       proof: proactivityTranscriptOccurrenceQuery({ ...scope, proof: transcript }),
+    }),
+    prepareInsightTranscriptAssociations({
+      db: environment.DB,
+      userId,
+      links: proactivityTranscriptLinksQuery({ ...scope, proof }),
+      transcript: {
+        sql: "SELECT user_id,id FROM proactive_transcript_entries WHERE kind='insight' AND user_id=? AND insight_event_id=? AND expires_at_ms>?",
+        params: [userId, id, status.receivedAtMs],
+      },
     }),
   ];
 };

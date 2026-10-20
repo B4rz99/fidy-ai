@@ -32,7 +32,7 @@ export const seedRefundCharge = (db: D1Database): Effect.Effect<void, Cause.Unkn
         "UPDATE billing_attempts SET paid_starts_at_ms=incoming.starts_at_ms,paid_ends_at_ms=incoming.ends_at_ms,paid_renewal_anchor_ms=incoming.renewal_anchor_ms FROM (SELECT '40000000-0000-4000-8000-000000000001' AS attempt_id,1 AS starts_at_ms,9999999999999 AS ends_at_ms,9999999999999 AS renewal_anchor_ms) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.paid_starts_at_ms IS NULL"
       ),
       db.prepare(
-        "INSERT INTO subscriptions VALUES ('10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','22700000-0000-4000-8000-000000000001',9999999999999,9999999999999)"
+        "UPDATE users SET paid_attempt_id='40000000-0000-4000-8000-000000000001',paid_price_id='22700000-0000-4000-8000-000000000001',paid_period_ends_at_ms=9999999999999,paid_renewal_anchor_ms=9999999999999 WHERE id='10000000-0000-4000-8000-000000000001'"
       ),
     ])
   ).pipe(Effect.asVoid);

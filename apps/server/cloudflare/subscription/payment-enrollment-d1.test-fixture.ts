@@ -44,7 +44,7 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
         "subscription_cancellations",
         "subscription_prices",
         "subscription_renewal_fences",
-        "subscriptions",
+        "subscription_standing",
       ],
       objects: ["users_subscription_id", "subscription_identities_field_"],
     })

@@ -240,20 +240,20 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [],
     quiescence: { _tag: "Synchronous" },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'attempt_id',r.\"attempt_id\",'price_id',r.\"price_id\",'paid_period_ends_at_ms',r.\"paid_period_ends_at_ms\",'renewal_anchor_ms',r.\"renewal_anchor_ms\") AS body FROM subscriptions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('user_id',r.\"user_id\",'attempt_id',r.\"attempt_id\",'price_id',r.\"price_id\",'paid_period_ends_at_ms',r.\"paid_period_ends_at_ms\",'renewal_anchor_ms',r.\"renewal_anchor_ms\") AS body FROM subscription_standing r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM subscriptions r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM subscription_standing r WHERE r.user_id=?",
       params: [userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM subscriptions r WHERE r.user_id=?",
+      sql: "SELECT 1 FROM subscription_standing r WHERE r.user_id=?",
       params: [userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM subscriptions AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
+        sql: "UPDATE users AS r SET paid_attempt_id=NULL,paid_price_id=NULL,paid_period_ends_at_ms=NULL,paid_renewal_anchor_ms=NULL WHERE r.id=? AND paid_attempt_id IS NOT NULL AND CAST(r.rowid AS TEXT) IN(SELECT row_ref FROM erasure_chunk WHERE request_id=?)",
         params: [scope.userId, scope.reference],
       },
     ],

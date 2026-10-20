@@ -91,7 +91,7 @@ const prepareReport = (
     statements.push(
       input.db
         .prepare(
-          "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) VALUES(?,?,?)"
+          "UPDATE insight_events SET report_delivery_id=?2 WHERE user_id=?1 AND id=?3 AND report_delivery_id IS NULL"
         )
         .bind(input.userId, id, id)
     );

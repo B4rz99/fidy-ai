@@ -22,7 +22,6 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { readProactiveTranscript } from "../agent/operations";
 import { evaluateRecurringSeries } from "../recurring/operations";
 
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -51,6 +50,7 @@ import {
   findInsight,
   findRecurringDigestReport,
   readCanonicalRecurringDigestReport,
+  readProactiveTranscript,
   recordRecurringDigestDecision,
   requestRecurringDigestOffer,
 } from "./operations";
@@ -641,7 +641,7 @@ it("uses the installed coordinator for one-shot delivery and settles the exact t
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS total FROM proactive_transcript_event_links WHERE insight_event_id=?"
+              "SELECT count(*) AS total FROM (SELECT rowid,user_id AS user_id,transcript_id AS transcript_id,id AS insight_event_id,transcript_kind AS transcript_kind FROM insight_events WHERE transcript_id IS NOT NULL) WHERE insight_event_id=?"
             )
             .bind(id)
             .first()

@@ -1127,7 +1127,11 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
       expect(auditRows.results.filter((entry) => entry.outcome === "rejected")).toHaveLength(15);
       expect(
         (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM email_replacement_limits").first<{ requests: number }>()
+          db
+            .prepare(
+              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests,last_work_id AS last_work_id FROM email_security_limits WHERE kind='replacement')"
+            )
+            .first<{ requests: number }>()
         ))?.requests
       ).toBe(5);
       expect(
@@ -2111,7 +2115,11 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       ).toEqual({ count: 5 });
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+          db
+            .prepare(
+              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+            )
+            .first()
         )
       ).toEqual({ requests: 5 });
       yield* Effect.tryPromise(() => db.prepare("DELETE FROM browser_login_pairings").run());
@@ -2139,7 +2147,7 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "UPDATE browser_pairing_email_user_limits SET window_started_at_ms = window_started_at_ms - 3600000"
+            "UPDATE email_security_limits SET window_started_at_ms=window_started_at_ms-3600000 WHERE kind='pairing'"
           ),
           db.prepare(
             "UPDATE browser_pairing_email_global_limit SET window_started_at_ms = window_started_at_ms - 3600000"
@@ -2149,7 +2157,11 @@ it("bounds concurrent email sends across pairings and preserves admission after 
       expect((yield* emailAdmissionRequest(sendRequest, next)).status).toBe(202);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+          db
+            .prepare(
+              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+            )
+            .first()
         )
       ).toEqual({ requests: 1 });
       expect(
@@ -2170,7 +2182,11 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       yield* emailAdmissionRequest(sendRequest, pairing);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+          db
+            .prepare(
+              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+            )
+            .first()
         )
       ).toEqual({ requests: 1 });
       expect(
@@ -2199,7 +2215,11 @@ it("does not spend email capacity for same-pairing cooldown or exhausted aggrega
       expect((yield* emailAdmissionRequest(sendRequest, fresh)).status).toBe(202);
       expect(
         yield* Effect.tryPromise(() =>
-          db.prepare("SELECT requests FROM browser_pairing_email_user_limits").first()
+          db
+            .prepare(
+              "SELECT requests FROM (SELECT rowid,user_id AS user_id,window_started_at_ms AS window_started_at_ms,requests AS requests FROM email_security_limits WHERE kind='pairing')"
+            )
+            .first()
         )
       ).toEqual({ requests: 2 });
       expect(
@@ -2229,7 +2249,7 @@ it("rolls email admission back when recording its proof fails", () =>
       const pairing = yield* emailAdmissionPairing(sendRequest);
       expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(503);
       for (const table of [
-        "browser_pairing_email_user_limits",
+        "(SELECT user_id FROM email_security_limits WHERE kind='pairing')",
         "browser_pairing_email_global_limit",
         "(SELECT id FROM browser_login_pairings WHERE email_work_id IS NOT NULL)",
       ]) {

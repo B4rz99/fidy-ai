@@ -64,7 +64,7 @@ export const preparePublication = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `UPDATE budget_crossing_publications SET materialized_at_ms=? WHERE user_id=? AND delivery_group_id=? AND materialized_at_ms IS NULL AND EXISTS (${input.proof.sql})`,
+      sql: `UPDATE budget_state SET materialized_at_ms=? WHERE kind='publication' AND user_id=? AND record_id=? AND materialized_at_ms IS NULL AND EXISTS (${input.proof.sql})`,
       params: [input.now, input.userId, input.id, ...input.proof.params],
     },
   });
@@ -119,7 +119,7 @@ export const noteEvaluation = (
         .bind(input.now, input.userId),
       input.db
         .prepare(
-          "UPDATE budget_crossing_publications SET last_evaluated_at_ms=? WHERE user_id=? AND materialized_at_ms IS NULL"
+          "UPDATE budget_state SET last_evaluated_at_ms=? WHERE kind='publication' AND user_id=? AND materialized_at_ms IS NULL"
         )
         .bind(input.now, input.userId),
       input.db
@@ -139,7 +139,7 @@ export const discoverUsers = (
     const result = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT user_id FROM (SELECT user_id,last_evaluated_at_ms,detected_at_ms AS pending_at FROM budget_crossing_publications WHERE materialized_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,created_at_ms AS pending_at FROM (SELECT rowid,user_id,budget_id,created_at_ms,offer_requested_at_ms,first_last_evaluated_at_ms AS last_evaluated_at_ms FROM budget_state WHERE kind='user' AND budget_id IS NOT NULL) AS budget_first_creation WHERE offer_requested_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,0 FROM (SELECT rowid,user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work) GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(pending_at) LIMIT ?"
+          "SELECT user_id FROM (SELECT user_id,last_evaluated_at_ms,detected_at_ms AS pending_at FROM budget_state WHERE kind='publication' AND materialized_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,created_at_ms AS pending_at FROM (SELECT rowid,user_id,budget_id,created_at_ms,offer_requested_at_ms,first_last_evaluated_at_ms AS last_evaluated_at_ms FROM budget_state WHERE kind='user' AND budget_id IS NOT NULL) AS budget_first_creation WHERE offer_requested_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,0 FROM (SELECT rowid,user_id,occurred_at,version,last_evaluated_at_ms FROM budget_state WHERE kind='work') AS budget_reconciliation_work) GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(pending_at) LIMIT ?"
         )
         .bind(maximumGroups)
         .all()
@@ -162,7 +162,7 @@ export const readGroups = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT budget_id,from_utc,time_zone,threshold,delivery_group_id,consent_grant_id,crossing_json FROM (SELECT a.budget_id,a.from_utc,a.time_zone,a.threshold,a.delivery_group_id,a.consent_grant_id,a.crossing_json FROM budget_threshold_alerts AS a WHERE a.user_id=? AND a.delivery_group_id IN (SELECT p.delivery_group_id FROM budget_crossing_publications AS p WHERE p.user_id=? AND p.materialized_at_ms IS NULL ORDER BY p.detected_at_ms,p.delivery_group_id LIMIT ?) ORDER BY a.delivery_group_id,a.threshold LIMIT ?) WHERE 1=1",
+          sql: "SELECT budget_id,from_utc,time_zone,threshold,delivery_group_id,consent_grant_id,crossing_json FROM (SELECT a.budget_id,a.from_utc,a.time_zone,a.threshold,a.delivery_group_id,a.consent_grant_id,a.crossing_json FROM budget_threshold_alerts AS a WHERE a.user_id=? AND a.delivery_group_id IN (SELECT p.record_id FROM budget_state AS p WHERE p.kind='publication' AND p.user_id=? AND p.materialized_at_ms IS NULL ORDER BY p.detected_at_ms,p.record_id LIMIT ?) ORDER BY a.delivery_group_id,a.threshold LIMIT ?) WHERE 1=1",
           params: [input.userId, input.userId, maximumGroups, maximumRows],
         },
       }).all()

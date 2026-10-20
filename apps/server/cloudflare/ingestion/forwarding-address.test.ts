@@ -45,7 +45,7 @@ const setup = Effect.fn(function* () {
   yield* wait(() => miniflare.ready);
   const db = yield* wait(() => miniflare.getD1Database("DB"));
   yield* wait(() =>
-    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
+    db.exec(`CREATE TABLE users (paid_attempt_id TEXT,paid_price_id TEXT,paid_period_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER,audit_retention_cutoff_ms INTEGER,id TEXT PRIMARY KEY, trial_started_at_ms INTEGER, trial_ends_at_ms INTEGER ,service_market TEXT,locale TEXT,time_zone TEXT,created_at_ms INTEGER,verified_email_address TEXT,email_verified_at_ms INTEGER,recovery_code_digest BLOB,recovery_created_at_ms INTEGER,recovery_consumed_at_ms INTEGER,recovery_revision INTEGER,whatsapp_portfolio_id TEXT,whatsapp_bsuid TEXT,whatsapp_verified_at_ms INTEGER,route_portfolio_id TEXT,route_bsuid TEXT,route_phone_number_id TEXT,route_verified_at_ms INTEGER);
     ${consentHistoryTestSchema};
 
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
@@ -55,7 +55,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE statement_clarification_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY, attempt_id TEXT, paid_period_ends_at_ms INTEGER);
+    CREATE VIEW subscription_standing AS SELECT rowid,id AS user_id,paid_attempt_id AS attempt_id,paid_period_ends_at_ms FROM users WHERE paid_attempt_id IS NOT NULL;
     CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT, paid_starts_at_ms INTEGER,paid_ends_at_ms INTEGER,paid_renewal_anchor_ms INTEGER);
  CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT);
  CREATE TABLE subscription_renewal_stops (user_id TEXT); CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops;

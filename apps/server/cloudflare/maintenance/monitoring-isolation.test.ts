@@ -105,7 +105,13 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
           )
         ).toEqual({ count: 0 });
         expect(
-          yield* Effect.tryPromise(() => db.prepare("SELECT * FROM operational_canary").all())
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
+              )
+              .all()
+          )
         ).toMatchObject({
           results: [],
         });
@@ -113,7 +119,13 @@ it("a stalled canary offer cannot skip later Core retention or manufacture execu
         held.resolve({ metadata: { metrics: { backlogCount: 1, backlogBytes: 34 } } });
       }
       expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT * FROM operational_canary").all())
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
+            )
+            .all()
+        )
       ).toMatchObject({ results: [] });
       expect(send).toHaveBeenCalledOnce();
     })

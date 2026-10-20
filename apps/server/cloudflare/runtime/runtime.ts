@@ -1,15 +1,11 @@
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import {
   type PlatformMaintenance,
   type PlatformMaintenanceInput,
   PlatformMaintenanceUnavailable,
 } from "./contract";
 import { inspectScheduledHealth } from "./internal/scheduled-health";
-import {
-  sendCanary,
-  sweepCoreRejections,
-  sweepOperationalEventBuckets,
-} from "./operational-health/operations";
+import { sendCanary, sweepOperationalEventBuckets } from "./operational-health/operations";
 import { expireSmokeProbes } from "./release-smoke/operations";
 
 const smokeConfigured = (input: PlatformMaintenanceInput): boolean =>
@@ -26,17 +22,9 @@ export const makePlatformMaintenance = (input: PlatformMaintenanceInput): Platfo
     inspectScheduledHealth(input).pipe(Effect.mapError(() => new PlatformMaintenanceUnavailable())),
   retainEventBuckets: (nowEpochMs) =>
     Option.contains(input.ASYNC_HEALTH_ENABLED, "enabled")
-      ? Effect.gen(function* () {
-          const events = yield* Effect.result(
-            sweepOperationalEventBuckets({ db: input.DB, now: nowEpochMs })
-          );
-          const rejections = yield* Effect.result(
-            sweepCoreRejections({ db: input.DB, now: nowEpochMs })
-          );
-          if (Result.isFailure(events) || Result.isFailure(rejections)) {
-            return yield* new PlatformMaintenanceUnavailable();
-          }
-        })
+      ? sweepOperationalEventBuckets({ db: input.DB, now: nowEpochMs }).pipe(
+          Effect.mapError(() => new PlatformMaintenanceUnavailable())
+        )
       : Effect.void,
   publishCanary: (nowEpochMs) => {
     if (!Option.contains(input.ASYNC_HEALTH_ENABLED, "enabled")) return Effect.void;

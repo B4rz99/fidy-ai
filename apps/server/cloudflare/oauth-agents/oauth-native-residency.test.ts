@@ -906,7 +906,11 @@ describe("native2025 residency integration", () => {
             yield* wait(() => listing.text());
             expect(
               (yield* wait(() =>
-                harness.db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+                harness.db
+                  .prepare(
+                    "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+                  )
+                  .all()
               )).results
             ).toEqual([]);
             const final = yield* native(tool("refused-last", "budgets.listBudgets"), session);
@@ -921,7 +925,11 @@ describe("native2025 residency integration", () => {
             expect(calls).toBeLessThan(100);
             expect(
               (yield* wait(() =>
-                harness.db.prepare("SELECT * FROM operational_core_rejection_burst").all()
+                harness.db
+                  .prepare(
+                    "SELECT 1 AS id,observed_at_ms FROM operational_event_buckets WHERE kind='core_rejection'"
+                  )
+                  .all()
               )).results
             ).toEqual([{ id: 1, observed_at_ms: Math.floor(harness.current / 60000) * 60000 }]);
           } finally {

@@ -28,7 +28,7 @@ it("inherits the Queue owner's Clock when validating and retaining canary execut
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TABLE operational_canary (kind TEXT PRIMARY KEY, last_succeeded_ms INTEGER NOT NULL)"
+            "CREATE TABLE operational_health_view (operation TEXT PRIMARY KEY,state TEXT NOT NULL,observed_at_ms INTEGER NOT NULL,last_succeeded_ms INTEGER)"
           )
           .run()
       );
@@ -93,7 +93,13 @@ it("inherits the Queue owner's Clock when validating and retaining canary execut
         )
       );
       expect(
-        yield* Effect.tryPromise(() => db.prepare("SELECT * FROM operational_canary").all())
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT operation AS kind,last_succeeded_ms FROM operational_health_view WHERE last_succeeded_ms IS NOT NULL"
+            )
+            .all()
+        )
       ).toMatchObject({
         results: [{ kind: "queueExecution", last_succeeded_ms: now }],
       });

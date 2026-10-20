@@ -94,12 +94,10 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
         Option.getOrNull(Option.map(period, (paid) => paid.startsAtMs))
       ),
     db
-      .prepare(`INSERT INTO subscriptions(user_id,attempt_id,price_id,paid_period_ends_at_ms,renewal_anchor_ms)
-      SELECT user_id,id,price_id,paid_ends_at_ms,paid_renewal_anchor_ms FROM billing_attempts
-      WHERE id=? AND status='succeeded' AND paid_starts_at_ms IS NOT NULL
-      ON CONFLICT(user_id) DO UPDATE SET attempt_id=excluded.attempt_id,price_id=excluded.price_id,
-        paid_period_ends_at_ms=excluded.paid_period_ends_at_ms,renewal_anchor_ms=excluded.renewal_anchor_ms
-      WHERE excluded.paid_period_ends_at_ms>subscriptions.paid_period_ends_at_ms`)
+      .prepare(`UPDATE users SET (paid_attempt_id,paid_price_id,paid_period_ends_at_ms,paid_renewal_anchor_ms)=
+      (SELECT id,price_id,paid_ends_at_ms,paid_renewal_anchor_ms FROM billing_attempts WHERE id=?1)
+      WHERE id=(SELECT user_id FROM billing_attempts WHERE id=?1 AND status='succeeded' AND paid_starts_at_ms IS NOT NULL)
+      AND (paid_period_ends_at_ms IS NULL OR paid_period_ends_at_ms<(SELECT paid_ends_at_ms FROM billing_attempts WHERE id=?1))`)
       .bind(attemptId),
     db
       .prepare(`INSERT OR IGNORE INTO audit_entries(record_type,attempt_id,transition,occurred_at_ms)
@@ -112,12 +110,12 @@ const standingAndIntent = (input: Settlement): ReadonlyArray<D1PreparedStatement
     db
       .prepare(`UPDATE billing_attempts SET followup_kind=NULL,followup_due_at_ms=NULL
       WHERE user_id=(SELECT user_id FROM billing_attempts WHERE id=?) AND followup_kind IS NOT NULL
-      AND NOT EXISTS(SELECT 1 FROM subscriptions s WHERE s.attempt_id=billing_attempts.id)`)
+      AND NOT EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)`)
       .bind(attemptId),
     db
       .prepare(`UPDATE billing_attempts SET followup_kind='renewal_due',followup_due_at_ms=paid_ends_at_ms
       WHERE id=? AND paid_starts_at_ms IS NOT NULL AND followup_kind IS NULL
-      AND EXISTS(SELECT 1 FROM subscriptions s WHERE s.attempt_id=billing_attempts.id)`)
+      AND EXISTS(SELECT 1 FROM subscription_standing s WHERE s.attempt_id=billing_attempts.id)`)
       .bind(attemptId),
   ];
 };

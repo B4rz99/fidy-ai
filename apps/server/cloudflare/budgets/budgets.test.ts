@@ -37,11 +37,15 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { readProactiveMessageTranscript, readProactiveTranscript } from "../agent/operations";
+import { readProactiveMessageTranscript } from "../agent/operations";
 import { InsightEventId } from "../../src/core/insights/contract";
 import { FetchHttpClient } from "effect/http";
 import { executeProactivityWork } from "../insights/runtime";
-import { findProactivityReport, recordProactivityDecision } from "../insights/operations";
+import {
+  findProactivityReport,
+  readProactiveTranscript,
+  recordProactivityDecision,
+} from "../insights/operations";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";

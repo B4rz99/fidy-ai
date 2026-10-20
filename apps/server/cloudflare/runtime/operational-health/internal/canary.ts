@@ -31,8 +31,8 @@ export const recordCanary = ({
 > =>
   Effect.tryPromise(() =>
     db
-      .prepare(`INSERT INTO operational_canary (kind, last_succeeded_ms) VALUES (?, ?)
-    ON CONFLICT(kind) DO UPDATE SET last_succeeded_ms = MAX(last_succeeded_ms, excluded.last_succeeded_ms)`)
+      .prepare(`INSERT INTO operational_health_view(operation,state,observed_at_ms,last_succeeded_ms) VALUES (?1,'healthy',?2,?2)
+    ON CONFLICT(operation) DO UPDATE SET last_succeeded_ms = MAX(coalesce(last_succeeded_ms,0), excluded.last_succeeded_ms)`)
       .bind(kind, now)
       .run()
   ).pipe(Effect.asVoid);

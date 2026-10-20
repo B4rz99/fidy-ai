@@ -22,7 +22,8 @@ class PackagedVerification(unittest.TestCase):
         self.archive = self.directory / 'fidy-linux-x64.zip'
         self.fixture()
 
-    def fixture(self, name='fidy'):
+    def fixture(self, name=None):
+        name = name or ('fidy.exe' if packaged.os.name == 'nt' else 'fidy')
         with zipfile.ZipFile(self.archive, 'w') as bundle:
             bundle.writestr(name, '#!/bin/sh\necho "fidy 0.1.0"\n')
         self.manifest = self.archive.with_name(self.archive.name + '.sha256')

@@ -49,6 +49,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/cli-release/test-install.ps1
+      - uses: ./.github/actions/packaged-cli-check
       - name: Preserve candidate archives and checksums
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

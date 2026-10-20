@@ -1,12 +1,15 @@
 /// <reference types="bun-types" />
 
+import { writeFileSync } from "node:fs";
+import { schemaSqlTokens } from "./schema-sql-tokens";
 import { Database } from "bun:sqlite";
 import { Schema } from "effect";
 import type { AppliedMigration, HashedMigrationSource, MigrationSource } from "./migration-history";
 
-/** Contains only locally constructed metadata diagnostics, never provider output or User rows. */
+/** Contains only allowlisted schema names and counts, never SQL, provider output or User rows. */
 export class BaselineVerificationError extends Error {}
 
+const maximumDiagnosticObjects = 8;
 const baselineName = "0001_schema.sql";
 const SchemaObject = Schema.Struct({
   type: Schema.String,
@@ -45,9 +48,26 @@ const schemaObjects = (source: string): ReadonlyArray<SchemaObject> => {
 const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`;
 const verifySchema = (query: Query, expected: ReadonlyArray<SchemaObject>): void => {
   const [reply] = Schema.decodeUnknownSync(SchemaReply)(JSON.parse(query(managedObjects)));
-  if (JSON.stringify(reply.results) !== JSON.stringify(expected)) {
+  const differences = expected.filter((wanted, index) => {
+    const actual = reply.results[index];
+    return (
+      actual === undefined ||
+      actual.type !== wanted.type ||
+      actual.name !== wanted.name ||
+      actual.tbl_name !== wanted.tbl_name ||
+      JSON.stringify(schemaSqlTokens(actual.sql)) !== JSON.stringify(schemaSqlTokens(wanted.sql))
+    );
+  });
+  if (reply.results.length !== expected.length || differences.length > 0) {
+    const diagnosticsFile = process.env.SCHEMA_METADATA_FILE;
+    if (diagnosticsFile !== undefined) {
+      writeFileSync(diagnosticsFile, JSON.stringify({ expected, actual: reply.results }));
+    }
     throw new BaselineVerificationError(
-      `Production schema differs from baseline (expected ${expected.length} objects, received ${reply.results.length})`
+      `Production schema differs from baseline (expected ${expected.length} objects, received ${reply.results.length}; differing objects: ${differences
+        .slice(0, maximumDiagnosticObjects)
+        .map((row) => row.name)
+        .join(", ")})`
     );
   }
   const [foreignKeys] = Schema.decodeUnknownSync(ForeignKeyReply)(

@@ -49,7 +49,7 @@ const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`
 const verifySchema = (query: Query, expected: ReadonlyArray<SchemaObject>): void => {
   const [reply] = Schema.decodeUnknownSync(SchemaReply)(JSON.parse(query(managedObjects)));
   const differences = expected.filter((wanted, index) => {
-    const actual = reply.results[index];
+    const actual = reply.results.at(index);
     return (
       actual === undefined ||
       actual.type !== wanted.type ||

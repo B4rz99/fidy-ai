@@ -113,9 +113,10 @@ jobs:
       - name: Recheck trunk immediately before deployment
         env:
           GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           CURRENT_TRUNK_SHA=$(gh api \
-            "repos/$GITHUB_REPOSITORY/git/ref/heads/${{ github.event.repository.default_branch }}" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" \
             --jq .object.sha)
           if [[ "$CURRENT_TRUNK_SHA" != "$RELEASE_GIT_SHA" ]]; then
             echo "Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; leaving the prior topology active." >&2

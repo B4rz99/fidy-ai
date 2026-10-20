@@ -11,6 +11,8 @@ const warningRepeatMinutes = 240;
 const criticalRepeatMinutes = 30;
 const warningRepeatMs = warningRepeatMinutes * minuteMs;
 const criticalRepeatMs = criticalRepeatMinutes * minuteMs;
+const observationHeartbeatMs = 300_000;
+const ActiveAlerts = Schema.fromJsonString(Schema.Array(OperationalAlert));
 
 const claimOperationalAlert = (
   db: D1Database,
@@ -29,8 +31,11 @@ const claimOperationalAlert = (
         acknowledged_ms = CASE WHEN operational_alerts.state = 'resolved' OR operational_alerts.severity != excluded.severity THEN NULL ELSE operational_alerts.acknowledged_ms END,
         next_attempt_ms = CASE WHEN operational_alerts.state = 'resolved' OR operational_alerts.severity != excluded.severity THEN excluded.next_attempt_ms ELSE operational_alerts.next_attempt_ms END,
         delivery_confirmed = CASE WHEN operational_alerts.state = 'resolved' OR operational_alerts.severity != excluded.severity THEN 1 ELSE operational_alerts.delivery_confirmed END
-      WHERE excluded.last_seen_ms >= operational_alerts.last_seen_ms`)
-        .bind(alert.kind, alert.owner, alert.severity, now, now, now)
+      WHERE excluded.last_seen_ms >= operational_alerts.last_seen_ms
+        AND (operational_alerts.state != 'firing'
+          OR operational_alerts.severity != excluded.severity
+          OR operational_alerts.last_seen_ms <= excluded.last_seen_ms - ?)`)
+        .bind(alert.kind, alert.owner, alert.severity, now, now, now, observationHeartbeatMs)
         .run()
     );
     const repeatMs = alert.severity === "critical" ? criticalRepeatMs : warningRepeatMs;
@@ -91,16 +96,20 @@ export const deliverFiring = ({
 
 export const claimResolutions = (
   input: OperationalAlertDelivery
-): Effect.Effect<ReadonlyArray<unknown>, Cause.UnknownError> =>
+): Effect.Effect<ReadonlyArray<unknown>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     if (input.alerts.every((alert) => alert.kind !== "inspection_unavailable")) {
+      const active = yield* Schema.encodeEffect(ActiveAlerts)(input.alerts);
       yield* Effect.tryPromise(() =>
         input.db
           .prepare(`UPDATE operational_alerts
       SET state = 'resolved', acknowledged_ms = NULL, delivery_confirmed = 0,
         attempts = 0, attempt_started_ms = NULL, next_attempt_ms = ?
-      WHERE state = 'firing' AND last_seen_ms < ?`)
-          .bind(input.now, input.now)
+      WHERE state = 'firing' AND last_seen_ms < ?
+        AND NOT EXISTS (SELECT 1 FROM json_each(?) AS active
+          WHERE json_extract(active.value, '$.kind') = operational_alerts.kind
+            AND json_extract(active.value, '$.owner') = operational_alerts.owner)`)
+          .bind(input.now, input.now, active)
           .run()
       );
     }

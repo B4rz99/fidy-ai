@@ -165,6 +165,10 @@ falling permanently silent. This may produce a duplicate alert email, never dupl
 Work. A measurement failure is `inspection_unavailable`, never
 zero; until all measurements recover the alert sweep does not resolve an existing firing condition.
 These records represent **notification state**, not the authoritative status of background work.
+Unchanged firing observations refresh `last_seen_ms` at most every five minutes. New conditions,
+severity changes, and recovery still persist immediately. Resolution excludes the current sweep's
+active `(kind, owner)` pairs rather than treating an unchanged heartbeat timestamp as recovery.
+This bounds observation writes without changing notification cooldowns or acknowledgement policy.
 
 Configure `OPERATOR_ALERT_EMAIL` as a Production GitHub environment variable, alongside the existing
 `RESEND_API_KEY` secret. GitHub Actions sends deployment-failure email independently of the newly
@@ -310,6 +314,35 @@ The outbox remains the recovery source. Current Cloudflare behavior is documente
 [delivery guarantees](https://developers.cloudflare.com/queues/reference/delivery-guarantees/),
 [dead-letter queues](https://developers.cloudflare.com/queues/configuration/dead-letter-queues/), and
 [Queue metrics](https://developers.cloudflare.com/queues/observability/metrics/).
+
+### October 20 retained-canary investigation
+
+At 13:20 UTC, the shared dead-letter Queue reported 679 messages, no consumer, and zero ingestions
+or retries in the preceding 24 hours. All ten dashboard-preview messages were operational canaries
+(`version`, `sentAtMs`) from October 18; this sample does not classify every retained message.
+The source canary Queue reported 286 ingestions, 286 acknowledgements, no retries and no current
+backlog over the same rolling day. Current canary execution has recovered; a nonempty dead-letter
+Queue is not evidence that it is still failing.
+
+The source consumer logs confirm rejected canary invocations during October 18's D1 outage,
+including 18:59:11 UTC, adjacent to the latest sampled dead letter. Those logs retain only a generic
+Promise failure, so they cannot establish each message's original provider error. Production run
+39157824267 independently confirmed the daily D1 quota refusal at 19:17 UTC that day. The canary
+consumer writes its D1 execution checkpoint before Workflow handoff; refusal therefore prevents
+acknowledgement and can exhaust its three Queue retries. This is consistent with the sampled failure path,
+not every message or the first October 10 incident. The alert's October 10 `first_seen_ms` is a
+continuous-condition timestamp, not the age of each currently retained message.
+
+The dashboard displays 86,400-second retention, while Cloudflare's DLQ-specific documentation says
+messages without a consumer persist four days. The October 18 previews were still present on
+October 20; do not promise immediate expiry from the generic settings alone. No message was
+acknowledged, replayed or purged during this investigation. Expired canaries must not be replayed:
+they cannot prove present health. Inspect all remaining identities before any destructive cleanup.
+
+The unnecessary D1 writes came from the alert observation UPSERT, not a consumer repeatedly running
+these retained messages. Its prior minute refresh cost up to 1,440 observation writes per active
+alert per day. The five-minute heartbeat reduces that steady observation component to 288;
+notification claims, confirmations and actual state changes retain their separate writes.
 
 ## Capability status and release evidence
 

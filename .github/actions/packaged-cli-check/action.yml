@@ -1,0 +1,44 @@
+name: Packaged CLI credential verification
+description: Verify the exact candidate and immutable published executable using synthetic native credentials.
+inputs:
+  published:
+    description: Also verify the current immutable published release.
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Verify archive refusal and credential isolation
+      shell: bash
+      run: python3 scripts/cli-release/test-packaged.py
+    - name: Initialize disposable macOS test keychain
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        [[ "$GITHUB_ACTIONS" == true && "$RUNNER_ENVIRONMENT" == github-hosted ]]
+        keychain="$RUNNER_TEMP/fidy-packaged-test.keychain-db"
+        security create-keychain -p fidy-synthetic-ci-only "$keychain"
+        security list-keychains -d user -s "$keychain"
+        security default-keychain -d user -s "$keychain"
+        security unlock-keychain -p fidy-synthetic-ci-only "$keychain"
+        security set-keychain-settings -lut 21600 "$keychain"
+    - name: Verify archived executables and native credential lifecycle
+      shell: bash
+      env:
+        VERIFY_PUBLISHED_CLI: ${{ inputs.published }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [[ "$RUNNER_OS" == Linux ]]; then
+          sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
+          dbus-run-session -- bash -euc '
+            printf "%s" fidy-packaged-test-keyring | gnome-keyring-daemon --unlock --components=secrets
+            python3 scripts/cli-release/verify-packaged.py --version "${FIDY_CLI_VERSION:-0.1.0}" --credentials
+            if [[ "$VERIFY_PUBLISHED_CLI" == true ]]; then
+              python3 scripts/cli-release/verify-published.py --credentials
+            fi
+          '
+        else
+          python3 scripts/cli-release/verify-packaged.py --version "${FIDY_CLI_VERSION:-0.1.0}" --credentials
+          if [[ "$VERIFY_PUBLISHED_CLI" == true ]]; then
+            python3 scripts/cli-release/verify-published.py --credentials
+          fi
+        fi

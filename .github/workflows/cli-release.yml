@@ -68,6 +68,9 @@ jobs:
           for archive in dist/cli-release/*.zip; do
             cmp "$archive" "dist/cli-repeat/$(basename "$archive")"
           done
+      - uses: ./.github/actions/packaged-cli-check
+        with:
+          published: "false"
       - name: Verify POSIX installation and release selection
         if: runner.os != 'Windows'
         run: |

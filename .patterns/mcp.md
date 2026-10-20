@@ -2,7 +2,7 @@
 
 Use when changing MCP ingress, tool registration, protocol negotiation or native confirmation.
 Import `McpServer`, `McpSchema` and `McpProtocol` from `effect/ai`; HTTP assembly uses
-`HttpRouter` from `effect/http`. Selected Effect 4.0.3 sources:
+`HttpRouter` from `effect/http`. Selected Effect 4.0.4 sources:
 `node_modules/effect/src/ai/{McpServer,McpSchema,McpProtocol}.ts`. Verify `layerHttp`,
 `McpServer.addTool`, `McpRequestContext`, `InputRequired` and the selected protocol adapters.
 
@@ -49,7 +49,7 @@ confirmation decline/expiry/replay, client disconnect during streaming and dispo
 Assert safe protocol failures and no additional operation execution. Source-backed assembly describes
 library mechanics; OAuth authority, canonical admission and residency limits are Fidy policy.
 
-In the selected 4.0.3 SDK, a fully cancelled request POST with no emitted JSON-RPC reply
+In the selected 4.0.4 SDK, a fully cancelled request POST with no emitted JSON-RPC reply
 settles as an empty HTTP 200 with `text/event-stream`. `McpServer.ts` suppresses cancelled replies,
 tracks the POST's remaining expected replies and emits an empty SSE stream when that count reaches
 zero. Notification acknowledgments remain HTTP 202. Residency tests distinguish transport completion

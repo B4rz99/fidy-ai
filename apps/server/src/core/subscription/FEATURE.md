@@ -275,6 +275,26 @@ the local test's synthetic provider case is fixture data, not Production proof. 
 add an operator HTTP/CLI confirmation facility, bypass the privileged confirmation ledger, retire
 wallets or change paid Subscriptions. No live billing state or provider authorization was changed.
 
+Integration rerun on trunk `c83e35cc51` plus this change: all 351 native billing checks passed
+with the pinned Bun runtime when each of the fifteen files ran in a separate process; eight
+opt-in provider cases were skipped. Broad single-worker runs had moving native-fixture timeouts,
+so those runs are not recorded as passing. The 19 current web Subscription checks passed; all nine
+Upgrade and three public Ingress/Core browser journeys passed, including their shared admission
+and navigation prerequisites. The four mechanical review gates and two edge-manifest checks
+passed. The first full static run was blocked by 26 dependency pins whose updates had reached
+the seven-day age condition.
+
+The required dependency refresh admits Effect 4.0.4 and the eligible tooling/platform updates
+without changing release-age or vulnerability policy. A clean frozen installation removed stale
+duplicate Effect copies; a forced type build, the complete static group and four contract tests
+passed. Generated OpenAPI numeric bounds were regenerated from the selected Effect source.
+The full native billing run passed all 351 checks (eight provider opt-ins skipped), and all 19
+Subscription web checks passed. The final uninstrumented browser run passed all 22 selected
+checks: twelve Subscription journeys and ten shared admission/navigation prerequisites. Earlier
+DaviPlata runs timed out; two focused diagnostic runs and the final clean run passed, but no
+definitive cause was established. Temporary diagnostics were removed; no waits, test retries or
+timeout increases were retained. This is local verification, not deployed wallet proof.
+
 Owners: [Core decisions](operations.ts), [canonical API](../../shell/subscription/contract.ts),
 [native billing](../../../cloudflare/subscription/operations.ts),
 [AccessTier guard](../../shell/access-tier/operations.ts), and

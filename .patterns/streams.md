@@ -24,7 +24,7 @@ pull control for boundaries that genuinely require it.
 `fromReadableStream` and `toReadableStream*` bridge Web streams. Map foreign failures to the owning
 closed error set and verify cancellation releases the reader/body.
 
-The selected 4.0.3 `Channel.readableStreamToPullUnsafe` finalizer has two distinct branches: the
+The selected 4.0.4 `Channel.readableStreamToPullUnsafe` finalizer has two distinct branches: the
 default awaits `reader.cancel().catch(...)` without releasing its lock; `releaseLockOnEnd: true`
 releases only the lock and does not cancel underlying work. An unsettled native cancellation can
 stall scope closure even after a byte cap or deadline fires. Inspect

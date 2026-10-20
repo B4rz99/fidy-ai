@@ -1,25 +1,25 @@
 {
   "effect": {
     "repository": "https://github.com/Effect-TS/effect",
-    "verifiedOn": "2026-10-18",
+    "verifiedOn": "2026-10-20",
     "snapshot": {
       "manifest": ".repos/effect/packages/effect/package.json",
       "version": "4.0.4",
       "revision": "f9f43352d6b718623fdc0f29e2297785a8d6a073",
       "revisionKind": "upstream-commit",
-      "provenance": "Squashed subtree refresh in 0f8eb7bda2; vendored tree b559684fa32784293ec176f65cf87521ca5a5e42 matches upstream f9f43352d6b718623fdc0f29e2297785a8d6a073. Upstream main differs from the integrity-locked published 4.0.3 source.",
+      "provenance": "Squashed subtree refresh in 0f8eb7bda2; vendored tree b559684fa32784293ec176f65cf87521ca5a5e42 matches upstream f9f43352d6b718623fdc0f29e2297785a8d6a073. Upstream main differs from the integrity-locked published 4.0.4 source.",
       "status": "historical"
     },
     "packages": [
       {
         "name": "effect",
         "manifest": "package.json",
-        "version": "4.0.3"
+        "version": "4.0.4"
       },
       {
         "name": "@effect/atom-react",
         "manifest": "apps/web/package.json",
-        "version": "4.0.3"
+        "version": "4.0.4"
       }
     ],
     "sourcePaths": [

@@ -403,7 +403,7 @@ it("compacts numeric bound intersections without weakening the provider contract
   expect(Schema.is(bounded)(20)).toBe(true);
 });
 
-it("leaves exclusive numeric intersections intact", () => {
+it("preserves the strongest exclusive numeric bounds", () => {
   const bounded = Schema.Int.check(
     Schema.isGreaterThan(0),
     Schema.isGreaterThan(1),
@@ -411,10 +411,12 @@ it("leaves exclusive numeric intersections intact", () => {
   );
   expect(workersAiProviderSchema(bounded)).toMatchObject({
     type: "integer",
-    exclusiveMinimum: 0,
+    exclusiveMinimum: 1,
     exclusiveMaximum: 20,
-    allOf: [{ exclusiveMinimum: 1 }],
   });
+  expect(Schema.is(bounded)(1)).toBe(false);
+  expect(Schema.is(bounded)(2)).toBe(true);
+  expect(Schema.is(bounded)(20)).toBe(false);
 });
 
 it("preserves nonempty homogeneous array bounds in provider schemas", () => {

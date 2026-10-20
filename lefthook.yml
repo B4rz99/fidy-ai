@@ -13,6 +13,7 @@ pre-commit:
       glob: "*.{js,jsx,ts,tsx,json}"
       exclude:
         - ".repos/**"
+        - "apps/server/contracts/**"
       run: bunx oxfmt --write {staged_files}
       stage_fixed: true
       skip_output: errors

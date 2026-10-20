@@ -43,6 +43,15 @@ Effect 4.0.2 retest, 2026-10-14, production `6708a0e76cf9e0c82157c0caa5e3fe12b22
 
 ## Evidence and remaining checks
 
+Production continuation, 20-10-2026: the discovery fix is merged in PR #1389, but deployment
+remains blocked. The protected signed database proof in [run 39455413477](https://github.com/B4rz99/fidy-ai/actions/runs/39455413477)
+reported daily D1 quota exhaustion; live Workers AI conformance had passed independently.
+A no-data greeting returned HTTP 503 and preserved its exact editable draft without an assistant
+success message, pending submission or automatic retry. Existing conversation entries remained.
+The three built-browser recurring host-review checks passed, including recovered review and the
+negative model-prose case. Production lifecycle and Dashboard mutation checks remain pending;
+see the [recurring release evidence](../recurring/FEATURE.md#release-and-broader-rerun-20-10-2026).
+
 The 20-10-2026 production rerun restored successful signed-in date and recurring reads, with
 automatic delivery acknowledgement and retained conversation across month navigation. It exposed
 a separate missing discovery step: a recurring stop request asked for `expectedRevision` instead

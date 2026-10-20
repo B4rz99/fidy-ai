@@ -1,6 +1,6 @@
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { ScopeMissing } from "../../src/shell/public-http/contract";
@@ -22,10 +22,12 @@ import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contrac
 import coreWorker from "../core-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import publicWorker from "../public-worker";
+import { withErasureRecovery } from "../erasure/runtime";
 
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const databases = isolatedTestDatabases();
+const recoveryStorage = isolatedTestStorage();
 const bearer = (index: number): string => String(index + 1).repeat(43);
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
@@ -95,6 +97,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     return db;
   });
 afterAll(() => databases.dispose());
+afterAll(() => recoveryStorage.dispose());
 
 const seedPAT = (
   db: D1Database,
@@ -312,10 +315,17 @@ const listIds = (
     return list.widget.result.transactions.map((transaction) => transaction.id);
   });
 
+const recoveryDatabase = (db: D1Database): Effect.Effect<D1Database, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const { bucket } = yield* Effect.tryPromise(() => recoveryStorage.acquire());
+    yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+    return withErasureRecovery({ DB: db, ERASURE_REQUIRED: "true", ERASURE_BUCKET: bucket }).DB;
+  });
+
 it("reads catalog, quota and Subscription discovery through public admission", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* recoveryDatabase(yield* setup());
       for (const path of [
         "/dashboard/catalog",
         "/quota",
@@ -334,7 +344,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* recoveryDatabase(yield* setup());
         for (const user of [0, 1]) {
           for (const path of ["/dashboard", "/dashboard/view"]) {
             const response = yield* Effect.tryPromise(() => send(db, user, path));

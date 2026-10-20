@@ -269,6 +269,41 @@ full probe returned `canonical_correction / ProviderUnavailable`; it is not coun
 These probes execute no canonical mutations. Production lifecycle approval and stopped-state
 verification remain pending deployment of this follow-up.
 
+### Release and broader rerun, 20-10-2026
+
+The discovery follow-up merged in [PR #1389](https://github.com/B4rz99/fidy-ai/pull/1389)
+as `7d755940e498551835327059ab70a9fefa9957c7`, after all CI checks passed. Its production
+run stopped at the existing schema-baseline guard before candidate upload. The separate cosmetic
+SQL comparison fix then merged in PR #1388 at `ef1005e310151e98ad946858051a0b8cffdaa945`.
+The subsequent [deployment](https://github.com/B4rz99/fidy-ai/actions/runs/39454696608)
+still failed during baseline adoption, without a new baseline ledger row.
+
+Read-only diagnostics compared all 1,088 schema objects: the initial difference was comments and
+whitespace in one table. Replaying the corrected adopter against captured metadata reached its
+first requested write, where the diagnostic deliberately stopped. The native and external recovery
+generations matched, foreign-key checking returned no violations, and the fixture account had no
+erasure request. These checks made no production writes. The protected signed live database proof
+in [inspection run 39455413477](https://github.com/B4rz99/fidy-ai/actions/runs/39455413477)
+then explicitly reported daily D1 quota exhaustion. This is separate from the passing AI probe;
+normal health remained available at release `82c937fbd410f89cdd9378ab12c58ec883929398`.
+
+Dashboard catalog/view, Categories and Recurring reads returned HTTP 503. Recurring retained its
+cached month, disabled creation and requested an explicit refresh rather than presenting stale
+facts as current. A no-data greeting also returned 503: the failed submission was removed from
+message history and its exact draft remained editable, without automatic replay. No stop mutation
+was attempted after the database failure, and the recurring fixture is not claimed as cleaned up.
+
+On the synchronized code, all 14 recurring Worker/D1 checks and all 69 Dashboard Worker/D1
+checks passed. Dashboard catalog and uninitialized queries now also run through the production
+recovery wrapper with isolated real R2 storage. The three built-browser hosted-review checks
+passed: direct approval, recovered approval, and refusal to turn model prose into approval.
+Those browser checks use controlled hosted replies and do not establish live model mutation.
+A separate 11-test built-browser workspace rerun passed pagination across 100 items, real canonical
+persistence, list/calendar consistency, separated summaries, uncertain-save recovery, tracking,
+lifecycle reloads, forward-edit history and unavailable/malformed/limited/pressure read recovery.
+Production host approval, durable stopped-state verification and Dashboard chat edits remain
+blocked on database availability and deployment of the merged follow-up.
+
 ### Limits and remaining evidence
 
 - Cleanup of the three fictional Transactions awaits action-time deletion confirmation. Test plans

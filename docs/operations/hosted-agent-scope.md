@@ -57,3 +57,23 @@ A passing sample does not prove universal resistance, and these fixtures do not 
 audio, full ingestion or host authority/confirmation effects. Rerun when Agent behavior changes
 through the model, prompt, context, tools, ingestion or relevant dependencies. Unrelated changes
 do not trigger paid evaluation; ordinary CI retains deterministic checks.
+
+## Ingestion and host enforcement
+
+The separate deterministic integration coverage exercises native isolated D1/R2 and the real
+hosted runtime with controlled external provider responses. It does not purchase inference or
+replace the live corpus above. The [2026-10-20 assessment](security-assessment-2026-10-20.md)
+records the exercised paths and their limits.
+
+`apps/server/cloudflare/agent/hosted-ingestion-security.test.ts` stages CSV/XLSX bytes, publishes
+and processes each statement twice, and reads the resulting Transaction through a canonical
+hosted query. A hostile Counterparty reaches the model as data. The substituted provider then
+requests Memory deletion directly or inside an atomic batch. Both paths require independent
+exact-action confirmation, preserve the Memory and original Transaction, avoid duplicate
+SourceAttestations, exclude credentials from model context, and keep another User's history empty.
+
+Email and image-caption integration cases separately verify fixed-User admission, replay and
+visible review. Unsupported email instructions create no Transaction or SourceAttestation.
+Image captions remain private pending evidence with `extraction-unavailable`; this is not image
+OCR or live vision-model evaluation. Existing signed-voice coverage verifies host refusal after
+provider transcript admission; it does not establish the accuracy of an audio transcription model.

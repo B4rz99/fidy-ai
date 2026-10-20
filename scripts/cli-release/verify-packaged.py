@@ -24,7 +24,7 @@ if (action === 'empty') {
   process.stdout.write(JSON.stringify(current === null));
 } else if (action === 'seed') {
   if (current !== null) process.exit(1);
-  await Bun.secrets.set({...options, value: input.value, persist: 'local', allowUnrestrictedAccess: true});
+  await Bun.secrets.set({...options, value: input.value, persist: 'local'});
   process.stdout.write('true');
 } else if (action === 'cleanup') {
   if (current !== null && current !== input.value) process.exit(1);
@@ -98,7 +98,15 @@ def credentials(binary, root):
     directory.mkdir(parents=True, mode=0o700)
     metadata = directory / 'grant.json'
     bearer = 'fin_relcheck_' + secrets.token_urlsafe(32)
-    native('seed', bearer)
+    if platform.system() == 'Darwin':
+        # security reads the synthetic password from stdin, never process arguments.
+        # Trust these exact executables on this disposable CI-only credential.
+        result = run(['security', 'add-generic-password', '-a', 'login',
+                      '-s', 'com.fidy.cli.api.fidyapp.com', '-T', str(binary),
+                      '-T', shutil.which('bun'), '-w'], data=bearer + '\n')
+        require(result.returncode == 0, 'Synthetic native credential seed failed')
+    else:
+        native('seed', bearer)
     print('Synthetic native credential seeded.', flush=True)
     try:
         metadata.write_text(json.dumps(grant()))
@@ -167,6 +175,7 @@ if __name__ == '__main__':
     except ValueError as failure:
         safe = {
             'Native credential precondition or cleanup failed; existing access was preserved',
+            'Synthetic native credential seed failed',
             'Packaged credential directory already exists; existing access was preserved',
             'Credential verification requires an isolated GitHub-hosted runner',
             'Packaged CLI disclosed credential material',

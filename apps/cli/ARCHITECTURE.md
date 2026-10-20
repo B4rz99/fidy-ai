@@ -304,7 +304,8 @@ This synthetic seeding proves packaged loading, safe failure, redaction and clea
 production login or server-side revocation. The existing real public/Core/browser CLI journey
 separately verifies pairing, issuance, canonical calls and revocation with synthetic identities.
 
-The synthetic macOS seed opts into Bun's `allowUnrestrictedAccess` on the disposable CI runner
-so the separate archived executable can read it without a GUI keychain prompt. Production
-credential writes do not use this flag. This verifies native retrieval and redaction, not the
-production item's application access-control list or interactive first-use Keychain approval.
+The synthetic macOS item is created through the OS `security` utility, with its password on stdin
+and an explicit access list for Bun and the exact extracted executable. The runner uses a dedicated
+unlocked test keychain. Production credential writes do not use this fixture permission. This
+verifies native retrieval and redaction, not the production item's application access-control list
+or interactive first-use Keychain approval. Linux and Windows seed through `Bun.secrets`.

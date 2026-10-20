@@ -4,8 +4,11 @@ import {
   TransactionId,
   UpdateTransactionInput,
 } from "~/core/transactions/contract";
+import { ToolCallId } from "~/core/agent/contract";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { RecurringCommand } from "~/core/recurring-plans/contract";
+import { RecurringCommand, RecurringDocument } from "~/core/recurring-plans/contract";
+import { projectRecurringMonth, summarizeRecurring } from "~/core/recurring-plans/operations";
+import { RecurringWorkspace } from "~/shell/recurring-plans/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
   HostedInferenceError,
@@ -203,19 +206,90 @@ const expectedRecurringLifecycle = Schema.Struct({
   }),
 });
 
+const representativeRecurringWorkspace = Effect.gen(function* () {
+  const document = yield* Schema.decodeEffect(RecurringDocument)({
+    revision: 2,
+    plans: [
+      {
+        id: representativePlanId,
+        revisions: [
+          {
+            from: "2026-09-22",
+            plan: {
+              name: "Plan de prueba",
+              kind: "expense",
+              currency: "COP",
+              amountMode: "unknown",
+              frequency: "monthly",
+              firstDate: "2026-09-22",
+              timeZone: "America/Bogota",
+            },
+          },
+        ],
+        pauses: [],
+      },
+    ],
+    exceptions: [],
+    fulfillments: [],
+    excludedTransactionIds: [],
+    suggestions: [],
+  });
+  const occurrences = projectRecurringMonth({
+    document,
+    month: "2026-09",
+    now: DateTime.makeUnsafe("2026-09-22T12:00:00Z"),
+  });
+  return yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))({
+    document,
+    month: "2026-09",
+    today: "2026-09-22",
+    occurrences,
+    previous: [],
+    summary: summarizeRecurring(occurrences),
+    invalidFulfillmentIds: [],
+    matches: [],
+    matchesComplete: true,
+  });
+}).pipe(Effect.mapError(conformanceFailure));
+
 export const verifyRecurringLifecycle = (
   inference: HostedInferenceService
 ): Effect.Effect<void, HostedInferenceError> =>
   Effect.gen(function* () {
     const prepared = yield* inference.prepareText({
       context: context(
-        `Deja de seguir el recurrente de prueba ${representativePlanId} desde hoy, 22 de septiembre de 2026. La revisión observada del documento es 2. Usa la herramienta para preparar el cambio; el host obtiene la confirmación.`
+        "Deja de seguir únicamente el plan recurrente de gastos «Plan de prueba» desde el 22 de septiembre de 2026. Conserva su historial y no cambies ningún otro plan."
       ),
-      availableOperations: [CanonicalOperationId.make("recurringPlans.applyRecurringEdit")],
+      availableOperations: [
+        CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
+        CanonicalOperationId.make("recurringPlans.applyRecurringEdit"),
+      ],
       toolChoice: "auto",
-      maximumToolCalls: HostedToolCallMaximum.make(1),
+      maximumToolCalls: HostedToolCallMaximum.make(2),
     });
-    const result = yield* prepared.execute;
+    const discovery = yield* prepared.execute;
+    const query = discovery.toolCalls[0];
+    if (
+      discovery.toolCalls.length !== 1 ||
+      query?.operation !== "recurringPlans.getRecurringWorkspace"
+    ) {
+      return yield* conformanceFailure();
+    }
+    yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ query: Schema.Struct({ month: Schema.Literal("2026-09") }) })
+    )(query.params).pipe(Effect.mapError(conformanceFailure));
+    const output = yield* representativeRecurringWorkspace;
+    const next = yield* discovery.continuation.prepare([
+      {
+        _tag: "ToolResult",
+        toolCallId: yield* Schema.decodeEffect(ToolCallId)(query.id).pipe(
+          Effect.mapError(conformanceFailure)
+        ),
+        operation: query.operation,
+        outcome: { _tag: "Succeeded", output: { data: output, next: [] } },
+      },
+    ]);
+    const result = yield* next.execute;
     const call = result.toolCalls[0];
     if (result.toolCalls.length !== 1 || call?.operation !== "recurringPlans.applyRecurringEdit") {
       return yield* conformanceFailure();

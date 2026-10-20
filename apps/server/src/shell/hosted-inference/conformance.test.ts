@@ -20,17 +20,25 @@ const result = (
 const conformanceStub = (
   firstText: string,
   amount: number | string = representativeAmount,
-  times: Readonly<{ occurredAt: string; dateOnly: string; recurringDate: string }> = {
+  times: Readonly<{
+    occurredAt: string;
+    dateOnly: string;
+    recurringDate: string;
+    recurring: "observe" | "ask" | "invent" | "ask-after-read" | "stale";
+  }> = {
     occurredAt: "2026-09-22T12:00:00Z",
     dateOnly: "2026-09-21T05:00:00Z",
     recurringDate: "2026-09-22",
+    recurring: "observe",
   }
 ): Effect.Effect<HostedInferenceService> =>
   Effect.gen(function* () {
+    const recurring = times.recurring;
     const occurredAt = times.occurredAt;
     const dateOnly = times.dateOnly;
     const textRound = yield* Ref.make(0);
     let mutationRound = 0;
+    let recurringRound = 0;
     const toolArguments = (operation: CanonicalOperationId): Schema.Json => {
       switch (operation) {
         case "transactions.createTransaction":
@@ -52,7 +60,7 @@ const conformanceStub = (
         case "recurringPlans.applyRecurringEdit":
           return {
             payload: {
-              expectedRevision: 2,
+              expectedRevision: recurring === "stale" ? 1 : 2,
               edit: {
                 kind: "lifecycle",
                 planId: "00000000-0000-4000-8000-000000000002",
@@ -67,12 +75,41 @@ const conformanceStub = (
           return { query: {} };
       }
     };
+    const recurringResult = (): Effect.Effect<Omit<HostedTextResult, "continuation">> => {
+      if (recurring === "ask" || (recurring === "ask-after-read" && recurringRound > 0)) {
+        return Effect.succeed(result("Necesito expectedRevision."));
+      }
+      const operation = CanonicalOperationId.make(
+        recurring === "invent" || recurringRound++ > 0
+          ? "recurringPlans.applyRecurringEdit"
+          : "recurringPlans.getRecurringWorkspace"
+      );
+      return Effect.succeed(
+        result("", [
+          {
+            id: `recurring-call-${recurringRound}`,
+            operation,
+            params:
+              operation === "recurringPlans.getRecurringWorkspace"
+                ? { query: { month: "2026-09" } }
+                : toolArguments(operation),
+          },
+        ])
+      );
+    };
     return makeHostedInferenceStub({
       countText: () => Effect.succeed(1),
       countTranscript: () => Effect.succeed(1),
       validate: () => Effect.void,
       generate: (policy) => {
         if (policy.toolChoice === "auto") {
+          if (
+            policy.availableOperations.includes(
+              CanonicalOperationId.make("recurringPlans.getRecurringWorkspace")
+            )
+          ) {
+            return recurringResult();
+          }
           return Effect.sync(() =>
             result("", [
               {
@@ -139,6 +176,7 @@ it.effect("rejects local wall time when the canonical mutation needs the UTC ins
       occurredAt: "2026-09-22T07:00:00Z",
       dateOnly: "2026-09-21T05:00:00Z",
       recurringDate: "2026-09-22",
+      recurring: "observe",
     });
     assert.deepStrictEqual(
       yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
@@ -165,6 +203,7 @@ it.effect("rejects UTC midnight and an invented daylight-saving offset for a dat
         occurredAt: "2026-09-22T12:00:00Z",
         dateOnly,
         recurringDate: "2026-09-22",
+        recurring: "observe",
       });
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
@@ -181,6 +220,24 @@ it.effect("rejects timestamps and a different calendar day for recurring lifecyc
         occurredAt: "2026-09-22T12:00:00Z",
         dateOnly: "2026-09-21T05:00:00Z",
         recurringDate,
+        recurring: "observe",
+      });
+      assert.deepStrictEqual(
+        yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+        Exit.fail({ check: "canonical_recurring_lifecycle", category: "InvalidOutput" })
+      );
+    }
+  })
+);
+
+it.effect("requires a workspace read followed by an edit using the observed revision", () =>
+  Effect.gen(function* () {
+    for (const recurring of ["ask", "invent", "ask-after-read", "stale"] as const) {
+      const inference = yield* conformanceStub("inválido", representativeAmount, {
+        occurredAt: "2026-09-22T12:00:00Z",
+        dateOnly: "2026-09-21T05:00:00Z",
+        recurringDate: "2026-09-22",
+        recurring,
       });
       assert.deepStrictEqual(
         yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),

@@ -1,5 +1,16 @@
 # Dashboard
 
+Audit continuation, 20-10-2026, trunk `ef1005e310151e98ad946858051a0b8cffdaa945`:
+all 69 native Dashboard Worker/D1 checks passed. Catalog, quota/Subscription discovery and
+uninitialized reads now exercise the production recovery wrapper with isolated real R2 storage;
+the two Users' absent Dashboards remain absent. This does not claim production persistence.
+Production catalog and view requests repeatedly returned 503, so no Widget was renamed or
+created for the pending chat test. Categories and Recurring subsequently failed too. A protected
+[signed database proof](https://github.com/B4rz99/fidy-ai/actions/runs/39455413477) confirmed daily
+D1 quota exhaustion. Public health still reported release `82c937fbd410f89cdd9378ab12c58ec883929398`.
+The live chat title-edit/restore check remains pending database recovery and the merged agent
+follow-up deployment; local test success does not close it.
+
 Production aggregation continuation, 2026-10-14, release `30f585ceb1a811a97c523251ea6bd0bee13fc07f`: after the fictional COP 1 `PRUEBA QA AUDITORIA 20261014` expense was captured and categorized as Restaurantes, the recent-Transaction Widget displayed its name, Category and 14 October date. The monthly metric showed COP 0 income and COP 1 expenses, matching Transactions and the uncapped Budget summary. The Category chart included Restaurantes, while the Budget Widget correctly retained its no-cap state. After action-time approval and fixture deletion, returning to Dashboard showed no Category series, no recent Transactions and no monthly Transactions to calculate. This closes live cross-view read-after-delete for this fixture. No Widget definition changed.
 
 Rebased audit, 2026-10-14, baseline `a387f50fb5`: the actual Core/D1 browser title editor journey passed again, persisting the canonical title through reload. The two actual Budget Widget journeys also passed, including canonical cap changes/deletion and display-Currency isolation. Production chat title editing still failed before tool execution on that baseline; the Agent feature records its diagnosis and pending repair verification.

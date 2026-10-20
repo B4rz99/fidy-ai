@@ -849,7 +849,7 @@ export const publishStatementWithRecovery = ({
       (yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT submission_id FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE user_id=?"
+            "SELECT submission_id FROM (SELECT rowid,id AS submission_id,user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS statement_ingestion_outbox WHERE user_id=?"
           )
           .bind(users[0])
           .all()

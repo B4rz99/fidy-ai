@@ -121,7 +121,7 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       }),
     },
     select: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'started_at_ms',r.\"started_at_ms\",'terminal_at_ms',r.\"terminal_at_ms\",'status',r.\"status\",'failure_reason',r.\"failure_reason\",'proposal_user_id',r.proposal_user_id,'proposed_at_ms',r.proposed_at_ms,'proposal_text',r.proposal_text,'retention_user_id',r.retention_user_id,'retention_terminal_at_ms',r.retention_terminal_at_ms) AS body FROM hosted_turns r WHERE r.user_id=?",
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef,json_object('id',r.\"id\",'user_id',r.\"user_id\",'hosted_session_id',r.\"hosted_session_id\",'started_at_ms',r.\"started_at_ms\",'terminal_at_ms',r.\"terminal_at_ms\",'status',r.\"status\",'failure_reason',r.\"failure_reason\",'proposal_user_id',CASE WHEN r.proposed_at_ms IS NOT NULL THEN r.user_id END,'proposed_at_ms',r.proposed_at_ms,'proposal_text',r.proposal_text,'retention_user_id',CASE WHEN r.retention_terminal_at_ms IS NOT NULL THEN r.user_id END,'retention_terminal_at_ms',r.retention_terminal_at_ms) AS body FROM hosted_turns r WHERE r.user_id=?",
       params: [userId],
     }),
     candidates: (userId) => ({

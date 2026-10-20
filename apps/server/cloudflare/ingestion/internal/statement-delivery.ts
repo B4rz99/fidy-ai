@@ -81,12 +81,11 @@ export const dispatchStatementExtraction = (
     const trace = yield* captureWorkTrace;
     const now = yield* Clock.currentTimeMillis;
     const rows = yield* attempt(() =>
-      environment.DB.prepare(`SELECT o.user_id, o.submission_id, o.revision
-        FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) AS o
-        JOIN statement_submissions AS s ON s.id = o.submission_id AND s.user_id = o.user_id
-        WHERE s.status IN ('queued', 'processing')
-          AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
-        ORDER BY o.published_at_ms, o.submission_id LIMIT ?`)
+      environment.DB.prepare(`SELECT user_id, id AS submission_id, work_revision AS revision
+        FROM statement_submissions
+        WHERE work_revision IS NOT NULL AND status IN ('queued', 'processing')
+          AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)
+        ORDER BY work_published_at_ms, id LIMIT ?`)
         .bind(now - dispatchCooldownMs, dispatchLimit)
         .all()
     );
@@ -96,8 +95,8 @@ export const dispatchStatementExtraction = (
     let failed = false;
     for (const entry of entries) {
       const claimed = yield* attempt(() =>
-        environment.DB.prepare(`UPDATE statement_submissions AS statement_ingestion_outbox SET work_last_attempt_at_ms = ?
-          WHERE work_revision IS NOT NULL AND id = ? AND work_user_id = ?
+        environment.DB.prepare(`UPDATE statement_submissions SET work_last_attempt_at_ms = ?
+          WHERE work_revision IS NOT NULL AND id = ? AND user_id = ?
           AND (work_last_attempt_at_ms IS NULL OR work_last_attempt_at_ms < ?)`)
           .bind(now, entry.submission_id, entry.user_id, now - dispatchCooldownMs)
           .run()
@@ -214,12 +213,11 @@ export const reconcileStatementExtraction = (
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const selected = yield* attempt(() =>
-      input.DB.prepare(`SELECT o.user_id, o.submission_id, o.revision
-      FROM (SELECT rowid,id AS submission_id,work_user_id AS user_id,work_revision AS revision,work_published_at_ms AS published_at_ms,work_last_attempt_at_ms AS last_attempt_at_ms,work_last_reconciled_at_ms AS last_reconciled_at_ms FROM statement_submissions WHERE work_revision IS NOT NULL) o JOIN statement_submissions s
-        ON s.id = o.submission_id AND s.user_id = o.user_id
-      WHERE o.published_at_ms > 0 AND s.status IN ('queued', 'processing')
-        AND s.retention_expires_at_ms > ?
-      ORDER BY o.last_reconciled_at_ms, o.published_at_ms, o.submission_id LIMIT ?`)
+      input.DB.prepare(`SELECT user_id, id AS submission_id, work_revision AS revision
+      FROM statement_submissions
+      WHERE work_revision IS NOT NULL AND work_published_at_ms > 0
+        AND status IN ('queued', 'processing') AND retention_expires_at_ms > ?
+      ORDER BY work_last_reconciled_at_ms, work_published_at_ms, id LIMIT ?`)
         .bind(now, dispatchLimit)
         .all()
     );
@@ -229,7 +227,7 @@ export const reconcileStatementExtraction = (
     for (const row of work) {
       yield* attempt(() =>
         input.DB.prepare(
-          `UPDATE statement_submissions AS statement_ingestion_outbox SET work_last_reconciled_at_ms = ? WHERE work_revision IS NOT NULL AND id = ? AND work_user_id = ?`
+          `UPDATE statement_submissions SET work_last_reconciled_at_ms = ? WHERE work_revision IS NOT NULL AND id = ? AND user_id = ?`
         )
           .bind(now, row.submission_id, row.user_id)
           .run()

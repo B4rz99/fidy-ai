@@ -278,7 +278,7 @@ it("keeps compacted mutation receipts discoverable until their own retention bou
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
             )
             .first("count")
         )
@@ -297,7 +297,7 @@ it("keeps compacted mutation receipts discoverable until their own retention bou
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
+              "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention"
             )
             .first("count")
         )
@@ -346,7 +346,7 @@ it("drains channel event backlogs without losing their parent deadline or touchi
           yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,retention_user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention WHERE turn_id='retired-1'"
+                "SELECT count(*) AS count FROM (SELECT rowid,id AS turn_id,user_id AS user_id,retention_terminal_at_ms AS terminal_at_ms FROM hosted_turns WHERE retention_terminal_at_ms IS NOT NULL) AS hosted_turn_retention WHERE turn_id='retired-1'"
               )
               .first("count")
           )

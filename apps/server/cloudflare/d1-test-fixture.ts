@@ -27,6 +27,7 @@ const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
     Bun.file(
       new URL("./migrations/0004_consolidate_financial_records.sql", import.meta.url)
     ).text(),
+    Bun.file(new URL("./migrations/0005_simplify_feature_columns.sql", import.meta.url)).text(),
   ]).then((sources) => {
     // Build only the empty installation image here. Every behavior check still executes native D1.
     const database = new Database(":memory:");

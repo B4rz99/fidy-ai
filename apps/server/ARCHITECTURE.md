@@ -990,3 +990,16 @@ Moved source, membership and callback groups retain their original archive row r
 read projections expose those retained references; newly created groups use purpose-qualified stable
 record identities. Erasure chunks therefore keep addressing the same record across migration without
 rewriting archives or external recovery objects. Clearing a group also clears its reference.
+
+## Feature storage ownership
+
+Each feature owns a coherent set of tables. A separate table must earn its place through cardinality,
+retention, independent identity, or measured query requirements. Table count alone is not the target:
+consolidation should also remove duplicated state and redundant queries without hiding relationships
+inside generic payloads.
+
+Statement processing work and hosted proposal/retention state inherit the owner of their parent row.
+They do not store another User identity. Their existing revision or timestamp identifies presence;
+clearing an optional group never clears the parent owner. Dispatch, acknowledgment and retention read
+those parent fields directly. Erasure archive projections derive the former optional owner fields,
+including their absent state, so retained archive contents keep their original meaning.

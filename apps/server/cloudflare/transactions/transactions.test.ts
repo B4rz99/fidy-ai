@@ -994,7 +994,7 @@ effectIt.effect(
         (yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
             )
             .all()
         )).results
@@ -1054,7 +1054,7 @@ effectIt.effect(
         (yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
             )
             .all()
         )).results
@@ -1102,7 +1102,7 @@ effectIt.effect(
         (yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
             )
             .all()
         )).results
@@ -1204,7 +1204,7 @@ effectIt.effect(
         (yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
             )
             .all()
         )).results
@@ -1241,7 +1241,7 @@ effectIt.effect(
       const stored = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT receipt_digest FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
+            "SELECT receipt_digest FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals WHERE turn_id = ?"
           )
           .bind(proposal.turnId)
           .first<{ receipt_digest: ArrayBuffer }>()
@@ -1250,7 +1250,7 @@ effectIt.effect(
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_user_id=NULL,proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ?"
+            "UPDATE hosted_turns AS hosted_delivery_proposals SET proposal_receipt_digest=NULL,proposed_at_ms=NULL,proposal_text=NULL WHERE proposed_at_ms IS NOT NULL AND id = ?"
           )
           .bind(proposal.turnId)
           .run()
@@ -1258,7 +1258,7 @@ effectIt.effect(
       yield* fromTestPromise(() =>
         db
           .prepare(
-            "UPDATE hosted_turns SET proposal_user_id=incoming.user_id,proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.proposed_at_ms IS NULL"
+            "UPDATE hosted_turns SET proposal_receipt_digest=incoming.receipt_digest,proposed_at_ms=incoming.proposed_at_ms,proposal_text=incoming.text FROM (SELECT ? AS turn_id,? AS user_id,? AS receipt_digest,? AS proposed_at_ms,? AS text) AS incoming WHERE hosted_turns.id=incoming.turn_id AND hosted_turns.user_id=incoming.user_id AND hosted_turns.proposed_at_ms IS NULL"
           )
           .bind(
             proposal.turnId,
@@ -1292,7 +1292,7 @@ effectIt.effect(
         (yield* fromTestPromise(() =>
           db
             .prepare(
-              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,proposal_user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
+              "SELECT turn_id FROM (SELECT rowid,id AS turn_id,user_id AS user_id,proposal_receipt_digest AS receipt_digest,proposed_at_ms,proposal_text AS text FROM hosted_turns WHERE proposed_at_ms IS NOT NULL) AS hosted_delivery_proposals"
             )
             .all()
         )).results

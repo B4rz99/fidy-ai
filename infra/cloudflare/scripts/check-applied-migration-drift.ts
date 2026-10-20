@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { adoptSchemaBaseline } from "./adopt-schema-baseline";
+import { BaselineVerificationError, adoptSchemaBaseline } from "./adopt-schema-baseline";
 import * as BunCrypto from "@effect/platform-bun/BunCrypto";
 import * as Effect from "effect/Effect";
 import {
@@ -65,7 +65,10 @@ const main = async (): Promise<void> => {
     }
 
     process.stdout.write("Production D1 applied migration hashes match checked-in SQL.\n");
-  } catch {
+  } catch (error) {
+    if (error instanceof BaselineVerificationError) {
+      process.stderr.write(`${error.message}.\n`);
+    }
     process.stderr.write(
       `Production D1 migration history could not be verified while attempting to ${failureStage}; deployment is blocked.\n`
     );

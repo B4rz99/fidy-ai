@@ -4,6 +4,9 @@ import { Database } from "bun:sqlite";
 import { Schema } from "effect";
 import type { AppliedMigration, HashedMigrationSource, MigrationSource } from "./migration-history";
 
+/** Contains only locally constructed metadata diagnostics, never provider output or User rows. */
+export class BaselineVerificationError extends Error {}
+
 const baselineName = "0001_schema.sql";
 const SchemaObject = Schema.Struct({
   type: Schema.String,
@@ -32,7 +35,7 @@ const schemaObjects = (source: string): ReadonlyArray<SchemaObject> => {
       database.query(managedObjects).all()
     );
     if (!expected.some((row) => row.type === "table" && row.name === "users")) {
-      throw Error("Baseline schema is incomplete");
+      throw new BaselineVerificationError("Baseline schema is incomplete");
     }
     return expected;
   } finally {
@@ -43,13 +46,15 @@ const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`
 const verifySchema = (query: Query, expected: ReadonlyArray<SchemaObject>): void => {
   const [reply] = Schema.decodeUnknownSync(SchemaReply)(JSON.parse(query(managedObjects)));
   if (JSON.stringify(reply.results) !== JSON.stringify(expected)) {
-    throw Error("Production schema differs from baseline");
+    throw new BaselineVerificationError(
+      `Production schema differs from baseline (expected ${expected.length} objects, received ${reply.results.length})`
+    );
   }
   const [foreignKeys] = Schema.decodeUnknownSync(ForeignKeyReply)(
     JSON.parse(query("PRAGMA foreign_key_check"))
   );
   if (foreignKeys.results.length !== 0) {
-    throw Error("Production foreign keys are invalid");
+    throw new BaselineVerificationError("Production foreign keys are invalid");
   }
 };
 const validateHistory = (
@@ -57,10 +62,10 @@ const validateHistory = (
   target: HashedMigrationSource
 ): void => {
   if (new Set(applied.map((row) => row.name)).size !== applied.length) {
-    throw Error("Duplicate migration ledger names");
+    throw new BaselineVerificationError("Duplicate migration ledger names");
   }
   if (applied.some((row) => row.name === target.name && row.hash !== target.hash)) {
-    throw Error("Baseline hash mismatch");
+    throw new BaselineVerificationError("Baseline hash mismatch");
   }
 };
 const requireBaseline = (
@@ -68,7 +73,7 @@ const requireBaseline = (
   target: HashedMigrationSource
 ): void => {
   if (rows.length !== 1 || rows[0].name !== target.name || rows[0].hash !== target.hash) {
-    throw Error("Baseline ledger verification failed");
+    throw new BaselineVerificationError("Baseline ledger verification failed");
   }
 };
 
